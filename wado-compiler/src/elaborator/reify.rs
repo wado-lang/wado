@@ -25,10 +25,10 @@ use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, Receiver, global_init_function, global_name};
 use crate::symbol::SymbolTable;
 use crate::tir::{
-    self as tir, CallArg, GlobalInit, LetStorage, LocalFrame, ResolvedType, TirBinaryOp, TirBlock,
-    TirEnum, TirEnumCase, TirExpr, TirExprKind, TirFlags, TirFlagsMember, TirFunction, TirGlobal,
-    TirModule, TirNewtype, TirPattern, TirStmt, TirStmtKind, TirStruct, TirTest, TirUnaryOp,
-    TirVariantDecl, TypeId, TypeTable, transpose_tuple_expr,
+    self as tir, CallArg, GlobalInit, InstancePattern, LetStorage, LocalFrame, ResolvedType,
+    TirBinaryOp, TirBlock, TirEnum, TirEnumCase, TirExpr, TirExprKind, TirFlags, TirFlagsMember,
+    TirFunction, TirGlobal, TirModule, TirNewtype, TirPattern, TirStmt, TirStmtKind, TirStruct,
+    TirTest, TirUnaryOp, TirVariantDecl, TypeId, TypeTable, transpose_tuple_expr,
 };
 
 use super::coercion::{
@@ -66,7 +66,8 @@ use crate::elaborator::stmt::{
 use crate::elaborator::trait_query::trait_sig_of_with;
 use crate::elaborator::types::{VarRef, newtype_member_owner};
 use crate::elaborator::util::{
-    parse_i128_literal, parse_int_bits, parse_u128_literal, range_endpoint_to_i128,
+    parse_i128_literal, parse_u128_literal, pattern_literal, range_bound_literal,
+    settles_literal_patterns,
 };
 use crate::escape::{
     unescape_byte, unescape_bytes, unescape_char, unescape_string, unescape_template_segment,
@@ -2293,7 +2294,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let else_type = tir::block_result_type(&self.tysys.type_table.borrow(), &else_block);
         let else_span = else_block.span;
 
-        let tir_pattern = self.reify_pattern(&l.else_pattern(), scrutinee_type, ctx);
+        let tir_pattern = self.reify_pattern(&l.else_pattern(), scrutinee_type, span, ctx);
 
         let cont_stmts =
             self.reify_positioned_stmts(rest, block_span, ctx, expected_type, tail_value);
@@ -3635,7 +3636,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
 
         let mut scope = ctx.enter_scope();
-        let binding_pattern = self.reify_pattern(&for_of.binding, info.item_type, &mut scope);
+        let binding_pattern =
+            self.reify_pattern(&for_of.binding, info.item_type, for_of.span, &mut scope);
         let body_block = self.reify_block(&for_of.body, &mut scope, None);
 
         let some_pattern = TirPattern::Variant {
@@ -4199,7 +4201,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let scrutinee = self.reify_expr(expr, ctx, None);
                 let scrutinee_type = scrutinee.type_id;
                 let mut scope = ctx.enter_scope();
-                let tir_pattern = self.reify_pattern(pattern, scrutinee_type, &mut scope);
+                let tir_pattern =
+                    self.reify_pattern(pattern, scrutinee_type, elem_span, &mut scope);
                 let labeled_body = self.reify_for_labeled_body(&body_label, &f.body, &mut scope);
                 let update_stmts = self.reify_for_update(f.update.as_ref(), &mut scope);
 
@@ -4323,7 +4326,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             } => {
                 let scrutinee = self.reify_expr(expr, ctx, None);
                 let scrutinee_type = scrutinee.type_id;
-                let tir_pattern = self.reify_pattern(pattern, scrutinee_type, ctx);
+                let tir_pattern = self.reify_pattern(pattern, scrutinee_type, *elem_span, ctx);
                 let inner_stmts = self.reify_let_chain_stmts(
                     &elements[1..],
                     then_block_ast,
@@ -6657,7 +6660,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let scrutinee_type = scrutinee.type_id;
 
         let ctx = &mut ctx.enter_scope();
-        let pattern_tir = self.reify_pattern(&m.pattern, scrutinee_type, ctx);
+        let pattern_tir = self.reify_pattern(&m.pattern, scrutinee_type, m.span, ctx);
         let arm_body = match &m.guard {
             Some(guard) => self.reify_expr(guard, ctx, Some(TypeTable::BOOL)),
             None => TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, m.span),
@@ -6926,7 +6929,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .iter()
             .map(|arm| {
                 let ctx = &mut ctx.enter_scope();
-                let pattern = self.reify_pattern(&arm.pattern, scrutinee_type, ctx);
+                let pattern = self.reify_pattern(&arm.pattern, scrutinee_type, arm.span, ctx);
                 let guard = arm
                     .guard
                     .as_ref()
@@ -8969,9 +8972,24 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         })
     }
 
-    fn pattern_endpoint_value(&self, endpoint: &ast::Pattern, is_unsigned: bool) -> i128 {
-        range_endpoint_to_i128(endpoint, is_unsigned, &self.tysys.resolutions)
-            .expect("annotate diagnoses a range endpoint that denotes no integer")
+    /// `pattern` on `scrutinee_type`: lowered now when the type is settled,
+    /// left to each instance when it is still a type parameter.
+    fn literal_value_pattern(
+        &self,
+        pattern: InstancePattern,
+        scrutinee_type: TypeId,
+        site: Span,
+    ) -> TirPattern {
+        let type_table = self.tysys.type_table.borrow();
+        if settles_literal_patterns(&type_table, scrutinee_type) {
+            pattern.lower(type_table.is_unsigned_int(scrutinee_type))
+        } else {
+            TirPattern::PerInstance {
+                pattern,
+                scrutinee_type,
+                span: site,
+            }
+        }
     }
 
     /// [`super::types::newtype_member_owner`] for the declaration `prefix`
@@ -9138,7 +9156,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         span: Span,
         ctx: &mut FunctionContext,
     ) -> TirStmt {
-        let pattern = self.reify_pattern(pattern, value_type, ctx);
+        let pattern = self.reify_pattern(pattern, value_type, span, ctx);
         if is_mut {
             for (name, index, _) in collect_pattern_bindings_with_index(&pattern) {
                 ctx.make_mutable(&name, index);
@@ -9147,10 +9165,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         TirStmt::new(TirStmtKind::LetDestructure { pattern, value }, span)
     }
 
+    /// `site` is where a diagnostic about the pattern points: the arm or
+    /// statement that holds it.
     pub(super) fn reify_pattern(
         &mut self,
         pattern: &ast::Pattern,
         scrutinee_type: TypeId,
+        site: Span,
         ctx: &mut FunctionContext,
     ) -> TirPattern {
         match pattern {
@@ -9214,35 +9235,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Pattern::Literal(lit) => {
                 // Mirrors `Elaborator::resolve_if_pattern_inner`'s literal arm:
-                // char / string literals decode their escapes, and `null` on a
+                // string literals decode their escapes, and `null` on a
                 // variant scrutinee with a `None` case lowers to that case.
-                let scrutinee_is_unsigned = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .is_unsigned_int(scrutinee_type);
-                let int_pattern = |bits: u128| {
-                    if scrutinee_is_unsigned {
-                        TirLiteralPattern::U128(bits)
-                    } else {
-                        TirLiteralPattern::I128(bits.cast_signed())
-                    }
-                };
                 let tir_lit = match lit {
-                    // A malformed literal is already diagnosed, so the value it
-                    // stands in with is never reached.
-                    ast::Literal::Number(repr, _) => int_pattern(
-                        parse_int_bits(repr, scrutinee_is_unsigned)
-                            .unwrap_or(0)
-                            .cast_unsigned(),
-                    ),
-                    ast::Literal::Byte(raw) => {
-                        int_pattern(u128::from(unescape_byte(raw).unwrap_or(0)))
-                    }
-                    ast::Literal::Bool(b) => TirLiteralPattern::Bool(*b),
-                    ast::Literal::Char(raw) => {
-                        TirLiteralPattern::Char(unescape_char(raw).unwrap_or('\0'))
-                    }
                     ast::Literal::String(raw) => {
                         TirLiteralPattern::String(unescape_string(raw).unwrap_or_default())
                     }
@@ -9263,6 +9258,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     | ast::Literal::IncludeStr(_)
                     | ast::Literal::IncludeBytes(_) => {
                         panic!("literal kind {lit:?} is not valid in pattern position")
+                    }
+                    _ => {
+                        // A literal naming no value is already diagnosed, so
+                        // the pattern standing in for it is never lowered.
+                        let Ok(value) = pattern_literal(lit) else {
+                            return TirPattern::Wildcard;
+                        };
+                        return self.literal_value_pattern(
+                            InstancePattern::Literal(value),
+                            scrutinee_type,
+                            site,
+                        );
                     }
                 };
                 TirPattern::Literal(tir_lit)
@@ -9290,7 +9297,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         let elem_ty = elem_types.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
                         let binding_ty =
                             self.tysys.apply_scrutinee_ref_kind(scrutinee_type, elem_ty);
-                        self.reify_pattern(p, binding_ty, ctx)
+                        self.reify_pattern(p, binding_ty, site, ctx)
                     })
                     .collect();
                 TirPattern::Tuple(sub_patterns, *has_rest)
@@ -9387,7 +9394,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .apply_scrutinee_ref_kind(scrutinee_type, payload_type);
                 let sub_patterns: Vec<TirPattern> = bindings
                     .iter()
-                    .map(|p| self.reify_pattern(p, binding_scrutinee, ctx))
+                    .map(|p| self.reify_pattern(p, binding_scrutinee, site, ctx))
                     .collect();
                 let case_index = resolved_case_index(case_index, &case_name);
                 TirPattern::Variant {
@@ -9409,12 +9416,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // arm-scope bindings at the first alternative's locals.
                 let mut resolved: Vec<TirPattern> = Vec::with_capacity(alternatives.len());
                 if let Some(first_alt) = alternatives.first() {
-                    let first = self.reify_pattern(first_alt, scrutinee_type, ctx);
+                    let first = self.reify_pattern(first_alt, scrutinee_type, site, ctx);
                     let first_bindings = collect_pattern_bindings_with_index(&first);
                     resolved.push(first);
 
                     for alt in alternatives.iter().skip(1) {
-                        let alt_resolved = self.reify_pattern(alt, scrutinee_type, ctx);
+                        let alt_resolved = self.reify_pattern(alt, scrutinee_type, site, ctx);
                         let alt_bindings = collect_pattern_bindings_with_index(&alt_resolved);
                         let mut remapped = alt_resolved;
                         for (first_bind, alt_bind) in first_bindings.iter().zip(alt_bindings.iter())
@@ -9442,22 +9449,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Pattern::Range {
                 start, end, kind, ..
             } => {
-                let inclusive = matches!(kind, RangeKind::Inclusive);
-                let is_unsigned = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .is_unsigned_int(scrutinee_type);
-                TirPattern::Range {
-                    start: self.pattern_endpoint_value(start, is_unsigned),
-                    end: self.pattern_endpoint_value(end, is_unsigned),
-                    inclusive,
-                    is_unsigned,
-                }
+                let bound = |bound| {
+                    range_bound_literal(bound, &self.tysys.resolutions)
+                        .and_then(Result::ok)
+                        .expect("annotate diagnoses a range bound that names no value")
+                };
+                let pattern = InstancePattern::Range {
+                    start: bound(start),
+                    end: bound(end),
+                    inclusive: matches!(kind, RangeKind::Inclusive),
+                };
+                self.literal_value_pattern(pattern, scrutinee_type, site)
             }
             ast::Pattern::Struct {
                 fields, has_rest, ..
-            } => self.reify_struct_pattern(fields, *has_rest, scrutinee_type, ctx),
+            } => self.reify_struct_pattern(fields, *has_rest, scrutinee_type, site, ctx),
             ast::Pattern::Typed {
                 id,
                 pattern: inner,
@@ -9476,7 +9482,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     self.reify_narrowing(inner, target, *span, ctx)
                 } else {
                     let binding_ty = self.tysys.ascribed_binding_type(scrutinee_type, target);
-                    self.reify_pattern(inner, binding_ty, ctx)
+                    self.reify_pattern(inner, binding_ty, site, ctx)
                 }
             }
             // `build_tir_from_state` skips reify for modules with syntax
@@ -9571,6 +9577,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         fields: &[ast::StructPatternField],
         has_rest: bool,
         scrutinee_type: TypeId,
+        site: Span,
         ctx: &mut FunctionContext,
     ) -> TirPattern {
         // Determine the struct name: explicit `Type::Pattern` wins;
@@ -9621,7 +9628,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let binding_ty = self
                     .tysys
                     .apply_scrutinee_ref_kind(scrutinee_type, field_ty);
-                let pattern = self.reify_pattern(&f.pattern, binding_ty, ctx);
+                let pattern = self.reify_pattern(&f.pattern, binding_ty, site, ctx);
                 TirStructPatternField {
                     field_name: f.field_name.clone(),
                     field_index,

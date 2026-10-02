@@ -272,6 +272,9 @@ struct PatternLowerer<'a> {
 /// write.
 fn binds_by_value(pattern: &TirPattern, type_table: &TypeTable) -> bool {
     match pattern {
+        TirPattern::PerInstance { .. } => {
+            unreachable!("instance_patterns lowers every per-instance pattern")
+        }
         TirPattern::Binding { type_id, .. } | TirPattern::Narrow { type_id, .. } => {
             value_copy::needs_value_copy(*type_id, type_table)
         }
@@ -330,6 +333,9 @@ fn guard_arm(arm: &mut TirMatchArm, cond: TirExpr) {
 /// the match pre-pass rewrites into a guard.
 fn is_plain_value_pattern(pattern: &TirPattern) -> bool {
     match pattern {
+        TirPattern::PerInstance { .. } => {
+            unreachable!("instance_patterns lowers every per-instance pattern")
+        }
         TirPattern::Literal(lit) => !matches!(lit, TirLiteralPattern::String(_)),
         TirPattern::Enum { .. } | TirPattern::Range { .. } => true,
         TirPattern::Wildcard
@@ -482,6 +488,9 @@ impl<'a> PatternLowerer<'a> {
     /// Whether the given pattern may fail to match at runtime.
     fn pattern_is_refutable(pattern: &TirPattern) -> bool {
         match pattern {
+            TirPattern::PerInstance { .. } => {
+                unreachable!("instance_patterns lowers every per-instance pattern")
+            }
             TirPattern::Wildcard | TirPattern::Binding { .. } => false,
             TirPattern::Literal(_)
             | TirPattern::Variant { .. }
@@ -885,6 +894,9 @@ impl<'a> PatternLowerer<'a> {
         continuation: TirExpr,
     ) -> TirExpr {
         match pattern {
+            TirPattern::PerInstance { .. } => {
+                unreachable!("instance_patterns lowers every per-instance pattern")
+            }
             TirPattern::Wildcard => {
                 // Evaluate value for side effects, then continuation.
                 let drop_stmt = TirStmt::new(TirStmtKind::Expr(value), span);
@@ -1952,6 +1964,9 @@ impl<'a> PatternLowerer<'a> {
         type_table: &TypeTable,
     ) {
         match pattern {
+            TirPattern::PerInstance { .. } => {
+                unreachable!("instance_patterns lowers every per-instance pattern")
+            }
             TirPattern::Binding {
                 name, local_index, ..
             } => {

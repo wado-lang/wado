@@ -4447,9 +4447,9 @@ pub fn unparse_struct_field(struct_name: &str, field: &StructField) -> String {
 use crate::lexer::is_valid_ident;
 use crate::name::LocalMethodName;
 use crate::tir::{
-    TirBinaryOp, TirBlock, TirEnum, TirExpr, TirExprKind, TirFlags, TirFunction, TirGlobal,
-    TirLiteralPattern, TirLocal, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct,
-    TirUnaryOp, TypeId, TypeTable, receiver_value,
+    InstancePattern, PatternLiteral, TirBinaryOp, TirBlock, TirEnum, TirExpr, TirExprKind,
+    TirFlags, TirFunction, TirGlobal, TirLiteralPattern, TirLocal, TirModule, TirParam, TirPattern,
+    TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId, TypeTable, receiver_value,
 };
 
 /// Unparses TIR back to pseudo-Wado source code.
@@ -4984,6 +4984,18 @@ impl<'a> TirUnparser<'a> {
                 self.output.push_str(if *inclusive { "..=" } else { "..<" });
                 self.output.push_str(&end.to_string());
             }
+            TirPattern::PerInstance { pattern, .. } => match pattern {
+                InstancePattern::Literal(value) => emit_pattern_literal(value, &mut self.output),
+                InstancePattern::Range {
+                    start,
+                    end,
+                    inclusive,
+                } => {
+                    emit_pattern_literal(start, &mut self.output);
+                    self.output.push_str(if *inclusive { "..=" } else { "..<" });
+                    emit_pattern_literal(end, &mut self.output);
+                }
+            },
         }
     }
 
@@ -5409,6 +5421,20 @@ fn emit_tir_literal_pattern(lit: &TirLiteralPattern, output: &mut String) {
         TirLiteralPattern::Char(c) => output.push_str(&quoted_char(*c)),
         TirLiteralPattern::String(s) => output.push_str(&quoted(s)),
         TirLiteralPattern::Null => output.push_str("null"),
+    }
+}
+
+fn emit_pattern_literal(value: &PatternLiteral, output: &mut String) {
+    match value {
+        PatternLiteral::Int { shown, suffix, .. } => {
+            output.push_str(shown);
+            if let Some(suffix) = suffix {
+                output.push('_');
+                output.push_str(suffix.as_str());
+            }
+        }
+        PatternLiteral::Char(c) => output.push_str(&quoted_char(*c)),
+        PatternLiteral::Bool(b) => output.push_str(if *b { "true" } else { "false" }),
     }
 }
 

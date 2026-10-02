@@ -451,7 +451,8 @@ impl<'a> Resolver<'a> {
             | TirPattern::Literal(_)
             | TirPattern::Enum { .. }
             | TirPattern::ConstantValue { .. }
-            | TirPattern::Range { .. } => {}
+            | TirPattern::Range { .. }
+            | TirPattern::PerInstance { .. } => {}
         }
     }
 }

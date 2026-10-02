@@ -165,7 +165,8 @@ impl MutBindingLifter {
             | TirPattern::Enum { .. }
             | TirPattern::ConstantValue { .. }
             | TirPattern::Narrow { name: None, .. }
-            | TirPattern::Range { .. } => {}
+            | TirPattern::Range { .. }
+            | TirPattern::PerInstance { .. } => {}
         }
     }
 }

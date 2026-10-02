@@ -132,6 +132,7 @@ pub use literal_cast::literal_cast_diagnostics;
 pub use loader::{LoadError, LoadResult, ModuleLoader};
 pub use lower::lower;
 pub use module_source::ModuleSource;
+use monomorphize::lower_instance_patterns;
 pub use monomorphize::monomorphize;
 pub use optimize::{OptLevel, optimize};
 pub use package::Package;
@@ -1814,6 +1815,10 @@ fn compile_after_load<H: CompilerHost>(
         synthesis::traits::synthesize_monomorphized_fn_inspect_stubs(&mut flat);
     }
 
+    // === Phase 9': Per-instance patterns ===
+    // Before erasure, which would let a newtype instance pass as its base.
+    lower_instance_patterns(&flat, logger)?;
+
     // === Phase 9a: Erase Newtypes and Flags ===
     // After monomorphize (which needs distinct Newtype/Flags types for trait dispatch)
     // and before lower/optimize/codegen (which expect Newtypes → base type; Flags → u32).
@@ -2263,6 +2268,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 mono.resume(&mut flat);
                 synthesis::traits::synthesize_monomorphized_fn_inspect_stubs(&mut flat);
             }
+            lower_instance_patterns(&flat, &logger)?;
 
             // Erase Newtypes and Flags (after monomorphize, before lower)
             flat.type_table.borrow_mut().erase_newtypes_and_flags();

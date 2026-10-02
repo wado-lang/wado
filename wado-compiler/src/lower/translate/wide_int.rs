@@ -57,6 +57,9 @@ pub(super) fn build_if_chain(
             continue;
         }
         match &arm.pattern {
+            TirPattern::PerInstance { .. } => {
+                unreachable!("instance_patterns lowers every per-instance pattern")
+            }
             TirPattern::Wildcard => {
                 if let Some(guard) = &arm.guard {
                     else_expr = Some(build_if(
