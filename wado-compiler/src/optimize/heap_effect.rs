@@ -190,8 +190,7 @@ struct Summary {
 }
 
 impl Summary {
-    fn join(&mut self, other: &Summary) -> bool {
-        let before = self.clone();
+    fn join(&mut self, other: &Summary) {
         self.reads.union(&other.reads);
         self.writes.union(&other.writes);
         self.ret.join(other.ret);
@@ -203,7 +202,6 @@ impl Summary {
             mine.join(*theirs);
         }
         self.into_elsewhere.join(other.into_elsewhere);
-        *self != before
     }
 
     fn access(&self, effect: Effect) -> &Access {
