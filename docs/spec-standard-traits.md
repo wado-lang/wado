@@ -455,9 +455,9 @@ second. `Iterator::min` returns the first of its least elements and
 `[min(a, b), max(a, b)]` is then `[a, b]` sorted stably: `min(-0.0, 0.0)` is
 `-0.0` and `max(-0.0, 0.0)` is `0.0`.
 
-`f32::minimum`, `f32::maximum`, `f64::minimum` and `f64::maximum` are IEEE
-754-2019 `minimum` and `maximum`: a NaN argument gives NaN on both, and `-0.0`
-is less than `0.0`.
+`f32::ieee754_min`, `f32::ieee754_max`, `f64::ieee754_min` and
+`f64::ieee754_max` are IEEE 754-2019 `minimum` and `maximum`: a NaN argument
+gives NaN on both, and `-0.0` is less than `0.0`.
 
 `clamp(x, low, high)` on `f32` and `f64` first traps on a NaN bound or on
 `low > high`, whatever `x` is. It then confines `x` to `low..=high` by the

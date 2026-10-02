@@ -169,7 +169,8 @@ one of `a < b`, `a == b` and `a > b` holds, and `x == x` holds for every `x`.
 Each float type carries IEEE 754's six comparisons as methods: `ieee754_eq`,
 `ieee754_ne`, `ieee754_lt`, `ieee754_le`, `ieee754_gt` and `ieee754_ge`. The
 operators keep the order, and IEEE's answers stay reachable under a name that
-says which they are, as `minimum` and `maximum` are beside `min` and `max`.
+says which they are, as `ieee754_min` and `ieee754_max` are beside `min` and
+`max`.
 
 Each is one Wasm instruction. Code that ports an IEEE comparison, or a loop
 that compares two loaded floats and cannot pay the order's NaN tests (see
@@ -194,8 +195,8 @@ can return it. Putting NaN least would only move the disagreement from `min` to
 
 So the two meanings take two names. `min` and `max` follow the order everywhere,
 on a float as through `Iterator` or a `T: Ord` bound, so one name means one
-thing. `minimum` and `maximum` keep IEEE's own names and IEEE's meaning, and
-lower to Wasm's instructions; Rust's `f64::minimum` uses the same names.
+thing. `ieee754_min` and `ieee754_max` carry IEEE's meaning under the
+`ieee754_` prefix the comparisons carry, and lower to Wasm's instructions.
 `f64::min` therefore costs what a `<` between two variables costs (see
 [Cost](#cost)) and a select, instead of one instruction.
 
@@ -301,7 +302,7 @@ copied into loops over 262,144 random `f32`s:
 | `MaxPool`: 2×2 taps through `f32::max`    | 0.988 ms | 2.059 ms | 108% slower |
 | `Softmax`: a row's `f32::max`             | 0.548 ms | 0.742 ms | 35% slower  |
 
-`f32::maximum` runs each kernel within noise of the old `f32::max`. Loam's
+`f32::ieee754_max` runs each kernel within noise of the old `f32::max`. Loam's
 kernels call it, since it propagates a NaN as `max` does and differs only in
 the sign of a zero result. The `microgpt` benchmark, which calls `f64::max` for
 its ReLU and its softmax, stayed within noise.
@@ -344,6 +345,7 @@ overlap, which is what `benchmark/ab.ts` decides.
   `x` and trap on a NaN bound, `high` included, which `low <= high` passes.
   Each with a fixture. Then measure Loam's kernels, which compare floats
   through `f32::max`, and record it in [Cost](#cost).
+- [x] Rename `minimum` and `maximum` to `ieee754_min` and `ieee754_max`.
 - [ ] Add the six `ieee754_*` comparison methods to `f16`, `bf16`, `f32` and
   `f64`, each lowering to one Wasm instruction, with a fixture holding each
   method's answers on a NaN, `-0.0` and an ordinary pair.
@@ -362,6 +364,7 @@ computed operand is not a NaN, so `a < b` between two variables pays the test
 even where neither can be one.
 
 A float `min` or `max` is a conditional branch under wasmtime on x86, where
-`minimum` and `maximum` are one instruction each. Over operands whose order
-changes at random, `max` costs up to two and a half times `maximum`, as
+`ieee754_min` and `ieee754_max` are one instruction each. Over operands whose
+order changes at random, `max` costs up to two and a half times `ieee754_max`,
+as
 [Cost](#cost) measures.

@@ -1315,12 +1315,12 @@ they are equal.
 The greater of two values by the order, where NaN is greatest; `y` when
 they are equal.
 
-#### `pub fn minimum(x: f32, y: f32) -> f32`
+#### `pub fn ieee754_min(x: f32, y: f32) -> f32`
 
 IEEE 754-2019 `minimum`: NaN when either value is, and `-0.0` below
 `0.0`.
 
-#### `pub fn maximum(x: f32, y: f32) -> f32`
+#### `pub fn ieee754_max(x: f32, y: f32) -> f32`
 
 IEEE 754-2019 `maximum`: NaN when either value is, and `-0.0` below
 `0.0`.
@@ -1650,12 +1650,12 @@ they are equal.
 The greater of two values by the order, where NaN is greatest; `y` when
 they are equal.
 
-#### `pub fn minimum(x: f64, y: f64) -> f64`
+#### `pub fn ieee754_min(x: f64, y: f64) -> f64`
 
 IEEE 754-2019 `minimum`: NaN when either value is, and `-0.0` below
 `0.0`.
 
-#### `pub fn maximum(x: f64, y: f64) -> f64`
+#### `pub fn ieee754_max(x: f64, y: f64) -> f64`
 
 IEEE 754-2019 `maximum`: NaN when either value is, and `-0.0` below
 `0.0`.
