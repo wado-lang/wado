@@ -52,26 +52,23 @@ impl TypeSet {
         !self.any && self.keys.is_empty()
     }
 
-    fn insert(&mut self, key: TypeKey) -> bool {
-        !self.any && self.keys.insert(key)
+    fn insert(&mut self, key: TypeKey) {
+        if !self.any {
+            self.keys.insert(key);
+        }
     }
 
-    fn set_any(&mut self) -> bool {
-        let changed = !self.any;
+    fn set_any(&mut self) {
         self.any = true;
         self.keys.clear();
-        changed
     }
 
-    fn union(&mut self, other: &TypeSet) -> bool {
+    fn union(&mut self, other: &TypeSet) {
         if other.any {
-            return self.set_any();
+            self.set_any();
+        } else if !self.any {
+            self.keys.extend(other.keys.iter().copied());
         }
-        let mut changed = false;
-        for &k in &other.keys {
-            changed |= self.insert(k);
-        }
-        changed
     }
 
     /// Whether `self ∩ other` is non-empty.
@@ -168,10 +165,9 @@ impl Access {
         }
     }
 
-    fn union(&mut self, other: &Access) -> bool {
-        let a = self.through_args.union(&other.through_args);
-        let b = self.elsewhere.union(&other.elsewhere);
-        a || b
+    fn union(&mut self, other: &Access) {
+        self.through_args.union(&other.through_args);
+        self.elsewhere.union(&other.elsewhere);
     }
 }
 
@@ -190,8 +186,7 @@ struct Summary {
 }
 
 impl Summary {
-    fn join(&mut self, other: &Summary) -> bool {
-        let before = self.clone();
+    fn join(&mut self, other: &Summary) {
         self.reads.union(&other.reads);
         self.writes.union(&other.writes);
         self.ret.join(other.ret);
@@ -203,7 +198,6 @@ impl Summary {
             mine.join(*theirs);
         }
         self.into_elsewhere.join(other.into_elsewhere);
-        *self != before
     }
 
     fn access(&self, effect: Effect) -> &Access {
@@ -410,21 +404,30 @@ impl HeapEffectsCache {
                 .iter()
                 .map(|&n| std::mem::take(self.summary_mut(n)))
                 .collect();
-            let mut worklist = members.clone();
             for &n in members {
                 queued[n] = true;
             }
-            while let Some(n) = worklist.pop() {
-                queued[n] = false;
-                let summary = self.summarize(project, type_table, n);
-                if summary == *self.summary_mut(n) {
-                    continue;
-                }
-                *self.summary_mut(n) = summary;
-                for &m in &callers_within[n] {
-                    if !queued[m] {
-                        queued[m] = true;
-                        worklist.push(m);
+            // Sweeps in member order, deepest in the walk first, so a callee's
+            // growth reaches its callers within one sweep rather than one
+            // increment at a time.
+            let mut pending = members.len();
+            while pending > 0 {
+                for &n in members {
+                    if !queued[n] {
+                        continue;
+                    }
+                    queued[n] = false;
+                    pending -= 1;
+                    let summary = self.summarize(project, type_table, n);
+                    if summary == *self.summary_mut(n) {
+                        continue;
+                    }
+                    *self.summary_mut(n) = summary;
+                    for &m in &callers_within[n] {
+                        if !queued[m] {
+                            queued[m] = true;
+                            pending += 1;
+                        }
                     }
                 }
             }

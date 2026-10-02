@@ -1158,6 +1158,21 @@ fn collect_and_validate(project: &NirPackage, dirty: &[FuncId]) -> IndexMap<Func
     }
     candidates.retain(|k, _| !used_in_globals.contains(k));
 
+    // A call site refutes only the candidate it calls, and the candidates only
+    // shrink below, so a body calling none of them now never refutes one. The
+    // arena holds every expression the body reaches, and some it no longer does.
+    let callers: Vec<_> = project
+        .functions
+        .iter()
+        .filter(|f| {
+            f.borrow().body.as_ref().is_some_and(|body| {
+                body.exprs.values().any(|node| {
+                    matches!(&node.kind, ExprKind::Call { func_id, .. } if candidates.contains_key(func_id))
+                })
+            })
+        })
+        .collect();
+
     // The tail-call rule couples caller and callee candidacy in both
     // directions, so refute to a fix-point: optimistic (assume-then-refute), so
     // a mutually tail-recursive group survives.
@@ -1186,7 +1201,7 @@ fn collect_and_validate(project: &NirPackage, dirty: &[FuncId]) -> IndexMap<Func
                 invalid.insert(key);
             }
         }
-        for func_rc in &project.functions {
+        for func_rc in &callers {
             let func = func_rc.borrow();
             if let Some(body) = &func.body {
                 let caller_ok = func
