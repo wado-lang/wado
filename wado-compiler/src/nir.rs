@@ -5,6 +5,7 @@
 //! identity and `EffectRef` are shared with TIR. See WEP 2026-05-11.
 
 use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::rc::Rc;
 
 use crate::ast;
@@ -178,14 +179,17 @@ impl NirBinaryOp {
         }
     }
 
-    /// What this comparison answers for a value compared with itself. Every
-    /// type's comparisons read an order, a float's included, so `==`, `<=` and
-    /// `>=` hold and the other three do not. `None` for an op that is not one
-    /// of the six.
-    pub fn reflexive_answer(self) -> Option<bool> {
+    /// What this comparison answers for two values `ordering` relates. Every
+    /// type's comparisons read an order, a float's included. `None` for an op
+    /// that is not one of the six.
+    pub fn holds_for(self, ordering: Ordering) -> Option<bool> {
         match self {
-            Self::Eq | Self::LtEq | Self::GtEq => Some(true),
-            Self::NotEq | Self::Lt | Self::Gt => Some(false),
+            Self::Eq => Some(ordering.is_eq()),
+            Self::NotEq => Some(ordering.is_ne()),
+            Self::Lt => Some(ordering.is_lt()),
+            Self::LtEq => Some(ordering.is_le()),
+            Self::Gt => Some(ordering.is_gt()),
+            Self::GtEq => Some(ordering.is_ge()),
             Self::Add
             | Self::Sub
             | Self::Mul

@@ -4,6 +4,8 @@
 //! anything a branch, loop, or `break` path can disagree on goes `Opaque`.
 //! Consumed lazily by [`crate::nir_engine::Engine::value`]; see WEP 2026-06-05.
 
+use std::cmp::Ordering;
+
 use crate::const_eval;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
@@ -604,7 +606,7 @@ impl<'a> Builder<'a> {
         // comparison of them folds without a literal (e.g. an identity
         // reinterpret `v as SameType == v`). `v128` has no scalar comparison.
         if lhs == rhs
-            && let Some(answer) = op.reflexive_answer()
+            && let Some(answer) = op.holds_for(Ordering::Equal)
             && !matches!(
                 const_eval::prim_of(self.operand_type(left), tt),
                 Some(PrimitiveType::V128)

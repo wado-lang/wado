@@ -585,9 +585,8 @@ impl Interpreter<'_> {
             CtfeBuiltin::FloatIsNan => match args {
                 [value] => match self.operand_lattice_folded(body, value.expr) {
                     Lattice::Const(value) => {
-                        value.as_float().map_or(Lattice::Unevaluated, |(value, _)| {
-                            Lattice::Const(Value::Bool(value.is_nan()))
-                        })
+                        let (value, _) = value.as_float().expect("`is_nan` takes a float");
+                        Lattice::Const(Value::Bool(value.is_nan()))
                     }
                     _ => Lattice::Unevaluated,
                 },

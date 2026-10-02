@@ -4733,14 +4733,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ast::BinaryOp::Lt
                 | ast::BinaryOp::Gt
                 | ast::BinaryOp::LtEq
-                | ast::BinaryOp::GtEq
-                    if call.type_id
-                        == self
-                            .tysys
+                | ast::BinaryOp::GtEq => {
+                    assert_eq!(
+                        call.type_id,
+                        self.tysys
                             .type_table
                             .borrow_mut()
-                            .make_compiler_enum(CompilerItem::Ordering) =>
-                {
+                            .make_compiler_enum(CompilerItem::Ordering),
+                        "an ordering operator dispatches to `cmp`"
+                    );
                     ord_bool_from_cmp(call, op, span, &self.tysys.type_table)
                 }
                 _ => call,
