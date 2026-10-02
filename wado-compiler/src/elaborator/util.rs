@@ -45,7 +45,7 @@ fn saturated_value(magnitude: u128, negated: bool) -> i128 {
 
 /// The value a number, byte, char or bool literal pattern names, or why it
 /// names none.
-pub(crate) fn pattern_literal(lit: &Literal) -> Result<PatternLiteral, String> {
+pub(super) fn pattern_literal(lit: &Literal) -> Result<PatternLiteral, String> {
     match lit {
         Literal::Number(repr, suffix) => {
             if denotes_float(repr, *suffix) {
@@ -125,7 +125,7 @@ pub(super) fn settles_literal_patterns(type_table: &TypeTable, scrutinee: TypeId
 pub(crate) enum PatternLiteralError {
     /// Of another kind: the type it demands.
     Mismatch(String),
-    /// Out of the scrutinee's range, or a range out of order.
+    /// Out of the scrutinee's range.
     Invalid(String),
 }
 
@@ -171,7 +171,7 @@ pub(crate) fn pattern_literal_error(
 }
 
 /// The type `lit` demands of `scrutinee`, when `scrutinee` is not it.
-pub(crate) fn pattern_literal_mismatch(
+pub(super) fn pattern_literal_mismatch(
     lit: &PatternLiteral,
     scrutinee: TypeId,
     type_table: &mut TypeTable,
@@ -244,7 +244,7 @@ fn range_order_key(bound: &PatternLiteral) -> (bool, u128) {
 }
 
 /// Why `value`, written `shown`, is no value of the integer `target_type`.
-pub(super) fn int_value_range_error(
+fn int_value_range_error(
     value: i128,
     shown: &str,
     target_type: TypeId,

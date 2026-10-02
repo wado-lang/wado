@@ -1815,8 +1815,8 @@ fn compile_after_load<H: CompilerHost>(
         synthesis::traits::synthesize_monomorphized_fn_inspect_stubs(&mut flat);
     }
 
-    // === Phase 9': Per-instance patterns ===
-    // Before erasure, which would let a newtype instance pass as its base.
+    // The last of monomorphization: each instance's literal patterns, judged
+    // before erasure would let a newtype instance pass as its base.
     lower_instance_patterns(&flat, logger)?;
 
     // === Phase 9a: Erase Newtypes and Flags ===

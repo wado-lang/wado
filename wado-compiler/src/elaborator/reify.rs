@@ -9259,7 +9259,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     | ast::Literal::IncludeBytes(_) => {
                         panic!("literal kind {lit:?} is not valid in pattern position")
                     }
-                    _ => {
+                    ast::Literal::Number(..)
+                    | ast::Literal::Byte(_)
+                    | ast::Literal::Char(_)
+                    | ast::Literal::Bool(_) => {
                         // A literal naming no value is already diagnosed, so
                         // the pattern standing in for it is never lowered.
                         let Ok(value) = pattern_literal(lit) else {

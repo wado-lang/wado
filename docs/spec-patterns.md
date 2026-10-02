@@ -49,6 +49,12 @@ fn is_minus_one<T>(x: T) -> i32 {
         _ => 0,
     };
 }
+
+test "a negative literal matches each signed width" {
+    assert is_minus_one(builtin::black_box(-1_i8)) == 1;
+    assert is_minus_one(builtin::black_box(-1_i64)) == 1;
+    assert is_minus_one(builtin::black_box(1_i32)) == 0;
+}
 ```
 
 <!-- {"fixture":"spec_control_flow_match.wado"} -->
