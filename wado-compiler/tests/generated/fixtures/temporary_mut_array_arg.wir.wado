@@ -78,7 +78,7 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:temporary_mut_array_arg.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(95);
+global global:temporary_mut_array_arg.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(95);
 
 fn "temporary_mut_array_arg.wado/helper"(name, counts) {
     let $load_6: i32;
@@ -125,7 +125,7 @@ fn "temporary_mut_array_arg.wado/helper"(name, counts) {
                 break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
             } {
                 prev = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">($licm_repr_67, i_2).1;
-                value_25 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: ref.as_non_null($load_6 = name.used; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = name.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_6)), 0, $array_clone_src_1, 0, $load_6); $array_clone_dst_2), used: $load_6 }), 1: prev + 1 };
+                value_25 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: $load_6 = name.used; struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = name.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_6)), 0, $array_clone_src_1, 0, $load_6); $array_clone_dst_2, used: $load_6 }, 1: prev + 1 };
                 builtin::array_set<ref "tuple//[core:prelude/string.wado/String, i32]">($licm_repr_67, i_2, value_25);
                 return $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }, if @unlikely(local.tee new_used(0 + (1 + $load_6)) > builtin::array_len($local_4_4.repr)) {
                     cold_path;
@@ -136,7 +136,7 @@ fn "temporary_mut_array_arg.wado/helper"(name, counts) {
             continue l1;
         };
     };
-    value_25 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: ref.as_non_null(offset_48 = name.used; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null($load_10 = name.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(offset_48)), 0, $load_10, 0, offset_48); $array_clone_dst_2), used: offset_48 }), 1: 1 };
+    value_25 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: offset_48 = name.used; struct.new "core:prelude/string.wado//String" { repr: $load_10 = name.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(offset_48)), 0, $load_10, 0, offset_48); $array_clone_dst_2, used: offset_48 }, 1: 1 };
     if @unlikely(local.tee offset_48(counts.used) >= builtin::array_len(counts.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/string.wado/String,i32]>::grow"(counts);
@@ -157,7 +157,7 @@ fn "temporary_mut_array_arg.wado/$cm_export__run"() {
     let tx_10: i32;
     let $av_17: i32;
     $av_17 = local.tee v("temporary_mut_array_arg.wado/helper"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 111, 111), used: 3 }, struct.new "core:prelude//List<[core:prelude/string.wado/String,i32]>" { repr: array.new_fixed<ref "tuple//[core:prelude/string.wado/String, i32]">(), used: 0 })).used;
-    v = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_17)), 0, $array_clone_src_1, 0, $av_17); $array_clone_dst_2), used: $av_17 };
+    v = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_17)), 0, $array_clone_src_1, 0, $av_17); $array_clone_dst_2, used: $av_17 };
     rx_9 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_10 = builtin::i32_wrap_i64(packed >> 32_i64);
     rx_9 = "temporary_mut_array_arg.wado/$cm_binding__Stdout_write_via_stream"(rx_9);

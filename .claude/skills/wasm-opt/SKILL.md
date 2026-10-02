@@ -60,50 +60,79 @@ $B/wasm-opt $FEATURES -O3 $S/jco/prog.core.wasm -o $S/O3.wasm
 - `wasm-tools print` gives WAT to diff. A whole-module diff is too large to
   read, so compare per-function instruction counts and opcode histograms with a
   small Node script instead.
+- `-O2 --skip-pass=NAME` measures what one pass is worth: the bytes `-O2` grows
+  by without it. Passes overlap, so these do not add up to the whole gap.
+  Running a pass alone misleads for the `-optimizing` variants, which rerun the
+  whole function pipeline on what they touch.
 
 To run the result, copy the jco output directory and replace its
 `<name>.core.wasm`. Then run it as the `jco` skill describes. Keep a median of
 at least 7 runs per variant, since the spread on a cloud VM is ±15%.
 
-## Findings: zlib benchmark (binaryen 133, 2026-09)
+## Findings: zlib benchmark (binaryen 133, 2026-10)
 
-Sizes of `zlib_bench.core.wasm`:
+Sizes of the zlib benchmark's core module:
 
 | Variant           | Bytes  |
 | ----------------- | ------ |
-| Wado `-Os`        | 90,877 |
-| wasm-opt, no pass | 84,979 |
-| wasm-opt `-O2`    | 73,013 |
-| wasm-opt `-O3`    | 71,274 |
-| wasm-opt `-Oz`    | 70,883 |
+| Wado `-Os`        | 76,476 |
+| wasm-opt, no pass | 76,943 |
+| wasm-opt `-O2`    | 70,073 |
+| wasm-opt `-O3`    | 67,979 |
+| wasm-opt `-Oz`    | 67,853 |
 
-On Node 26, decompression ran faster under wasm-opt `-O2` and `-Os`: the median
-rose 10–40% across two sessions. Compression, and everything under `-O3`,
-stayed within the noise.
+Re-encoding alone makes this module 467 bytes larger, so binaryen's encoding
+finds nothing to save in Wado's.
 
-What wasm-opt removes, as open codegen targets. The counts after the first
-come from Wado's `-O2` build:
+In 2026-09, on Node 26, decompression ran faster under wasm-opt `-O2` and
+`-Os`: the median rose 10–40% across two sessions. Compression, and everything
+under `-O3`, stayed within the noise.
+
+What each `-O2` pass is worth, by `--skip-pass`:
+
+| Pass                     | Bytes | What it does to Wado's output                    |
+| ------------------------ | ----- | ------------------------------------------------ |
+| `coalesce-locals`        | 2,230 | Mostly cleans up after inlining: 337 run alone   |
+| `inlining-optimizing`    | 1,799 | Takes 114 functions to 53                        |
+| `optimize-instructions`  | 1,164 | Peepholes, `ref.as_non_null` among them          |
+| `remove-unused-brs`      | 1,062 | Turns `block`/`br_if`/`return` into `if`/`else`  |
+| `precompute-propagate`   | 782   | Constant propagation                             |
+| `dae-optimizing`         | 758   | Drops unused and always-constant parameters      |
+| `heap2local`             | 664   | Turns non-escaping structs into locals           |
+| `vacuum`, `merge-blocks` | 824   | Removes the blocks the passes above leave behind |
+
+What wasm-opt removes, as open codegen targets:
 
 - [x] Local declarations: the emitter wrote one entry per local, 2,942 entries
   and 7.1KB in all. Grouped by type, they take 346 entries and 1.0KB.
   `wir_optimize/local_layout.rs` groups them, and puts the most used first.
-- [ ] Duplicate function types: 167 types stand outside the rec group, and only
-  104 of them differ.
-- [ ] `ref.as_non_null`: wasm-opt takes the count from 1,869 to 113. A local
-  keeps its non-null type when a write dominates every read
-  (`wir_optimize/local_nullability.rs`). That leaves 634.
+- [ ] Duplicate function types: 136 types, of which `-O2` keeps 69. Most of the
+  rest go with the functions it inlines.
+- [x] `ref.as_non_null`: `-O2` takes the count from 388 to 16. Codegen added
+  most of them, after reads of nullable global slots. A global promoted to a
+  non-null constant now has a non-null slot
+  (`wir_optimize/const_global.rs`). The object of a GC access, which traps on
+  null by itself, is not narrowed (`wir_optimize/cleanup.rs`). The `-Os` build
+  keeps 17.
 - [x] Set-then-get: a `local.set X` followed at once by `local.get X` occurred
   1,191 times. wasm-opt turns it into a `local.tee` or removes it. The last WIR
   pass fuses each pair into a tee (`fuse_remaining_local_tees`), and copy
   propagation removes a copy of a tee'd local. The `-Os` build keeps 39 pairs.
+- [ ] Set sinking: `simplify-locals` moves a `local.set` into the one read of
+  it, so the value stays on the stack. `-O2` removes 565 `local.set` and 725
+  `local.get`, and adds 188 `local.tee`.
 - [x] Local coalescing: wasm-opt merges locals whose live ranges never overlap,
   as a register allocator would. `wir_optimize/local_coalesce.rs` does the
   same per Wasm type. On the `-Os` build it takes 2,752 locals to 1,020.
-- [ ] Identical functions: 10 of zlib's 144 functions duplicate another. The
-  outlined `$cold0` bounds-check paths of `List<T>::index_value` and
-  `index_assign` repeat once per element type with the same body, and
-  `i32`'s `Display::fmt` equals its `Inspect::inspect`. Two `param_spec`
-  clones whose bindings differ can fold to one body
+- [ ] Control-flow shape: `-O2` takes `block` from 229 to 57, `br_if` from 191
+  to 54, and `return` from 184 to 44, while `if` grows from 1,278 to 1,385.
+- [ ] Single-caller inlining: `-O2` inlines functions with one caller whatever
+  their size, `inflate_fast` among them.
+- [ ] Identical functions: the `-Os` build has none. The `-O2` build keeps 9
+  copies of the outlined `$cold0` bounds-check path of `List<T>::index_value`
+  and `index_assign`, one per element type, and `i32`'s `Display::fmt` equals
+  its `Inspect::inspect`. `--duplicate-function-elimination` saves 4,722 bytes
+  there. Two `param_spec` clones whose bindings differ can fold to one body
   (`fmt_float_special$spec0` and `$spec1` in json_twitter).
 - [x] Empty functions: a module whose globals all become constants keeps an
   empty `$initialize_module`. `wir_optimize/empty_work.rs` removes the calls

@@ -58,9 +58,9 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:opt_labeled_block_copy_mutation.wado::$const_obj_0: ref null Array<u8> = array.new_fixed<u8>(116, 61);
-global global:opt_labeled_block_copy_mutation.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(115, 61);
-global global:opt_labeled_block_copy_mutation.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<u8>(98);
+global global:opt_labeled_block_copy_mutation.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(116, 61);
+global global:opt_labeled_block_copy_mutation.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(115, 61);
+global global:opt_labeled_block_copy_mutation.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(98);
 
 fn "opt_labeled_block_copy_mutation.wado/run"() with Stdout {
     let $load_0: ref Array<u8>;
@@ -71,7 +71,7 @@ fn "opt_labeled_block_copy_mutation.wado/run"() with Stdout {
     let new_used_50: i32;
     let start_51: i32;
     let packed_53: i64;
-    x = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null($load_0 = local.tee s(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }).repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(1)), 0, $load_0, 0, 1); $array_clone_dst_2), used: 1 };
+    x = struct.new "core:prelude/string.wado//String" { repr: $load_0 = local.tee s(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }).repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(1)), 0, $load_0, 0, 1); $array_clone_dst_2, used: 1 };
     if @unlikely(2 > builtin::array_len($load_0)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, 2);

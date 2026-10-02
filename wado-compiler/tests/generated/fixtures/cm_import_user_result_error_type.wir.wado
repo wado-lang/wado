@@ -96,23 +96,23 @@ fn "cm_import_user_result_error_type.wado/$cm_binding__Gfx_name"() with Gfx {
     let i_12: i32;
     "wasi/wasi:demo/Gfx::name"(local.tee $outptr("mem/realloc"(0, 0, 4, 12)));
     $result_val = (if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>" {
-        struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: ref.as_non_null($disc = builtin::load_i32($outptr + 4); arr_11 = builtin::array_new<u8>(local.tee len_4(builtin::load_i32(($outptr + 4) + 4))); i_12 = 0; b2: block {
+        struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: $disc = builtin::load_i32($outptr + 4); arr_11 = builtin::array_new<u8>(local.tee len_4(builtin::load_i32(($outptr + 4) + 4))); i_12 = 0; b2: block {
             l3: loop {
                 break_if b2 i_12 >= len_4;
                 builtin::array_set_u8(arr_11, i_12, builtin::load_u8($disc + i_12));
                 i_12 = i_12 + 1;
                 continue l3;
             };
-        }; struct.new "core:prelude/string.wado//String" { repr: arr_11, used: len_4 }) };
+        }; struct.new "core:prelude/string.wado//String" { repr: arr_11, used: len_4 } };
     } else {
-        struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: ref.as_non_null(len_4 = builtin::load_i32($outptr + 4); arr_11 = builtin::array_new<u8>(local.tee i_12(builtin::load_i32(($outptr + 4) + 4))); $disc = 0; b4: block {
+        struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: len_4 = builtin::load_i32($outptr + 4); arr_11 = builtin::array_new<u8>(local.tee i_12(builtin::load_i32(($outptr + 4) + 4))); $disc = 0; b4: block {
             l5: loop {
                 break_if b4 $disc >= i_12;
                 builtin::array_set_u8(arr_11, $disc, builtin::load_u8(len_4 + $disc));
                 $disc = $disc + 1;
                 continue l5;
             };
-        }; struct.new "core:prelude/string.wado//String" { repr: arr_11, used: i_12 }) };
+        }; struct.new "core:prelude/string.wado//String" { repr: arr_11, used: i_12 } };
     });
     drop("mem/realloc"($outptr, 12, 4, 0));
     return $result_val;

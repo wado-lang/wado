@@ -1,0 +1,57 @@
+// A `ref.as_non_null` is emitted only where a null could reach a place that
+// does not trap on it.
+//
+// - `TABLE` promotes to an eager constant. Its slot then holds a non-null value
+//   from instantiation on, so it is declared non-null and no read narrows it.
+// - `BANNER` stays lazy, so its slot is nullable until `$initialize_module`
+//   stores it. `BANNER.len()` reads it as the object of a `struct.get`, which
+//   traps on null by itself, so the read is not narrowed.
+// - `POINTS[i].y` reads a `ref` element as the object of a `struct.get`, and
+//   `lens[0]()` reads one to cast to its closure type, which traps on null as
+//   well. Neither element read is narrowed.
+// - A closure capturing the `for` header's string copies it into a block whose
+//   last value is the fresh array, which is non-null without a check.
+//
+// The assert on `BANNER` goes through a local. Its failure path keeps the
+// operands it reports, and a read of the global into one would need narrowing.
+//
+// Below `-O2` the element reads stay calls, whose non-null results are narrowed
+// where the callee reads them.
+
+struct P {
+    x: i32,
+    y: i32,
+}
+
+global TABLE: List<i32> = [3, 1, 4, 1, 5];
+global POINTS: List<P> = [P { x: 1, y: 2 }, P { x: 3, y: 4 }];
+global BANNER: String = "welcome to wado";
+
+export fn run() {
+    let i = builtin::black_box(1);
+    assert TABLE[i] == 1;
+    assert POINTS[i].y == 4;
+    let banner_len = BANNER.len();
+    assert banner_len == builtin::black_box(15);
+
+    let mut lens: List<fn() -> i32> = [];
+    for let mut s = ""; s.len() < 3; s.push_str("x") {
+        s.push_str("y");
+        lens.push(|| s.len());
+    }
+    assert lens[0]() + lens[1]() == 4;
+}
+
+__DATA__
+{
+    "only_opt": ["O2", "O3", "Os"],
+    "wir_expect:O2": [
+        "global global:opt_elide_nonnull_casts.wado::TABLE: ref \"core:prelude//List<i32>\""
+    ],
+    "wir_not_expect:O2": [
+        "ref.as_non_null(let"
+    ],
+    "wat_lines": [
+        { "contains": ["ref.as_non_null"], "count": 0 }
+    ]
+}

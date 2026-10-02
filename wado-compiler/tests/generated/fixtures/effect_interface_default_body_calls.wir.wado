@@ -113,8 +113,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global mut global:effect_interface_default_body_calls.wado::TRACE: ref null "core:prelude//List<core:prelude/string.wado/String>" = ref.null none;
 global mut global:effect_interface_default_body_calls.wado::$effect_Calc: ref null "effect_interface_default_body_calls.wado//$Dispatch_Calc" = ref.null none;
 global mut global:effect_interface_default_body_calls.wado::$modules_initialized: bool = 0;
-global global:effect_interface_default_body_calls.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(100, 101, 102, 97, 117, 108, 116, 58);
-global global:effect_interface_default_body_calls.wado::$const_obj_3: ref null Array<u8> = array.new_fixed<u8>(104, 97, 110, 100, 108, 101, 114, 58);
+global global:effect_interface_default_body_calls.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(100, 101, 102, 97, 117, 108, 116, 58);
+global global:effect_interface_default_body_calls.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(104, 97, 110, 100, 108, 101, 114, 58);
 
 fn "effect_interface_default_body_calls.wado/$effect_default$Calc$value"(n) {
     let $local_1: ref "core:prelude/string.wado//String";
@@ -258,7 +258,7 @@ fn "effect_interface_default_body_calls.wado/run"() with Stdout, Calc {
         l13: loop {
             break_if b12 tx_32 >= $local_3_27;
             $av_255 = local.tee $local_3_3(builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$iter_0_repr_132, tx_32)).used;
-            $local_3_3 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_13: ref Array<u8>; $array_clone_src_13 = $local_3_3.repr; let $array_clone_dst_14: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_14(builtin::array_new<u8>($av_255)), 0, $array_clone_src_13, 0, $av_255); $array_clone_dst_14), used: $av_255 };
+            $local_3_3 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_13: ref Array<u8>; $array_clone_src_13 = $local_3_3.repr; let $array_clone_dst_14: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_14(builtin::array_new<u8>($av_255)), 0, $array_clone_src_13, 0, $av_255); $array_clone_dst_14, used: $av_255 };
             tx_32 = tx_32 + 1;
             rx_126 = builtin::i32_wrap_i64(local.tee packed_30("wasi/stream-new"()));
             tx_127 = builtin::i32_wrap_i64(packed_30 >> 32_i64);

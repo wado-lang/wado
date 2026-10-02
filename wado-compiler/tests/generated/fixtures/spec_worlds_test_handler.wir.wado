@@ -346,8 +346,8 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
-global global:spec_worlds_test_handler.wado::$const_obj_1: ref null "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>" = struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } };
-global global:spec_worlds_test_handler.wado::$const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(47, 97, 100, 109, 105, 110), used: 6 };
+global global:spec_worlds_test_handler.wado::$const_obj_1: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>" = struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } };
+global global:spec_worlds_test_handler.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(47, 97, 100, 109, 105, 110), used: 6 };
 global mut global:spec_worlds_test_handler.wado::$const_obj_3: ref null "core:prelude/string.wado//String" = ref.null none;
 
 fn "spec_worlds_test_handler.wado/handle"(request) {
@@ -407,7 +407,7 @@ fn "spec_worlds_test_handler.wado/handle"(request) {
 fn "spec_worlds_test_handler.wado/request_for"($mv$path$repr, $mv$path$used) {
     let $sroa_$pattern_temp_0_0_11: i32;
     $sroa_$pattern_temp_0_0_11 = builtin::i32_wrap_i64("wasi/future-new"());
-    drop("spec_worlds_test_handler.wado/$cm_binding__Request_set_path_with_query"(local.tee $sroa_$pattern_temp_0_0_11("spec_worlds_test_handler.wado/$cm_binding__Request_new"("spec_worlds_test_handler.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, $sroa_$pattern_temp_0_0_11, struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>" { 1 }).0), struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($mv$path$used)), 0, $mv$path$repr, 0, $mv$path$used); $array_clone_dst_2), used: $mv$path$used }));
+    drop("spec_worlds_test_handler.wado/$cm_binding__Request_set_path_with_query"(local.tee $sroa_$pattern_temp_0_0_11("spec_worlds_test_handler.wado/$cm_binding__Request_new"("spec_worlds_test_handler.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, $sroa_$pattern_temp_0_0_11, struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>" { 1 }).0), struct.new "core:prelude/string.wado//String" { repr: let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($mv$path$used)), 0, $mv$path$repr, 0, $mv$path$used); $array_clone_dst_2, used: $mv$path$used }));
     return $sroa_$pattern_temp_0_0_11;
 }
 
@@ -445,14 +445,18 @@ fn "spec_worlds_test_handler.wado/$cm_binding__Request_get_path_with_query"(self
     self = builtin::load_u8($outptr);
     $option_result = ref.null none;
     if self != 0 {
-        $option_result = ref.as_non_null(self = builtin::load_i32($outptr + 4); arr_9 = builtin::array_new<u8>(local.tee len_5(builtin::load_i32(($outptr + 4) + 4))); i = 0; b12: block {
+        self = builtin::load_i32($outptr + 4);
+        arr_9 = builtin::array_new<u8>(local.tee len_5(builtin::load_i32(($outptr + 4) + 4)));
+        i = 0;
+        b12: block {
             l13: loop {
                 break_if b12 i >= len_5;
                 builtin::array_set_u8(arr_9, i, builtin::load_u8(self + i));
                 i = i + 1;
                 continue l13;
             };
-        }; struct.new "core:prelude/string.wado//String" { repr: arr_9, used: len_5 });
+        };
+        $option_result = struct.new "core:prelude/string.wado//String" { repr: arr_9, used: len_5 };
         drop("mem/realloc"(builtin::load_i32($outptr + 4), builtin::load_i32(($outptr + 4) + 4), 1, 0));
     }
     drop("mem/realloc"($outptr, 12, 4, 0));
