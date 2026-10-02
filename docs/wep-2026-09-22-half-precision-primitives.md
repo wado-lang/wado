@@ -46,28 +46,16 @@ precision, and Wasm has no instruction to lower an operator to. Whether Wado
 grows half precision arithmetic later is open; nothing decided here forecloses
 it.
 
-The comparisons are the exception, and they are not arithmetic. `Eq`, `Ord` and
-`OperatorOrd` are written in `core:prelude/half.wado`, and each hands the
-widened value to `f32`'s. Widening is exact and order-preserving, so a half
-never has an answer of its own to get wrong. `Default` is there too, and is the
-zero.
+The comparisons are the exception, and they are not arithmetic. `Eq` and `Ord`
+are written in `core:prelude/half.wado`, and each hands the widened value to
+`f32`'s. Widening is exact and order-preserving, so a half never has an answer
+of its own to get wrong. `Default` is there too, and is the zero.
 
-Which of them a comparison reaches is the same for a half as for `f32`. `==`
-and the four ordering operators are IEEE, so a NaN answers false and the two
-zeroes are one value. `Ord::cmp` is the total order, which `sort` and a `T: Ord`
-bound read.
-
-`f32` gets that split from its instructions: `<` lowers to `f32.lt` and never
-consults `cmp`. A half has no instruction, so the split is written down instead.
-`Ord` cannot carry both, because `Ordering` has three cases and an IEEE
-comparison has four answers — the fourth being that there is none. So the
-ordering operators dispatch to `OperatorOrd`, whose four methods return `bool`,
-and `Ord` is left to mean the total order alone. C++20 splits them the same way,
-`operator<=>` yielding `partial_ordering` against `strong_order`.
-
-`OperatorOrd` is `internal` to `core:prelude`: the half types are the only ones
-that need it, and naming the split in the public API is
-[a separate decision](./wep-2026-09-23-comparison-traits.md).
+What a comparison answers is the same for a half as for `f32`, and
+[WEP: One Order per Type](./wep-2026-09-23-comparison-traits.md) decides it.
+Until that WEP's roadmap is done, the four ordering operators on a half keep
+IEEE's answers through `OperatorOrd`, an `internal` trait of `core:prelude`,
+since a half has no instruction to lower them to.
 
 `bf16` is kept rather than converted to `f16` on load. That conversion is the
 one lossy direction, because bf16 has f32's exponent range and f16 does not,
@@ -252,11 +240,7 @@ page from different modules, and nothing carries a trait's visibility across
 that boundary.
 
 A comparison widens both operands and calls, where `f32`'s is one instruction.
-Both could be answered from the bits instead. Equal bits are equal values
-except for a NaN, and different bits are different values except for the two
-zeroes, which is all `Eq` needs. `Ord` would take the sign-magnitude key
-`f32`'s own uses, computed on sixteen bits. Nothing measured has asked for
-either.
+Nothing measured has asked for a faster one.
 
 A half precision tensor cannot be part of a component's public API, so a Loam
 module that exports one has to widen it or hand out its bytes.

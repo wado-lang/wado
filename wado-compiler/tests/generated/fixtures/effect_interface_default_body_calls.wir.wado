@@ -75,29 +75,27 @@ type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32; 
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(27)
 
-type "functype//core:rt/$initialize_module" = fn();  // TypeId(28)
+type "functype//core:rt/write_string_to_stream$spec0" = fn(i32, ref Array<u8>, i32);  // TypeId(28)
 
-type "functype//core:rt/write_string_to_stream$spec0" = fn(i32, ref Array<u8>, i32);  // TypeId(29)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(29)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(30)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(30)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(31)
+type "functype//effect_interface_default_body_calls.wado/effect_interface_default_body_calls.wado/$Closure_0::$call" = fn(ref "effect_interface_default_body_calls.wado//$Closure_0", i32) -> i32;  // TypeId(31)
 
-type "functype//effect_interface_default_body_calls.wado/effect_interface_default_body_calls.wado/$Closure_0::$call" = fn(ref "effect_interface_default_body_calls.wado//$Closure_0", i32) -> i32;  // TypeId(32)
+type "functype//effect_interface_default_body_calls.wado/effect_interface_default_body_calls.wado/$Closure_1::$call" = fn(i32) -> i32;  // TypeId(32)
 
-type "functype//effect_interface_default_body_calls.wado/effect_interface_default_body_calls.wado/$Closure_1::$call" = fn(i32) -> i32;  // TypeId(33)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(33)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(34)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(34)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(35)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(35)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(36)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(36)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(37)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(37)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(38)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(39)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(38)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -158,7 +156,6 @@ fn "effect_interface_default_body_calls.wado/run"() with Stdout, Calc {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:effect_interface_default_body_calls.wado::$modules_initialized);
         cold_path;
-        "core:rt/$initialize_module"();
         "effect_interface_default_body_calls.wado/$initialize_module"();
         global:effect_interface_default_body_calls.wado::$modules_initialized = 1;
     };
@@ -318,7 +315,6 @@ fn "effect_interface_default_body_calls.wado/$cm_export__run"() {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:effect_interface_default_body_calls.wado::$modules_initialized);
         cold_path;
-        "core:rt/$initialize_module"();
         "effect_interface_default_body_calls.wado/$initialize_module"();
         global:effect_interface_default_body_calls.wado::$modules_initialized = 1;
     };
@@ -508,9 +504,6 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             continue l49;
         };
     };
-}
-
-fn "core:rt/$initialize_module"() {
 }
 
 fn "core:rt/write_string_to_stream$spec0"(tx, $mv$message$repr, $mv$message$used) {

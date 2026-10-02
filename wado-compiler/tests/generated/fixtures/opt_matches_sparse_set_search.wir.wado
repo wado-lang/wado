@@ -47,29 +47,25 @@ type "functype//opt_matches_sparse_set_search.wado/$cm_binding__Stdout_write_via
 
 type "functype//opt_matches_sparse_set_search.wado/$cm_export__run" = fn();  // TypeId(17)
 
-type "functype//opt_matches_sparse_set_search.wado/$initialize_module" = fn();  // TypeId(18)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(18)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(19)
+type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(19)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(20)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(20)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(21)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(21)
 
-type "functype//core:rt/$initialize_module" = fn();  // TypeId(22)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(22)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(23)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(23)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(24)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(25)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(25)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(26)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(26)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(27)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(28)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(29)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(27)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -85,7 +81,6 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:opt_matches_sparse_set_search.wado::EDGES: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(65, 90, 97, 122, 170, 181, 186, 192, 214, 216, 246, 248, 705, 880, 884, 902, 904, 906, 908, 910, 929, 931, 1013, 1024, 1153, 1329, 1366, 1488, 1514, 1569, 1610, 2308, 2361, 3585, 3632, 4304, 4346, 12353, 12438, 12449, 12538, 19968, 40959, 44032, 55203), used: 45 };
-global mut global:opt_matches_sparse_set_search.wado::$modules_initialized: bool = 0;
 global global:opt_matches_sparse_set_search.wado::$const_obj_1: ref null "core:prelude//List<u32>" = struct.new "core:prelude//List<u32>" { repr: array.new_fixed<u32>(0, 1, 2, 9, 10, 20, 21, 999, 1000, 1001, 69999, 70000, 80000, 80001, 2147483646, 2147483647, -2147483648, -2147483647, -1879048192, -1879047937, -1879047936, -1073741825, -1073741824, -17, -16, -1), used: 26 };
 global global:opt_matches_sparse_set_search.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<u8>(32);
 
@@ -108,13 +103,6 @@ fn "opt_matches_sparse_set_search.wado/run"() with Stdout {
     let $sroa_$iter_1_exhausted_211: bool;
     let $sroa_$iter_3_repr_217: ref Array<u32>;
     let $sroa_$f_buf_231: ref "core:prelude/string.wado//String";
-    $inline__initialize_modules_0: block {
-        break_if $inline__initialize_modules_0 @likely(global:opt_matches_sparse_set_search.wado::$modules_initialized);
-        cold_path;
-        "core:rt/$initialize_module"();
-        "opt_matches_sparse_set_search.wado/$initialize_module"();
-        global:opt_matches_sparse_set_search.wado::$modules_initialized = 1;
-    };
     inside = 0;
     outside = 0;
     end_35 = local.tee self_31(global:opt_matches_sparse_set_search.wado::EDGES).used;
@@ -386,18 +374,8 @@ fn "opt_matches_sparse_set_search.wado/$cm_binding__Stdout_write_via_stream"(dat
 }
 
 fn "opt_matches_sparse_set_search.wado/$cm_export__run"() {
-    $inline__initialize_modules_0: block {
-        break_if $inline__initialize_modules_0 @likely(global:opt_matches_sparse_set_search.wado::$modules_initialized);
-        cold_path;
-        "core:rt/$initialize_module"();
-        "opt_matches_sparse_set_search.wado/$initialize_module"();
-        global:opt_matches_sparse_set_search.wado::$modules_initialized = 1;
-    };
     "opt_matches_sparse_set_search.wado/run"();
     "wasi/task-return"(0);
-}
-
-fn "opt_matches_sparse_set_search.wado/$initialize_module"() {
 }
 
 fn "core:prelude/primitive.wado/count_digits_u64"(val) {
@@ -525,9 +503,6 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             continue l73;
         };
     };
-}
-
-fn "core:rt/$initialize_module"() {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {

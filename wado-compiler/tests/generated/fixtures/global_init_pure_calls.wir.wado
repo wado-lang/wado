@@ -42,35 +42,31 @@ type "functype//global_init_pure_calls.wado/$cm_binding__Stdout_write_via_stream
 
 type "functype//global_init_pure_calls.wado/$cm_export__run" = fn();  // TypeId(16)
 
-type "functype//global_init_pure_calls.wado/$initialize_module" = fn();  // TypeId(17)
+type "functype//global_init_pure_calls.wado/run$cold0" = fn(i32);  // TypeId(17)
 
-type "functype//global_init_pure_calls.wado/run$cold0" = fn(i32);  // TypeId(18)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(18)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(19)
+type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(19)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(20)
+type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(20)
 
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(21)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(21)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(22)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(22)
 
-type "functype//core:rt/$initialize_module" = fn();  // TypeId(23)
+type "functype//global_init_pure_calls.wado/global_init_pure_calls.wado/$Closure_1::$call" = fn(i32) -> i32;  // TypeId(23)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(24)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(24)
 
-type "functype//global_init_pure_calls.wado/global_init_pure_calls.wado/$Closure_1::$call" = fn(i32) -> i32;  // TypeId(25)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(25)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(26)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(26)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(27)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(27)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(28)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(28)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(29)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(30)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(31)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(29)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -87,7 +83,6 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:global_init_pure_calls.wado::DOUBLER: ref null struct = struct.new "canonical//CanonicalClosure_0" { env: struct.new "global_init_pure_calls.wado//$Closure_1" {  }, func: ref.func "closure/global_init_pure_calls.wado/$closure_wrapper_0" };
-global mut global:global_init_pure_calls.wado::$modules_initialized: bool = 0;
 global global:global_init_pure_calls.wado::$const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(52, 50), used: 2 };
 global global:global_init_pure_calls.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<u8>(10);
 global global:global_init_pure_calls.wado::$const_obj_3: ref null Array<u8> = array.new_fixed<u8>(68, 79, 85, 66, 76, 69, 82, 40, 50, 49, 41, 58, 32);
@@ -102,13 +97,6 @@ fn "global_init_pure_calls.wado/run"() with Stdout {
     let $v0: i32;
     let packed: i64;
     let tx_22: i32;
-    $inline__initialize_modules_0: block {
-        break_if $inline__initialize_modules_0 @likely(global:global_init_pure_calls.wado::$modules_initialized);
-        cold_path;
-        "core:rt/$initialize_module"();
-        "global_init_pure_calls.wado/$initialize_module"();
-        global:global_init_pure_calls.wado::$modules_initialized = 1;
-    };
     if @unlikely(local.tee $v0(block -> i32 {
         let $indirect_call_1: ref "canonical//CanonicalClosure_0";
         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(global:global_init_pure_calls.wado::DOUBLER)).env, 21);
@@ -131,18 +119,8 @@ fn "global_init_pure_calls.wado/$cm_binding__Stdout_write_via_stream"(data) with
 }
 
 fn "global_init_pure_calls.wado/$cm_export__run"() {
-    $inline__initialize_modules_0: block {
-        break_if $inline__initialize_modules_0 @likely(global:global_init_pure_calls.wado::$modules_initialized);
-        cold_path;
-        "core:rt/$initialize_module"();
-        "global_init_pure_calls.wado/$initialize_module"();
-        global:global_init_pure_calls.wado::$modules_initialized = 1;
-    };
     "global_init_pure_calls.wado/run"();
     "wasi/task-return"(0);
-}
-
-fn "global_init_pure_calls.wado/$initialize_module"() {
 }
 
 fn "global_init_pure_calls.wado/run$cold0"($v0) with Stdout {
@@ -302,9 +280,6 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             continue l29;
         };
     };
-}
-
-fn "core:rt/$initialize_module"() {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {

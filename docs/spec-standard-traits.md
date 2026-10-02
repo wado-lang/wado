@@ -338,6 +338,10 @@ The `==` and `!=` operators use `Eq::eq`:
 - `a == b` desugars to `Eq::eq(&a, &b)`
 - `a != b` desugars to `!Eq::eq(&a, &b)`
 
+`Eq<Self>` is an equivalence: `a == a` holds, `a == b` is `b == a`, and `a == b`
+with `b == c` gives `a == c`. A derived impl holds this when its members' impls
+do. Nothing checks a written one.
+
 `==` can span two types. The right operand picks among a type's `Eq<Rhs>` impls
 exactly as it picks among its `Add<Rhs>` impls, so `StrSlice` and `String`
 compare directly, in either order, with nothing copied.
@@ -387,30 +391,74 @@ test {
 }
 ```
 
-`Ord` is a total order, and `sort`, `TreeMap` and every `T: Ord` bound read it.
-On a float it is IEEE 754-2019 `totalOrder`, so it separates `-0.0` from `0.0`
-and places each NaN at one end rather than calling it equal to what it met.
-
-On every type but a float, a comparison operator means what `Ord::cmp` answers:
+`Ord` is a total order. `sort`, `TreeMap`, every `T: Ord` bound and the four
+ordering operators read it, on every type:
 
 - `a < b` desugars to `Ord::cmp(&a, &b) == Ordering::Less`
 - `a > b` desugars to `Ord::cmp(&a, &b) == Ordering::Greater`
 - `a <= b` desugars to `Ord::cmp(&a, &b) != Ordering::Greater`
 - `a >= b` desugars to `Ord::cmp(&a, &b) != Ordering::Less`
 
-A float is the one type whose operators are not its `Ord`: all four are IEEE,
-so a NaN answers false and the two zeroes are one value. This holds for `f16`
-and `bf16` as for `f32` and `f64`. One trait cannot carry both orders, because
-`Ordering` has three cases and an IEEE comparison has four answers.
+So a comparison means the same in a body generic over `T: Ord` as at the
+concrete type.
 
-A float still implements `Ord`, so a `List<f32>` sorts, and a struct holding a
-float derives `Ord` and can key a `TreeMap`.
+Where a type implements both `Eq` and `Ord`, `a == b` holds exactly when
+`a.cmp(&b)` is `Ordering::Equal`. An impl the compiler writes holds this by
+construction, since both come from one source
+([Derivation Policy](./spec-traits.md#derivation-policy)).
 
-Written at a concrete float type, the operators are IEEE. Written in a body
-generic over `T: Ord`, they read `Ord::cmp`, so the same expression answers
-differently at `T = f32`.
+A type may write both, so that `==` can answer faster than `cmp`, as a length
+check does for a `String`. Nothing proves or checks that such a pair agrees.
 
-Rationale: [WEP: The Operator Order and the Total Order](./wep-2026-09-23-comparison-traits.md).
+Rationale: [WEP: One Order per Type](./wep-2026-09-23-comparison-traits.md).
+
+### Float Comparison
+
+`f16`, `bf16`, `f32` and `f64` share one equality and one order, which the
+operators, `sort` and `TreeMap` all read:
+
+- Every NaN is one value. It equals every NaN, whatever its sign and payload,
+  and is greater than every other value, `+Inf` included.
+- `-0.0` equals `0.0`.
+- Any other two values compare as IEEE 754 compares them.
+
+The answers differ from IEEE's only when an operand is a NaN. `NaN == NaN` is
+true, `x < NaN` is true for any `x` that is not a NaN, and `NaN < x` stays
+false. `x != x` is always false, so a NaN is tested with `is_nan()`.
+
+An IEEE predicate is written with `is_nan()`:
+
+| IEEE predicate | Written in Wado          |
+| -------------- | ------------------------ |
+| `a == b`       | `a == b && !a.is_nan()`  |
+| `a != b`       | `a != b \|\| a.is_nan()` |
+| `a < b`        | `a < b && !b.is_nan()`   |
+| `a <= b`       | `a <= b && !b.is_nan()`  |
+| `a > b`        | `a > b && !a.is_nan()`   |
+| `a >= b`       | `a >= b && !a.is_nan()`  |
+
+`min` and `max` follow the order wherever they are called: `f32::min`,
+`f64::min`, `Iterator::min`, and every `min` over a `T: Ord`. NaN is greatest,
+so `min(1.0, NaN)` is `1.0` and `max(1.0, NaN)` is NaN.
+
+Of two `Equal` arguments, on every type, `min` returns the first and `max` the
+second. `Iterator::min` returns the first of its least elements and
+`Iterator::max` the last of its greatest, so `min(a, b)` is `[a, b]`'s `min()`.
+`[min(a, b), max(a, b)]` is then `[a, b]` sorted stably: `min(-0.0, 0.0)` is
+`-0.0` and `max(-0.0, 0.0)` is `0.0`.
+
+`f32::minimum`, `f32::maximum`, `f64::minimum` and `f64::maximum` are IEEE
+754-2019 `minimum` and `maximum`: a NaN argument gives NaN on both, and `-0.0`
+is less than `0.0`.
+
+`clamp(x, low, high)` on `f32` and `f64` first traps on a NaN bound or on
+`low > high`, whatever `x` is. It then confines `x` to `low..=high` by the
+order, with one exception: a NaN `x` gives NaN rather than `high`.
+
+> Not yet implemented: the operators on a float are IEEE's, and `Ord` on a float
+> is IEEE 754 `totalOrder`, which reads a NaN's bits and orders `-0.0 < 0.0`.
+> `f32::min` and `f64::min` (and `max`) are IEEE 754-2019 `minimum` (and
+> `maximum`), and `minimum` and `maximum` do not exist.
 
 ### Default Implementations
 

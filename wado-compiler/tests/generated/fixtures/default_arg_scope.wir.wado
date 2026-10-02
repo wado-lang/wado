@@ -72,27 +72,21 @@ type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(30)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(31)
 
-type "functype//./sub/default_arg_caller_local_not_in_scope_lib.wado/$initialize_module" = fn();  // TypeId(32)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(32)
 
-type "functype//./sub/default_arg_namespaced_callee_a.wado/$initialize_module" = fn();  // TypeId(33)
+type "functype//default_arg_scope.wado/default_arg_scope.wado/$Closure_2::$call" = fn() -> i32;  // TypeId(33)
 
-type "functype//core:rt/$initialize_module" = fn();  // TypeId(34)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(34)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(35)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(35)
 
-type "functype//default_arg_scope.wado/default_arg_scope.wado/$Closure_2::$call" = fn() -> i32;  // TypeId(36)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(36)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(37)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(37)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(38)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(38)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(39)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(40)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(41)
-
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(42)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(39)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -108,7 +102,6 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
 global global:./sub/default_arg_caller_local_not_in_scope_lib.wado::MAKE: ref null struct = struct.new "canonical//CanonicalClosure_0" { env: struct.new "default_arg_scope.wado//$Closure_2" {  }, func: ref.func "closure/default_arg_scope.wado/$closure_wrapper_0" };
-global mut global:default_arg_scope.wado::$modules_initialized: bool = 0;
 global global:default_arg_scope.wado::$const_obj_265: ref null Array<u8> = array.new_fixed<u8>(10);
 global global:default_arg_scope.wado::$const_obj_266: ref null Array<u8> = array.new_fixed<u8>(99, 97, 108, 108, 101, 100, 40, 41, 58, 32);
 global global:default_arg_scope.wado::$const_obj_267: ref null Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 99, 97, 108, 108, 101, 100, 40, 41, 32, 61, 61, 32, 55, 10);
@@ -119,123 +112,43 @@ global mut global:default_arg_scope.wado::$const_obj_271: ref null Array<u8> = r
 global global:default_arg_scope.wado::$const_obj_272: ref null Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
 
 fn "default_arg_scope.wado/$cm_export__$test_0_a_default_names_a_module_private_item_of_its_own_module"() {
-    $inline__initialize_modules_0: block {
-        break_if $inline__initialize_modules_0 @likely(global:default_arg_scope.wado::$modules_initialized);
-        cold_path;
-        "./sub/default_arg_caller_local_not_in_scope_lib.wado/$initialize_module"();
-        "./sub/default_arg_namespaced_callee_a.wado/$initialize_module"();
-        "core:rt/$initialize_module"();
-        global:default_arg_scope.wado::$modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "default_arg_scope.wado/$cm_export__$test_1_a_default_calls_a_module_private_function_of_its_own_module"() {
-    $inline__initialize_modules_0: block {
-        break_if $inline__initialize_modules_0 @likely(global:default_arg_scope.wado::$modules_initialized);
-        cold_path;
-        "./sub/default_arg_caller_local_not_in_scope_lib.wado/$initialize_module"();
-        "./sub/default_arg_namespaced_callee_a.wado/$initialize_module"();
-        "core:rt/$initialize_module"();
-        global:default_arg_scope.wado::$modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "default_arg_scope.wado/$cm_export__$test_2_a_default_names_a_type_this_module_never_imported"() {
-    $inline__initialize_modules_0: block {
-        break_if $inline__initialize_modules_0 @likely(global:default_arg_scope.wado::$modules_initialized);
-        cold_path;
-        "./sub/default_arg_caller_local_not_in_scope_lib.wado/$initialize_module"();
-        "./sub/default_arg_namespaced_callee_a.wado/$initialize_module"();
-        "core:rt/$initialize_module"();
-        global:default_arg_scope.wado::$modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "default_arg_scope.wado/$cm_export__$test_3_a_default_names_a_variant_case_through_a_qualified_path"() {
-    $inline__initialize_modules_0: block {
-        break_if $inline__initialize_modules_0 @likely(global:default_arg_scope.wado::$modules_initialized);
-        cold_path;
-        "./sub/default_arg_caller_local_not_in_scope_lib.wado/$initialize_module"();
-        "./sub/default_arg_namespaced_callee_a.wado/$initialize_module"();
-        "core:rt/$initialize_module"();
-        global:default_arg_scope.wado::$modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "default_arg_scope.wado/$cm_export__$test_4_a_file_reading_literal_in_a_default_reads_the_file_that_wrote_it"() {
-    $inline__initialize_modules_0: block {
-        break_if $inline__initialize_modules_0 @likely(global:default_arg_scope.wado::$modules_initialized);
-        cold_path;
-        "./sub/default_arg_caller_local_not_in_scope_lib.wado/$initialize_module"();
-        "./sub/default_arg_namespaced_callee_a.wado/$initialize_module"();
-        "core:rt/$initialize_module"();
-        global:default_arg_scope.wado::$modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "default_arg_scope.wado/$cm_export__$test_5_a_default_names_an_item_its_own_module_imported"() {
-    $inline__initialize_modules_0: block {
-        break_if $inline__initialize_modules_0 @likely(global:default_arg_scope.wado::$modules_initialized);
-        cold_path;
-        "./sub/default_arg_caller_local_not_in_scope_lib.wado/$initialize_module"();
-        "./sub/default_arg_namespaced_callee_a.wado/$initialize_module"();
-        "core:rt/$initialize_module"();
-        global:default_arg_scope.wado::$modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "default_arg_scope.wado/$cm_export__$test_6_a_default_resolves_its_own_module_s_import_aliases"() {
-    $inline__initialize_modules_0: block {
-        break_if $inline__initialize_modules_0 @likely(global:default_arg_scope.wado::$modules_initialized);
-        cold_path;
-        "./sub/default_arg_caller_local_not_in_scope_lib.wado/$initialize_module"();
-        "./sub/default_arg_namespaced_callee_a.wado/$initialize_module"();
-        "core:rt/$initialize_module"();
-        global:default_arg_scope.wado::$modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "default_arg_scope.wado/$cm_export__$test_7_a_default_names_a_namespaced_global_of_its_own_module"() {
-    $inline__initialize_modules_0: block {
-        break_if $inline__initialize_modules_0 @likely(global:default_arg_scope.wado::$modules_initialized);
-        cold_path;
-        "./sub/default_arg_caller_local_not_in_scope_lib.wado/$initialize_module"();
-        "./sub/default_arg_namespaced_callee_a.wado/$initialize_module"();
-        "core:rt/$initialize_module"();
-        global:default_arg_scope.wado::$modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "default_arg_scope.wado/$cm_export__$test_8_a_namespace_qualified_call_fills_its_callee_s_defaults"() {
-    $inline__initialize_modules_0: block {
-        break_if $inline__initialize_modules_0 @likely(global:default_arg_scope.wado::$modules_initialized);
-        cold_path;
-        "./sub/default_arg_caller_local_not_in_scope_lib.wado/$initialize_module"();
-        "./sub/default_arg_namespaced_callee_a.wado/$initialize_module"();
-        "core:rt/$initialize_module"();
-        global:default_arg_scope.wado::$modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "default_arg_scope.wado/$cm_export__$test_9_a_local_of_the_function_taking_a_default_is_not_in_scope_for_it"() {
     let v_55: i32;
-    $inline__initialize_modules_0: block {
-        break_if $inline__initialize_modules_0 @likely(global:default_arg_scope.wado::$modules_initialized);
-        cold_path;
-        "./sub/default_arg_caller_local_not_in_scope_lib.wado/$initialize_module"();
-        "./sub/default_arg_namespaced_callee_a.wado/$initialize_module"();
-        "core:rt/$initialize_module"();
-        global:default_arg_scope.wado::$modules_initialized = 1;
-    };
     if @unlikely(local.tee v_55(block -> i32 {
         let $indirect_call_1: ref "canonical//CanonicalClosure_0";
         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(global:./sub/default_arg_caller_local_not_in_scope_lib.wado::MAKE)).env);
@@ -248,62 +161,22 @@ fn "default_arg_scope.wado/$cm_export__$test_9_a_local_of_the_function_taking_a_
 }
 
 fn "default_arg_scope.wado/$cm_export__$test_10_a_method_s_default_resolves_where_it_is_declared"() {
-    $inline__initialize_modules_0: block {
-        break_if $inline__initialize_modules_0 @likely(global:default_arg_scope.wado::$modules_initialized);
-        cold_path;
-        "./sub/default_arg_caller_local_not_in_scope_lib.wado/$initialize_module"();
-        "./sub/default_arg_namespaced_callee_a.wado/$initialize_module"();
-        "core:rt/$initialize_module"();
-        global:default_arg_scope.wado::$modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "default_arg_scope.wado/$cm_export__$test_11_a_default_constructs_a_type_private_to_its_own_module"() {
-    $inline__initialize_modules_0: block {
-        break_if $inline__initialize_modules_0 @likely(global:default_arg_scope.wado::$modules_initialized);
-        cold_path;
-        "./sub/default_arg_caller_local_not_in_scope_lib.wado/$initialize_module"();
-        "./sub/default_arg_namespaced_callee_a.wado/$initialize_module"();
-        "core:rt/$initialize_module"();
-        global:default_arg_scope.wado::$modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "default_arg_scope.wado/$cm_export__$test_12_a_method_s_default_names_a_type_private_to_its_own_module"() {
-    $inline__initialize_modules_0: block {
-        break_if $inline__initialize_modules_0 @likely(global:default_arg_scope.wado::$modules_initialized);
-        cold_path;
-        "./sub/default_arg_caller_local_not_in_scope_lib.wado/$initialize_module"();
-        "./sub/default_arg_namespaced_callee_a.wado/$initialize_module"();
-        "core:rt/$initialize_module"();
-        global:default_arg_scope.wado::$modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "default_arg_scope.wado/$cm_export__$test_13_a_cross_module_default_naming_an_earlier_parameter_reads_the_caller_s_value"() {
-    $inline__initialize_modules_0: block {
-        break_if $inline__initialize_modules_0 @likely(global:default_arg_scope.wado::$modules_initialized);
-        cold_path;
-        "./sub/default_arg_caller_local_not_in_scope_lib.wado/$initialize_module"();
-        "./sub/default_arg_namespaced_callee_a.wado/$initialize_module"();
-        "core:rt/$initialize_module"();
-        global:default_arg_scope.wado::$modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "default_arg_scope.wado/$cm_export__$test_14_a_cross_module_default_s_nodes_keep_their_own_identity"() {
-    $inline__initialize_modules_0: block {
-        break_if $inline__initialize_modules_0 @likely(global:default_arg_scope.wado::$modules_initialized);
-        cold_path;
-        "./sub/default_arg_caller_local_not_in_scope_lib.wado/$initialize_module"();
-        "./sub/default_arg_namespaced_callee_a.wado/$initialize_module"();
-        "core:rt/$initialize_module"();
-        global:default_arg_scope.wado::$modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
@@ -490,15 +363,6 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             continue l30;
         };
     };
-}
-
-fn "./sub/default_arg_caller_local_not_in_scope_lib.wado/$initialize_module"() {
-}
-
-fn "./sub/default_arg_namespaced_callee_a.wado/$initialize_module"() {
-}
-
-fn "core:rt/$initialize_module"() {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {

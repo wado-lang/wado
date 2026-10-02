@@ -739,6 +739,26 @@ on that path.
 
 Rationale: [WEP: Operator Precedence](./wep-2026-01-11-operator-precedence.md).
 
+### The `self_comparison` Lint
+
+The `self_comparison` lint warns about a comparison whose two operands are the
+same expression, where evaluating that expression performs no effect. Such a
+comparison has one answer on every type, because the laws of
+[`Eq`](./spec-standard-traits.md#eq---equality) and
+[`Ord`](./spec-standard-traits.md#ord---ordering) make both reflexive:
+`x == x`, `x <= x` and `x >= x` are true, and `x != x`, `x < x` and `x > x` are
+false. In a chain, each adjacent pair is one comparison.
+
+On a float the warning adds that a NaN is tested with `is_nan()`, since `x != x`
+is the NaN test other languages teach.
+
+Mark the item `#[allow(self_comparison)]`, or the module
+`#![allow(self_comparison)]`, where the comparison is deliberate.
+
+> Not yet implemented: no comparison is reported.
+
+Rationale: [WEP: One Order per Type](./wep-2026-09-23-comparison-traits.md).
+
 ## Ranges
 
 A range operator builds a range value from two bounds:

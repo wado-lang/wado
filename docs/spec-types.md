@@ -55,9 +55,8 @@ arithmetic:
   [Numeric Casts](./spec-expressions.md#numeric-casts)).
 - A numeric literal coerces to either type and is rounded once (see
   [Floating-Point Literals](./spec-literals.md#floating-point-literals)).
-- A comparison widens both operands to `f32` and compares those, so `<` is
-  IEEE and `Ord` is the total order (see
-  [Ord](./spec-standard-traits.md#ord---ordering)).
+- A comparison answers as it would on both operands widened to `f32` (see
+  [Float Comparison](./spec-standard-traits.md#float-comparison)).
 - Neither type crosses a component boundary (see
   [Type Mapping](./spec-components.md#type-mapping-at-component-boundaries)).
 
@@ -476,9 +475,8 @@ Every sort is stable and O(n log n) in the worst case:
 | `sorted()`    | No       | `Ord::cmp` (requires `T: Ord`)      |
 | `sorted_by()` | No       | Custom `fn mut(&T, &T) -> Ordering` |
 
-On a float, `Ord` is the IEEE 754 total order rather than the order `<` gives,
-so a NaN still has a place in a sorted list. See
-[Ord - Ordering](./spec-standard-traits.md#ord---ordering).
+`sort()` and `sorted()` put every NaN in a list of floats last. See
+[Float Comparison](./spec-standard-traits.md#float-comparison).
 
 <!-- {"fixture":"spec_literals_lists.wado"} -->
 
