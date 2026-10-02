@@ -626,6 +626,7 @@ fn run_optimization_passes(
     let mut param_spec_state = param_spec::ParamSpecState::default();
     let mut call_sites = inline::CallSites::default();
     let mut inline_facts = inline::InlineFacts::default();
+    let mut body_summaries = mod_ref::BodySummaries::default();
     // Held across the loop: the budget anchors on the unit as the loop found it,
     // so what the rounds add together stays bounded. See `InlineBudget`.
     let mut inline_budget = inline::InlineBudget::new(config.inline_growth);
@@ -709,7 +710,7 @@ fn run_optimization_passes(
         // Hosts `MatchToSwitchRule` (`include_match = true`), so `inline` copies
         // `Switch`-shaped bodies, and `const_branch_prune`.
         gated!("nir/peephole", GatedPass::PeepholePre, |p, g| {
-            peephole::run_peephole(p, g, true, &mut heap_effects)
+            peephole::run_peephole(p, g, true, &mut heap_effects, &mut body_summaries)
         });
         // Demote deep `$value_copy$T` copies of `List<E>` to shallow spine
         // copies when the binding's elements are provably never mutated through
@@ -755,12 +756,13 @@ fn run_optimization_passes(
             descriptor_cache,
             &mut call_sites,
             &mut inline_facts,
+            &mut body_summaries,
         ));
         // Peephole engine, post-inline run. `elide_local` runs again over
         // inline's freshly dead bindings. No `MatchToSwitchRule` — the
         // pre-inline run lowered every reachable `Match` already.
         gated!("nir/peephole", GatedPass::PeepholePost, |p, g| {
-            peephole::run_peephole(p, g, false, &mut heap_effects)
+            peephole::run_peephole(p, g, false, &mut heap_effects, &mut body_summaries)
         });
         // `labeled_block_fusion` moved into the post-inline `nir/peephole`
         // session as `LabeledBlockFusionRule`; see `optimize/peephole.rs`.
