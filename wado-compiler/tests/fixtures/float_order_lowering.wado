@@ -23,8 +23,21 @@ fn differs(a: f64, b: f64) -> bool {
     return !(a == 2.0) && b != 2.0;
 }
 
+// The NaN test leaves the comparison a 0 or 1, so the count stays branchless.
+fn count_ordered(xs: &List<f64>) -> i32 {
+    let mut ordered = 0;
+    for let i of 1..<xs.len() {
+        if xs[i - 1] <= xs[i] {
+            ordered += 1;
+        }
+    }
+    return ordered;
+}
+
 test {
     let nan = f64::from_bits(builtin::black_box(0x7FF8_0000_0000_0000));
+    let xs: List<f64> = [1.0, 2.0, nan, 0.5, nan];
+    assert count_ordered(&xs) == 3;
     assert above(nan) && !below(nan);
     assert above(builtin::black_box(2.0)) && below(builtin::black_box(0.5));
     assert less(builtin::black_box(1.0), nan) && !less(nan, builtin::black_box(1.0));
@@ -41,6 +54,6 @@ __DATA__
         "return (a <= b) | (b != b);",
         "return (a == b) | ((a != a) & (b != b));"
     ],
-    "wir_expect:O1": ["(nan != 2) & (nan != 2)"],
+    "wir_expect:O1": ["(nan != 2) & (nan != 2)", "ordered = ordered + "],
     "wir_not_expect:O1": ["(nan == 2) == 0"]
 }

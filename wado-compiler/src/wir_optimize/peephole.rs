@@ -1066,6 +1066,10 @@ fn is_boolean_valued(instr: &WirInstr) -> bool {
     if let WirInstr::I32And(l, r) | WirInstr::I32Or(l, r) | WirInstr::I32Xor(l, r) = instr {
         return is_boolean_valued(l) && is_boolean_valued(r);
     }
+    // A sequence's value is its last instruction's.
+    if let WirInstr::Seq(instrs) = instr {
+        return instrs.last().is_some_and(is_boolean_valued);
+    }
     matches!(
         instr,
         // Integer comparisons
