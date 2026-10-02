@@ -3240,8 +3240,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
         let value = match lit {
-            Literal::Number(repr, suffix) if util::denotes_float(repr, *suffix) => return None,
-            Literal::Number(repr, _) => {
+            Literal::Number(repr, suffix) => {
+                let repr = util::integer_digits(repr, *suffix)?;
                 if self
                     .tysys
                     .type_table

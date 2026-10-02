@@ -168,8 +168,7 @@ pub(super) fn denotes_float(repr: &str, suffix: Option<NumericSuffix>) -> bool {
     is_float_only_literal(repr) || suffix.is_some_and(NumericSuffix::is_float)
 }
 
-/// The digits of a number literal that denotes an integer, the reading every
-/// constant that must be one takes: a range bound, a lane, a tuple index.
+/// The digits of a number literal that denotes an integer.
 pub(super) fn integer_digits(repr: &str, suffix: Option<NumericSuffix>) -> Option<&str> {
     (!denotes_float(repr, suffix)).then_some(repr)
 }
