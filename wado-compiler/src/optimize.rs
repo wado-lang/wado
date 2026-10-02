@@ -624,8 +624,6 @@ fn run_optimization_passes(
     // re-solves only what the passes before it rewrote.
     let mut heap_effects = HeapEffectsCache::default();
     let mut param_spec_state = param_spec::ParamSpecState::default();
-    let mut call_sites = inline::CallSites::default();
-    let mut inline_facts = inline::InlineFacts::default();
     // Held across the loop: the budget anchors on the unit as the loop found it,
     // so what the rounds add together stays bounded. See `InlineBudget`.
     let mut inline_budget = inline::InlineBudget::new(config.inline_growth);
@@ -753,8 +751,6 @@ fn run_optimization_passes(
             &mut inline_holds,
             g,
             descriptor_cache,
-            &mut call_sites,
-            &mut inline_facts,
         ));
         // Peephole engine, post-inline run. `elide_local` runs again over
         // inline's freshly dead bindings. No `MatchToSwitchRule` — the
@@ -798,13 +794,7 @@ fn run_optimization_passes(
         // summary taken before a callee gained a write, an unsound substitution
         // (see its module doc).
         gated!("nir/param_spec", GatedPass::ParamSpec, |p, g| {
-            param_spec::specialize_const_params(
-                p,
-                &mut param_spec_state,
-                g,
-                descriptor_cache,
-                &mut call_sites,
-            )
+            param_spec::specialize_const_params(p, &mut param_spec_state, g, descriptor_cache)
         });
         gated!("nir/licm", GatedPass::Licm, |p, g| {
             apply_licm(p, g, &mut heap_effects)

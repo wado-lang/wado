@@ -23,7 +23,7 @@ use super::dae::is_dae_sroa_eligible;
 use super::dce::{DescriptorCache, reachable_function_positions};
 use super::extract::is_place_read;
 use super::gate::{FunctionGate, GatedPass};
-use super::inline::{CallSites, call_sites_of, find_recursive_functions};
+use super::inline::find_recursive_functions;
 use crate::ast::Visibility;
 use crate::compiler_trace;
 use crate::module_source::ModuleSource;
@@ -224,7 +224,8 @@ struct Signatures {
 }
 
 impl Signatures {
-    fn build(project: &NirPackage, types: &TypeTable, recursive: &IndexSet<FuncId>) -> Self {
+    fn build(project: &NirPackage, types: &TypeTable) -> Self {
+        let recursive = find_recursive_functions(&project.functions);
         let mut param_locals = Vec::with_capacity(project.functions.len());
         let mut param_struct = Vec::with_capacity(project.functions.len());
         let mut has_body = Vec::with_capacity(project.functions.len());
@@ -975,7 +976,6 @@ pub(super) fn specialize_const_params(
     state: &mut ParamSpecState,
     gate: &mut FunctionGate,
     descriptors: &mut DescriptorCache,
-    call_sites: &mut CallSites,
 ) -> bool {
     let cached: Vec<_> = state
         .clones
@@ -985,14 +985,7 @@ pub(super) fn specialize_const_params(
         .collect();
     let mut reachable = reachable_function_positions(project, descriptors, cached);
     let mut changed = false;
-    while specialize_round(
-        project,
-        state,
-        gate,
-        descriptors,
-        call_sites,
-        &mut reachable,
-    ) {
+    while specialize_round(project, state, gate, descriptors, &mut reachable) {
         changed = true;
     }
     gate.catch_up(GatedPass::ParamSpec, project.functions.len());
@@ -1006,15 +999,13 @@ fn specialize_round(
     state: &mut ParamSpecState,
     gate: &mut FunctionGate,
     descriptors: &mut DescriptorCache,
-    call_sites: &mut CallSites,
     reachable: &mut IndexSet<usize>,
 ) -> bool {
     let constants = collect_call_constants(project, reachable);
     let propagated = propagate_scalar_constants(project, state, &constants, gate);
-    let recursive = find_recursive_functions(call_sites.refresh(project, gate, call_sites_of));
     let signatures = {
         let types = project.type_table.borrow();
-        Signatures::build(project, &types, &recursive)
+        Signatures::build(project, &types)
     };
     let facts = summarize_params(project, &signatures);
     let cold = cold_path_id(descriptors.descriptors(project));
