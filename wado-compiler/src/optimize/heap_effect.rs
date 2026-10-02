@@ -404,21 +404,30 @@ impl HeapEffectsCache {
                 .iter()
                 .map(|&n| std::mem::take(self.summary_mut(n)))
                 .collect();
-            let mut worklist = members.clone();
             for &n in members {
                 queued[n] = true;
             }
-            while let Some(n) = worklist.pop() {
-                queued[n] = false;
-                let summary = self.summarize(project, type_table, n);
-                if summary == *self.summary_mut(n) {
-                    continue;
-                }
-                *self.summary_mut(n) = summary;
-                for &m in &callers_within[n] {
-                    if !queued[m] {
-                        queued[m] = true;
-                        worklist.push(m);
+            // Sweeps in member order, deepest in the walk first, so a callee's
+            // growth reaches its callers within one sweep rather than one
+            // increment at a time.
+            let mut pending = members.len();
+            while pending > 0 {
+                for &n in members {
+                    if !queued[n] {
+                        continue;
+                    }
+                    queued[n] = false;
+                    pending -= 1;
+                    let summary = self.summarize(project, type_table, n);
+                    if summary == *self.summary_mut(n) {
+                        continue;
+                    }
+                    *self.summary_mut(n) = summary;
+                    for &m in &callers_within[n] {
+                        if !queued[m] {
+                            queued[m] = true;
+                            pending += 1;
+                        }
                     }
                 }
             }
