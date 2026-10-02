@@ -46,7 +46,9 @@ Doc comment text is extracted with the `///` prefix stripped (including the sing
 
 ### Visibility: Public API Only
 
-`wado doc` outputs **only `pub` and `export` items**. Private items are implementation details and are excluded — there is no flag to include them.
+`wado doc` outputs **only `pub` and `export` items**. Private items are implementation details and are excluded. `--all` includes them, for a reader working inside the package.
+
+An `impl` of a trait follows the trait's visibility. A reader who cannot name the trait cannot call its methods, so the page leaves out an impl of a trait below `pub`. The trait and the impl often live in different modules, so `wado doc` follows the impl's `use` to the module that declares the trait. A trait whose declaration it cannot read, such as a prelude trait, is taken as `pub`.
 
 For structs with private fields, the struct is documented but private fields are represented as `..`:
 

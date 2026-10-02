@@ -4,8 +4,8 @@ use serde::Serialize;
 use crate::ast::{
     AssociatedConst, AstId, Attribute, EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl,
     ImplBlock, InterfaceDecl, Item, Module, Newtype, Param, ResourceDecl, SelfKind, StructDecl,
-    StructField, TraitBound, TraitDecl, Type, UseItem, VariantDecl, Visibility, type_head_name,
-    written_params,
+    StructField, TraitBound, TraitDecl, Type, UseDecl, UseItem, VariantDecl, Visibility,
+    type_head_name, written_params,
 };
 use crate::attribute::SYNOPSIS;
 use crate::comment::{Comment, CommentKind, TriviaMap};
@@ -204,27 +204,54 @@ pub struct DocFlagsMember {
     pub doc: Option<String>,
 }
 
-/// Extract the public-API documentation of a module.
+/// Reads the source of the module a `use` names, given the path as written.
+/// The page follows an `impl`'s trait to its declaration through it, to leave
+/// out an impl of a trait its reader cannot name. `None` keeps the impl.
+pub type ReadImport<'a> = dyn Fn(&str) -> Option<String> + 'a;
+
+/// [`ReadImport`] over the bundled standard library.
+pub fn read_stdlib_import(path: &str) -> Option<String> {
+    stdlib::get_stdlib_module(path).map(str::to_owned)
+}
+
+/// Extract the public-API documentation of a module whose imports reach only
+/// the standard library.
 pub fn extract_doc(
     module: &Module,
     trivia: &TriviaMap,
     source: &str,
     module_name: &str,
 ) -> DocModule {
-    extract_doc_with(module, trivia, source, module_name, false)
+    extract_doc_with(
+        module,
+        trivia,
+        source,
+        module_name,
+        false,
+        &read_stdlib_import,
+    )
 }
 
-/// [`extract_doc`] with explicit visibility: `include_private` documents
-/// non-`pub` items, fields, and inherent methods too (the `wado doc --all`
-/// view). The default (`false`) is the public API.
+/// [`extract_doc`] with explicit visibility and imports: `include_private`
+/// documents non-`pub` items, fields, and inherent methods too (the
+/// `wado doc --all` view). The default (`false`) is the public API.
 pub fn extract_doc_with(
     module: &Module,
     trivia: &TriviaMap,
     source: &str,
     module_name: &str,
     include_private: bool,
+    read_import: &ReadImport,
 ) -> DocModule {
-    extract_doc_filtered(module, trivia, source, module_name, include_private, false)
+    extract_doc_filtered(
+        module,
+        trivia,
+        source,
+        module_name,
+        include_private,
+        false,
+        read_import,
+    )
 }
 
 /// Like [`extract_doc_with`], but `include_internal` also admits top-level
@@ -238,6 +265,7 @@ pub fn extract_doc_filtered(
     module_name: &str,
     include_private: bool,
     include_internal: bool,
+    read_import: &ReadImport,
 ) -> DocModule {
     let module_doc = extract_module_doc(trivia, module);
     let synopsis = collect_synopsis(module, source);
@@ -252,14 +280,7 @@ pub fn extract_doc_filtered(
     let mut effects: Vec<DocEffect> = Vec::new();
     let mut resources: Vec<DocResource> = Vec::new();
     let mut functions: Vec<DocFunction> = Vec::new();
-    let mut impls: Vec<&ImplBlock> = Vec::new();
-
-    // First pass: collect all impl blocks
-    for item in &module.items {
-        if let Item::Impl(i) = item {
-            impls.push(i);
-        }
-    }
+    let impls = documented_impls(module, include_private, read_import);
 
     for item in &module.items {
         let visible = include_private
@@ -673,6 +694,120 @@ fn is_internal_item(item: &Item) -> bool {
     item.visibility().is_some_and(Visibility::is_internal)
 }
 
+/// The `impl` blocks the page documents: every one under `include_private`,
+/// else those whose trait, if any, the reader can name. A reader who cannot
+/// name a trait cannot call its methods, so listing them would advertise an
+/// API that does not exist.
+fn documented_impls<'m>(
+    module: &'m Module,
+    include_private: bool,
+    read_import: &ReadImport,
+) -> Vec<&'m ImplBlock> {
+    let impls: Vec<&ImplBlock> = module
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Impl(i) => Some(i),
+            _ => None,
+        })
+        .collect();
+    if include_private {
+        return impls;
+    }
+    let trait_head = |i: &ImplBlock| i.trait_type.as_ref().and_then(spell_head);
+    let heads: IndexSet<String> = impls.iter().filter_map(|i| trait_head(i)).collect();
+    let unnameable = unnameable_heads(module, &heads, read_import);
+    impls
+        .into_iter()
+        .filter(|i| !trait_head(i).is_some_and(|head| unnameable.contains(&head)))
+        .collect()
+}
+
+/// An `impl` head as written: `Trait`, or `ns::Trait` through a namespace import.
+fn spell_head(ty: &Type) -> Option<String> {
+    match ty {
+        Type::Named(n) => Some(n.name.clone()),
+        Type::Generic(g) => Some(g.name.clone()),
+        Type::NamespacedGeneric(g) => Some(format!("{}::{}", g.namespace, g.name)),
+        _ => None,
+    }
+}
+
+/// Which of `heads` name a trait below `pub`: one `module` declares so, or one
+/// it imports from a module that declares or re-exports it so. A head reaching
+/// no declaration, such as a prelude trait, is taken as nameable.
+fn unnameable_heads(
+    module: &Module,
+    heads: &IndexSet<String>,
+    read_import: &ReadImport,
+) -> IndexSet<String> {
+    let mut unnameable: IndexSet<String> = declared_below_pub(module)
+        .filter(|name| heads.contains(*name))
+        .map(str::to_owned)
+        .collect();
+    for item in &module.items {
+        let Item::Use(u) = item else { continue };
+        let through: Vec<(&String, &str)> = heads
+            .iter()
+            .filter_map(|head| Some((head, imported_name(u, head)?)))
+            .collect();
+        if through.is_empty() {
+            continue;
+        }
+        let Some(source) = read_import(&u.source) else {
+            continue;
+        };
+        let imported = parse(&source).ast;
+        let below_pub: IndexSet<&str> = declared_below_pub(&imported)
+            .chain(reexported_below_pub(&imported))
+            .collect();
+        unnameable.extend(
+            through
+                .into_iter()
+                .filter(|(_, name)| below_pub.contains(name))
+                .map(|(head, _)| head.clone()),
+        );
+    }
+    unnameable
+}
+
+/// The name `head` reaches in the module `u` imports from, if `u` binds it.
+fn imported_name<'a>(u: &'a UseDecl, head: &'a str) -> Option<&'a str> {
+    u.items.iter().find_map(|item| match item {
+        UseItem::Simple { name, alias, .. } => {
+            (alias.as_ref().unwrap_or(name) == head).then_some(name.as_str())
+        }
+        UseItem::Namespace { name, .. } => head.strip_prefix(name.as_str())?.strip_prefix("::"),
+        UseItem::InterfaceFunctions { .. } | UseItem::Wildcard => None,
+    })
+}
+
+/// The traits and interfaces `module` declares below `pub`.
+fn declared_below_pub(module: &Module) -> impl Iterator<Item = &str> {
+    module.items.iter().filter_map(|item| match item {
+        Item::Trait(t) if !t.visibility.is_public() => Some(t.name.as_str()),
+        Item::Interface(i) if !i.visibility.is_public() => Some(i.name.as_str()),
+        _ => None,
+    })
+}
+
+/// The names `module` re-exports with `internal use`. A private `use` exports
+/// nothing, so it is not counted.
+fn reexported_below_pub(module: &Module) -> impl Iterator<Item = &str> {
+    module
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Use(u) if u.visibility.is_internal() => Some(&u.items),
+            _ => None,
+        })
+        .flatten()
+        .filter_map(|item| match item {
+            UseItem::Simple { name, alias, .. } => Some(alias.as_ref().unwrap_or(name).as_str()),
+            _ => None,
+        })
+}
+
 fn render_type(ty: &Type) -> String {
     let mut out = String::new();
     unparse_type_into(ty, &mut out);
@@ -793,6 +928,7 @@ pub fn extract_stdlib_doc_with(module_name: &str, include_private: bool) -> Opti
         source,
         module_name,
         include_private,
+        &read_stdlib_import,
     );
 
     // For modules with pub use re-exports, follow them to get the actual items
@@ -815,6 +951,7 @@ pub fn extract_stdlib_doc_with(module_name: &str, include_private: bool) -> Opti
                     reexport_source,
                     false,
                     true,
+                    &read_stdlib_import,
                 );
                 merge_reexported_items(&mut doc, &sub_doc, &exported_names);
             }
@@ -887,6 +1024,7 @@ fn component_reexport_doc(module_name: &str, reexport_source: &str) -> Option<Do
         &path,
         false,
         true,
+        &read_stdlib_import,
     ))
 }
 
@@ -1094,13 +1232,7 @@ fn collect_primitive_types_from_module(
 ) -> Vec<DocPrimitiveType> {
     use crate::hashmap::IndexMap;
 
-    let mut impls: Vec<&ImplBlock> = Vec::new();
-    for item in &module.items {
-        if let Item::Impl(i) = item {
-            impls.push(i);
-        }
-    }
-
+    let impls = documented_impls(module, include_private, &read_stdlib_import);
     let mut by_name: IndexMap<&str, DocPrimitiveType> = IndexMap::default();
 
     for prim_name in PrimitiveType::all_primitive_names() {

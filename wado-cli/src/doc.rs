@@ -5,7 +5,7 @@ use std::path::Path;
 use lexopt::Arg::Value;
 use wado_compiler::doc::{
     DocEffect, DocEnum, DocFlags, DocModule, DocPrimitiveType, DocResource, DocStruct, DocTrait,
-    DocVariant, extract_doc_with, extract_stdlib_doc_with,
+    DocVariant, extract_doc_with, extract_stdlib_doc_with, read_stdlib_import,
 };
 
 use crate::args::{self, CliExit};
@@ -250,12 +250,22 @@ fn load_doc(input: &str, include_private: bool) -> Result<DocModule, CliExit> {
         .file_stem()
         .map_or("unknown", |s| s.to_str().unwrap_or("unknown"));
 
+    let dir = path.parent().unwrap_or(Path::new(""));
+    let read_import = |import: &str| {
+        read_stdlib_import(import).or_else(|| {
+            let relative = import.starts_with("./") || import.starts_with("../");
+            relative
+                .then(|| fs::read_to_string(dir.join(import)).ok())
+                .flatten()
+        })
+    };
     Ok(extract_doc_with(
         &parsed.ast,
         &parsed.trivia,
         &source,
         module_name,
         include_private,
+        &read_import,
     ))
 }
 
@@ -353,7 +363,7 @@ fn format_markdown(content: &str) -> String {
 #[cfg(test)]
 mod format_contract_tests {
     use super::*;
-    use wado_compiler::doc::extract_stdlib_doc;
+    use wado_compiler::doc::{ReadImport, extract_stdlib_doc};
     use wado_lsp::host::install_dev_stdlib;
 
     fn stdlib_doc(module: &str) -> DocModule {
@@ -446,8 +456,30 @@ mod format_contract_tests {
         let parsed = wado_compiler::parse(source)
             .into_fail_fast()
             .expect("parse");
-        let doc = extract_doc_with(&parsed.ast, &parsed.trivia, source, "demo", true);
+        let doc = extract_doc_with(
+            &parsed.ast,
+            &parsed.trivia,
+            source,
+            "demo",
+            true,
+            &read_stdlib_import,
+        );
         render_single(&doc, "simple", "demo.wado", OutputFormat::Simple)
+    }
+
+    fn markdown_importing(source: &str, read_import: &ReadImport) -> String {
+        let parsed = wado_compiler::parse(source)
+            .into_fail_fast()
+            .expect("parse");
+        let doc = extract_doc_with(
+            &parsed.ast,
+            &parsed.trivia,
+            source,
+            "demo",
+            false,
+            read_import,
+        );
+        render_single(&doc, "markdown", "demo.wado", OutputFormat::Markdown)
     }
 
     /// `--all` documents a struct at every visibility.
@@ -459,6 +491,53 @@ mod format_contract_tests {
         assert!(
             out.contains("impl Limit {"),
             "an internal struct's impl block must name the struct:\n{out}"
+        );
+    }
+
+    const GAUGE_WITH_A_PRIVATE_TRAIT: &str = "//! Demo.\n\ntrait Hidden {\n    fn hidden(&self) -> i32;\n}\n\npub trait Shown {\n    fn shown(&self) -> i32;\n}\n\npub struct Gauge {\n    value: i32,\n}\n\nimpl Hidden for Gauge {\n    fn hidden(&self) -> i32 {\n        return self.value;\n    }\n}\n\nimpl Shown for Gauge {\n    fn shown(&self) -> i32 {\n        return self.value;\n    }\n}\n";
+
+    /// A reader who cannot name a trait cannot call its methods, so the page
+    /// lists no impl of one.
+    #[test]
+    fn an_impl_of_a_private_trait_is_left_out() {
+        let out = markdown_of(GAUGE_WITH_A_PRIVATE_TRAIT);
+        assert!(
+            out.contains("impl Shown for Gauge"),
+            "an impl of a pub trait must be documented:\n{out}"
+        );
+        assert!(
+            !out.contains("Hidden"),
+            "an impl of a private trait must be left out:\n{out}"
+        );
+    }
+
+    /// The trait and its impl reach the page from different modules, so the
+    /// page follows the `use` to the trait's declaration, under any spelling.
+    #[test]
+    fn an_impl_of_an_imported_internal_trait_is_left_out() {
+        let dep = "internal trait Hidden {\n    fn hidden(&self) -> i32;\n}\n\ninternal use { Hidden as Veiled } from \"./veiled.wado\";\n\npub trait Shown {\n    fn shown(&self) -> i32;\n}\n";
+        let source = "//! Demo.\n\nuse { Hidden, Veiled as Masked, Shown as Visible } from \"./dep.wado\";\nuse dep from \"./dep.wado\";\n\npub struct Gauge {\n    value: i32,\n}\n\npub struct Meter {\n    value: i32,\n}\n\nimpl Hidden for Gauge {\n    fn hidden(&self) -> i32 {\n        return self.value;\n    }\n}\n\nimpl Masked for Gauge {\n    fn hidden(&self) -> i32 {\n        return self.value;\n    }\n}\n\nimpl dep::Hidden for Meter {\n    fn hidden(&self) -> i32 {\n        return self.value;\n    }\n}\n\nimpl Visible for Gauge {\n    fn shown(&self) -> i32 {\n        return self.value;\n    }\n}\n\nimpl dep::Shown for Meter {\n    fn shown(&self) -> i32 {\n        return self.value;\n    }\n}\n";
+        let out = markdown_importing(source, &|import: &str| {
+            (import == "./dep.wado").then(|| dep.to_string())
+        });
+        assert!(
+            out.contains("impl Visible for Gauge") && out.contains("impl dep::Shown for Meter"),
+            "an impl of an imported pub trait must be documented:\n{out}"
+        );
+        for hidden in ["Hidden", "Masked"] {
+            assert!(
+                !out.contains(hidden),
+                "an impl of an internal trait must be left out:\n{out}"
+            );
+        }
+    }
+
+    #[test]
+    fn all_view_includes_an_impl_of_a_private_trait() {
+        let out = simple_all_of(GAUGE_WITH_A_PRIVATE_TRAIT);
+        assert!(
+            out.contains("impl Hidden for Gauge"),
+            "--all documents every visibility:\n{out}"
         );
     }
 
