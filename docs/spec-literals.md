@@ -335,6 +335,15 @@ assert 0x1_f32 == 0x1F32;
 let a = 0b1_f32;             // compile error: a float suffix needs a decimal literal
 ```
 
+A suffix starts with a letter, so a decimal digit an octal or binary literal
+lacks is an invalid digit rather than the start of one:
+
+<!-- {"fixture":"error_numeric_literal_radix_digit.wado"} -->
+
+```wado
+let a = 0b102;               // compile error: invalid digit `2` in a binary literal
+```
+
 A suffix is a type annotation. The literal is checked against its type as
 `let x: T = literal` checks it, with a leading `-` read as part of the literal.
 The context does not retype a suffixed literal, and a literal pattern with a
@@ -347,6 +356,9 @@ let a = 300_u8;              // compile error: literal out of range for `u8`: 30
 let b = -1_u8;               // compile error: literal out of range for `u8`: -1
 let c = 1e40_f32;            // compile error: literal out of range for `f32`: 1e40
 let d = 1.5_i32;             // compile error: cannot use float literal '1.5' as integer
+let h = 2.5_i128;            // compile error: cannot use float literal '2.5' as integer
+let i = 1e-5_u128;           // compile error: cannot use float literal '1e-5' as integer
+let j: i128 = 3.5;           // compile error: cannot use float literal '3.5' as integer
 let e: i64 = 1_i32;          // compile error: expected 'i64', found 'i32'
 let f: Meters = 1.0_f64;     // compile error: expected 'Meters', found 'f64'
 let x: u8 = 0;

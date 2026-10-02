@@ -575,16 +575,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             NumericLiteralKind::Number(repr) => repr,
         };
 
-        if self.tysys.type_table.borrow().is_integer(target_type) {
-            if util::is_float_only_literal(repr) {
-                let _ = self.emit(TypeError::InvalidLiteral {
-                    message: format!(
-                        "cannot use float literal '{sign}{repr}' as integer (has decimal point or negative exponent)"
-                    ),
-                    span: whole_span,
-                });
-                return Some(target_type);
-            }
+        // `i128` / `u128` are structs, so `is_integer` does not answer for them.
+        let wide = self.tysys.type_table.borrow().wide_int_item(target_type);
+        let is_integer = self.tysys.type_table.borrow().is_integer(target_type);
+        if (is_integer || wide.is_some()) && util::is_float_only_literal(repr) {
+            let _ = self.emit(TypeError::InvalidLiteral {
+                message: format!(
+                    "cannot use float literal '{sign}{repr}' as integer (has decimal point or negative exponent)"
+                ),
+                span: whole_span,
+            });
+            return Some(target_type);
+        }
+
+        if is_integer {
             return Some(match util::parse_u128_literal(repr) {
                 Ok(value) => {
                     let tt = self.tysys.type_table.borrow();
@@ -625,30 +629,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(target_type);
         }
 
-        // What is left is `i128` / `u128`: structs, so they reach neither test
-        // above, and the gate admits no other struct.
-        if !util::is_float_only_literal(repr) {
-            let wide = self.tysys.type_table.borrow().wide_int_item(target_type);
-            if let Some(item) = wide {
-                let in_range = match (item, neg.is_some()) {
-                    (CompilerItem::U128, true) => util::parse_u128_literal(repr) == Ok(0),
-                    (CompilerItem::U128, false) => util::parse_u128_literal(repr).is_ok(),
-                    (_, true) => util::parse_i128_literal(&format!("-{repr}")).is_ok(),
-                    (_, false) => util::parse_i128_literal(repr).is_ok(),
-                };
-                if !in_range {
-                    let name = item.attr_name();
-                    let _ = self.emit(TypeError::InvalidLiteral {
-                        message: format!("literal out of range for `{name}`: {sign}{repr}"),
-                        span: whole_span,
-                    });
-                }
-                return Some(target_type);
-            }
+        let item = wide.expect("the literal-target gate admits no struct but `i128` / `u128`");
+        let in_range = match (item, neg.is_some()) {
+            (CompilerItem::U128, true) => util::parse_u128_literal(repr) == Ok(0),
+            (CompilerItem::U128, false) => util::parse_u128_literal(repr).is_ok(),
+            (_, true) => util::parse_i128_literal(&format!("-{repr}")).is_ok(),
+            (_, false) => util::parse_i128_literal(repr).is_ok(),
+        };
+        if !in_range {
+            let name = item.attr_name();
+            let _ = self.emit(TypeError::InvalidLiteral {
+                message: format!("literal out of range for `{name}`: {sign}{repr}"),
+                span: whole_span,
+            });
         }
-
-        // A float-only literal at a wide integer.
-        None
+        Some(target_type)
     }
 
     /// Re-coerce the arguments that answered last (see [`answers_last`]) to the

@@ -8,6 +8,9 @@ export fn run() {
     let b = -1_u8;               // compile error: literal out of range for `u8`: -1
     let c = 1e40_f32;            // compile error: literal out of range for `f32`: 1e40
     let d = 1.5_i32;             // compile error: cannot use float literal '1.5' as integer
+    let h = 2.5_i128;            // compile error: cannot use float literal '2.5' as integer
+    let i = 1e-5_u128;           // compile error: cannot use float literal '1e-5' as integer
+    let j: i128 = 3.5;           // compile error: cannot use float literal '3.5' as integer
     let e: i64 = 1_i32;          // compile error: expected 'i64', found 'i32'
     let f: Meters = 1.0_f64;     // compile error: expected 'Meters', found 'f64'
     let x: u8 = 0;
@@ -24,6 +27,9 @@ __DATA__
     "literal out of range for `u8`: -1",
     "literal out of range for `f32`: 1e40",
     "cannot use float literal '1.5' as integer",
+    "cannot use float literal '2.5' as integer",
+    "cannot use float literal '1e-5' as integer",
+    "cannot use float literal '3.5' as integer",
     "expected 'i64', found 'i32'",
     "expected 'Meters', found 'f64'",
     "pattern mismatch: expected 'i32', found 'u8'"
