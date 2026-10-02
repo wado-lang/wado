@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790949817648,
+  "lastUpdate": 1790954931484,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -62889,6 +62889,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a4dd81adefeb9ce275b9db3bddea5ac316209fd6"
         },
         "date": 1790949816808,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20617,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 279825,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f022de7c0bd48d19d1a76f36c3286f0c8aa42e87",
+          "message": "Merge pull request #2249 from wado-lang/ccr-4293f746-rmzst6\n\nfeat: float operators and Ord read one order, NaN greatest",
+          "timestamp": "2026-10-03T00:10:51+09:00",
+          "tree_id": "b1cbfed20f4a5607f6a44144c62dfd45a7227af6",
+          "url": "https://github.com/wado-lang/wado/commit/f022de7c0bd48d19d1a76f36c3286f0c8aa42e87"
+        },
+        "date": 1790954930731,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
