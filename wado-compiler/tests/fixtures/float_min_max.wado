@@ -1,0 +1,99 @@
+// `min` and `max` follow the float order, where every NaN is one value greater
+// than `+Inf`, and of two equal arguments `min` returns the first and `max` the
+// second. `minimum` and `maximum` are IEEE 754-2019's, a NaN either way.
+// `clamp` confines by the order but keeps a NaN `x`.
+
+fn bits(x: f64) -> u64 {
+    return x.to_bits();
+}
+
+fn bits32(x: f32) -> u32 {
+    return x.to_bits();
+}
+
+test "min and max follow the order" {
+    let nan = f64::from_bits(builtin::black_box(0x7FF8_0000_0000_0000));
+    let one = builtin::black_box(1.0);
+    assert f64::min(one, nan) == 1.0 && f64::min(nan, one) == 1.0;
+    assert f64::max(one, nan).is_nan() && f64::max(nan, one).is_nan();
+    assert f64::min(f64::INFINITY, nan) == f64::INFINITY;
+
+    let nan32 = f32::from_bits(builtin::black_box(0x7FC0_0000));
+    let one32: f32 = builtin::black_box(1.0);
+    assert f32::min(one32, nan32) == 1.0 && f32::min(nan32, one32) == 1.0;
+    assert f32::max(one32, nan32).is_nan() && f32::max(nan32, one32).is_nan();
+}
+
+test "of two equal arguments min returns the first and max the second" {
+    let neg = builtin::black_box(-0.0);
+    let pos = builtin::black_box(0.0);
+    assert bits(f64::min(neg, pos)) == bits(-0.0) && bits(f64::min(pos, neg)) == bits(0.0);
+    assert bits(f64::max(neg, pos)) == bits(0.0) && bits(f64::max(pos, neg)) == bits(-0.0);
+
+    let neg32: f32 = builtin::black_box(-0.0);
+    let pos32: f32 = builtin::black_box(0.0);
+    assert bits32(f32::min(neg32, pos32)) == bits32(-0.0);
+    assert bits32(f32::max(pos32, neg32)) == bits32(-0.0);
+
+    // Two arguments answer as a two-element list does.
+    let pair: List<f64> = [neg, pos];
+    assert bits(pair.into_iter().min().unwrap()) == bits(f64::min(neg, pos));
+    assert bits(pair.into_iter().max().unwrap()) == bits(f64::max(neg, pos));
+}
+
+test "minimum and maximum are IEEE's" {
+    let nan = f64::from_bits(builtin::black_box(0x7FF8_0000_0000_0000));
+    let one = builtin::black_box(1.0);
+    assert f64::minimum(one, nan).is_nan() && f64::minimum(nan, one).is_nan();
+    assert f64::maximum(one, nan).is_nan() && f64::maximum(nan, one).is_nan();
+    assert f64::minimum(one, builtin::black_box(2.0)) == 1.0;
+    assert f64::maximum(one, builtin::black_box(2.0)) == 2.0;
+    let neg = builtin::black_box(-0.0);
+    let pos = builtin::black_box(0.0);
+    assert bits(f64::minimum(pos, neg)) == bits(-0.0);
+    assert bits(f64::maximum(neg, pos)) == bits(0.0);
+
+    let nan32 = f32::from_bits(builtin::black_box(0x7FC0_0000));
+    let one32: f32 = builtin::black_box(1.0);
+    assert f32::minimum(one32, nan32).is_nan() && f32::maximum(nan32, one32).is_nan();
+    assert bits32(f32::minimum(builtin::black_box(0.0), builtin::black_box(-0.0))) == bits32(-0.0);
+}
+
+test "clamp keeps a NaN x and an x already in range" {
+    let nan = f64::from_bits(builtin::black_box(0x7FF8_0000_0000_0000));
+    assert f64::clamp(nan, 0.0, 1.0).is_nan();
+    assert f64::clamp(builtin::black_box(f64::INFINITY), 0.0, 1.0) == 1.0;
+    assert f64::clamp(builtin::black_box(-2.0), -1.0, 1.0) == -1.0;
+    assert bits(f64::clamp(builtin::black_box(-0.0), 0.0, 1.0)) == bits(-0.0);
+    assert bits(f64::clamp(builtin::black_box(0.0), -1.0, -0.0)) == bits(0.0);
+
+    let nan32 = f32::from_bits(builtin::black_box(0x7FC0_0000));
+    assert f32::clamp(nan32, 0.0, 1.0).is_nan();
+    assert f32::clamp(builtin::black_box(f32::NEG_INFINITY), 0.0, 1.0) == 0.0;
+}
+
+#[expect_trap]
+test "a NaN high bound traps" {
+    let _ = f64::clamp(0.0, 0.0, f64::from_bits(builtin::black_box(0x7FF8_0000_0000_0000)));
+}
+
+#[expect_trap]
+test "a NaN high bound traps on f32" {
+    let _ = f32::clamp(0.0, 0.0, f32::from_bits(builtin::black_box(0x7FC0_0000)));
+}
+
+#[expect_trap]
+test "a NaN low bound traps" {
+    let _ = f32::clamp(0.0, f32::from_bits(builtin::black_box(0x7FC0_0000)), 1.0);
+}
+
+test "minimum and maximum lower to one instruction" {
+    assert f64::maximum(builtin::black_box(1.0), 2.0) == 2.0;
+    assert f32::minimum(builtin::black_box(1.0), 2.0) == 1.0;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_expect:O1": ["f64.max(local.tee", "f32.min(local.tee"]
+}

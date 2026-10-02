@@ -1436,21 +1436,38 @@ impl f32 {
         return builtin::f32_sqrt(x);
     }
 
-    /// Minimum of two values
+    /// The lesser of two values by the order, where NaN is greatest; `x` when
+    /// they are equal.
     pub fn min(x: f32, y: f32) -> f32 {
+        return builtin::select(y < x, y, x);
+    }
+
+    /// The greater of two values by the order, where NaN is greatest; `y` when
+    /// they are equal.
+    pub fn max(x: f32, y: f32) -> f32 {
+        return builtin::select(y < x, x, y);
+    }
+
+    /// IEEE 754-2019 `minimum`: NaN when either value is, and `-0.0` below
+    /// `0.0`.
+    pub fn minimum(x: f32, y: f32) -> f32 {
         return builtin::f32_min(x, y);
     }
 
-    /// Maximum of two values
-    pub fn max(x: f32, y: f32) -> f32 {
+    /// IEEE 754-2019 `maximum`: NaN when either value is, and `-0.0` below
+    /// `0.0`.
+    pub fn maximum(x: f32, y: f32) -> f32 {
         return builtin::f32_max(x, y);
     }
 
-    /// `x` confined to `low..=high`. A NaN `x` stays NaN; a NaN bound traps,
-    /// as `low > high` does.
+    /// `x` confined to `low..=high` by the order, except that a NaN `x` stays
+    /// NaN. A NaN bound traps, as `low > high` does.
     pub fn clamp(x: f32, low: f32, high: f32) -> f32 {
-        assert low <= high;
-        return f32::min(f32::max(x, low), high);
+        assert !high.is_nan() && low <= high;
+        if x.is_nan() {
+            return x;
+        }
+        return builtin::select(x < low, low, builtin::select(high < x, high, x));
     }
 
     /// Copy sign from y to x
@@ -1859,21 +1876,38 @@ impl f64 {
         return builtin::f64_sqrt(x);
     }
 
-    /// Minimum of two values
+    /// The lesser of two values by the order, where NaN is greatest; `x` when
+    /// they are equal.
     pub fn min(x: f64, y: f64) -> f64 {
+        return builtin::select(y < x, y, x);
+    }
+
+    /// The greater of two values by the order, where NaN is greatest; `y` when
+    /// they are equal.
+    pub fn max(x: f64, y: f64) -> f64 {
+        return builtin::select(y < x, x, y);
+    }
+
+    /// IEEE 754-2019 `minimum`: NaN when either value is, and `-0.0` below
+    /// `0.0`.
+    pub fn minimum(x: f64, y: f64) -> f64 {
         return builtin::f64_min(x, y);
     }
 
-    /// Maximum of two values
-    pub fn max(x: f64, y: f64) -> f64 {
+    /// IEEE 754-2019 `maximum`: NaN when either value is, and `-0.0` below
+    /// `0.0`.
+    pub fn maximum(x: f64, y: f64) -> f64 {
         return builtin::f64_max(x, y);
     }
 
-    /// `x` confined to `low..=high`. A NaN `x` stays NaN; a NaN bound traps,
-    /// as `low > high` does.
+    /// `x` confined to `low..=high` by the order, except that a NaN `x` stays
+    /// NaN. A NaN bound traps, as `low > high` does.
     pub fn clamp(x: f64, low: f64, high: f64) -> f64 {
-        assert low <= high;
-        return f64::min(f64::max(x, low), high);
+        assert !high.is_nan() && low <= high;
+        if x.is_nan() {
+            return x;
+        }
+        return builtin::select(x < low, low, builtin::select(high < x, high, x));
     }
 
     /// Copy sign from y to x

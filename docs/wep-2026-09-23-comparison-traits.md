@@ -271,6 +271,23 @@ loops:
 
 Every Wado row of the benchmark suite (`mise run all-wado`) stayed within noise.
 
+`f32::max` costs more than a comparison. It was one `f32.max` instruction and is
+now a comparison and a `select`. wasmtime compiles a float `select` to a
+conditional branch on x86, and where the larger operand changes at random the
+branch is mispredicted half the time. Measured on 2026-10-02 over Loam's kernels,
+copied into loops over 262,144 random `f32`s:
+
+| Kernel                                    | Before   | After    | Change      |
+| ----------------------------------------- | -------- | -------- | ----------- |
+| `Relu`: `map(xs, \|v\| f32::max(v, 0.0))` | 1.116 ms | 2.680 ms | 140% slower |
+| `MaxPool`: 2×2 taps through `f32::max`    | 0.988 ms | 2.059 ms | 108% slower |
+| `Softmax`: a row's `f32::max`             | 0.548 ms | 0.742 ms | 35% slower  |
+
+`f32::maximum` runs each kernel within noise of the old `f32::max`. Loam's
+kernels call it, since it propagates a NaN as `max` does and differs only in
+the sign of a zero result. The `microgpt` benchmark, which calls `f64::max` for
+its ReLU and its softmax, stayed within noise.
+
 "Before" is `origin/main` at `ba07da1b9` and "after" is this WEP's change on
 top of it. Both compilers were built `--release`, and each program ran at `-O2`
 under the vendored wasmtime, on a 4-core Intel Xeon cloud VM. A figure is the
@@ -304,11 +321,11 @@ overlap, which is what `benchmark/ab.ts` decides.
 - [ ] Derive `Eq` from a written `cmp`, and reject a use of `Ord` on a type
   whose `Eq` is written and whose `cmp` is not, a marker included. Each with a
   fixture.
-- [ ] Make `f32::min`, `f64::min` and their `max` follow the order, add
+- [x] Make `f32::min`, `f64::min` and their `max` follow the order, add
   `minimum` and `maximum` on the Wasm instructions, and make `clamp` keep a NaN
   `x` and trap on a NaN bound, `high` included, which `low <= high` passes.
-  Each with a fixture. Then measure Loam's kernels, which compare floats only
-  through `f32::max` and against constants, and record it in [Cost](#cost).
+  Each with a fixture. Then measure Loam's kernels, which compare floats
+  through `f32::max`, and record it in [Cost](#cost).
 - [ ] Report the `self_comparison` lint, with a fixture for each operator, the
   float hint, a chain, an operand that performs an effect, and `allow`.
 - [ ] Accept float range patterns, with fixtures for `-0.0`, a NaN scrutinee, a
@@ -322,3 +339,8 @@ overlap, which is what `benchmark/ab.ts` decides.
 The NaN test goes only where an operand is a constant. Nothing yet proves that a
 computed operand is not a NaN, so `a < b` between two variables pays the test
 even where neither can be one.
+
+A float `min` or `max` is a conditional branch under wasmtime on x86, where
+`minimum` and `maximum` are one instruction each. Over operands whose order
+changes at random, `max` costs up to two and a half times `maximum`, as
+[Cost](#cost) measures.

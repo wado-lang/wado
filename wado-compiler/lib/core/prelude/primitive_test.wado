@@ -186,8 +186,9 @@ test "f64 wasm instruction math" {
     assert f64::round_ties_even(2.5) == 2.0;
     assert f64::round_ties_even(3.5) == 4.0;
     assert f64::sqrt(4.0) == 2.0;
-    assert f64::min(3.0, 5.0) == 3.0;
-    assert f64::max(3.0, 5.0) == 5.0;
+    assert f64::minimum(3.0, 5.0) == 3.0;
+    assert f64::maximum(3.0, 5.0) == 5.0;
+    assert f64::minimum(3.0, f64::NAN).is_nan();
     assert f64::copysign(5.0, -1.0) == -5.0;
     assert f64::copysign(-5.0, 1.0) == 5.0;
 }
@@ -204,10 +205,22 @@ test "f32 wasm instruction math" {
     assert f32::round_ties_even(2.5) == 2.0;
     assert f32::round_ties_even(3.5) == 4.0;
     assert f32::sqrt(4.0) == 2.0;
-    assert f32::min(3.0, 5.0) == 3.0;
-    assert f32::max(3.0, 5.0) == 5.0;
+    assert f32::minimum(3.0, 5.0) == 3.0;
+    assert f32::maximum(3.0, 5.0) == 5.0;
+    assert f32::minimum(3.0, f32::NAN).is_nan();
     assert f32::copysign(5.0, -1.0) == -5.0;
     assert f32::copysign(-5.0, 1.0) == 5.0;
+}
+
+test "float min and max follow the order, where NaN is greatest" {
+    assert f64::min(3.0, 5.0) == 3.0;
+    assert f64::max(3.0, 5.0) == 5.0;
+    assert f64::min(3.0, f64::NAN) == 3.0;
+    assert f64::max(3.0, f64::NAN).is_nan();
+    assert f32::min(3.0, 5.0) == 3.0;
+    assert f32::max(3.0, 5.0) == 5.0;
+    assert f32::min(f32::NAN, 3.0) == 3.0;
+    assert f32::max(f32::NAN, 3.0).is_nan();
 }
 
 test "f64 constants" {
@@ -533,8 +546,8 @@ test "float clamp confines a value to the range" {
     assert f32::clamp(-1.0, 0.0, 1.0) == 0.0;
     assert f32::clamp(2.0, 0.0, 1.0) == 1.0;
 
-    // NaN is neither below nor above, so it passes through rather than
-    // snapping to a bound.
+    // The order puts NaN above `high`, but a clamp keeps it rather than hide
+    // bad input behind a bound.
     assert f64::clamp(f64::NAN, 0.0, 1.0).is_nan();
     assert f32::clamp(f32::NAN, 0.0, 1.0).is_nan();
 }
@@ -552,6 +565,11 @@ test "an empty float clamp range is refused" {
 #[expect_trap]
 test "a NaN clamp bound is refused" {
     let _ = f64::clamp(0.0, f64::NAN, 1.0);
+}
+
+#[expect_trap]
+test "a NaN high clamp bound is refused" {
+    let _ = f32::clamp(0.0, 0.0, f32::NAN);
 }
 
 test "ParseIntError and ParseFloatError render their reason" {

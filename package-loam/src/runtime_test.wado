@@ -506,7 +506,7 @@ test "permute puts input axis perm[i] at output axis i" {
 test "map applies one function per element" {
     let t: Tensor<f32, [Row, Col]> = tensor([1, 3], [-1.0, 0.0, 2.0]);
 
-    let r = map(&t, |v| f32::max(v, 0.0));
+    let r = map(&t, |v| f32::maximum(v, 0.0));
     assert r.data == [0.0, 0.0, 2.0] as List<f32>;
 }
 

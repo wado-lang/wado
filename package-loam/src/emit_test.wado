@@ -67,7 +67,7 @@ test "the forward pass is one kernel call per operator" {
     );
     assert out.contains("let H = matmul(X, &weights.W1);");
     assert out.contains("let HB = zip_suffix::<[Batch], [Hidden]>(&H, &weights.B1, |x, y| x + y);");
-    assert out.contains("let A = map(&HB, |v| f32::max(v, 0.0));");
+    assert out.contains("let A = map(&HB, |v| f32::maximum(v, 0.0));");
     assert out.contains("let T = matmul(&A, &weights.W2);");
     assert out.contains("return Y;");
 }
@@ -258,7 +258,7 @@ g (float[N, 2] "/model/input.0") => (float[N, 2] out)
     let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
 
     assert out.contains("pub fn forward(_model_input_0: &Tensor<f32, [Batch, Unit]>");
-    assert out.contains("let out = map(_model_input_0, |v| f32::max(v, 0.0));");
+    assert out.contains("let out = map(_model_input_0, |v| f32::maximum(v, 0.0));");
 }
 
 test "a graph that returns its own input copies it out" {
@@ -1096,7 +1096,7 @@ test "a Cast to the element a tensor already has computes nothing" {
     }`;
     let out = emitted(&generate(source, [rule("*", ["Feat"])]).unwrap());
     assert !out.contains("let C");
-    assert out.contains("let Y = map(X, |v| f32::max(v, 0.0));");
+    assert out.contains("let Y = map(X, |v| f32::maximum(v, 0.0));");
 }
 
 test "a Cast that truncates is spelled apart from the constant it reads" {
@@ -1164,7 +1164,7 @@ test "a constant with no closure to fold into is a rank-0 literal" {
     let out = emitted(&emit_graph(&constant_graph(node("Relu", "Y", ["C"]), Rank::Scalar, 0.5)).unwrap());
 
     assert out.contains("let C = Tensor::<f32, []> { data: [(0.5 as f32)], extents: [] };");
-    assert out.contains("let Y = map(&C, |v| f32::max(v, 0.0));");
+    assert out.contains("let Y = map(&C, |v| f32::maximum(v, 0.0));");
 }
 
 test "a one-element constant that raises the output's rank is a tensor, not a folded scalar" {

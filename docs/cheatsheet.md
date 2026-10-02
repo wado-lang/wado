@@ -1303,6 +1303,9 @@ f64::sin(x)    f64::cos(x)    f64::sqrt(x)
 f64::abs(x)    f64::ceil(x)   f64::floor(x)
 f64::pow(x, y) f64::ln(x)     f64::exp(x)
 f64::mul_add(x, y, z)
+f64::min(x, y)     f64::max(x, y)       // by the order: max(1.0, NaN) is NaN, min is 1.0
+f64::minimum(x, y) f64::maximum(x, y)   // IEEE's: NaN when either is, one instruction
+f64::clamp(x, lo, hi)                   // a NaN x stays NaN; a NaN bound traps
 
 x.is_nan()     x.is_finite()    // where x is f64 or f32
 

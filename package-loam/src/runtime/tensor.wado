@@ -525,7 +525,7 @@ pub fn max_pool<N, C, ..In, ..Out>(x: &Tensor<f32, [N, C, ..In]>, window: &Windo
                 continue;
             }
             for let plane of 0..<planes {
-                out[plane * out_size + at] = f32::max(out[plane * out_size + at], x.data[plane * in_size + offset]);
+                out[plane * out_size + at] = f32::maximum(out[plane * out_size + at], x.data[plane * in_size + offset]);
             }
         }
     }
@@ -712,7 +712,7 @@ fn softmax_lanes<Axes>(t: &Tensor<f32, Axes>, from: i32, to: i32) -> Tensor<f32,
         let base = lane / inner * extent * inner + lane % inner;
         let mut max = -f32::INFINITY;
         for let k of 0..<extent {
-            max = f32::max(max, t.data[base + k * inner]);
+            max = f32::maximum(max, t.data[base + k * inner]);
         }
         let mut sum: f32 = 0.0;
         for let k of 0..<extent {
