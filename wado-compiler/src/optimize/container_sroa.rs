@@ -8,7 +8,7 @@
 //! replacing the shape whitelist with `value_copy_demote`'s element-immutability
 //! query so any element-immutable method counts as a SROA-safe use.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 
 use crate::call_args::CallArgs;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -245,10 +245,24 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
     let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::ContainerSroa, len, |fid| {
         let func_rc = &project.functions[fid.index()];
-        // Skip CM bindings (ABI bridges) and body-less declarations.
+        // Skip CM bindings (ABI bridges) and body-less declarations, and a body
+        // holding no candidate, which the rewrite would find before anything
+        // else: the session's indices cost a walk of the whole body.
         {
             let func = func_rc.borrow();
-            if func.is_cm_binding || func.body.is_none() {
+            let Some(body) = func.body.as_ref().filter(|_| !func.is_cm_binding) else {
+                return false;
+            };
+            let type_table = type_table_rc.borrow();
+            if collect_candidates(
+                body,
+                &type_table,
+                &struct_index,
+                &method_sig,
+                &value_copy_ids,
+            )
+            .is_empty()
+            {
                 return false;
             }
         }
@@ -411,24 +425,45 @@ fn members_of(sig: &MethodSig, kind: ListMethodKind) -> IndexSet<FuncId> {
 }
 
 /// Shrink `holding` to the members whose `holds` stays true against what is
-/// left of it.
+/// left of it. `holds` sees `holding` only through the membership query it is
+/// handed.
 fn greatest_fixpoint(
     project: &NirPackage,
     holding: &mut IndexSet<FuncId>,
-    holds: impl Fn(&NirFunction, &IndexSet<FuncId>) -> bool,
+    holds: impl Fn(&NirFunction, &dyn Fn(&FuncId) -> bool) -> bool,
 ) {
-    loop {
-        let failing: Vec<FuncId> = holding
+    // A verdict changes only once a member it was answered `true` about
+    // leaves, so each round rechecks just the dependents of the last removals.
+    let mut dependents: IndexMap<FuncId, Vec<FuncId>> = IndexMap::default();
+    let mut pending: IndexSet<FuncId> = holding.clone();
+    while !pending.is_empty() {
+        let mut failing = Vec::new();
+        for id in pending {
+            let relied_on = RefCell::new(Vec::new());
+            let is_member = |callee: &FuncId| {
+                let member = holding.contains(callee);
+                if member {
+                    relied_on.borrow_mut().push(*callee);
+                }
+                member
+            };
+            if holds(&project.functions[id.index()].borrow(), &is_member) {
+                for callee in relied_on.into_inner() {
+                    dependents.entry(callee).or_default().push(id);
+                }
+            } else {
+                failing.push(id);
+            }
+        }
+        for id in &failing {
+            holding.shift_remove(id);
+        }
+        pending = failing
             .iter()
-            .copied()
-            .filter(|&id| !holds(&project.functions[id.index()].borrow(), holding))
+            .filter_map(|id| dependents.swap_remove(id))
+            .flatten()
+            .filter(|id| holding.contains(id))
             .collect();
-        if failing.is_empty() {
-            return;
-        }
-        for id in failing {
-            holding.shift_remove(&id);
-        }
     }
 }
 
@@ -458,8 +493,8 @@ fn demote_filling_constructors(
 ) {
     let constructors = members_of(sig, ListMethodKind::Constructor);
     let mut empty = constructors.clone();
-    greatest_fixpoint(project, &mut empty, |func, empty| {
-        builds_empty(func, array_new, empty)
+    greatest_fixpoint(project, &mut empty, |func, is_empty| {
+        builds_empty(func, array_new, is_empty)
     });
     demote_families(sig, &constructors, &empty);
 }
@@ -469,7 +504,7 @@ fn demote_filling_constructors(
 fn builds_empty(
     func: &NirFunction,
     array_new: &IndexSet<FuncId>,
-    empty: &IndexSet<FuncId>,
+    is_empty: &dyn Fn(&FuncId) -> bool,
 ) -> bool {
     let Some(body) = func.body.as_ref() else {
         return false;
@@ -484,8 +519,8 @@ fn builds_empty(
     let Some(e) = value.as_expr() else {
         return false;
     };
-    let pure_call = |func_id: &FuncId, args: &[ArenaCallArg], callees: &IndexSet<FuncId>| {
-        callees.contains(func_id) && args.iter().all(|a| is_pure_operand(body, a.expr))
+    let pure_call = |func_id: &FuncId, args: &[ArenaCallArg], admits: &dyn Fn(&FuncId) -> bool| {
+        admits(func_id) && args.iter().all(|a| is_pure_operand(body, a.expr))
     };
     match &body.exprs[e].kind {
         ExprKind::StructLiteral { fields, .. } => fields.iter().all(|f| {
@@ -493,11 +528,13 @@ fn builds_empty(
                 return body.operand_const_int(f.value) == Some(0);
             }
             match f.value.as_expr().map(|v| &body.exprs[v].kind) {
-                Some(ExprKind::Call { func_id, args, .. }) => pure_call(func_id, args, array_new),
+                Some(ExprKind::Call { func_id, args, .. }) => {
+                    pure_call(func_id, args, &|id| array_new.contains(id))
+                }
                 _ => is_pure_operand(body, f.value),
             }
         }),
-        ExprKind::Call { func_id, args, .. } => pure_call(func_id, args, empty),
+        ExprKind::Call { func_id, args, .. } => pure_call(func_id, args, is_empty),
         _ => false,
     }
 }
@@ -599,7 +636,11 @@ fn movers_of(
     storage_builtins: &IndexSet<FuncId>,
     value_copy_ids: &IndexSet<FuncId>,
 ) -> IndexSet<FuncId> {
-    let key = type_table.type_key(element);
+    let roles = ElementRoles {
+        type_table,
+        element: type_table.type_key(element),
+        memo: RefCell::default(),
+    };
     let mut movers: IndexSet<FuncId> = project
         .functions
         .iter()
@@ -612,20 +653,51 @@ fn movers_of(
                 .iter()
                 .map(|p| p.type_id)
                 .chain(std::iter::once(f.return_type))
-                .any(|t| holds_element(type_table, t, key));
+                .any(|t| roles.of(t) != ElementRole::Unrelated);
             touches.then_some(f.id).flatten()
         })
         .filter(|id| !value_copy_ids.contains(id))
         .collect();
-    greatest_fixpoint(project, &mut movers, |func, movers| {
+    greatest_fixpoint(project, &mut movers, |func, is_mover| {
         let passes = |callee: &FuncId| {
-            movers.contains(callee)
-                || storage_builtins.contains(callee)
-                || value_copy_ids.contains(callee)
+            is_mover(callee) || storage_builtins.contains(callee) || value_copy_ids.contains(callee)
         };
-        moves_elements_only(func, type_table, key, &passes)
+        moves_elements_only(func, &roles, &passes)
     });
     movers
+}
+
+/// What a type is to the element type [`movers_of`] asks about.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ElementRole {
+    Element,
+    Holder,
+    Unrelated,
+}
+
+/// [`ElementRole`] by type, memoized: every operand of every body is asked,
+/// and the same few types recur.
+struct ElementRoles<'a> {
+    type_table: &'a TypeTable,
+    element: TypeKey,
+    memo: RefCell<IndexMap<TypeId, ElementRole>>,
+}
+
+impl ElementRoles<'_> {
+    fn of(&self, ty: TypeId) -> ElementRole {
+        if let Some(&role) = self.memo.borrow().get(&ty) {
+            return role;
+        }
+        let role = if self.type_table.type_key(ty) == self.element {
+            ElementRole::Element
+        } else if holds_element(self.type_table, ty, self.element) {
+            ElementRole::Holder
+        } else {
+            ElementRole::Unrelated
+        };
+        self.memo.borrow_mut().insert(ty, role);
+        role
+    }
 }
 
 /// Whether a value of type `ty` is, or holds, a value of the type `element`.
@@ -683,8 +755,7 @@ fn holds_element(type_table: &TypeTable, ty: TypeId, element: TypeKey) -> bool {
 /// holds one to no callee but those `passes` admits.
 fn moves_elements_only(
     func: &NirFunction,
-    type_table: &TypeTable,
-    element: TypeKey,
+    roles: &ElementRoles,
     passes: &dyn Fn(&FuncId) -> bool,
 ) -> bool {
     let Some(body) = func.body.as_ref() else {
@@ -692,11 +763,13 @@ fn moves_elements_only(
     };
     let mut ok = true;
     body.for_each_reachable_node(|node| {
+        if !ok {
+            return;
+        }
         body.for_each_operand(node, |op| {
-            let ty = body.operand_type(op);
-            let is_element = type_table.type_key(ty) == element;
-            if ok && (is_element || holds_element(type_table, ty, element)) {
-                ok = accepts_element_operand(body, node, op, is_element, passes);
+            let role = roles.of(body.operand_type(op));
+            if ok && role != ElementRole::Unrelated {
+                ok = accepts_element_operand(body, node, op, role == ElementRole::Element, passes);
             }
         });
     });
@@ -779,8 +852,8 @@ fn demote_element_reading_queries(
             .flatten()
     });
     let mut length_only: IndexSet<FuncId> = queries.iter().copied().chain(array_subjects).collect();
-    greatest_fixpoint(project, &mut length_only, |func, length_only| {
-        reads_length_only(func, array_len, length_only)
+    greatest_fixpoint(project, &mut length_only, |func, is_length_only| {
+        reads_length_only(func, array_len, is_length_only)
     });
     demote_families(sig, &queries, &length_only);
 }
@@ -790,7 +863,7 @@ fn demote_element_reading_queries(
 fn reads_length_only(
     func: &NirFunction,
     array_len: &IndexSet<FuncId>,
-    length_only: &IndexSet<FuncId>,
+    is_length_only: &dyn Fn(&FuncId) -> bool,
 ) -> bool {
     let (Some(body), Some(subject)) = (func.body.as_ref(), func.params.first()) else {
         return false;
@@ -799,7 +872,7 @@ fn reads_length_only(
         body,
         subject: subject.local_index,
         array_len,
-        length_only,
+        is_length_only,
     }
     .node(NodeRef::Block(body.root))
 }
@@ -809,7 +882,7 @@ struct LengthOnly<'a> {
     body: &'a Body,
     subject: u32,
     array_len: &'a IndexSet<FuncId>,
-    length_only: &'a IndexSet<FuncId>,
+    is_length_only: &'a dyn Fn(&FuncId) -> bool,
 }
 
 impl LengthOnly<'_> {
@@ -821,7 +894,7 @@ impl LengthOnly<'_> {
                     expr, field_index, ..
                 } if self.is_subject(*expr) => return *field_index == SeqField::Len.index(),
                 ExprKind::Call { func_id, args, .. }
-                    if (self.array_len.contains(func_id) || self.length_only.contains(func_id))
+                    if (self.array_len.contains(func_id) || (self.is_length_only)(func_id))
                         && args
                             .first()
                             .is_some_and(|a| self.is_subject_or_backing(a.expr)) =>
