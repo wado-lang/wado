@@ -7,14 +7,15 @@
 //! Every loop pass is optional, the IR being valid without it, so an imprecise
 //! gate costs optimization quality and never correctness. When in doubt, the
 //! propagation marks dirty. The exception is [`FunctionGate::edits`]: the
-//! heap-effect summaries trust it, so a pass reports every body it rewrites.
+//! heap-effect summaries and every [`EditMemo`] trust it, so a pass reports
+//! every body it rewrites.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use cranelift_entity::EntityRef;
 
 use crate::hashmap::IndexSet;
-use crate::nir::FuncId;
+use crate::nir::{FuncId, NirFunction};
 use crate::nir_arena::ExprKind;
 use crate::nir_package::NirPackage;
 
@@ -245,6 +246,76 @@ impl FunctionGate {
             }
         }
         any
+    }
+}
+
+/// A value derived from each function alone, kept across the loop's rounds and
+/// derived again only for a function whose [`FunctionGate::edits`] moved.
+pub(super) struct EditMemo<T> {
+    gate: Option<u64>,
+    edits: Vec<u64>,
+    values: Vec<T>,
+    /// Where the debug check resumes its rotation.
+    #[cfg(debug_assertions)]
+    cursor: usize,
+}
+
+impl<T> Default for EditMemo<T> {
+    fn default() -> Self {
+        Self {
+            gate: None,
+            edits: Vec::new(),
+            values: Vec::new(),
+            #[cfg(debug_assertions)]
+            cursor: 0,
+        }
+    }
+}
+
+impl<T: PartialEq + std::fmt::Debug> EditMemo<T> {
+    /// Each function's value, indexed by store position, as `derive` gives it
+    /// for the function as it stands.
+    pub(super) fn refresh(
+        &mut self,
+        project: &NirPackage,
+        gate: &FunctionGate,
+        derive: impl Fn(&NirFunction) -> T,
+    ) -> &[T] {
+        let len = project.functions.len();
+        if self.gate != Some(gate.id()) || self.values.len() > len {
+            *self = Self {
+                gate: Some(gate.id()),
+                ..Self::default()
+            };
+        }
+        for i in 0..len {
+            let edit = gate.edits(FuncId::new(i));
+            if self.edits.get(i) == Some(&edit) {
+                continue;
+            }
+            let value = derive(&project.functions[i].borrow());
+            if i < self.values.len() {
+                self.values[i] = value;
+                self.edits[i] = edit;
+            } else {
+                self.values.push(value);
+                self.edits.push(edit);
+            }
+        }
+        // A body edited without a report would keep a stale value. One entry per
+        // refresh, rotating, since checking them all is the cost this saves.
+        #[cfg(debug_assertions)]
+        if len > 0 {
+            self.cursor %= len;
+            assert_eq!(
+                self.values[self.cursor],
+                derive(&project.functions[self.cursor].borrow()),
+                "function {} was edited without a report to the gate",
+                self.cursor
+            );
+            self.cursor += 1;
+        }
+        &self.values
     }
 }
 
