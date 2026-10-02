@@ -52,26 +52,23 @@ impl TypeSet {
         !self.any && self.keys.is_empty()
     }
 
-    fn insert(&mut self, key: TypeKey) -> bool {
-        !self.any && self.keys.insert(key)
+    fn insert(&mut self, key: TypeKey) {
+        if !self.any {
+            self.keys.insert(key);
+        }
     }
 
-    fn set_any(&mut self) -> bool {
-        let changed = !self.any;
+    fn set_any(&mut self) {
         self.any = true;
         self.keys.clear();
-        changed
     }
 
-    fn union(&mut self, other: &TypeSet) -> bool {
+    fn union(&mut self, other: &TypeSet) {
         if other.any {
-            return self.set_any();
+            self.set_any();
+        } else if !self.any {
+            self.keys.extend(other.keys.iter().copied());
         }
-        let mut changed = false;
-        for &k in &other.keys {
-            changed |= self.insert(k);
-        }
-        changed
     }
 
     /// Whether `self ∩ other` is non-empty.
@@ -168,10 +165,9 @@ impl Access {
         }
     }
 
-    fn union(&mut self, other: &Access) -> bool {
-        let a = self.through_args.union(&other.through_args);
-        let b = self.elsewhere.union(&other.elsewhere);
-        a || b
+    fn union(&mut self, other: &Access) {
+        self.through_args.union(&other.through_args);
+        self.elsewhere.union(&other.elsewhere);
     }
 }
 
