@@ -211,7 +211,7 @@ global global:core:prelude/primitive.wado::$const_obj_56: ref Array<u8> = array.
 global global:core:prelude/primitive.wado::$const_obj_59: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 46, 48), used: 3 };
 
 fn "opt_sroa_variant_unrestricted_handle.wado/maybe"(x) {
-    if x > 0 {
+    if (x <= 0) == 0 {
         return 0, builtin::i64_reinterpret_f64(x);
     }
     return 1, 0_i64;
@@ -235,7 +235,7 @@ fn "opt_sroa_variant_unrestricted_handle.wado/last_positive"(xs) {
             break_if b1 $sroa_$iter_0_index_19 >= end;
             ref_val = builtin::array_get_value<f64>($sroa_$iter_0_repr_18, $sroa_$iter_0_index_19);
             $sroa_$iter_0_index_19 = $sroa_$iter_0_index_19 + 1;
-            if ref_val > 0 {
+            if (ref_val <= 0) == 0 {
                 $sroa_next_15 = builtin::i64_reinterpret_f64(ref_val);
                 $sroa_found_0_13 = 0;
                 $sroa_found_1_14 = $sroa_next_15;
@@ -281,7 +281,7 @@ fn "opt_sroa_variant_unrestricted_handle.wado/$test_1_a_handle_local_round_trips
     let $local_11: ref "core:prelude/format.wado//Formatter";
     let v_25: ref "core:prelude//List<f64>";
     v_25 = black_box(local.tee xs(struct.new "core:prelude//List<f64>" { repr: array.new_fixed<f64>(1.5, -1, 3.5, -2), used: 4 }));
-    if @unlikely((local.tee $v3_3("opt_sroa_variant_unrestricted_handle.wado/last_positive"(local.tee v_25(struct.new "core:prelude//List<f64>" { repr: let $array_clone_src_1: ref Array<f64>; $array_clone_src_1 = v_25.repr; $load_1 = v_25.used; let $array_clone_dst_2: ref Array<f64>; builtin::array_copy<f64>(local.tee $array_clone_dst_2(builtin::array_new<f64>($load_1)), 0, $array_clone_src_1, 0, $load_1); $array_clone_dst_2, used: $load_1 }))) == 3.5) == 0) {
+    if @unlikely(local.tee $v3_3("opt_sroa_variant_unrestricted_handle.wado/last_positive"(local.tee v_25(struct.new "core:prelude//List<f64>" { repr: let $array_clone_src_1: ref Array<f64>; $array_clone_src_1 = v_25.repr; $load_1 = v_25.used; let $array_clone_dst_2: ref Array<f64>; builtin::array_copy<f64>(local.tee $array_clone_dst_2(builtin::array_new<f64>($load_1)), 0, $array_clone_src_1, 0, $load_1); $array_clone_dst_2, used: $load_1 }))) != 3.5) {
         cold_path;
         $load_1 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_10("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(292)), 100);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_10.repr, $load_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -313,13 +313,13 @@ condition: last_positive(&builtin::black_box(xs)) == 3.5
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_10.repr, $load_1 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("last_positive(&builtin::black_box(xs)): "), used: 40 }, 40);
         $local_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_10);
         "core:prelude/primitive.wado/f64^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<f64>" { value: $v3_3 }, $local_11);
-        let $mv_arg_6: ref "core:prelude/string.wado//String";
-        $mv_arg_6 = global:opt_sroa_variant_unrestricted_handle.wado::$const_obj_20;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_10, $mv_arg_6.repr, $mv_arg_6.used);
+        let $mv_arg_5: ref "core:prelude/string.wado//String";
+        $mv_arg_5 = global:opt_sroa_variant_unrestricted_handle.wado::$const_obj_20;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_10, $mv_arg_5.repr, $mv_arg_5.used);
         "core:rt/panic"($local_10.repr, $local_10.used);
         unreachable;
     }
-    if @unlikely((local.tee $v3_3("opt_sroa_variant_unrestricted_handle.wado/last_positive"(local.tee xs(struct.new "core:prelude//List<f64>" { repr: $array_clone_dst_2 = local.tee xs(black_box(local.tee v_25(struct.new "core:prelude//List<f64>" { repr: array.new_fixed<f64>(-1), used: 1 }))).repr; builtin::array_copy<f64>(local.tee $array_clone_src_1(builtin::array_new<f64>(local.tee $load_1(xs.used))), 0, $array_clone_dst_2, 0, $load_1); $array_clone_src_1, used: $load_1 }))) == -1) == 0) {
+    if @unlikely(local.tee $v3_3("opt_sroa_variant_unrestricted_handle.wado/last_positive"(local.tee xs(struct.new "core:prelude//List<f64>" { repr: $array_clone_dst_2 = local.tee xs(black_box(local.tee v_25(struct.new "core:prelude//List<f64>" { repr: array.new_fixed<f64>(-1), used: 1 }))).repr; builtin::array_copy<f64>(local.tee $array_clone_src_1(builtin::array_new<f64>(local.tee $load_1(xs.used))), 0, $array_clone_dst_2, 0, $load_1); $array_clone_src_1, used: $load_1 }))) != -1) {
         cold_path;
         $load_1 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_10("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(303)), 100);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_10.repr, $load_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -351,8 +351,8 @@ condition: last_positive(&builtin::black_box(none)) == -1.0
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_10.repr, $load_1 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("last_positive(&builtin::black_box(none)): "), used: 42 }, 42);
         $local_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_10);
         "core:prelude/primitive.wado/f64^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<f64>" { value: $v3_3 }, $local_11);
-        $mv_arg_6 = global:opt_sroa_variant_unrestricted_handle.wado::$const_obj_20;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_10, $mv_arg_6.repr, $mv_arg_6.used);
+        $mv_arg_5 = global:opt_sroa_variant_unrestricted_handle.wado::$const_obj_20;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_10, $mv_arg_5.repr, $mv_arg_5.used);
         "core:rt/panic"($local_10.repr, $local_10.used);
         unreachable;
     }

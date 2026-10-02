@@ -85,6 +85,9 @@ pub enum CtfeBuiltin {
     ColdPath,
     Select,
     I32AsChar,
+    /// `f32_is_nan` and `f64_is_nan`, IEEE's NaN test, which no operator
+    /// spells under the float order.
+    FloatIsNan,
     /// `heap_base`, carrying the address it is for this package.
     HeapBase(i32),
 }
@@ -103,6 +106,7 @@ impl CtfeBuiltin {
             | Self::ColdPath
             | Self::Select
             | Self::I32AsChar
+            | Self::FloatIsNan
             | Self::HeapBase(_) => false,
         }
     }
@@ -275,6 +279,7 @@ pub(crate) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
             Some("cold_path") => CtfeBuiltin::ColdPath,
             Some("select") => CtfeBuiltin::Select,
             Some("i32_as_char") => CtfeBuiltin::I32AsChar,
+            Some("f32_is_nan" | "f64_is_nan") => CtfeBuiltin::FloatIsNan,
             Some("heap_base") => CtfeBuiltin::HeapBase(project.heap_base()),
             _ => continue,
         };

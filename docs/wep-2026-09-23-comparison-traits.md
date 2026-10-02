@@ -257,6 +257,43 @@ branch:
 
 Where the optimizer proves an operand is not a NaN, the test goes.
 
+The slowdown this costs is accepted. Measured on 2026-10-02, it is up to 30% on
+a loop that does little but compare two loaded floats, and none outside such
+loops:
+
+| Loop over 200,000 random `f64`s                 | Before   | After    | Change       |
+| ----------------------------------------------- | -------- | -------- | ------------ |
+| `if xs[i - 1] <= xs[i] { n += 1 }`, and `==`    | 0.625 ms | 0.812 ms | 30% slower   |
+| `if xs[i] > xs[best] { best = i }`              | 0.504 ms | 0.621 ms | 23% slower   |
+| `if xs[i] > 0.25 { n += 1 }`                    | 0.443 ms | 0.444 ms | no change    |
+| `sort()` on a `List<f64>`                       | 39.6 ms  | 38.7 ms  | within noise |
+| `sort()` on a `List<f32>` holding the same data | 35.8 ms  | 37.5 ms  | within noise |
+
+Every Wado row of the benchmark suite (`mise run all-wado`) stayed within noise.
+
+`f32::max` costs more than a comparison. It was one `f32.max` instruction and is
+now a comparison and a `select`. wasmtime compiles a float `select` to a
+conditional branch on x86, and where the larger operand changes at random the
+branch is mispredicted half the time. Measured on 2026-10-02 over Loam's kernels,
+copied into loops over 262,144 random `f32`s:
+
+| Kernel                                    | Before   | After    | Change      |
+| ----------------------------------------- | -------- | -------- | ----------- |
+| `Relu`: `map(xs, \|v\| f32::max(v, 0.0))` | 1.116 ms | 2.680 ms | 140% slower |
+| `MaxPool`: 2×2 taps through `f32::max`    | 0.988 ms | 2.059 ms | 108% slower |
+| `Softmax`: a row's `f32::max`             | 0.548 ms | 0.742 ms | 35% slower  |
+
+`f32::maximum` runs each kernel within noise of the old `f32::max`. Loam's
+kernels call it, since it propagates a NaN as `max` does and differs only in
+the sign of a zero result. The `microgpt` benchmark, which calls `f64::max` for
+its ReLU and its softmax, stayed within noise.
+
+"Before" is `origin/main` at `ba07da1b9` and "after" is this WEP's change on
+top of it. Both compilers were built `--release`, and each program ran at `-O2`
+under the vendored wasmtime, on a 4-core Intel Xeon cloud VM. A figure is the
+best of six runs. A change counts only where the two compilers' ranges do not
+overlap, which is what `benchmark/ab.ts` decides.
+
 ### Rejected
 
 - IEEE operators beside a separate total order, as C++20, Java, Julia and Go
@@ -275,19 +312,20 @@ Where the optimizer proves an operand is not a NaN, the test goes.
 
 ## Roadmap
 
-- [ ] Implement the float `Eq` and `Ord` impls and the operator lowering for
+- [x] Implement the float `Eq` and `Ord` impls and the operator lowering for
   all four float types, and remove `OperatorOrd`.
-- [ ] Rewrite the fixtures that pin today's answers (`float_total_order.wado`,
-  `half_ieee_compare.wado`) to pin these.
-- [ ] Measure the cost on comparison-heavy code, sorting and Loam's kernels
-  among it, and record it here.
+- [x] Rewrite the fixtures that pin today's answers (`float_total_order.wado`,
+  `half_ieee_compare.wado`, now `half_float_order.wado`) to pin these.
+- [x] Measure the cost on comparison-heavy code and sorting, and record it in
+  [Cost](#cost).
 - [ ] Derive `Eq` from a written `cmp`, and reject a use of `Ord` on a type
   whose `Eq` is written and whose `cmp` is not, a marker included. Each with a
   fixture.
-- [ ] Make `f32::min`, `f64::min` and their `max` follow the order, add
+- [x] Make `f32::min`, `f64::min` and their `max` follow the order, add
   `minimum` and `maximum` on the Wasm instructions, and make `clamp` keep a NaN
   `x` and trap on a NaN bound, `high` included, which `low <= high` passes.
-  Each with a fixture.
+  Each with a fixture. Then measure Loam's kernels, which compare floats
+  through `f32::max`, and record it in [Cost](#cost).
 - [ ] Report the `self_comparison` lint, with a fixture for each operator, the
   float hint, a chain, an operand that performs an effect, and `allow`.
 - [ ] Accept float range patterns, with fixtures for `-0.0`, a NaN scrutinee, a
@@ -295,3 +333,14 @@ Where the optimizer proves an operand is not a NaN, the test goes.
 - [ ] Reject a constant pattern whose type is or holds a float, with fixtures
   for `f64::INFINITY`, a `global` float, and a nested struct constant holding
   one.
+
+## Known gaps
+
+The NaN test goes only where an operand is a constant. Nothing yet proves that a
+computed operand is not a NaN, so `a < b` between two variables pays the test
+even where neither can be one.
+
+A float `min` or `max` is a conditional branch under wasmtime on x86, where
+`minimum` and `maximum` are one instruction each. Over operands whose order
+changes at random, `max` costs up to two and a half times `maximum`, as
+[Cost](#cost) measures.

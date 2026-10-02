@@ -582,6 +582,16 @@ impl Interpreter<'_> {
                 [value] => self.i32_as_char_lattice(body, value.expr),
                 _ => Lattice::Unevaluated,
             },
+            CtfeBuiltin::FloatIsNan => match args {
+                [value] => match self.operand_lattice_folded(body, value.expr) {
+                    Lattice::Const(value) => {
+                        let (value, _) = value.as_float().expect("`is_nan` takes a float");
+                        Lattice::Const(Value::Bool(value.is_nan()))
+                    }
+                    _ => Lattice::Unevaluated,
+                },
+                _ => Lattice::Unevaluated,
+            },
             CtfeBuiltin::HeapBase(address) => Lattice::Const(Value::Int {
                 value: u64::from(address.cast_unsigned()),
                 prim: PrimitiveType::I32,

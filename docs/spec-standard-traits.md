@@ -455,11 +455,6 @@ is less than `0.0`.
 `low > high`, whatever `x` is. It then confines `x` to `low..=high` by the
 order, with one exception: a NaN `x` gives NaN rather than `high`.
 
-> Not yet implemented: the operators on a float are IEEE's, and `Ord` on a float
-> is IEEE 754 `totalOrder`, which reads a NaN's bits and orders `-0.0 < 0.0`.
-> `f32::min` and `f64::min` (and `max`) are IEEE 754-2019 `minimum` (and
-> `maximum`), and `minimum` and `maximum` do not exist.
-
 ### Default Implementations
 
 `String` and `List<T>` implement `Eq` and `Ord` with lexicographic comparison:

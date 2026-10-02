@@ -199,7 +199,11 @@ fn "numeric_literal_suffix.wado/$cm_export__$test_1_a_suffixed_literal_holds_the
         }
         break $inline__test_1_a_suffixed_literal_holds_the_value_it_spells_0__$inline_round_to_even_3: kept_31;
     };
-    if @unlikely(local.tee bits_30(builtin::f32_reinterpret_i32(16384 << 16) == builtin::f32_reinterpret_i32(kept_31 << 16)) == 0) {
+    let $float_cmp_1: f32;
+    $float_cmp_1 = builtin::f32_reinterpret_i32(16384 << 16);
+    let $float_cmp_2: f32;
+    $float_cmp_2 = builtin::f32_reinterpret_i32(kept_31 << 16);
+    if @unlikely(local.tee bits_30(($float_cmp_1 == $float_cmp_2) | (($float_cmp_1 != $float_cmp_1) & ($float_cmp_2 != $float_cmp_2))) == 0) {
         cold_path;
         "numeric_literal_suffix.wado/$test_1_a_suffixed_literal_holds_the_value_it_spells$cold2"(kept_31);
         unreachable;

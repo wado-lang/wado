@@ -158,13 +158,19 @@ fn "spec_types_primitives.wado/$test_0"() {
     let $v7_seen: bool;
     let $v8: bool;
     let $v8_seen: bool;
-    $v1_23 = "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from$spec0"() == "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from"(14336);
+    let $float_cmp_1: f32;
+    $float_cmp_1 = "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from$spec0"();
+    let $float_cmp_2: f32;
+    $float_cmp_2 = "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from"(14336);
+    $v1_23 = ($float_cmp_1 == $float_cmp_2) | (($float_cmp_1 != $float_cmp_1) & ($float_cmp_2 != $float_cmp_2));
     $v2_seen_25 = 0;
     $v3_seen_27 = 0;
     $v4_28 = (if $v1_23 -> i32 {
         $v2_24 = 16128;
         $v2_seen_25 = 1;
-        $v3_26 = builtin::f32_reinterpret_i32(16128 << 16) == builtin::f32_reinterpret_i32(16128 << 16);
+        $float_cmp_2 = builtin::f32_reinterpret_i32(16128 << 16);
+        $float_cmp_1 = builtin::f32_reinterpret_i32(16128 << 16);
+        $v3_26 = ($float_cmp_2 == $float_cmp_1) | (($float_cmp_2 != $float_cmp_2) & ($float_cmp_1 != $float_cmp_1));
         $v3_seen_27 = 1;
         $v3_26;
     } else {

@@ -254,7 +254,7 @@ fn "spec_testing_declaration.wado/$cm_export__$test_6"() {
     let $local_3: ref "core:prelude/string.wado//String";
     let $local_4: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_5: i32;
-    if @unlikely((local.tee $v1(builtin::f64_sqrt(25)) == 5) == 0) {
+    if @unlikely(local.tee $v1(builtin::f64_sqrt(25)) != 5) {
         cold_path;
         $fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_3("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(152)), 61);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_3.repr, $fuse_at_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -276,9 +276,9 @@ condition: p.length() == 5.0
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_3.repr, $fuse_at_5 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("p.length(): "), used: 12 }, 12);
         $local_4 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3);
         "core:prelude/primitive.wado/f64^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<f64>" { value: $v1 }, $local_4);
-        let $mv_field_3: ref Array<u8>;
-        $mv_field_3 = array.new_fixed<u8>(10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_3, $mv_field_3, 1);
+        let $mv_field_2: ref Array<u8>;
+        $mv_field_2 = array.new_fixed<u8>(10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_3, $mv_field_2, 1);
         "core:rt/panic"($local_3.repr, $local_3.used);
         unreachable;
     }

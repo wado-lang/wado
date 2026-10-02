@@ -4,6 +4,8 @@
 //! anything a branch, loop, or `break` path can disagree on goes `Opaque`.
 //! Consumed lazily by [`crate::nir_engine::Engine::value`]; see WEP 2026-06-05.
 
+use std::cmp::Ordering;
+
 use crate::const_eval;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
@@ -600,21 +602,17 @@ impl<'a> Builder<'a> {
         result_type: tir::TypeId,
     ) -> Option<ValueId> {
         let tt = self.type_table?;
-        // Reflexivity: operands sharing a `ValueId` are the same value, so
-        // `x == x` folds to `true` and `x != x` to `false` without a literal
-        // (e.g. an identity reinterpret `v as SameType == v`). Floats
-        // (`NaN != NaN`) and `v128` (no scalar `==`) are excluded; every other
-        // operand reaching here is reflexively equal.
+        // Reflexivity: operands sharing a `ValueId` are the same value, so a
+        // comparison of them folds without a literal (e.g. an identity
+        // reinterpret `v as SameType == v`). `v128` has no scalar comparison.
         if lhs == rhs
-            && matches!(op, NirBinaryOp::Eq | NirBinaryOp::NotEq)
+            && let Some(answer) = op.holds_for(Ordering::Equal)
             && !matches!(
                 const_eval::prim_of(self.operand_type(left), tt),
-                Some(PrimitiveType::F32 | PrimitiveType::F64 | PrimitiveType::V128)
+                Some(PrimitiveType::V128)
             )
         {
-            return Some(
-                self.const_to_value(const_eval::Value::Bool(op == NirBinaryOp::Eq), result_type),
-            );
+            return Some(self.const_to_value(const_eval::Value::Bool(answer), result_type));
         }
         // Logical identities with one constant-bool operand. `&&` / `||`
         // short-circuit, but both operands reach here as pure values (the

@@ -1,0 +1,68 @@
+// A float comparison costs what docs/wep-2026-09-23-comparison-traits.md
+// § Cost says. Against a constant that is not a NaN it is one IEEE
+// instruction, negated for `>` and `>=`. Between two variables the instruction
+// is joined with NaN tests, with no branch.
+
+fn above(x: f64) -> bool {
+    return x > 1.0;
+}
+
+fn below(x: f64) -> bool {
+    return x < 1.0;
+}
+
+fn less(a: f64, b: f64) -> bool {
+    return a <= b;
+}
+
+fn same(a: f32, b: f32) -> bool {
+    return a == b;
+}
+
+#[inline(never)]
+fn differs(a: f64, b: f64) -> bool {
+    return !(a == 2.0) && b != 2.0;
+}
+
+// The NaN test leaves the comparison a 0 or 1, so the count stays branchless.
+fn count_ordered(xs: &List<f64>) -> i32 {
+    let mut ordered = 0;
+    for let i of 1..<xs.len() {
+        if xs[i - 1] <= xs[i] {
+            ordered += 1;
+        }
+    }
+    return ordered;
+}
+
+// Constant bounds fold their NaN tests and their `low <= high` away.
+#[inline(never)]
+fn unit(x: f64) -> f64 {
+    return f64::clamp(x, 0.0, 1.0);
+}
+
+test {
+    assert unit(builtin::black_box(2.0)) == 1.0;
+    let nan = f64::from_bits(builtin::black_box(0x7FF8_0000_0000_0000));
+    let xs: List<f64> = [1.0, 2.0, nan, 0.5, nan];
+    assert count_ordered(&xs) == 3;
+    assert above(nan) && !below(nan);
+    assert above(builtin::black_box(2.0)) && below(builtin::black_box(0.5));
+    assert less(builtin::black_box(1.0), nan) && !less(nan, builtin::black_box(1.0));
+    assert same(nan as f32, nan as f32);
+    assert differs(nan, nan);
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_expect:O0": [
+        "return (x <= 1) == 0;",
+        "return x < 1;",
+        "return (a <= b) | (b != b);",
+        "return (a == b) | ((a != a) & (b != b));"
+    ],
+    "wir_expect:O1": ["return (a != 2) & (b != 2);", "ordered = ordered + "],
+    "wir_not_expect:O1": ["(a == 2) == 0"],
+    "wir_not_expect:O2": ["f64::clamp$cold0", "1 != 1"]
+}

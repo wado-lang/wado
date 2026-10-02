@@ -170,8 +170,9 @@ function does ([WEP: Declared absence](./wep-2026-09-13-declared-absence.md)).
 
 ## Known gaps
 
-- Floating-point keys have no `Hash`. Their `==` follows IEEE 754, under which
-  `-0.0 == 0.0` and `NaN != NaN`, and `Ord` follows the total order instead.
+- Floating-point keys have no `Hash`. Their `==` treats every NaN as one value
+  and `-0.0` as equal to `0.0`, so a `Hash` has to agree on each of those
+  groups, which bit patterns do not.
 - Until the refusal lands, a `HashMap` is refused `Serialize` only because the
   `Array` behind its entries has none. The error walks the private fields to
   `Array` rather than stating the reason.

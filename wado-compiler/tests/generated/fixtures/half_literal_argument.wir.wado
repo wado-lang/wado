@@ -78,10 +78,16 @@ fn "half_literal_argument.wado/$cm_export__$test_0"() {
     let $v0_9: bool;
     let $v1_10: bool;
     let $v1_seen: bool;
-    $v0_9 = builtin::f32_reinterpret_i32(16384 << 16) == builtin::f32_reinterpret_i32(16384 << 16);
+    let $float_cmp_1: f32;
+    $float_cmp_1 = builtin::f32_reinterpret_i32(16384 << 16);
+    let $float_cmp_2: f32;
+    $float_cmp_2 = builtin::f32_reinterpret_i32(16384 << 16);
+    $v0_9 = ($float_cmp_1 == $float_cmp_2) | (($float_cmp_1 != $float_cmp_1) & ($float_cmp_2 != $float_cmp_2));
     $v1_seen = 0;
     if @unlikely((if $v0_9 -> i32 {
-        $v1_10 = builtin::f32_reinterpret_i32(16384 << 16) == builtin::f32_reinterpret_i32(16384 << 16);
+        $float_cmp_2 = builtin::f32_reinterpret_i32(16384 << 16);
+        $float_cmp_1 = builtin::f32_reinterpret_i32(16384 << 16);
+        $v1_10 = ($float_cmp_2 == $float_cmp_1) | (($float_cmp_2 != $float_cmp_2) & ($float_cmp_1 != $float_cmp_1));
         $v1_seen = 1;
         $v1_10;
     } else {

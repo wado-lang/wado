@@ -5989,7 +5989,7 @@ fn "core:json/core:json/JsonDeserializer::parse_i32_with_lead"(self, lead) {
     let v_7: i64;
     let $match_11: ref null "core:serde//DeserializeError";
     let v_13: f64;
-    let $sroa_slot_25: f64;
+    let $sroa_slot_26: f64;
     start_2 = builtin::i64_extend_i32_s(self.pos);
     n_3 = self.scratch;
     if @likely(ref.is_null(local.tee $match_11("core:json/core:json/JsonDeserializer::scan_number_into"(self, lead, n_3)))) {
@@ -6011,30 +6011,36 @@ fn "core:json/core:json/JsonDeserializer::parse_i32_with_lead"(self, lead) {
         return 0, builtin::i32_wrap_i64(select i64(n_3.neg, 0_i64 - v_7, v_7)), ref.null none;
     }
     lead = 0;
-    $sroa_slot_25 = 0;
+    $sroa_slot_26 = 0;
     $match_11 = ref.null none;
     $inline_core_json_checked_int_f64_core_prelude_string_wado_String__0: block {
-        if @unlikely(local.tee v_13(builtin::f64_reinterpret_i64("core:json/scanned_to_bits"(n_3, self.input, global:core:prelude/fpfmt.wado::BINARY64))) != builtin::f64_floor(v_13)) {
+        if @unlikely((if local.tee v_13(builtin::f64_reinterpret_i64("core:json/scanned_to_bits"(n_3, self.input, global:core:prelude/fpfmt.wado::BINARY64))) != v_13 -> i32 {
+            1;
+        } else {
+            let $float_cmp_2: f64;
+            $float_cmp_2 = builtin::f64_floor(v_13);
+            ((v_13 == $float_cmp_2) | ((v_13 != v_13) & ($float_cmp_2 != $float_cmp_2))) == 0;
+        })) {
             cold_path;
             lead = 1;
-            $sroa_slot_25 = 0;
+            $sroa_slot_26 = 0;
             $match_11 = ref.as_non_null("core:serde/core:serde/DeserializeError::unexpected_type<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected integer, got float"), used: 27 }, start_2));
             break $inline_core_json_checked_int_f64_core_prelude_string_wado_String__0;
         }
-        if @unlikely(((-2147483648 <= v_13) & (v_13 < 2147483648)) == 0) {
+        if @unlikely((((-2147483648 > v_13) == 0) & (v_13 < 2147483648)) == 0) {
             cold_path;
             lead = 1;
-            $sroa_slot_25 = 0;
+            $sroa_slot_26 = 0;
             $match_11 = ref.as_non_null("core:serde/core:serde/DeserializeError::overflow<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value out of range for i32"), used: 26 }, start_2));
             break $inline_core_json_checked_int_f64_core_prelude_string_wado_String__0;
         }
         lead = 0;
-        $sroa_slot_25 = v_13;
+        $sroa_slot_26 = v_13;
         $match_11 = ref.null none;
         break $inline_core_json_checked_int_f64_core_prelude_string_wado_String__0;
     };
-    $sroa_slot_25 = (if lead == 0 -> f64 {
-        $sroa_slot_25;
+    $sroa_slot_26 = (if lead == 0 -> f64 {
+        $sroa_slot_26;
     } else if @unlikely(lead == 1) -> f64 {
         $qm_e_5 = ref.as_non_null($match_11);
         cold_path;
@@ -6042,7 +6048,7 @@ fn "core:json/core:json/JsonDeserializer::parse_i32_with_lead"(self, lead) {
     } else {
         unreachable;
     });
-    return 0, builtin::i32_trunc_sat_f64_s($sroa_slot_25), ref.null none;
+    return 0, builtin::i32_trunc_sat_f64_s($sroa_slot_26), ref.null none;
 }
 
 fn "core:json/core:json/JsonDeserializer::skip_string"(self) {
@@ -6053,7 +6059,7 @@ fn "core:json/core:json/JsonDeserializer::skip_string"(self) {
     self.pos = self.pos + 1;
     $hfs_pos_6 = self.pos;
     block {
-        l787: loop {
+        l788: loop {
             start = $hfs_pos_6;
             let $mv$scan$end: i32;
             let $mv$scan$stop: i32;
@@ -6091,7 +6097,7 @@ fn "core:json/core:json/JsonDeserializer::skip_string"(self) {
                 unreachable;
             }));
             $hfs_pos_6 = self.pos;
-            continue l787;
+            continue l788;
         };
     };
 }
@@ -6181,7 +6187,7 @@ fn "core:json/core:json/JsonDeserializer::skip_array_body"(self, depth) {
     }
     $hfs_pos_6 = self.pos;
     block {
-        l808: loop {
+        l809: loop {
             if @likely(ref.is_null(local.tee $match_5("core:json/core:json/JsonDeserializer::skip_value"(self, depth)))) {
             } else {
                 $qm_e = ref.as_non_null($match_5);
@@ -6207,7 +6213,7 @@ fn "core:json/core:json/JsonDeserializer::skip_array_body"(self, depth) {
                 return ref.as_non_null("core:serde/core:serde/DeserializeError::malformed<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected ',' or ']'"), used: 19 }, builtin::i64_extend_i32_s($hfs_pos_6)));
             }
             self.pos = $hfs_pos_6;
-            continue l808;
+            continue l809;
         };
     };
 }
@@ -6227,7 +6233,7 @@ fn "core:json/core:json/JsonDeserializer::skip_object_body"(self, depth) {
     }
     $hfs_pos_15 = self.pos;
     block {
-        l815: loop {
+        l816: loop {
             if @unlikely(local.tee key_lead("core:json/core:json/JsonDeserializer::peek_after_whitespace"(self)) != 34) {
                 cold_path;
                 return ref.as_non_null("core:json/core:json/JsonDeserializer::key_quote_error$scalar"(local.tee $hfs_pos_15(self.pos), key_lead));
@@ -6288,7 +6294,7 @@ fn "core:json/core:json/JsonDeserializer::skip_object_body"(self, depth) {
                 return ref.as_non_null("core:serde/core:serde/DeserializeError::malformed<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected ',' or '}'"), used: 19 }, builtin::i64_extend_i32_s($hfs_pos_15)));
             }
             self.pos = $hfs_pos_15;
-            continue l815;
+            continue l816;
         };
     };
 }
@@ -6860,8 +6866,8 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     $load_6 = local.tee view_2(struct.new "core:prelude/string.wado//StrSlice" { repr: $mv$content$repr, start: 0, end: $mv$content$used }).repr;
     start_20 = 0;
     new_used_19 = 0;
-    b940: block {
-        l941: loop {
+    b941: block {
+        l942: loop {
             $sroa_slot_156 = 0;
             $inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_9: block {
                 if start_20 >= $mv$content$used {
@@ -6899,9 +6905,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
             if local.tee $match_scrut_0($sroa_slot_156) == 0 {
                 new_used_19 = new_used_19 + 1;
             } else {
-                break b940;
+                break b941;
             }
-            continue l941;
+            continue l942;
         };
     };
     if new_used_19 >= $load_0 {
@@ -6943,9 +6949,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         };
         self_9 = self.buf;
         b0 = 0;
-        b953: block {
-            l954: loop {
-                break_if b953 b0 >= new_used_19;
+        b954: block {
+            l955: loop {
+                break_if b954 b0 >= new_used_19;
                 if @unlikely(local.tee $sroa_slot_196(self_9.used + 1) > builtin::array_len(self_9.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_9, $sroa_slot_196);
@@ -6954,7 +6960,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
                 self_9.used = $sroa_slot_196;
                 builtin::array_set_u8(self_9.repr, $match_scrut_0, 48);
                 b0 = b0 + 1;
-                continue l954;
+                continue l955;
             };
         };
         self_9 = self.buf;
@@ -6986,12 +6992,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         self_9 = self.buf;
         b0 = self.fill;
         $match_scrut_0 = 0;
-        b959: block {
-            l960: loop {
-                break_if b959 $match_scrut_0 >= new_used_19;
+        b960: block {
+            l961: loop {
+                break_if b960 $match_scrut_0 >= new_used_19;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_9, b0);
                 $match_scrut_0 = $match_scrut_0 + 1;
-                continue l960;
+                continue l961;
             };
         };
     } else if $load_0 == 1 {
@@ -7000,12 +7006,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         self_9 = self.buf;
         b0 = self.fill;
         $sroa_slot_196 = 0;
-        b962: block {
-            l963: loop {
-                break_if b962 $sroa_slot_196 >= $load_0;
+        b963: block {
+            l964: loop {
+                break_if b963 $sroa_slot_196 >= $load_0;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_9, b0);
                 $sroa_slot_196 = $sroa_slot_196 + 1;
-                continue l963;
+                continue l964;
             };
         };
         self_9 = self.buf;
@@ -7022,24 +7028,24 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         self_9 = self.buf;
         $sroa_slot_196 = self.fill;
         b0 = 0;
-        b965: block {
-            l966: loop {
-                break_if b965 b0 >= $match_scrut_0;
+        b966: block {
+            l967: loop {
+                break_if b966 b0 >= $match_scrut_0;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_9, $sroa_slot_196);
                 b0 = b0 + 1;
-                continue l966;
+                continue l967;
             };
         };
     } else {
         self_9 = self.buf;
         $match_scrut_0 = self.fill;
         b0 = 0;
-        b967: block {
-            l968: loop {
-                break_if b967 b0 >= new_used_19;
+        b968: block {
+            l969: loop {
+                break_if b968 b0 >= new_used_19;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_9, $match_scrut_0);
                 b0 = b0 + 1;
-                continue l968;
+                continue l969;
             };
         };
         self_9 = self.buf;
@@ -7144,9 +7150,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         }
         self_21 = self.buf;
         $load_2 = 0;
-        b985: block {
-            l986: loop {
-                break_if b985 $load_2 >= sign_len;
+        b986: block {
+            l987: loop {
+                break_if b986 $load_2 >= sign_len;
                 if @unlikely(local.tee new_used_26(self_21.used + 1) > builtin::array_len(self_21.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, new_used_26);
@@ -7155,7 +7161,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 self_21.used = new_used_26;
                 builtin::array_set_u8(self_21.repr, start_63, 48);
                 $load_2 = $load_2 + 1;
-                continue l986;
+                continue l987;
             };
         };
         if @unlikely(local.tee $load_2(local.tee self_21(self.buf).used + digit_count) > builtin::array_len(self_21.repr)) {
@@ -7206,12 +7212,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         new_used_26 = self.fill;
         $load_0 = 0;
-        b997: block {
-            l998: loop {
-                break_if b997 $load_0 >= sign_len;
+        b998: block {
+            l999: loop {
+                break_if b998 $load_0 >= sign_len;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, new_used_26);
                 $load_0 = $load_0 + 1;
-                continue l998;
+                continue l999;
             };
         };
         return $load_2;
@@ -7221,12 +7227,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         new_used_26 = self.fill;
         $load_0 = 0;
-        b1000: block {
-            l1001: loop {
-                break_if b1000 $load_0 >= start_63;
+        b1001: block {
+            l1002: loop {
+                break_if b1001 $load_0 >= start_63;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, new_used_26);
                 $load_0 = $load_0 + 1;
-                continue l1001;
+                continue l1002;
             };
         };
         if is_negative {
@@ -7268,12 +7274,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         start_63 = self.fill;
         new_used_26 = 0;
-        b1009: block {
-            l1010: loop {
-                break_if b1009 new_used_26 >= $load_2;
+        b1010: block {
+            l1011: loop {
+                break_if b1010 new_used_26 >= $load_2;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, start_63);
                 new_used_26 = new_used_26 + 1;
-                continue l1010;
+                continue l1011;
             };
         };
         return $load_0;
@@ -7281,12 +7287,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         $load_0 = self.fill;
         start_63 = 0;
-        b1011: block {
-            l1012: loop {
-                break_if b1011 start_63 >= sign_len;
+        b1012: block {
+            l1013: loop {
+                break_if b1012 start_63 >= sign_len;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, $load_0);
                 start_63 = start_63 + 1;
-                continue l1012;
+                continue l1013;
             };
         };
         if is_negative {
@@ -7428,144 +7434,144 @@ fn "core:prelude/traits.wado/serde_json_many_fields.wado/Wide^core:prelude/trait
     new_used_54 = self_42.used;
     self_42.used = start_55;
     builtin::array_copy<u8>(self_42.repr, new_used_54, global:core:prelude/traits.wado::$const_obj_85, 0, 2);
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(b1029: block -> i32 {
-        b1030: block {
-            b1031: block {
-                b1032: block {
-                    b1033: block {
-                        b1034: block {
-                            b1035: block {
-                                b1036: block {
-                                    b1037: block {
-                                        b1038: block {
-                                            b1039: block {
-                                                b1040: block {
-                                                    b1041: block {
-                                                        b1042: block {
-                                                            b1043: block {
-                                                                b1044: block {
-                                                                    b1045: block {
-                                                                        b1046: block {
-                                                                            b1047: block {
-                                                                                b1048: block {
-                                                                                    b1049: block {
-                                                                                        b1050: block {
-                                                                                            b1051: block {
-                                                                                                b1052: block {
-                                                                                                    b1053: block {
-                                                                                                        b1054: block {
-                                                                                                            b1055: block {
-                                                                                                                b1056: block {
-                                                                                                                    b1057: block {
-                                                                                                                        b1058: block {
-                                                                                                                            b1059: block {
-                                                                                                                                b1060: block {
-                                                                                                                                    b1061: block {
-                                                                                                                                        b1062: block {
-                                                                                                                                            b1063: block {
-                                                                                                                                                b1064: block {
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(b1030: block -> i32 {
+        b1031: block {
+            b1032: block {
+                b1033: block {
+                    b1034: block {
+                        b1035: block {
+                            b1036: block {
+                                b1037: block {
+                                    b1038: block {
+                                        b1039: block {
+                                            b1040: block {
+                                                b1041: block {
+                                                    b1042: block {
+                                                        b1043: block {
+                                                            b1044: block {
+                                                                b1045: block {
+                                                                    b1046: block {
+                                                                        b1047: block {
+                                                                            b1048: block {
+                                                                                b1049: block {
+                                                                                    b1050: block {
+                                                                                        b1051: block {
+                                                                                            b1052: block {
+                                                                                                b1053: block {
+                                                                                                    b1054: block {
+                                                                                                        b1055: block {
+                                                                                                            b1056: block {
+                                                                                                                b1057: block {
+                                                                                                                    b1058: block {
+                                                                                                                        b1059: block {
+                                                                                                                            b1060: block {
+                                                                                                                                b1061: block {
+                                                                                                                                    b1062: block {
+                                                                                                                                        b1063: block {
+                                                                                                                                            b1064: block {
+                                                                                                                                                b1065: block {
                                                                                                                                                     br_table 0 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34] default=0;
                                                                                                                                                 };
                                                                                                                                                 unreachable;
                                                                                                                                             };
                                                                                                                                             self.f0;
-                                                                                                                                            break b1029;
+                                                                                                                                            break b1030;
                                                                                                                                         };
                                                                                                                                         self.f1;
-                                                                                                                                        break b1029;
+                                                                                                                                        break b1030;
                                                                                                                                     };
                                                                                                                                     self.f2;
-                                                                                                                                    break b1029;
+                                                                                                                                    break b1030;
                                                                                                                                 };
                                                                                                                                 self.f3;
-                                                                                                                                break b1029;
+                                                                                                                                break b1030;
                                                                                                                             };
                                                                                                                             self.f4;
-                                                                                                                            break b1029;
+                                                                                                                            break b1030;
                                                                                                                         };
                                                                                                                         self.f5;
-                                                                                                                        break b1029;
+                                                                                                                        break b1030;
                                                                                                                     };
                                                                                                                     self.f6;
-                                                                                                                    break b1029;
+                                                                                                                    break b1030;
                                                                                                                 };
                                                                                                                 self.f7;
-                                                                                                                break b1029;
+                                                                                                                break b1030;
                                                                                                             };
                                                                                                             self.f8;
-                                                                                                            break b1029;
+                                                                                                            break b1030;
                                                                                                         };
                                                                                                         self.f9;
-                                                                                                        break b1029;
+                                                                                                        break b1030;
                                                                                                     };
                                                                                                     self.f10;
-                                                                                                    break b1029;
+                                                                                                    break b1030;
                                                                                                 };
                                                                                                 self.f11;
-                                                                                                break b1029;
+                                                                                                break b1030;
                                                                                             };
                                                                                             self.f12;
-                                                                                            break b1029;
+                                                                                            break b1030;
                                                                                         };
                                                                                         self.f13;
-                                                                                        break b1029;
+                                                                                        break b1030;
                                                                                     };
                                                                                     self.f14;
-                                                                                    break b1029;
+                                                                                    break b1030;
                                                                                 };
                                                                                 self.f15;
-                                                                                break b1029;
+                                                                                break b1030;
                                                                             };
                                                                             self.f16;
-                                                                            break b1029;
+                                                                            break b1030;
                                                                         };
                                                                         self.f17;
-                                                                        break b1029;
+                                                                        break b1030;
                                                                     };
                                                                     self.f18;
-                                                                    break b1029;
+                                                                    break b1030;
                                                                 };
                                                                 self.f19;
-                                                                break b1029;
+                                                                break b1030;
                                                             };
                                                             self.f20;
-                                                            break b1029;
+                                                            break b1030;
                                                         };
                                                         self.f21;
-                                                        break b1029;
+                                                        break b1030;
                                                     };
                                                     self.f22;
-                                                    break b1029;
+                                                    break b1030;
                                                 };
                                                 self.f23;
-                                                break b1029;
+                                                break b1030;
                                             };
                                             self.f24;
-                                            break b1029;
+                                            break b1030;
                                         };
                                         self.f25;
-                                        break b1029;
+                                        break b1030;
                                     };
                                     self.f26;
-                                    break b1029;
+                                    break b1030;
                                 };
                                 self.f27;
-                                break b1029;
+                                break b1030;
                             };
                             self.f28;
-                            break b1029;
+                            break b1030;
                         };
                         self.f29;
-                        break b1029;
+                        break b1030;
                     };
                     self.f30;
-                    break b1029;
+                    break b1030;
                 };
                 self.f31;
-                break b1029;
+                break b1030;
             };
             self.f32;
-            break b1029;
+            break b1030;
         };
         self.f33;
     }, f);
@@ -7591,144 +7597,144 @@ fn "core:prelude/traits.wado/serde_json_many_fields.wado/Wide^core:prelude/trait
     start_55 = self_42.used;
     self_42.used = new_used_54;
     builtin::array_copy<u8>(self_42.repr, start_55, global:core:prelude/traits.wado::$const_obj_85, 0, 2);
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(b1068: block -> i32 {
-        b1069: block {
-            b1070: block {
-                b1071: block {
-                    b1072: block {
-                        b1073: block {
-                            b1074: block {
-                                b1075: block {
-                                    b1076: block {
-                                        b1077: block {
-                                            b1078: block {
-                                                b1079: block {
-                                                    b1080: block {
-                                                        b1081: block {
-                                                            b1082: block {
-                                                                b1083: block {
-                                                                    b1084: block {
-                                                                        b1085: block {
-                                                                            b1086: block {
-                                                                                b1087: block {
-                                                                                    b1088: block {
-                                                                                        b1089: block {
-                                                                                            b1090: block {
-                                                                                                b1091: block {
-                                                                                                    b1092: block {
-                                                                                                        b1093: block {
-                                                                                                            b1094: block {
-                                                                                                                b1095: block {
-                                                                                                                    b1096: block {
-                                                                                                                        b1097: block {
-                                                                                                                            b1098: block {
-                                                                                                                                b1099: block {
-                                                                                                                                    b1100: block {
-                                                                                                                                        b1101: block {
-                                                                                                                                            b1102: block {
-                                                                                                                                                b1103: block {
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(b1069: block -> i32 {
+        b1070: block {
+            b1071: block {
+                b1072: block {
+                    b1073: block {
+                        b1074: block {
+                            b1075: block {
+                                b1076: block {
+                                    b1077: block {
+                                        b1078: block {
+                                            b1079: block {
+                                                b1080: block {
+                                                    b1081: block {
+                                                        b1082: block {
+                                                            b1083: block {
+                                                                b1084: block {
+                                                                    b1085: block {
+                                                                        b1086: block {
+                                                                            b1087: block {
+                                                                                b1088: block {
+                                                                                    b1089: block {
+                                                                                        b1090: block {
+                                                                                            b1091: block {
+                                                                                                b1092: block {
+                                                                                                    b1093: block {
+                                                                                                        b1094: block {
+                                                                                                            b1095: block {
+                                                                                                                b1096: block {
+                                                                                                                    b1097: block {
+                                                                                                                        b1098: block {
+                                                                                                                            b1099: block {
+                                                                                                                                b1100: block {
+                                                                                                                                    b1101: block {
+                                                                                                                                        b1102: block {
+                                                                                                                                            b1103: block {
+                                                                                                                                                b1104: block {
                                                                                                                                                     br_table 1 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34] default=0;
                                                                                                                                                 };
                                                                                                                                                 unreachable;
                                                                                                                                             };
                                                                                                                                             self.f0;
-                                                                                                                                            break b1068;
+                                                                                                                                            break b1069;
                                                                                                                                         };
                                                                                                                                         self.f1;
-                                                                                                                                        break b1068;
+                                                                                                                                        break b1069;
                                                                                                                                     };
                                                                                                                                     self.f2;
-                                                                                                                                    break b1068;
+                                                                                                                                    break b1069;
                                                                                                                                 };
                                                                                                                                 self.f3;
-                                                                                                                                break b1068;
+                                                                                                                                break b1069;
                                                                                                                             };
                                                                                                                             self.f4;
-                                                                                                                            break b1068;
+                                                                                                                            break b1069;
                                                                                                                         };
                                                                                                                         self.f5;
-                                                                                                                        break b1068;
+                                                                                                                        break b1069;
                                                                                                                     };
                                                                                                                     self.f6;
-                                                                                                                    break b1068;
+                                                                                                                    break b1069;
                                                                                                                 };
                                                                                                                 self.f7;
-                                                                                                                break b1068;
+                                                                                                                break b1069;
                                                                                                             };
                                                                                                             self.f8;
-                                                                                                            break b1068;
+                                                                                                            break b1069;
                                                                                                         };
                                                                                                         self.f9;
-                                                                                                        break b1068;
+                                                                                                        break b1069;
                                                                                                     };
                                                                                                     self.f10;
-                                                                                                    break b1068;
+                                                                                                    break b1069;
                                                                                                 };
                                                                                                 self.f11;
-                                                                                                break b1068;
+                                                                                                break b1069;
                                                                                             };
                                                                                             self.f12;
-                                                                                            break b1068;
+                                                                                            break b1069;
                                                                                         };
                                                                                         self.f13;
-                                                                                        break b1068;
+                                                                                        break b1069;
                                                                                     };
                                                                                     self.f14;
-                                                                                    break b1068;
+                                                                                    break b1069;
                                                                                 };
                                                                                 self.f15;
-                                                                                break b1068;
+                                                                                break b1069;
                                                                             };
                                                                             self.f16;
-                                                                            break b1068;
+                                                                            break b1069;
                                                                         };
                                                                         self.f17;
-                                                                        break b1068;
+                                                                        break b1069;
                                                                     };
                                                                     self.f18;
-                                                                    break b1068;
+                                                                    break b1069;
                                                                 };
                                                                 self.f19;
-                                                                break b1068;
+                                                                break b1069;
                                                             };
                                                             self.f20;
-                                                            break b1068;
+                                                            break b1069;
                                                         };
                                                         self.f21;
-                                                        break b1068;
+                                                        break b1069;
                                                     };
                                                     self.f22;
-                                                    break b1068;
+                                                    break b1069;
                                                 };
                                                 self.f23;
-                                                break b1068;
+                                                break b1069;
                                             };
                                             self.f24;
-                                            break b1068;
+                                            break b1069;
                                         };
                                         self.f25;
-                                        break b1068;
+                                        break b1069;
                                     };
                                     self.f26;
-                                    break b1068;
+                                    break b1069;
                                 };
                                 self.f27;
-                                break b1068;
+                                break b1069;
                             };
                             self.f28;
-                            break b1068;
+                            break b1069;
                         };
                         self.f29;
-                        break b1068;
+                        break b1069;
                     };
                     self.f30;
-                    break b1068;
+                    break b1069;
                 };
                 self.f31;
-                break b1068;
+                break b1069;
             };
             self.f32;
-            break b1068;
+            break b1069;
         };
         self.f33;
     }, f);
@@ -8635,8 +8641,8 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
     } else {
         unreachable;
     });
-    b1203: block {
-        l1204: loop {
+    b1204: block {
+        l1205: loop {
             let $vr_discriminant_$mv$$vr_468$1: i32;
             let $vr_payload_0_$mv$$vr_468$1: i32;
             multivalue_bind [$mv$$vr_467$0, $vr_discriminant_$mv$$vr_468$1, $vr_payload_0_$mv$$vr_468$1, $mv$$vr_467$2] = "core:json/core:json/JsonStructAccess^core:serde/DeserializeStruct::next_field<serde_json_many_fields.wado/Wide>"($qm_v_5);
@@ -8651,45 +8657,45 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
             if $vr_discriminant_$mv$$vr_468$1 == 0 {
                 index_10 = $vr_payload_0_$mv$$vr_468$1;
                 taken = 0;
-                b1208: block {
-                    b1209: block {
-                        b1210: block {
-                            b1211: block {
-                                b1212: block {
-                                    b1213: block {
-                                        b1214: block {
-                                            b1215: block {
-                                                b1216: block {
-                                                    b1217: block {
-                                                        b1218: block {
-                                                            b1219: block {
-                                                                b1220: block {
-                                                                    b1221: block {
-                                                                        b1222: block {
-                                                                            b1223: block {
-                                                                                b1224: block {
-                                                                                    b1225: block {
-                                                                                        b1226: block {
-                                                                                            b1227: block {
-                                                                                                b1228: block {
-                                                                                                    b1229: block {
-                                                                                                        b1230: block {
-                                                                                                            b1231: block {
-                                                                                                                b1232: block {
-                                                                                                                    b1233: block {
-                                                                                                                        b1234: block {
-                                                                                                                            b1235: block {
-                                                                                                                                b1236: block {
-                                                                                                                                    b1237: block {
-                                                                                                                                        b1238: block {
-                                                                                                                                            b1239: block {
-                                                                                                                                                b1240: block {
-                                                                                                                                                    b1241: block {
-                                                                                                                                                        b1242: block {
-                                                                                                                                                            b1243: block {
+                b1209: block {
+                    b1210: block {
+                        b1211: block {
+                            b1212: block {
+                                b1213: block {
+                                    b1214: block {
+                                        b1215: block {
+                                            b1216: block {
+                                                b1217: block {
+                                                    b1218: block {
+                                                        b1219: block {
+                                                            b1220: block {
+                                                                b1221: block {
+                                                                    b1222: block {
+                                                                        b1223: block {
+                                                                            b1224: block {
+                                                                                b1225: block {
+                                                                                    b1226: block {
+                                                                                        b1227: block {
+                                                                                            b1228: block {
+                                                                                                b1229: block {
+                                                                                                    b1230: block {
+                                                                                                        b1231: block {
+                                                                                                            b1232: block {
+                                                                                                                b1233: block {
+                                                                                                                    b1234: block {
+                                                                                                                        b1235: block {
+                                                                                                                            b1236: block {
+                                                                                                                                b1237: block {
+                                                                                                                                    b1238: block {
+                                                                                                                                        b1239: block {
+                                                                                                                                            b1240: block {
+                                                                                                                                                b1241: block {
+                                                                                                                                                    b1242: block {
+                                                                                                                                                        b1243: block {
+                                                                                                                                                            b1244: block {
                                                                                                                                                                 br_table index_10 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34] default=0;
                                                                                                                                                             };
-                                                                                                                                                            break b1208;
+                                                                                                                                                            break b1209;
                                                                                                                                                         };
                                                                                                                                                         if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.0)) {
                                                                                                                                                             cold_path;
@@ -8713,7 +8719,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                                                                                                                         });
                                                                                                                                                         slots.0 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: value_18 };
                                                                                                                                                         taken = 1;
-                                                                                                                                                        break b1208;
+                                                                                                                                                        break b1209;
                                                                                                                                                     };
                                                                                                                                                     if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.1)) {
                                                                                                                                                         cold_path;
@@ -8737,7 +8743,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                                                                                                                     });
                                                                                                                                                     slots.1 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_36 };
                                                                                                                                                     taken = 1;
-                                                                                                                                                    break b1208;
+                                                                                                                                                    break b1209;
                                                                                                                                                 };
                                                                                                                                                 if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.2)) {
                                                                                                                                                     cold_path;
@@ -8761,7 +8767,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                                                                                                                 });
                                                                                                                                                 slots.2 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_43 };
                                                                                                                                                 taken = 1;
-                                                                                                                                                break b1208;
+                                                                                                                                                break b1209;
                                                                                                                                             };
                                                                                                                                             if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.3)) {
                                                                                                                                                 cold_path;
@@ -8785,7 +8791,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                                                                                                             });
                                                                                                                                             slots.3 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_50 };
                                                                                                                                             taken = 1;
-                                                                                                                                            break b1208;
+                                                                                                                                            break b1209;
                                                                                                                                         };
                                                                                                                                         if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.4)) {
                                                                                                                                             cold_path;
@@ -8809,7 +8815,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                                                                                                         });
                                                                                                                                         slots.4 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_57 };
                                                                                                                                         taken = 1;
-                                                                                                                                        break b1208;
+                                                                                                                                        break b1209;
                                                                                                                                     };
                                                                                                                                     if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.5)) {
                                                                                                                                         cold_path;
@@ -8833,7 +8839,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                                                                                                     });
                                                                                                                                     slots.5 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_64 };
                                                                                                                                     taken = 1;
-                                                                                                                                    break b1208;
+                                                                                                                                    break b1209;
                                                                                                                                 };
                                                                                                                                 if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.6)) {
                                                                                                                                     cold_path;
@@ -8857,7 +8863,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                                                                                                 });
                                                                                                                                 slots.6 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_71 };
                                                                                                                                 taken = 1;
-                                                                                                                                break b1208;
+                                                                                                                                break b1209;
                                                                                                                             };
                                                                                                                             if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.7)) {
                                                                                                                                 cold_path;
@@ -8881,7 +8887,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                                                                                             });
                                                                                                                             slots.7 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_78 };
                                                                                                                             taken = 1;
-                                                                                                                            break b1208;
+                                                                                                                            break b1209;
                                                                                                                         };
                                                                                                                         if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.8)) {
                                                                                                                             cold_path;
@@ -8905,7 +8911,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                                                                                         });
                                                                                                                         slots.8 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_85 };
                                                                                                                         taken = 1;
-                                                                                                                        break b1208;
+                                                                                                                        break b1209;
                                                                                                                     };
                                                                                                                     if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.9)) {
                                                                                                                         cold_path;
@@ -8929,7 +8935,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                                                                                     });
                                                                                                                     slots.9 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_92 };
                                                                                                                     taken = 1;
-                                                                                                                    break b1208;
+                                                                                                                    break b1209;
                                                                                                                 };
                                                                                                                 if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.10)) {
                                                                                                                     cold_path;
@@ -8953,7 +8959,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                                                                                 });
                                                                                                                 slots.10 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_99 };
                                                                                                                 taken = 1;
-                                                                                                                break b1208;
+                                                                                                                break b1209;
                                                                                                             };
                                                                                                             if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.11)) {
                                                                                                                 cold_path;
@@ -8977,7 +8983,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                                                                             });
                                                                                                             slots.11 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_106 };
                                                                                                             taken = 1;
-                                                                                                            break b1208;
+                                                                                                            break b1209;
                                                                                                         };
                                                                                                         if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.12)) {
                                                                                                             cold_path;
@@ -9001,7 +9007,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                                                                         });
                                                                                                         slots.12 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_113 };
                                                                                                         taken = 1;
-                                                                                                        break b1208;
+                                                                                                        break b1209;
                                                                                                     };
                                                                                                     if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.13)) {
                                                                                                         cold_path;
@@ -9025,7 +9031,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                                                                     });
                                                                                                     slots.13 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_120 };
                                                                                                     taken = 1;
-                                                                                                    break b1208;
+                                                                                                    break b1209;
                                                                                                 };
                                                                                                 if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.14)) {
                                                                                                     cold_path;
@@ -9049,7 +9055,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                                                                 });
                                                                                                 slots.14 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_127 };
                                                                                                 taken = 1;
-                                                                                                break b1208;
+                                                                                                break b1209;
                                                                                             };
                                                                                             if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.15)) {
                                                                                                 cold_path;
@@ -9073,7 +9079,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                                                             });
                                                                                             slots.15 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_134 };
                                                                                             taken = 1;
-                                                                                            break b1208;
+                                                                                            break b1209;
                                                                                         };
                                                                                         if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.16)) {
                                                                                             cold_path;
@@ -9097,7 +9103,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                                                         });
                                                                                         slots.16 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_141 };
                                                                                         taken = 1;
-                                                                                        break b1208;
+                                                                                        break b1209;
                                                                                     };
                                                                                     if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.17)) {
                                                                                         cold_path;
@@ -9121,7 +9127,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                                                     });
                                                                                     slots.17 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_148 };
                                                                                     taken = 1;
-                                                                                    break b1208;
+                                                                                    break b1209;
                                                                                 };
                                                                                 if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.18)) {
                                                                                     cold_path;
@@ -9145,7 +9151,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                                                 });
                                                                                 slots.18 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_155 };
                                                                                 taken = 1;
-                                                                                break b1208;
+                                                                                break b1209;
                                                                             };
                                                                             if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.19)) {
                                                                                 cold_path;
@@ -9169,7 +9175,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                                             });
                                                                             slots.19 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_162 };
                                                                             taken = 1;
-                                                                            break b1208;
+                                                                            break b1209;
                                                                         };
                                                                         if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.20)) {
                                                                             cold_path;
@@ -9193,7 +9199,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                                         });
                                                                         slots.20 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_169 };
                                                                         taken = 1;
-                                                                        break b1208;
+                                                                        break b1209;
                                                                     };
                                                                     if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.21)) {
                                                                         cold_path;
@@ -9217,7 +9223,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                                     });
                                                                     slots.21 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_176 };
                                                                     taken = 1;
-                                                                    break b1208;
+                                                                    break b1209;
                                                                 };
                                                                 if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.22)) {
                                                                     cold_path;
@@ -9241,7 +9247,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                                 });
                                                                 slots.22 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_183 };
                                                                 taken = 1;
-                                                                break b1208;
+                                                                break b1209;
                                                             };
                                                             if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.23)) {
                                                                 cold_path;
@@ -9265,7 +9271,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                             });
                                                             slots.23 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_190 };
                                                             taken = 1;
-                                                            break b1208;
+                                                            break b1209;
                                                         };
                                                         if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.24)) {
                                                             cold_path;
@@ -9289,7 +9295,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                         });
                                                         slots.24 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_197 };
                                                         taken = 1;
-                                                        break b1208;
+                                                        break b1209;
                                                     };
                                                     if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.25)) {
                                                         cold_path;
@@ -9313,7 +9319,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                     });
                                                     slots.25 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_204 };
                                                     taken = 1;
-                                                    break b1208;
+                                                    break b1209;
                                                 };
                                                 if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.26)) {
                                                     cold_path;
@@ -9337,7 +9343,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                                 });
                                                 slots.26 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_211 };
                                                 taken = 1;
-                                                break b1208;
+                                                break b1209;
                                             };
                                             if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.27)) {
                                                 cold_path;
@@ -9361,7 +9367,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                             });
                                             slots.27 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_218 };
                                             taken = 1;
-                                            break b1208;
+                                            break b1209;
                                         };
                                         if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.28)) {
                                             cold_path;
@@ -9385,7 +9391,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                         });
                                         slots.28 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_225 };
                                         taken = 1;
-                                        break b1208;
+                                        break b1209;
                                     };
                                     if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.29)) {
                                         cold_path;
@@ -9409,7 +9415,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                     });
                                     slots.29 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_232 };
                                     taken = 1;
-                                    break b1208;
+                                    break b1209;
                                 };
                                 if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.30)) {
                                     cold_path;
@@ -9433,7 +9439,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                                 });
                                 slots.30 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_239 };
                                 taken = 1;
-                                break b1208;
+                                break b1209;
                             };
                             if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.31)) {
                                 cold_path;
@@ -9457,7 +9463,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                             });
                             slots.31 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_246 };
                             taken = 1;
-                            break b1208;
+                            break b1209;
                         };
                         if @unlikely(ref.test "core:prelude/types.wado//Option<i32>::Some"(slots.32)) {
                             cold_path;
@@ -9481,7 +9487,7 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                         });
                         slots.32 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $local_253 };
                         taken = 1;
-                        break b1208;
+                        break b1209;
                     };
                     if @unlikely(let $match_scrut_69: ref "core:prelude/types.wado//Option<i32>"; ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $match_scrut_69(slots.33))) {
                         cold_path;
@@ -9515,9 +9521,9 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Deserialize::deserial
                     }
                 }
             } else {
-                break b1203;
+                break b1204;
             }
-            continue l1204;
+            continue l1205;
         };
     };
     if @likely(ref.is_null(local.tee $local_465($inline_core_json_JsonDeserializer__expect_char_140: block -> ref null "core:serde//DeserializeError" {
@@ -10190,14 +10196,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     arr = local.tee $mv_arg_3(f.buf).repr;
     is_negative = is_negative + self;
     i = 0;
-    b1433: block {
-        l1434: loop {
-            break_if b1433 i >= self;
+    b1434: block {
+        l1435: loop {
+            break_if b1434 i >= self;
             is_negative = is_negative - 1;
             builtin::array_set_u8(arr, is_negative, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
             x = x /u 10_i64;
             i = i + 1;
-            continue l1434;
+            continue l1435;
         };
     };
 }
@@ -10217,14 +10223,14 @@ fn "core:prelude/primitive.wado/i64::fmt_decimal$scalar"(self, f) {
     arr = local.tee $mv_arg_3(f.buf).repr;
     is_negative = is_negative + digit_count_5;
     i = 0;
-    b1436: block {
-        l1437: loop {
-            break_if b1436 i >= digit_count_5;
+    b1437: block {
+        l1438: loop {
+            break_if b1437 i >= digit_count_5;
             is_negative = is_negative - 1;
             builtin::array_set_u8(arr, is_negative, (48 + builtin::i32_wrap_i64(self %u 10_i64)) & 255);
             self = self /u 10_i64;
             i = i + 1;
-            continue l1437;
+            continue l1438;
         };
     };
 }
@@ -10574,29 +10580,29 @@ fn "core:json/core:json/JsonDeserializer::scan_string_run$scalar"(self, from) {
     valid = 1;
     stop = -1;
     $licm_repr_12 = self.repr;
-    b1491: block {
-        l1492: loop {
-            break_if b1491 from >= len;
+    b1492: block {
+        l1493: loop {
+            break_if b1492 from >= len;
             if (local.tee b(builtin::array_get_value<u8>($licm_repr_12, $load_1 + from)) - 32) <u 96 {
                 if (b == 34) | (b == 92) {
                     stop = b;
-                    break b1491;
+                    break b1492;
                 }
                 from = from + 1;
-                continue l1492;
+                continue l1493;
             }
             if b < 32 {
                 stop = b;
-                break b1491;
+                break b1492;
             }
             if @unlikely(local.tee b("core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"(self, from, len)) <= 0) {
                 cold_path;
                 valid = 0;
                 from = from + 1;
-                continue l1492;
+                continue l1493;
             }
             from = from + b;
-            continue l1492;
+            continue l1493;
         };
     };
     return from, stop, valid;
@@ -10634,287 +10640,287 @@ fn "core:serde/serde_json_many_fields.wado/Wide^core:serde/Serialize::serialize<
     start_194 = s.used;
     s.used = new_used_193;
     builtin::array_copy<u8>(s.repr, start_194, global:core:serde::$const_obj_618, 0, 1);
-    start_194 = b1501: block -> i32 {
-        b1502: block {
-            b1503: block {
-                b1504: block {
-                    b1505: block {
-                        b1506: block {
-                            b1507: block {
-                                b1508: block {
-                                    b1509: block {
-                                        b1510: block {
-                                            b1511: block {
-                                                b1512: block {
-                                                    b1513: block {
-                                                        b1514: block {
-                                                            b1515: block {
-                                                                b1516: block {
-                                                                    b1517: block {
-                                                                        b1518: block {
-                                                                            b1519: block {
-                                                                                b1520: block {
-                                                                                    b1521: block {
-                                                                                        b1522: block {
-                                                                                            b1523: block {
-                                                                                                b1524: block {
-                                                                                                    b1525: block {
-                                                                                                        b1526: block {
-                                                                                                            b1527: block {
-                                                                                                                b1528: block {
-                                                                                                                    b1529: block {
-                                                                                                                        b1530: block {
-                                                                                                                            b1531: block {
-                                                                                                                                b1532: block {
-                                                                                                                                    b1533: block {
-                                                                                                                                        b1534: block {
-                                                                                                                                            b1535: block {
-                                                                                                                                                b1536: block {
+    start_194 = b1502: block -> i32 {
+        b1503: block {
+            b1504: block {
+                b1505: block {
+                    b1506: block {
+                        b1507: block {
+                            b1508: block {
+                                b1509: block {
+                                    b1510: block {
+                                        b1511: block {
+                                            b1512: block {
+                                                b1513: block {
+                                                    b1514: block {
+                                                        b1515: block {
+                                                            b1516: block {
+                                                                b1517: block {
+                                                                    b1518: block {
+                                                                        b1519: block {
+                                                                            b1520: block {
+                                                                                b1521: block {
+                                                                                    b1522: block {
+                                                                                        b1523: block {
+                                                                                            b1524: block {
+                                                                                                b1525: block {
+                                                                                                    b1526: block {
+                                                                                                        b1527: block {
+                                                                                                            b1528: block {
+                                                                                                                b1529: block {
+                                                                                                                    b1530: block {
+                                                                                                                        b1531: block {
+                                                                                                                            b1532: block {
+                                                                                                                                b1533: block {
+                                                                                                                                    b1534: block {
+                                                                                                                                        b1535: block {
+                                                                                                                                            b1536: block {
+                                                                                                                                                b1537: block {
                                                                                                                                                     br_table 0 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34] default=0;
                                                                                                                                                 };
                                                                                                                                                 unreachable;
                                                                                                                                             };
                                                                                                                                             self.f0;
-                                                                                                                                            break b1501;
+                                                                                                                                            break b1502;
                                                                                                                                         };
                                                                                                                                         self.f1;
-                                                                                                                                        break b1501;
+                                                                                                                                        break b1502;
                                                                                                                                     };
                                                                                                                                     self.f2;
-                                                                                                                                    break b1501;
+                                                                                                                                    break b1502;
                                                                                                                                 };
                                                                                                                                 self.f3;
-                                                                                                                                break b1501;
+                                                                                                                                break b1502;
                                                                                                                             };
                                                                                                                             self.f4;
-                                                                                                                            break b1501;
+                                                                                                                            break b1502;
                                                                                                                         };
                                                                                                                         self.f5;
-                                                                                                                        break b1501;
+                                                                                                                        break b1502;
                                                                                                                     };
                                                                                                                     self.f6;
-                                                                                                                    break b1501;
+                                                                                                                    break b1502;
                                                                                                                 };
                                                                                                                 self.f7;
-                                                                                                                break b1501;
+                                                                                                                break b1502;
                                                                                                             };
                                                                                                             self.f8;
-                                                                                                            break b1501;
+                                                                                                            break b1502;
                                                                                                         };
                                                                                                         self.f9;
-                                                                                                        break b1501;
+                                                                                                        break b1502;
                                                                                                     };
                                                                                                     self.f10;
-                                                                                                    break b1501;
+                                                                                                    break b1502;
                                                                                                 };
                                                                                                 self.f11;
-                                                                                                break b1501;
+                                                                                                break b1502;
                                                                                             };
                                                                                             self.f12;
-                                                                                            break b1501;
+                                                                                            break b1502;
                                                                                         };
                                                                                         self.f13;
-                                                                                        break b1501;
+                                                                                        break b1502;
                                                                                     };
                                                                                     self.f14;
-                                                                                    break b1501;
+                                                                                    break b1502;
                                                                                 };
                                                                                 self.f15;
-                                                                                break b1501;
+                                                                                break b1502;
                                                                             };
                                                                             self.f16;
-                                                                            break b1501;
+                                                                            break b1502;
                                                                         };
                                                                         self.f17;
-                                                                        break b1501;
+                                                                        break b1502;
                                                                     };
                                                                     self.f18;
-                                                                    break b1501;
+                                                                    break b1502;
                                                                 };
                                                                 self.f19;
-                                                                break b1501;
+                                                                break b1502;
                                                             };
                                                             self.f20;
-                                                            break b1501;
+                                                            break b1502;
                                                         };
                                                         self.f21;
-                                                        break b1501;
+                                                        break b1502;
                                                     };
                                                     self.f22;
-                                                    break b1501;
+                                                    break b1502;
                                                 };
                                                 self.f23;
-                                                break b1501;
+                                                break b1502;
                                             };
                                             self.f24;
-                                            break b1501;
+                                            break b1502;
                                         };
                                         self.f25;
-                                        break b1501;
+                                        break b1502;
                                     };
                                     self.f26;
-                                    break b1501;
+                                    break b1502;
                                 };
                                 self.f27;
-                                break b1501;
+                                break b1502;
                             };
                             self.f28;
-                            break b1501;
+                            break b1502;
                         };
                         self.f29;
-                        break b1501;
+                        break b1502;
                     };
                     self.f30;
-                    break b1501;
+                    break b1502;
                 };
                 self.f31;
-                break b1501;
+                break b1502;
             };
             self.f32;
-            break b1501;
+            break b1502;
         };
         self.f33;
     };
     "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"(s, global:core:serde::$const_obj_219, 0);
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(start_194, s);
-    start_194 = b1537: block -> i32 {
-        b1538: block {
-            b1539: block {
-                b1540: block {
-                    b1541: block {
-                        b1542: block {
-                            b1543: block {
-                                b1544: block {
-                                    b1545: block {
-                                        b1546: block {
-                                            b1547: block {
-                                                b1548: block {
-                                                    b1549: block {
-                                                        b1550: block {
-                                                            b1551: block {
-                                                                b1552: block {
-                                                                    b1553: block {
-                                                                        b1554: block {
-                                                                            b1555: block {
-                                                                                b1556: block {
-                                                                                    b1557: block {
-                                                                                        b1558: block {
-                                                                                            b1559: block {
-                                                                                                b1560: block {
-                                                                                                    b1561: block {
-                                                                                                        b1562: block {
-                                                                                                            b1563: block {
-                                                                                                                b1564: block {
-                                                                                                                    b1565: block {
-                                                                                                                        b1566: block {
-                                                                                                                            b1567: block {
-                                                                                                                                b1568: block {
-                                                                                                                                    b1569: block {
-                                                                                                                                        b1570: block {
-                                                                                                                                            b1571: block {
-                                                                                                                                                b1572: block {
+    start_194 = b1538: block -> i32 {
+        b1539: block {
+            b1540: block {
+                b1541: block {
+                    b1542: block {
+                        b1543: block {
+                            b1544: block {
+                                b1545: block {
+                                    b1546: block {
+                                        b1547: block {
+                                            b1548: block {
+                                                b1549: block {
+                                                    b1550: block {
+                                                        b1551: block {
+                                                            b1552: block {
+                                                                b1553: block {
+                                                                    b1554: block {
+                                                                        b1555: block {
+                                                                            b1556: block {
+                                                                                b1557: block {
+                                                                                    b1558: block {
+                                                                                        b1559: block {
+                                                                                            b1560: block {
+                                                                                                b1561: block {
+                                                                                                    b1562: block {
+                                                                                                        b1563: block {
+                                                                                                            b1564: block {
+                                                                                                                b1565: block {
+                                                                                                                    b1566: block {
+                                                                                                                        b1567: block {
+                                                                                                                            b1568: block {
+                                                                                                                                b1569: block {
+                                                                                                                                    b1570: block {
+                                                                                                                                        b1571: block {
+                                                                                                                                            b1572: block {
+                                                                                                                                                b1573: block {
                                                                                                                                                     br_table 1 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34] default=0;
                                                                                                                                                 };
                                                                                                                                                 unreachable;
                                                                                                                                             };
                                                                                                                                             self.f0;
-                                                                                                                                            break b1537;
+                                                                                                                                            break b1538;
                                                                                                                                         };
                                                                                                                                         self.f1;
-                                                                                                                                        break b1537;
+                                                                                                                                        break b1538;
                                                                                                                                     };
                                                                                                                                     self.f2;
-                                                                                                                                    break b1537;
+                                                                                                                                    break b1538;
                                                                                                                                 };
                                                                                                                                 self.f3;
-                                                                                                                                break b1537;
+                                                                                                                                break b1538;
                                                                                                                             };
                                                                                                                             self.f4;
-                                                                                                                            break b1537;
+                                                                                                                            break b1538;
                                                                                                                         };
                                                                                                                         self.f5;
-                                                                                                                        break b1537;
+                                                                                                                        break b1538;
                                                                                                                     };
                                                                                                                     self.f6;
-                                                                                                                    break b1537;
+                                                                                                                    break b1538;
                                                                                                                 };
                                                                                                                 self.f7;
-                                                                                                                break b1537;
+                                                                                                                break b1538;
                                                                                                             };
                                                                                                             self.f8;
-                                                                                                            break b1537;
+                                                                                                            break b1538;
                                                                                                         };
                                                                                                         self.f9;
-                                                                                                        break b1537;
+                                                                                                        break b1538;
                                                                                                     };
                                                                                                     self.f10;
-                                                                                                    break b1537;
+                                                                                                    break b1538;
                                                                                                 };
                                                                                                 self.f11;
-                                                                                                break b1537;
+                                                                                                break b1538;
                                                                                             };
                                                                                             self.f12;
-                                                                                            break b1537;
+                                                                                            break b1538;
                                                                                         };
                                                                                         self.f13;
-                                                                                        break b1537;
+                                                                                        break b1538;
                                                                                     };
                                                                                     self.f14;
-                                                                                    break b1537;
+                                                                                    break b1538;
                                                                                 };
                                                                                 self.f15;
-                                                                                break b1537;
+                                                                                break b1538;
                                                                             };
                                                                             self.f16;
-                                                                            break b1537;
+                                                                            break b1538;
                                                                         };
                                                                         self.f17;
-                                                                        break b1537;
+                                                                        break b1538;
                                                                     };
                                                                     self.f18;
-                                                                    break b1537;
+                                                                    break b1538;
                                                                 };
                                                                 self.f19;
-                                                                break b1537;
+                                                                break b1538;
                                                             };
                                                             self.f20;
-                                                            break b1537;
+                                                            break b1538;
                                                         };
                                                         self.f21;
-                                                        break b1537;
+                                                        break b1538;
                                                     };
                                                     self.f22;
-                                                    break b1537;
+                                                    break b1538;
                                                 };
                                                 self.f23;
-                                                break b1537;
+                                                break b1538;
                                             };
                                             self.f24;
-                                            break b1537;
+                                            break b1538;
                                         };
                                         self.f25;
-                                        break b1537;
+                                        break b1538;
                                     };
                                     self.f26;
-                                    break b1537;
+                                    break b1538;
                                 };
                                 self.f27;
-                                break b1537;
+                                break b1538;
                             };
                             self.f28;
-                            break b1537;
+                            break b1538;
                         };
                         self.f29;
-                        break b1537;
+                        break b1538;
                     };
                     self.f30;
-                    break b1537;
+                    break b1538;
                 };
                 self.f31;
-                break b1537;
+                break b1538;
             };
             self.f32;
-            break b1537;
+            break b1538;
         };
         self.f33;
     };
@@ -11088,14 +11094,14 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar"(self, f) {
     arr = f.repr;
     offset_3 = offset_3 + digit_count_2;
     i = 0;
-    b1579: block {
-        l1580: loop {
-            break_if b1579 i >= digit_count_2;
+    b1580: block {
+        l1581: loop {
+            break_if b1580 i >= digit_count_2;
             offset_3 = offset_3 - 1;
             builtin::array_set_u8(arr, offset_3, (48 + builtin::i32_wrap_i64(self %u 10_i64)) & 255);
             self = self /u 10_i64;
             i = i + 1;
-            continue l1580;
+            continue l1581;
         };
     };
 }
@@ -11132,14 +11138,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     arr = f.repr;
     is_negative = is_negative + self;
     i = 0;
-    b1584: block {
-        l1585: loop {
-            break_if b1584 i >= self;
+    b1585: block {
+        l1586: loop {
+            break_if b1585 i >= self;
             is_negative = is_negative - 1;
             builtin::array_set_u8(arr, is_negative, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
             x = x /u 10_i64;
             i = i + 1;
-            continue l1585;
+            continue l1586;
         };
     };
 }

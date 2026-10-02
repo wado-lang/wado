@@ -4730,20 +4730,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if let Some(dispatch) = self.ann_operator_dispatch(id) {
             let call = self.binary_operator_call(dispatch, left, right, span);
             // `!=` negates `eq`, and an ordering operator reads `cmp`'s
-            // `Ordering`; an `OperatorOrd` method already answers a `bool`.
+            // `Ordering`.
             return match op {
                 ast::BinaryOp::NotEq if call.type_id == TypeTable::BOOL => not_expr(call, span),
                 ast::BinaryOp::Lt
                 | ast::BinaryOp::Gt
                 | ast::BinaryOp::LtEq
-                | ast::BinaryOp::GtEq
-                    if call.type_id
-                        == self
-                            .tysys
+                | ast::BinaryOp::GtEq => {
+                    assert_eq!(
+                        call.type_id,
+                        self.tysys
                             .type_table
                             .borrow_mut()
-                            .make_compiler_enum(CompilerItem::Ordering) =>
-                {
+                            .make_compiler_enum(CompilerItem::Ordering),
+                        "an ordering operator dispatches to `cmp`"
+                    );
                     ord_bool_from_cmp(call, op, span, &self.tysys.type_table)
                 }
                 _ => call,

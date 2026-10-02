@@ -1,0 +1,13 @@
+// A trait the call site cannot name offers no method. `Hidden` is private to
+// the file that declares it, so without this the call would ask for an import
+// no file can write.
+
+use { Gauge } from "./sub/unnameable_trait_method_absent_dep.wado";
+
+export fn run() {
+    let g = Gauge { level: 1 };
+    assert g.hidden() == 1;
+}
+
+__DATA__
+{"compile_error": ":9:12: analysis error: no method 'hidden' found on type 'Gauge'"}

@@ -53,9 +53,6 @@ of its own to get wrong. `Default` is there too, and is the zero.
 
 What a comparison answers is the same for a half as for `f32`, and
 [WEP: One Order per Type](./wep-2026-09-23-comparison-traits.md) decides it.
-Until that WEP's roadmap is done, the four ordering operators on a half keep
-IEEE's answers through `OperatorOrd`, an `internal` trait of `core:prelude`,
-since a half has no instruction to lower them to.
 
 `bf16` is kept rather than converted to `f16` on load. That conversion is the
 one lossy direction, because bf16 has f32's exponent range and f16 does not,
@@ -232,15 +229,8 @@ of it is committed work.
 No arithmetic, so every computation widens to `f32` and narrows again to store.
 A generic body bounded on `Add` cannot be instantiated at either type.
 
-`wado doc` filters a trait declaration by visibility but not an impl of one, so
-the generated `core:prelude` page lists `impl OperatorOrd for f16` and its four
-methods with no trait definition anywhere on it, and a reader who calls one is
-told the method does not exist. The trait declaration and its impls reach the
-page from different modules, and nothing carries a trait's visibility across
-that boundary.
-
-A comparison widens both operands and calls, where `f32`'s is one instruction.
-Nothing measured has asked for a faster one.
+A comparison widens both operands and calls `cmp`, where `f32`'s lowers to
+instructions. Nothing measured has asked for a faster one.
 
 A half precision tensor cannot be part of a component's public API, so a Loam
 module that exports one has to widen it or hand out its bytes.

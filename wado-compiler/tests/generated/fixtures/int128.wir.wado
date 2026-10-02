@@ -300,7 +300,7 @@ fn "int128.wado/$test_7_wide_int_as_f32"() {
     let lo: i64;
     let hi: i64;
     v = struct.new "core:prelude/int128.wado//i128" { low: -5_i64, high: -1_i64 };
-    if @unlikely((local.tee $v1_1(builtin::f32_neg($inline_core_prelude_int128_wado_u128__as_f32_2: block -> f32 {
+    if @unlikely(local.tee $v1_1(builtin::f32_neg($inline_core_prelude_int128_wado_u128__as_f32_2: block -> f32 {
         multivalue_bind [lo, hi] = i64.sub128(0_i64, 0_i64, -5_i64, -1_i64);
         self_28 = struct.new "core:prelude/int128.wado//u128" { low: lo, high: hi };
         if hi == 0_i64 {
@@ -308,7 +308,7 @@ fn "int128.wado/$test_7_wide_int_as_f32"() {
         }
         multivalue_bind [lo, hi] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec1"(self_28);
         break $inline_core_prelude_int128_wado_u128__as_f32_2: builtin::f32_reinterpret_i32((builtin::i32_wrap_i64(hi + 127_i64) << 23) | (builtin::i32_wrap_i64(lo) & 8388607));
-    })) == -5_f32) == 0) {
+    })) != -5_f32) {
         cold_path;
         $fuse_at_15 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_9("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(156)), 59);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -330,14 +330,14 @@ condition: v as f32 == -5.0 as f32
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_15 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("v as f32: "), used: 10 }, 10);
         $local_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_9);
         "core:prelude/primitive.wado/f32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<f32>" { value: $v1_1 }, $local_10);
-        let $mv_arg_3: ref "core:prelude/string.wado//String";
-        $mv_arg_3 = global:int128.wado::$const_obj_35;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_9, $mv_arg_3.repr, $mv_arg_3.used);
+        let $mv_arg_2: ref "core:prelude/string.wado//String";
+        $mv_arg_2 = global:int128.wado::$const_obj_35;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_9, $mv_arg_2.repr, $mv_arg_2.used);
         "core:rt/panic"($local_9.repr, $local_9.used);
         unreachable;
     }
     multivalue_bind [lo, hi] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec1"(local.tee self_28(struct.new "core:prelude/int128.wado//u128" { low: 2199023255552_i64, high: 2_i64 }));
-    if @unlikely((local.tee $v1_1(builtin::f32_reinterpret_i32((builtin::i32_wrap_i64(hi + 127_i64) << 23) | (builtin::i32_wrap_i64(lo) & 8388607))) == 36893490000000000000_f32) == 0) {
+    if @unlikely(local.tee $v1_1(builtin::f32_reinterpret_i32((builtin::i32_wrap_i64(hi + 127_i64) << 23) | (builtin::i32_wrap_i64(lo) & 8388607))) != 36893490000000000000_f32) {
         cold_path;
         $fuse_at_15 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_9("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(180)), 59);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -359,13 +359,13 @@ condition: tie as f32 == 36893488147419103232.0 as f32
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_15 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("tie as f32: "), used: 12 }, 12);
         $local_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_9);
         "core:prelude/primitive.wado/f32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<f32>" { value: $v1_1 }, $local_10);
-        $mv_arg_3 = global:int128.wado::$const_obj_35;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_9, $mv_arg_3.repr, $mv_arg_3.used);
+        $mv_arg_2 = global:int128.wado::$const_obj_35;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_9, $mv_arg_2.repr, $mv_arg_2.used);
         "core:rt/panic"($local_9.repr, $local_9.used);
         unreachable;
     }
     multivalue_bind [lo, hi] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec1"(local.tee self_28(struct.new "core:prelude/int128.wado//u128" { low: 2199023255553_i64, high: 2_i64 }));
-    if @unlikely((local.tee $v1_1(builtin::f32_reinterpret_i32((builtin::i32_wrap_i64(hi + 127_i64) << 23) | (builtin::i32_wrap_i64(lo) & 8388607))) == 36893493000000000000_f32) == 0) {
+    if @unlikely(local.tee $v1_1(builtin::f32_reinterpret_i32((builtin::i32_wrap_i64(hi + 127_i64) << 23) | (builtin::i32_wrap_i64(lo) & 8388607))) != 36893493000000000000_f32) {
         cold_path;
         $fuse_at_15 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_9("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(186)), 59);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -387,8 +387,8 @@ condition: above as f32 == 36893492545465614336.0 as f32
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_15 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("above as f32: "), used: 14 }, 14);
         $local_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_9);
         "core:prelude/primitive.wado/f32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<f32>" { value: $v1_1 }, $local_10);
-        $mv_arg_3 = global:int128.wado::$const_obj_35;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_9, $mv_arg_3.repr, $mv_arg_3.used);
+        $mv_arg_2 = global:int128.wado::$const_obj_35;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_9, $mv_arg_2.repr, $mv_arg_2.used);
         "core:rt/panic"($local_9.repr, $local_9.used);
         unreachable;
     }
@@ -779,7 +779,7 @@ fn "int128.wado/$cm_export__$test_0_i128_as_f64"() {
     let lo: i64;
     let hi: i64;
     neg = struct.new "core:prelude/int128.wado//i128" { low: -5_i64, high: -1_i64 };
-    if @unlikely((local.tee $v1_4(builtin::f64_neg($inline_core_prelude_int128_wado_u128__as_f64_9: block -> f64 {
+    if @unlikely(local.tee $v1_4(builtin::f64_neg($inline_core_prelude_int128_wado_u128__as_f64_9: block -> f64 {
         multivalue_bind [lo, hi] = i64.sub128(0_i64, 0_i64, -5_i64, -1_i64);
         self_33 = struct.new "core:prelude/int128.wado//u128" { low: lo, high: hi };
         if hi == 0_i64 {
@@ -787,7 +787,7 @@ fn "int128.wado/$cm_export__$test_0_i128_as_f64"() {
         }
         multivalue_bind [lo, hi] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0"(self_33);
         break $inline_core_prelude_int128_wado_u128__as_f64_9: builtin::f64_reinterpret_i64(((hi + 1023_i64) << 52_i64) | (lo & 4503599627370495_i64));
-    })) == -5) == 0) {
+    })) != -5) {
         cold_path;
         $fuse_at_13 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_8("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(155)), 55);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_8.repr, $fuse_at_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -809,9 +809,9 @@ condition: neg as f64 == -5.0
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_8.repr, $fuse_at_13 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("neg as f64: "), used: 12 }, 12);
         $local_9 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8);
         "core:prelude/primitive.wado/f64^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<f64>" { value: $v1_4 }, $local_9);
-        let $mv_field_3: ref Array<u8>;
-        $mv_field_3 = array.new_fixed<u8>(10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_8, $mv_field_3, 1);
+        let $mv_field_2: ref Array<u8>;
+        $mv_field_2 = array.new_fixed<u8>(10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_8, $mv_field_2, 1);
         "core:rt/panic"($local_8.repr, $local_8.used);
         unreachable;
     }
@@ -834,7 +834,7 @@ fn "int128.wado/$cm_export__$test_2_large_i128_as_f64_uses_the_full_128_bit_valu
     let $mv$$pattern_temp_0$0: u64;
     let $mv$$pattern_temp_0$1: i64;
     multivalue_bind [$mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0"(self_12);
-    if @unlikely((local.tee magnitude(builtin::f64_reinterpret_i64((($mv$$pattern_temp_0$1 + 1023_i64) << 52_i64) | ($mv$$pattern_temp_0$0 & 4503599627370495_i64))) == 1267650600228229400000000000000) == 0) {
+    if @unlikely(local.tee magnitude(builtin::f64_reinterpret_i64((($mv$$pattern_temp_0$1 + 1023_i64) << 52_i64) | ($mv$$pattern_temp_0$0 & 4503599627370495_i64))) != 1267650600228229400000000000000) {
         cold_path;
         $fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_3("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(178)), 89);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_3.repr, $fuse_at_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -856,9 +856,9 @@ condition: v as f64 == 1267650600228229401496703205376.0
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_3.repr, $fuse_at_5 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("v as f64: "), used: 10 }, 10);
         $local_4 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3);
         "core:prelude/primitive.wado/f64^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<f64>" { value: magnitude }, $local_4);
-        let $mv_field_3: ref Array<u8>;
-        $mv_field_3 = array.new_fixed<u8>(10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_3, $mv_field_3, 1);
+        let $mv_field_2: ref Array<u8>;
+        $mv_field_2 = array.new_fixed<u8>(10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_3, $mv_field_2, 1);
         "core:rt/panic"($local_3.repr, $local_3.used);
         unreachable;
     }
@@ -875,7 +875,7 @@ fn "int128.wado/$cm_export__$test_3_u128_as_f64_rounds_to_nearest_with_ties_to_e
     let $mv$$pattern_temp_0_24$0: u64;
     let $mv$$pattern_temp_0_24$1: i64;
     multivalue_bind [$mv$$pattern_temp_0_24$0, $mv$$pattern_temp_0_24$1] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0"(tie);
-    if @unlikely((local.tee $v1_1(builtin::f64_reinterpret_i64((($mv$$pattern_temp_0_24$1 + 1023_i64) << 52_i64) | ($mv$$pattern_temp_0_24$0 & 4503599627370495_i64))) == 18446744073709552000) == 0) {
+    if @unlikely(local.tee $v1_1(builtin::f64_reinterpret_i64((($mv$$pattern_temp_0_24$1 + 1023_i64) << 52_i64) | ($mv$$pattern_temp_0_24$0 & 4503599627370495_i64))) != 18446744073709552000) {
         cold_path;
         $fuse_at_10 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_6("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(173)), 91);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $fuse_at_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -897,14 +897,14 @@ condition: tie as f64 == 18446744073709551616.0
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $fuse_at_10 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("tie as f64: "), used: 12 }, 12);
         $local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6);
         "core:prelude/primitive.wado/f64^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<f64>" { value: $v1_1 }, $local_7);
-        let $mv_field_3: ref Array<u8>;
-        $mv_field_3 = array.new_fixed<u8>(10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6, $mv_field_3, 1);
+        let $mv_field_2: ref Array<u8>;
+        $mv_field_2 = array.new_fixed<u8>(10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6, $mv_field_2, 1);
         "core:rt/panic"($local_6.repr, $local_6.used);
         unreachable;
     }
     multivalue_bind [$mv$$pattern_temp_0_24$0, $mv$$pattern_temp_0_24$1] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0"(local.tee tie(struct.new "core:prelude/int128.wado//u128" { low: 2049_i64, high: 1_i64 }));
-    if @unlikely((local.tee $v1_1(builtin::f64_reinterpret_i64((($mv$$pattern_temp_0_24$1 + 1023_i64) << 52_i64) | ($mv$$pattern_temp_0_24$0 & 4503599627370495_i64))) == 18446744073709556000) == 0) {
+    if @unlikely(local.tee $v1_1(builtin::f64_reinterpret_i64((($mv$$pattern_temp_0_24$1 + 1023_i64) << 52_i64) | ($mv$$pattern_temp_0_24$0 & 4503599627370495_i64))) != 18446744073709556000) {
         cold_path;
         $fuse_at_10 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_6("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(179)), 91);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $fuse_at_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -926,8 +926,8 @@ condition: above as f64 == 18446744073709555712.0
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $fuse_at_10 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("above as f64: "), used: 14 }, 14);
         $local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6);
         "core:prelude/primitive.wado/f64^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<f64>" { value: $v1_1 }, $local_7);
-        $mv_field_3 = array.new_fixed<u8>(10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6, $mv_field_3, 1);
+        $mv_field_2 = array.new_fixed<u8>(10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6, $mv_field_2, 1);
         "core:rt/panic"($local_6.repr, $local_6.used);
         unreachable;
     }
@@ -944,7 +944,7 @@ fn "int128.wado/$cm_export__$test_4_i128_as_f64_rounds_the_magnitude_for_negativ
     let lo_45: i64;
     let hi_46: i64;
     tie = struct.new "core:prelude/int128.wado//i128" { low: -4096_i64, high: -3_i64 };
-    if @unlikely((local.tee $v1_1(builtin::f64_neg($inline_core_prelude_int128_wado_u128__as_f64_4: block -> f64 {
+    if @unlikely(local.tee $v1_1(builtin::f64_neg($inline_core_prelude_int128_wado_u128__as_f64_4: block -> f64 {
         multivalue_bind [lo_45, hi_46] = i64.sub128(0_i64, 0_i64, -4096_i64, -3_i64);
         self_20 = struct.new "core:prelude/int128.wado//u128" { low: lo_45, high: hi_46 };
         if hi_46 == 0_i64 {
@@ -952,7 +952,7 @@ fn "int128.wado/$cm_export__$test_4_i128_as_f64_rounds_the_magnitude_for_negativ
         }
         multivalue_bind [lo_45, hi_46] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0"(self_20);
         break $inline_core_prelude_int128_wado_u128__as_f64_4: builtin::f64_reinterpret_i64(((hi_46 + 1023_i64) << 52_i64) | (lo_45 & 4503599627370495_i64));
-    })) == -36893488147419103000) == 0) {
+    })) != -36893488147419103000) {
         cold_path;
         $fuse_at_10 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_6_6("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(174)), 96);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6_6.repr, $fuse_at_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -974,14 +974,14 @@ condition: tie as f64 == -36893488147419103232.0
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6_6.repr, $fuse_at_10 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("tie as f64: "), used: 12 }, 12);
         $local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6_6);
         "core:prelude/primitive.wado/f64^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<f64>" { value: $v1_1 }, $local_7);
-        let $mv_field_3: ref Array<u8>;
-        $mv_field_3 = array.new_fixed<u8>(10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6_6, $mv_field_3, 1);
+        let $mv_field_2: ref Array<u8>;
+        $mv_field_2 = array.new_fixed<u8>(10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6_6, $mv_field_2, 1);
         "core:rt/panic"($local_6_6.repr, $local_6_6.used);
         unreachable;
     }
     tie = struct.new "core:prelude/int128.wado//i128" { low: -4097_i64, high: -3_i64 };
-    if @unlikely((local.tee $v1_1(builtin::f64_neg($inline_core_prelude_int128_wado_u128__as_f64_9: block -> f64 {
+    if @unlikely(local.tee $v1_1(builtin::f64_neg($inline_core_prelude_int128_wado_u128__as_f64_9: block -> f64 {
         multivalue_bind [lo_45, hi_46] = i64.sub128(0_i64, 0_i64, -4097_i64, -3_i64);
         self_20 = struct.new "core:prelude/int128.wado//u128" { low: lo_45, high: hi_46 };
         if hi_46 == 0_i64 {
@@ -989,7 +989,7 @@ condition: tie as f64 == -36893488147419103232.0
         }
         multivalue_bind [lo_45, hi_46] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0"(self_20);
         break $inline_core_prelude_int128_wado_u128__as_f64_9: builtin::f64_reinterpret_i64(((hi_46 + 1023_i64) << 52_i64) | (lo_45 & 4503599627370495_i64));
-    })) == -36893488147419110000) == 0) {
+    })) != -36893488147419110000) {
         cold_path;
         $fuse_at_10 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_6_6("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(180)), 96);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6_6.repr, $fuse_at_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -1011,8 +1011,8 @@ condition: below as f64 == -36893488147419111424.0
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6_6.repr, $fuse_at_10 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("below as f64: "), used: 14 }, 14);
         $local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6_6);
         "core:prelude/primitive.wado/f64^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<f64>" { value: $v1_1 }, $local_7);
-        $mv_field_3 = array.new_fixed<u8>(10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6_6, $mv_field_3, 1);
+        $mv_field_2 = array.new_fixed<u8>(10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6_6, $mv_field_2, 1);
         "core:rt/panic"($local_6_6.repr, $local_6_6.used);
         unreachable;
     }
@@ -1033,7 +1033,7 @@ fn "int128.wado/$cm_export__$test_6_i128__min_and_u128__max_as_f64"() {
     let lo: i64;
     let hi: i64;
     min = struct.new "core:prelude/int128.wado//i128" { low: 0_i64, high: -9223372036854775808_i64 };
-    if @unlikely((local.tee $v1_1(builtin::f64_neg($inline_core_prelude_int128_wado_u128__as_f64_4: block -> f64 {
+    if @unlikely(local.tee $v1_1(builtin::f64_neg($inline_core_prelude_int128_wado_u128__as_f64_4: block -> f64 {
         multivalue_bind [lo, hi] = i64.sub128(0_i64, 0_i64, 0_i64, -9223372036854775808_i64);
         self_20 = struct.new "core:prelude/int128.wado//u128" { low: lo, high: hi };
         if hi == 0_i64 {
@@ -1041,7 +1041,7 @@ fn "int128.wado/$cm_export__$test_6_i128__min_and_u128__max_as_f64"() {
         }
         multivalue_bind [lo, hi] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0"(self_20);
         break $inline_core_prelude_int128_wado_u128__as_f64_4: builtin::f64_reinterpret_i64(((hi + 1023_i64) << 52_i64) | (lo & 4503599627370495_i64));
-    })) == -170141183460469230000000000000000000000) == 0) {
+    })) != -170141183460469230000000000000000000000) {
         cold_path;
         $fuse_at_10 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_6_6("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(193)), 74);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6_6.repr, $fuse_at_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -1063,14 +1063,14 @@ condition: min as f64 == -170141183460469231731687303715884105728.0
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6_6.repr, $fuse_at_10 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("min as f64: "), used: 12 }, 12);
         $local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6_6);
         "core:prelude/primitive.wado/f64^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<f64>" { value: $v1_1 }, $local_7);
-        let $mv_field_3: ref Array<u8>;
-        $mv_field_3 = array.new_fixed<u8>(10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6_6, $mv_field_3, 1);
+        let $mv_field_2: ref Array<u8>;
+        $mv_field_2 = array.new_fixed<u8>(10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6_6, $mv_field_2, 1);
         "core:rt/panic"($local_6_6.repr, $local_6_6.used);
         unreachable;
     }
     multivalue_bind [lo, hi] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0"(local.tee self_20(struct.new "core:prelude/int128.wado//u128" { low: -1_i64, high: -1_i64 }));
-    if @unlikely((local.tee $v1_1(builtin::f64_reinterpret_i64(((hi + 1023_i64) << 52_i64) | (lo & 4503599627370495_i64))) == 340282366920938500000000000000000000000) == 0) {
+    if @unlikely(local.tee $v1_1(builtin::f64_reinterpret_i64(((hi + 1023_i64) << 52_i64) | (lo & 4503599627370495_i64))) != 340282366920938500000000000000000000000) {
         cold_path;
         $fuse_at_10 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_6_6("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(192)), 74);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6_6.repr, $fuse_at_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -1092,8 +1092,8 @@ condition: max as f64 == 340282366920938463463374607431768211456.0
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6_6.repr, $fuse_at_10 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("max as f64: "), used: 12 }, 12);
         $local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6_6);
         "core:prelude/primitive.wado/f64^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<f64>" { value: $v1_1 }, $local_7);
-        $mv_field_3 = array.new_fixed<u8>(10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6_6, $mv_field_3, 1);
+        $mv_field_2 = array.new_fixed<u8>(10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6_6, $mv_field_2, 1);
         "core:rt/panic"($local_6_6.repr, $local_6_6.used);
         unreachable;
     }
@@ -1115,7 +1115,7 @@ fn "int128.wado/$cm_export__$test_8_u128__max_as_f32_overflows_to_infinity"() {
     let $mv$$pattern_temp_0$0: u64;
     let $mv$$pattern_temp_0$1: i64;
     multivalue_bind [$mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec1"(max);
-    if @unlikely((local.tee $v1(builtin::f32_reinterpret_i32((builtin::i32_wrap_i64($mv$$pattern_temp_0$1 + 127_i64) << 23) | (builtin::i32_wrap_i64($mv$$pattern_temp_0$0) & 8388607))) == inf_f32) == 0) {
+    if @unlikely(local.tee $v1(builtin::f32_reinterpret_i32((builtin::i32_wrap_i64($mv$$pattern_temp_0$1 + 127_i64) << 23) | (builtin::i32_wrap_i64($mv$$pattern_temp_0$0) & 8388607))) != inf_f32) {
         cold_path;
         $fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_3("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(196)), 82);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_3.repr, $fuse_at_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -1142,9 +1142,9 @@ condition: max as f32 == f32::INFINITY
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_3.repr, $fuse_at_5 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("f32::INFINITY: "), used: 15 }, 15);
         $local_4 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3);
         "core:prelude/primitive.wado/f32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<f32>" { value: inf_f32 }, $local_4);
-        let $mv_field_3: ref Array<u8>;
-        $mv_field_3 = array.new_fixed<u8>(10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_3, $mv_field_3, 1);
+        let $mv_field_2: ref Array<u8>;
+        $mv_field_2 = array.new_fixed<u8>(10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_3, $mv_field_2, 1);
         "core:rt/panic"($local_3.repr, $local_3.used);
         unreachable;
     }

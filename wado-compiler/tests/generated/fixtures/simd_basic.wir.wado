@@ -291,7 +291,7 @@ fn "simd_basic.wado/run"() with Stdout {
     b = a + sum;
     fprod = a * sum;
     sum = a / sum;
-    $v1_2 = local.tee fsum_val(f64x2.extract_lane(0, b)) > 5.13;
+    $v1_2 = (local.tee fsum_val(f64x2.extract_lane(0, b)) <= 5.13) == 0;
     $v2_seen_44 = 0;
     $v3_seen_46 = 0;
     if @unlikely((if $v1_2 -> i32 {
@@ -305,7 +305,7 @@ fn "simd_basic.wado/run"() with Stdout {
         "simd_basic.wado/run$cold2"(fsum_val, $v1_2, $v2_43, $v2_seen_44, $v3_45, $v3_seen_46);
         unreachable;
     }
-    $v3_seen_46 = local.tee $v2_43(f64x2.extract_lane(0, fprod)) > 6.27;
+    $v3_seen_46 = (local.tee $v2_43(f64x2.extract_lane(0, fprod)) <= 6.27) == 0;
     $v3_45 = 0;
     $v2_seen_44 = 0;
     if @unlikely(local.tee $v1_2((if $v3_seen_46 -> i32 {
@@ -319,7 +319,7 @@ fn "simd_basic.wado/run"() with Stdout {
         "simd_basic.wado/run$cold1"($v2_43, $v3_seen_46, $v2_52, $v3_45, $v3_54, $v2_seen_44);
         unreachable;
     }
-    $v2_seen_44 = local.tee $v2_52(f64x2.extract_lane(0, sum)) > 1.56;
+    $v2_seen_44 = (local.tee $v2_52(f64x2.extract_lane(0, sum)) <= 1.56) == 0;
     $v3_54 = 0;
     $v3_45 = 0;
     if @unlikely(local.tee $v3_seen_46((if $v2_seen_44 -> i32 {

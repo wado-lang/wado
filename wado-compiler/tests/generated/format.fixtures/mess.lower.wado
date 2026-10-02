@@ -2947,6 +2947,10 @@ pub fn f64_abs(x: f64) -> f64;
 
 pub fn f64_floor(x: f64) -> f64;
 
+pub fn f32_is_nan(x: f32) -> bool;
+
+pub fn f64_is_nan(x: f64) -> bool;
+
 pub fn i8x16_eq(a: v128, b: v128) -> v128;
 
 pub fn i8x16_all_true(a: v128) -> bool;
@@ -3751,7 +3755,7 @@ fn round_to_even(kept: u16, dropped: u32, shift: u32) -> u16 {
 fn round_to_odd_f32(v: f64) -> f32 {
     let near: f32 = v as f32;
     let bits: u32 = Box<f32> { value: near }.f32::to_bits();
-    if (((near as f64 == v) || Box<f64> { value: v }.f64::is_nan()) || ((bits & 1) == 1)) {
+    if ((near as f64 == v) || ((bits & 1) == 1)) {
         return near;
     }
     let beyond: bool = ("core::prelude/primitive.wado::f64::abs"(near as f64) > "core::prelude/primitive.wado::f64::abs"(v));
@@ -3836,7 +3840,7 @@ pub fn "core:prelude/int128.wado/u128::from_i64"(value: i64) -> u128 {
 }
 
 pub fn "core:prelude/int128.wado/u128::from_f64"(value: f64) -> u128 {
-    if !(value > 0.0) {
+    if ((value <= 0.0) || Box<f64> { value: value }.f64::is_nan()) {
         return "core::prelude/int128.wado::core:prelude/int128.wado/u128::from_u64"(0);
     }
     if (value >= 340282366920938500000000000000000000000.0) {
@@ -4019,6 +4023,9 @@ pub fn "core:prelude/int128.wado/i128::from_u64"(value: u64) -> i128 {
 }
 
 pub fn "core:prelude/int128.wado/i128::from_f64"(value: f64) -> i128 {
+    if Box<f64> { value: value }.f64::is_nan() {
+        return "core::prelude/int128.wado::core:prelude/int128.wado/i128::zero"();
+    }
     if (value >= 170141183460469230000000000000000000000.0) {
         return "core::prelude/int128.wado::core:prelude/int128.wado/i128::from_pair"(18446744073709551615, 9223372036854775807);
     }
@@ -4337,7 +4344,7 @@ fn fmt_float_sign(f: &mut Formatter, is_neg: bool) {
 }
 
 pub fn f32::is_nan(self: Box<f32>) -> bool {
-    return (self.value != self.value);
+    return core::builtin::f32_is_nan(self.value);
 }
 
 pub fn f32::to_bits(self: Box<f32>) -> u32 {
@@ -4426,7 +4433,7 @@ pub fn f64::abs(x: f64) -> f64 {
 }
 
 pub fn f64::is_nan(self: Box<f64>) -> bool {
-    return (self.value != self.value);
+    return core::builtin::f64_is_nan(self.value);
 }
 
 pub fn f64::to_bits(self: Box<f64>) -> u64 {
@@ -4597,26 +4604,24 @@ pub fn "u64^core:prelude/traits.wado/Ord::cmp"(self: Box<u64>, other: Box<u64>) 
     return Ordering::Equal;
 }
 
-fn total_order_key_32(bits: u32) -> u32 {
-    if ((bits & 2147483648) != 0) {
-        return ~bits;
-    }
-    return (bits | 2147483648);
-}
-
-fn total_order_key_64(bits: u64) -> u64 {
-    if ((bits & 9223372036854775808) != 0) {
-        return ~bits;
-    }
-    return (bits | 9223372036854775808);
-}
-
 pub fn "f32^core:prelude/traits.wado/Ord::cmp"(self: Box<f32>, other: Box<f32>) -> Ordering {
-    return Box<u32> { value: "core::prelude/primitive.wado::total_order_key_32"(self.f32::to_bits()) }."u32^core:prelude/traits.wado/Ord::cmp"(Box<u32> { value: "core::prelude/primitive.wado::total_order_key_32"(other.f32::to_bits()) });
+    if (self.value < other.value) {
+        return Ordering::Less;
+    }
+    if (self.value > other.value) {
+        return Ordering::Greater;
+    }
+    return Ordering::Equal;
 }
 
 pub fn "f64^core:prelude/traits.wado/Ord::cmp"(self: Box<f64>, other: Box<f64>) -> Ordering {
-    return Box<u64> { value: "core::prelude/primitive.wado::total_order_key_64"(self.f64::to_bits()) }."u64^core:prelude/traits.wado/Ord::cmp"(Box<u64> { value: "core::prelude/primitive.wado::total_order_key_64"(other.f64::to_bits()) });
+    if (self.value < other.value) {
+        return Ordering::Less;
+    }
+    if (self.value > other.value) {
+        return Ordering::Greater;
+    }
+    return Ordering::Equal;
 }
 
 pub fn "char^core:prelude/traits.wado/Ord::cmp"(self: Box<char>, other: Box<char>) -> Ordering {

@@ -4,6 +4,7 @@
 //! functions over [`Value`] and `PrimitiveType`, kept in a lower module so the
 //! value-graph builder can fold arithmetic without depending on `niri`.
 
+use std::cmp::Ordering;
 use std::rc::Rc;
 
 use crate::nir::{NirBinaryOp, NirUnaryOp};
@@ -230,10 +231,11 @@ impl Value {
     /// asks before replacing an expression, which is not the question `==`
     /// answers.
     ///
-    /// `PartialEq` models the program's own `==`, so it follows IEEE and holds
-    /// for `-0.0` and `0.0`. A program tells those apart (`1.0 / x` alone
+    /// `PartialEq` is numeric, so it holds for `-0.0` and `0.0` as the
+    /// program's `==` does. A program tells those apart (`1.0 / x` alone
     /// does), so substituting either changes what it computes. Two NaNs are
-    /// equal under neither question, which leaves them out of reach.
+    /// equal under neither, which leaves them out of reach; the program's own
+    /// float `==` is [`eval_float_comparison`]'s.
     #[must_use]
     pub fn denotes_same(&self, other: &Self) -> bool {
         match (self, other) {
@@ -590,31 +592,15 @@ pub(crate) fn eval_bool_binary(l: bool, op: NirBinaryOp, r: bool) -> Option<Valu
         NirBinaryOp::BitAnd => Some(Value::Bool(l & r)),
         NirBinaryOp::BitOr => Some(Value::Bool(l | r)),
         NirBinaryOp::BitXor => Some(Value::Bool(l ^ r)),
-        NirBinaryOp::Eq => Some(Value::Bool(l == r)),
-        NirBinaryOp::NotEq => Some(Value::Bool(l != r)),
-        // bool implements Ord with `false < true`. Spelled with `&&`
-        // rather than `<` to satisfy clippy's `bool_comparison` lint
-        // without tripping `needless_bitwise_bool`.
-        NirBinaryOp::Lt => Some(Value::Bool(!l && r)),
-        NirBinaryOp::LtEq => Some(Value::Bool(l <= r)),
-        NirBinaryOp::Gt => Some(Value::Bool(l && !r)),
-        NirBinaryOp::GtEq => Some(Value::Bool(l >= r)),
-        _ => None,
+        // bool implements Ord with `false < true`, as Rust's does.
+        _ => op.holds_for(l.cmp(&r)).map(Value::Bool),
     }
 }
 
 /// `char` comparisons. char implements `Eq` and `Ord` (codepoint
 /// order); arithmetic / bitwise ops are not defined.
 pub(crate) fn eval_char_binary(l: char, op: NirBinaryOp, r: char) -> Option<Value> {
-    match op {
-        NirBinaryOp::Eq => Some(Value::Bool(l == r)),
-        NirBinaryOp::NotEq => Some(Value::Bool(l != r)),
-        NirBinaryOp::Lt => Some(Value::Bool(l < r)),
-        NirBinaryOp::LtEq => Some(Value::Bool(l <= r)),
-        NirBinaryOp::Gt => Some(Value::Bool(l > r)),
-        NirBinaryOp::GtEq => Some(Value::Bool(l >= r)),
-        _ => None,
-    }
+    op.holds_for(l.cmp(&r)).map(Value::Bool)
 }
 
 pub(crate) fn eval_int_binary(
@@ -672,29 +658,13 @@ pub(crate) fn eval_int_binary(
 }
 
 pub(crate) fn eval_int_cmp(lval: u64, op: NirBinaryOp, rval: u64, prim: PrimitiveType) -> bool {
-    if is_signed_int(prim) {
-        let l = lval as i64;
-        let r = rval as i64;
-        match op {
-            NirBinaryOp::Eq => l == r,
-            NirBinaryOp::NotEq => l != r,
-            NirBinaryOp::Lt => l < r,
-            NirBinaryOp::LtEq => l <= r,
-            NirBinaryOp::Gt => l > r,
-            NirBinaryOp::GtEq => l >= r,
-            _ => unreachable!(),
-        }
+    let ordering = if is_signed_int(prim) {
+        (lval as i64).cmp(&(rval as i64))
     } else {
-        match op {
-            NirBinaryOp::Eq => lval == rval,
-            NirBinaryOp::NotEq => lval != rval,
-            NirBinaryOp::Lt => lval < rval,
-            NirBinaryOp::LtEq => lval <= rval,
-            NirBinaryOp::Gt => lval > rval,
-            NirBinaryOp::GtEq => lval >= rval,
-            _ => unreachable!(),
-        }
-    }
+        lval.cmp(&rval)
+    };
+    op.holds_for(ordering)
+        .unwrap_or_else(|| unreachable!("`{op:?}` is not a comparison"))
 }
 
 pub(crate) fn eval_int_shl(lval: u64, rval: u64, prim: PrimitiveType) -> u64 {
@@ -816,26 +786,21 @@ pub(crate) fn eval_f32_binary(lval: f64, op: NirBinaryOp, rval: f64) -> Option<V
         NirBinaryOp::Sub => non_nan_float(f64::from(l - r), PrimitiveType::F32),
         NirBinaryOp::Mul => non_nan_float(f64::from(l * r), PrimitiveType::F32),
         NirBinaryOp::Div => non_nan_float(f64::from(l / r), PrimitiveType::F32),
-        NirBinaryOp::Eq => Some(Value::Bool(l == r)),
-        NirBinaryOp::NotEq => Some(Value::Bool(l != r)),
-        NirBinaryOp::Lt => Some(Value::Bool(l < r)),
-        NirBinaryOp::LtEq => Some(Value::Bool(l <= r)),
-        NirBinaryOp::Gt => Some(Value::Bool(l > r)),
-        NirBinaryOp::GtEq => Some(Value::Bool(l >= r)),
-        _ => None,
+        // Widening is exact, so f64's order is f32's.
+        _ => eval_float_comparison(f64::from(l), op, f64::from(r)),
     }
 }
 
+/// A comparison under the float order, where every NaN is one value greater
+/// than `+Inf` and `-0.0` equals `0.0`.
 pub(crate) fn eval_float_comparison(lval: f64, op: NirBinaryOp, rval: f64) -> Option<Value> {
-    match op {
-        NirBinaryOp::Eq => Some(Value::Bool(lval == rval)),
-        NirBinaryOp::NotEq => Some(Value::Bool(lval != rval)),
-        NirBinaryOp::Lt => Some(Value::Bool(lval < rval)),
-        NirBinaryOp::LtEq => Some(Value::Bool(lval <= rval)),
-        NirBinaryOp::Gt => Some(Value::Bool(lval > rval)),
-        NirBinaryOp::GtEq => Some(Value::Bool(lval >= rval)),
-        _ => None,
-    }
+    let ordering = match (lval.is_nan(), rval.is_nan()) {
+        (true, true) => Ordering::Equal,
+        (true, false) => Ordering::Greater,
+        (false, true) => Ordering::Less,
+        (false, false) => lval.partial_cmp(&rval).expect("neither operand is a NaN"),
+    };
+    op.holds_for(ordering).map(Value::Bool)
 }
 
 pub(crate) fn non_nan_float(value: f64, prim: PrimitiveType) -> Option<Value> {

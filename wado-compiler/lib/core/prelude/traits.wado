@@ -50,8 +50,9 @@ pub fn ref_eq<T>(a: &T, b: &T) -> bool {
     return builtin::ref_eq(a, b);
 }
 
-/// A total order over the type: what `sort`, `TreeMap` and a `T: Ord` bound
-/// read. A float's is IEEE 754-2019 `totalOrder`, which its `<` is not.
+/// A total order over the type: what `<`, `sort`, `TreeMap` and a `T: Ord`
+/// bound read. A float's puts every NaN last, as one value, and `-0.0` equal to
+/// `0.0`.
 #[compiler_item("ord")]
 pub trait Ord: Eq with () {
     /// Compares self with other and returns an Ordering.
@@ -69,16 +70,6 @@ pub trait Hasher with () {
 /// A value a hash table can key on. Values that are `==` feed a hasher alike.
 pub trait Hash: Eq with () {
     fn hash<H: Hasher>(&self, h: &mut H);
-}
-
-/// What `<`, `<=`, `>` and `>=` mean where the operator order is not the total
-/// order. A float's instructions already carry that split; a half has none.
-#[compiler_item("operator_ord")]
-internal trait OperatorOrd with () {
-    fn lt(&self, other: &Self) -> bool;
-    fn le(&self, other: &Self) -> bool;
-    fn gt(&self, other: &Self) -> bool;
-    fn ge(&self, other: &Self) -> bool;
 }
 
 /// Trait for providing a default value for a type.

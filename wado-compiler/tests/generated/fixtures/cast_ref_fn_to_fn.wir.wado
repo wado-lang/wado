@@ -132,10 +132,10 @@ fn "cast_ref_fn_to_fn.wado/$cm_export__$test_0_a_reference_to_a_function_convert
     let g: ref struct;
     let $v1: f64;
     g = struct.new "canonical//CanonicalClosure_0" { env: struct.new "cast_ref_fn_to_fn.wado//$Closure_0" {  }, func: ref.func "closure/cast_ref_fn_to_fn.wado/$closure_wrapper_0" };
-    if @unlikely((local.tee $v1(block -> f64 {
+    if @unlikely(local.tee $v1(block -> f64 {
         let $indirect_call_1: ref "canonical//CanonicalClosure_0";
         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(g)).env, 1.5);
-    }) == 3) == 0) {
+    }) != 3) {
         cold_path;
         "cast_ref_fn_to_fn.wado/$test_0_a_reference_to_a_function_converts_its_referent$cold0"(1.5, $v1, $v1);
         unreachable;

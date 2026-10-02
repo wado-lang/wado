@@ -1013,3 +1013,13 @@ test "i128 clamp confines a value to the range" {
 test "an empty i128 clamp range is refused" {
     let _ = i128::clamp(0, 10, -10);
 }
+
+test "a float casts to a wide integer truncating and saturating, NaN to zero" {
+    let nan = builtin::black_box(f64::NAN);
+    let huge = builtin::black_box(1.0e40);
+    assert nan as i128 == 0 && nan as u128 == 0;
+    assert huge as i128 == i128::MAX && -huge as i128 == i128::MIN;
+    assert huge as u128 == u128::MAX && builtin::black_box(-1.0) as u128 == 0;
+    assert builtin::black_box(-2.5) as i128 == -2;
+    assert builtin::black_box(1.0e20) as u128 == 100000000000000000000;
+}

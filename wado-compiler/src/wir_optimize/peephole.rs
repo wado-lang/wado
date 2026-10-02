@@ -464,8 +464,9 @@ fn try_eliminate_const_if(instr: &mut WirInstr, null: &Nullability) -> bool {
     true
 }
 
-/// Fold a constant integer comparison (i32 and i64, all ten operators each)
-/// or a constant `I32Eqz` / `I64Eqz` to its boolean `I32Const` result.
+/// Fold a constant comparison (i32 and i64, all ten operators each; f32 and
+/// f64, all six, as IEEE answers them) or a constant `I32Eqz` / `I64Eqz` to
+/// its boolean `I32Const` result.
 fn try_fold_comparison(instr: &mut WirInstr) -> bool {
     fn i32c(instr: &WirInstr) -> Option<i32> {
         match instr {
@@ -479,11 +480,29 @@ fn try_fold_comparison(instr: &mut WirInstr) -> bool {
             _ => None,
         }
     }
+    fn f32c(instr: &WirInstr) -> Option<f32> {
+        match instr {
+            WirInstr::F32Const(v) => Some(*v),
+            _ => None,
+        }
+    }
+    fn f64c(instr: &WirInstr) -> Option<f64> {
+        match instr {
+            WirInstr::F64Const(v) => Some(*v),
+            _ => None,
+        }
+    }
     fn cmp32(l: &WirInstr, r: &WirInstr, op: fn(i32, i32) -> bool) -> Option<bool> {
         Some(op(i32c(l)?, i32c(r)?))
     }
     fn cmp64(l: &WirInstr, r: &WirInstr, op: fn(i64, i64) -> bool) -> Option<bool> {
         Some(op(i64c(l)?, i64c(r)?))
+    }
+    fn cmpf32(l: &WirInstr, r: &WirInstr, op: fn(f32, f32) -> bool) -> Option<bool> {
+        Some(op(f32c(l)?, f32c(r)?))
+    }
+    fn cmpf64(l: &WirInstr, r: &WirInstr, op: fn(f64, f64) -> bool) -> Option<bool> {
+        Some(op(f64c(l)?, f64c(r)?))
     }
     let folded = match instr {
         // i32
@@ -508,6 +527,19 @@ fn try_fold_comparison(instr: &mut WirInstr) -> bool {
         WirInstr::I64LeU(l, r) => cmp64(l, r, |a, b| a.cast_unsigned() <= b.cast_unsigned()),
         WirInstr::I64GtU(l, r) => cmp64(l, r, |a, b| a.cast_unsigned() > b.cast_unsigned()),
         WirInstr::I64GeU(l, r) => cmp64(l, r, |a, b| a.cast_unsigned() >= b.cast_unsigned()),
+        // f32 and f64, whose Rust operators are IEEE's as Wasm's instructions are
+        WirInstr::F32Eq(l, r) => cmpf32(l, r, |a, b| a == b),
+        WirInstr::F32Ne(l, r) => cmpf32(l, r, |a, b| a != b),
+        WirInstr::F32Lt(l, r) => cmpf32(l, r, |a, b| a < b),
+        WirInstr::F32Le(l, r) => cmpf32(l, r, |a, b| a <= b),
+        WirInstr::F32Gt(l, r) => cmpf32(l, r, |a, b| a > b),
+        WirInstr::F32Ge(l, r) => cmpf32(l, r, |a, b| a >= b),
+        WirInstr::F64Eq(l, r) => cmpf64(l, r, |a, b| a == b),
+        WirInstr::F64Ne(l, r) => cmpf64(l, r, |a, b| a != b),
+        WirInstr::F64Lt(l, r) => cmpf64(l, r, |a, b| a < b),
+        WirInstr::F64Le(l, r) => cmpf64(l, r, |a, b| a <= b),
+        WirInstr::F64Gt(l, r) => cmpf64(l, r, |a, b| a > b),
+        WirInstr::F64Ge(l, r) => cmpf64(l, r, |a, b| a >= b),
         // eqz
         WirInstr::I32Eqz(o) => i32c(o).map(|v| v == 0),
         WirInstr::I64Eqz(o) => i64c(o).map(|v| v == 0),
@@ -563,7 +595,8 @@ fn try_fold_eqz(instr: &mut WirInstr) -> bool {
 ///
 /// This saves one Wasm instruction per negated comparison, which is significant
 /// in tight loops (e.g., `while x <= limit` lowers to `if !(x <= limit) break`).
-/// Only applies to integer comparisons — float comparisons are excluded due to NaN.
+/// A float's `eq` and `ne` negate each other, NaN included. Its other
+/// comparisons are each false on a NaN, so their negations are no instruction.
 fn try_negate_eqz_comparison(instr: &mut WirInstr) -> bool {
     let WirInstr::I32Eqz(inner) = instr else {
         return false;
@@ -597,6 +630,10 @@ fn try_negate_eqz_comparison(instr: &mut WirInstr) -> bool {
         // i64 eq/ne
         WirInstr::I64Eq(..) => WirInstr::I64Ne,
         WirInstr::I64Ne(..) => WirInstr::I64Eq,
+        WirInstr::F32Eq(..) => WirInstr::F32Ne,
+        WirInstr::F32Ne(..) => WirInstr::F32Eq,
+        WirInstr::F64Eq(..) => WirInstr::F64Ne,
+        WirInstr::F64Ne(..) => WirInstr::F64Eq,
         _ => return false,
     };
     // Extract the two operands from the inner comparison.
@@ -620,7 +657,11 @@ fn try_negate_eqz_comparison(instr: &mut WirInstr) -> bool {
         | WirInstr::I64GeU(l, r)
         | WirInstr::I64GtU(l, r)
         | WirInstr::I64Eq(l, r)
-        | WirInstr::I64Ne(l, r) => (
+        | WirInstr::I64Ne(l, r)
+        | WirInstr::F32Eq(l, r)
+        | WirInstr::F32Ne(l, r)
+        | WirInstr::F64Eq(l, r)
+        | WirInstr::F64Ne(l, r) => (
             std::mem::replace(l, Box::new(WirInstr::Nop)),
             std::mem::replace(r, Box::new(WirInstr::Nop)),
         ),
@@ -1056,6 +1097,10 @@ fn power_of_two_minus_one_width(v: i32) -> Option<u32> {
 fn is_boolean_valued(instr: &WirInstr) -> bool {
     if let WirInstr::I32And(l, r) | WirInstr::I32Or(l, r) | WirInstr::I32Xor(l, r) = instr {
         return is_boolean_valued(l) && is_boolean_valued(r);
+    }
+    // A sequence's value is its last instruction's.
+    if let WirInstr::Seq(instrs) = instr {
+        return instrs.last().is_some_and(is_boolean_valued);
     }
     matches!(
         instr,
@@ -2031,6 +2076,32 @@ mod tests {
         let mut eqz64 = WirInstr::I64Eqz(Box::new(WirInstr::I64Const(5)));
         assert!(try_fold_comparison(&mut eqz64));
         assert_matches!(eqz64, WirInstr::I32Const(0));
+    }
+
+    /// The instructions are IEEE's, whatever the source order was, so a NaN
+    /// constant answers `ne` true and every other comparison false.
+    #[test]
+    fn float_comparisons_of_const_fold_as_ieee() {
+        let mut le = WirInstr::F64Le(
+            Box::new(WirInstr::F64Const(0.0)),
+            Box::new(WirInstr::F64Const(1.0)),
+        );
+        assert!(try_fold_comparison(&mut le));
+        assert_matches!(le, WirInstr::I32Const(1));
+
+        let mut nan_ne = WirInstr::F32Ne(
+            Box::new(WirInstr::F32Const(f32::NAN)),
+            Box::new(WirInstr::F32Const(f32::NAN)),
+        );
+        assert!(try_fold_comparison(&mut nan_ne));
+        assert_matches!(nan_ne, WirInstr::I32Const(1));
+
+        let mut nan_ge = WirInstr::F64Ge(
+            Box::new(WirInstr::F64Const(f64::NAN)),
+            Box::new(WirInstr::F64Const(1.0)),
+        );
+        assert!(try_fold_comparison(&mut nan_ge));
+        assert_matches!(nan_ge, WirInstr::I32Const(0));
     }
 
     #[test]

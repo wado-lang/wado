@@ -153,7 +153,7 @@ fn "select_extended_arms.wado/run"() with Stdout {
     neg = black_box(3);
     c2 = black_box(0);
     widened = select i64(c2, builtin::i64_extend_i32_s(neg), builtin::i64_extend_i32_s(neg + 1));
-    if @unlikely((v == -3.5) == 0) {
+    if @unlikely(v != -3.5) {
         cold_path;
         "select_extended_arms.wado/run$cold2"(v);
         unreachable;

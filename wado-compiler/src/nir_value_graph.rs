@@ -55,9 +55,9 @@ pub(crate) fn value_kind_to_const(kind: &ValueKind, prim: Option<PrimitiveType>)
 
 /// Identity view of a compile-time constant, so the pool can hash-cons one.
 ///
-/// [`crate::const_eval::Value`]'s `PartialEq` is the numeric relation the
-/// evaluator needs (`NaN != NaN`, `+0.0 == -0.0`); a hash-cons key needs
-/// identity. Wrapping rather than giving the value `Eq` keeps both honest.
+/// [`crate::const_eval::Value`]'s `PartialEq` is numeric (`NaN != NaN`,
+/// `+0.0 == -0.0`); a hash-cons key needs identity. Wrapping rather than giving
+/// the value `Eq` keeps both honest.
 #[derive(Clone, Debug)]
 pub struct ConstKey(Value);
 

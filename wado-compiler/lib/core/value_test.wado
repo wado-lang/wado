@@ -685,6 +685,8 @@ test "from_value reads u128 from every integer spelling" {
 test "from_value reads a whole float as an integer" {
     assert from_value::<i32>(&Value::Float(42.0)) matches { Ok(42) };
     assert fails_with::<i32>(&Value::Float(4.5), UnexpectedType);
+    assert fails_with::<i32>(&Value::Float(f64::NAN), UnexpectedType);
+    assert fails_with::<u128>(&Value::Float(f64::NAN), UnexpectedType);
 }
 
 test "from_value reads a whole float past 64 bits into a wide integer" {

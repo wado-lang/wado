@@ -622,7 +622,7 @@ fn "serde_json_synth_variant.wado/$test_3_variant_roundtrip_payload_case"() {
         multivalue_bind [$mv$json_r$0, $mv$parsed_r$1, $mv$parsed_r$2] = "core:json/core/json/from_bytes<serde_json_synth_variant.wado/Shape,core:prelude/bytes.wado/ByteSlice>"(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: repr_13, start: 0, end: json.used });
         if @likely($mv$json_r$0 == 0) {
             if @likely(ref.test "serde_json_synth_variant.wado//Shape::Circle"(local.tee parsed(ref.as_non_null($mv$parsed_r$1)))) {
-                if @unlikely((local.tee r(ref.cast "serde_json_synth_variant.wado//Shape::Circle"(parsed).payload_0) == 3.14) == 0) {
+                if @unlikely(local.tee r(ref.cast "serde_json_synth_variant.wado//Shape::Circle"(parsed).payload_0) != 3.14) {
                     cold_path;
                     "serde_json_synth_variant.wado/$test_3_variant_roundtrip_payload_case$cold0"(r);
                     unreachable;
@@ -4763,7 +4763,7 @@ fn "core:serde/serde_json_synth_variant.wado/Shape^core:serde/Serialize::seriali
             if $sroa_payload_value_207 != $sroa_payload_value_207 {
                 break $inline_write_json_f64_0: struct.new "core:serde//SerializeError" { kind: 0, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("NaN is not allowed in JSON"), used: 26 } };
             }
-            if (($sroa_payload_value_207 - $sroa_payload_value_207) == 0) == 0 {
+            if ($sroa_payload_value_207 - $sroa_payload_value_207) != 0 {
                 break $inline_write_json_f64_0: struct.new "core:serde//SerializeError" { kind: 0, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Infinity is not allowed in JSON"), used: 31 } };
             }
             "core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar"($sroa_payload_value_207, s);

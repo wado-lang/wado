@@ -1,23 +1,23 @@
 // `Eq`, `Ord` and `Default` for binary16 and bfloat16. Each answers what f32
-// answers for the widened value, so a NaN is equal to nothing and the two
-// zeroes are equal to each other. Comparing bits would give neither.
+// answers for the widened value, so every NaN is one value and the two zeroes
+// are equal to each other. Comparing bits would give neither.
 
 export fn run() {
     assert f16::from_f32(1.0) == f16::from_f32(1.0);
     assert f16::from_f32(1.0) != f16::from_f32(2.0);
     // The two zeroes differ in every bit that matters and are one value.
     assert f16::from_bits(0x0000) == f16::from_bits(0x8000);
-    // A NaN equals nothing, itself included, and its bits are its own.
-    assert f16::from_bits(0x7E00) != f16::from_bits(0x7E00);
-    assert !(f16::from_bits(0x7E00) == f16::from_bits(0x7E00));
+    // Every NaN is one value, whatever its bits.
+    assert f16::from_bits(0x7E00) == f16::from_bits(0xFE01);
+    assert !(f16::from_bits(0x7E00) != f16::from_bits(0x7E00));
 
     assert f16::from_f32(1.0) < f16::from_f32(2.0);
     assert f16::from_f32(-2.0) < f16::from_f32(-1.0);
     assert f16::from_f32(65504.0) < f16::from_bits(0x7C00);
     assert f16::from_f32(2.0) >= f16::from_f32(2.0);
     // A half's operators are the widened f32's, so the two agree on a NaN.
-    assert !(f16::from_bits(0x7E00) <= f16::from_bits(0x7E00));
-    assert !(f32::NAN <= f32::NAN);
+    assert f16::from_bits(0x7E00) <= f16::from_bits(0x7E00);
+    assert f32::NAN <= f32::NAN;
 
     let mut xs: List<f16> = [f16::from_f32(3.0), f16::from_f32(-1.0), f16::from_f32(2.0)];
     xs.sort();
@@ -28,7 +28,7 @@ export fn run() {
 
     assert bf16::from_f32(1.0) == bf16::from_f32(1.0);
     assert bf16::from_bits(0x0000) == bf16::from_bits(0x8000);
-    assert bf16::from_bits(0x7FC0) != bf16::from_bits(0x7FC0);
+    assert bf16::from_bits(0x7FC0) == bf16::from_bits(0xFFC1);
     assert bf16::from_f32(1.0) < bf16::from_f32(2.0);
     assert bf16::default().to_bits() == 0x0000;
 
