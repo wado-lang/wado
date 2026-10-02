@@ -128,7 +128,7 @@ pub use effect_check::{
 pub use elaborator::{Elaborator, TypeError};
 pub use flat_package::FlatPackage;
 pub use lexer::{LexError, LexErrorKind, LexResult, lex, lex_in};
-pub use literal_cast::literal_cast_diagnostics;
+use literal_cast::literal_cast_diagnostics;
 pub use loader::{LoadError, LoadResult, ModuleLoader};
 pub use lower::lower;
 pub use module_source::ModuleSource;
@@ -443,16 +443,11 @@ pub async fn compile_with_host<H: CompilerHost>(
     compile_with_options(source, host, filename, options).await
 }
 
-/// Compile Wado source code with full options.
-///
-/// This is the main compilation entry point with all options. It runs the full compilation pipeline:
-/// lexer -> parser -> binder -> loader -> analyzer -> elaborator -> lower -> optimize -> `tir_to_wir`
-///
 /// Build unused-item warnings from the liveness classification: `DeadFunction`
 /// / `DeadGlobal` (reached by neither production nor tests) and
 /// `TestOnlyFunction` / `TestOnlyGlobal` (reached only by `test` blocks).
 /// Pure over `Semantics`; `is_test_world` suppresses the `TestOnly*` warnings.
-pub fn unused_diagnostics(sem: &semantics::Semantics, is_test_world: bool) -> Vec<Diagnostic> {
+fn unused_diagnostics(sem: &semantics::Semantics, is_test_world: bool) -> Vec<Diagnostic> {
     use crate::ast::Item;
     use crate::compiler_host::{Code, DiagnosticSpan};
 
@@ -513,10 +508,26 @@ pub fn unused_diagnostics(sem: &semantics::Semantics, is_test_world: bool) -> Ve
     out
 }
 
+/// Every source-level lint. `unused` gates the unused lints alone, as
+/// `--no-unused` names them alone; the rest are waived by `allow` instead.
+pub fn lint_diagnostics(
+    sem: &semantics::Semantics,
+    unused: bool,
+    is_test_world: bool,
+) -> Vec<Diagnostic> {
+    let mut lints = shadowing_diagnostics(sem);
+    lints.extend(undecided_effect_diagnostics(sem));
+    lints.extend(literal_cast_diagnostics(sem));
+    if unused {
+        lints.extend(unused_diagnostics(sem, is_test_world));
+    }
+    lints
+}
+
 /// Source-level `ShadowedName` warnings: every binder the resolution pass found
 /// taking a name that already reached a declaration or an enclosing binder.
 /// Stdlib modules are left alone, as the unused lints leave them.
-pub fn shadowing_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
+fn shadowing_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
     use crate::compiler_host::{Code, DiagnosticSpan};
     use crate::elaborator::liveness::is_user_authored;
     use crate::resolve::Shadowed;
@@ -553,7 +564,7 @@ pub fn shadowing_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
 
 /// Source-level `UndecidedEffects` diagnostics: every trait head that says
 /// nothing about the effects its impls may declare.
-pub fn undecided_effect_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
+fn undecided_effect_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
     use crate::ast::{Item, attrs_allow, inner_attrs_allow, lint};
     use crate::compiler_host::{Code, DiagnosticSpan};
     use crate::elaborator::liveness::is_user_authored;
@@ -1008,6 +1019,11 @@ fn select_allocator<H: CompilerHost>(
     Ok(())
 }
 
+/// Compile Wado source code with full options.
+///
+/// This is the main compilation entry point with all options. It runs the full compilation pipeline:
+/// lexer -> parser -> binder -> loader -> analyzer -> elaborator -> lower -> optimize -> `tir_to_wir`
+///
 /// # Arguments
 /// * `source` - The entry module source code
 /// * `host` - `CompilerHost` for loading imported modules and emitting diagnostics
@@ -1265,17 +1281,8 @@ fn compile_after_load<H: CompilerHost>(
         )
     });
 
-    // Source-level lint warnings. `--no-unused` names the unused lints alone,
-    // so `shadowed_name` is emitted either way; it is waived per binder and per
-    // module by `allow` instead.
-    let mut lints = shadowing_diagnostics(&sem);
-    lints.extend(undecided_effect_diagnostics(&sem));
-    lints.extend(literal_cast_diagnostics(&sem));
-    if options.unused_diagnostics {
-        let is_test_world = options.target_world.as_deref() == Some("test");
-        lints.extend(unused_diagnostics(&sem, is_test_world));
-    }
-    for diag in lints {
+    let is_test_world = options.target_world.as_deref() == Some("test");
+    for diag in lint_diagnostics(&sem, options.unused_diagnostics, is_test_world) {
         // A lint carries the severity it words itself at, so one that only
         // remarks is not raised to a warning on the way out.
         match (diag.severity, diag.span) {
