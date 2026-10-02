@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790927869115,
+  "lastUpdate": 1790939852073,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -62801,6 +62801,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9e636884f4394b208cace6ea5501478f820980c6"
         },
         "date": 1790927868535,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6262,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20671,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 281097,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4ddfc442c3bdd0428b20f33f836fb506a141f594",
+          "message": "Merge pull request #2247 from wado-lang/ccr-5117b114-vbqsqr\n\nfeat: numeric literal suffixes (`255_u8`, `1.5_f32`)",
+          "timestamp": "2026-10-02T19:57:24+09:00",
+          "tree_id": "82848fe0e51ebed7b25899d84665c7c331e840d8",
+          "url": "https://github.com/wado-lang/wado/commit/4ddfc442c3bdd0428b20f33f836fb506a141f594"
+        },
+        "date": 1790939851397,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
