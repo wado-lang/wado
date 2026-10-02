@@ -108,8 +108,9 @@ impl WirMutVisitor for CleanupVisitor {
 /// itself: a `RefAsNonNull`, or the `ref.as_non_null` codegen adds after a
 /// non-null read of a nullable global or array slot. That moves the trap to
 /// `instr`, past the operands evaluated between them, so it is done only where
-/// those have no effect. Each operand is checked once, and only after one that
-/// is narrowed.
+/// those have no effect. They may still trap: a narrowing wraps a value the
+/// types already hold non-null, so its trap never fires and moving it reorders
+/// nothing. Each operand is checked once, and only after one that is narrowed.
 fn relax_null_trapping_objects(instr: &mut WirInstr) {
     let own = own_traps(instr);
     let mut narrowed = false;
