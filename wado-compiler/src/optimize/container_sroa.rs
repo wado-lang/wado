@@ -660,9 +660,7 @@ fn movers_of(
         .collect();
     greatest_fixpoint(project, &mut movers, |func, is_mover| {
         let passes = |callee: &FuncId| {
-            is_mover(callee)
-                || storage_builtins.contains(callee)
-                || value_copy_ids.contains(callee)
+            is_mover(callee) || storage_builtins.contains(callee) || value_copy_ids.contains(callee)
         };
         moves_elements_only(func, &roles, &passes)
     });
