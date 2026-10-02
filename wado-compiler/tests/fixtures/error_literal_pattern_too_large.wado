@@ -1,0 +1,13 @@
+// A literal pattern no integer type holds is reported, as the same literal
+// is in an expression.
+
+export fn run() {
+    let x: i32 = builtin::black_box(0);
+    let k = match x {
+        999999999999999999999999999999999999999999 => 1,  // compile error
+        _ => 0,
+    };
+}
+
+__DATA__
+{"compile_error": ":7:9: analysis error: invalid pattern: invalid integer literal: 999999999999999999999999999999999999999999"}

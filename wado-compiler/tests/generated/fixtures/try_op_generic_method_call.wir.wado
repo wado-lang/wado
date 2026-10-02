@@ -77,7 +77,7 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:try_op_generic_method_call.wado::$const_obj_1: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+global global:try_op_generic_method_call.wado::$const_obj_1: ref "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
 
 fn "try_op_generic_method_call.wado/write_values"(s, values) {
     let end: i32;
@@ -97,7 +97,7 @@ fn "try_op_generic_method_call.wado/write_values"(s, values) {
             break_if b0 $sroa_$iter_0_index_43 >= end;
             item = builtin::array_get_value<i32>($sroa_$iter_0_repr_42, $sroa_$iter_0_index_43);
             $sroa_$iter_0_index_43 = $sroa_$iter_0_index_43 + 1;
-            s.buf = ref.as_non_null($local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 }; other_20 = s.buf; $inline_core_prelude_string_wado_String__internal_push_string_7: block {
+            s.buf = $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 }; other_20 = s.buf; $inline_core_prelude_string_wado_String__internal_push_string_7: block {
                 break_if $inline_core_prelude_string_wado_String__internal_push_string_7 local.tee n_25(other_20.used) == 0;
                 if @unlikely(local.tee new_used(0 + n_25) > builtin::array_len($local_2.repr)) {
                     cold_path;
@@ -106,7 +106,7 @@ fn "try_op_generic_method_call.wado/write_values"(s, values) {
                 start_30 = $local_2.used;
                 $local_2.used = new_used;
                 builtin::array_copy<u8>($local_2.repr, start_30, other_20.repr, 0, n_25);
-            }; "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(item, $local_2); $local_2);
+            }; "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(item, $local_2); $local_2;
             continue l1;
         };
     };

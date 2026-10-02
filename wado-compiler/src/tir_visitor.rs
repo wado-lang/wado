@@ -96,7 +96,8 @@ pub trait TirMutVisitor {
             }
             TirPattern::Enum { .. }
             | TirPattern::ConstantValue { .. }
-            | TirPattern::Range { .. } => {}
+            | TirPattern::Range { .. }
+            | TirPattern::PerInstance { .. } => {}
             TirPattern::Narrow { test, .. } => self.visit_expr(test),
             TirPattern::Struct { fields, .. } => {
                 for field in fields {
@@ -299,7 +300,8 @@ pub trait TirRefVisitor {
             }
             TirPattern::Enum { .. }
             | TirPattern::ConstantValue { .. }
-            | TirPattern::Range { .. } => {}
+            | TirPattern::Range { .. }
+            | TirPattern::PerInstance { .. } => {}
             TirPattern::Narrow { test, .. } => self.visit_expr(test),
             TirPattern::Struct { fields, .. } => {
                 for field in fields {
@@ -555,7 +557,8 @@ pub fn opt_walk_pattern(visitor: &mut impl TirOptVisitor, pattern: &mut TirPatte
         | TirPattern::Binding { .. }
         | TirPattern::Literal(_)
         | TirPattern::Enum { .. }
-        | TirPattern::Range { .. } => {}
+        | TirPattern::Range { .. }
+        | TirPattern::PerInstance { .. } => {}
         TirPattern::Tuple(patterns, _) | TirPattern::Or(patterns) => {
             for p in patterns {
                 changed |= visitor.visit_pattern(p);

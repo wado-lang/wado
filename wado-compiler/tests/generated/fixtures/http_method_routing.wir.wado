@@ -299,7 +299,7 @@ import fn wasi/task-return:handle from "wasi/task-return:handle";
 import fn wasi/resource-drop:wasi/http/types.wado#request from "wasi/resource-drop:wasi/http/types.wado#request";
 import fn wasi/future-write from "wasi/future-write";
 
-global global:http_method_routing.wado::$const_obj_0: ref null "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>" = struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } };
+global global:http_method_routing.wado::$const_obj_0: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>" = struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } };
 
 fn "http_method_routing.wado/$cm_binding__Request_get_method"(self) with Request {
     let $outptr: i32;
@@ -328,14 +328,14 @@ fn "http_method_routing.wado/$cm_binding__Request_get_method"(self) with Request
     } else if self == 8 -> ref "wasi:http/types.wado//Method" {
         struct.new "wasi:http/types.wado//Method" { 8 };
     } else {
-        struct.new "wasi:http/types.wado//Method::Other" { discriminant: 9, payload_0: ref.as_non_null(self = builtin::load_i32($outptr + 4); arr_9 = builtin::array_new<u8>(local.tee len_5(builtin::load_i32(($outptr + 4) + 4))); i = 0; b9: block {
+        struct.new "wasi:http/types.wado//Method::Other" { discriminant: 9, payload_0: self = builtin::load_i32($outptr + 4); arr_9 = builtin::array_new<u8>(local.tee len_5(builtin::load_i32(($outptr + 4) + 4))); i = 0; b9: block {
             l10: loop {
                 break_if b9 i >= len_5;
                 builtin::array_set_u8(arr_9, i, builtin::load_u8(self + i));
                 i = i + 1;
                 continue l10;
             };
-        }; struct.new "core:prelude/string.wado//String" { repr: arr_9, used: len_5 }) };
+        }; struct.new "core:prelude/string.wado//String" { repr: arr_9, used: len_5 } };
     });
     drop("mem/realloc"($outptr, 12, 4, 0));
     return $vresult;

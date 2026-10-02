@@ -1159,50 +1159,65 @@ fn try_C(chars: &List<char>, start: i32) -> i32 {
 fn try_D(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let mut accept_10: i32 = -1;
+    let mut la_reach_10: i32 = -1;
     if pos >= chars.len() || chars[pos] != 'd' { return -1; }
     pos += 1;
-    let peek_save_11 = pos;
-    let mut peek_ok_11 = false;
-    peek_11: {
-        let opt_saved_12 = pos;
-        let mut opt_ok_12 = false;
-        opt_12: {
-            if pos >= chars.len() || chars[pos] != 'e' { break opt_12; }
+    let mut la_tot_11: i32 = -1;
+    let peek_save_12 = pos;
+    let mut peek_ok_12 = false;
+    let mut peek_end_12: i32 = -1;
+    peek_12: {
+        let opt_saved_13 = pos;
+        let mut opt_ok_13 = false;
+        opt_13: {
+            if pos >= chars.len() || chars[pos] != 'e' { break opt_13; }
             pos += 1;
-            opt_ok_12 = true;
+            opt_ok_13 = true;
         }
-        if !opt_ok_12 { pos = opt_saved_12; }
-        if pos >= chars.len() || chars[pos] != 'd' { break peek_11; }
+        if !opt_ok_13 { pos = opt_saved_13; }
+        if pos >= chars.len() || chars[pos] != 'd' { break peek_12; }
         pos += 1;
-        peek_ok_11 = true;
+        peek_end_12 = pos;
+        peek_ok_12 = true;
     }
-    pos = peek_save_11;
-    if peek_ok_11 {
-        accept_10 = peek_save_11;
+    pos = peek_save_12;
+    if peek_ok_12 {
+        la_tot_11 = peek_end_12;
+    }
+    if la_tot_11 >= 0 && la_tot_11 >= la_reach_10 {
+        la_reach_10 = la_tot_11;
+        accept_10 = pos;
     }
     loop {
         let la_saved_10 = pos;
         la_rep_10: {
             if pos >= chars.len() || chars[pos] != 'd' { break la_rep_10; }
             pos += 1;
-            let peek_save_13 = pos;
-            let mut peek_ok_13 = false;
-            peek_13: {
-                let opt_saved_14 = pos;
-                let mut opt_ok_14 = false;
-                opt_14: {
-                    if pos >= chars.len() || chars[pos] != 'e' { break opt_14; }
+            let mut la_tot_14: i32 = -1;
+            let peek_save_15 = pos;
+            let mut peek_ok_15 = false;
+            let mut peek_end_15: i32 = -1;
+            peek_15: {
+                let opt_saved_16 = pos;
+                let mut opt_ok_16 = false;
+                opt_16: {
+                    if pos >= chars.len() || chars[pos] != 'e' { break opt_16; }
                     pos += 1;
-                    opt_ok_14 = true;
+                    opt_ok_16 = true;
                 }
-                if !opt_ok_14 { pos = opt_saved_14; }
-                if pos >= chars.len() || chars[pos] != 'd' { break peek_13; }
+                if !opt_ok_16 { pos = opt_saved_16; }
+                if pos >= chars.len() || chars[pos] != 'd' { break peek_15; }
                 pos += 1;
-                peek_ok_13 = true;
+                peek_end_15 = pos;
+                peek_ok_15 = true;
             }
-            pos = peek_save_13;
-            if peek_ok_13 {
-                accept_10 = peek_save_13;
+            pos = peek_save_15;
+            if peek_ok_15 {
+                la_tot_14 = peek_end_15;
+            }
+            if la_tot_14 >= 0 && la_tot_14 >= la_reach_10 {
+                la_reach_10 = la_tot_14;
+                accept_10 = pos;
             }
             continue;
         }
@@ -1213,14 +1228,14 @@ fn try_D(chars: &List<char>, start: i32) -> i32 {
         return -1;
     }
     pos = accept_10;
-    let opt_saved_15 = pos;
-    let mut opt_ok_15 = false;
-    opt_15: {
-        if pos >= chars.len() || chars[pos] != 'e' { break opt_15; }
+    let opt_saved_17 = pos;
+    let mut opt_ok_17 = false;
+    opt_17: {
+        if pos >= chars.len() || chars[pos] != 'e' { break opt_17; }
         pos += 1;
-        opt_ok_15 = true;
+        opt_ok_17 = true;
     }
-    if !opt_ok_15 { pos = opt_saved_15; }
+    if !opt_ok_17 { pos = opt_saved_17; }
     if pos >= chars.len() || chars[pos] != 'd' { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
     pos += 1;
     return pos;
@@ -1237,61 +1252,6 @@ fn try_E(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'x' { return -1; }
     pos += 1;
-    let la_saved_16 = pos;
-    let mut la_reach_16: i32 = -1;
-    let mut la_end_16: i32 = -1;
-    let mut la_win_16: i32 = -1;
-    let mut la_arm_16_0: i32 = -1;
-    la_alt_16_0: {
-        pos = la_saved_16;
-        if pos >= chars.len() || chars[pos] != 'y' { break la_alt_16_0; }
-        pos += 1;
-        la_arm_16_0 = pos;
-    }
-    let mut la_arm_16_1: i32 = -1;
-    la_alt_16_1: {
-        pos = la_saved_16;
-        if pos >= chars.len() || chars[pos] != 'y' { break la_alt_16_1; }
-        pos += 1;
-        if pos >= chars.len() || chars[pos] != 'z' { break la_alt_16_1; }
-        pos += 1;
-        la_arm_16_1 = pos;
-    }
-    for let mut la_i_16 = 0; la_i_16 < 2; la_i_16 += 1 {
-        let la_at_16 = match la_i_16 { 0 => la_arm_16_0, _ => la_arm_16_1 };
-        if la_at_16 < 0 { continue; }
-        pos = la_at_16;
-        let mut la_tot_16: i32 = -1;
-        let peek_save_17 = pos;
-        let mut peek_ok_17 = false;
-        let mut peek_end_17: i32 = -1;
-        peek_17: {
-            if pos >= chars.len() || chars[pos] != 'h' { break peek_17; }
-            pos += 1;
-            peek_end_17 = pos;
-            peek_ok_17 = true;
-        }
-        pos = peek_save_17;
-        if peek_ok_17 {
-            la_tot_16 = peek_end_17;
-        }
-        if la_tot_16 > la_reach_16 {
-            la_reach_16 = la_tot_16;
-            la_end_16 = la_at_16;
-            la_win_16 = la_i_16;
-        }
-    }
-    if la_win_16 < 0 { return -1; }
-    pos = la_end_16;
-    if pos >= chars.len() || chars[pos] != 'h' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_G(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'g' { return -1; }
-    pos += 1;
     let la_saved_18 = pos;
     let mut la_reach_18: i32 = -1;
     let mut la_end_18: i32 = -1;
@@ -1299,16 +1259,16 @@ fn try_G(chars: &List<char>, start: i32) -> i32 {
     let mut la_arm_18_0: i32 = -1;
     la_alt_18_0: {
         pos = la_saved_18;
-        if pos >= chars.len() || chars[pos] != 'i' { break la_alt_18_0; }
+        if pos >= chars.len() || chars[pos] != 'y' { break la_alt_18_0; }
         pos += 1;
         la_arm_18_0 = pos;
     }
     let mut la_arm_18_1: i32 = -1;
     la_alt_18_1: {
         pos = la_saved_18;
-        if pos >= chars.len() || chars[pos] != 'i' { break la_alt_18_1; }
+        if pos >= chars.len() || chars[pos] != 'y' { break la_alt_18_1; }
         pos += 1;
-        if pos >= chars.len() || chars[pos] != 'k' { break la_alt_18_1; }
+        if pos >= chars.len() || chars[pos] != 'z' { break la_alt_18_1; }
         pos += 1;
         la_arm_18_1 = pos;
     }
@@ -1321,7 +1281,7 @@ fn try_G(chars: &List<char>, start: i32) -> i32 {
         let mut peek_ok_19 = false;
         let mut peek_end_19: i32 = -1;
         peek_19: {
-            if pos >= chars.len() || chars[pos] != 'l' { break peek_19; }
+            if pos >= chars.len() || chars[pos] != 'h' { break peek_19; }
             pos += 1;
             peek_end_19 = pos;
             peek_ok_19 = true;
@@ -1338,13 +1298,15 @@ fn try_G(chars: &List<char>, start: i32) -> i32 {
     }
     if la_win_18 < 0 { return -1; }
     pos = la_end_18;
-    if pos >= chars.len() || chars[pos] != 'l' { return -1; }
+    if pos >= chars.len() || chars[pos] != 'h' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_K(chars: &List<char>, start: i32) -> i32 {
+fn try_G(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
+    if pos >= chars.len() || chars[pos] != 'g' { return -1; }
+    pos += 1;
     let la_saved_20 = pos;
     let mut la_reach_20: i32 = -1;
     let mut la_end_20: i32 = -1;
@@ -1352,16 +1314,16 @@ fn try_K(chars: &List<char>, start: i32) -> i32 {
     let mut la_arm_20_0: i32 = -1;
     la_alt_20_0: {
         pos = la_saved_20;
-        if pos >= chars.len() || chars[pos] != 'w' { break la_alt_20_0; }
+        if pos >= chars.len() || chars[pos] != 'i' { break la_alt_20_0; }
         pos += 1;
         la_arm_20_0 = pos;
     }
     let mut la_arm_20_1: i32 = -1;
     la_alt_20_1: {
         pos = la_saved_20;
-        if pos >= chars.len() || chars[pos] != 'w' { break la_alt_20_1; }
+        if pos >= chars.len() || chars[pos] != 'i' { break la_alt_20_1; }
         pos += 1;
-        if pos >= chars.len() || chars[pos] != 'v' { break la_alt_20_1; }
+        if pos >= chars.len() || chars[pos] != 'k' { break la_alt_20_1; }
         pos += 1;
         la_arm_20_1 = pos;
     }
@@ -1374,7 +1336,7 @@ fn try_K(chars: &List<char>, start: i32) -> i32 {
         let mut peek_ok_21 = false;
         let mut peek_end_21: i32 = -1;
         peek_21: {
-            if pos >= chars.len() || chars[pos] != 'v' { break peek_21; }
+            if pos >= chars.len() || chars[pos] != 'l' { break peek_21; }
             pos += 1;
             peek_end_21 = pos;
             peek_ok_21 = true;
@@ -1391,6 +1353,59 @@ fn try_K(chars: &List<char>, start: i32) -> i32 {
     }
     if la_win_20 < 0 { return -1; }
     pos = la_end_20;
+    if pos >= chars.len() || chars[pos] != 'l' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_K(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    let la_saved_22 = pos;
+    let mut la_reach_22: i32 = -1;
+    let mut la_end_22: i32 = -1;
+    let mut la_win_22: i32 = -1;
+    let mut la_arm_22_0: i32 = -1;
+    la_alt_22_0: {
+        pos = la_saved_22;
+        if pos >= chars.len() || chars[pos] != 'w' { break la_alt_22_0; }
+        pos += 1;
+        la_arm_22_0 = pos;
+    }
+    let mut la_arm_22_1: i32 = -1;
+    la_alt_22_1: {
+        pos = la_saved_22;
+        if pos >= chars.len() || chars[pos] != 'w' { break la_alt_22_1; }
+        pos += 1;
+        if pos >= chars.len() || chars[pos] != 'v' { break la_alt_22_1; }
+        pos += 1;
+        la_arm_22_1 = pos;
+    }
+    for let mut la_i_22 = 0; la_i_22 < 2; la_i_22 += 1 {
+        let la_at_22 = match la_i_22 { 0 => la_arm_22_0, _ => la_arm_22_1 };
+        if la_at_22 < 0 { continue; }
+        pos = la_at_22;
+        let mut la_tot_22: i32 = -1;
+        let peek_save_23 = pos;
+        let mut peek_ok_23 = false;
+        let mut peek_end_23: i32 = -1;
+        peek_23: {
+            if pos >= chars.len() || chars[pos] != 'v' { break peek_23; }
+            pos += 1;
+            peek_end_23 = pos;
+            peek_ok_23 = true;
+        }
+        pos = peek_save_23;
+        if peek_ok_23 {
+            la_tot_22 = peek_end_23;
+        }
+        if la_tot_22 > la_reach_22 {
+            la_reach_22 = la_tot_22;
+            la_end_22 = la_at_22;
+            la_win_22 = la_i_22;
+        }
+    }
+    if la_win_22 < 0 { return -1; }
+    pos = la_end_22;
     if pos >= chars.len() || chars[pos] != 'v' { return -1; }
     pos += 1;
     return pos;

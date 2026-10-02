@@ -6,7 +6,6 @@ use crate::ast::{
     Type, WhileStmt, walk_expr, walk_stmt,
 };
 use crate::compiler_host::CompilerHost;
-use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TirPattern, TypeId, TypeTable};
 use crate::tir_visitor::remap_local_reads;
 use crate::token::Span;
@@ -23,7 +22,6 @@ use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::orchestration::first_infer_span;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
 use crate::elaborator::synth::ArgClass;
-use crate::elaborator::trait_env::written_type_source;
 use crate::elaborator::trait_query::assoc_const_owner;
 use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, ParamSlot, StructFieldInfo};
 use crate::name::{
@@ -33,7 +31,7 @@ use crate::name::{
 use crate::resolve::Resolutions;
 use crate::symbol_notation::render;
 use crate::tir::StructDef;
-use crate::{escape, hashmap, tir};
+use crate::{hashmap, tir};
 
 /// Tracks the reference binding mode for match ergonomics.
 /// When matching a reference-typed scrutinee, bindings inherit the reference kind.
@@ -1546,18 +1544,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Pattern::Literal(lit) => {
                 match lit {
-                    Literal::Number(repr) if util::is_float_only_literal(repr) => {
-                        let _ = self.emit(TypeError::InvalidPattern {
-                            message: "float literals cannot be used in match patterns".to_string(),
-                            span,
-                        });
-                    }
                     Literal::Null => {
                         // If the scrutinee is a variant type with a `None` case,
                         // `null` lowers to a `None` variant pattern (no binding).
                         let _ = self.try_null_as_none_pattern(scrutinee_type);
                     }
-                    _ => self.check_pattern_value(pattern, scrutinee_type, span),
+                    _ => self.check_pattern_value(lit, scrutinee_type, span),
                 }
                 Vec::new()
             }
@@ -2129,48 +2121,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .is_some()
     }
 
-    /// The type a literal pattern demands of its scrutinee, when the scrutinee is
-    /// not it. Whether its value is in range is [`Self::check_pattern_value`]'s.
+    fn settles_literal_patterns(&self, scrutinee_type: TypeId) -> bool {
+        util::settles_literal_patterns(&self.tysys.type_table.borrow(), scrutinee_type)
+    }
+
+    /// The type a literal pattern demands of its settled scrutinee, when the
+    /// scrutinee is not it.
     pub(super) fn literal_pattern_mismatch(
         &mut self,
         lit: &Literal,
         scrutinee_type: TypeId,
     ) -> Option<String> {
-        let type_table = self.tysys.type_table.borrow();
-        let head = type_table.representation_head(scrutinee_type);
-        let expected = match lit {
-            Literal::Number(_) | Literal::Byte(_)
-                if !type_table.is_integer(head) && !type_table.is_wide_int(head) =>
-            {
-                "an integer type"
+        if !self.settles_literal_patterns(scrutinee_type) {
+            return None;
+        }
+        match lit {
+            Literal::Null => None,
+            // A string-literal arm tests the scrutinee with `==`, so any type
+            // answering `Eq<String>` matches one the way a `String` does.
+            Literal::String(_) => {
+                let is_string = {
+                    let type_table = self.tysys.type_table.borrow();
+                    type_table.is_string(type_table.representation_head(scrutinee_type))
+                };
+                (!is_string && !self.compares_with_string_literal(scrutinee_type))
+                    .then(|| "String".to_string())
             }
-            Literal::String(_) if !type_table.is_string(head) => "String",
-            Literal::Char(_) if !type_table.is_primitive(head, PrimitiveType::Char) => "char",
-            Literal::Bool(_) if !type_table.is_primitive(head, PrimitiveType::Bool) => "bool",
-            _ => return None,
-        };
-        // An unsettled head judges nothing: an unresolved type is reported
-        // where it is unresolved, and a type parameter decided per instance.
-        let settled = match type_table.get(head) {
-            ResolvedType::Primitive(_)
-            | ResolvedType::Struct { .. }
-            | ResolvedType::Enum { .. }
-            | ResolvedType::Variant { .. }
-            | ResolvedType::Flags { .. }
-            | ResolvedType::Unit => true,
-            ResolvedType::GenericInstance { .. } => type_table.is_concrete(head),
-            _ => false,
-        };
-        drop(type_table);
-        if !settled {
-            return None;
+            _ => util::pattern_literal_mismatch(
+                &util::pattern_literal(lit).ok()?,
+                scrutinee_type,
+                &mut self.tysys.type_table.borrow_mut(),
+            ),
         }
-        // A string-literal arm tests the scrutinee with `==`, so any type
-        // answering `Eq<String>` matches one the way a `String` does.
-        if matches!(lit, Literal::String(_)) && self.compares_with_string_literal(scrutinee_type) {
-            return None;
-        }
-        Some(expected.to_string())
     }
 
     /// Whether `scrutinee == "…"` resolves, which is what a string-literal
@@ -2197,72 +2179,54 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .is_some()
     }
 
-    /// Report a literal pattern or range bound that is no value of
-    /// `scrutinee_type`: of another kind, or out of its range.
-    fn check_pattern_value(&mut self, pattern: &Pattern, scrutinee_type: TypeId, span: Span) {
-        if let Pattern::Literal(lit) = pattern
-            && let Some(expected) = self.literal_pattern_mismatch(lit, scrutinee_type)
-        {
-            let _ = self.emit(TypeError::PatternTypeMismatch {
-                expected,
-                found: self.tysys.type_table.borrow().type_name(scrutinee_type),
-                span,
-            });
+    /// Report a literal pattern that names no value of `scrutinee_type`: one
+    /// that names no value at all, or, on a settled scrutinee, one of another
+    /// kind or out of its range.
+    fn check_pattern_value(&mut self, lit: &Literal, scrutinee_type: TypeId, span: Span) {
+        if let Literal::String(_) = lit {
+            if let Some(expected) = self.literal_pattern_mismatch(lit, scrutinee_type) {
+                self.emit_pattern_literal_error(
+                    util::PatternLiteralError::Mismatch(expected),
+                    scrutinee_type,
+                    span,
+                );
+            }
             return;
         }
-        let message = {
-            let tt = self.tysys.type_table.borrow();
-            match pattern {
-                Pattern::Literal(Literal::Number(repr)) => {
-                    let (negated, digits) = repr
-                        .strip_prefix('-')
-                        .map_or((false, repr.as_str()), |digits| (true, digits));
-                    util::parse_u128_literal(digits).ok().and_then(|magnitude| {
-                        util::int_literal_range_error(
-                            magnitude,
-                            negated,
-                            digits,
-                            scrutinee_type,
-                            &tt,
-                        )
-                    })
-                }
-                Pattern::Literal(Literal::Byte(raw)) => {
-                    escape::unescape_byte(raw).ok().and_then(|v| {
-                        util::int_value_range_error(
-                            v.into(),
-                            &format!("b'{raw}'"),
-                            scrutinee_type,
-                            &tt,
-                        )
-                    })
-                }
-                Pattern::Variant {
-                    variant_name,
-                    variant_qualifier: Some(qualifier),
-                    bindings,
-                    ..
-                } if bindings.is_empty() => primitive_assoc_const_to_i128(
-                    Some(qualifier),
-                    variant_name,
-                    &self.tysys.resolutions,
-                )
-                .and_then(|value| {
-                    let shown = format!("{}::{variant_name}", written_type_source(qualifier));
-                    util::int_value_range_error(value, &shown, scrutinee_type, &tt)
-                }),
-                _ => None,
+        let value = match util::pattern_literal(lit) {
+            Ok(value) => value,
+            Err(message) => {
+                let _ = self.emit(TypeError::InvalidPattern { message, span });
+                return;
             }
         };
-        if let Some(message) = message {
-            let _ = self.emit(TypeError::InvalidPattern { message, span });
+        if !self.settles_literal_patterns(scrutinee_type) {
+            return;
+        }
+        let error = util::pattern_literal_error(
+            &value,
+            scrutinee_type,
+            &mut self.tysys.type_table.borrow_mut(),
+        );
+        if let Some(error) = error {
+            self.emit_pattern_literal_error(error, scrutinee_type, span);
         }
     }
 
-    /// Validate a range pattern (`0..<10` or `'a'..='z'`) for the body walk,
-    /// emitting the bad-bounds / reversed / empty diagnostics. Range
-    /// patterns bind nothing and reify rebuilds the real `TirPattern::Range`,
-    /// so no pattern node is produced here.
+    fn emit_pattern_literal_error(
+        &mut self,
+        error: util::PatternLiteralError,
+        scrutinee_type: TypeId,
+        span: Span,
+    ) {
+        let error = error.at(scrutinee_type, span, &self.tysys.type_table.borrow());
+        let _ = self.emit(error);
+    }
+
+    /// Report a range pattern (`0..<10` or `'a'..='z'`) whose bounds name no
+    /// values of `scrutinee_type`. Range patterns bind nothing and reify
+    /// rebuilds the real `TirPattern::Range`, so no pattern node is produced
+    /// here.
     fn resolve_range_pattern(
         &mut self,
         start: &Pattern,
@@ -2271,42 +2235,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scrutinee_type: TypeId,
         span: Span,
     ) {
-        let is_unsigned = self
-            .tysys
-            .type_table
-            .borrow()
-            .is_unsigned_int(scrutinee_type);
-
         let resolutions = &self.tysys.resolutions;
-        let start_val = util::range_endpoint_to_i128(start, is_unsigned, resolutions);
-        let end_val = util::range_endpoint_to_i128(end, is_unsigned, resolutions);
-
-        let (Some(start_val), Some(end_val)) = (start_val, end_val) else {
+        let (Some(start), Some(end)) = (
+            util::range_bound_literal(start, resolutions),
+            util::range_bound_literal(end, resolutions),
+        ) else {
             let _ = self.emit(TypeError::InvalidPattern {
                 message: "range pattern bounds must be integer or char literals".to_string(),
                 span,
             });
             return;
         };
-        for bound in [start, end] {
-            self.check_pattern_value(bound, scrutinee_type, span);
+        let (start, end) = match (start, end) {
+            (Ok(start), Ok(end)) => (start, end),
+            (start, end) => {
+                for message in [start.err(), end.err()].into_iter().flatten() {
+                    let _ = self.emit(TypeError::InvalidPattern { message, span });
+                }
+                return;
+            }
+        };
+        if self.settles_literal_patterns(scrutinee_type) {
+            let errors = util::range_bound_errors(
+                &start,
+                &end,
+                scrutinee_type,
+                &mut self.tysys.type_table.borrow_mut(),
+            );
+            for error in errors {
+                self.emit_pattern_literal_error(error, scrutinee_type, span);
+            }
         }
-
-        // Check for reversed or empty range
         let inclusive = matches!(kind, RangeKind::Inclusive);
-        let order = util::range_endpoints_ordered(start_val, end_val, is_unsigned);
-        if order.is_gt() {
-            let _ = self.emit(TypeError::InvalidPattern {
-                message: "reversed range pattern".to_string(),
-                span,
-            });
-            return;
-        }
-        if !inclusive && order.is_ge() {
-            let _ = self.emit(TypeError::InvalidPattern {
-                message: "empty range pattern".to_string(),
-                span,
-            });
+        if let Some(message) = util::range_order_error(&start, &end, inclusive) {
+            let _ = self.emit(TypeError::InvalidPattern { message, span });
         }
     }
 
@@ -3257,6 +3219,7 @@ fn collect_pattern_bindings_with_index_inner(
         | TirPattern::Enum { .. }
         | TirPattern::ConstantValue { .. }
         | TirPattern::Range { .. }
+        | TirPattern::PerInstance { .. }
         | TirPattern::Narrow { name: None, .. } => {}
     }
 }
@@ -3301,7 +3264,8 @@ pub(super) fn remap_pattern_local(pattern: &mut TirPattern, from: u32, to: u32) 
         | TirPattern::Literal(_)
         | TirPattern::Enum { .. }
         | TirPattern::ConstantValue { .. }
-        | TirPattern::Range { .. } => {}
+        | TirPattern::Range { .. }
+        | TirPattern::PerInstance { .. } => {}
     }
 }
 

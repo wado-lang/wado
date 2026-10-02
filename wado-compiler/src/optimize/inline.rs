@@ -877,10 +877,6 @@ fn fold_drops_loop(body: &Body, view: &ConstView<'_>, walk: &CostWalk<'_>) -> bo
 }
 
 /// Whether `body` runs a loop.
-fn body_has_loop(body: &Body) -> bool {
-    arena_query::block_contains_loop(body, body.root)
-}
-
 /// Whether running `body` reaches a safepoint: a call, or an allocation, where
 /// the collector may run. A copying collector moves objects there, so every
 /// reference live across one is spilled and reloaded, and a loop holds more of
@@ -989,63 +985,97 @@ fn safepoint_calls(project: &NirPackage, descriptors: &[FunctionRef]) -> Vec<boo
         .collect()
 }
 
-/// Locals the body writes, counting a write anywhere in the place (`p.x = f()`
-/// writes `p`) and a mutable hand-out, which is a write the body does not show.
-fn written_locals(body: &Body) -> IndexSet<u32> {
-    let mut written: IndexSet<u32> = IndexSet::default();
-    for node in arena_query::reachable_nodes(body) {
-        let NodeRef::Expr(e) = node else {
-            continue;
-        };
-        match &body.exprs[e].kind {
+/// What `inline` reads off one body each round, gathered in one walk; empty for
+/// a bodyless function.
+#[derive(Default)]
+struct BodyScan {
+    /// Locals the body writes, counting a write anywhere in the place (`p.x =
+    /// f()` writes `p`) and a mutable hand-out, which is a write the body does
+    /// not show.
+    written: IndexSet<u32>,
+    /// Every `let`, as the local and the value bound to it.
+    lets: Vec<(u32, Operand)>,
+    /// Every call, with its by-value arguments keyed by position: an
+    /// [`ArgSite`] before the callee's own writes rule any out.
+    by_value_sites: Vec<ArgSite>,
+    /// Whether the body holds a `loop`.
+    loopy: bool,
+}
+
+fn scan_body(func: &NirFunction) -> BodyScan {
+    // A site's arguments are keyed by position and the callee's writes by
+    // local index.
+    assert!(
+        func.params
+            .iter()
+            .enumerate()
+            .all(|(pos, p)| p.local_index == pos as u32),
+        "a parameter's local index is its position"
+    );
+    let mut scan = BodyScan::default();
+    let Some(body) = &func.body else {
+        return scan;
+    };
+    body.for_each_reachable_node(|node| match node {
+        NodeRef::Stmt(st) => match &body.stmts[st].kind {
+            StmtKind::Let {
+                local_index, value, ..
+            } => scan.lets.push((*local_index, *value)),
+            StmtKind::Loop { .. } => scan.loopy = true,
+            _ => {}
+        },
+        NodeRef::Expr(e) => match &body.exprs[e].kind {
             ExprKind::Assign { target, .. } => {
-                written.extend(place_root_local(body, *target));
+                scan.written.extend(place_root_local(body, *target));
             }
             ExprKind::Unary {
                 op: NirUnaryOp::MutRef,
                 expr: inner,
             } => {
-                written.extend(inner.as_expr().and_then(|x| place_root_local(body, x)));
+                scan.written
+                    .extend(inner.as_expr().and_then(|x| place_root_local(body, x)));
             }
             // A `&mut` argument is the callee's write. A `&mut` parameter passed
             // on wears no `MutRef` of its own — it is already a reference, so it
             // reaches the next call as a bare place and only `is_mut` says so.
             // `args[0]` carries a method's `&mut self` the same way.
-            ExprKind::Call { args, .. } => {
+            ExprKind::Call { func_id, args, .. } => {
                 for arg in args.iter().filter(|a| a.is_mut) {
-                    written.extend(arg.expr.as_expr().and_then(|x| place_root_local(body, x)));
+                    scan.written
+                        .extend(arg.expr.as_expr().and_then(|x| place_root_local(body, x)));
                 }
+                let by_value = args
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, a)| !a.is_mut)
+                    .map(|(pos, a)| (pos as u32, a.expr))
+                    .collect();
+                scan.by_value_sites.push((*func_id, by_value));
             }
             _ => {}
-        }
-    }
-    written
+        },
+        NodeRef::Block(_) | NodeRef::Pat(_) => {}
+    });
+    scan
 }
 
 /// Locals a body binds once, to a constant, and never writes — the shape a
 /// literal argument wears by the time it reaches a call (`let name = "id";
 /// f(&name)`), which is otherwise indistinguishable from a runtime value.
-fn constant_locals(body: &Body, written: &IndexSet<u32>) -> IndexSet<u32> {
+fn constant_locals(body: &Body, scan: &BodyScan) -> IndexSet<u32> {
     let mut bound: IndexMap<u32, bool> = IndexMap::default();
-    for node in arena_query::reachable_nodes(body) {
-        let NodeRef::Stmt(st) = node else {
-            continue;
-        };
-        if let StmtKind::Let {
-            local_index, value, ..
-        } = &body.stmts[st].kind
-        {
-            let is_const = is_constant_arg(body, *value, &IndexSet::default());
-            match bound.get_mut(local_index) {
-                // A second binding of the same slot: keep it only if both are
-                // constant, since either may reach the call.
-                Some(prev) => *prev &= is_const,
-                None => {
-                    bound.insert(*local_index, is_const);
-                }
+    for &(local_index, value) in &scan.lets {
+        let is_const = is_constant_arg(body, value, &IndexSet::default());
+        match bound.get_mut(&local_index) {
+            // A second binding of the same slot: keep it only if both are
+            // constant, since either may reach the call.
+            Some(prev) => *prev &= is_const,
+            None => {
+                bound.insert(local_index, is_const);
             }
         }
     }
+    let written = &scan.written;
     bound
         .into_iter()
         .filter(|&(idx, is_const)| is_const && !written.contains(&idx))
@@ -1118,6 +1148,34 @@ fn is_constant_arg(body: &Body, op: Operand, const_locals: &IndexSet<u32>) -> bo
     }
 }
 
+/// One call in a body: the callee, and the arguments that may carry a constant
+/// into it — by value, to a parameter the callee never writes, keyed by
+/// position. A written parameter is out because the readers here are
+/// flow-insensitive: `fn f(mut n: i32) { n = g(); .. }` holds no argument.
+type ArgSite = (FuncId, Vec<(u32, Operand)>);
+
+/// The [`ArgSite`]s of every function, indexed by store position; empty for a
+/// bodyless one.
+fn argument_sites(scans: &[BodyScan]) -> Vec<Vec<ArgSite>> {
+    scans
+        .iter()
+        .map(|scan| {
+            scan.by_value_sites
+                .iter()
+                .map(|(callee, args)| {
+                    let callee_written = &scans[callee.index()].written;
+                    let args = args
+                        .iter()
+                        .filter(|(pos, _)| !callee_written.contains(pos))
+                        .copied()
+                        .collect();
+                    (*callee, args)
+                })
+                .collect()
+        })
+        .collect()
+}
+
 /// For each callee, the parameters *every* call site in the program fills with
 /// a compile-time constant and the callee's own body never writes.
 ///
@@ -1126,7 +1184,8 @@ fn is_constant_arg(body: &Body, op: Operand, const_locals: &IndexSet<u32>) -> bo
 /// would not fold it. A callee nothing calls is absent.
 fn constant_params(
     project: &NirPackage,
-    written_by_func: &[IndexSet<u32>],
+    scans: &[BodyScan],
+    sites: &[Vec<ArgSite>],
 ) -> IndexMap<FuncId, IndexSet<u32>> {
     let mut out: IndexMap<FuncId, IndexSet<u32>> = IndexMap::default();
     for (i, func_rc) in project.functions.iter().enumerate() {
@@ -1134,49 +1193,183 @@ fn constant_params(
         let Some(body) = &func.body else {
             continue;
         };
-        let const_locals = constant_locals(body, &written_by_func[i]);
-        for node in arena_query::reachable_nodes(body) {
-            let NodeRef::Expr(e) = node else {
-                continue;
-            };
-            let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
-                continue;
-            };
+        let const_locals = constant_locals(body, &scans[i]);
+        for (callee, args) in &sites[i] {
             let here: IndexSet<u32> = args
                 .iter()
-                .enumerate()
-                .filter(|(_, a)| !a.is_mut && is_constant_arg(body, a.expr, &const_locals))
-                .map(|(i, _)| i as u32)
+                .filter(|&&(_, op)| is_constant_arg(body, op, &const_locals))
+                .map(|&(pos, _)| pos)
                 .collect();
-            match out.get_mut(func_id) {
+            match out.get_mut(callee) {
                 Some(prev) => prev.retain(|q| here.contains(q)),
                 None => {
-                    out.insert(*func_id, here);
+                    out.insert(*callee, here);
                 }
             }
         }
     }
-    // An argument arriving constant says nothing about what the parameter holds
-    // later: `fn f(mut n: i32) { n = g(); .. }` reassigns it, and the readers
-    // here are flow-insensitive, so one write disqualifies it for the whole
-    // body.
-    for (i, func_rc) in project.functions.iter().enumerate() {
-        let func = func_rc.borrow();
-        let Some(params) = func.id.and_then(|id| out.get_mut(&id)) else {
-            continue;
-        };
-        // The set is built from argument positions and read by local index.
-        assert!(
-            func.params
-                .iter()
-                .enumerate()
-                .all(|(pos, p)| p.local_index == pos as u32),
-            "a parameter's local index is its position"
-        );
-        params.retain(|&pos| !written_by_func[i].contains(&pos));
-    }
     out.retain(|_, params| !params.is_empty());
     out
+}
+
+/// Per function, the parameters it never writes that some call site may still
+/// hand a constant ([`Caller::may_turn_constant`]). A hold bets on a constant
+/// arriving, and only these can.
+///
+/// Transitive: a caller's own parameter carries a constant on only once one
+/// may reach it, so the sets grow from the literal arguments outward, and a
+/// caller's sites are weighed again each time its set grows.
+fn hopeful_params(
+    project: &NirPackage,
+    scans: &[BodyScan],
+    sites: &[Vec<ArgSite>],
+) -> Vec<IndexSet<u32>> {
+    let n = project.functions.len();
+    let funcs: Vec<_> = project.functions.iter().map(|f| f.borrow()).collect();
+    let callers: Vec<Option<Caller<'_>>> = funcs
+        .iter()
+        .zip(scans)
+        .zip(sites)
+        .map(|((func, scan), sites)| {
+            func.body.as_ref().map(|body| Caller {
+                body,
+                written: &scan.written,
+                bindings: single_bindings(scan),
+                sites,
+            })
+        })
+        .collect();
+    let mut hopeful: Vec<IndexSet<u32>> = vec![IndexSet::default(); n];
+    let mut queued = vec![true; n];
+    let mut worklist: Vec<usize> = (0..n).collect();
+    while let Some(c) = worklist.pop() {
+        queued[c] = false;
+        let Some(caller) = &callers[c] else {
+            continue;
+        };
+        let own = hopeful[c].clone();
+        let memo = RefCell::default();
+        for (callee, args) in caller.sites {
+            let callee = callee.index();
+            let mut grew = false;
+            for &(pos, op) in args {
+                if !hopeful[callee].contains(&pos) && caller.may_turn_constant(op, &own, &memo, 0) {
+                    hopeful[callee].insert(pos);
+                    grew = true;
+                }
+            }
+            if grew && !queued[callee] {
+                queued[callee] = true;
+                worklist.push(callee);
+            }
+        }
+    }
+    hopeful
+}
+
+/// What [`Caller::may_turn_constant`] reads about the body holding a call site.
+struct Caller<'a> {
+    body: &'a Body,
+    written: &'a IndexSet<u32>,
+    /// The one value each unwritten, once-bound local holds.
+    bindings: IndexMap<u32, Operand>,
+    sites: &'a [ArgSite],
+}
+
+/// How deep [`Caller::may_turn_constant`] follows an operand before it answers
+/// yes, so a long chain of lets cannot take the recursion as deep as itself.
+const MAY_TURN_CONSTANT_DEPTH: u32 = 16;
+
+impl Caller<'_> {
+    /// Whether a later round may still fold `op` to a constant, given the
+    /// parameters of this body a constant may reach. Optimistic: only a value
+    /// that no splice or fold can pin — another parameter, a loop-carried
+    /// value, an indirect call, a write — answers no.
+    ///
+    /// `memo` holds each bound local's answer under this `hopeful`: a local
+    /// read twice shares its binding, so the bindings form a DAG that an
+    /// unmemoized walk covers exponentially.
+    fn may_turn_constant(
+        &self,
+        op: Operand,
+        hopeful: &IndexSet<u32>,
+        memo: &RefCell<IndexMap<u32, bool>>,
+        depth: u32,
+    ) -> bool {
+        if depth == MAY_TURN_CONSTANT_DEPTH {
+            return true;
+        }
+        let next = |op: Operand| self.may_turn_constant(op, hopeful, memo, depth + 1);
+        let e = match op {
+            Operand::Value(v) => {
+                return !matches!(self.body.values.kind(v), ValueKind::LoopPhi { .. });
+            }
+            Operand::Expr(e) => e,
+        };
+        match &self.body.exprs[e].kind {
+            ExprKind::Local { index, .. } => {
+                if self.written.contains(index) {
+                    return false;
+                }
+                if hopeful.contains(index) {
+                    return true;
+                }
+                let Some(&value) = self.bindings.get(index) else {
+                    return false;
+                };
+                if let Some(&known) = memo.borrow().get(index) {
+                    return known;
+                }
+                let answer = next(value);
+                memo.borrow_mut().insert(*index, answer);
+                answer
+            }
+            ExprKind::PackedArray(_)
+            | ExprKind::EnumConstruct { .. }
+            | ExprKind::GlobalVarGet { .. }
+            | ExprKind::LabeledBlock { .. }
+            | ExprKind::If { .. }
+            | ExprKind::Match { .. }
+            | ExprKind::Switch { .. } => true,
+            ExprKind::Unary { expr, .. }
+            | ExprKind::Cast { expr, .. }
+            | ExprKind::FieldAccess { expr, .. }
+            | ExprKind::VariantTag { expr, .. }
+            | ExprKind::VariantTest { expr, .. }
+            | ExprKind::VariantPayload { expr, .. } => next(*expr),
+            ExprKind::Binary { left, right, .. } => next(*left) && next(*right),
+            ExprKind::Index { expr, index } => next(*expr) && next(*index),
+            ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+                elements.iter().all(|&el| next(el))
+            }
+            ExprKind::StructLiteral { fields, .. } => fields.iter().all(|f| next(f.value)),
+            ExprKind::VariantConstruct { payload, .. } => payload.is_none_or(next),
+            ExprKind::Call { args, .. } => args.iter().all(|a| !a.is_mut && next(a.expr)),
+            ExprKind::Dead
+            | ExprKind::Assign { .. }
+            | ExprKind::GlobalVarSet { .. }
+            | ExprKind::CmRawCall { .. }
+            | ExprKind::IndirectCall { .. }
+            | ExprKind::ClosureToCanonical { .. } => false,
+        }
+    }
+}
+
+/// The value each local holds where the body binds it once and never writes
+/// it again.
+fn single_bindings(scan: &BodyScan) -> IndexMap<u32, Operand> {
+    let mut bound: IndexMap<u32, Option<Operand>> = IndexMap::default();
+    for &(local_index, value) in &scan.lets {
+        bound
+            .entry(local_index)
+            .and_modify(|v| *v = None)
+            .or_insert(Some(value));
+    }
+    bound
+        .into_iter()
+        .filter(|(idx, _)| !scan.written.contains(idx))
+        .filter_map(|(idx, v)| v.map(|v| (idx, v)))
+        .collect()
 }
 
 /// How much more a callee may cost where its splice pays back than anywhere
@@ -1297,7 +1490,7 @@ fn classify_callee(
     safepoint_calls: &[bool],
     sites: usize,
     spliced: &[usize],
-    written: &IndexSet<u32>,
+    hopeful: &IndexSet<u32>,
 ) -> Verdict {
     // Must have a body
     let Some(body) = &func.body else {
@@ -1352,19 +1545,17 @@ fn classify_callee(
     // two-line `peek`. Measured slower and not worth retrying — holding what
     // the call sites already admit, holding every candidate, and splicing from
     // a frozen copy, which no other pass can reach and `sroa_param` invalidates.
-    // Optimistic about the call sites, not about the body: a parameter this
-    // body writes is not the caller's constant however it arrived.
-    let all_params: IndexSet<u32> = func
-        .params
-        .iter()
-        .map(|p| p.local_index)
-        .filter(|i| !written.contains(i))
-        .collect();
-    let (_, optimistic_loop) = weigh(&ConstView {
-        params: &all_params,
-        foldable,
-        loopy,
-    });
+    // Optimistic about the call sites, but only as far as they leave room: a
+    // parameter no site can still hand a constant is a bet already lost, and
+    // holding on it only defers the splices into this body to a second
+    // convergence of the loop.
+    let optimistic_loop = !hopeful.is_empty()
+        && weigh(&ConstView {
+            params: hopeful,
+            foldable,
+            loopy,
+        })
+        .1;
     let folds = const_view.is_some_and(|view| {
         let (halves, drops_loop) = weigh(view);
         halves || drops_loop
@@ -1407,13 +1598,18 @@ pub(super) fn find_recursive_functions(functions: &[Rc<RefCell<NirFunction>>]) -
             call_graph[i] = callee_ids.into_iter().collect();
         }
     }
+    recursive_functions(&call_graph)
+}
 
+/// The functions on a call cycle of `call_graph`, which holds each function's
+/// callees by store position.
+fn recursive_functions(call_graph: &[Vec<usize>]) -> IndexSet<FuncId> {
     // A function is recursive iff it lies on a call cycle — i.e. it is a member
     // of a non-trivial strongly-connected component, or has a self-edge. One
     // iterative Tarjan pass computes every SCC in O(V + E), versus the old
     // per-function reachability DFS at O(V·(V + E)).
-    let recursive_idx = recursive_scc_members(&call_graph);
-    (0..n)
+    let recursive_idx = recursive_scc_members(call_graph);
+    (0..call_graph.len())
         .filter(|&i| recursive_idx[i])
         .map(FuncId::new)
         .collect()
@@ -1507,16 +1703,10 @@ fn collect_callees(body: &Body, callees: &mut IndexSet<usize>) {
 /// store position. This is the multiplier on what one splice adds, so a callee
 /// reached twice from one body counts twice — unlike [`collect_callees`], whose
 /// answer is a set because the recursion graph only asks whether an edge exists.
-fn call_site_counts(project: &NirPackage) -> Vec<usize> {
-    let mut counts = vec![0usize; project.functions.len()];
-    for func_rc in &project.functions {
-        let func = func_rc.borrow();
-        let Some(body) = func.body.as_ref() else {
-            continue;
-        };
-        for_each_call_site(body, NodeRef::Block(body.root), |callee| {
-            counts[callee.index()] += 1;
-        });
+fn call_site_counts(scans: &[BodyScan]) -> Vec<usize> {
+    let mut counts = vec![0usize; scans.len()];
+    for (callee, _) in scans.iter().flat_map(|s| &s.by_value_sites) {
+        counts[callee.index()] += 1;
     }
     counts
 }
@@ -1763,7 +1953,16 @@ pub fn inline_functions(
     // borrow-safe), so a call site is recognized by its stamped id rather than the
     // call node's `FunctionRef`. Indexed by `func_id.index()` (== store position).
     let descriptors = descriptor_cache.descriptors(project);
-    let recursive_functions = find_recursive_functions(&project.functions);
+    let scans: Vec<BodyScan> = project
+        .functions
+        .iter()
+        .map(|f| scan_body(&f.borrow()))
+        .collect();
+    let call_graph: Vec<Vec<usize>> = scans
+        .iter()
+        .map(|s| s.by_value_sites.iter().map(|(c, _)| c.index()).collect())
+        .collect();
+    let recursive_functions = recursive_functions(&call_graph);
 
     // Collect inline candidates from all modules, keyed by `FuncId` (the
     // function's store position). A call site resolves its candidate by its
@@ -1782,18 +1981,8 @@ pub fn inline_functions(
     // Inputs for the folded-cost second chance: which parameters arrive
     // constant everywhere, which callees the compile-time engine runs on
     // constant arguments, and which of those spin a loop while doing it.
-    let written_by_func: Vec<IndexSet<u32>> = project
-        .functions
-        .iter()
-        .map(|f| {
-            f.borrow()
-                .body
-                .as_ref()
-                .map(written_locals)
-                .unwrap_or_default()
-        })
-        .collect();
-    let const_params = constant_params(project, &written_by_func);
+    let sites = argument_sites(&scans);
+    let const_params = constant_params(project, &scans, &sites);
     let safepoint_calls = safepoint_calls(project, descriptors);
     let fn_effects = compute_fn_effects(project);
     let foldable: Vec<bool> = project
@@ -1802,11 +1991,7 @@ pub fn inline_functions(
         .zip(&fn_effects)
         .map(|(f, e)| e.is_pure() && is_ctfe_eligible(&f.borrow()))
         .collect();
-    let loopy: Vec<bool> = project
-        .functions
-        .iter()
-        .map(|f| f.borrow().body.as_ref().is_some_and(body_has_loop))
-        .collect();
+    let loopy: Vec<bool> = scans.iter().map(|s| s.loopy).collect();
 
     // What the unit holds right now, and what each admitted candidate would add
     // to it. `Candidate::forced` marks the ones the budget may not turn down.
@@ -1815,7 +2000,8 @@ pub fn inline_functions(
     // counts are taken every round, since a callee's only site is one where its
     // splice pays back.
     let pricing = budget.prices_read();
-    let call_sites = call_site_counts(project);
+    let call_sites = call_site_counts(&scans);
+    let hopeful_params = hopeful_params(project, &scans, &sites);
     let mut unit_size = 0usize;
     let mut priced: Vec<Candidate> = Vec::new();
 
@@ -1889,7 +2075,7 @@ pub fn inline_functions(
             &safepoint_calls,
             call_sites[i],
             &spliced,
-            &written_by_func[i],
+            &hopeful_params[i],
         );
         if let Some(id) = func.id {
             holds.settle(id, verdict.hold, gate);
@@ -2066,6 +2252,13 @@ pub fn inline_functions(
 
             if !inlined_funcs.is_empty() {
                 changed = true;
+                compiler_trace!("inline_sites", "{func_name} <- [{}]", {
+                    inlined_funcs
+                        .iter()
+                        .map(|id| inline_candidates[id].name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                });
                 // The splice restructures the body, staling the persisted graph's
                 // `loop_entry_values` (licm's pre-header snapshots — the only
                 // value-graph state any consumer still reads, `value_of` having

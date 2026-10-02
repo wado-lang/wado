@@ -6,35 +6,42 @@ enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Canc
 
 array Array<u8> (mut u8);  // TypeId(1)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(2)
+struct core:prelude/string.wado//String {  // TypeId(2)
+    mut repr: ref Array<u8>,
+    mut used: i32,
+}
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(3)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(3)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(4)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(4)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(5)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(5)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(6)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(6)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(7)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(8)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//opt_dce_tail_break_flatten.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(9)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//opt_dce_tail_break_flatten.wado/$cm_export__run" = fn();  // TypeId(10)
+type "functype//opt_dce_tail_break_flatten.wado/run" = fn();  // TypeId(10)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(11)
+type "functype//opt_dce_tail_break_flatten.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(12)
+type "functype//opt_dce_tail_break_flatten.wado/$cm_export__run" = fn();  // TypeId(12)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(13)
+type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(13)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(14)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(14)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(15)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(15)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(16)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(16)
+
+type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
+
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -49,21 +56,27 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
+global global:opt_dce_tail_break_flatten.wado::$const_obj_1: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 };
+
+fn "opt_dce_tail_break_flatten.wado/run"() with Stdout {
+    let packed: i64;
+    let rx_26: i32;
+    let tx_27: i32;
+    rx_26 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_27 = builtin::i32_wrap_i64(packed >> 32_i64);
+    rx_26 = "opt_dce_tail_break_flatten.wado/$cm_binding__Stdout_write_via_stream"(rx_26);
+    let $mv_arg_2: ref "core:prelude/string.wado//String";
+    $mv_arg_2 = global:opt_dce_tail_break_flatten.wado::$const_obj_1;
+    "core:rt/write_string_to_stream"(tx_27, $mv_arg_2.repr, $mv_arg_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_26);
+}
+
 fn "opt_dce_tail_break_flatten.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
 fn "opt_dce_tail_break_flatten.wado/$cm_export__run"() {
-    let packed: i64;
-    let rx_14: i32;
-    let tx_15: i32;
-    rx_14 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_15 = builtin::i32_wrap_i64(packed >> 32_i64);
-    rx_14 = "opt_dce_tail_break_flatten.wado/$cm_binding__Stdout_write_via_stream"(rx_14);
-    let $mv_field_2: ref Array<u8>;
-    $mv_field_2 = array.new_fixed<u8>(111, 107);
-    "core:rt/write_string_to_stream"(tx_15, $mv_field_2, 2);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_14);
+    "opt_dce_tail_break_flatten.wado/run"();
     "wasi/task-return"(0);
 }
 

@@ -349,7 +349,12 @@ impl Monomorphizer {
     ) {
         match pattern {
             TirPattern::Wildcard | TirPattern::Literal(_) | TirPattern::Range { .. } => {}
-            TirPattern::Binding { type_id, .. } | TirPattern::Narrow { type_id, .. } => {
+            TirPattern::Binding { type_id, .. }
+            | TirPattern::Narrow { type_id, .. }
+            | TirPattern::PerInstance {
+                scrutinee_type: type_id,
+                ..
+            } => {
                 // Substitute the binding's type (e.g., type parameter T -> i32)
                 *type_id = self.substitute_type(*type_id, substitution, type_table);
             }

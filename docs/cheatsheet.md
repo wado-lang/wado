@@ -97,6 +97,16 @@ Wado uses Wasm GC for memory management. There is no borrow checker or lifetime 
 0b1010          // binary
 0o755           // octal
 
+// Type suffix, after an `_`: the literal's type, range-checked
+255_u8          // u8
+-128_i8         // i8
+1.5_f32         // f32
+1_f64           // f64: an integer literal with a float suffix
+0xFF_u64        // a hex literal takes an integer suffix only
+// let b = 255u8;      // Error: write `255_u8`
+// let c = 300_u8;     // Error: out of range for `u8`
+// let d: i64 = 1_i32; // Error: a suffixed literal is not retyped
+
 // Numeric literal coercion
 let x: i64 = 42;               // integer literal → i64
 let y: u8 = 255;               // integer literal → u8
@@ -619,9 +629,9 @@ See the spec on [precedence](./spec-expressions.md#precedence) and [overloading]
 = += -= *= /= %= &= |= ^= <<= >>=
 
 // Type cast: numeric casts follow Rust's `as`
-42 as f64
+42_i32 as f64
 300.7 as u8             // 255: float -> int truncates and saturates, NaN -> 0
-(0xFF as u8) as i8      // -1; `0xFF as i8` is a compile error, as in Rust
+0xFF_u8 as i8           // -1; `0xFF as i8` is a compile error, as in Rust
 true as i32             // bool -> int: 1; nothing casts to bool
 'A' as i32              // char -> i32: 65
 97 as char              // 'a': only a u8 casts to char; else char::from_u32()
@@ -1003,7 +1013,7 @@ impl Container {
 
 // Turbofish syntax (explicit type arguments)
 let x = identity::<i32>(42);
-let y = container.transform::<i32, i64>(10, 20 as i64);
+let y = container.transform::<i32, i64>(10, 20_i64);
 let arr = List::<i32>::with_capacity(10);  // turbofish for generic statics
 
 // Variadic type packs: operate on tuples of any arity

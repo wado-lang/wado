@@ -1,0 +1,66 @@
+// A literal or range pattern on a type parameter reads its value as each
+// instance's type does: an unsigned instance compares unsigned.
+
+fn is_high_half<T>(x: T) -> i32 {
+    return match x {
+        0x8000_0000..=0xFFFF_FFFF => 1,
+        _ => 0,
+    };
+}
+
+fn is_max<T>(x: T) -> i32 {
+    return match x {
+        0xFFFF_FFFF_FFFF_FFFF_FFFF_FFFF_FFFF_FFFF => 1,
+        _ => 0,
+    };
+}
+
+fn classify<T>(x: T) -> i32 {
+    return match x {
+        'a'..='z' => 1,
+        '0' => 2,
+        _ => 0,
+    };
+}
+
+fn is_set<T>(x: T) -> i32 {
+    return match x {
+        true => 1,
+        _ => 0,
+    };
+}
+
+fn is_minus_one<T>(x: T) -> i32 {
+    return match x {
+        -1 => 1,
+        _ => 0,
+    };
+}
+
+test "a negative literal matches each signed width" {
+    assert is_minus_one(builtin::black_box(-1_i8)) == 1;
+    assert is_minus_one(builtin::black_box(-1_i64)) == 1;
+    assert is_minus_one(builtin::black_box(1_i32)) == 0;
+}
+
+test "an unsigned instance compares a range unsigned" {
+    assert is_high_half(builtin::black_box(0x9000_0000_u32)) == 1;
+    assert is_high_half(builtin::black_box(5_u32)) == 0;
+    assert is_high_half(builtin::black_box(0x9000_0000_i64)) == 1;
+}
+
+test "a literal past i128::MAX matches a u128 instance" {
+    assert is_max(builtin::black_box(u128::MAX)) == 1;
+    assert is_max(builtin::black_box(1_u128)) == 0;
+}
+
+test "char and bool literals match their own instances" {
+    assert classify(builtin::black_box('q')) == 1;
+    assert classify(builtin::black_box('0')) == 2;
+    assert classify(builtin::black_box('#')) == 0;
+    assert is_set(builtin::black_box(true)) == 1;
+    assert is_set(builtin::black_box(false)) == 0;
+}
+
+__DATA__
+{"test": {}}

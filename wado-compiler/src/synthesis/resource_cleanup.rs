@@ -265,7 +265,8 @@ impl TirRefVisitor for PatternBindings<'_> {
             | TirPattern::Enum { .. }
             | TirPattern::Struct { .. }
             | TirPattern::ConstantValue { .. }
-            | TirPattern::Range { .. } => self.walk_pattern(pattern),
+            | TirPattern::Range { .. }
+            | TirPattern::PerInstance { .. } => self.walk_pattern(pattern),
         }
     }
 }

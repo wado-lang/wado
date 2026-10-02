@@ -1416,7 +1416,8 @@ impl MaxLocalIndex {
             | TirPattern::Literal(_)
             | TirPattern::Enum { .. }
             | TirPattern::ConstantValue { .. }
-            | TirPattern::Range { .. } => {}
+            | TirPattern::Range { .. }
+            | TirPattern::PerInstance { .. } => {}
         }
     }
 }

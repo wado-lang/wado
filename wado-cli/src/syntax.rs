@@ -398,23 +398,23 @@ fn generate_textmate_grammar(def: &SyntaxDefinition) -> serde_json::Value {
                 "patterns": [
                     {
                         "name": "constant.numeric.hex.wado",
-                        "match": "\\b0x[0-9a-fA-F][0-9a-fA-F_]*\\b"
+                        "match": "\\b0x[0-9a-fA-F][0-9a-fA-F_]*(?:_[iu](?:8|16|32|64|128))?\\b"
                     },
                     {
                         "name": "constant.numeric.binary.wado",
-                        "match": "\\b0b[01][01_]*\\b"
+                        "match": "\\b0b[01][01_]*(?:_[iu](?:8|16|32|64|128))?\\b"
                     },
                     {
                         "name": "constant.numeric.octal.wado",
-                        "match": "\\b0o[0-7][0-7_]*\\b"
+                        "match": "\\b0o[0-7][0-7_]*(?:_[iu](?:8|16|32|64|128))?\\b"
                     },
                     {
                         "name": "constant.numeric.float.wado",
-                        "match": "\\b[0-9][0-9_]*\\.[0-9][0-9_]*(?:[eE][+-]?[0-9][0-9_]*)?\\b"
+                        "match": "\\b[0-9][0-9_]*(?:\\.[0-9][0-9_]*(?:[eE][+-]?[0-9][0-9_]*)?|[eE][+-]?[0-9][0-9_]*)(?:_(?:[iu](?:8|16|32|64|128)|f16|bf16|f32|f64))?\\b"
                     },
                     {
                         "name": "constant.numeric.integer.wado",
-                        "match": "\\b[0-9][0-9_]*\\b"
+                        "match": "\\b[0-9][0-9_]*(?:_(?:[iu](?:8|16|32|64|128)|f16|bf16|f32|f64))?\\b"
                     }
                 ]
             },

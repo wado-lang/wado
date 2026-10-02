@@ -789,20 +789,13 @@ fn run_optimization_passes(
         // sessions (`prune_template_block_wrappers` / `prune_constant_branches`).
         // After `const_fold`, so a caller's config struct literal already holds
         // folded constants; inside the loop, so a constant a later pass exposes
-        // is carried down its whole call chain too. Not `gated!`: it
-        // owns no column, since a summary taken before a callee gained a write
-        // would license an unsound substitution (see its module doc).
-        record!(
-            "nir/param_spec",
-            run_pass("nir/param_spec", project, profiler, |p| {
-                param_spec::specialize_const_params(
-                    p,
-                    &mut param_spec_state,
-                    &mut gate,
-                    descriptor_cache,
-                )
-            })
-        );
+        // is carried down its whole call chain too. Its column only skips a
+        // round no function changed before: a per-function skip would trust a
+        // summary taken before a callee gained a write, an unsound substitution
+        // (see its module doc).
+        gated!("nir/param_spec", GatedPass::ParamSpec, |p, g| {
+            param_spec::specialize_const_params(p, &mut param_spec_state, g, descriptor_cache)
+        });
         gated!("nir/licm", GatedPass::Licm, |p, g| {
             apply_licm(p, g, &mut heap_effects)
         });

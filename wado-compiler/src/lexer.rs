@@ -7,7 +7,7 @@
 // best-effort token stream via [`LexResult`]. The entry points are the free
 // functions [`lex`] and [`lex_in`].
 
-use crate::ast::AstIdSpace;
+use crate::ast::{AstIdSpace, NumericSuffix};
 use crate::comment::{Comment, CommentKind};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::token;
@@ -260,11 +260,21 @@ pub enum LexErrorKind {
     MissingOctalDigits,
     /// Floating-point exponent (`e` / `E`) with no following digit.
     MissingExponentDigits,
+    /// A suffix written without its `_` (`255u8`), holding the literal
+    /// spelled with one.
+    MissingSuffixSeparator(String),
+    /// Letters after a numeric literal that name no suffix type.
+    UnknownNumericSuffix(String),
+    /// A float suffix on an octal or binary literal, holding the literal.
+    FloatSuffixOnRadixLiteral(String),
+    /// A decimal digit the literal's radix lacks (`0b102`), with the kind of
+    /// literal it sits in.
+    InvalidRadixDigit { digit: char, literal: &'static str },
 }
 
 impl std::fmt::Display for LexError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.kind {
+        match &self.kind {
             LexErrorKind::UnexpectedChar(ch) => write!(f, "unexpected character: '{ch}'"),
             LexErrorKind::UnterminatedString => write!(f, "unterminated string literal"),
             LexErrorKind::UnterminatedTemplateString => write!(f, "unterminated template string"),
@@ -278,6 +288,52 @@ impl std::fmt::Display for LexError {
             LexErrorKind::MissingBinaryDigits => write!(f, "expected binary digit after 0b"),
             LexErrorKind::MissingOctalDigits => write!(f, "expected octal digit after 0o"),
             LexErrorKind::MissingExponentDigits => write!(f, "expected digit after exponent"),
+            LexErrorKind::MissingSuffixSeparator(spelled) => {
+                write!(f, "write `{spelled}`: a suffix follows an `_`")
+            }
+            LexErrorKind::UnknownNumericSuffix(name) => {
+                write!(f, "unknown numeric suffix `{name}`")
+            }
+            LexErrorKind::FloatSuffixOnRadixLiteral(text) => {
+                write!(f, "a float suffix needs a decimal literal: `{text}`")
+            }
+            LexErrorKind::InvalidRadixDigit { digit, literal } => {
+                write!(f, "invalid digit `{digit}` in {literal}")
+            }
+        }
+    }
+}
+
+/// The base a prefixed integer literal is written in.
+#[derive(Clone, Copy)]
+enum Radix {
+    Hex,
+    Binary,
+    Octal,
+}
+
+impl Radix {
+    fn is_digit(self, ch: char) -> bool {
+        match self {
+            Self::Hex => ch.is_ascii_hexdigit(),
+            Self::Binary => matches!(ch, '0' | '1'),
+            Self::Octal => ('0'..='7').contains(&ch),
+        }
+    }
+
+    fn missing_digits(self) -> LexErrorKind {
+        match self {
+            Self::Hex => LexErrorKind::MissingHexDigits,
+            Self::Binary => LexErrorKind::MissingBinaryDigits,
+            Self::Octal => LexErrorKind::MissingOctalDigits,
+        }
+    }
+
+    fn literal(self) -> &'static str {
+        match self {
+            Self::Hex => "a hex literal",
+            Self::Binary => "a binary literal",
+            Self::Octal => "an octal literal",
         }
     }
 }
@@ -667,6 +723,17 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    /// Advance over the characters `accept` holds for, stopping before the
+    /// first it does not.
+    fn advance_while(&mut self, accept: impl Fn(char) -> bool) {
+        while let Some((_, ch)) = self.peek() {
+            if !accept(ch) {
+                break;
+            }
+            self.advance();
+        }
+    }
+
     /// Skip shebang line if present at the very beginning of the file.
     /// Shebang is only valid at position 0 and starts with `#!`.
     /// Note: `#![` is an inner attribute, not a shebang.
@@ -684,12 +751,7 @@ impl<'a> Lexer<'a> {
 
         // Find the end of the shebang line
         let start = self.pos;
-        while let Some((_, ch)) = self.peek() {
-            if ch == '\n' {
-                break;
-            }
-            self.advance();
-        }
+        self.advance_while(|ch| ch != '\n');
 
         // Store the shebang line (without trailing newline)
         self.shebang = Some(self.input[start..self.pos].to_string());
@@ -703,13 +765,7 @@ impl<'a> Lexer<'a> {
     fn skip_whitespace_and_comments(&mut self) {
         loop {
             // Skip whitespace
-            while let Some((_, ch)) = self.peek() {
-                if ch.is_whitespace() {
-                    self.advance();
-                } else {
-                    break;
-                }
-            }
+            self.advance_while(char::is_whitespace);
 
             // Check for __DATA__ at the start of a line
             if self.column == 1 && self.check_data_section() {
@@ -766,12 +822,7 @@ impl<'a> Lexer<'a> {
         };
 
         let text_start = self.pos;
-        while let Some((_, ch)) = self.peek() {
-            if ch == '\n' {
-                break;
-            }
-            self.advance();
-        }
+        self.advance_while(|ch| ch != '\n');
 
         let text = self.input[text_start..self.pos].to_string();
 
@@ -885,13 +936,7 @@ impl<'a> Lexer<'a> {
     fn lex_ident_or_keyword(&mut self) -> TokenKind {
         let start = self.pos;
 
-        while let Some((_, ch)) = self.peek() {
-            if ch.is_alphanumeric() || ch == '_' {
-                self.advance();
-            } else {
-                break;
-            }
-        }
+        self.advance_while(|ch| ch.is_alphanumeric() || ch == '_');
 
         let text = &self.input[start..self.pos];
 
@@ -912,15 +957,15 @@ impl<'a> Lexer<'a> {
             match self.peek_char() {
                 Some('x' | 'X') => {
                     self.advance();
-                    return self.lex_hex_number(start, start_line, start_column);
+                    return self.lex_radix_number(start, start_line, start_column, Radix::Hex);
                 }
                 Some('b' | 'B') => {
                     self.advance();
-                    return self.lex_binary_number(start, start_line, start_column);
+                    return self.lex_radix_number(start, start_line, start_column, Radix::Binary);
                 }
                 Some('o' | 'O') => {
                     self.advance();
-                    return self.lex_octal_number(start, start_line, start_column);
+                    return self.lex_radix_number(start, start_line, start_column, Radix::Octal);
                 }
                 _ => {
                     // Continue with decimal (could be 0, 0.5, etc.)
@@ -929,13 +974,7 @@ impl<'a> Lexer<'a> {
         }
 
         // Consume decimal digits and underscores
-        while let Some((_, ch)) = self.peek() {
-            if ch.is_ascii_digit() || ch == '_' {
-                self.advance();
-            } else {
-                break;
-            }
-        }
+        self.advance_while(|ch| ch.is_ascii_digit() || ch == '_');
 
         // Check for float (decimal point followed by digits)
         if self.peek_char() == Some('.') {
@@ -945,13 +984,7 @@ impl<'a> Lexer<'a> {
                 && ch.is_ascii_digit()
             {
                 self.advance(); // consume '.'
-                while let Some((_, ch)) = self.peek() {
-                    if ch.is_ascii_digit() || ch == '_' {
-                        self.advance();
-                    } else {
-                        break;
-                    }
-                }
+                self.advance_while(|ch| ch.is_ascii_digit() || ch == '_');
             }
         }
 
@@ -972,98 +1005,85 @@ impl<'a> Lexer<'a> {
                     span: self.span_from(start, start_line, start_column),
                 });
             }
-            while let Some((_, ch)) = self.peek() {
-                if ch.is_ascii_digit() || ch == '_' {
-                    self.advance();
-                } else {
-                    break;
-                }
-            }
+            self.advance_while(|ch| ch.is_ascii_digit() || ch == '_');
         }
 
-        let text = &self.input[start..self.pos];
-
-        // Return string representation; type is determined by context in elaborator
-        TokenKind::NumberLit(text.to_string())
+        self.finish_number(start, start_line, start_column)
     }
 
-    fn lex_hex_number(
+    /// Read the suffix written directly after a numeric literal, and return the
+    /// literal's token. Letters after a literal are its suffix whatever they
+    /// spell, so `255_u9` is an unknown suffix rather than a number followed
+    /// by a name. A malformed suffix is reported and left out of the token, or
+    /// spelled right where the fix is certain.
+    fn finish_number(&mut self, start: usize, start_line: usize, start_column: usize) -> TokenKind {
+        let digits_end = self.pos;
+        self.advance_while(|ch| ch.is_ascii_alphanumeric() || ch == '_');
+        let digits = &self.input[start..digits_end];
+        let name = &self.input[digits_end..self.pos];
+        if name.is_empty() {
+            return TokenKind::NumberLit(digits.to_string());
+        }
+        let (kind, text) = match NumericSuffix::from_name(name) {
+            None => (
+                LexErrorKind::UnknownNumericSuffix(name.to_string()),
+                digits.to_string(),
+            ),
+            Some(suffix) if !suffix.suits(digits) => (
+                LexErrorKind::FloatSuffixOnRadixLiteral(format!("{digits}{name}")),
+                digits.to_string(),
+            ),
+            Some(_) if !digits.ends_with('_') => {
+                let spelled = format!("{digits}_{name}");
+                (
+                    LexErrorKind::MissingSuffixSeparator(spelled.clone()),
+                    spelled,
+                )
+            }
+            Some(_) => return TokenKind::NumberLit(format!("{digits}{name}")),
+        };
+        self.errors.push(LexError {
+            kind,
+            span: self.span_from(start, start_line, start_column),
+        });
+        TokenKind::NumberLit(text)
+    }
+
+    /// Lex the digits of a hex, binary or octal literal after its prefix. With
+    /// no digit there is no literal to suffix, so what follows lexes on its own.
+    /// A decimal digit the radix lacks is reported as one, not read as the
+    /// start of a suffix.
+    fn lex_radix_number(
         &mut self,
         start: usize,
         start_line: usize,
         start_column: usize,
+        radix: Radix,
     ) -> TokenKind {
         let digit_start = self.pos;
 
-        while let Some((_, ch)) = self.peek() {
-            if ch.is_ascii_hexdigit() || ch == '_' {
-                self.advance();
-            } else {
-                break;
-            }
-        }
+        self.advance_while(|ch| radix.is_digit(ch) || ch == '_');
 
         if self.pos == digit_start {
             self.errors.push(LexError {
-                kind: LexErrorKind::MissingHexDigits,
+                kind: radix.missing_digits(),
+                span: self.span_from(start, start_line, start_column),
+            });
+            return TokenKind::NumberLit(self.input[start..self.pos].to_string());
+        }
+
+        if let Some(digit) = self.peek_char().filter(char::is_ascii_digit) {
+            self.advance_while(|ch| ch.is_ascii_digit() || ch == '_');
+            self.errors.push(LexError {
+                kind: LexErrorKind::InvalidRadixDigit {
+                    digit,
+                    literal: radix.literal(),
+                },
                 span: self.span_from(start, start_line, start_column),
             });
         }
 
-        // Include "0x" prefix in repr; actual parsing happens in elaborator
-        TokenKind::NumberLit(self.input[start..self.pos].to_string())
-    }
-
-    fn lex_binary_number(
-        &mut self,
-        start: usize,
-        start_line: usize,
-        start_column: usize,
-    ) -> TokenKind {
-        let digit_start = self.pos;
-
-        while let Some((_, ch)) = self.peek() {
-            if ch == '0' || ch == '1' || ch == '_' {
-                self.advance();
-            } else {
-                break;
-            }
-        }
-
-        if self.pos == digit_start {
-            self.errors.push(LexError {
-                kind: LexErrorKind::MissingBinaryDigits,
-                span: self.span_from(start, start_line, start_column),
-            });
-        }
-
-        TokenKind::NumberLit(self.input[start..self.pos].to_string())
-    }
-
-    fn lex_octal_number(
-        &mut self,
-        start: usize,
-        start_line: usize,
-        start_column: usize,
-    ) -> TokenKind {
-        let digit_start = self.pos;
-
-        while let Some((_, ch)) = self.peek() {
-            if ('0'..='7').contains(&ch) || ch == '_' {
-                self.advance();
-            } else {
-                break;
-            }
-        }
-
-        if self.pos == digit_start {
-            self.errors.push(LexError {
-                kind: LexErrorKind::MissingOctalDigits,
-                span: self.span_from(start, start_line, start_column),
-            });
-        }
-
-        TokenKind::NumberLit(self.input[start..self.pos].to_string())
+        self.finish_number(start, start_line, start_column)
     }
 
     fn lex_string(&mut self) -> TokenKind {

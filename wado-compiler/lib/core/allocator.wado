@@ -70,7 +70,7 @@ fn grow_memory(end: u64) {
     let normal_grow = if current_bytes < sixteen_mb { current_bytes } else { sixteen_mb };
     // If deficit exceeds normal growth, round up to next power of two
     let grow_bytes = if deficit > normal_grow {
-        1 as u64 << (64 - builtin::i64_clz((deficit - 1) as i64)) as u64;
+        1_u64 << (64 - builtin::i64_clz((deficit - 1) as i64)) as u64;
     } else {
         normal_grow;
     };

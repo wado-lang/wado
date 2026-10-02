@@ -904,11 +904,7 @@ pub fn slice_cuts(node: &Node, known: &TreeMap<String, Known>, x: &Shape) -> Res
         let dim = x.axes[a].extent.poly();
         // Walking backwards, the first position is the axis's last, and the
         // end may lie before the axis, at -1.
-        let [top, floor] = if step > 0 {
-            [dim, 0 as i64];
-        } else {
-            [difference(node, &dim, &Poly::constant(1))?, -1 as i64];
-        };
+        let [top, floor] = if step > 0 { [dim, 0_i64] } else { [difference(node, &dim, &Poly::constant(1))?, -1_i64] };
         let begin = slice_bound(node, &starts[i], &dim, 0, &top)?;
         let end = slice_bound(node, &ends[i], &dim, floor, &top)?;
         // A step is a number other than 0, which owes nothing.

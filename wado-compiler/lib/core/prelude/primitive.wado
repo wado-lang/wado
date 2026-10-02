@@ -3317,7 +3317,7 @@ impl TryFrom<u64> for f64 {
     type Err = ConvertError;
 
     pub fn try_from(value: u64) -> Result<f64, ConvertError> {
-        if value > 9007199254740992 as u64 {
+        if value > 9007199254740992_u64 {
             builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} cannot be exactly represented as f64`));
         }
@@ -3329,7 +3329,7 @@ impl TryFrom<u64> for f32 {
     type Err = ConvertError;
 
     pub fn try_from(value: u64) -> Result<f32, ConvertError> {
-        if value > 16777216 as u64 {
+        if value > 16777216_u64 {
             builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} cannot be exactly represented as f32`));
         }

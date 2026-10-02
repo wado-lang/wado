@@ -54,12 +54,9 @@ CI applies clippy and format, so a quick sanity check is sufficient.
 
 ## Generated files
 
-- **On a golden / generated-file conflict, always regenerate and commit.**
+- **Always regenerate golden / generated files and commit.**
   Re-run the generator (do not hand-resolve the markers) and commit its output.
   Do not skip them or defer them to `on-task-done` / CI.
-- **When there is no conflict, follow the task's explicit instruction** for
-  whether to regenerate. Regeneration is not always required; never let a generic
-  "always regenerate" or "CI handles it" default override what you were asked to do.
 - **Never silently discard generated output** (e.g. `git restore` to clean the
   tree or quiet a hook). Commit it, or ask. Discarding generated work without
   asking is always wrong.

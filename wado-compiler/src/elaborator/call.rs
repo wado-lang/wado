@@ -28,7 +28,7 @@ use super::trait_query::SelfBinding;
 use super::types::{FunctionContext, TypeError, VarRef, newtype_member_owner};
 use super::tysys::TypeSystem;
 use super::util;
-use super::util::parse_i128_literal;
+use super::util::{integer_digits, parse_i128_literal};
 use crate::ast::{AstId, GenericParam};
 use crate::compiler_item::CompilerItem;
 use crate::defs::{DefId, DefKind};
@@ -4433,10 +4433,10 @@ fn lane_literal(arg: &Expr) -> Option<i128> {
     let Expr::Literal(lit) = operand else {
         return None;
     };
-    let ast::Literal::Number(repr) = &lit.value else {
+    let ast::Literal::Number(repr, suffix) = &lit.value else {
         return None;
     };
-    parse_i128_literal(&format!("{sign}{repr}")).ok()
+    parse_i128_literal(&format!("{sign}{}", integer_digits(repr, *suffix)?)).ok()
 }
 
 /// Where a SIMD builtin keeps its lane immediates, and what they may name.

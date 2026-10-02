@@ -714,7 +714,7 @@ test "i128 binary format" {
 
 test "u128::from_str basic" {
     let expected: u128 = 42;
-    assert u128::from_str("0") matches { Ok(v) && v == 0 as u128 };
+    assert u128::from_str("0") matches { Ok(v) && v == 0_u128 };
     assert u128::from_str("42") matches { Ok(v) && v == expected };
     assert u128::from_str("+42") matches { Ok(v) && v == expected };
 }
@@ -735,7 +735,7 @@ test "u128::from_str_hex" {
     let max = u128::from_pair(u64::MAX, u64::MAX);
     assert u128::from_str_hex("ffffffffffffffffffffffffffffffff") matches { Ok(v) && v == max };
     assert u128::from_str_hex("100000000000000000000000000000000") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
-    assert u128::from_str_hex("DeadBeef") matches { Ok(v) && v == 3735928559 as u128 };
+    assert u128::from_str_hex("DeadBeef") matches { Ok(v) && v == 3735928559_u128 };
 }
 
 test "i128::from_str basic" {
@@ -783,12 +783,12 @@ test "i128::as_f64 is correctly rounded" {
 
 test "u128::as_f32 is correctly rounded and saturates to infinity" {
     let small: u128 = 5;
-    assert small.as_f32() == 5.0 as f32;
+    assert small.as_f32() == 5.0_f32;
     // ulp(2^65) = 2^42 in f32; an exact tie rounds to the even mantissa.
     let tie: u128 = 36893490346442358784;  // 2^65 + 2^41
-    assert tie.as_f32() == 36893488147419103232.0 as f32;
+    assert tie.as_f32() == 36893488147419103232.0_f32;
     let above: u128 = 36893490346442358785;
-    assert above.as_f32() == 36893492545465614336.0 as f32;
+    assert above.as_f32() == 36893492545465614336.0_f32;
     let max: u128 = 340282366920938463463374607431768211455;
     assert max.as_f32() == f32::INFINITY;
     // f32::MAX = (2^24 - 1) * 2^104 sits at the largest finite biased
@@ -796,14 +796,14 @@ test "u128::as_f32 is correctly rounded and saturates to infinity" {
     // the 255/infinity pattern.
     let f32_max: u128 = 340282346638528859811704183484516925440;
     assert f32_max.as_f32() != f32::INFINITY;
-    assert f32_max.as_f32() == 340282346638528859811704183484516925440.0 as f32;
+    assert f32_max.as_f32() == 340282346638528859811704183484516925440.0_f32;
 }
 
 test "i128::as_f32 carries the sign" {
     let neg: i128 = -5;
-    assert neg.as_f32() == -5.0 as f32;
+    assert neg.as_f32() == -5.0_f32;
     let min = i128::from_pair(0, i64::MIN);
-    assert min.as_f32() == -170141183460469231731687303715884105728.0 as f32;
+    assert min.as_f32() == -170141183460469231731687303715884105728.0_f32;
 }
 
 test "TryFrom<u128> for i64" {
