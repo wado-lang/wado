@@ -347,8 +347,7 @@ use { println, Stdout } from "core:cli" with { tpye: "wasm", provider: 1 };
 | CM / `lib:` deps   | Optional         | Type inferred from package     |
 
 `"wasm"` and `"wat"` are the only values that make an import a Wasm asset. A
-`.wasm` or `.wat` path without one is read as a schema, which needs a
-generator.
+`.wasm` or `.wat` import without `type` is a compile error.
 
 Rationale: an explicit `type` keeps a Wasm import unambiguous and its
 dependency visible, as Wado's imports are explicit elsewhere.
