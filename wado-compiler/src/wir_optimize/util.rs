@@ -247,8 +247,6 @@ pub(super) struct OwnTraps {
 }
 
 impl OwnTraps {
-    const NONE: Self = Self::new(&[], false);
-
     const fn new(on_null: &[usize], otherwise: bool) -> Self {
         let mut slots = [None, None];
         let mut i = 0;
@@ -268,8 +266,7 @@ impl OwnTraps {
     }
 }
 
-/// The one answer to how `instr` itself traps, which [`may_trap_in`] and the
-/// passes that move a null trap read alike.
+/// How `instr` itself traps.
 pub(super) fn own_traps(instr: &WirInstr) -> OwnTraps {
     match instr {
         WirInstr::StructGet { .. }
@@ -319,7 +316,7 @@ pub(super) fn own_traps(instr: &WirInstr) -> OwnTraps {
         | WirInstr::TableGet { .. }
         | WirInstr::TableSet { .. }
         | WirInstr::Unreachable => OwnTraps::new(&[], true),
-        _ => OwnTraps::NONE,
+        _ => OwnTraps::new(&[], false),
     }
 }
 
@@ -352,6 +349,25 @@ pub(super) fn may_trap_in(instr: &WirInstr, null: &Nullability) -> bool {
     trap
 }
 
+/// Visit each operand `instr` traps on when null, with its position in
+/// evaluation order.
+pub(super) fn for_each_null_trapping_operand(
+    instr: &mut WirInstr,
+    mut f: impl FnMut(usize, &mut WirInstr),
+) {
+    let own = own_traps(instr);
+    if own.on_null().next().is_none() {
+        return;
+    }
+    let mut position = 0;
+    instr.for_each_boxed_child_mut(&mut |operand| {
+        if own.on_null().any(|p| p == position) {
+            f(position, operand);
+        }
+        position += 1;
+    });
+}
+
 /// Index of the first non-`Nop` statement at or after `from`.
 pub(super) fn next_non_nop(stmts: &[WirInstr], from: usize) -> Option<usize> {
     (from..stmts.len()).find(|&k| !matches!(stmts[k], WirInstr::Nop))
@@ -369,9 +385,9 @@ pub(super) fn is_same_free_read(a: &WirInstr, b: &WirInstr) -> bool {
 }
 
 /// Visit each operand of `instr` that accepts `(ref null $type)` where its
-/// type allows `(ref $type)`: the object of a GC access, `ref.cast` and
-/// `ref.test`, a value dropped, tested for null, compared or externalized,
-/// and one stored into a local `locals` declares nullable.
+/// type allows `(ref $type)`: one an instruction traps on when null by itself,
+/// `ref.cast` and `ref.test`, a value dropped, tested for null, compared or
+/// externalized, and one stored into a local `locals` declares nullable.
 pub(super) fn for_each_nullable_ref_operand(
     instr: &mut WirInstr,
     locals: &WirLocals,
@@ -390,21 +406,10 @@ pub(super) fn for_each_nullable_ref_operand(
         {
             f(value);
         }
-        WirInstr::ArrayGet { array, .. }
-        | WirInstr::ArrayGetS { array, .. }
-        | WirInstr::ArrayGetU { array, .. }
-        | WirInstr::ArraySet { array, .. }
-        | WirInstr::ArrayFill { array, .. } => f(array),
-        WirInstr::ArrayLen(array) => f(array),
-        WirInstr::ArrayCopy { dest, src, .. } => {
-            f(dest);
-            f(src);
-        }
-        WirInstr::StructGet { expr, .. }
-        | WirInstr::StructSet { expr, .. }
-        | WirInstr::RefCast { expr, .. }
-        | WirInstr::RefTest { expr, .. } => f(expr),
-        _ => {}
+        WirInstr::RefCast { expr, .. } | WirInstr::RefTest { expr, .. } => f(expr),
+        // Relaxing what it narrows would only move the narrowing inside it.
+        WirInstr::RefAsNonNull(_) => {}
+        _ => for_each_null_trapping_operand(instr, |_, operand| f(operand)),
     }
 }
 

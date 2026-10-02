@@ -10,7 +10,7 @@ use crate::hashmap::IndexSet;
 use crate::wir::{WirInstr, WirPackage};
 use crate::wir_visitor::{WirMutVisitor, WirRefVisitor};
 
-use super::util::{is_side_effect_free, own_traps};
+use super::util::{for_each_null_trapping_operand, is_side_effect_free, own_traps};
 
 pub(super) fn cleanup(module: &mut WirPackage) {
     for func in &mut module.functions {
@@ -112,28 +112,26 @@ impl WirMutVisitor for CleanupVisitor {
 /// is narrowed.
 fn relax_null_trapping_objects(instr: &mut WirInstr) {
     let own = own_traps(instr);
-    let mut narrowed_from = None;
+    let mut narrowed = false;
     let mut last_effect = None;
     let mut position = 0;
     instr.for_each_child(&mut |operand| {
-        if narrowed_from.is_some() {
+        if narrowed {
             if !is_side_effect_free(operand) {
                 last_effect = Some(position);
             }
         } else if own.on_null().any(|p| p == position) && is_narrowed(operand) {
-            narrowed_from = Some(position);
+            narrowed = true;
         }
         position += 1;
     });
-    if narrowed_from.is_none() {
+    if !narrowed {
         return;
     }
-    let mut position = 0;
-    instr.for_each_boxed_child_mut(&mut |operand| {
-        if own.on_null().any(|p| p == position) && last_effect.is_none_or(|e| e < position) {
+    for_each_null_trapping_operand(instr, |position, operand| {
+        if last_effect.is_none_or(|e| e < position) {
             relax_nonnull(operand);
         }
-        position += 1;
     });
 }
 
