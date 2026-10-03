@@ -936,7 +936,7 @@ pub struct NirImport {
     pub module_source: ModuleSource,
     /// Import namespace ("wasi" or "env")
     pub namespace: String,
-    /// Canonical name for the import (e.g., "stream-new", "`libm_sin`")
+    /// Canonical name for the import (e.g., "stream-new", "`f64_sin`")
     pub canonical_name: String,
     /// Internal function name (e.g., "`stream_new`", "`f64_sin`")
     pub func_name: String,

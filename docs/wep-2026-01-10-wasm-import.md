@@ -33,8 +33,8 @@ Phase 1 supports both wildcard and named imports:
 // Named imports — the loader synthesises Wado bindings from the wasm
 // module's export signatures, so each name resolves to a normal Wado
 // function with the right type.
-use { libm_sin, libm_cos } from "./libm.wat" with { type: "wat" };
-let s = libm_sin(1.5);
+use { f64_sin, f64_cos } from "./libm.wat" with { type: "wat" };
+let s = f64_sin(1.5);
 
 // Wildcard imports — same loading machinery, no symbols are bound. Useful
 // when the asset is referenced indirectly through `pub use` re-exports.
@@ -47,8 +47,8 @@ use _ from "./helpers.wasm" with { type: "wasm" };
 
 1. The loader fetches the asset bytes (stdlib lookup for `core:*.wat`, `host.load_source` for user paths), runs `wat::parse_bytes` if `kind == Wat`, and validates the result.
 2. The bytes are cached in `LoadResult::wasm_assets` keyed by the canonical namespace string `wasm:<canonical-path>` (e.g. `wasm:core:libm.wat`). Each `WasmAsset` also carries the function-export signatures extracted via `wasmparser`.
-3. The loader synthesises a Wado source string from those signatures — one `pub fn name(...) -> ret;` declaration per export, each tagged `#[canonical("wasm:<path>", "<export>")]` — and runs it through the regular parse/bind/desugar pipeline. The resulting AST module is registered under `ModuleSource::Wasm { path, kind }`, so named imports (`use { libm_sin } from "./libm.wat" ...`) resolve through the same path as imports of any other Wado module.
-4. A call to an export lowers to a Wasm import, as a call to a `#[canonical]` `core:builtin` declaration does. An export is its own asset's function whatever its name: one named like an intrinsic (`cold_path`, `select`) or like another asset's export (`libm_sin`) is still an ordinary call to that asset.
+3. The loader synthesises a Wado source string from those signatures — one `pub fn name(...) -> ret;` declaration per export, each tagged `#[canonical("wasm:<path>", "<export>")]` — and runs it through the regular parse/bind/desugar pipeline. The resulting AST module is registered under `ModuleSource::Wasm { path, kind }`, so named imports (`use { f64_sin } from "./libm.wat" ...`) resolve through the same path as imports of any other Wado module.
+4. A call to an export lowers to a Wasm import, as a call to a `#[canonical]` `core:builtin` declaration does. An export is its own asset's function whatever its name: one named like an intrinsic (`cold_path`, `select`) or like another asset's export (`f64_sin`) is still an ordinary call to that asset.
 5. Codegen looks up each asset by namespace (post-DCE), transforms the module to import its memory from `env.memory`, prunes to the union of exports actually referenced, and embeds it in the resulting component.
 
 ### Phase 1 limitations (enforced)
@@ -67,7 +67,7 @@ The bundled libm path was the motivating use case. Phase 1 retires the previous 
 
 - `lib/builtins/wado-bundled-libm.wat` → `lib/core/libm.wat`
 - `wado-compiler/src/bundled.rs` → folded into `stdlib.rs` (`get_stdlib_wasm_asset` returns the bytes by canonical path)
-- `core:prelude/primitive.wado` name-imports the libm exports directly from `../libm.wat`, renaming each onto its Wado-side identifier (`libm_sin as f64_sin`, …, `libm_log as f64_ln`, etc.) at the import site, and calls them as ordinary functions in place of the previous `builtin::f64_sin(x)` style. There is no intermediate stdlib module — `primitive.wado` is the only consumer, so a `core:libm` re-exporter would be pure indirection.
+- `core:prelude/primitive.wado` name-imports the libm exports directly from `../libm.wat` under the names the impl blocks call (`f64_sin`, `f64_ln`, `f32_mul_add`, …), so no import renames one, and calls them as ordinary functions in place of the previous `builtin::f64_sin(x)` style. There is no intermediate stdlib module — `primitive.wado` is the only consumer, so a `core:libm` re-exporter would be pure indirection.
 - The libm function declarations have been removed from `lib/core/builtin.wado`.
 - `embed_bundled_modules` in `codegen/component.rs` is generalised into `embed_imported_wasm_modules`, driven by post-DCE imports grouped by namespace.
 

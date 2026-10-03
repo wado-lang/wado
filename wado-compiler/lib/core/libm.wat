@@ -1,17 +1,17 @@
 (module $wado_bundled_libm.wasm
-  (type (;0;) (func (param f64) (result f64)))
-  (type (;1;) (func (param f32) (result f32)))
-  (type (;2;) (func (param f64 f64) (result f64)))
-  (type (;3;) (func (param f32 f32) (result f32)))
-  (type (;4;) (func (param f64 f64 f64) (result f64)))
-  (type (;5;) (func (param i32 f64)))
-  (type (;6;) (func (param i32 f32)))
-  (type (;7;) (func (param i32 f64) (result f64)))
-  (type (;8;) (func (param i32 f32) (result f32)))
-  (type (;9;) (func (param f32 f32 f32) (result f32)))
-  (type (;10;) (func))
-  (type (;11;) (func (param i32)))
-  (type (;12;) (func (param f32 i32) (result f32)))
+  (type (;0;) (func (param f32) (result f32)))
+  (type (;1;) (func (param f64) (result f64)))
+  (type (;2;) (func (param f32 f32) (result f32)))
+  (type (;3;) (func (param i32 f32)))
+  (type (;4;) (func (param i32 f32) (result f32)))
+  (type (;5;) (func))
+  (type (;6;) (func (param i32)))
+  (type (;7;) (func (param f32 f32 f32) (result f32)))
+  (type (;8;) (func (param f32 i32) (result f32)))
+  (type (;9;) (func (param f64 f64) (result f64)))
+  (type (;10;) (func (param f64 f64 f64) (result f64)))
+  (type (;11;) (func (param i32 f64)))
+  (type (;12;) (func (param i32 f64) (result f64)))
   (type (;13;) (func (param f64 f64 i32) (result f64)))
   (type (;14;) (func (param i32 i32 i32 i32 i32) (result i32)))
   (type (;15;) (func (param i32 f64 i32)))
@@ -21,70 +21,70 @@
   (memory (;0;) 17)
   (global $__stack_pointer (;0;) (mut i32) (i32.const 1048576))
   (export "memory" (memory 0))
-  (export "libm_acos" (func $libm_acos))
-  (export "libm_acosf" (func $libm_acosf))
-  (export "libm_acosh" (func $libm_acosh))
-  (export "libm_acoshf" (func $libm_acoshf))
-  (export "libm_asin" (func $libm_asin))
-  (export "libm_asinf" (func $libm_asinf))
-  (export "libm_asinh" (func $libm_asinh))
-  (export "libm_asinhf" (func $libm_asinhf))
-  (export "libm_atan" (func $libm_atan))
-  (export "libm_atan2" (func $libm_atan2))
-  (export "libm_atan2f" (func $libm_atan2f))
-  (export "libm_atanf" (func $libm_atanf))
-  (export "libm_atanh" (func $libm_atanh))
-  (export "libm_atanhf" (func $libm_atanhf))
-  (export "libm_cbrt" (func $libm_cbrt))
-  (export "libm_cbrtf" (func $libm_cbrtf))
-  (export "libm_cos" (func $libm_cos))
-  (export "libm_cosf" (func $libm_cosf))
-  (export "libm_cosh" (func $libm_cosh))
-  (export "libm_coshf" (func $libm_coshf))
-  (export "libm_erf" (func $libm_erf))
-  (export "libm_erfc" (func $libm_erfc))
-  (export "libm_erfcf" (func $libm_erfcf))
-  (export "libm_erff" (func $libm_erff))
-  (export "libm_exp" (func $libm_exp))
-  (export "libm_exp10" (func $libm_exp10))
-  (export "libm_exp10f" (func $libm_exp10f))
-  (export "libm_exp2" (func $libm_exp2))
-  (export "libm_exp2f" (func $libm_exp2f))
-  (export "libm_expf" (func $libm_expf))
-  (export "libm_expm1" (func $libm_expm1))
-  (export "libm_expm1f" (func $libm_expm1f))
-  (export "libm_fma" (func $libm_fma))
-  (export "libm_fmaf" (func $libm_fmaf))
-  (export "libm_fmod" (func $libm_fmod))
-  (export "libm_fmodf" (func $libm_fmodf))
-  (export "libm_hypot" (func $libm_hypot))
-  (export "libm_hypotf" (func $libm_hypotf))
-  (export "libm_lgamma" (func $libm_lgamma))
-  (export "libm_lgammaf" (func $libm_lgammaf))
-  (export "libm_log" (func $libm_log))
-  (export "libm_log10" (func $libm_log10))
-  (export "libm_log10f" (func $libm_log10f))
-  (export "libm_log1p" (func $libm_log1p))
-  (export "libm_log1pf" (func $libm_log1pf))
-  (export "libm_log2" (func $libm_log2))
-  (export "libm_log2f" (func $libm_log2f))
-  (export "libm_logf" (func $libm_logf))
-  (export "libm_pow" (func $libm_pow))
-  (export "libm_powf" (func $libm_powf))
-  (export "libm_round" (func $libm_round))
-  (export "libm_roundf" (func $libm_roundf))
-  (export "libm_sin" (func $libm_sin))
-  (export "libm_sinf" (func $libm_sinf))
-  (export "libm_sinh" (func $libm_sinh))
-  (export "libm_sinhf" (func $libm_sinhf))
-  (export "libm_tan" (func $libm_tan))
-  (export "libm_tanf" (func $libm_tanf))
-  (export "libm_tanh" (func $libm_tanh))
-  (export "libm_tanhf" (func $libm_tanhf))
-  (export "libm_tgamma" (func $libm_tgamma))
-  (export "libm_tgammaf" (func $libm_tgammaf))
-  (func $libm_acos (;0;) (type 0) (param f64) (result f64)
-    (local i64 i32 f64 f64)
+  (export "f32_acos" (func $f32_acos))
+  (export "f32_acosh" (func $f32_acosh))
+  (export "f32_asin" (func $f32_asin))
+  (export "f32_asinh" (func $f32_asinh))
+  (export "f32_atan" (func $f32_atan))
+  (export "f32_atan2" (func $f32_atan2))
+  (export "f32_atanh" (func $f32_atanh))
+  (export "f32_cbrt" (func $f32_cbrt))
+  (export "f32_cos" (func $f32_cos))
+  (export "f32_cosh" (func $f32_cosh))
+  (export "f32_erf" (func $f32_erf))
+  (export "f32_erfc" (func $f32_erfc))
+  (export "f32_exp" (func $f32_exp))
+  (export "f32_exp10" (func $f32_exp10))
+  (export "f32_exp2" (func $f32_exp2))
+  (export "f32_expm1" (func $f32_expm1))
+  (export "f32_fmod" (func $f32_fmod))
+  (export "f32_gamma" (func $f32_gamma))
+  (export "f32_hypot" (func $f32_hypot))
+  (export "f32_ln" (func $f32_ln))
+  (export "f32_ln1p" (func $f32_ln1p))
+  (export "f32_ln_gamma" (func $f32_ln_gamma))
+  (export "f32_log10" (func $f32_log10))
+  (export "f32_log2" (func $f32_log2))
+  (export "f32_mul_add" (func $f32_mul_add))
+  (export "f32_pow" (func $f32_pow))
+  (export "f32_round" (func $f32_round))
+  (export "f32_sin" (func $f32_sin))
+  (export "f32_sinh" (func $f32_sinh))
+  (export "f32_tan" (func $f32_tan))
+  (export "f32_tanh" (func $f32_tanh))
+  (export "f64_acos" (func $f64_acos))
+  (export "f64_acosh" (func $f64_acosh))
+  (export "f64_asin" (func $f64_asin))
+  (export "f64_asinh" (func $f64_asinh))
+  (export "f64_atan" (func $f64_atan))
+  (export "f64_atan2" (func $f64_atan2))
+  (export "f64_atanh" (func $f64_atanh))
+  (export "f64_cbrt" (func $f64_cbrt))
+  (export "f64_cos" (func $f64_cos))
+  (export "f64_cosh" (func $f64_cosh))
+  (export "f64_erf" (func $f64_erf))
+  (export "f64_erfc" (func $f64_erfc))
+  (export "f64_exp" (func $f64_exp))
+  (export "f64_exp10" (func $f64_exp10))
+  (export "f64_exp2" (func $f64_exp2))
+  (export "f64_expm1" (func $f64_expm1))
+  (export "f64_fmod" (func $f64_fmod))
+  (export "f64_gamma" (func $f64_gamma))
+  (export "f64_hypot" (func $f64_hypot))
+  (export "f64_ln" (func $f64_ln))
+  (export "f64_ln1p" (func $f64_ln1p))
+  (export "f64_ln_gamma" (func $f64_ln_gamma))
+  (export "f64_log10" (func $f64_log10))
+  (export "f64_log2" (func $f64_log2))
+  (export "f64_mul_add" (func $f64_mul_add))
+  (export "f64_pow" (func $f64_pow))
+  (export "f64_round" (func $f64_round))
+  (export "f64_sin" (func $f64_sin))
+  (export "f64_sinh" (func $f64_sinh))
+  (export "f64_tan" (func $f64_tan))
+  (export "f64_tanh" (func $f64_tanh))
+  (func $f32_acos (;0;) (type 0) (param f32) (result f32)
+    (local i32 i32 f32 f32)
     (block ;; label = @1
       (block ;; label = @2
         (block ;; label = @3
@@ -92,238 +92,772 @@
             (i32.gt_u
               (local.tee 2
                 (i32.and
-                  (i32.wrap_i64
-                    (i64.shr_u
-                      (local.tee 1
-                        (i64.reinterpret_f64
-                          (local.get 0)))
-                      (i64.const 32)))
+                  (local.tee 1
+                    (i32.reinterpret_f32
+                      (local.get 0)))
                   (i32.const 2147483647)))
-              (i32.const 1072693247)))
+              (i32.const 1065353215)))
           (block ;; label = @4
             (br_if 0 (;@4;)
               (i32.lt_u
                 (local.get 2)
-                (i32.const 1071644672)))
+                (i32.const 1056964608)))
             (block ;; label = @5
               (br_if 0 (;@5;)
-                (i64.le_s
+                (i32.le_s
                   (local.get 1)
-                  (i64.const -1)))
+                  (i32.const -1)))
               (return
-                (f64.add
+                (f32.add
                   (local.tee 0
-                    (f64.add
-                      (f64.add
-                        (f64.mul
-                          (f64.div
-                            (f64.mul
+                    (f32.add
+                      (f32.add
+                        (f32.mul
+                          (f32.div
+                            (f32.mul
                               (local.tee 0
-                                (f64.mul
-                                  (f64.sub
-                                    (f64.const 0x1p+0 (;=1;))
+                                (f32.mul
+                                  (f32.sub
+                                    (f32.const 0x1p+0 (;=1;))
                                     (local.get 0))
-                                  (f64.const 0x1p-1 (;=0.5;))))
-                              (f64.add
-                                (f64.mul
+                                  (f32.const 0x1p-1 (;=0.5;))))
+                              (f32.add
+                                (f32.mul
                                   (local.get 0)
-                                  (f64.add
-                                    (f64.mul
+                                  (f32.add
+                                    (f32.mul
                                       (local.get 0)
-                                      (f64.add
-                                        (f64.mul
-                                          (local.get 0)
-                                          (f64.add
-                                            (f64.mul
-                                              (local.get 0)
-                                              (f64.add
-                                                (f64.mul
-                                                  (local.get 0)
-                                                  (f64.const 0x1.23de10dfdf709p-15 (;=0.00003479331075960212;)))
-                                                (f64.const 0x1.9efe07501b288p-11 (;=0.0007915349942898145;))))
-                                            (f64.const -0x1.48228b5688f3bp-5 (;=-0.04005553450067941;))))
-                                        (f64.const 0x1.9c1550e884455p-3 (;=0.20121253213486293;))))
-                                    (f64.const -0x1.4d61203eb6f7dp-2 (;=-0.3255658186224009;))))
-                                (f64.const 0x1.5555555555555p-3 (;=0.16666666666666666;))))
-                            (f64.add
-                              (f64.mul
+                                      (f32.const -0x1.1ba6d6p-7 (;=-0.008656363;)))
+                                    (f32.const -0x1.5e2774p-5 (;=-0.042743422;))))
+                                (f32.const 0x1.5554eap-3 (;=0.16666587;))))
+                            (f32.add
+                              (f32.mul
                                 (local.get 0)
-                                (f64.add
-                                  (f64.mul
-                                    (local.get 0)
-                                    (f64.add
-                                      (f64.mul
-                                        (local.get 0)
-                                        (f64.add
-                                          (f64.mul
-                                            (local.get 0)
-                                            (f64.const 0x1.3b8c5b12e9282p-4 (;=0.07703815055590194;)))
-                                          (f64.const -0x1.6066c1b8d0159p-1 (;=-0.6882839716054533;))))
-                                      (f64.const 0x1.02ae59c598ac8p+1 (;=2.0209457602335057;))))
-                                  (f64.const -0x1.33a271c8a2d4bp+1 (;=-2.403394911734414;))))
-                              (f64.const 0x1p+0 (;=1;))))
+                                (f32.const -0x1.69cb5cp-1 (;=-0.70662963;)))
+                              (f32.const 0x1p+0 (;=1;))))
                           (local.tee 3
-                            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4sqrt4sqrt
+                            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4sqrt5sqrtf
                               (local.get 0))))
-                        (f64.div
-                          (f64.sub
+                        (f32.div
+                          (f32.sub
                             (local.get 0)
-                            (f64.mul
+                            (f32.mul
                               (local.tee 4
-                                (f64.reinterpret_i64
-                                  (i64.and
-                                    (i64.reinterpret_f64
+                                (f32.reinterpret_i32
+                                  (i32.and
+                                    (i32.reinterpret_f32
                                       (local.get 3))
-                                    (i64.const -4294967296))))
+                                    (i32.const -4096))))
                               (local.get 4)))
-                          (f64.add
+                          (f32.add
                             (local.get 3)
                             (local.get 4))))
                       (local.get 4)))
                   (local.get 0))))
             (return
-              (f64.add
+              (f32.add
                 (local.tee 0
-                  (f64.sub
-                    (f64.const 0x1.921fb54442d18p+0 (;=1.5707963267948966;))
-                    (f64.add
+                  (f32.sub
+                    (f32.const 0x1.921fb4p+0 (;=1.5707963;))
+                    (f32.add
                       (local.tee 4
-                        (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4sqrt4sqrt
+                        (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4sqrt5sqrtf
                           (local.tee 0
-                            (f64.mul
-                              (f64.add
+                            (f32.mul
+                              (f32.add
                                 (local.get 0)
-                                (f64.const 0x1p+0 (;=1;)))
-                              (f64.const 0x1p-1 (;=0.5;))))))
-                      (f64.add
-                        (f64.mul
+                                (f32.const 0x1p+0 (;=1;)))
+                              (f32.const 0x1p-1 (;=0.5;))))))
+                      (f32.add
+                        (f32.mul
                           (local.get 4)
-                          (f64.div
-                            (f64.mul
+                          (f32.div
+                            (f32.mul
                               (local.get 0)
-                              (f64.add
-                                (f64.mul
+                              (f32.add
+                                (f32.mul
                                   (local.get 0)
-                                  (f64.add
-                                    (f64.mul
+                                  (f32.add
+                                    (f32.mul
                                       (local.get 0)
-                                      (f64.add
-                                        (f64.mul
-                                          (local.get 0)
-                                          (f64.add
-                                            (f64.mul
-                                              (local.get 0)
-                                              (f64.add
-                                                (f64.mul
-                                                  (local.get 0)
-                                                  (f64.const 0x1.23de10dfdf709p-15 (;=0.00003479331075960212;)))
-                                                (f64.const 0x1.9efe07501b288p-11 (;=0.0007915349942898145;))))
-                                            (f64.const -0x1.48228b5688f3bp-5 (;=-0.04005553450067941;))))
-                                        (f64.const 0x1.9c1550e884455p-3 (;=0.20121253213486293;))))
-                                    (f64.const -0x1.4d61203eb6f7dp-2 (;=-0.3255658186224009;))))
-                                (f64.const 0x1.5555555555555p-3 (;=0.16666666666666666;))))
-                            (f64.add
-                              (f64.mul
+                                      (f32.const -0x1.1ba6d6p-7 (;=-0.008656363;)))
+                                    (f32.const -0x1.5e2774p-5 (;=-0.042743422;))))
+                                (f32.const 0x1.5554eap-3 (;=0.16666587;))))
+                            (f32.add
+                              (f32.mul
                                 (local.get 0)
-                                (f64.add
-                                  (f64.mul
-                                    (local.get 0)
-                                    (f64.add
-                                      (f64.mul
-                                        (local.get 0)
-                                        (f64.add
-                                          (f64.mul
-                                            (local.get 0)
-                                            (f64.const 0x1.3b8c5b12e9282p-4 (;=0.07703815055590194;)))
-                                          (f64.const -0x1.6066c1b8d0159p-1 (;=-0.6882839716054533;))))
-                                      (f64.const 0x1.02ae59c598ac8p+1 (;=2.0209457602335057;))))
-                                  (f64.const -0x1.33a271c8a2d4bp+1 (;=-2.403394911734414;))))
-                              (f64.const 0x1p+0 (;=1;)))))
-                        (f64.const -0x1.1a62633145c07p-54 (;=-0.00000000000000006123233995736766;))))))
+                                (f32.const -0x1.69cb5cp-1 (;=-0.70662963;)))
+                              (f32.const 0x1p+0 (;=1;)))))
+                        (f32.const -0x1.4442dp-24 (;=-0.000000075497894;))))))
                 (local.get 0))))
           (local.set 4
-            (f64.const 0x1.921fb54442d18p+0 (;=1.5707963267948966;)))
+            (f32.const 0x1.921fb4p+0 (;=1.5707963;)))
           (br_if 1 (;@2;)
             (i32.lt_u
               (local.get 2)
-              (i32.const 1012924417)))
+              (i32.const 847249409)))
           (return
-            (f64.add
-              (f64.sub
-                (f64.sub
-                  (f64.const 0x1.1a62633145c07p-54 (;=0.00000000000000006123233995736766;))
-                  (f64.mul
+            (f32.add
+              (f32.sub
+                (f32.sub
+                  (f32.const 0x1.4442dp-24 (;=0.000000075497894;))
+                  (f32.mul
                     (local.get 0)
-                    (f64.div
-                      (f64.mul
+                    (f32.div
+                      (f32.mul
                         (local.tee 4
-                          (f64.mul
+                          (f32.mul
                             (local.get 0)
                             (local.get 0)))
-                        (f64.add
-                          (f64.mul
+                        (f32.add
+                          (f32.mul
                             (local.get 4)
-                            (f64.add
-                              (f64.mul
+                            (f32.add
+                              (f32.mul
                                 (local.get 4)
-                                (f64.add
-                                  (f64.mul
-                                    (local.get 4)
-                                    (f64.add
-                                      (f64.mul
-                                        (local.get 4)
-                                        (f64.add
-                                          (f64.mul
-                                            (local.get 4)
-                                            (f64.const 0x1.23de10dfdf709p-15 (;=0.00003479331075960212;)))
-                                          (f64.const 0x1.9efe07501b288p-11 (;=0.0007915349942898145;))))
-                                      (f64.const -0x1.48228b5688f3bp-5 (;=-0.04005553450067941;))))
-                                  (f64.const 0x1.9c1550e884455p-3 (;=0.20121253213486293;))))
-                              (f64.const -0x1.4d61203eb6f7dp-2 (;=-0.3255658186224009;))))
-                          (f64.const 0x1.5555555555555p-3 (;=0.16666666666666666;))))
-                      (f64.add
-                        (f64.mul
+                                (f32.const -0x1.1ba6d6p-7 (;=-0.008656363;)))
+                              (f32.const -0x1.5e2774p-5 (;=-0.042743422;))))
+                          (f32.const 0x1.5554eap-3 (;=0.16666587;))))
+                      (f32.add
+                        (f32.mul
                           (local.get 4)
-                          (f64.add
-                            (f64.mul
-                              (local.get 4)
-                              (f64.add
-                                (f64.mul
-                                  (local.get 4)
-                                  (f64.add
-                                    (f64.mul
-                                      (local.get 4)
-                                      (f64.const 0x1.3b8c5b12e9282p-4 (;=0.07703815055590194;)))
-                                    (f64.const -0x1.6066c1b8d0159p-1 (;=-0.6882839716054533;))))
-                                (f64.const 0x1.02ae59c598ac8p+1 (;=2.0209457602335057;))))
-                            (f64.const -0x1.33a271c8a2d4bp+1 (;=-2.403394911734414;))))
-                        (f64.const 0x1p+0 (;=1;))))))
+                          (f32.const -0x1.69cb5cp-1 (;=-0.70662963;)))
+                        (f32.const 0x1p+0 (;=1;))))))
                 (local.get 0))
-              (f64.const 0x1.921fb54442d18p+0 (;=1.5707963267948966;)))))
+              (f32.const 0x1.921fb4p+0 (;=1.5707963;)))))
         (br_if 1 (;@1;)
-          (i32.eqz
-            (i32.or
-              (i32.add
-                (local.get 2)
-                (i32.const -1072693248))
-              (i32.wrap_i64
-                (local.get 1)))))
+          (i32.eq
+            (local.get 2)
+            (i32.const 1065353216)))
         (local.set 4
-          (f64.div
-            (f64.const 0x0p+0 (;=0;))
-            (f64.sub
+          (f32.div
+            (f32.const 0x0p+0 (;=0;))
+            (f32.sub
               (local.get 0)
               (local.get 0)))))
       (return
         (local.get 4)))
     (select
-      (f64.const 0x0p+0 (;=0;))
-      (f64.const 0x1.921fb54442d18p+1 (;=3.141592653589793;))
-      (i64.gt_s
+      (f32.const 0x0p+0 (;=0;))
+      (f32.const 0x1.921fb4p+1 (;=3.1415925;))
+      (i32.gt_s
         (local.get 1)
-        (i64.const -1)))
+        (i32.const -1)))
   )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math4sqrt4sqrt (;1;) (type 0) (param f64) (result f64)
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math4sqrt5sqrtf (;1;) (type 0) (param f32) (result f32)
+    (local i32 f32 i32 i32 i32 i32 i32 i64)
+    (block ;; label = @1
+      (block ;; label = @2
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i32.gt_u
+              (i32.add
+                (local.tee 1
+                  (i32.reinterpret_f32
+                    (local.get 0)))
+                (i32.const -2139095040))
+              (i32.const -2130706433)))
+          (br_if 2 (;@1;)
+            (f32.eq
+              (local.get 0)
+              (f32.const 0x0p+0 (;=0;))))
+          (br_if 2 (;@1;)
+            (i32.eq
+              (local.get 1)
+              (i32.const 2139095040)))
+          (local.set 2
+            (f32.const nan (;=NaN;)))
+          (br_if 1 (;@2;)
+            (i32.gt_u
+              (local.get 1)
+              (i32.const 2139095040)))
+          (local.set 1
+            (i32.add
+              (i32.reinterpret_f32
+                (f32.mul
+                  (local.get 0)
+                  (f32.const 0x1p+23 (;=8388608;))))
+              (i32.const -192937984))))
+        (local.set 3
+          (i32.const -1))
+        (local.set 5
+          (local.tee 4
+            (i32.shl
+              (i32.load16_u offset=1058160
+                (i32.and
+                  (i32.shr_u
+                    (local.get 1)
+                    (i32.const 16))
+                  (i32.const 254)))
+              (i32.const 16))))
+        (local.set 7
+          (local.tee 6
+            (select
+              (i32.and
+                (i32.shl
+                  (local.get 1)
+                  (i32.const 7))
+                (i32.const 2147483520))
+              (i32.or
+                (i32.shl
+                  (local.get 1)
+                  (i32.const 8))
+                (i32.const -2147483648))
+              (i32.and
+                (local.get 1)
+                (i32.const 8388608)))))
+        (loop ;; label = @3
+          (local.set 4
+            (i32.and
+              (i32.wrap_i64
+                (i64.shr_u
+                  (i64.mul
+                    (i64.extend_i32_u
+                      (local.tee 5
+                        (i32.sub
+                          (i32.const -1073741824)
+                          (i32.wrap_i64
+                            (i64.shr_u
+                              (i64.mul
+                                (i64.extend_i32_u
+                                  (local.tee 7
+                                    (i32.shl
+                                      (i32.wrap_i64
+                                        (i64.shr_u
+                                          (i64.mul
+                                            (i64.extend_i32_u
+                                              (local.get 7))
+                                            (i64.extend_i32_u
+                                              (local.get 5)))
+                                          (i64.const 32)))
+                                      (i32.eqz
+                                        (local.get 3)))))
+                                (local.tee 8
+                                  (i64.extend_i32_u
+                                    (local.get 4))))
+                              (i64.const 32))))))
+                    (local.get 8))
+                  (i64.const 31)))
+              (i32.const -2)))
+          (br_if 0 (;@3;)
+            (i32.ne
+              (local.tee 3
+                (i32.add
+                  (local.get 3)
+                  (i32.const 1)))
+              (i32.const 2))))
+        (local.set 2
+          (f32.add
+            (f32.reinterpret_i32
+              (local.tee 3
+                (i32.or
+                  (i32.and
+                    (i32.add
+                      (i32.shr_u
+                        (local.tee 7
+                          (i32.add
+                            (i32.sub
+                              (i32.mul
+                                (local.tee 3
+                                  (i32.shr_u
+                                    (local.get 7)
+                                    (i32.const 6)))
+                                (local.get 3))
+                              (i32.shl
+                                (local.get 6)
+                                (i32.const 16)))
+                            (local.get 3)))
+                        (i32.const 31))
+                      (local.get 3))
+                    (i32.const 8388607))
+                  (i32.and
+                    (i32.add
+                      (i32.shr_u
+                        (local.get 1)
+                        (i32.const 1))
+                      (i32.const 532676608))
+                    (i32.const 2139095040)))))
+            (f32.reinterpret_i32
+              (i32.or
+                (select
+                  (i32.const 8388608)
+                  (i32.const 0)
+                  (local.tee 3
+                    (i32.add
+                      (i32.add
+                        (local.get 7)
+                        (local.get 3))
+                      (i32.const 1))))
+                (i32.and
+                  (i32.xor
+                    (local.get 3)
+                    (local.get 7))
+                  (i32.const -2147483648)))))))
+      (return
+        (local.get 2)))
+    (local.get 0)
+  )
+  (func $f32_acosh (;2;) (type 0) (param f32) (result f32)
+    (local i32)
+    (block ;; label = @1
+      (br_if 0 (;@1;)
+        (i32.lt_u
+          (local.tee 1
+            (i32.and
+              (i32.reinterpret_f32
+                (local.get 0))
+              (i32.const 2147483647)))
+          (i32.const 1073741824)))
+      (block ;; label = @2
+        (br_if 0 (;@2;)
+          (i32.lt_u
+            (local.get 1)
+            (i32.const 1166016512)))
+        (return
+          (f32.add
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4logf4logf
+              (local.get 0))
+            (f32.const 0x1.62e43p-1 (;=0.6931472;)))))
+      (return
+        (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4logf4logf
+          (f32.add
+            (f32.add
+              (local.get 0)
+              (local.get 0))
+            (f32.div
+              (f32.const -0x1p+0 (;=-1;))
+              (f32.add
+                (local.get 0)
+                (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4sqrt5sqrtf
+                  (f32.add
+                    (f32.mul
+                      (local.get 0)
+                      (local.get 0))
+                    (f32.const -0x1p+0 (;=-1;))))))))))
+    (local.set 0
+      (f32.add
+        (local.get 0)
+        (f32.const -0x1p+0 (;=-1;))))
+    (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math6log1pf6log1pf
+      (f32.add
+        (local.get 0)
+        (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4sqrt5sqrtf
+          (f32.add
+            (f32.mul
+              (local.get 0)
+              (local.get 0))
+            (f32.add
+              (local.get 0)
+              (local.get 0))))))
+  )
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math4logf4logf (;3;) (type 0) (param f32) (result f32)
+    (local i32 i32 f32 f32)
+    (block ;; label = @1
+      (block ;; label = @2
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i32.lt_s
+              (local.tee 1
+                (i32.reinterpret_f32
+                  (local.get 0)))
+              (i32.const 8388608)))
+          (br_if 1 (;@2;)
+            (i32.gt_u
+              (local.get 1)
+              (i32.const 2139095039)))
+          (local.set 2
+            (i32.const -127))
+          (local.set 0
+            (f32.const 0x0p+0 (;=0;)))
+          (br_if 1 (;@2;)
+            (i32.eq
+              (local.get 1)
+              (i32.const 1065353216)))
+          (br 2 (;@1;)))
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (f32.ne
+              (local.get 0)
+              (f32.const 0x0p+0 (;=0;))))
+          (return
+            (f32.div
+              (f32.const -0x1p+0 (;=-1;))
+              (f32.mul
+                (local.get 0)
+                (local.get 0)))))
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i32.lt_s
+              (local.get 1)
+              (i32.const 0)))
+          (local.set 1
+            (i32.reinterpret_f32
+              (f32.mul
+                (local.get 0)
+                (f32.const 0x1p+25 (;=33554432;)))))
+          (local.set 2
+            (i32.const -152))
+          (br 2 (;@1;)))
+        (local.set 0
+          (f32.div
+            (f32.sub
+              (local.get 0)
+              (local.get 0))
+            (f32.const 0x0p+0 (;=0;)))))
+      (return
+        (local.get 0)))
+    (f32.add
+      (f32.mul
+        (local.tee 3
+          (f32.convert_i32_s
+            (i32.add
+              (local.get 2)
+              (i32.shr_u
+                (local.tee 1
+                  (i32.add
+                    (local.get 1)
+                    (i32.const 4913933)))
+                (i32.const 23)))))
+        (f32.const 0x1.62e3p-1 (;=0.6931381;)))
+      (f32.add
+        (local.tee 0
+          (f32.add
+            (f32.reinterpret_i32
+              (i32.add
+                (i32.and
+                  (local.get 1)
+                  (i32.const 8388607))
+                (i32.const 1060439283)))
+            (f32.const -0x1p+0 (;=-1;))))
+        (f32.sub
+          (f32.add
+            (f32.mul
+              (local.get 3)
+              (f32.const 0x1.2fefa2p-17 (;=0.000009058001;)))
+            (f32.mul
+              (local.tee 3
+                (f32.div
+                  (local.get 0)
+                  (f32.add
+                    (local.get 0)
+                    (f32.const 0x1p+1 (;=2;)))))
+              (f32.add
+                (local.tee 4
+                  (f32.mul
+                    (local.get 0)
+                    (f32.mul
+                      (local.get 0)
+                      (f32.const 0x1p-1 (;=0.5;)))))
+                (f32.add
+                  (f32.mul
+                    (local.tee 0
+                      (f32.mul
+                        (local.get 3)
+                        (local.get 3)))
+                    (f32.add
+                      (f32.mul
+                        (local.tee 0
+                          (f32.mul
+                            (local.get 0)
+                            (local.get 0)))
+                        (f32.const 0x1.23d3dcp-2 (;=0.28498787;)))
+                      (f32.const 0x1.555554p-1 (;=0.6666666;))))
+                  (f32.mul
+                    (local.get 0)
+                    (f32.add
+                      (f32.mul
+                        (local.get 0)
+                        (f32.const 0x1.f13c4cp-3 (;=0.24279079;)))
+                      (f32.const 0x1.999c26p-2 (;=0.40000972;))))))))
+          (local.get 4))))
+  )
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math6log1pf6log1pf (;4;) (type 0) (param f32) (result f32)
+    (local i32 i32 f32 f32)
+    (local.set 1
+      (i32.sub
+        (global.get $__stack_pointer)
+        (i32.const 16)))
+    (block ;; label = @1
+      (block ;; label = @2
+        (block ;; label = @3
+          (block ;; label = @4
+            (block ;; label = @5
+              (block ;; label = @6
+                (block ;; label = @7
+                  (block ;; label = @8
+                    (br_if 0 (;@8;)
+                      (i32.gt_s
+                        (local.tee 2
+                          (i32.reinterpret_f32
+                            (local.get 0)))
+                        (i32.const 1054086095)))
+                    (br_if 2 (;@6;)
+                      (i32.gt_u
+                        (local.get 2)
+                        (i32.const -1082130433)))
+                    (br_if 1 (;@7;)
+                      (i32.ge_u
+                        (i32.shl
+                          (local.get 2)
+                          (i32.const 1))
+                        (i32.const 1728053248)))
+                    (br_if 3 (;@5;)
+                      (i32.eqz
+                        (i32.and
+                          (local.get 2)
+                          (i32.const 2139095040))))
+                    (br 7 (;@1;)))
+                  (br_if 6 (;@1;)
+                    (i32.gt_u
+                      (local.get 2)
+                      (i32.const 2139095039)))
+                  (br 4 (;@3;)))
+                (local.set 3
+                  (f32.const 0x0p+0 (;=0;)))
+                (br_if 3 (;@3;)
+                  (i32.gt_u
+                    (local.get 2)
+                    (i32.const -1097468391)))
+                (local.set 4
+                  (f32.const 0x0p+0 (;=0;)))
+                (br 4 (;@2;)))
+              (br_if 1 (;@4;)
+                (f32.ne
+                  (local.get 0)
+                  (f32.const -0x1p+0 (;=-1;))))
+              (return
+                (f32.const -inf (;=-inf;))))
+            (f32.store offset=12
+              (local.get 1)
+              (f32.mul
+                (local.get 0)
+                (local.get 0)))
+            (drop
+              (f32.load offset=12
+                (local.get 1)))
+            (br 3 (;@1;)))
+          (return
+            (f32.div
+              (f32.sub
+                (local.get 0)
+                (local.get 0))
+              (f32.const 0x0p+0 (;=0;)))))
+        (local.set 1
+          (i32.add
+            (i32.shr_u
+              (local.tee 2
+                (i32.add
+                  (i32.reinterpret_f32
+                    (local.tee 4
+                      (f32.add
+                        (local.get 0)
+                        (f32.const 0x1p+0 (;=1;)))))
+                  (i32.const 4913933)))
+              (i32.const 23))
+            (i32.const -127)))
+        (local.set 3
+          (f32.const 0x0p+0 (;=0;)))
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i32.ge_u
+              (local.get 2)
+              (i32.const 1275068416)))
+          (local.set 3
+            (f32.div
+              (select
+                (f32.add
+                  (f32.sub
+                    (local.get 0)
+                    (local.get 4))
+                  (f32.const 0x1p+0 (;=1;)))
+                (f32.sub
+                  (local.get 0)
+                  (f32.add
+                    (local.get 4)
+                    (f32.const -0x1p+0 (;=-1;))))
+                (i32.gt_u
+                  (local.get 2)
+                  (i32.const 1082130431)))
+              (local.get 4))))
+        (local.set 0
+          (f32.add
+            (f32.reinterpret_i32
+              (i32.add
+                (i32.and
+                  (local.get 2)
+                  (i32.const 8388607))
+                (i32.const 1060439283)))
+            (f32.const -0x1p+0 (;=-1;))))
+        (local.set 4
+          (f32.convert_i32_s
+            (local.get 1))))
+      (return
+        (f32.add
+          (f32.mul
+            (local.get 4)
+            (f32.const 0x1.62e3p-1 (;=0.6931381;)))
+          (f32.add
+            (local.get 0)
+            (f32.sub
+              (f32.add
+                (f32.add
+                  (local.get 3)
+                  (f32.mul
+                    (local.get 4)
+                    (f32.const 0x1.2fefa2p-17 (;=0.000009058001;))))
+                (f32.mul
+                  (local.tee 4
+                    (f32.div
+                      (local.get 0)
+                      (f32.add
+                        (local.get 0)
+                        (f32.const 0x1p+1 (;=2;)))))
+                  (f32.add
+                    (local.tee 3
+                      (f32.mul
+                        (local.get 0)
+                        (f32.mul
+                          (local.get 0)
+                          (f32.const 0x1p-1 (;=0.5;)))))
+                    (f32.add
+                      (f32.mul
+                        (local.tee 4
+                          (f32.mul
+                            (local.get 4)
+                            (local.get 4)))
+                        (f32.add
+                          (f32.mul
+                            (local.tee 4
+                              (f32.mul
+                                (local.get 4)
+                                (local.get 4)))
+                            (f32.const 0x1.23d3dcp-2 (;=0.28498787;)))
+                          (f32.const 0x1.555554p-1 (;=0.6666666;))))
+                      (f32.mul
+                        (local.get 4)
+                        (f32.add
+                          (f32.mul
+                            (local.get 4)
+                            (f32.const 0x1.f13c4cp-3 (;=0.24279079;)))
+                          (f32.const 0x1.999c26p-2 (;=0.40000972;))))))))
+              (local.get 3))))))
+    (local.get 0)
+  )
+  (func $f32_asin (;5;) (type 0) (param f32) (result f32)
+    (local f32 i32 f64)
+    (block ;; label = @1
+      (block ;; label = @2
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i32.gt_u
+              (local.tee 2
+                (i32.reinterpret_f32
+                  (local.tee 1
+                    (f32.abs
+                      (local.get 0)))))
+              (i32.const 1065353215)))
+          (block ;; label = @4
+            (br_if 0 (;@4;)
+              (i32.lt_u
+                (local.get 2)
+                (i32.const 1056964608)))
+            (return
+              (select
+                (f32.neg
+                  (local.tee 1
+                    (f32.demote_f64
+                      (f64.sub
+                        (f64.const 0x1.921fb54442d18p+0 (;=1.5707963267948966;))
+                        (f64.add
+                          (local.tee 3
+                            (f64.add
+                              (local.tee 3
+                                (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4sqrt4sqrt
+                                  (f64.promote_f32
+                                    (local.tee 1
+                                      (f32.mul
+                                        (f32.sub
+                                          (f32.const 0x1p+0 (;=1;))
+                                          (local.get 1))
+                                        (f32.const 0x1p-1 (;=0.5;)))))))
+                              (f64.mul
+                                (local.get 3)
+                                (f64.promote_f32
+                                  (f32.div
+                                    (f32.mul
+                                      (local.get 1)
+                                      (f32.add
+                                        (f32.mul
+                                          (local.get 1)
+                                          (f32.add
+                                            (f32.mul
+                                              (local.get 1)
+                                              (f32.const -0x1.1ba6d6p-7 (;=-0.008656363;)))
+                                            (f32.const -0x1.5e2774p-5 (;=-0.042743422;))))
+                                        (f32.const 0x1.5554eap-3 (;=0.16666587;))))
+                                    (f32.add
+                                      (f32.mul
+                                        (local.get 1)
+                                        (f32.const -0x1.69cb5cp-1 (;=-0.70662963;)))
+                                      (f32.const 0x1p+0 (;=1;))))))))
+                          (local.get 3))))))
+                (local.get 1)
+                (i32.lt_s
+                  (i32.reinterpret_f32
+                    (local.get 0))
+                  (i32.const 0)))))
+          (br_if 1 (;@2;)
+            (i32.lt_u
+              (i32.add
+                (local.get 2)
+                (i32.const -8388608))
+              (i32.const 956301312)))
+          (return
+            (f32.add
+              (local.get 0)
+              (f32.mul
+                (local.get 0)
+                (f32.div
+                  (f32.mul
+                    (local.tee 1
+                      (f32.mul
+                        (local.get 0)
+                        (local.get 0)))
+                    (f32.add
+                      (f32.mul
+                        (local.get 1)
+                        (f32.add
+                          (f32.mul
+                            (local.get 1)
+                            (f32.const -0x1.1ba6d6p-7 (;=-0.008656363;)))
+                          (f32.const -0x1.5e2774p-5 (;=-0.042743422;))))
+                      (f32.const 0x1.5554eap-3 (;=0.16666587;))))
+                  (f32.add
+                    (f32.mul
+                      (local.get 1)
+                      (f32.const -0x1.69cb5cp-1 (;=-0.70662963;)))
+                    (f32.const 0x1p+0 (;=1;))))))))
+        (br_if 1 (;@1;)
+          (i32.eq
+            (local.get 2)
+            (i32.const 1065353216)))
+        (local.set 0
+          (f32.div
+            (f32.const 0x0p+0 (;=0;))
+            (f32.sub
+              (local.get 0)
+              (local.get 0)))))
+      (return
+        (local.get 0)))
+    (f32.demote_f64
+      (f64.add
+        (f64.mul
+          (f64.promote_f32
+            (local.get 0))
+          (f64.const 0x1.921fb54442d18p+0 (;=1.5707963267948966;)))
+        (f64.const 0x1p-120 (;=0.000000000000000000000000000000000000752316384526264;))))
+  )
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math4sqrt4sqrt (;6;) (type 1) (param f64) (result f64)
     (local i32 i64 i32 f64 i64 i32 i32 i32 i32 i64 i64)
     (global.set $__stack_pointer
       (local.tee 1
@@ -555,95 +1089,3771 @@
         (i32.const 48)))
     (local.get 4)
   )
-  (func $libm_acosf (;2;) (type 1) (param f32) (result f32)
-    (local i32 i32 f32 f32)
+  (func $f32_asinh (;7;) (type 0) (param f32) (result f32)
+    (local i32 f32 i32 f32)
+    (global.set $__stack_pointer
+      (local.tee 1
+        (i32.sub
+          (global.get $__stack_pointer)
+          (i32.const 16))))
     (block ;; label = @1
       (block ;; label = @2
         (block ;; label = @3
           (br_if 0 (;@3;)
             (i32.gt_u
-              (local.tee 2
+              (local.tee 3
+                (i32.reinterpret_f32
+                  (local.tee 2
+                    (f32.abs
+                      (local.get 0)))))
+              (i32.const 1166016511)))
+          (br_if 1 (;@2;)
+            (i32.gt_u
+              (local.get 3)
+              (i32.const 1073741823)))
+          (block ;; label = @4
+            (br_if 0 (;@4;)
+              (i32.gt_u
+                (local.get 3)
+                (i32.const 964689919)))
+            (f32.store offset=12
+              (local.get 1)
+              (f32.add
+                (local.get 2)
+                (f32.const 0x1p+120 (;=1329228000000000000000000000000000000;))))
+            (drop
+              (f32.load offset=12
+                (local.get 1)))
+            (br 3 (;@1;)))
+          (local.set 4
+            (f32.mul
+              (local.get 0)
+              (local.get 0)))
+          (local.set 2
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math6log1pf6log1pf
+              (f32.add
+                (local.get 2)
+                (f32.div
+                  (local.get 4)
+                  (f32.add
+                    (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4sqrt5sqrtf
+                      (f32.add
+                        (local.get 4)
+                        (f32.const 0x1p+0 (;=1;))))
+                    (f32.const 0x1p+0 (;=1;)))))))
+          (br 2 (;@1;)))
+        (local.set 2
+          (f32.add
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4logf4logf
+              (local.get 2))
+            (f32.const 0x1.62e43p-1 (;=0.6931472;))))
+        (br 1 (;@1;)))
+      (local.set 2
+        (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4logf4logf
+          (f32.add
+            (f32.add
+              (local.get 2)
+              (local.get 2))
+            (f32.div
+              (f32.const 0x1p+0 (;=1;))
+              (f32.add
+                (local.get 2)
+                (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4sqrt5sqrtf
+                  (f32.add
+                    (f32.mul
+                      (local.get 0)
+                      (local.get 0))
+                    (f32.const 0x1p+0 (;=1;))))))))))
+    (global.set $__stack_pointer
+      (i32.add
+        (local.get 1)
+        (i32.const 16)))
+    (select
+      (f32.neg
+        (local.get 2))
+      (local.get 2)
+      (i32.lt_s
+        (i32.reinterpret_f32
+          (local.get 0))
+        (i32.const 0)))
+  )
+  (func $f32_atan (;8;) (type 0) (param f32) (result f32)
+    (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5atanf5atanf
+      (local.get 0))
+  )
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math5atanf5atanf (;9;) (type 0) (param f32) (result f32)
+    (local i32 i32 f32 i32 i32 f32 f32)
+    (local.set 1
+      (i32.sub
+        (global.get $__stack_pointer)
+        (i32.const 16)))
+    (local.set 2
+      (i32.reinterpret_f32
+        (local.get 0)))
+    (block ;; label = @1
+      (block ;; label = @2
+        (br_if 0 (;@2;)
+          (i32.gt_u
+            (local.tee 4
+              (i32.reinterpret_f32
+                (local.tee 3
+                  (f32.abs
+                    (local.get 0)))))
+            (i32.const 1283457023)))
+        (block ;; label = @3
+          (block ;; label = @4
+            (block ;; label = @5
+              (block ;; label = @6
+                (br_if 0 (;@6;)
+                  (i32.le_u
+                    (local.get 4)
+                    (i32.const 1054867455)))
+                (br_if 2 (;@4;)
+                  (i32.lt_u
+                    (local.get 4)
+                    (i32.const 1066926080)))
+                (br_if 1 (;@5;)
+                  (i32.lt_u
+                    (local.get 4)
+                    (i32.const 1075576832)))
+                (local.set 0
+                  (f32.div
+                    (f32.const -0x1p+0 (;=-1;))
+                    (local.get 3)))
+                (local.set 5
+                  (i32.const 3))
+                (br 3 (;@3;)))
+              (local.set 5
+                (i32.const -1))
+              (br_if 2 (;@3;)
+                (i32.ge_u
+                  (local.get 4)
+                  (i32.const 964689920)))
+              (br_if 4 (;@1;)
+                (i32.ge_u
+                  (local.get 4)
+                  (i32.const 8388608)))
+              (f32.store offset=12
+                (local.get 1)
+                (f32.mul
+                  (local.get 0)
+                  (local.get 0)))
+              (drop
+                (f32.load offset=12
+                  (local.get 1)))
+              (return
+                (local.get 0)))
+            (local.set 0
+              (f32.div
+                (f32.add
+                  (local.get 3)
+                  (f32.const -0x1.8p+0 (;=-1.5;)))
+                (f32.add
+                  (f32.mul
+                    (local.get 3)
+                    (f32.const 0x1.8p+0 (;=1.5;)))
+                  (f32.const 0x1p+0 (;=1;)))))
+            (local.set 5
+              (i32.const 2))
+            (br 1 (;@3;)))
+          (block ;; label = @4
+            (br_if 0 (;@4;)
+              (i32.lt_u
+                (local.get 4)
+                (i32.const 1060110336)))
+            (local.set 0
+              (f32.div
+                (f32.add
+                  (local.get 3)
+                  (f32.const -0x1p+0 (;=-1;)))
+                (f32.add
+                  (local.get 3)
+                  (f32.const 0x1p+0 (;=1;)))))
+            (local.set 5
+              (i32.const 1))
+            (br 1 (;@3;)))
+          (local.set 0
+            (f32.div
+              (f32.add
+                (f32.add
+                  (local.get 3)
+                  (local.get 3))
+                (f32.const -0x1p+0 (;=-1;)))
+              (f32.add
+                (local.get 3)
+                (f32.const 0x1p+1 (;=2;)))))
+          (local.set 5
+            (i32.const 0)))
+        (local.set 7
+          (f32.mul
+            (local.tee 3
+              (f32.mul
+                (local.tee 6
+                  (f32.mul
+                    (local.get 0)
+                    (local.get 0)))
+                (local.get 6)))
+            (f32.add
+              (f32.mul
+                (local.get 3)
+                (f32.const -0x1.b4248ep-4 (;=-0.106480174;)))
+              (f32.const -0x1.99953p-3 (;=-0.19999158;)))))
+        (local.set 3
+          (f32.mul
+            (local.get 6)
+            (f32.add
+              (f32.mul
+                (local.get 3)
+                (f32.add
+                  (f32.mul
+                    (local.get 3)
+                    (f32.const 0x1.f9584ap-5 (;=0.061687607;)))
+                  (f32.const 0x1.23ea1ap-3 (;=0.14253636;))))
+              (f32.const 0x1.555552p-2 (;=0.33333328;)))))
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i32.le_u
+              (local.get 4)
+              (i32.const 1054867455)))
+          (return
+            (select
+              (local.tee 0
+                (f32.sub
+                  (f32.load offset=1057296
+                    (local.tee 4
+                      (i32.shl
+                        (local.get 5)
+                        (i32.const 2))))
+                  (f32.sub
+                    (f32.sub
+                      (f32.mul
+                        (local.get 0)
+                        (f32.add
+                          (local.get 7)
+                          (local.get 3)))
+                      (f32.load offset=1057312
+                        (local.get 4)))
+                    (local.get 0))))
+              (f32.neg
+                (local.get 0))
+              (i32.gt_s
+                (local.get 2)
+                (i32.const -1)))))
+        (local.set 0
+          (f32.sub
+            (local.get 0)
+            (f32.mul
+              (local.get 0)
+              (f32.add
+                (local.get 7)
+                (local.get 3)))))
+        (br 1 (;@1;)))
+      (br_if 0 (;@1;)
+        (f32.ne
+          (local.get 0)
+          (local.get 0)))
+      (return
+        (select
+          (f32.const 0x1.921fb4p+0 (;=1.5707963;))
+          (f32.const -0x1.921fb4p+0 (;=-1.5707963;))
+          (i32.gt_s
+            (local.get 2)
+            (i32.const -1)))))
+    (local.get 0)
+  )
+  (func $f32_atan2 (;10;) (type 2) (param f32 f32) (result f32)
+    (local i32 i32 i32 i32 f32)
+    (block ;; label = @1
+      (br_if 0 (;@1;)
+        (i32.and
+          (f32.eq
+            (local.get 1)
+            (local.get 1))
+          (f32.eq
+            (local.get 0)
+            (local.get 0))))
+      (return
+        (f32.add
+          (local.get 0)
+          (local.get 1))))
+    (block ;; label = @1
+      (br_if 0 (;@1;)
+        (i32.ne
+          (local.tee 2
+            (i32.reinterpret_f32
+              (local.get 1)))
+          (i32.const 1065353216)))
+      (return
+        (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5atanf5atanf
+          (local.get 0))))
+    (local.set 5
+      (i32.or
+        (local.tee 3
+          (i32.and
+            (i32.shr_u
+              (local.get 2)
+              (i32.const 30))
+            (i32.const 2)))
+        (i32.shr_u
+          (local.tee 4
+            (i32.reinterpret_f32
+              (local.get 0)))
+          (i32.const 31))))
+    (block ;; label = @1
+      (block ;; label = @2
+        (block ;; label = @3
+          (block ;; label = @4
+            (block ;; label = @5
+              (block ;; label = @6
+                (block ;; label = @7
+                  (block ;; label = @8
+                    (br_if 0 (;@8;)
+                      (local.tee 4
+                        (i32.and
+                          (local.get 4)
+                          (i32.const 2147483647))))
+                    (local.set 6
+                      (f32.const -0x1.921fb6p+1 (;=-3.1415927;)))
+                    (br_table 1 (;@7;) 1 (;@7;) 2 (;@6;) 6 (;@2;) 1 (;@7;)
+                      (local.get 5)))
+                  (br_if 2 (;@5;)
+                    (i32.eqz
+                      (local.tee 2
+                        (i32.and
+                          (local.get 2)
+                          (i32.const 2147483647)))))
+                  (br_if 3 (;@4;)
+                    (i32.ne
+                      (local.get 2)
+                      (i32.const 2139095040)))
+                  (br_if 4 (;@3;)
+                    (i32.ne
+                      (local.get 4)
+                      (i32.const 2139095040)))
+                  (return
+                    (f32.load offset=1058416
+                      (i32.shl
+                        (local.get 5)
+                        (i32.const 2)))))
+                (return
+                  (local.get 0)))
+              (return
+                (f32.const 0x1.921fb6p+1 (;=3.1415927;))))
+            (return
+              (f32.copysign
+                (f32.const 0x1.921fb6p+0 (;=1.5707964;))
+                (local.get 0))))
+          (br_if 2 (;@1;)
+            (i32.eq
+              (local.get 4)
+              (i32.const 2139095040)))
+          (br_if 2 (;@1;)
+            (i32.lt_u
+              (i32.add
+                (local.get 2)
+                (i32.const 218103808))
+              (local.get 4)))
+          (block ;; label = @4
+            (block ;; label = @5
+              (br_if 0 (;@5;)
+                (i32.eqz
+                  (local.get 3)))
+              (local.set 6
+                (f32.const 0x0p+0 (;=0;)))
+              (br_if 1 (;@4;)
+                (i32.lt_u
+                  (i32.add
+                    (local.get 4)
+                    (i32.const 218103808))
+                  (local.get 2))))
+            (local.set 6
+              (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5atanf5atanf
+                (f32.abs
+                  (f32.div
+                    (local.get 0)
+                    (local.get 1))))))
+          (block ;; label = @4
+            (block ;; label = @5
+              (block ;; label = @6
+                (br_table 4 (;@2;) 1 (;@5;) 2 (;@4;) 0 (;@6;) 4 (;@2;)
+                  (local.get 5)))
+              (return
+                (f32.add
+                  (f32.add
+                    (local.get 6)
+                    (f32.const 0x1.777a5cp-24 (;=0.00000008742278;)))
+                  (f32.const -0x1.921fb6p+1 (;=-3.1415927;)))))
+            (return
+              (f32.neg
+                (local.get 6))))
+          (return
+            (f32.sub
+              (f32.const 0x1.921fb6p+1 (;=3.1415927;))
+              (f32.add
+                (local.get 6)
+                (f32.const 0x1.777a5cp-24 (;=0.00000008742278;))))))
+        (local.set 6
+          (f32.load offset=1058432
+            (i32.shl
+              (local.get 5)
+              (i32.const 2)))))
+      (return
+        (local.get 6)))
+    (f32.copysign
+      (f32.const 0x1.921fb6p+0 (;=1.5707964;))
+      (local.get 0))
+  )
+  (func $f32_atanh (;11;) (type 0) (param f32) (result f32)
+    (local i32 f32 i32 f32)
+    (global.set $__stack_pointer
+      (local.tee 1
+        (i32.sub
+          (global.get $__stack_pointer)
+          (i32.const 16))))
+    (block ;; label = @1
+      (block ;; label = @2
+        (br_if 0 (;@2;)
+          (i32.lt_u
+            (local.tee 3
+              (i32.reinterpret_f32
+                (local.tee 2
+                  (f32.abs
+                    (local.get 0)))))
+            (i32.const 1056964608)))
+        (local.set 2
+          (f32.mul
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math6log1pf6log1pf
+              (f32.add
+                (local.tee 2
+                  (f32.div
+                    (local.get 2)
+                    (f32.sub
+                      (f32.const 0x1p+0 (;=1;))
+                      (local.get 2))))
+                (local.get 2)))
+            (f32.const 0x1p-1 (;=0.5;))))
+        (br 1 (;@1;)))
+      (block ;; label = @2
+        (br_if 0 (;@2;)
+          (i32.lt_u
+            (local.get 3)
+            (i32.const 796917760)))
+        (local.set 2
+          (f32.mul
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math6log1pf6log1pf
+              (f32.add
+                (local.tee 4
+                  (f32.add
+                    (local.get 2)
+                    (local.get 2)))
+                (f32.div
+                  (f32.mul
+                    (local.get 2)
+                    (local.get 4))
+                  (f32.sub
+                    (f32.const 0x1p+0 (;=1;))
+                    (local.get 2)))))
+            (f32.const 0x1p-1 (;=0.5;))))
+        (br 1 (;@1;)))
+      (br_if 0 (;@1;)
+        (i32.gt_u
+          (local.get 3)
+          (i32.const 8388607)))
+      (f32.store offset=12
+        (local.get 1)
+        (f32.mul
+          (local.get 0)
+          (local.get 0)))
+      (drop
+        (f32.load offset=12
+          (local.get 1))))
+    (global.set $__stack_pointer
+      (i32.add
+        (local.get 1)
+        (i32.const 16)))
+    (select
+      (f32.neg
+        (local.get 2))
+      (local.get 2)
+      (i32.lt_s
+        (i32.reinterpret_f32
+          (local.get 0))
+        (i32.const 0)))
+  )
+  (func $f32_cbrt (;12;) (type 0) (param f32) (result f32)
+    (local i32 i32 f32 f64 f64 f64 f64)
+    (block ;; label = @1
+      (block ;; label = @2
+        (br_if 0 (;@2;)
+          (i32.gt_u
+            (local.tee 1
+              (i32.and
+                (i32.reinterpret_f32
+                  (local.get 0))
+                (i32.const 2147483647)))
+            (i32.const 2139095039)))
+        (local.set 2
+          (i32.const 709958130))
+        (block ;; label = @3
+          (block ;; label = @4
+            (br_if 0 (;@4;)
+              (i32.lt_u
+                (local.get 1)
+                (i32.const 8388608)))
+            (local.set 3
+              (local.get 0))
+            (br 1 (;@3;)))
+          (br_if 2 (;@1;)
+            (i32.eqz
+              (local.get 1)))
+          (local.set 1
+            (i32.and
+              (i32.reinterpret_f32
+                (local.tee 3
+                  (f32.mul
+                    (local.get 0)
+                    (f32.const 0x1p+24 (;=16777216;)))))
+              (i32.const 2147483647)))
+          (local.set 2
+            (i32.const 642849266)))
+        (return
+          (f32.demote_f64
+            (f64.div
+              (f64.mul
+                (local.tee 6
+                  (f64.div
+                    (f64.mul
+                      (f64.add
+                        (local.tee 5
+                          (f64.add
+                            (local.tee 4
+                              (f64.promote_f32
+                                (local.get 0)))
+                            (local.get 4)))
+                        (local.tee 7
+                          (f64.mul
+                            (f64.mul
+                              (local.tee 6
+                                (f64.promote_f32
+                                  (f32.copysign
+                                    (f32.reinterpret_i32
+                                      (i32.add
+                                        (i32.div_u
+                                          (local.get 1)
+                                          (i32.const 3))
+                                        (local.get 2)))
+                                    (local.get 3))))
+                              (local.get 6))
+                            (local.get 6))))
+                      (local.get 6))
+                    (f64.add
+                      (local.get 7)
+                      (f64.add
+                        (local.get 7)
+                        (local.get 4)))))
+                (f64.add
+                  (local.get 5)
+                  (local.tee 6
+                    (f64.mul
+                      (local.get 6)
+                      (f64.mul
+                        (local.get 6)
+                        (local.get 6))))))
+              (f64.add
+                (local.get 6)
+                (f64.add
+                  (local.get 6)
+                  (local.get 4)))))))
+      (local.set 0
+        (f32.add
+          (local.get 0)
+          (local.get 0))))
+    (local.get 0)
+  )
+  (func $f32_cos (;13;) (type 0) (param f32) (result f32)
+    (local i32 f64 i32 i32 f64 f64)
+    (global.set $__stack_pointer
+      (local.tee 1
+        (i32.sub
+          (global.get $__stack_pointer)
+          (i32.const 16))))
+    (local.set 2
+      (f64.promote_f32
+        (local.get 0)))
+    (block ;; label = @1
+      (block ;; label = @2
+        (block ;; label = @3
+          (block ;; label = @4
+            (br_if 0 (;@4;)
+              (i32.lt_u
+                (local.tee 4
+                  (i32.and
+                    (local.tee 3
+                      (i32.reinterpret_f32
+                        (local.get 0)))
+                    (i32.const 2147483647)))
+                (i32.const 1061752795)))
+            (block ;; label = @5
+              (br_if 0 (;@5;)
+                (i32.lt_u
+                  (local.get 4)
+                  (i32.const 1081824210)))
+              (block ;; label = @6
+                (br_if 0 (;@6;)
+                  (i32.lt_u
+                    (local.get 4)
+                    (i32.const 1088565718)))
+                (block ;; label = @7
+                  (block ;; label = @8
+                    (block ;; label = @9
+                      (block ;; label = @10
+                        (block ;; label = @11
+                          (br_if 0 (;@11;)
+                            (i32.gt_u
+                              (local.get 4)
+                              (i32.const 2139095039)))
+                          (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math9rem_pio2f9rem_pio2f
+                            (local.get 1)
+                            (local.get 0))
+                          (local.set 2
+                            (f64.load offset=8
+                              (local.get 1)))
+                          (br_table 2 (;@9;) 3 (;@8;) 4 (;@7;) 1 (;@10;) 2 (;@9;)
+                            (i32.and
+                              (i32.load
+                                (local.get 1))
+                              (i32.const 3))))
+                        (local.set 0
+                          (f32.sub
+                            (local.get 0)
+                            (local.get 0)))
+                        (br 9 (;@1;)))
+                      (local.set 0
+                        (f32.demote_f64
+                          (f64.add
+                            (f64.mul
+                              (f64.mul
+                                (local.tee 6
+                                  (f64.mul
+                                    (local.get 2)
+                                    (local.tee 5
+                                      (f64.mul
+                                        (local.get 2)
+                                        (local.get 2)))))
+                                (f64.mul
+                                  (local.get 5)
+                                  (local.get 5)))
+                              (f64.add
+                                (f64.mul
+                                  (local.get 5)
+                                  (f64.const 0x1.6cd878c3b46a7p-19 (;=0.000002718311493989822;)))
+                                (f64.const -0x1.a00f9e2cae774p-13 (;=-0.00019839334836096632;))))
+                            (f64.add
+                              (local.get 2)
+                              (f64.mul
+                                (local.get 6)
+                                (f64.add
+                                  (f64.mul
+                                    (local.get 5)
+                                    (f64.const 0x1.11110896efbb2p-7 (;=0.008333329385889463;)))
+                                  (f64.const -0x1.5555554cbac77p-3 (;=-0.16666666641626524;))))))))
+                      (br 8 (;@1;)))
+                    (local.set 0
+                      (f32.demote_f64
+                        (f64.add
+                          (f64.add
+                            (f64.add
+                              (f64.mul
+                                (local.tee 2
+                                  (f64.mul
+                                    (local.get 2)
+                                    (local.get 2)))
+                                (f64.const -0x1.ffffffd0c5e81p-2 (;=-0.499999997251031;)))
+                              (f64.const 0x1p+0 (;=1;)))
+                            (f64.mul
+                              (local.tee 5
+                                (f64.mul
+                                  (local.get 2)
+                                  (local.get 2)))
+                              (f64.const 0x1.55553e1053a42p-5 (;=0.04166662332373906;))))
+                          (f64.mul
+                            (f64.mul
+                              (local.get 2)
+                              (local.get 5))
+                            (f64.add
+                              (f64.mul
+                                (local.get 2)
+                                (f64.const 0x1.99342e0ee5069p-16 (;=0.00002439044879627741;)))
+                              (f64.const -0x1.6c087e80f1e27p-10 (;=-0.001388676377460993;)))))))
+                    (br 7 (;@1;)))
+                  (local.set 0
+                    (f32.demote_f64
+                      (f64.add
+                        (f64.mul
+                          (f64.mul
+                            (local.tee 6
+                              (f64.mul
+                                (local.tee 5
+                                  (f64.mul
+                                    (local.get 2)
+                                    (local.get 2)))
+                                (f64.neg
+                                  (local.get 2))))
+                            (f64.mul
+                              (local.get 5)
+                              (local.get 5)))
+                          (f64.add
+                            (f64.mul
+                              (local.get 5)
+                              (f64.const 0x1.6cd878c3b46a7p-19 (;=0.000002718311493989822;)))
+                            (f64.const -0x1.a00f9e2cae774p-13 (;=-0.00019839334836096632;))))
+                        (f64.sub
+                          (f64.mul
+                            (local.get 6)
+                            (f64.add
+                              (f64.mul
+                                (local.get 5)
+                                (f64.const 0x1.11110896efbb2p-7 (;=0.008333329385889463;)))
+                              (f64.const -0x1.5555554cbac77p-3 (;=-0.16666666641626524;))))
+                          (local.get 2)))))
+                  (br 6 (;@1;)))
+                (local.set 0
+                  (f32.neg
+                    (f32.demote_f64
+                      (f64.add
+                        (f64.add
+                          (f64.add
+                            (f64.mul
+                              (local.tee 2
+                                (f64.mul
+                                  (local.get 2)
+                                  (local.get 2)))
+                              (f64.const -0x1.ffffffd0c5e81p-2 (;=-0.499999997251031;)))
+                            (f64.const 0x1p+0 (;=1;)))
+                          (f64.mul
+                            (local.tee 5
+                              (f64.mul
+                                (local.get 2)
+                                (local.get 2)))
+                            (f64.const 0x1.55553e1053a42p-5 (;=0.04166662332373906;))))
+                        (f64.mul
+                          (f64.mul
+                            (local.get 2)
+                            (local.get 5))
+                          (f64.add
+                            (f64.mul
+                              (local.get 2)
+                              (f64.const 0x1.99342e0ee5069p-16 (;=0.00002439044879627741;)))
+                            (f64.const -0x1.6c087e80f1e27p-10 (;=-0.001388676377460993;))))))))
+                (br 5 (;@1;)))
+              (br_if 2 (;@3;)
+                (i32.gt_u
+                  (local.get 4)
+                  (i32.const 1085271519)))
+              (block ;; label = @6
+                (br_if 0 (;@6;)
+                  (i32.le_s
+                    (local.get 3)
+                    (i32.const -1)))
+                (local.set 0
+                  (f32.demote_f64
+                    (f64.add
+                      (f64.mul
+                        (f64.mul
+                          (local.tee 6
+                            (f64.mul
+                              (local.tee 5
+                                (f64.add
+                                  (local.get 2)
+                                  (f64.const -0x1.2d97c7f3321d2p+2 (;=-4.71238898038469;))))
+                              (local.tee 2
+                                (f64.mul
+                                  (local.get 5)
+                                  (local.get 5)))))
+                          (f64.mul
+                            (local.get 2)
+                            (local.get 2)))
+                        (f64.add
+                          (f64.mul
+                            (local.get 2)
+                            (f64.const 0x1.6cd878c3b46a7p-19 (;=0.000002718311493989822;)))
+                          (f64.const -0x1.a00f9e2cae774p-13 (;=-0.00019839334836096632;))))
+                      (f64.add
+                        (local.get 5)
+                        (f64.mul
+                          (local.get 6)
+                          (f64.add
+                            (f64.mul
+                              (local.get 2)
+                              (f64.const 0x1.11110896efbb2p-7 (;=0.008333329385889463;)))
+                            (f64.const -0x1.5555554cbac77p-3 (;=-0.16666666641626524;))))))))
+                (br 5 (;@1;)))
+              (local.set 0
+                (f32.demote_f64
+                  (f64.add
+                    (f64.mul
+                      (f64.mul
+                        (local.tee 6
+                          (f64.mul
+                            (local.tee 5
+                              (f64.sub
+                                (f64.const -0x1.2d97c7f3321d2p+2 (;=-4.71238898038469;))
+                                (local.get 2)))
+                            (local.tee 2
+                              (f64.mul
+                                (local.get 5)
+                                (local.get 5)))))
+                        (f64.mul
+                          (local.get 2)
+                          (local.get 2)))
+                      (f64.add
+                        (f64.mul
+                          (local.get 2)
+                          (f64.const 0x1.6cd878c3b46a7p-19 (;=0.000002718311493989822;)))
+                        (f64.const -0x1.a00f9e2cae774p-13 (;=-0.00019839334836096632;))))
+                    (f64.add
+                      (local.get 5)
+                      (f64.mul
+                        (local.get 6)
+                        (f64.add
+                          (f64.mul
+                            (local.get 2)
+                            (f64.const 0x1.11110896efbb2p-7 (;=0.008333329385889463;)))
+                          (f64.const -0x1.5555554cbac77p-3 (;=-0.16666666641626524;))))))))
+              (br 4 (;@1;)))
+            (br_if 2 (;@2;)
+              (i32.gt_u
+                (local.get 4)
+                (i32.const 1075235811)))
+            (block ;; label = @5
+              (br_if 0 (;@5;)
+                (i32.le_s
+                  (local.get 3)
+                  (i32.const -1)))
+              (local.set 0
+                (f32.demote_f64
+                  (f64.add
+                    (f64.mul
+                      (f64.mul
+                        (local.tee 6
+                          (f64.mul
+                            (local.tee 5
+                              (f64.sub
+                                (f64.const 0x1.921fb54442d18p+0 (;=1.5707963267948966;))
+                                (local.get 2)))
+                            (local.tee 2
+                              (f64.mul
+                                (local.get 5)
+                                (local.get 5)))))
+                        (f64.mul
+                          (local.get 2)
+                          (local.get 2)))
+                      (f64.add
+                        (f64.mul
+                          (local.get 2)
+                          (f64.const 0x1.6cd878c3b46a7p-19 (;=0.000002718311493989822;)))
+                        (f64.const -0x1.a00f9e2cae774p-13 (;=-0.00019839334836096632;))))
+                    (f64.add
+                      (local.get 5)
+                      (f64.mul
+                        (local.get 6)
+                        (f64.add
+                          (f64.mul
+                            (local.get 2)
+                            (f64.const 0x1.11110896efbb2p-7 (;=0.008333329385889463;)))
+                          (f64.const -0x1.5555554cbac77p-3 (;=-0.16666666641626524;))))))))
+              (br 4 (;@1;)))
+            (local.set 0
+              (f32.demote_f64
+                (f64.add
+                  (f64.mul
+                    (f64.mul
+                      (local.tee 6
+                        (f64.mul
+                          (local.tee 5
+                            (f64.add
+                              (local.get 2)
+                              (f64.const 0x1.921fb54442d18p+0 (;=1.5707963267948966;))))
+                          (local.tee 2
+                            (f64.mul
+                              (local.get 5)
+                              (local.get 5)))))
+                      (f64.mul
+                        (local.get 2)
+                        (local.get 2)))
+                    (f64.add
+                      (f64.mul
+                        (local.get 2)
+                        (f64.const 0x1.6cd878c3b46a7p-19 (;=0.000002718311493989822;)))
+                      (f64.const -0x1.a00f9e2cae774p-13 (;=-0.00019839334836096632;))))
+                  (f64.add
+                    (local.get 5)
+                    (f64.mul
+                      (local.get 6)
+                      (f64.add
+                        (f64.mul
+                          (local.get 2)
+                          (f64.const 0x1.11110896efbb2p-7 (;=0.008333329385889463;)))
+                        (f64.const -0x1.5555554cbac77p-3 (;=-0.16666666641626524;))))))))
+            (br 3 (;@1;)))
+          (block ;; label = @4
+            (br_if 0 (;@4;)
+              (i32.lt_u
+                (local.get 4)
+                (i32.const 964689920)))
+            (local.set 0
+              (f32.demote_f64
+                (f64.add
+                  (f64.add
+                    (f64.add
+                      (f64.mul
+                        (local.tee 2
+                          (f64.mul
+                            (local.get 2)
+                            (local.get 2)))
+                        (f64.const -0x1.ffffffd0c5e81p-2 (;=-0.499999997251031;)))
+                      (f64.const 0x1p+0 (;=1;)))
+                    (f64.mul
+                      (local.tee 5
+                        (f64.mul
+                          (local.get 2)
+                          (local.get 2)))
+                      (f64.const 0x1.55553e1053a42p-5 (;=0.04166662332373906;))))
+                  (f64.mul
+                    (f64.mul
+                      (local.get 2)
+                      (local.get 5))
+                    (f64.add
+                      (f64.mul
+                        (local.get 2)
+                        (f64.const 0x1.99342e0ee5069p-16 (;=0.00002439044879627741;)))
+                      (f64.const -0x1.6c087e80f1e27p-10 (;=-0.001388676377460993;)))))))
+            (br 3 (;@1;)))
+          (f32.store
+            (local.get 1)
+            (f32.add
+              (local.get 0)
+              (f32.const 0x1p+120 (;=1329228000000000000000000000000000000;))))
+          (drop
+            (f32.load
+              (local.get 1)))
+          (local.set 0
+            (f32.const 0x1p+0 (;=1;)))
+          (br 2 (;@1;)))
+        (local.set 0
+          (f32.demote_f64
+            (f64.add
+              (f64.add
+                (f64.add
+                  (f64.mul
+                    (local.tee 2
+                      (f64.mul
+                        (local.tee 2
+                          (f64.add
+                            (select
+                              (f64.const -0x1.921fb54442d18p+2 (;=-6.283185307179586;))
+                              (f64.const 0x1.921fb54442d18p+2 (;=6.283185307179586;))
+                              (i32.gt_s
+                                (local.get 3)
+                                (i32.const -1)))
+                            (local.get 2)))
+                        (local.get 2)))
+                    (f64.const -0x1.ffffffd0c5e81p-2 (;=-0.499999997251031;)))
+                  (f64.const 0x1p+0 (;=1;)))
+                (f64.mul
+                  (local.tee 5
+                    (f64.mul
+                      (local.get 2)
+                      (local.get 2)))
+                  (f64.const 0x1.55553e1053a42p-5 (;=0.04166662332373906;))))
+              (f64.mul
+                (f64.mul
+                  (local.get 2)
+                  (local.get 5))
+                (f64.add
+                  (f64.mul
+                    (local.get 2)
+                    (f64.const 0x1.99342e0ee5069p-16 (;=0.00002439044879627741;)))
+                  (f64.const -0x1.6c087e80f1e27p-10 (;=-0.001388676377460993;)))))))
+        (br 1 (;@1;)))
+      (local.set 0
+        (f32.neg
+          (f32.demote_f64
+            (f64.add
+              (f64.add
+                (f64.add
+                  (f64.mul
+                    (local.tee 2
+                      (f64.mul
+                        (local.tee 2
+                          (f64.add
+                            (select
+                              (f64.const -0x1.921fb54442d18p+1 (;=-3.141592653589793;))
+                              (f64.const 0x1.921fb54442d18p+1 (;=3.141592653589793;))
+                              (i32.gt_s
+                                (local.get 3)
+                                (i32.const -1)))
+                            (local.get 2)))
+                        (local.get 2)))
+                    (f64.const -0x1.ffffffd0c5e81p-2 (;=-0.499999997251031;)))
+                  (f64.const 0x1p+0 (;=1;)))
+                (f64.mul
+                  (local.tee 5
+                    (f64.mul
+                      (local.get 2)
+                      (local.get 2)))
+                  (f64.const 0x1.55553e1053a42p-5 (;=0.04166662332373906;))))
+              (f64.mul
+                (f64.mul
+                  (local.get 2)
+                  (local.get 5))
+                (f64.add
+                  (f64.mul
+                    (local.get 2)
+                    (f64.const 0x1.99342e0ee5069p-16 (;=0.00002439044879627741;)))
+                  (f64.const -0x1.6c087e80f1e27p-10 (;=-0.001388676377460993;)))))))))
+    (global.set $__stack_pointer
+      (i32.add
+        (local.get 1)
+        (i32.const 16)))
+    (local.get 0)
+  )
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math9rem_pio2f9rem_pio2f (;14;) (type 3) (param i32 f32)
+    (local i32 f64 i32 i32 i32 f64)
+    (global.set $__stack_pointer
+      (local.tee 2
+        (i32.sub
+          (global.get $__stack_pointer)
+          (i32.const 16))))
+    (i64.store offset=8
+      (local.get 2)
+      (i64.const 0))
+    (local.set 3
+      (f64.promote_f32
+        (local.get 1)))
+    (block ;; label = @1
+      (block ;; label = @2
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i32.lt_u
+              (local.tee 5
                 (i32.and
-                  (local.tee 1
+                  (local.tee 4
                     (i32.reinterpret_f32
-                      (local.get 0)))
+                      (local.get 1)))
                   (i32.const 2147483647)))
-              (i32.const 1065353215)))
+              (i32.const 1305022427)))
+          (br_if 1 (;@2;)
+            (i32.gt_u
+              (local.get 5)
+              (i32.const 2139095039)))
+          (f64.store
+            (local.get 2)
+            (f64.promote_f32
+              (f32.reinterpret_i32
+                (i32.sub
+                  (local.get 5)
+                  (i32.shl
+                    (local.tee 6
+                      (i32.add
+                        (i32.shr_u
+                          (local.get 5)
+                          (i32.const 23))
+                        (i32.const -150)))
+                    (i32.const 23))))))
+          (local.set 5
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math14rem_pio2_large14rem_pio2_large
+              (local.get 2)
+              (i32.const 1)
+              (i32.add
+                (local.get 2)
+                (i32.const 8))
+              (local.get 6)
+              (i32.const 0)))
+          (block ;; label = @4
+            (br_if 0 (;@4;)
+              (i32.le_s
+                (local.get 4)
+                (i32.const -1)))
+            (local.set 3
+              (f64.load offset=8
+                (local.get 2)))
+            (br 3 (;@1;)))
+          (local.set 5
+            (i32.sub
+              (i32.const 0)
+              (local.get 5)))
+          (local.set 3
+            (f64.neg
+              (f64.load offset=8
+                (local.get 2))))
+          (br 2 (;@1;)))
+        (local.set 3
+          (f64.add
+            (f64.add
+              (local.get 3)
+              (f64.mul
+                (local.tee 7
+                  (f64.add
+                    (f64.add
+                      (f64.mul
+                        (local.get 3)
+                        (f64.const 0x1.45f306dc9c883p-1 (;=0.6366197723675814;)))
+                      (f64.const 0x1.8p+52 (;=6755399441055744;)))
+                    (f64.const -0x1.8p+52 (;=-6755399441055744;))))
+                (f64.const -0x1.921fb5p+0 (;=-1.5707963109016418;))))
+            (f64.mul
+              (local.get 7)
+              (f64.const -0x1.110b4611a6263p-26 (;=-0.000000015893254773528196;)))))
+        (local.set 5
+          (i32.trunc_sat_f64_s
+            (local.get 7)))
+        (br 1 (;@1;)))
+      (local.set 3
+        (f64.sub
+          (local.get 3)
+          (local.get 3)))
+      (local.set 5
+        (i32.const 0)))
+    (f64.store offset=8
+      (local.get 0)
+      (local.get 3))
+    (i32.store
+      (local.get 0)
+      (local.get 5))
+    (global.set $__stack_pointer
+      (i32.add
+        (local.get 2)
+        (i32.const 16)))
+  )
+  (func $f32_cosh (;15;) (type 0) (param f32) (result f32)
+    (local i32 i32)
+    (global.set $__stack_pointer
+      (local.tee 1
+        (i32.sub
+          (global.get $__stack_pointer)
+          (i32.const 16))))
+    (block ;; label = @1
+      (block ;; label = @2
+        (br_if 0 (;@2;)
+          (i32.lt_u
+            (local.tee 2
+              (i32.reinterpret_f32
+                (local.tee 0
+                  (f32.abs
+                    (local.get 0)))))
+            (i32.const 1060205079)))
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i32.lt_u
+              (local.get 2)
+              (i32.const 1118925335)))
+          (local.set 0
+            (f32.mul
+              (f32.mul
+                (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4expf4expf
+                  (f32.add
+                    (local.get 0)
+                    (f32.const -0x1.45c778p+7 (;=-162.88959;))))
+                (f32.const 0x1p+117 (;=166153500000000000000000000000000000;)))
+              (f32.const 0x1p+117 (;=166153500000000000000000000000000000;))))
+          (br 2 (;@1;)))
+        (local.set 0
+          (f32.mul
+            (f32.add
+              (local.tee 0
+                (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4expf4expf
+                  (local.get 0)))
+              (f32.div
+                (f32.const 0x1p+0 (;=1;))
+                (local.get 0)))
+            (f32.const 0x1p-1 (;=0.5;))))
+        (br 1 (;@1;)))
+      (block ;; label = @2
+        (br_if 0 (;@2;)
+          (i32.lt_u
+            (local.get 2)
+            (i32.const 964689920)))
+        (local.set 0
+          (f32.add
+            (f32.div
+              (f32.mul
+                (local.tee 0
+                  (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math6expm1f6expm1f
+                    (local.get 0)))
+                (local.get 0))
+              (f32.add
+                (local.tee 0
+                  (f32.add
+                    (local.get 0)
+                    (f32.const 0x1p+0 (;=1;))))
+                (local.get 0)))
+            (f32.const 0x1p+0 (;=1;))))
+        (br 1 (;@1;)))
+      (f32.store offset=12
+        (local.get 1)
+        (f32.add
+          (local.get 0)
+          (f32.const 0x1p+120 (;=1329228000000000000000000000000000000;))))
+      (drop
+        (f32.load offset=12
+          (local.get 1)))
+      (local.set 0
+        (f32.const 0x1p+0 (;=1;))))
+    (global.set $__stack_pointer
+      (i32.add
+        (local.get 1)
+        (i32.const 16)))
+    (local.get 0)
+  )
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math4expf4expf (;16;) (type 0) (param f32) (result f32)
+    (local i32 i32 i32 i32 f32 f32 f32)
+    (global.set $__stack_pointer
+      (local.tee 1
+        (i32.sub
+          (global.get $__stack_pointer)
+          (i32.const 16))))
+    (local.set 3
+      (i32.shr_u
+        (local.tee 2
+          (i32.reinterpret_f32
+            (local.get 0)))
+        (i32.const 31)))
+    (block ;; label = @1
+      (block ;; label = @2
+        (block ;; label = @3
+          (block ;; label = @4
+            (block ;; label = @5
+              (block ;; label = @6
+                (block ;; label = @7
+                  (br_if 0 (;@7;)
+                    (i32.lt_u
+                      (local.tee 4
+                        (i32.and
+                          (local.get 2)
+                          (i32.const 2147483647)))
+                      (i32.const 1118743632)))
+                  (block ;; label = @8
+                    (br_if 0 (;@8;)
+                      (i32.le_u
+                        (local.get 4)
+                        (i32.const 2139095040)))
+                    (local.set 5
+                      (local.get 0))
+                    (br 7 (;@1;)))
+                  (block ;; label = @8
+                    (br_if 0 (;@8;)
+                      (i32.gt_u
+                        (local.get 4)
+                        (i32.const 1118925335)))
+                    (br_if 2 (;@6;)
+                      (i32.gt_s
+                        (local.get 2)
+                        (i32.const -1)))
+                    (f32.store offset=8
+                      (local.get 1)
+                      (f32.div
+                        (f32.const -0x1p-126 (;=-0.000000000000000000000000000000000000011754944;))
+                        (local.get 0)))
+                    (drop
+                      (f32.load offset=8
+                        (local.get 1)))
+                    (br 2 (;@6;)))
+                  (block ;; label = @8
+                    (br_if 0 (;@8;)
+                      (i32.gt_s
+                        (local.get 2)
+                        (i32.const -1)))
+                    (f32.store offset=8
+                      (local.get 1)
+                      (f32.div
+                        (f32.const -0x1p-126 (;=-0.000000000000000000000000000000000000011754944;))
+                        (local.get 0)))
+                    (drop
+                      (f32.load offset=8
+                        (local.get 1)))
+                    (local.set 5
+                      (f32.const 0x0p+0 (;=0;)))
+                    (br_if 2 (;@6;)
+                      (i32.le_u
+                        (local.get 4)
+                        (i32.const 1120924084)))
+                    (br 7 (;@1;)))
+                  (local.set 5
+                    (f32.mul
+                      (local.get 0)
+                      (f32.const 0x1p+127 (;=170141180000000000000000000000000000000;))))
+                  (br 6 (;@1;)))
+                (block ;; label = @7
+                  (br_if 0 (;@7;)
+                    (i32.gt_u
+                      (local.get 4)
+                      (i32.const 1051816472)))
+                  (br_if 2 (;@5;)
+                    (i32.le_u
+                      (local.get 4)
+                      (i32.const 956301312)))
+                  (local.set 4
+                    (i32.const 0))
+                  (local.set 6
+                    (f32.const 0x0p+0 (;=0;)))
+                  (local.set 5
+                    (local.get 0))
+                  (br 5 (;@2;)))
+                (br_if 2 (;@4;)
+                  (i32.le_u
+                    (local.get 4)
+                    (i32.const 1065686418))))
+              (local.set 4
+                (i32.trunc_sat_f32_s
+                  (f32.add
+                    (f32.mul
+                      (local.get 0)
+                      (f32.const 0x1.715476p+0 (;=1.442695;)))
+                    (f32.load offset=1057264
+                      (i32.shl
+                        (local.get 3)
+                        (i32.const 2))))))
+              (br 2 (;@3;)))
+            (f32.store offset=12
+              (local.get 1)
+              (f32.add
+                (local.get 0)
+                (f32.const 0x1p+127 (;=170141180000000000000000000000000000000;))))
+            (local.set 5
+              (f32.add
+                (local.get 0)
+                (f32.const 0x1p+0 (;=1;))))
+            (drop
+              (f32.load offset=12
+                (local.get 1)))
+            (br 3 (;@1;)))
+          (local.set 4
+            (i32.sub
+              (i32.xor
+                (local.get 3)
+                (i32.const 1))
+              (local.get 3))))
+        (local.set 5
+          (f32.sub
+            (local.tee 0
+              (f32.add
+                (local.get 0)
+                (f32.mul
+                  (local.tee 5
+                    (f32.convert_i32_s
+                      (local.get 4)))
+                  (f32.const -0x1.62e4p-1 (;=-0.69314575;)))))
+            (local.tee 6
+              (f32.mul
+                (local.get 5)
+                (f32.const 0x1.7f7d1cp-20 (;=0.0000014286068;)))))))
+      (local.set 5
+        (f32.add
+          (f32.add
+            (local.get 0)
+            (f32.sub
+              (f32.div
+                (f32.mul
+                  (local.get 5)
+                  (local.tee 7
+                    (f32.sub
+                      (local.get 5)
+                      (f32.mul
+                        (local.tee 7
+                          (f32.mul
+                            (local.get 5)
+                            (local.get 5)))
+                        (f32.add
+                          (f32.mul
+                            (local.get 7)
+                            (f32.const -0x1.6aa42ap-9 (;=-0.0027667333;)))
+                          (f32.const 0x1.55551ep-3 (;=0.16666625;)))))))
+                (f32.sub
+                  (f32.const 0x1p+1 (;=2;))
+                  (local.get 7)))
+              (local.get 6)))
+          (f32.const 0x1p+0 (;=1;))))
+      (br_if 0 (;@1;)
+        (i32.eqz
+          (local.get 4)))
+      (local.set 5
+        (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math6scalbn7scalbnf
+          (local.get 5)
+          (local.get 4))))
+    (global.set $__stack_pointer
+      (i32.add
+        (local.get 1)
+        (i32.const 16)))
+    (local.get 5)
+  )
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math6expm1f6expm1f (;17;) (type 0) (param f32) (result f32)
+    (local i32 i32 i32 f32 f32 f32 f32)
+    (local.set 1
+      (i32.sub
+        (global.get $__stack_pointer)
+        (i32.const 16)))
+    (block ;; label = @1
+      (block ;; label = @2
+        (block ;; label = @3
+          (block ;; label = @4
+            (block ;; label = @5
+              (block ;; label = @6
+                (block ;; label = @7
+                  (block ;; label = @8
+                    (block ;; label = @9
+                      (block ;; label = @10
+                        (br_if 0 (;@10;)
+                          (i32.gt_u
+                            (local.tee 3
+                              (i32.and
+                                (local.tee 2
+                                  (i32.reinterpret_f32
+                                    (local.get 0)))
+                                (i32.const 2147483647)))
+                            (i32.const 1100331075)))
+                        (br_if 1 (;@9;)
+                          (i32.gt_u
+                            (local.get 3)
+                            (i32.const 1051816472)))
+                        (br_if 6 (;@4;)
+                          (i32.lt_u
+                            (local.get 3)
+                            (i32.const 855638016)))
+                        (local.set 3
+                          (i32.const 0))
+                        (local.set 4
+                          (f32.const 0x0p+0 (;=0;)))
+                        (br 5 (;@5;)))
+                      (local.set 5
+                        (select
+                          (local.get 0)
+                          (f32.const -0x1p+0 (;=-1;))
+                          (local.tee 1
+                            (i32.gt_u
+                              (local.get 3)
+                              (i32.const 2139095040)))))
+                      (br_if 7 (;@2;)
+                        (i32.lt_s
+                          (local.get 2)
+                          (i32.const 0)))
+                      (br_if 7 (;@2;)
+                        (local.get 1))
+                      (local.set 5
+                        (f32.const 0x1p-1 (;=0.5;)))
+                      (br_if 1 (;@8;)
+                        (i32.lt_u
+                          (local.get 3)
+                          (i32.const 1118925336)))
+                      (return
+                        (f32.mul
+                          (local.get 0)
+                          (f32.const 0x1p+127 (;=170141180000000000000000000000000000000;)))))
+                    (br_if 1 (;@7;)
+                      (i32.lt_u
+                        (local.get 3)
+                        (i32.const 1065686418)))
+                    (local.set 5
+                      (select
+                        (f32.const -0x1p-1 (;=-0.5;))
+                        (f32.const 0x1p-1 (;=0.5;))
+                        (i32.lt_s
+                          (local.get 2)
+                          (i32.const 0)))))
+                  (local.set 5
+                    (f32.mul
+                      (local.tee 4
+                        (f32.convert_i32_s
+                          (local.tee 3
+                            (i32.trunc_sat_f32_s
+                              (f32.add
+                                (f32.mul
+                                  (local.get 0)
+                                  (f32.const 0x1.715476p+0 (;=1.442695;)))
+                                (local.get 5))))))
+                      (f32.const 0x1.2fefa2p-17 (;=0.000009058001;))))
+                  (local.set 4
+                    (f32.add
+                      (local.get 0)
+                      (f32.mul
+                        (local.get 4)
+                        (f32.const -0x1.62e3p-1 (;=-0.6931381;)))))
+                  (br 1 (;@6;)))
+                (block ;; label = @7
+                  (br_if 0 (;@7;)
+                    (i32.lt_s
+                      (local.get 2)
+                      (i32.const 0)))
+                  (local.set 4
+                    (f32.add
+                      (local.get 0)
+                      (f32.const -0x1.62e3p-1 (;=-0.6931381;))))
+                  (local.set 5
+                    (f32.const 0x1.2fefa2p-17 (;=0.000009058001;)))
+                  (local.set 3
+                    (i32.const 1))
+                  (br 1 (;@6;)))
+                (local.set 4
+                  (f32.add
+                    (local.get 0)
+                    (f32.const 0x1.62e3p-1 (;=0.6931381;))))
+                (local.set 5
+                  (f32.const -0x1.2fefa2p-17 (;=-0.000009058001;)))
+                (local.set 3
+                  (i32.const -1)))
+              (local.set 4
+                (f32.sub
+                  (f32.sub
+                    (local.get 4)
+                    (local.tee 0
+                      (f32.sub
+                        (local.get 4)
+                        (local.get 5))))
+                  (local.get 5))))
+            (local.set 6
+              (f32.mul
+                (local.tee 5
+                  (f32.mul
+                    (local.get 0)
+                    (local.tee 6
+                      (f32.mul
+                        (local.get 0)
+                        (f32.const 0x1p-1 (;=0.5;))))))
+                (f32.div
+                  (f32.sub
+                    (local.tee 7
+                      (f32.add
+                        (f32.mul
+                          (local.get 5)
+                          (f32.add
+                            (f32.mul
+                              (local.get 5)
+                              (f32.const 0x1.9e602p-10 (;=0.001580717;)))
+                            (f32.const -0x1.1110dp-5 (;=-0.033333212;))))
+                        (f32.const 0x1p+0 (;=1;))))
+                    (local.tee 6
+                      (f32.sub
+                        (f32.const 0x1.8p+1 (;=3;))
+                        (f32.mul
+                          (local.get 6)
+                          (local.get 7)))))
+                  (f32.sub
+                    (f32.const 0x1.8p+2 (;=6;))
+                    (f32.mul
+                      (local.get 0)
+                      (local.get 6))))))
+            (br_if 1 (;@3;)
+              (local.get 3))
+            (return
+              (f32.sub
+                (local.get 0)
+                (f32.sub
+                  (f32.mul
+                    (local.get 0)
+                    (local.get 6))
+                  (local.get 5)))))
+          (br_if 2 (;@1;)
+            (i32.ge_u
+              (local.get 3)
+              (i32.const 8388608)))
+          (f32.store offset=12
+            (local.get 1)
+            (f32.mul
+              (local.get 0)
+              (local.get 0)))
+          (drop
+            (f32.load offset=12
+              (local.get 1)))
+          (br 2 (;@1;)))
+        (local.set 5
+          (f32.sub
+            (f32.sub
+              (f32.mul
+                (local.get 0)
+                (f32.sub
+                  (local.get 6)
+                  (local.get 4)))
+              (local.get 4))
+            (local.get 5)))
+        (block ;; label = @3
+          (block ;; label = @4
+            (block ;; label = @5
+              (br_table 0 (;@5;) 2 (;@3;) 1 (;@4;) 2 (;@3;)
+                (i32.add
+                  (local.get 3)
+                  (i32.const 1))))
+            (return
+              (f32.add
+                (f32.mul
+                  (f32.sub
+                    (local.get 0)
+                    (local.get 5))
+                  (f32.const 0x1p-1 (;=0.5;)))
+                (f32.const -0x1p-1 (;=-0.5;)))))
+          (block ;; label = @4
+            (br_if 0 (;@4;)
+              (f32.lt
+                (local.get 0)
+                (f32.const -0x1p-2 (;=-0.25;))))
+            (return
+              (f32.add
+                (f32.add
+                  (local.tee 0
+                    (f32.sub
+                      (local.get 0)
+                      (local.get 5)))
+                  (local.get 0))
+                (f32.const 0x1p+0 (;=1;)))))
+          (return
+            (f32.mul
+              (f32.sub
+                (local.get 5)
+                (f32.add
+                  (local.get 0)
+                  (f32.const 0x1p-1 (;=0.5;))))
+              (f32.const -0x1p+1 (;=-2;)))))
+        (local.set 4
+          (f32.reinterpret_i32
+            (i32.add
+              (local.tee 2
+                (i32.shl
+                  (local.get 3)
+                  (i32.const 23)))
+              (i32.const 1065353216))))
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i32.lt_u
+              (local.get 3)
+              (i32.const 57)))
+          (return
+            (f32.add
+              (select
+                (f32.mul
+                  (f32.add
+                    (local.tee 0
+                      (f32.add
+                        (f32.sub
+                          (local.get 0)
+                          (local.get 5))
+                        (f32.const 0x1p+0 (;=1;))))
+                    (local.get 0))
+                  (f32.const 0x1p+127 (;=170141180000000000000000000000000000000;)))
+                (f32.mul
+                  (local.get 0)
+                  (local.get 4))
+                (i32.eq
+                  (local.get 3)
+                  (i32.const 128)))
+              (f32.const -0x1p+0 (;=-1;)))))
+        (local.set 6
+          (f32.reinterpret_i32
+            (i32.sub
+              (i32.const 1065353216)
+              (local.get 2))))
+        (block ;; label = @3
+          (block ;; label = @4
+            (br_if 0 (;@4;)
+              (i32.lt_u
+                (local.get 3)
+                (i32.const 23)))
+            (local.set 0
+              (f32.add
+                (f32.sub
+                  (local.get 0)
+                  (f32.add
+                    (local.get 5)
+                    (local.get 6)))
+                (f32.const 0x1p+0 (;=1;))))
+            (br 1 (;@3;)))
+          (local.set 0
+            (f32.add
+              (f32.sub
+                (f32.const 0x1p+0 (;=1;))
+                (local.get 6))
+              (f32.sub
+                (local.get 0)
+                (local.get 5)))))
+        (local.set 5
+          (f32.mul
+            (local.get 0)
+            (local.get 4))))
+      (return
+        (local.get 5)))
+    (local.get 0)
+  )
+  (func $f32_erf (;18;) (type 0) (param f32) (result f32)
+    (local i32 i32 f32)
+    (block ;; label = @1
+      (br_if 0 (;@1;)
+        (i32.gt_u
+          (local.tee 2
+            (i32.and
+              (local.tee 1
+                (i32.reinterpret_f32
+                  (local.get 0)))
+              (i32.const 2147483647)))
+          (i32.const 2139095039)))
+      (block ;; label = @2
+        (br_if 0 (;@2;)
+          (i32.lt_u
+            (local.get 2)
+            (i32.const 1062731776)))
+        (local.set 3
+          (f32.const 0x1p-120 (;=0.0000000000000000000000000000000000007523164;)))
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i32.ge_u
+              (local.get 2)
+              (i32.const 1086324736)))
+          (local.set 3
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4erff5erfc2
+              (local.get 2)
+              (local.get 0))))
+        (return
+          (select
+            (f32.neg
+              (local.tee 0
+                (f32.sub
+                  (f32.const 0x1p+0 (;=1;))
+                  (local.get 3))))
+            (local.get 0)
+            (i32.lt_s
+              (local.get 1)
+              (i32.const 0)))))
+      (block ;; label = @2
+        (br_if 0 (;@2;)
+          (i32.lt_u
+            (local.get 2)
+            (i32.const 830472192)))
+        (return
+          (f32.add
+            (local.get 0)
+            (f32.mul
+              (local.get 0)
+              (f32.div
+                (f32.add
+                  (f32.mul
+                    (local.tee 3
+                      (f32.mul
+                        (local.get 0)
+                        (local.get 0)))
+                    (f32.add
+                      (f32.mul
+                        (local.get 3)
+                        (f32.add
+                          (f32.mul
+                            (local.get 3)
+                            (f32.add
+                              (f32.mul
+                                (local.get 3)
+                                (f32.const -0x1.8ead62p-16 (;=-0.000023763017;)))
+                              (f32.const -0x1.7a2912p-8 (;=-0.0057702702;))))
+                          (f32.const -0x1.d2a51ep-6 (;=-0.02848175;))))
+                      (f32.const -0x1.4cd7d6p-2 (;=-0.3250421;))))
+                  (f32.const 0x1.06eba8p-3 (;=0.12837917;)))
+                (f32.add
+                  (f32.mul
+                    (local.get 3)
+                    (f32.add
+                      (f32.mul
+                        (local.get 3)
+                        (f32.add
+                          (f32.mul
+                            (local.get 3)
+                            (f32.add
+                              (f32.mul
+                                (local.get 3)
+                                (f32.add
+                                  (f32.mul
+                                    (local.get 3)
+                                    (f32.const -0x1.09c434p-18 (;=-0.0000039602282;)))
+                                  (f32.const 0x1.15dc92p-13 (;=0.00013249474;))))
+                              (f32.const 0x1.4d022cp-8 (;=0.005081306;))))
+                          (f32.const 0x1.0a54c6p-4 (;=0.06502225;))))
+                      (f32.const 0x1.97779cp-2 (;=0.3979172;))))
+                  (f32.const 0x1p+0 (;=1;))))))))
+      (return
+        (f32.mul
+          (f32.add
+            (f32.mul
+              (local.get 0)
+              (f32.const 0x1p+3 (;=8;)))
+            (f32.mul
+              (local.get 0)
+              (f32.const 0x1.06eba8p+0 (;=1.0270333;))))
+          (f32.const 0x1p-3 (;=0.125;)))))
+    (f32.add
+      (f32.div
+        (f32.const 0x1p+0 (;=1;))
+        (local.get 0))
+      (f32.sub
+        (f32.const 0x1p+0 (;=1;))
+        (f32.convert_i32_u
+          (i32.and
+            (i32.shr_u
+              (local.get 1)
+              (i32.const 30))
+            (i32.const 2)))))
+  )
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math4erff5erfc2 (;19;) (type 4) (param i32 f32) (result f32)
+    (local f32 f32 f32 f32 f32 f32 f32 f32 f32)
+    (local.set 2
+      (f32.abs
+        (local.get 1)))
+    (block ;; label = @1
+      (br_if 0 (;@1;)
+        (i32.lt_u
+          (local.get 0)
+          (i32.const 1067450368)))
+      (local.set 1
+        (f32.div
+          (f32.const 0x1p+0 (;=1;))
+          (f32.mul
+            (local.get 1)
+            (local.get 1))))
+      (block ;; label = @2
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i32.lt_u
+              (local.get 0)
+              (i32.const 1077336941)))
+          (local.set 3
+            (f32.add
+              (f32.mul
+                (local.get 1)
+                (f32.const -0x1.670e24p+4 (;=-22.440952;)))
+              (f32.const 0x1.da874ep+8 (;=474.52853;))))
+          (local.set 4
+            (f32.add
+              (f32.mul
+                (local.get 1)
+                (f32.add
+                  (f32.mul
+                    (local.get 1)
+                    (f32.add
+                      (f32.mul
+                        (local.get 1)
+                        (f32.add
+                          (f32.mul
+                            (local.get 1)
+                            (f32.add
+                              (f32.mul
+                                (local.get 1)
+                                (f32.add
+                                  (f32.mul
+                                    (local.get 1)
+                                    (f32.const -0x1.e384eap+8 (;=-483.5192;)))
+                                  (f32.const -0x1.004616p+10 (;=-1025.0951;))))
+                              (f32.const -0x1.3ec882p+9 (;=-637.56647;))))
+                          (f32.const -0x1.4145d4p+7 (;=-160.63638;))))
+                      (f32.const -0x1.1c2096p+4 (;=-17.757956;))))
+                  (f32.const -0x1.993ba8p-1 (;=-0.79928327;))))
+              (f32.const -0x1.434124p-7 (;=-0.009864943;))))
+          (local.set 5
+            (f32.const 0x1.e568b2p+4 (;=30.33806;)))
+          (local.set 6
+            (f32.const 0x1.45cae2p+8 (;=325.7925;)))
+          (local.set 7
+            (f32.const 0x1.802eb2p+10 (;=1536.7296;)))
+          (local.set 8
+            (f32.const 0x1.8ffb76p+11 (;=3199.8582;)))
+          (local.set 9
+            (f32.const 0x1.3f219cp+11 (;=2553.0503;)))
+          (br 1 (;@2;)))
+        (local.set 3
+          (f32.add
+            (f32.mul
+              (local.get 1)
+              (f32.add
+                (f32.mul
+                  (local.get 1)
+                  (f32.const -0x1.eeff2ep-5 (;=-0.060424414;)))
+                (f32.const 0x1.a47ef8p+2 (;=6.5702496;))))
+            (f32.const 0x1.b28a3ep+6 (;=108.635;))))
+        (local.set 4
+          (f32.add
+            (f32.mul
+              (local.get 1)
+              (f32.add
+                (f32.mul
+                  (local.get 1)
+                  (f32.add
+                    (f32.mul
+                      (local.get 1)
+                      (f32.add
+                        (f32.mul
+                          (local.get 1)
+                          (f32.add
+                            (f32.mul
+                              (local.get 1)
+                              (f32.add
+                                (f32.mul
+                                  (local.get 1)
+                                  (f32.add
+                                    (f32.mul
+                                      (local.get 1)
+                                      (f32.const -0x1.3a0efcp+3 (;=-9.814329;)))
+                                    (f32.const -0x1.452656p+6 (;=-81.28744;))))
+                                (f32.const -0x1.7135cep+7 (;=-184.60509;))))
+                            (f32.const -0x1.44cb18p+7 (;=-162.39667;))))
+                        (f32.const -0x1.f300aep+5 (;=-62.37533;))))
+                    (f32.const -0x1.51e044p+3 (;=-10.558626;))))
+                (f32.const -0x1.63416ep-1 (;=-0.69385856;))))
+            (f32.const -0x1.434126p-7 (;=-0.009864944;))))
+        (local.set 5
+          (f32.const 0x1.3a6b9cp+4 (;=19.651272;)))
+        (local.set 6
+          (f32.const 0x1.1350c6p+7 (;=137.65776;)))
+        (local.set 7
+          (f32.const 0x1.b290dep+8 (;=434.5659;)))
+        (local.set 8
+          (f32.const 0x1.42b192p+9 (;=645.38727;)))
+        (local.set 9
+          (f32.const 0x1.ad0216p+8 (;=429.00815;))))
+      (return
+        (f32.div
+          (f32.mul
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4expf4expf
+              (f32.sub
+                (f32.const -0x1.2p-1 (;=-0.5625;))
+                (f32.mul
+                  (local.tee 10
+                    (f32.reinterpret_i32
+                      (i32.and
+                        (i32.reinterpret_f32
+                          (local.get 2))
+                        (i32.const 2147475456))))
+                  (local.get 10))))
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4expf4expf
+              (f32.add
+                (f32.mul
+                  (f32.sub
+                    (local.get 10)
+                    (local.get 2))
+                  (f32.add
+                    (local.get 2)
+                    (local.get 10)))
+                (f32.div
+                  (local.get 4)
+                  (f32.add
+                    (f32.mul
+                      (local.get 1)
+                      (f32.add
+                        (f32.mul
+                          (local.get 1)
+                          (f32.add
+                            (f32.mul
+                              (local.get 1)
+                              (f32.add
+                                (f32.mul
+                                  (local.get 1)
+                                  (f32.add
+                                    (f32.mul
+                                      (local.get 1)
+                                      (f32.add
+                                        (f32.mul
+                                          (local.get 1)
+                                          (local.get 3))
+                                        (local.get 9)))
+                                    (local.get 8)))
+                                (local.get 7)))
+                            (local.get 6)))
+                        (local.get 5)))
+                    (f32.const 0x1p+0 (;=1;)))))))
+          (local.get 2))))
+    (f32.sub
+      (f32.const 0x1.3d4fa8p-3 (;=0.15493709;))
+      (f32.div
+        (f32.add
+          (f32.mul
+            (local.tee 1
+              (f32.add
+                (local.get 2)
+                (f32.const -0x1p+0 (;=-1;))))
+            (f32.add
+              (f32.mul
+                (local.get 1)
+                (f32.add
+                  (f32.mul
+                    (local.get 1)
+                    (f32.add
+                      (f32.mul
+                        (local.get 1)
+                        (f32.add
+                          (f32.mul
+                            (local.get 1)
+                            (f32.add
+                              (f32.mul
+                                (local.get 1)
+                                (f32.const -0x1.1bf38p-9 (;=-0.0021663755;)))
+                              (f32.const 0x1.22a366p-5 (;=0.035478305;))))
+                          (f32.const -0x1.c63984p-4 (;=-0.110894695;))))
+                      (f32.const 0x1.45fca8p-2 (;=0.31834662;))))
+                  (f32.const -0x1.7d241p-2 (;=-0.37220788;))))
+              (f32.const 0x1.a8d00ap-2 (;=0.4148561;))))
+          (f32.const -0x1.359b8cp-9 (;=-0.0023621186;)))
+        (f32.add
+          (f32.mul
+            (local.get 1)
+            (f32.add
+              (f32.mul
+                (local.get 1)
+                (f32.add
+                  (f32.mul
+                    (local.get 1)
+                    (f32.add
+                      (f32.mul
+                        (local.get 1)
+                        (f32.add
+                          (f32.mul
+                            (local.get 1)
+                            (f32.add
+                              (f32.mul
+                                (local.get 1)
+                                (f32.const 0x1.88b546p-7 (;=0.0119845;)))
+                              (f32.const 0x1.bedc26p-7 (;=0.013637084;))))
+                          (f32.const 0x1.02660ep-3 (;=0.12617122;))))
+                      (f32.const 0x1.2635cep-4 (;=0.071828656;))))
+                  (f32.const 0x1.14af0ap-1 (;=0.54039794;))))
+              (f32.const 0x1.b3e662p-4 (;=0.10642088;))))
+          (f32.const 0x1p+0 (;=1;)))))
+  )
+  (func $f32_erfc (;20;) (type 0) (param f32) (result f32)
+    (local i32 i32 f32)
+    (block ;; label = @1
+      (block ;; label = @2
+        (br_if 0 (;@2;)
+          (i32.gt_u
+            (local.tee 2
+              (i32.and
+                (local.tee 1
+                  (i32.reinterpret_f32
+                    (local.get 0)))
+                (i32.const 2147483647)))
+            (i32.const 2139095039)))
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i32.lt_u
+              (local.get 2)
+              (i32.const 1062731776)))
           (block ;; label = @4
             (br_if 0 (;@4;)
               (i32.lt_u
                 (local.get 2)
-                (i32.const 1056964608)))
+                (i32.const 1105199104)))
+            (return
+              (select
+                (f32.const 0x0p+0 (;=0;))
+                (f32.const 0x1p+1 (;=2;))
+                (i32.gt_s
+                  (local.get 1)
+                  (i32.const -1)))))
+          (return
+            (select
+              (local.tee 0
+                (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4erff5erfc2
+                  (local.get 2)
+                  (local.get 0)))
+              (f32.sub
+                (f32.const 0x1p+1 (;=2;))
+                (local.get 0))
+              (i32.gt_s
+                (local.get 1)
+                (i32.const -1)))))
+        (br_if 1 (;@1;)
+          (i32.lt_u
+            (local.get 2)
+            (i32.const 595591168)))
+        (local.set 3
+          (f32.div
+            (f32.add
+              (f32.mul
+                (local.tee 3
+                  (f32.mul
+                    (local.get 0)
+                    (local.get 0)))
+                (f32.add
+                  (f32.mul
+                    (local.get 3)
+                    (f32.add
+                      (f32.mul
+                        (local.get 3)
+                        (f32.add
+                          (f32.mul
+                            (local.get 3)
+                            (f32.const -0x1.8ead62p-16 (;=-0.000023763017;)))
+                          (f32.const -0x1.7a2912p-8 (;=-0.0057702702;))))
+                      (f32.const -0x1.d2a51ep-6 (;=-0.02848175;))))
+                  (f32.const -0x1.4cd7d6p-2 (;=-0.3250421;))))
+              (f32.const 0x1.06eba8p-3 (;=0.12837917;)))
+            (f32.add
+              (f32.mul
+                (local.get 3)
+                (f32.add
+                  (f32.mul
+                    (local.get 3)
+                    (f32.add
+                      (f32.mul
+                        (local.get 3)
+                        (f32.add
+                          (f32.mul
+                            (local.get 3)
+                            (f32.add
+                              (f32.mul
+                                (local.get 3)
+                                (f32.const -0x1.09c434p-18 (;=-0.0000039602282;)))
+                              (f32.const 0x1.15dc92p-13 (;=0.00013249474;))))
+                          (f32.const 0x1.4d022cp-8 (;=0.005081306;))))
+                      (f32.const 0x1.0a54c6p-4 (;=0.06502225;))))
+                  (f32.const 0x1.97779cp-2 (;=0.3979172;))))
+              (f32.const 0x1p+0 (;=1;)))))
+        (block ;; label = @3
+          (block ;; label = @4
+            (br_if 0 (;@4;)
+              (i32.lt_s
+                (local.get 1)
+                (i32.const 0)))
+            (br_if 1 (;@3;)
+              (i32.ge_u
+                (local.get 2)
+                (i32.const 1048576000))))
+          (return
+            (f32.sub
+              (f32.const 0x1p+0 (;=1;))
+              (f32.add
+                (local.get 0)
+                (f32.mul
+                  (local.get 0)
+                  (local.get 3))))))
+        (return
+          (f32.sub
+            (f32.const 0x1p-1 (;=0.5;))
+            (f32.add
+              (f32.add
+                (local.get 0)
+                (f32.const -0x1p-1 (;=-0.5;)))
+              (f32.mul
+                (local.get 0)
+                (local.get 3))))))
+      (return
+        (f32.add
+          (f32.div
+            (f32.const 0x1p+0 (;=1;))
+            (local.get 0))
+          (f32.convert_i32_u
+            (i32.and
+              (i32.shr_u
+                (local.get 1)
+                (i32.const 30))
+              (i32.const 2))))))
+    (f32.sub
+      (f32.const 0x1p+0 (;=1;))
+      (local.get 0))
+  )
+  (func $f32_exp (;21;) (type 0) (param f32) (result f32)
+    (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4expf4expf
+      (local.get 0))
+  )
+  (func $f32_exp10 (;22;) (type 0) (param f32) (result f32)
+    (local i32 i32 i32 f32 f32)
+    (local.set 3
+      (i32.add
+        (local.tee 2
+          (i32.and
+            (i32.shr_u
+              (local.tee 1
+                (i32.reinterpret_f32
+                  (local.get 0)))
+              (i32.const 23))
+            (i32.const 255)))
+        (i32.const -127)))
+    (block ;; label = @1
+      (block ;; label = @2
+        (block ;; label = @3
+          (block ;; label = @4
             (block ;; label = @5
               (br_if 0 (;@5;)
-                (i32.le_s
+                (i32.gt_u
+                  (local.get 2)
+                  (i32.const 149)))
+              (br_if 2 (;@3;)
+                (i32.lt_u
+                  (local.get 2)
+                  (i32.const 127)))
+              (br_if 3 (;@2;)
+                (i32.and
+                  (i32.shl
+                    (local.get 1)
+                    (local.get 3))
+                  (i32.const 8388607)))
+              (local.set 4
+                (f32.reinterpret_i32
+                  (i32.and
+                    (local.get 1)
+                    (i32.const -2147483648))))
+              (br 1 (;@4;)))
+            (block ;; label = @5
+              (br_if 0 (;@5;)
+                (i32.eqz
+                  (i32.and
+                    (local.get 1)
+                    (i32.const 8388607))))
+              (local.set 5
+                (local.get 0))
+              (local.set 4
+                (local.get 0))
+              (br_if 4 (;@1;)
+                (i32.eq
+                  (local.get 3)
+                  (i32.const 128))))
+            (local.set 4
+              (f32.reinterpret_i32
+                (i32.and
                   (local.get 1)
-                  (i32.const -1)))
-              (return
-                (f32.add
-                  (local.tee 0
-                    (f32.add
-                      (f32.add
-                        (f32.mul
-                          (f32.div
-                            (f32.mul
-                              (local.tee 0
-                                (f32.mul
-                                  (f32.sub
-                                    (f32.const 0x1p+0 (;=1;))
-                                    (local.get 0))
-                                  (f32.const 0x1p-1 (;=0.5;))))
-                              (f32.add
-                                (f32.mul
+                  (i32.const -2147483648)))))
+          (local.set 5
+            (local.get 0))
+          (br 2 (;@1;)))
+        (local.set 5
+          (f32.reinterpret_i32
+            (i32.and
+              (local.get 1)
+              (i32.const -2147483648))))
+        (local.set 4
+          (local.get 0))
+        (br 1 (;@1;)))
+      (local.set 4
+        (f32.sub
+          (local.get 0)
+          (local.tee 5
+            (f32.reinterpret_i32
+              (i32.and
+                (i32.shr_s
+                  (i32.const -8388608)
+                  (local.get 3))
+                (local.get 1)))))))
+    (block ;; label = @1
+      (br_if 0 (;@1;)
+        (i32.lt_u
+          (i32.and
+            (i32.reinterpret_f32
+              (local.get 5))
+            (i32.const 2130706432))
+          (i32.const 1090519040)))
+      (return
+        (f32.demote_f64
+          (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4exp24exp2
+            (f64.mul
+              (f64.promote_f32
+                (local.get 0))
+              (f64.const 0x1.a934f0979a371p+1 (;=3.321928094887362;)))))))
+    (block ;; label = @1
+      (br_if 0 (;@1;)
+        (f32.eq
+          (local.get 4)
+          (f32.const 0x0p+0 (;=0;))))
+      (return
+        (f32.mul
+          (f32.load
+            (i32.add
+              (i32.shl
+                (i32.trunc_sat_f32_s
+                  (local.get 5))
+                (i32.const 2))
+              (i32.const 1057732)))
+          (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5exp2f5exp2f
+            (f32.mul
+              (local.get 4)
+              (f32.const 0x1.a934fp+1 (;=3.321928;)))))))
+    (f32.load
+      (i32.add
+        (i32.shl
+          (i32.trunc_sat_f32_s
+            (local.get 5))
+          (i32.const 2))
+        (i32.const 1057732)))
+  )
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math4exp24exp2 (;23;) (type 1) (param f64) (result f64)
+    (local i32 i64 i64 f64 i32 i32 f64)
+    (global.set $__stack_pointer
+      (local.tee 1
+        (i32.sub
+          (global.get $__stack_pointer)
+          (i32.const 16))))
+    (block ;; label = @1
+      (block ;; label = @2
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i64.gt_u
+              (local.tee 3
+                (i64.and
+                  (i64.shr_u
+                    (local.tee 2
+                      (i64.reinterpret_f64
+                        (local.get 0)))
+                    (i64.const 32))
+                  (i64.const 2147483647)))
+              (i64.const 1083174911)))
+          (br_if 1 (;@2;)
+            (i64.ge_u
+              (local.get 3)
+              (i64.const 1016070144)))
+          (local.set 0
+            (f64.add
+              (local.get 0)
+              (f64.const 0x1p+0 (;=1;))))
+          (br 2 (;@1;)))
+        (block ;; label = @3
+          (block ;; label = @4
+            (br_if 0 (;@4;)
+              (i64.lt_s
+                (local.get 2)
+                (i64.const 0)))
+            (br_if 1 (;@3;)
+              (i64.gt_u
+                (local.get 3)
+                (i64.const 1083179007))))
+          (block ;; label = @4
+            (block ;; label = @5
+              (br_if 0 (;@5;)
+                (i64.gt_u
+                  (local.get 3)
+                  (i64.const 2146435071)))
+              (br_if 1 (;@4;)
+                (i64.le_s
+                  (local.get 2)
+                  (i64.const -1)))
+              (br 3 (;@2;)))
+            (local.set 0
+              (f64.div
+                (f64.const -0x1p+0 (;=-1;))
+                (local.get 0)))
+            (br 3 (;@1;)))
+          (block ;; label = @4
+            (br_if 0 (;@4;)
+              (i32.eqz
+                (f64.le
+                  (local.get 0)
+                  (f64.const -0x1.0ccp+10 (;=-1075;)))))
+            (f32.store offset=12
+              (local.get 1)
+              (f32.demote_f64
+                (f64.div
+                  (f64.const -0x1p-149 (;=-0.000000000000000000000000000000000000000000001401298464324817;))
+                  (local.get 0))))
+            (drop
+              (f32.load offset=12
+                (local.get 1)))
+            (local.set 0
+              (f64.const 0x0p+0 (;=0;)))
+            (br 3 (;@1;)))
+          (br_if 1 (;@2;)
+            (f64.eq
+              (f64.add
+                (f64.add
+                  (local.get 0)
+                  (f64.const -0x1p+52 (;=-4503599627370496;)))
+                (f64.const 0x1p+52 (;=4503599627370496;)))
+              (local.get 0)))
+          (f32.store offset=12
+            (local.get 1)
+            (f32.demote_f64
+              (f64.div
+                (f64.const -0x1p-149 (;=-0.000000000000000000000000000000000000000000001401298464324817;))
+                (local.get 0))))
+          (drop
+            (f32.load offset=12
+              (local.get 1)))
+          (br 1 (;@2;)))
+        (local.set 0
+          (f64.mul
+            (local.get 0)
+            (f64.const 0x1p+1023 (;=89884656743115800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000;))))
+        (br 1 (;@1;)))
+      (local.set 0
+        (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math6scalbn6scalbn
+          (f64.add
+            (local.tee 7
+              (f64.load offset=1053168
+                (local.tee 6
+                  (i32.and
+                    (i32.shl
+                      (local.tee 5
+                        (i32.add
+                          (i32.wrap_i64
+                            (i64.reinterpret_f64
+                              (local.tee 4
+                                (f64.add
                                   (local.get 0)
-                                  (f32.add
-                                    (f32.mul
-                                      (local.get 0)
-                                      (f32.const -0x1.1ba6d6p-7 (;=-0.008656363;)))
-                                    (f32.const -0x1.5e2774p-5 (;=-0.042743422;))))
-                                (f32.const 0x1.5554eap-3 (;=0.16666587;))))
+                                  (f64.const 0x1.8p+44 (;=26388279066624;))))))
+                          (i32.const 128)))
+                      (i32.const 4))
+                    (i32.const 4080)))))
+            (f64.mul
+              (f64.mul
+                (local.get 7)
+                (local.tee 0
+                  (f64.sub
+                    (f64.sub
+                      (local.get 0)
+                      (f64.add
+                        (local.get 4)
+                        (f64.const -0x1.8p+44 (;=-26388279066624;))))
+                    (f64.load offset=1053176
+                      (local.get 6)))))
+              (f64.add
+                (f64.mul
+                  (local.get 0)
+                  (f64.add
+                    (f64.mul
+                      (local.get 0)
+                      (f64.add
+                        (f64.mul
+                          (local.get 0)
+                          (f64.add
+                            (f64.mul
+                              (local.get 0)
+                              (f64.const 0x1.5d88003875c74p-10 (;=0.0013333559164630223;)))
+                            (f64.const 0x1.3b2ab88f704p-7 (;=0.009618129842126066;))))
+                        (f64.const 0x1.c6b08d704a0a6p-5 (;=0.0555041086648214;))))
+                    (f64.const 0x1.ebfbdff82c575p-3 (;=0.2402265069591;))))
+                (f64.const 0x1.62e42fefa39efp-1 (;=0.6931471805599453;)))))
+          (i32.shr_s
+            (local.get 5)
+            (i32.const 8)))))
+    (global.set $__stack_pointer
+      (i32.add
+        (local.get 1)
+        (i32.const 16)))
+    (local.get 0)
+  )
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math5exp2f5exp2f (;24;) (type 0) (param f32) (result f32)
+    (local i32 i32 i32 f32 f64 f64)
+    (local.set 1
+      (i32.sub
+        (global.get $__stack_pointer)
+        (i32.const 16)))
+    (block ;; label = @1
+      (block ;; label = @2
+        (br_if 0 (;@2;)
+          (i32.gt_u
+            (local.tee 3
+              (i32.and
+                (local.tee 2
+                  (i32.reinterpret_f32
+                    (local.get 0)))
+                (i32.const 2147483647)))
+            (i32.const 1123811328)))
+        (br_if 1 (;@1;)
+          (i32.ge_u
+            (local.get 3)
+            (i32.const 855638017)))
+        (return
+          (f32.add
+            (local.get 0)
+            (f32.const 0x1p+0 (;=1;)))))
+      (block ;; label = @2
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i32.gt_u
+              (local.get 3)
+              (i32.const 2139095040)))
+          (block ;; label = @4
+            (br_if 0 (;@4;)
+              (i32.gt_s
+                (local.get 2)
+                (i32.const 1124073471)))
+            (br_if 3 (;@1;)
+              (i32.ge_s
+                (local.get 2)
+                (i32.const 0)))
+            (br_if 2 (;@2;)
+              (i32.gt_u
+                (local.get 2)
+                (i32.const -1021968385)))
+            (br_if 3 (;@1;)
+              (i32.eqz
+                (i32.and
+                  (local.get 2)
+                  (i32.const 65535))))
+            (f32.store offset=12
+              (local.get 1)
+              (f32.div
+                (f32.const -0x1.p-149 (;=-0.000000000000000000000000000000000000000000001;))
+                (local.get 0)))
+            (drop
+              (f32.load offset=12
+                (local.get 1)))
+            (br 3 (;@1;)))
+          (local.set 0
+            (f32.mul
+              (local.get 0)
+              (f32.const 0x1p+127 (;=170141180000000000000000000000000000000;)))))
+        (return
+          (local.get 0)))
+      (f32.store offset=12
+        (local.get 1)
+        (f32.div
+          (f32.const -0x1.p-149 (;=-0.000000000000000000000000000000000000000000001;))
+          (local.get 0)))
+      (drop
+        (f32.load offset=12
+          (local.get 1)))
+      (return
+        (f32.const 0x0p+0 (;=0;))))
+    (f32.demote_f64
+      (f64.mul
+        (f64.add
+          (f64.add
+            (local.tee 5
+              (f64.load offset=1057576
+                (i32.shl
+                  (i32.and
+                    (local.tee 3
+                      (i32.add
+                        (i32.reinterpret_f32
+                          (local.tee 4
+                            (f32.add
+                              (local.get 0)
+                              (f32.const 0x1.8p+19 (;=786432;)))))
+                        (i32.const 8)))
+                    (i32.const 15))
+                  (i32.const 3))))
+            (f64.mul
+              (f64.add
+                (f64.mul
+                  (local.tee 6
+                    (f64.promote_f32
+                      (f32.sub
+                        (local.get 0)
+                        (f32.add
+                          (local.get 4)
+                          (f32.const -0x1.8p+19 (;=-786432;))))))
+                  (f64.const 0x1.ebfbep-3 (;=0.24022650718688965;)))
+                (f64.const 0x1.62e43p-1 (;=0.6931471824645996;)))
+              (local.tee 5
+                (f64.mul
+                  (local.get 5)
+                  (local.get 6)))))
+          (f64.mul
+            (f64.add
+              (f64.mul
+                (local.get 6)
+                (f64.const 0x1.3b2c9cp-7 (;=0.009618354961276054;)))
+              (f64.const 0x1.c6b348p-5 (;=0.055505409836769104;)))
+            (f64.mul
+              (f64.mul
+                (local.get 6)
+                (local.get 6))
+              (local.get 5))))
+        (f64.reinterpret_i64
+          (i64.shl
+            (i64.extend_i32_u
+              (i32.add
+                (i32.shr_u
+                  (local.get 3)
+                  (i32.const 4))
+                (i32.const 1023)))
+            (i64.const 52)))))
+  )
+  (func $f32_exp2 (;25;) (type 0) (param f32) (result f32)
+    (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5exp2f5exp2f
+      (local.get 0))
+  )
+  (func $f32_expm1 (;26;) (type 0) (param f32) (result f32)
+    (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math6expm1f6expm1f
+      (local.get 0))
+  )
+  (func $f32_fmod (;27;) (type 2) (param f32 f32) (result f32)
+    (local i32 i32 i32 i32 i32 i32 i32 i32 i64 i64 i64 i64)
+    (block ;; label = @1
+      (block ;; label = @2
+        (block ;; label = @3
+          (block ;; label = @4
+            (block ;; label = @5
+              (block ;; label = @6
+                (br_if 0 (;@6;)
+                  (i32.eq
+                    (i32.and
+                      (local.tee 2
+                        (i32.reinterpret_f32
+                          (local.get 0)))
+                      (i32.const 2139095040))
+                    (i32.const 2139095040)))
+                (br_if 0 (;@6;)
+                  (i32.eqz
+                    (i32.and
+                      (i32.sub
+                        (i32.const 0)
+                        (local.tee 3
+                          (i32.reinterpret_f32
+                            (local.get 1))))
+                      (i32.const 2139095040))))
+                (br_if 5 (;@1;)
+                  (i32.lt_u
+                    (local.tee 4
+                      (i32.and
+                        (local.get 2)
+                        (i32.const 2147483647)))
+                    (local.tee 3
+                      (i32.and
+                        (local.get 3)
+                        (i32.const 2147483647)))))
+                (block ;; label = @7
+                  (br_if 0 (;@7;)
+                    (i32.lt_u
+                      (local.tee 5
+                        (i32.sub
+                          (local.get 4)
+                          (i32.and
+                            (local.tee 6
+                              (select
+                                (i32.const 0)
+                                (local.tee 5
+                                  (i32.add
+                                    (local.get 4)
+                                    (i32.const -8388608)))
+                                (i32.gt_u
+                                  (local.get 5)
+                                  (local.get 4))))
+                            (i32.const 2139095040))))
+                      (local.tee 9
+                        (i32.shl
+                          (local.tee 4
+                            (i32.sub
+                              (local.get 3)
+                              (local.tee 8
+                                (i32.and
+                                  (local.tee 7
+                                    (select
+                                      (i32.const 0)
+                                      (local.tee 4
+                                        (i32.add
+                                          (local.get 3)
+                                          (i32.const -8388608)))
+                                      (i32.gt_u
+                                        (local.get 4)
+                                        (local.get 3))))
+                                  (i32.const 2139095040)))))
+                          (i32.const 1)))))
+                  (br_if 2 (;@5;)
+                    (i32.eq
+                      (local.get 3)
+                      (local.get 8)))
+                  (local.set 5
+                    (i32.rem_u
+                      (local.get 5)
+                      (local.get 4))))
+                (local.set 8
+                  (i32.and
+                    (local.get 2)
+                    (i32.const -2147483648)))
+                (br_if 2 (;@4;)
+                  (i32.ge_u
+                    (local.tee 2
+                      (i32.sub
+                        (i32.shr_u
+                          (local.get 6)
+                          (i32.const 23))
+                        (local.tee 3
+                          (i32.shr_u
+                            (local.get 7)
+                            (i32.const 23)))))
+                    (i32.const 32)))
+                (br_if 2 (;@4;)
+                  (i32.le_u
+                    (local.get 4)
+                    (i32.wrap_i64
+                      (i64.shr_u
+                        (local.tee 10
+                          (i64.shl
+                            (i64.extend_i32_u
+                              (local.get 5))
+                            (i64.extend_i32_u
+                              (local.get 2))))
+                        (i64.const 32)))))
+                (local.set 2
+                  (i32.wrap_i64
+                    (i64.rem_u
+                      (local.get 10)
+                      (i64.extend_i32_u
+                        (local.get 4)))))
+                (br 3 (;@3;)))
+              (return
+                (f32.div
+                  (local.tee 0
+                    (f32.mul
+                      (local.get 0)
+                      (local.get 1)))
+                  (local.get 0))))
+            (call $_RNvNtNtCsknUcikIyyBm_4core9panicking11panic_const23panic_const_rem_by_zero)
+            (unreachable))
+          (block ;; label = @4
+            (block ;; label = @5
+              (block ;; label = @6
+                (block ;; label = @7
+                  (block ;; label = @8
+                    (block ;; label = @9
+                      (br_if 0 (;@9;)
+                        (i32.ge_u
+                          (local.get 4)
+                          (i32.const 1073741824)))
+                      (br_if 1 (;@8;)
+                        (i32.ge_u
+                          (local.get 5)
+                          (local.get 9)))
+                      (block ;; label = @10
+                        (br_if 0 (;@10;)
+                          (i32.eqz
+                            (i32.and
+                              (local.get 4)
+                              (local.tee 6
+                                (i32.add
+                                  (local.get 4)
+                                  (i32.const -1))))))
+                        (br_if 3 (;@7;)
+                          (i32.le_u
+                            (local.tee 4
+                              (i32.shl
+                                (local.get 4)
+                                (local.tee 6
+                                  (i32.add
+                                    (i32.clz
+                                      (local.get 4))
+                                    (i32.const -2)))))
+                            (i32.const 536870912)))
+                        (br_if 4 (;@6;)
+                          (i32.ge_u
+                            (local.get 4)
+                            (i32.const 1073741824)))
+                        (br_if 5 (;@5;)
+                          (i32.ge_u
+                            (local.get 5)
+                            (local.tee 7
+                              (i32.shl
+                                (local.get 4)
+                                (i32.const 1)))))
+                        (local.set 10
+                          (i64.mul
+                            (i64.add
+                              (local.tee 13
+                                (i64.div_u
+                                  (local.tee 11
+                                    (i64.shl
+                                      (i64.extend_i32_u
+                                        (i32.sub
+                                          (i32.const -2147483648)
+                                          (local.get 7)))
+                                      (i64.const 32)))
+                                  (local.tee 12
+                                    (i64.extend_i32_u
+                                      (local.get 7)))))
+                              (i64.const 4294967296))
+                            (i64.extend_i32_u
+                              (i32.shl
+                                (local.get 5)
+                                (i32.const 1)))))
+                        (local.set 11
+                          (i64.sub
+                            (local.get 11)
+                            (i64.mul
+                              (local.get 13)
+                              (local.get 12))))
+                        (block ;; label = @11
+                          (br_if 0 (;@11;)
+                            (i32.lt_u
+                              (local.tee 2
+                                (i32.add
+                                  (local.get 6)
+                                  (local.get 2)))
+                              (i32.const 31)))
+                          (loop ;; label = @12
+                            (local.set 10
+                              (i64.add
+                                (i64.mul
+                                  (i64.shr_u
+                                    (local.get 10)
+                                    (i64.const 32))
+                                  (local.get 11))
+                                (i64.and
+                                  (i64.shl
+                                    (local.get 10)
+                                    (i64.const 31))
+                                  (i64.const 9223372032559808512))))
+                            (br_if 0 (;@12;)
+                              (i32.gt_u
+                                (local.tee 2
+                                  (i32.add
+                                    (local.get 2)
+                                    (i32.const -31)))
+                                (i32.const 30)))))
+                        (local.set 2
+                          (i32.shr_u
+                            (i32.sub
+                              (local.tee 2
+                                (i32.wrap_i64
+                                  (i64.shr_u
+                                    (i64.mul
+                                      (i64.add
+                                        (i64.shr_u
+                                          (i64.add
+                                            (i64.mul
+                                              (local.get 11)
+                                              (i64.extend_i32_u
+                                                (i32.shr_u
+                                                  (i32.wrap_i64
+                                                    (i64.shr_u
+                                                      (local.get 10)
+                                                      (i64.const 32)))
+                                                  (i32.xor
+                                                    (local.get 2)
+                                                    (i32.const 31)))))
+                                            (i64.and
+                                              (i64.shl
+                                                (local.get 10)
+                                                (i64.extend_i32_u
+                                                  (local.get 2)))
+                                              (i64.const 9223372036854775807)))
+                                          (i64.const 32))
+                                        (i64.const 2))
+                                      (local.get 12))
+                                    (i64.const 32))))
+                              (select
+                                (i32.const 0)
+                                (local.get 4)
+                                (i32.gt_u
+                                  (local.get 4)
+                                  (local.get 2))))
+                            (local.get 6)))
+                        (br 7 (;@3;)))
+                      (br_if 5 (;@4;)
+                        (i32.lt_u
+                          (local.get 2)
+                          (i32.const 32)))
+                      (br 7 (;@2;)))
+                    (call $_RNvNtCsknUcikIyyBm_4core9panicking5panic
+                      (i32.const 34))
+                    (unreachable))
+                  (call $_RNvNtCsknUcikIyyBm_4core9panicking5panic
+                    (i32.const 30))
+                  (unreachable))
+                (call $_RNvNtCsknUcikIyyBm_4core9panicking5panic
+                  (i32.const 43))
+                (unreachable))
+              (call $_RNvNtCsknUcikIyyBm_4core9panicking5panic
+                (i32.const 43))
+              (unreachable))
+            (call $_RNvNtCsknUcikIyyBm_4core9panicking5panic
+              (i32.const 23))
+            (unreachable))
+          (local.set 2
+            (i32.and
+              (i32.shl
+                (local.get 5)
+                (local.get 2))
+              (local.get 6))))
+        (br_if 0 (;@2;)
+          (i32.eqz
+            (local.get 2)))
+        (return
+          (f32.reinterpret_i32
+            (i32.add
+              (i32.add
+                (i32.shl
+                  (local.get 2)
+                  (local.tee 4
+                    (select
+                      (local.tee 4
+                        (i32.sub
+                          (i32.const 23)
+                          (i32.xor
+                            (i32.clz
+                              (local.get 2))
+                            (i32.const 31))))
+                      (local.get 3)
+                      (i32.lt_u
+                        (local.get 4)
+                        (local.get 3)))))
+                (local.get 8))
+              (i32.shl
+                (i32.sub
+                  (local.get 3)
+                  (local.get 4))
+                (i32.const 23))))))
+      (local.set 0
+        (f32.reinterpret_i32
+          (local.get 8))))
+    (local.get 0)
+  )
+  (func $_RNvNtNtCsknUcikIyyBm_4core9panicking11panic_const23panic_const_rem_by_zero (;28;) (type 5)
+    (call $_RNvNtCsknUcikIyyBm_4core9panicking9panic_fmt)
+    (unreachable)
+  )
+  (func $_RNvNtCsknUcikIyyBm_4core9panicking5panic (;29;) (type 6) (param i32)
+    (call $_RNvNtCsknUcikIyyBm_4core9panicking9panic_fmt)
+    (unreachable)
+  )
+  (func $f32_gamma (;30;) (type 0) (param f32) (result f32)
+    (f32.demote_f64
+      (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math6tgamma6tgamma
+        (f64.promote_f32
+          (local.get 0))))
+  )
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math6tgamma6tgamma (;31;) (type 1) (param f64) (result f64)
+    (local i32 i64 i32 f64 i32 f64 f64 f64 f64 f64 i32)
+    (global.set $__stack_pointer
+      (local.tee 1
+        (i32.sub
+          (global.get $__stack_pointer)
+          (i32.const 16))))
+    (block ;; label = @1
+      (block ;; label = @2
+        (block ;; label = @3
+          (block ;; label = @4
+            (block ;; label = @5
+              (br_if 0 (;@5;)
+                (i32.gt_u
+                  (local.tee 3
+                    (i32.and
+                      (i32.wrap_i64
+                        (i64.shr_u
+                          (local.tee 2
+                            (i64.reinterpret_f64
+                              (local.get 0)))
+                          (i64.const 32)))
+                      (i32.const 2147483647)))
+                  (i32.const 2146435071)))
+              (br_if 1 (;@4;)
+                (i32.lt_u
+                  (local.get 3)
+                  (i32.const 1016070144)))
+              (block ;; label = @6
+                (block ;; label = @7
+                  (block ;; label = @8
+                    (br_if 0 (;@8;)
+                      (f64.eq
+                        (local.get 0)
+                        (local.tee 4
+                          (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5floor5floor
+                            (local.get 0)))))
+                    (br_if 1 (;@7;)
+                      (i32.gt_u
+                        (local.get 3)
+                        (i32.const 1080492031)))
+                    (local.set 4
+                      (f64.abs
+                        (local.get 0)))
+                    (br 6 (;@2;)))
+                  (br_if 1 (;@6;)
+                    (i64.gt_s
+                      (local.get 2)
+                      (i64.const -1)))
+                  (local.set 4
+                    (f64.const nan (;=NaN;)))
+                  (br 6 (;@1;)))
+                (br_if 3 (;@3;)
+                  (i64.gt_s
+                    (local.get 2)
+                    (i64.const -1)))
+                (f32.store offset=12
+                  (local.get 1)
+                  (f32.demote_f64
+                    (f64.div
+                      (f64.const 0x1p-126 (;=0.000000000000000000000000000000000000011754943508222875;))
+                      (local.get 0))))
+                (drop
+                  (f32.load offset=12
+                    (local.get 1)))
+                (local.set 4
+                  (select
+                    (f64.const 0x0p+0 (;=0;))
+                    (f64.const -0x0p+0 (;=-0;))
+                    (f64.eq
+                      (f64.mul
+                        (local.get 4)
+                        (f64.const 0x1p-1 (;=0.5;)))
+                      (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5floor5floor
+                        (f64.mul
+                          (local.get 0)
+                          (f64.const 0x1p-1 (;=0.5;)))))))
+                (br 5 (;@1;)))
+              (block ;; label = @6
+                (br_if 0 (;@6;)
+                  (f64.le
+                    (local.get 0)
+                    (f64.const 0x1.7p+4 (;=23;))))
+                (local.set 4
+                  (local.get 0))
+                (br_if 4 (;@2;)
+                  (i32.le_u
+                    (local.get 3)
+                    (i32.const 1080492031)))
+                (br 3 (;@3;)))
+              (local.set 4
+                (f64.load
+                  (i32.add
+                    (i32.shl
+                      (i32.trunc_sat_f64_u
+                        (local.get 0))
+                      (i32.const 3))
+                    (i32.const 1057968))))
+              (br 4 (;@1;)))
+            (local.set 4
+              (f64.add
+                (local.get 0)
+                (f64.const inf (;=inf;))))
+            (br 3 (;@1;)))
+          (local.set 4
+            (f64.div
+              (f64.const 0x1p+0 (;=1;))
+              (local.get 0)))
+          (br 2 (;@1;)))
+        (local.set 4
+          (f64.mul
+            (local.get 0)
+            (f64.const 0x1p+1023 (;=89884656743115800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000;))))
+        (br 1 (;@1;)))
+      (local.set 5
+        (f64.gt
+          (local.get 4)
+          (f64.const 0x1.61945b98p+2 (;=5.52468004077673;))))
+      (local.set 7
+        (f64.sub
+          (f64.add
+            (local.tee 6
+              (f64.add
+                (local.get 4)
+                (f64.const 0x1.61945b98p+2 (;=5.52468004077673;))))
+            (f64.const -0x1.61945b98p+2 (;=-5.52468004077673;)))
+          (local.get 4)))
+      (local.set 8
+        (f64.add
+          (f64.sub
+            (local.get 6)
+            (local.get 4))
+          (f64.const -0x1.61945b98p+2 (;=-5.52468004077673;))))
+      (block ;; label = @2
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (f64.lt
+              (local.get 4)
+              (f64.const 0x1p+3 (;=8;))))
+          (local.set 3
+            (i32.const 0))
+          (local.set 9
+            (f64.const 0x0p+0 (;=0;)))
+          (local.set 10
+            (f64.const 0x0p+0 (;=0;)))
+          (loop ;; label = @4
+            (local.set 10
+              (f64.add
+                (f64.div
+                  (local.get 10)
+                  (local.get 4))
+                (f64.load offset=1057872
+                  (local.tee 11
+                    (i32.shl
+                      (local.get 3)
+                      (i32.const 3))))))
+            (local.set 9
+              (f64.add
+                (f64.div
+                  (local.get 9)
+                  (local.get 4))
+                (f64.load offset=1057768
+                  (local.get 11))))
+            (br_if 2 (;@2;)
+              (local.tee 11
+                (i32.eq
+                  (local.get 3)
+                  (i32.const 12))))
+            (br_if 0 (;@4;)
+              (i32.le_u
+                (local.tee 3
+                  (select
+                    (i32.const 12)
+                    (i32.add
+                      (local.get 3)
+                      (i32.const 1))
+                    (local.get 11)))
+                (i32.const 12)))
+            (br 2 (;@2;))))
+        (local.set 9
+          (f64.const 0x0p+0 (;=0;)))
+        (local.set 3
+          (i32.const 96))
+        (local.set 10
+          (f64.const 0x0p+0 (;=0;)))
+        (loop ;; label = @3
+          (local.set 10
+            (f64.add
+              (f64.mul
+                (local.get 4)
+                (local.get 10))
+              (f64.load
+                (i32.add
+                  (local.get 3)
+                  (i32.const 1057872)))))
+          (local.set 9
+            (f64.add
+              (f64.mul
+                (local.get 4)
+                (local.get 9))
+              (f64.load
+                (i32.add
+                  (local.get 3)
+                  (i32.const 1057768)))))
+          (br_if 0 (;@3;)
+            (i32.ne
+              (local.tee 3
+                (i32.add
+                  (local.get 3)
+                  (i32.const -8)))
+              (i32.const -8)))))
+      (local.set 7
+        (select
+          (local.get 8)
+          (local.get 7)
+          (local.get 5)))
+      (local.set 8
+        (f64.add
+          (local.get 4)
+          (f64.const -0x1p-1 (;=-0.5;))))
+      (local.set 9
+        (f64.mul
+          (f64.div
+            (local.get 9)
+            (local.get 10))
+          (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3exp3exp
+            (f64.neg
+              (local.get 6)))))
+      (block ;; label = @2
+        (br_if 0 (;@2;)
+          (i32.eqz
+            (f64.lt
+              (local.get 0)
+              (f64.const 0x0p+0 (;=0;)))))
+        (local.set 10
+          (f64.mul
+            (local.get 4)
+            (f64.const 0x1p-1 (;=0.5;))))
+        (local.set 10
+          (f64.mul
+            (f64.sub
+              (local.tee 10
+                (f64.add
+                  (local.tee 10
+                    (f64.sub
+                      (local.get 10)
+                      (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5floor5floor
+                        (local.get 10))))
+                  (local.get 10)))
+              (f64.mul
+                (f64.convert_i32_s
+                  (local.tee 3
+                    (i32.div_s
+                      (i32.add
+                        (i32.trunc_sat_f64_s
+                          (f64.mul
+                            (local.get 10)
+                            (f64.const 0x1p+2 (;=4;))))
+                        (i32.const 1))
+                      (i32.const 2))))
+                (f64.const 0x1p-1 (;=0.5;))))
+            (f64.const 0x1.921fb54442d18p+1 (;=3.141592653589793;))))
+        (block ;; label = @3
+          (block ;; label = @4
+            (block ;; label = @5
+              (block ;; label = @6
+                (block ;; label = @7
+                  (br_table 1 (;@6;) 2 (;@5;) 3 (;@4;) 0 (;@7;)
+                    (i32.add
+                      (local.get 3)
+                      (i32.const -1))))
+                (local.set 10
+                  (f64.add
+                    (local.get 10)
+                    (f64.mul
+                      (f64.mul
+                        (local.get 10)
+                        (local.tee 0
+                          (f64.mul
+                            (local.get 10)
+                            (local.get 10))))
+                      (f64.add
+                        (f64.mul
+                          (local.get 0)
+                          (f64.add
+                            (f64.mul
+                              (f64.mul
+                                (local.get 0)
+                                (f64.mul
+                                  (local.get 0)
+                                  (local.get 0)))
+                              (f64.add
+                                (f64.mul
+                                  (local.get 0)
+                                  (f64.const 0x1.5d93a5acfd57cp-33 (;=0.000000000158969099521155;)))
+                                (f64.const -0x1.ae5e68a2b9cebp-26 (;=-0.000000025050760253406863;))))
+                            (f64.add
+                              (f64.mul
+                                (local.get 0)
+                                (f64.add
+                                  (f64.mul
+                                    (local.get 0)
+                                    (f64.const 0x1.71de357b1fe7dp-19 (;=0.0000027557313707070068;)))
+                                  (f64.const -0x1.a01a019c161d5p-13 (;=-0.0001984126982985795;))))
+                              (f64.const 0x1.111111110f8a6p-7 (;=0.00833333333332249;)))))
+                        (f64.const -0x1.5555555555549p-3 (;=-0.16666666666666632;))))))
+                (br 3 (;@3;)))
+              (local.set 10
+                (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5k_cos5k_cos
+                  (local.get 10)
+                  (f64.const 0x0p+0 (;=0;))))
+              (br 2 (;@3;)))
+            (local.set 10
+              (f64.sub
+                (f64.mul
+                  (f64.mul
+                    (local.tee 0
+                      (f64.mul
+                        (local.get 10)
+                        (local.get 10)))
+                    (f64.neg
+                      (local.get 10)))
+                  (f64.add
+                    (f64.mul
+                      (local.get 0)
+                      (f64.add
+                        (f64.mul
+                          (f64.mul
+                            (local.get 0)
+                            (f64.mul
+                              (local.get 0)
+                              (local.get 0)))
+                          (f64.add
+                            (f64.mul
+                              (local.get 0)
+                              (f64.const 0x1.5d93a5acfd57cp-33 (;=0.000000000158969099521155;)))
+                            (f64.const -0x1.ae5e68a2b9cebp-26 (;=-0.000000025050760253406863;))))
+                        (f64.add
+                          (f64.mul
+                            (local.get 0)
+                            (f64.add
+                              (f64.mul
+                                (local.get 0)
+                                (f64.const 0x1.71de357b1fe7dp-19 (;=0.0000027557313707070068;)))
+                              (f64.const -0x1.a01a019c161d5p-13 (;=-0.0001984126982985795;))))
+                          (f64.const 0x1.111111110f8a6p-7 (;=0.00833333333332249;)))))
+                    (f64.const -0x1.5555555555549p-3 (;=-0.16666666666666632;))))
+                (local.get 10)))
+            (br 1 (;@3;)))
+          (local.set 10
+            (f64.neg
+              (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5k_cos5k_cos
+                (local.get 10)
+                (f64.const 0x0p+0 (;=0;))))))
+        (local.set 9
+          (f64.div
+            (f64.const -0x1.921fb54442d18p+1 (;=-3.141592653589793;))
+            (f64.mul
+              (local.get 9)
+              (f64.mul
+                (local.get 4)
+                (local.get 10)))))
+        (local.set 8
+          (f64.neg
+            (local.get 8)))
+        (local.set 7
+          (f64.neg
+            (local.get 7))))
+      (local.set 4
+        (f64.mul
+          (local.tee 4
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3pow3pow
+              (local.get 6)
+              (f64.mul
+                (local.get 8)
+                (f64.const 0x1p-1 (;=0.5;)))))
+          (f64.mul
+            (local.get 4)
+            (f64.add
+              (local.get 9)
+              (f64.div
+                (f64.mul
+                  (local.get 9)
+                  (f64.mul
+                    (local.get 7)
+                    (f64.const 0x1.81945b98p+2 (;=6.02468004077673;))))
+                (local.get 6)))))))
+    (global.set $__stack_pointer
+      (i32.add
+        (local.get 1)
+        (i32.const 16)))
+    (local.get 4)
+  )
+  (func $f32_hypot (;32;) (type 2) (param f32 f32) (result f32)
+    (local i32 i32 i32 f32 f64)
+    (local.set 1
+      (f32.reinterpret_i32
+        (local.tee 4
+          (select
+            (local.tee 2
+              (i32.and
+                (i32.reinterpret_f32
+                  (local.get 0))
+                (i32.const 2147483647)))
+            (local.tee 3
+              (i32.and
+                (i32.reinterpret_f32
+                  (local.get 1))
+                (i32.const 2147483647)))
+            (i32.lt_u
+              (local.get 2)
+              (local.get 3))))))
+    (block ;; label = @1
+      (br_if 0 (;@1;)
+        (i32.eq
+          (local.get 4)
+          (i32.const 2139095040)))
+      (local.set 0
+        (f32.reinterpret_i32
+          (local.tee 2
+            (select
+              (local.get 2)
+              (local.get 3)
+              (i32.gt_u
+                (local.get 2)
+                (local.get 3))))))
+      (block ;; label = @2
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i32.gt_u
+              (local.get 2)
+              (i32.const 2139095039)))
+          (br_if 0 (;@3;)
+            (i32.eqz
+              (local.get 4)))
+          (br_if 1 (;@2;)
+            (i32.lt_u
+              (i32.sub
+                (local.get 2)
+                (local.get 4))
+              (i32.const 209715200))))
+        (return
+          (f32.add
+            (local.get 0)
+            (local.get 1))))
+      (block ;; label = @2
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i32.gt_u
+              (local.get 2)
+              (i32.const 1568669695)))
+          (local.set 5
+            (f32.const 0x1p+0 (;=1;)))
+          (br_if 1 (;@2;)
+            (i32.ge_u
+              (local.get 4)
+              (i32.const 562036736)))
+          (local.set 1
+            (f32.mul
+              (local.get 1)
+              (f32.const 0x1p+90 (;=1237940100000000000000000000;))))
+          (local.set 0
+            (f32.mul
+              (local.get 0)
+              (f32.const 0x1p+90 (;=1237940100000000000000000000;))))
+          (local.set 5
+            (f32.const 0x1p-90 (;=0.0000000000000000000000000008077936;)))
+          (br 1 (;@2;)))
+        (local.set 1
+          (f32.mul
+            (local.get 1)
+            (f32.const 0x1p-90 (;=0.0000000000000000000000000008077936;))))
+        (local.set 0
+          (f32.mul
+            (local.get 0)
+            (f32.const 0x1p-90 (;=0.0000000000000000000000000008077936;))))
+        (local.set 5
+          (f32.const 0x1p+90 (;=1237940100000000000000000000;))))
+      (local.set 1
+        (f32.mul
+          (local.get 5)
+          (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4sqrt5sqrtf
+            (f32.demote_f64
+              (f64.add
+                (f64.mul
+                  (local.tee 6
+                    (f64.promote_f32
+                      (local.get 1)))
+                  (local.get 6))
+                (f64.mul
+                  (local.tee 6
+                    (f64.promote_f32
+                      (local.get 0)))
+                  (local.get 6))))))))
+    (local.get 1)
+  )
+  (func $f32_ln (;33;) (type 0) (param f32) (result f32)
+    (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4logf4logf
+      (local.get 0))
+  )
+  (func $f32_ln1p (;34;) (type 0) (param f32) (result f32)
+    (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math6log1pf6log1pf
+      (local.get 0))
+  )
+  (func $f32_ln_gamma (;35;) (type 0) (param f32) (result f32)
+    (local f32 i32 i32 f32 f32 i32 i32 i32 f64 f64 f64)
+    (block ;; label = @1
+      (block ;; label = @2
+        (br_if 0 (;@2;)
+          (i32.gt_u
+            (local.tee 2
+              (i32.reinterpret_f32
+                (local.tee 1
+                  (f32.abs
+                    (local.get 0)))))
+            (i32.const 2139095039)))
+        (block ;; label = @3
+          (block ;; label = @4
+            (br_if 0 (;@4;)
+              (i32.lt_u
+                (local.get 2)
+                (i32.const 889192448)))
+            (local.set 1
+              (f32.const 0x0p+0 (;=0;)))
+            (br_if 1 (;@3;)
+              (i32.le_s
+                (local.tee 3
+                  (i32.reinterpret_f32
+                    (local.get 0)))
+                (i32.const -1)))
+            (local.set 4
+              (f32.const 0x0p+0 (;=0;)))
+            (br 3 (;@1;)))
+          (return
+            (f32.neg
+              (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4logf4logf
+                (local.get 1)))))
+        (local.set 5
+          (local.tee 4
+            (f32.mul
+              (local.get 0)
+              (f32.const -0x1p-1 (;=-0.5;)))))
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i32.gt_u
+              (local.tee 7
+                (i32.and
+                  (i32.shr_u
+                    (local.tee 6
+                      (i32.reinterpret_f32
+                        (local.get 4)))
+                    (i32.const 23))
+                  (i32.const 255)))
+              (i32.const 149)))
+          (block ;; label = @4
+            (br_if 0 (;@4;)
+              (i32.gt_u
+                (local.get 7)
+                (i32.const 126)))
+            (local.set 5
+              (select
+                (f32.const 0x0p+0 (;=0;))
+                (f32.const -0x1p+0 (;=-1;))
+                (i32.gt_s
+                  (local.get 6)
+                  (i32.const -1))))
+            (br 1 (;@3;)))
+          (local.set 5
+            (local.get 4))
+          (br_if 0 (;@3;)
+            (i32.eqz
+              (i32.and
+                (local.tee 8
+                  (i32.shr_u
+                    (i32.const 8388607)
+                    (local.tee 7
+                      (i32.add
+                        (local.get 7)
+                        (i32.const -127)))))
+                (local.get 6))))
+          (local.set 5
+            (f32.reinterpret_i32
+              (i32.and
+                (i32.add
+                  (i32.and
+                    (i32.shr_s
+                      (local.get 6)
+                      (i32.const 31))
+                    (local.get 8))
+                  (local.get 6))
+                (i32.shr_s
+                  (i32.const -8388608)
+                  (local.get 7))))))
+        (local.set 9
+          (f64.mul
+            (f64.add
+              (f64.promote_f32
+                (local.tee 4
+                  (f32.add
+                    (local.tee 4
+                      (f32.sub
+                        (local.get 4)
+                        (local.get 5)))
+                    (local.get 4))))
+              (f64.mul
+                (f64.convert_i32_s
+                  (local.tee 6
+                    (i32.div_s
+                      (i32.add
+                        (i32.trunc_sat_f32_s
+                          (f32.mul
+                            (local.get 4)
+                            (f32.const 0x1p+2 (;=4;))))
+                        (i32.const 1))
+                      (i32.const 2))))
+                (f64.const -0x1p-1 (;=-0.5;))))
+            (f64.const 0x1.921fb54442d18p+1 (;=3.141592653589793;))))
+        (block ;; label = @3
+          (block ;; label = @4
+            (block ;; label = @5
+              (block ;; label = @6
+                (block ;; label = @7
+                  (br_table 1 (;@6;) 2 (;@5;) 3 (;@4;) 0 (;@7;)
+                    (i32.add
+                      (local.get 6)
+                      (i32.const -1))))
+                (local.set 4
+                  (f32.demote_f64
+                    (f64.add
+                      (f64.mul
+                        (f64.mul
+                          (local.tee 11
+                            (f64.mul
+                              (local.get 9)
+                              (local.tee 10
+                                (f64.mul
+                                  (local.get 9)
+                                  (local.get 9)))))
+                          (f64.mul
+                            (local.get 10)
+                            (local.get 10)))
+                        (f64.add
+                          (f64.mul
+                            (local.get 10)
+                            (f64.const 0x1.6cd878c3b46a7p-19 (;=0.000002718311493989822;)))
+                          (f64.const -0x1.a00f9e2cae774p-13 (;=-0.00019839334836096632;))))
+                      (f64.add
+                        (local.get 9)
+                        (f64.mul
+                          (local.get 11)
+                          (f64.add
+                            (f64.mul
+                              (local.get 10)
+                              (f64.const 0x1.11110896efbb2p-7 (;=0.008333329385889463;)))
+                            (f64.const -0x1.5555554cbac77p-3 (;=-0.16666666641626524;))))))))
+                (br 3 (;@3;)))
+              (local.set 4
+                (f32.demote_f64
+                  (f64.add
+                    (f64.add
+                      (f64.add
+                        (f64.mul
+                          (local.tee 9
+                            (f64.mul
+                              (local.get 9)
+                              (local.get 9)))
+                          (f64.const -0x1.ffffffd0c5e81p-2 (;=-0.499999997251031;)))
+                        (f64.const 0x1p+0 (;=1;)))
+                      (f64.mul
+                        (local.tee 10
+                          (f64.mul
+                            (local.get 9)
+                            (local.get 9)))
+                        (f64.const 0x1.55553e1053a42p-5 (;=0.04166662332373906;))))
+                    (f64.mul
+                      (f64.mul
+                        (local.get 9)
+                        (local.get 10))
+                      (f64.add
+                        (f64.mul
+                          (local.get 9)
+                          (f64.const 0x1.99342e0ee5069p-16 (;=0.00002439044879627741;)))
+                        (f64.const -0x1.6c087e80f1e27p-10 (;=-0.001388676377460993;)))))))
+              (br 2 (;@3;)))
+            (local.set 4
+              (f32.demote_f64
+                (f64.add
+                  (f64.mul
+                    (f64.mul
+                      (local.tee 11
+                        (f64.mul
+                          (local.tee 10
+                            (f64.mul
+                              (local.get 9)
+                              (local.get 9)))
+                          (f64.neg
+                            (local.get 9))))
+                      (f64.mul
+                        (local.get 10)
+                        (local.get 10)))
+                    (f64.add
+                      (f64.mul
+                        (local.get 10)
+                        (f64.const 0x1.6cd878c3b46a7p-19 (;=0.000002718311493989822;)))
+                      (f64.const -0x1.a00f9e2cae774p-13 (;=-0.00019839334836096632;))))
+                  (f64.sub
+                    (f64.mul
+                      (local.get 11)
+                      (f64.add
+                        (f64.mul
+                          (local.get 10)
+                          (f64.const 0x1.11110896efbb2p-7 (;=0.008333329385889463;)))
+                        (f64.const -0x1.5555554cbac77p-3 (;=-0.16666666641626524;))))
+                    (local.get 9)))))
+            (br 1 (;@3;)))
+          (local.set 4
+            (f32.neg
+              (f32.demote_f64
+                (f64.add
+                  (f64.add
+                    (f64.add
+                      (f64.mul
+                        (local.tee 9
+                          (f64.mul
+                            (local.get 9)
+                            (local.get 9)))
+                        (f64.const -0x1.ffffffd0c5e81p-2 (;=-0.499999997251031;)))
+                      (f64.const 0x1p+0 (;=1;)))
+                    (f64.mul
+                      (local.tee 10
+                        (f64.mul
+                          (local.get 9)
+                          (local.get 9)))
+                      (f64.const 0x1.55553e1053a42p-5 (;=0.04166662332373906;))))
+                  (f64.mul
+                    (f64.mul
+                      (local.get 9)
+                      (local.get 10))
+                    (f64.add
+                      (f64.mul
+                        (local.get 9)
+                        (f64.const 0x1.99342e0ee5069p-16 (;=0.00002439044879627741;)))
+                      (f64.const -0x1.6c087e80f1e27p-10 (;=-0.001388676377460993;)))))))))
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (f32.eq
+              (local.get 4)
+              (f32.const 0x0p+0 (;=0;))))
+          (local.set 4
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4logf4logf
+              (f32.div
+                (f32.const 0x1.921fb6p+1 (;=3.1415927;))
+                (f32.mul
+                  (select
+                    (local.get 4)
+                    (f32.neg
+                      (local.get 4))
+                    (f32.gt
+                      (local.get 4)
+                      (f32.const 0x0p+0 (;=0;))))
+                  (local.tee 0
+                    (f32.neg
+                      (local.get 0)))))))
+          (br 2 (;@1;)))
+        (return
+          (f32.div
+            (f32.const 0x1p+0 (;=1;))
+            (f32.sub
+              (local.get 0)
+              (local.get 0)))))
+      (return
+        (f32.mul
+          (local.get 0)
+          (local.get 0))))
+    (block ;; label = @1
+      (br_if 0 (;@1;)
+        (i32.eq
+          (local.get 2)
+          (i32.const 1065353216)))
+      (br_if 0 (;@1;)
+        (i32.eq
+          (local.get 2)
+          (i32.const 1073741824)))
+      (block ;; label = @2
+        (br_if 0 (;@2;)
+          (i32.lt_u
+            (local.get 2)
+            (i32.const 1073741824)))
+        (block ;; label = @3
+          (block ;; label = @4
+            (block ;; label = @5
+              (br_if 0 (;@5;)
+                (i32.lt_u
+                  (local.get 2)
+                  (i32.const 1090519040)))
+              (local.set 5
+                (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4logf4logf
+                  (local.get 0)))
+              (br_if 1 (;@4;)
+                (i32.lt_u
+                  (local.get 2)
+                  (i32.const 1551892480)))
+              (local.set 1
+                (f32.mul
+                  (local.get 0)
+                  (f32.add
+                    (local.get 5)
+                    (f32.const -0x1p+0 (;=-1;)))))
+              (br 4 (;@1;)))
+            (local.set 1
+              (f32.add
+                (f32.mul
+                  (local.tee 0
+                    (f32.sub
+                      (local.get 0)
+                      (f32.convert_i32_s
+                        (local.tee 2
+                          (i32.trunc_sat_f32_s
+                            (local.get 0))))))
+                  (f32.const 0x1p-1 (;=0.5;)))
+                (f32.div
+                  (f32.mul
+                    (local.get 0)
+                    (f32.add
+                      (f32.mul
+                        (local.get 0)
+                        (f32.add
+                          (f32.mul
+                            (local.get 0)
                             (f32.add
                               (f32.mul
                                 (local.get 0)
-                                (f32.const -0x1.69cb5cp-1 (;=-0.70662963;)))
-                              (f32.const 0x1p+0 (;=1;))))
-                          (local.tee 3
-                            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4sqrt5sqrtf
-                              (local.get 0))))
-                        (f32.div
-                          (f32.sub
-                            (local.get 0)
-                            (f32.mul
-                              (local.tee 4
-                                (f32.reinterpret_i32
-                                  (i32.and
-                                    (i32.reinterpret_f32
-                                      (local.get 3))
-                                    (i32.const -4096))))
-                              (local.get 4)))
-                          (f32.add
-                            (local.get 3)
-                            (local.get 4))))
-                      (local.get 4)))
-                  (local.get 0))))
-            (return
-              (f32.add
-                (local.tee 0
-                  (f32.sub
-                    (f32.const 0x1.921fb4p+0 (;=1.5707963;))
-                    (f32.add
-                      (local.tee 4
-                        (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4sqrt5sqrtf
-                          (local.tee 0
-                            (f32.mul
-                              (f32.add
-                                (local.get 0)
-                                (f32.const 0x1p+0 (;=1;)))
-                              (f32.const 0x1p-1 (;=0.5;))))))
+                                (f32.add
+                                  (f32.mul
+                                    (local.get 0)
+                                    (f32.add
+                                      (f32.mul
+                                        (local.get 0)
+                                        (f32.add
+                                          (f32.mul
+                                            (local.get 0)
+                                            (f32.const 0x1.0bfecep-15 (;=0.000031947533;)))
+                                          (f32.const 0x1.e26b68p-10 (;=0.0018402846;))))
+                                      (f32.const 0x1.b481c8p-6 (;=0.02664227;))))
+                                  (f32.const 0x1.2bb9ccp-3 (;=0.14635047;))))
+                              (f32.const 0x1.4d98f4p-2 (;=0.32577878;))))
+                          (f32.const 0x1.b848b4p-3 (;=0.21498242;))))
+                      (f32.const -0x1.3c467ep-4 (;=-0.077215664;))))
+                  (f32.add
+                    (f32.mul
+                      (local.get 0)
                       (f32.add
                         (f32.mul
-                          (local.get 4)
-                          (f32.div
+                          (local.get 0)
+                          (f32.add
                             (f32.mul
                               (local.get 0)
                               (f32.add
@@ -652,224 +4862,2792 @@
                                   (f32.add
                                     (f32.mul
                                       (local.get 0)
-                                      (f32.const -0x1.1ba6d6p-7 (;=-0.008656363;)))
-                                    (f32.const -0x1.5e2774p-5 (;=-0.042743422;))))
-                                (f32.const 0x1.5554eap-3 (;=0.16666587;))))
+                                      (f32.add
+                                        (f32.mul
+                                          (local.get 0)
+                                          (f32.const 0x1.ebaf7ap-18 (;=0.000007326684;)))
+                                        (f32.const 0x1.97ddacp-11 (;=0.0007779425;))))
+                                    (f32.const 0x1.317ea8p-6 (;=0.01864592;))))
+                                (f32.const 0x1.601edcp-3 (;=0.17193386;))))
+                            (f32.const 0x1.71a18ap-1 (;=0.7219356;))))
+                        (f32.const 0x1.645a76p+0 (;=1.3920053;))))
+                    (f32.const 0x1p+0 (;=1;))))))
+            (br_if 1 (;@3;)
+              (i32.gt_s
+                (local.get 2)
+                (i32.const 2)))
+            (br 3 (;@1;)))
+          (local.set 1
+            (f32.add
+              (f32.add
+                (f32.mul
+                  (local.tee 1
+                    (f32.div
+                      (f32.const 0x1p+0 (;=1;))
+                      (local.get 0)))
+                  (f32.add
+                    (f32.mul
+                      (local.tee 1
+                        (f32.mul
+                          (local.get 1)
+                          (local.get 1)))
+                      (f32.add
+                        (f32.mul
+                          (local.get 1)
+                          (f32.add
+                            (f32.mul
+                              (local.get 1)
+                              (f32.add
+                                (f32.mul
+                                  (local.get 1)
+                                  (f32.add
+                                    (f32.mul
+                                      (local.get 1)
+                                      (f32.const -0x1.ab89dp-10 (;=-0.0016309293;)))
+                                    (f32.const 0x1.b67ba4p-11 (;=0.0008363399;))))
+                                (f32.const -0x1.380cb8p-11 (;=-0.00059518754;))))
+                            (f32.const 0x1.a019fap-11 (;=0.0007936506;))))
+                        (f32.const -0x1.6c16c2p-9 (;=-0.0027777778;))))
+                    (f32.const 0x1.555556p-4 (;=0.083333336;))))
+                (f32.const 0x1.acfe3ap-2 (;=0.41893855;)))
+              (f32.mul
+                (f32.add
+                  (local.get 0)
+                  (f32.const -0x1p-1 (;=-0.5;)))
+                (f32.add
+                  (local.get 5)
+                  (f32.const -0x1p+0 (;=-1;))))))
+          (br 2 (;@1;)))
+        (local.set 1
+          (f32.add
+            (local.get 1)
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4logf4logf
+              (f32.mul
+                (f32.add
+                  (local.get 0)
+                  (f32.const 0x1p+1 (;=2;)))
+                (select
+                  (f32.const 0x1p+0 (;=1;))
+                  (f32.mul
+                    (f32.add
+                      (local.get 0)
+                      (f32.const 0x1.8p+1 (;=3;)))
+                    (select
+                      (f32.mul
+                        (f32.add
+                          (local.get 0)
+                          (f32.const 0x1p+2 (;=4;)))
+                        (select
+                          (f32.mul
+                            (f32.add
+                              (local.get 0)
+                              (f32.const 0x1.4p+2 (;=5;)))
+                            (select
+                              (f32.add
+                                (local.get 0)
+                                (f32.const 0x1.8p+2 (;=6;)))
+                              (f32.const 0x1p+0 (;=1;))
+                              (i32.gt_u
+                                (local.get 2)
+                                (i32.const 6))))
+                          (f32.const 0x1p+0 (;=1;))
+                          (i32.gt_u
+                            (local.get 2)
+                            (i32.const 5))))
+                      (f32.const 0x1p+0 (;=1;))
+                      (i32.gt_u
+                        (local.get 2)
+                        (i32.const 4))))
+                  (i32.eq
+                    (local.get 2)
+                    (i32.const 3)))))))
+        (br 1 (;@1;)))
+      (block ;; label = @2
+        (block ;; label = @3
+          (block ;; label = @4
+            (block ;; label = @5
+              (block ;; label = @6
+                (block ;; label = @7
+                  (br_if 0 (;@7;)
+                    (i32.lt_u
+                      (local.get 2)
+                      (i32.const 1063675495)))
+                  (br_if 1 (;@6;)
+                    (i32.le_u
+                      (local.get 2)
+                      (i32.const 1071490583)))
+                  (local.set 5
+                    (f32.const 0x1p+1 (;=2;)))
+                  (local.set 1
+                    (f32.const 0x0p+0 (;=0;)))
+                  (br 5 (;@2;)))
+                (local.set 1
+                  (f32.neg
+                    (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4logf4logf
+                      (local.get 0))))
+                (br_if 1 (;@5;)
+                  (i32.le_u
+                    (local.get 2)
+                    (i32.const 1060850207)))
+                (local.set 5
+                  (f32.const 0x1p+0 (;=1;)))
+                (br 4 (;@2;)))
+              (block ;; label = @6
+                (br_if 0 (;@6;)
+                  (i32.le_u
+                    (local.get 2)
+                    (i32.const 1067296287)))
+                (local.set 1
+                  (f32.const 0x0p+0 (;=0;)))
+                (local.set 5
+                  (f32.const -0x1.762d86p+0 (;=-1.4616321;)))
+                (br 3 (;@3;)))
+              (local.set 0
+                (f32.add
+                  (local.get 0)
+                  (f32.const -0x1p+0 (;=-1;))))
+              (local.set 1
+                (f32.const 0x0p+0 (;=0;)))
+              (br 1 (;@4;)))
+            (br_if 0 (;@4;)
+              (i32.le_u
+                (local.get 2)
+                (i32.const 1047343879)))
+            (local.set 5
+              (f32.const -0x1.d8b618p-2 (;=-0.46163213;)))
+            (br 1 (;@3;)))
+          (local.set 1
+            (f32.add
+              (local.get 1)
+              (f32.add
+                (f32.div
+                  (f32.mul
+                    (local.get 0)
+                    (f32.add
+                      (f32.mul
+                        (local.get 0)
+                        (f32.add
+                          (f32.mul
+                            (local.get 0)
                             (f32.add
                               (f32.mul
                                 (local.get 0)
-                                (f32.const -0x1.69cb5cp-1 (;=-0.70662963;)))
-                              (f32.const 0x1p+0 (;=1;)))))
-                        (f32.const -0x1.4442dp-24 (;=-0.000000075497894;))))))
-                (local.get 0))))
-          (local.set 4
-            (f32.const 0x1.921fb4p+0 (;=1.5707963;)))
-          (br_if 1 (;@2;)
-            (i32.lt_u
-              (local.get 2)
-              (i32.const 847249409)))
-          (return
+                                (f32.add
+                                  (f32.mul
+                                    (local.get 0)
+                                    (f32.add
+                                      (f32.mul
+                                        (local.get 0)
+                                        (f32.const 0x1.b678bcp-7 (;=0.013381092;)))
+                                      (f32.const 0x1.d4eafp-3 (;=0.22896373;))))
+                                  (f32.const 0x1.f49764p-1 (;=0.9777175;))))
+                              (f32.const 0x1.7475cep+0 (;=1.4549226;))))
+                          (f32.const 0x1.4401e8p-1 (;=0.63282704;))))
+                      (f32.const -0x1.3c467ep-4 (;=-0.077215664;))))
+                  (f32.add
+                    (f32.mul
+                      (local.get 0)
+                      (f32.add
+                        (f32.mul
+                          (local.get 0)
+                          (f32.add
+                            (f32.mul
+                              (local.get 0)
+                              (f32.add
+                                (f32.mul
+                                  (local.get 0)
+                                  (f32.add
+                                    (f32.mul
+                                      (local.get 0)
+                                      (f32.const 0x1.a5abb6p-9 (;=0.0032170925;)))
+                                    (f32.const 0x1.aae55ep-4 (;=0.10422265;))))
+                                (f32.const 0x1.89dfbep-1 (;=0.76928514;))))
+                            (f32.const 0x1.10725ap+1 (;=2.1284897;))))
+                        (f32.const 0x1.3a5d7cp+1 (;=2.455978;))))
+                    (f32.const 0x1p+0 (;=1;))))
+                (f32.mul
+                  (local.get 0)
+                  (f32.const -0x1p-1 (;=-0.5;))))))
+          (br 2 (;@1;)))
+        (local.set 1
+          (f32.add
+            (local.get 1)
             (f32.add
               (f32.sub
+                (f32.mul
+                  (local.tee 0
+                    (f32.mul
+                      (local.tee 5
+                        (f32.add
+                          (local.get 0)
+                          (local.get 5)))
+                      (local.get 5)))
+                  (f32.add
+                    (f32.mul
+                      (local.tee 0
+                        (f32.mul
+                          (local.get 5)
+                          (local.get 0)))
+                      (f32.add
+                        (f32.mul
+                          (local.get 0)
+                          (f32.add
+                            (f32.mul
+                              (local.get 0)
+                              (f32.add
+                                (f32.mul
+                                  (local.get 0)
+                                  (f32.const 0x1.4af6d6p-12 (;=0.00031563206;)))
+                                (f32.const -0x1.6fe8ecp-10 (;=-0.0014034647;))))
+                            (f32.const 0x1.8fce0ep-8 (;=0.0061005387;))))
+                        (f32.const -0x1.0c9a8ep-5 (;=-0.03278854;))))
+                    (f32.const 0x1.ef72bcp-2 (;=0.4838361;))))
                 (f32.sub
-                  (f32.const 0x1.4442dp-24 (;=0.000000075497894;))
+                  (f32.const 0x1.cc38a4p-28 (;=0.0000000066971007;))
                   (f32.mul
                     (local.get 0)
-                    (f32.div
+                    (f32.add
+                      (f32.add
+                        (f32.mul
+                          (local.get 0)
+                          (f32.add
+                            (f32.mul
+                              (local.get 0)
+                              (f32.add
+                                (f32.mul
+                                  (local.get 0)
+                                  (f32.add
+                                    (f32.mul
+                                      (local.get 0)
+                                      (f32.const -0x1.47f24ep-12 (;=-0.00031275416;)))
+                                    (f32.const 0x1.cdf0cep-11 (;=0.00088108185;))))
+                                (f32.const -0x1.e2effcp-9 (;=-0.0036845203;))))
+                            (f32.const 0x1.266e7ap-6 (;=0.017970676;))))
+                        (f32.const -0x1.2e4278p-3 (;=-0.14758772;)))
                       (f32.mul
-                        (local.tee 4
+                        (local.get 5)
+                        (f32.add
+                          (f32.mul
+                            (local.get 0)
+                            (f32.add
+                              (f32.mul
+                                (local.get 0)
+                                (f32.add
+                                  (f32.mul
+                                    (local.get 0)
+                                    (f32.add
+                                      (f32.mul
+                                        (local.get 0)
+                                        (f32.const 0x1.5fd3eep-12 (;=0.00033552918;)))
+                                      (f32.const -0x1.1a610ap-11 (;=-0.0005385953;))))
+                                  (f32.const 0x1.282d32p-9 (;=0.0022596477;))))
+                              (f32.const -0x1.51f9fcp-7 (;=-0.010314224;))))
+                          (f32.const 0x1.08b42ap-4 (;=0.06462494;))))))))
+              (f32.const -0x1.f19b9ap-4 (;=-0.121486284;)))))
+        (br 1 (;@1;)))
+      (local.set 1
+        (f32.add
+          (local.get 1)
+          (f32.add
+            (f32.add
+              (f32.mul
+                (local.tee 5
+                  (f32.sub
+                    (local.get 5)
+                    (local.get 0)))
+                (f32.add
+                  (f32.mul
+                    (local.tee 0
+                      (f32.mul
+                        (local.get 5)
+                        (local.get 5)))
+                    (f32.add
+                      (f32.mul
+                        (local.get 0)
+                        (f32.add
+                          (f32.mul
+                            (local.get 0)
+                            (f32.add
+                              (f32.mul
+                                (local.get 0)
+                                (f32.add
+                                  (f32.mul
+                                    (local.get 0)
+                                    (f32.const 0x1.a70744p-16 (;=0.000025214456;)))
+                                  (f32.const 0x1.cf2ecep-13 (;=0.00022086278;))))
+                              (f32.const 0x1.38a942p-10 (;=0.0011927077;))))
+                          (f32.const 0x1.e404fcp-8 (;=0.007385551;))))
+                      (f32.const 0x1.13e002p-4 (;=0.0673523;))))
+                  (f32.const 0x1.3c467ep-4 (;=0.077215664;))))
+              (f32.mul
+                (local.get 0)
+                (f32.add
+                  (f32.mul
+                    (local.get 0)
+                    (f32.add
+                      (f32.mul
+                        (local.get 0)
+                        (f32.add
+                          (f32.mul
+                            (local.get 0)
+                            (f32.add
+                              (f32.mul
+                                (local.get 0)
+                                (f32.add
+                                  (f32.mul
+                                    (local.get 0)
+                                    (f32.const 0x1.7858eap-15 (;=0.000044864097;)))
+                                  (f32.const 0x1.c5088ap-14 (;=0.00010801157;))))
+                              (f32.const 0x1.0b6c68p-11 (;=0.0005100698;))))
+                          (f32.const 0x1.7add8cp-9 (;=0.0028905137;))))
+                      (f32.const 0x1.51322ap-6 (;=0.020580808;))))
+                  (f32.const 0x1.4a34ccp-2 (;=0.32246703;)))))
+            (f32.mul
+              (local.get 5)
+              (f32.const -0x1p-1 (;=-0.5;)))))))
+    (select
+      (local.get 1)
+      (f32.sub
+        (local.get 4)
+        (local.get 1))
+      (i32.gt_s
+        (local.get 3)
+        (i32.const -1)))
+  )
+  (func $f32_log10 (;36;) (type 0) (param f32) (result f32)
+    (local i32 i32 f32 f32 f32)
+    (block ;; label = @1
+      (block ;; label = @2
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i32.lt_s
+              (local.tee 1
+                (i32.reinterpret_f32
+                  (local.get 0)))
+              (i32.const 8388608)))
+          (br_if 1 (;@2;)
+            (i32.gt_u
+              (local.get 1)
+              (i32.const 2139095039)))
+          (local.set 2
+            (i32.const -127))
+          (local.set 0
+            (f32.const 0x0p+0 (;=0;)))
+          (br_if 1 (;@2;)
+            (i32.eq
+              (local.get 1)
+              (i32.const 1065353216)))
+          (br 2 (;@1;)))
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (f32.ne
+              (local.get 0)
+              (f32.const 0x0p+0 (;=0;))))
+          (return
+            (f32.div
+              (f32.const -0x1p+0 (;=-1;))
+              (f32.mul
+                (local.get 0)
+                (local.get 0)))))
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i32.lt_s
+              (local.get 1)
+              (i32.const 0)))
+          (local.set 1
+            (i32.reinterpret_f32
+              (f32.mul
+                (local.get 0)
+                (f32.const 0x1p+25 (;=33554432;)))))
+          (local.set 2
+            (i32.const -152))
+          (br 2 (;@1;)))
+        (local.set 0
+          (f32.div
+            (f32.sub
+              (local.get 0)
+              (local.get 0))
+            (f32.const 0x0p+0 (;=0;)))))
+      (return
+        (local.get 0)))
+    (f32.add
+      (f32.mul
+        (local.tee 3
+          (f32.convert_i32_s
+            (i32.add
+              (local.get 2)
+              (i32.shr_u
+                (local.tee 1
+                  (i32.add
+                    (local.get 1)
+                    (i32.const 4913933)))
+                (i32.const 23)))))
+        (f32.const 0x1.3441p-2 (;=0.3010292;)))
+      (f32.add
+        (f32.mul
+          (local.tee 5
+            (f32.reinterpret_i32
+              (i32.and
+                (i32.reinterpret_f32
+                  (f32.sub
+                    (local.tee 0
+                      (f32.add
+                        (f32.reinterpret_i32
+                          (i32.add
+                            (i32.and
+                              (local.get 1)
+                              (i32.const 8388607))
+                            (i32.const 1060439283)))
+                        (f32.const -0x1p+0 (;=-1;))))
+                    (local.tee 4
+                      (f32.mul
+                        (local.get 0)
+                        (f32.mul
+                          (local.get 0)
+                          (f32.const 0x1p-1 (;=0.5;)))))))
+                (i32.const -4096))))
+          (f32.const 0x1.bccp-2 (;=0.43432617;)))
+        (f32.add
+          (f32.mul
+            (local.tee 0
+              (f32.add
+                (f32.sub
+                  (f32.sub
+                    (local.get 0)
+                    (local.get 5))
+                  (local.get 4))
+                (f32.mul
+                  (local.tee 0
+                    (f32.div
+                      (local.get 0)
+                      (f32.add
+                        (local.get 0)
+                        (f32.const 0x1p+1 (;=2;)))))
+                  (f32.add
+                    (local.get 4)
+                    (f32.add
+                      (f32.mul
+                        (local.tee 0
                           (f32.mul
                             (local.get 0)
                             (local.get 0)))
                         (f32.add
                           (f32.mul
-                            (local.get 4)
-                            (f32.add
+                            (local.tee 0
                               (f32.mul
-                                (local.get 4)
-                                (f32.const -0x1.1ba6d6p-7 (;=-0.008656363;)))
-                              (f32.const -0x1.5e2774p-5 (;=-0.042743422;))))
-                          (f32.const 0x1.5554eap-3 (;=0.16666587;))))
-                      (f32.add
-                        (f32.mul
-                          (local.get 4)
-                          (f32.const -0x1.69cb5cp-1 (;=-0.70662963;)))
-                        (f32.const 0x1p+0 (;=1;))))))
-                (local.get 0))
-              (f32.const 0x1.921fb4p+0 (;=1.5707963;)))))
-        (br_if 1 (;@1;)
-          (i32.eq
-            (local.get 2)
-            (i32.const 1065353216)))
-        (local.set 4
+                                (local.get 0)
+                                (local.get 0)))
+                            (f32.const 0x1.23d3dcp-2 (;=0.28498787;)))
+                          (f32.const 0x1.555554p-1 (;=0.6666666;))))
+                      (f32.mul
+                        (local.get 0)
+                        (f32.add
+                          (f32.mul
+                            (local.get 0)
+                            (f32.const 0x1.f13c4cp-3 (;=0.24279079;)))
+                          (f32.const 0x1.999c26p-2 (;=0.40000972;)))))))))
+            (f32.const 0x1.bccp-2 (;=0.43432617;)))
+          (f32.add
+            (f32.mul
+              (local.get 3)
+              (f32.const 0x1.a84fb6p-21 (;=0.0000007903415;)))
+            (f32.mul
+              (f32.add
+                (local.get 0)
+                (local.get 5))
+              (f32.const -0x1.09d5b2p-15 (;=-0.00003168997;)))))))
+  )
+  (func $f32_log2 (;37;) (type 0) (param f32) (result f32)
+    (local i32 i32 f32 f32)
+    (block ;; label = @1
+      (block ;; label = @2
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i32.lt_s
+              (local.tee 1
+                (i32.reinterpret_f32
+                  (local.get 0)))
+              (i32.const 8388608)))
+          (br_if 1 (;@2;)
+            (i32.gt_u
+              (local.get 1)
+              (i32.const 2139095039)))
+          (local.set 2
+            (i32.const -127))
+          (local.set 0
+            (f32.const 0x0p+0 (;=0;)))
+          (br_if 1 (;@2;)
+            (i32.eq
+              (local.get 1)
+              (i32.const 1065353216)))
+          (br 2 (;@1;)))
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (f32.ne
+              (local.get 0)
+              (f32.const 0x0p+0 (;=0;))))
+          (return
+            (f32.div
+              (f32.const -0x1p+0 (;=-1;))
+              (f32.mul
+                (local.get 0)
+                (local.get 0)))))
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i32.lt_s
+              (local.get 1)
+              (i32.const 0)))
+          (local.set 1
+            (i32.reinterpret_f32
+              (f32.mul
+                (local.get 0)
+                (f32.const 0x1p+25 (;=33554432;)))))
+          (local.set 2
+            (i32.const -152))
+          (br 2 (;@1;)))
+        (local.set 0
           (f32.div
-            (f32.const 0x0p+0 (;=0;))
             (f32.sub
               (local.get 0)
-              (local.get 0)))))
+              (local.get 0))
+            (f32.const 0x0p+0 (;=0;)))))
       (return
-        (local.get 4)))
-    (select
-      (f32.const 0x0p+0 (;=0;))
-      (f32.const 0x1.921fb4p+1 (;=3.1415925;))
-      (i32.gt_s
-        (local.get 1)
-        (i32.const -1)))
+        (local.get 0)))
+    (f32.add
+      (f32.add
+        (f32.mul
+          (local.tee 4
+            (f32.reinterpret_i32
+              (i32.and
+                (i32.reinterpret_f32
+                  (f32.sub
+                    (local.tee 0
+                      (f32.add
+                        (f32.reinterpret_i32
+                          (i32.add
+                            (i32.and
+                              (local.tee 1
+                                (i32.add
+                                  (local.get 1)
+                                  (i32.const 4913933)))
+                              (i32.const 8388607))
+                            (i32.const 1060439283)))
+                        (f32.const -0x1p+0 (;=-1;))))
+                    (local.tee 3
+                      (f32.mul
+                        (local.get 0)
+                        (f32.mul
+                          (local.get 0)
+                          (f32.const 0x1p-1 (;=0.5;)))))))
+                (i32.const -4096))))
+          (f32.const 0x1.716p+0 (;=1.4428711;)))
+        (f32.add
+          (f32.mul
+            (local.tee 0
+              (f32.add
+                (f32.sub
+                  (f32.sub
+                    (local.get 0)
+                    (local.get 4))
+                  (local.get 3))
+                (f32.mul
+                  (local.tee 0
+                    (f32.div
+                      (local.get 0)
+                      (f32.add
+                        (local.get 0)
+                        (f32.const 0x1p+1 (;=2;)))))
+                  (f32.add
+                    (local.get 3)
+                    (f32.add
+                      (f32.mul
+                        (local.tee 0
+                          (f32.mul
+                            (local.get 0)
+                            (local.get 0)))
+                        (f32.add
+                          (f32.mul
+                            (local.tee 0
+                              (f32.mul
+                                (local.get 0)
+                                (local.get 0)))
+                            (f32.const 0x1.23d3dcp-2 (;=0.28498787;)))
+                          (f32.const 0x1.555554p-1 (;=0.6666666;))))
+                      (f32.mul
+                        (local.get 0)
+                        (f32.add
+                          (f32.mul
+                            (local.get 0)
+                            (f32.const 0x1.f13c4cp-3 (;=0.24279079;)))
+                          (f32.const 0x1.999c26p-2 (;=0.40000972;)))))))))
+            (f32.const 0x1.716p+0 (;=1.4428711;)))
+          (f32.mul
+            (f32.add
+              (local.get 0)
+              (local.get 4))
+            (f32.const -0x1.7135a8p-13 (;=-0.00017605285;)))))
+      (f32.convert_i32_s
+        (i32.add
+          (local.get 2)
+          (i32.shr_u
+            (local.get 1)
+            (i32.const 23)))))
   )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math4sqrt5sqrtf (;3;) (type 1) (param f32) (result f32)
-    (local i32 f32 i32 i32 i32 i32 i32 i64)
+  (func $f32_mul_add (;38;) (type 7) (param f32 f32 f32) (result f32)
+    (local f64 f64 f64 i64 i32)
+    (block ;; label = @1
+      (br_if 0 (;@1;)
+        (i64.ne
+          (i64.and
+            (local.tee 6
+              (i64.reinterpret_f64
+                (local.tee 5
+                  (f64.add
+                    (local.tee 3
+                      (f64.mul
+                        (f64.promote_f32
+                          (local.get 0))
+                        (f64.promote_f32
+                          (local.get 1))))
+                    (local.tee 4
+                      (f64.promote_f32
+                        (local.get 2)))))))
+            (i64.const 536870911))
+          (i64.const 268435456)))
+      (br_if 0 (;@1;)
+        (i64.eq
+          (i64.and
+            (local.get 6)
+            (i64.const 9218868437227405312))
+          (i64.const 9218868437227405312)))
+      (block ;; label = @2
+        (br_if 0 (;@2;)
+          (f64.ne
+            (f64.sub
+              (local.get 5)
+              (local.get 3))
+            (local.get 4)))
+        (br_if 1 (;@1;)
+          (f64.eq
+            (f64.sub
+              (local.get 5)
+              (local.get 4))
+            (local.get 3))))
+      (local.set 5
+        (f64.reinterpret_i64
+          (select
+            (i64.add
+              (local.get 6)
+              (i64.const -1))
+            (i64.or
+              (local.get 6)
+              (i64.const 1))
+            (i32.xor
+              (local.tee 7
+                (i64.lt_s
+                  (local.get 6)
+                  (i64.const 0)))
+              (f64.lt
+                (select
+                  (f64.add
+                    (local.get 3)
+                    (f64.sub
+                      (local.get 4)
+                      (local.get 5)))
+                  (f64.add
+                    (f64.sub
+                      (local.get 3)
+                      (local.get 5))
+                    (local.get 4))
+                  (i32.xor
+                    (local.get 7)
+                    (f64.lt
+                      (local.get 3)
+                      (local.get 4))))
+                (f64.const 0x0p+0 (;=0;))))))))
+    (f32.demote_f64
+      (local.get 5))
+  )
+  (func $f32_pow (;39;) (type 2) (param f32 f32) (result f32)
+    (local f32 i32 i32 i32 f32 i32 i32 i32 i32 f32 f32 f32)
+    (local.set 2
+      (f32.const 0x1p+0 (;=1;)))
+    (block ;; label = @1
+      (block ;; label = @2
+        (block ;; label = @3
+          (block ;; label = @4
+            (br_if 0 (;@4;)
+              (i32.eq
+                (local.tee 3
+                  (i32.reinterpret_f32
+                    (local.get 0)))
+                (i32.const 1065353216)))
+            (br_if 0 (;@4;)
+              (i32.eqz
+                (local.tee 5
+                  (i32.and
+                    (local.tee 4
+                      (i32.reinterpret_f32
+                        (local.get 1)))
+                    (i32.const 2147483647)))))
+            (block ;; label = @5
+              (block ;; label = @6
+                (block ;; label = @7
+                  (br_if 0 (;@7;)
+                    (i32.gt_u
+                      (local.tee 7
+                        (i32.reinterpret_f32
+                          (local.tee 6
+                            (f32.abs
+                              (local.get 0)))))
+                      (i32.const 2139095040)))
+                  (br_if 0 (;@7;)
+                    (i32.gt_u
+                      (local.get 5)
+                      (i32.const 2139095040)))
+                  (br_if 1 (;@6;)
+                    (i32.ge_s
+                      (local.get 3)
+                      (i32.const 0)))
+                  (local.set 8
+                    (i32.const 2))
+                  (br_if 2 (;@5;)
+                    (i32.gt_u
+                      (local.get 5)
+                      (i32.const 1266679807)))
+                  (br_if 1 (;@6;)
+                    (i32.lt_u
+                      (local.get 5)
+                      (i32.const 1065353216)))
+                  (local.set 8
+                    (i32.const 0))
+                  (br_if 2 (;@5;)
+                    (i32.ne
+                      (i32.shl
+                        (local.tee 10
+                          (i32.shr_u
+                            (local.get 5)
+                            (local.tee 9
+                              (i32.sub
+                                (i32.const 150)
+                                (i32.shr_u
+                                  (local.get 5)
+                                  (i32.const 23))))))
+                        (local.get 9))
+                      (local.get 5)))
+                  (local.set 8
+                    (i32.sub
+                      (i32.const 2)
+                      (i32.and
+                        (local.get 10)
+                        (i32.const 1))))
+                  (br 2 (;@5;)))
+                (return
+                  (f32.add
+                    (local.get 0)
+                    (local.get 1))))
+              (local.set 8
+                (i32.const 0)))
+            (block ;; label = @5
+              (block ;; label = @6
+                (br_if 0 (;@6;)
+                  (i32.eq
+                    (local.get 5)
+                    (i32.const 1065353216)))
+                (br_if 1 (;@5;)
+                  (i32.ne
+                    (local.get 5)
+                    (i32.const 2139095040)))
+                (block ;; label = @7
+                  (block ;; label = @8
+                    (br_table 4 (;@4;) 1 (;@7;) 0 (;@8;)
+                      (i32.and
+                        (i32.sub
+                          (i32.gt_s
+                            (local.get 7)
+                            (i32.const 1065353216))
+                          (i32.lt_s
+                            (local.get 7)
+                            (i32.const 1065353216)))
+                        (i32.const 255))))
+                  (return
+                    (select
+                      (f32.const 0x0p+0 (;=0;))
+                      (f32.neg
+                        (local.get 1))
+                      (i32.gt_s
+                        (local.get 4)
+                        (i32.const -1)))))
+                (return
+                  (select
+                    (local.get 1)
+                    (f32.const 0x0p+0 (;=0;))
+                    (i32.gt_s
+                      (local.get 4)
+                      (i32.const -1)))))
+              (br_if 2 (;@3;)
+                (i32.le_s
+                  (local.get 4)
+                  (i32.const -1)))
+              (return
+                (local.get 0)))
+            (block ;; label = @5
+              (block ;; label = @6
+                (br_if 0 (;@6;)
+                  (i32.eq
+                    (local.get 4)
+                    (i32.const 1056964608)))
+                (br_if 1 (;@5;)
+                  (i32.ne
+                    (local.get 4)
+                    (i32.const 1073741824)))
+                (return
+                  (f32.mul
+                    (local.get 0)
+                    (local.get 0))))
+              (br_if 3 (;@2;)
+                (i32.gt_s
+                  (local.get 3)
+                  (i32.const -1))))
+            (block ;; label = @5
+              (block ;; label = @6
+                (block ;; label = @7
+                  (block ;; label = @8
+                    (block ;; label = @9
+                      (block ;; label = @10
+                        (br_if 0 (;@10;)
+                          (i32.eq
+                            (i32.and
+                              (local.get 3)
+                              (i32.const 1073741823))
+                            (i32.const 1065353216)))
+                        (br_if 1 (;@9;)
+                          (local.get 7)))
+                      (local.set 2
+                        (select
+                          (f32.div
+                            (f32.const 0x1p+0 (;=1;))
+                            (local.get 6))
+                          (local.get 6)
+                          (i32.lt_s
+                            (local.get 4)
+                            (i32.const 0))))
+                      (br_if 5 (;@4;)
+                        (i32.ge_s
+                          (local.get 3)
+                          (i32.const 0)))
+                      (br_if 1 (;@8;)
+                        (i32.or
+                          (local.get 8)
+                          (i32.add
+                            (local.get 7)
+                            (i32.const -1065353216))))
+                      (return
+                        (f32.div
+                          (local.tee 0
+                            (f32.sub
+                              (local.get 2)
+                              (local.get 2)))
+                          (local.get 0))))
+                    (local.set 11
+                      (f32.const 0x1p+0 (;=1;)))
+                    (br_if 3 (;@5;)
+                      (i32.ge_s
+                        (local.get 3)
+                        (i32.const 0)))
+                    (br_table 1 (;@7;) 2 (;@6;) 3 (;@5;)
+                      (local.get 8)))
+                  (return
+                    (select
+                      (f32.neg
+                        (local.get 2))
+                      (local.get 2)
+                      (i32.eq
+                        (local.get 8)
+                        (i32.const 1)))))
+                (return
+                  (f32.div
+                    (local.tee 0
+                      (f32.sub
+                        (local.get 0)
+                        (local.get 0)))
+                    (local.get 0))))
+              (local.set 11
+                (f32.const -0x1p+0 (;=-1;))))
+            (block ;; label = @5
+              (br_if 0 (;@5;)
+                (i32.gt_u
+                  (local.get 5)
+                  (i32.const 1291845632)))
+              (local.set 5
+                (i32.or
+                  (local.tee 7
+                    (i32.and
+                      (local.tee 8
+                        (select
+                          (i32.reinterpret_f32
+                            (f32.mul
+                              (local.get 6)
+                              (f32.const 0x1p+24 (;=16777216;))))
+                          (local.get 7)
+                          (local.tee 3
+                            (i32.lt_u
+                              (local.get 7)
+                              (i32.const 8388608)))))
+                      (i32.const 8388607)))
+                  (i32.const 1065353216)))
+              (local.set 8
+                (i32.add
+                  (select
+                    (i32.const -151)
+                    (i32.const -127)
+                    (local.get 3))
+                  (i32.shr_s
+                    (local.get 8)
+                    (i32.const 23))))
+              (local.set 3
+                (i32.const 0))
+              (block ;; label = @6
+                (br_if 0 (;@6;)
+                  (i32.lt_u
+                    (local.get 7)
+                    (i32.const 1885298)))
+                (block ;; label = @7
+                  (br_if 0 (;@7;)
+                    (i32.ge_u
+                      (local.get 7)
+                      (i32.const 6140887)))
+                  (local.set 3
+                    (i32.const 1))
+                  (br 1 (;@6;)))
+                (local.set 5
+                  (i32.or
+                    (local.get 7)
+                    (i32.const 1056964608)))
+                (local.set 8
+                  (i32.add
+                    (local.get 8)
+                    (i32.const 1))))
+              (local.set 2
+                (f32.sub
+                  (local.tee 2
+                    (f32.add
+                      (f32.load offset=1057280
+                        (local.tee 7
+                          (i32.shl
+                            (local.get 3)
+                            (i32.const 2))))
+                      (f32.add
+                        (f32.mul
+                          (f32.sub
+                            (local.tee 6
+                              (f32.add
+                                (f32.mul
+                                  (local.tee 0
+                                    (f32.mul
+                                      (local.tee 2
+                                        (f32.div
+                                          (f32.const 0x1p+0 (;=1;))
+                                          (f32.add
+                                            (local.tee 0
+                                              (f32.load offset=1057272
+                                                (local.get 7)))
+                                            (local.tee 12
+                                              (f32.reinterpret_i32
+                                                (local.get 5))))))
+                                      (f32.sub
+                                        (f32.sub
+                                          (local.tee 6
+                                            (f32.sub
+                                              (local.get 12)
+                                              (local.get 0)))
+                                          (f32.mul
+                                            (local.tee 13
+                                              (f32.reinterpret_i32
+                                                (i32.add
+                                                  (i32.add
+                                                    (i32.and
+                                                      (i32.shr_u
+                                                        (local.get 5)
+                                                        (i32.const 1))
+                                                      (i32.const 536866816))
+                                                    (i32.shl
+                                                      (local.get 3)
+                                                      (i32.const 21)))
+                                                  (i32.const 541065216))))
+                                            (local.tee 2
+                                              (f32.reinterpret_i32
+                                                (i32.and
+                                                  (i32.reinterpret_f32
+                                                    (local.tee 6
+                                                      (f32.mul
+                                                        (local.get 6)
+                                                        (local.get 2))))
+                                                  (i32.const -4096))))))
+                                        (f32.mul
+                                          (f32.add
+                                            (f32.sub
+                                              (local.get 0)
+                                              (local.get 13))
+                                            (local.get 12))
+                                          (local.get 2)))))
+                                  (local.tee 0
+                                    (f32.reinterpret_i32
+                                      (i32.and
+                                        (i32.reinterpret_f32
+                                          (f32.add
+                                            (f32.add
+                                              (local.tee 12
+                                                (f32.mul
+                                                  (local.get 2)
+                                                  (local.get 2)))
+                                              (f32.const 0x1.8p+1 (;=3;)))
+                                            (local.tee 13
+                                              (f32.add
+                                                (f32.mul
+                                                  (local.get 0)
+                                                  (f32.add
+                                                    (local.get 6)
+                                                    (local.get 2)))
+                                                (f32.mul
+                                                  (f32.mul
+                                                    (local.tee 0
+                                                      (f32.mul
+                                                        (local.get 6)
+                                                        (local.get 6)))
+                                                    (local.get 0))
+                                                  (f32.add
+                                                    (f32.mul
+                                                      (local.get 0)
+                                                      (f32.add
+                                                        (f32.mul
+                                                          (local.get 0)
+                                                          (f32.add
+                                                            (f32.mul
+                                                              (local.get 0)
+                                                              (f32.add
+                                                                (f32.mul
+                                                                  (local.get 0)
+                                                                  (f32.add
+                                                                    (f32.mul
+                                                                      (local.get 0)
+                                                                      (f32.const 0x1.a7e284p-3 (;=0.20697501;)))
+                                                                    (f32.const 0x1.d864aap-3 (;=0.23066075;))))
+                                                                (f32.const 0x1.17460ap-2 (;=0.27272812;))))
+                                                            (f32.const 0x1.555556p-2 (;=0.33333334;))))
+                                                        (f32.const 0x1.b6db6ep-2 (;=0.42857143;))))
+                                                    (f32.const 0x1.333334p-1 (;=0.6;))))))))
+                                        (i32.const -4096)))))
+                                (f32.mul
+                                  (local.get 6)
+                                  (f32.sub
+                                    (local.get 13)
+                                    (f32.sub
+                                      (f32.add
+                                        (local.get 0)
+                                        (f32.const -0x1.8p+1 (;=-3;)))
+                                      (local.get 12))))))
+                            (f32.sub
+                              (local.tee 0
+                                (f32.reinterpret_i32
+                                  (i32.and
+                                    (i32.reinterpret_f32
+                                      (f32.add
+                                        (local.get 6)
+                                        (local.tee 2
+                                          (f32.mul
+                                            (local.get 2)
+                                            (local.get 0)))))
+                                    (i32.const -4096))))
+                              (local.get 2)))
+                          (f32.const 0x1.ec709ep-1 (;=0.9617967;)))
+                        (f32.mul
+                          (local.get 0)
+                          (f32.const -0x1.ec478cp-14 (;=-0.000117368574;))))))
+                  (f32.sub
+                    (f32.sub
+                      (f32.sub
+                        (local.tee 0
+                          (f32.reinterpret_i32
+                            (i32.and
+                              (i32.reinterpret_f32
+                                (f32.add
+                                  (f32.add
+                                    (local.tee 6
+                                      (f32.load offset=1057288
+                                        (local.get 7)))
+                                    (f32.add
+                                      (local.get 2)
+                                      (local.tee 12
+                                        (f32.mul
+                                          (local.get 0)
+                                          (f32.const 0x1.ec8p-1 (;=0.96191406;))))))
+                                  (local.tee 2
+                                    (f32.convert_i32_s
+                                      (local.get 8)))))
+                              (i32.const -4096))))
+                        (local.get 2))
+                      (local.get 6))
+                    (local.get 12))))
+              (br 4 (;@1;)))
+            (block ;; label = @5
+              (br_if 0 (;@5;)
+                (i32.lt_u
+                  (local.get 7)
+                  (i32.const 1065353208)))
+              (block ;; label = @6
+                (br_if 0 (;@6;)
+                  (i32.gt_u
+                    (local.get 7)
+                    (i32.const 1065353223)))
+                (local.set 2
+                  (f32.sub
+                    (local.tee 2
+                      (f32.add
+                        (f32.mul
+                          (local.tee 0
+                            (f32.add
+                              (local.get 6)
+                              (f32.const -0x1p+0 (;=-1;))))
+                          (f32.const 0x1.d94aep-18 (;=0.0000070526075;)))
+                        (f32.mul
+                          (f32.mul
+                            (f32.mul
+                              (local.get 0)
+                              (local.get 0))
+                            (f32.sub
+                              (f32.const 0x1p-1 (;=0.5;))
+                              (f32.mul
+                                (local.get 0)
+                                (f32.add
+                                  (f32.mul
+                                    (local.get 0)
+                                    (f32.const -0x1p-2 (;=-0.25;)))
+                                  (f32.const 0x1.555556p-2 (;=0.33333334;))))))
+                          (f32.const -0x1.715476p+0 (;=-1.442695;)))))
+                    (f32.sub
+                      (local.tee 0
+                        (f32.reinterpret_i32
+                          (i32.and
+                            (i32.reinterpret_f32
+                              (f32.add
+                                (local.get 2)
+                                (local.tee 6
+                                  (f32.mul
+                                    (local.get 0)
+                                    (f32.const 0x1.7154p+0 (;=1.442688;))))))
+                            (i32.const -4096))))
+                      (local.get 6))))
+                (br 5 (;@1;)))
+              (block ;; label = @6
+                (br_if 0 (;@6;)
+                  (i32.gt_s
+                    (local.get 4)
+                    (i32.const 0)))
+                (return
+                  (f32.mul
+                    (f32.mul
+                      (local.get 11)
+                      (f32.const 0x1.4484cp-100 (;=0.000000000000000000000000000001;)))
+                    (f32.const 0x1.4484cp-100 (;=0.000000000000000000000000000001;)))))
+              (return
+                (f32.mul
+                  (f32.mul
+                    (local.get 11)
+                    (f32.const 0x1.93e594p+99 (;=1000000000000000000000000000000;)))
+                  (f32.const 0x1.93e594p+99 (;=1000000000000000000000000000000;)))))
+            (block ;; label = @5
+              (br_if 0 (;@5;)
+                (i32.lt_s
+                  (local.get 4)
+                  (i32.const 0)))
+              (return
+                (f32.mul
+                  (f32.mul
+                    (local.get 11)
+                    (f32.const 0x1.4484cp-100 (;=0.000000000000000000000000000001;)))
+                  (f32.const 0x1.4484cp-100 (;=0.000000000000000000000000000001;)))))
+            (local.set 2
+              (f32.mul
+                (f32.mul
+                  (local.get 11)
+                  (f32.const 0x1.93e594p+99 (;=1000000000000000000000000000000;)))
+                (f32.const 0x1.93e594p+99 (;=1000000000000000000000000000000;)))))
+          (return
+            (local.get 2)))
+        (return
+          (f32.div
+            (f32.const 0x1p+0 (;=1;))
+            (local.get 0))))
+      (return
+        (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4sqrt5sqrtf
+          (local.get 0))))
+    (block ;; label = @1
+      (block ;; label = @2
+        (block ;; label = @3
+          (block ;; label = @4
+            (br_if 0 (;@4;)
+              (i32.gt_s
+                (local.tee 5
+                  (i32.reinterpret_f32
+                    (local.tee 1
+                      (f32.add
+                        (local.tee 12
+                          (f32.mul
+                            (local.get 0)
+                            (local.tee 6
+                              (f32.reinterpret_i32
+                                (i32.and
+                                  (local.get 4)
+                                  (i32.const -4096))))))
+                        (local.tee 0
+                          (f32.add
+                            (f32.mul
+                              (f32.sub
+                                (local.get 1)
+                                (local.get 6))
+                              (local.get 0))
+                            (f32.mul
+                              (local.get 1)
+                              (local.get 2))))))))
+                (i32.const 1124073472)))
+            (br_if 1 (;@3;)
+              (i32.ne
+                (local.get 5)
+                (i32.const 1124073472)))
+            (br_if 2 (;@2;)
+              (i32.eqz
+                (f32.gt
+                  (f32.add
+                    (local.get 0)
+                    (f32.const 0x1.715478p-25 (;=0.000000042995666;)))
+                  (f32.sub
+                    (local.get 1)
+                    (local.get 12)))))
+            (return
+              (f32.mul
+                (f32.mul
+                  (local.get 11)
+                  (f32.const 0x1.93e594p+99 (;=1000000000000000000000000000000;)))
+                (f32.const 0x1.93e594p+99 (;=1000000000000000000000000000000;)))))
+          (return
+            (f32.mul
+              (f32.mul
+                (local.get 11)
+                (f32.const 0x1.93e594p+99 (;=1000000000000000000000000000000;)))
+              (f32.const 0x1.93e594p+99 (;=1000000000000000000000000000000;)))))
+        (block ;; label = @3
+          (block ;; label = @4
+            (br_if 0 (;@4;)
+              (i32.gt_u
+                (local.tee 4
+                  (i32.and
+                    (i32.reinterpret_f32
+                      (local.get 1))
+                    (i32.const 2147483647)))
+                (i32.const 1125515264)))
+            (br_if 1 (;@3;)
+              (i32.ne
+                (local.get 5)
+                (i32.const -1021968384)))
+            (br_if 1 (;@3;)
+              (i32.eqz
+                (f32.le
+                  (local.get 0)
+                  (f32.sub
+                    (local.get 1)
+                    (local.get 12)))))
+            (return
+              (f32.mul
+                (f32.mul
+                  (local.get 11)
+                  (f32.const 0x1.4484cp-100 (;=0.000000000000000000000000000001;)))
+                (f32.const 0x1.4484cp-100 (;=0.000000000000000000000000000001;)))))
+          (return
+            (f32.mul
+              (f32.mul
+                (local.get 11)
+                (f32.const 0x1.4484cp-100 (;=0.000000000000000000000000000001;)))
+              (f32.const 0x1.4484cp-100 (;=0.000000000000000000000000000001;)))))
+        (local.set 3
+          (i32.const 0))
+        (br_if 1 (;@1;)
+          (i32.le_u
+            (local.get 4)
+            (i32.const 1056964608))))
+      (local.set 3
+        (select
+          (i32.sub
+            (i32.const 0)
+            (local.tee 3
+              (i32.shr_u
+                (i32.or
+                  (i32.and
+                    (local.tee 4
+                      (i32.add
+                        (i32.shr_u
+                          (i32.const 8388608)
+                          (i32.add
+                            (i32.shr_u
+                              (local.get 5)
+                              (i32.const 23))
+                            (i32.const 2)))
+                        (local.get 5)))
+                    (i32.const 8388607))
+                  (i32.const 8388608))
+                (i32.sub
+                  (i32.const 22)
+                  (local.tee 7
+                    (i32.shr_u
+                      (local.get 4)
+                      (i32.const 23)))))))
+          (local.get 3)
+          (i32.lt_s
+            (local.get 5)
+            (i32.const 0))))
+      (local.set 5
+        (i32.reinterpret_f32
+          (f32.add
+            (local.get 0)
+            (local.tee 12
+              (f32.sub
+                (local.get 12)
+                (f32.reinterpret_i32
+                  (i32.and
+                    (i32.shr_s
+                      (i32.const -8388608)
+                      (i32.add
+                        (local.get 7)
+                        (i32.const 1)))
+                    (local.get 4)))))))))
+    (block ;; label = @1
+      (block ;; label = @2
+        (br_if 0 (;@2;)
+          (i32.lt_s
+            (local.tee 5
+              (i32.add
+                (i32.shl
+                  (local.get 3)
+                  (i32.const 23))
+                (i32.reinterpret_f32
+                  (local.tee 0
+                    (f32.add
+                      (f32.sub
+                        (local.tee 0
+                          (f32.add
+                            (local.tee 2
+                              (f32.mul
+                                (local.tee 1
+                                  (f32.reinterpret_i32
+                                    (i32.and
+                                      (local.get 5)
+                                      (i32.const -32768))))
+                                (f32.const 0x1.62e4p-1 (;=0.69314575;))))
+                            (local.tee 6
+                              (f32.add
+                                (f32.mul
+                                  (local.get 1)
+                                  (f32.const 0x1.7f7d18p-20 (;=0.0000014286065;)))
+                                (f32.mul
+                                  (f32.sub
+                                    (local.get 0)
+                                    (f32.sub
+                                      (local.get 1)
+                                      (local.get 12)))
+                                  (f32.const 0x1.62e43p-1 (;=0.6931472;)))))))
+                        (f32.sub
+                          (f32.div
+                            (f32.mul
+                              (local.get 0)
+                              (local.tee 1
+                                (f32.sub
+                                  (local.get 0)
+                                  (f32.mul
+                                    (local.tee 1
+                                      (f32.mul
+                                        (local.get 0)
+                                        (local.get 0)))
+                                    (f32.add
+                                      (f32.mul
+                                        (local.get 1)
+                                        (f32.add
+                                          (f32.mul
+                                            (local.get 1)
+                                            (f32.add
+                                              (f32.mul
+                                                (local.get 1)
+                                                (f32.add
+                                                  (f32.mul
+                                                    (local.get 1)
+                                                    (f32.const 0x1.637698p-25 (;=0.00000004138137;)))
+                                                  (f32.const -0x1.bbd41cp-20 (;=-0.0000016533902;))))
+                                              (f32.const 0x1.1566aap-14 (;=0.00006613756;))))
+                                          (f32.const -0x1.6c16c2p-9 (;=-0.0027777778;))))
+                                      (f32.const 0x1.555556p-3 (;=0.16666667;)))))))
+                            (f32.add
+                              (local.get 1)
+                              (f32.const -0x1p+1 (;=-2;))))
+                          (f32.add
+                            (local.tee 1
+                              (f32.sub
+                                (local.get 6)
+                                (f32.sub
+                                  (local.get 0)
+                                  (local.get 2))))
+                            (f32.mul
+                              (local.get 0)
+                              (local.get 1)))))
+                      (f32.const 0x1p+0 (;=1;)))))))
+            (i32.const 8388608)))
+        (local.set 0
+          (f32.reinterpret_i32
+            (local.get 5)))
+        (br 1 (;@1;)))
+      (local.set 0
+        (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math6scalbn7scalbnf
+          (local.get 0)
+          (local.get 3))))
+    (f32.mul
+      (local.get 11)
+      (local.get 0))
+  )
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math6scalbn7scalbnf (;40;) (type 8) (param f32 i32) (result f32)
+    (block ;; label = @1
+      (block ;; label = @2
+        (block ;; label = @3
+          (block ;; label = @4
+            (br_if 0 (;@4;)
+              (i32.gt_s
+                (local.get 1)
+                (i32.const 127)))
+            (br_if 3 (;@1;)
+              (i32.ge_s
+                (local.get 1)
+                (i32.const -126)))
+            (local.set 0
+              (f32.mul
+                (local.get 0)
+                (f32.const 0x1p-102 (;=0.00000000000000000000000000000019721523;))))
+            (br_if 1 (;@3;)
+              (i32.le_u
+                (local.get 1)
+                (i32.const -229)))
+            (local.set 1
+              (i32.add
+                (local.get 1)
+                (i32.const 102)))
+            (br 3 (;@1;)))
+          (local.set 0
+            (f32.mul
+              (local.get 0)
+              (f32.const 0x1p+127 (;=170141180000000000000000000000000000000;))))
+          (br_if 1 (;@2;)
+            (i32.gt_u
+              (local.get 1)
+              (i32.const 254)))
+          (local.set 1
+            (i32.add
+              (local.get 1)
+              (i32.const -127)))
+          (br 2 (;@1;)))
+        (local.set 0
+          (f32.mul
+            (local.get 0)
+            (f32.const 0x1p-102 (;=0.00000000000000000000000000000019721523;))))
+        (local.set 1
+          (i32.add
+            (select
+              (local.get 1)
+              (i32.const -330)
+              (i32.gt_u
+                (local.get 1)
+                (i32.const -330)))
+            (i32.const 204)))
+        (br 1 (;@1;)))
+      (local.set 0
+        (f32.mul
+          (local.get 0)
+          (f32.const 0x1p+127 (;=170141180000000000000000000000000000000;))))
+      (local.set 1
+        (i32.add
+          (select
+            (local.get 1)
+            (i32.const 381)
+            (i32.lt_u
+              (local.get 1)
+              (i32.const 381)))
+          (i32.const -254))))
+    (f32.mul
+      (local.get 0)
+      (f32.reinterpret_i32
+        (i32.and
+          (i32.add
+            (i32.shl
+              (local.get 1)
+              (i32.const 23))
+            (i32.const 1065353216))
+          (i32.const 2139095040))))
+  )
+  (func $f32_round (;41;) (type 0) (param f32) (result f32)
+    (local i32 i32)
+    (block ;; label = @1
+      (br_if 0 (;@1;)
+        (i32.gt_u
+          (local.tee 2
+            (i32.and
+              (i32.shr_u
+                (local.tee 1
+                  (i32.reinterpret_f32
+                    (local.tee 0
+                      (f32.add
+                        (local.get 0)
+                        (f32.copysign
+                          (f32.const 0x1.fffffep-2 (;=0.49999997;))
+                          (local.get 0))))))
+                (i32.const 23))
+              (i32.const 255)))
+          (i32.const 149)))
+      (br_if 0 (;@1;)
+        (i32.eqz
+          (i32.and
+            (i32.xor
+              (local.tee 2
+                (select
+                  (i32.const -2147483648)
+                  (i32.shr_s
+                    (i32.const -8388608)
+                    (i32.add
+                      (local.get 2)
+                      (i32.const -127)))
+                  (i32.lt_u
+                    (local.get 2)
+                    (i32.const 127))))
+              (i32.const -1))
+            (local.get 1))))
+      (local.set 0
+        (f32.reinterpret_i32
+          (i32.and
+            (local.get 2)
+            (local.get 1)))))
+    (local.get 0)
+  )
+  (func $f32_sin (;42;) (type 0) (param f32) (result f32)
+    (local i32 f64 i32 i32 f64 f64)
+    (global.set $__stack_pointer
+      (local.tee 1
+        (i32.sub
+          (global.get $__stack_pointer)
+          (i32.const 16))))
+    (local.set 2
+      (f64.promote_f32
+        (local.get 0)))
+    (block ;; label = @1
+      (block ;; label = @2
+        (br_if 0 (;@2;)
+          (i32.lt_u
+            (local.tee 4
+              (i32.and
+                (local.tee 3
+                  (i32.reinterpret_f32
+                    (local.get 0)))
+                (i32.const 2147483647)))
+            (i32.const 1061752795)))
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i32.lt_u
+              (local.get 4)
+              (i32.const 1081824210)))
+          (block ;; label = @4
+            (br_if 0 (;@4;)
+              (i32.lt_u
+                (local.get 4)
+                (i32.const 1088565718)))
+            (block ;; label = @5
+              (block ;; label = @6
+                (block ;; label = @7
+                  (block ;; label = @8
+                    (block ;; label = @9
+                      (br_if 0 (;@9;)
+                        (i32.gt_u
+                          (local.get 4)
+                          (i32.const 2139095039)))
+                      (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math9rem_pio2f9rem_pio2f
+                        (local.get 1)
+                        (local.get 0))
+                      (local.set 2
+                        (f64.load offset=8
+                          (local.get 1)))
+                      (br_table 2 (;@7;) 3 (;@6;) 4 (;@5;) 1 (;@8;) 2 (;@7;)
+                        (i32.and
+                          (i32.load
+                            (local.get 1))
+                          (i32.const 3))))
+                    (local.set 0
+                      (f32.sub
+                        (local.get 0)
+                        (local.get 0)))
+                    (br 7 (;@1;)))
+                  (local.set 0
+                    (f32.neg
+                      (f32.demote_f64
+                        (f64.add
+                          (f64.add
+                            (f64.add
+                              (f64.mul
+                                (local.tee 2
+                                  (f64.mul
+                                    (local.get 2)
+                                    (local.get 2)))
+                                (f64.const -0x1.ffffffd0c5e81p-2 (;=-0.499999997251031;)))
+                              (f64.const 0x1p+0 (;=1;)))
+                            (f64.mul
+                              (local.tee 5
+                                (f64.mul
+                                  (local.get 2)
+                                  (local.get 2)))
+                              (f64.const 0x1.55553e1053a42p-5 (;=0.04166662332373906;))))
+                          (f64.mul
+                            (f64.mul
+                              (local.get 2)
+                              (local.get 5))
+                            (f64.add
+                              (f64.mul
+                                (local.get 2)
+                                (f64.const 0x1.99342e0ee5069p-16 (;=0.00002439044879627741;)))
+                              (f64.const -0x1.6c087e80f1e27p-10 (;=-0.001388676377460993;))))))))
+                  (br 6 (;@1;)))
+                (local.set 0
+                  (f32.demote_f64
+                    (f64.add
+                      (f64.mul
+                        (f64.mul
+                          (local.tee 6
+                            (f64.mul
+                              (local.get 2)
+                              (local.tee 5
+                                (f64.mul
+                                  (local.get 2)
+                                  (local.get 2)))))
+                          (f64.mul
+                            (local.get 5)
+                            (local.get 5)))
+                        (f64.add
+                          (f64.mul
+                            (local.get 5)
+                            (f64.const 0x1.6cd878c3b46a7p-19 (;=0.000002718311493989822;)))
+                          (f64.const -0x1.a00f9e2cae774p-13 (;=-0.00019839334836096632;))))
+                      (f64.add
+                        (local.get 2)
+                        (f64.mul
+                          (local.get 6)
+                          (f64.add
+                            (f64.mul
+                              (local.get 5)
+                              (f64.const 0x1.11110896efbb2p-7 (;=0.008333329385889463;)))
+                            (f64.const -0x1.5555554cbac77p-3 (;=-0.16666666641626524;))))))))
+                (br 5 (;@1;)))
+              (local.set 0
+                (f32.demote_f64
+                  (f64.add
+                    (f64.add
+                      (f64.add
+                        (f64.mul
+                          (local.tee 2
+                            (f64.mul
+                              (local.get 2)
+                              (local.get 2)))
+                          (f64.const -0x1.ffffffd0c5e81p-2 (;=-0.499999997251031;)))
+                        (f64.const 0x1p+0 (;=1;)))
+                      (f64.mul
+                        (local.tee 5
+                          (f64.mul
+                            (local.get 2)
+                            (local.get 2)))
+                        (f64.const 0x1.55553e1053a42p-5 (;=0.04166662332373906;))))
+                    (f64.mul
+                      (f64.mul
+                        (local.get 2)
+                        (local.get 5))
+                      (f64.add
+                        (f64.mul
+                          (local.get 2)
+                          (f64.const 0x1.99342e0ee5069p-16 (;=0.00002439044879627741;)))
+                        (f64.const -0x1.6c087e80f1e27p-10 (;=-0.001388676377460993;)))))))
+              (br 4 (;@1;)))
+            (local.set 0
+              (f32.demote_f64
+                (f64.add
+                  (f64.mul
+                    (f64.mul
+                      (local.tee 6
+                        (f64.mul
+                          (local.tee 5
+                            (f64.mul
+                              (local.get 2)
+                              (local.get 2)))
+                          (f64.neg
+                            (local.get 2))))
+                      (f64.mul
+                        (local.get 5)
+                        (local.get 5)))
+                    (f64.add
+                      (f64.mul
+                        (local.get 5)
+                        (f64.const 0x1.6cd878c3b46a7p-19 (;=0.000002718311493989822;)))
+                      (f64.const -0x1.a00f9e2cae774p-13 (;=-0.00019839334836096632;))))
+                  (f64.sub
+                    (f64.mul
+                      (local.get 6)
+                      (f64.add
+                        (f64.mul
+                          (local.get 5)
+                          (f64.const 0x1.11110896efbb2p-7 (;=0.008333329385889463;)))
+                        (f64.const -0x1.5555554cbac77p-3 (;=-0.16666666641626524;))))
+                    (local.get 2)))))
+            (br 3 (;@1;)))
+          (block ;; label = @4
+            (br_if 0 (;@4;)
+              (i32.lt_u
+                (local.get 4)
+                (i32.const 1085271520)))
+            (local.set 0
+              (f32.demote_f64
+                (f64.add
+                  (f64.mul
+                    (f64.mul
+                      (local.tee 6
+                        (f64.mul
+                          (local.tee 5
+                            (f64.add
+                              (select
+                                (f64.const -0x1.921fb54442d18p+2 (;=-6.283185307179586;))
+                                (f64.const 0x1.921fb54442d18p+2 (;=6.283185307179586;))
+                                (i32.gt_s
+                                  (local.get 3)
+                                  (i32.const -1)))
+                              (local.get 2)))
+                          (local.tee 2
+                            (f64.mul
+                              (local.get 5)
+                              (local.get 5)))))
+                      (f64.mul
+                        (local.get 2)
+                        (local.get 2)))
+                    (f64.add
+                      (f64.mul
+                        (local.get 2)
+                        (f64.const 0x1.6cd878c3b46a7p-19 (;=0.000002718311493989822;)))
+                      (f64.const -0x1.a00f9e2cae774p-13 (;=-0.00019839334836096632;))))
+                  (f64.add
+                    (local.get 5)
+                    (f64.mul
+                      (local.get 6)
+                      (f64.add
+                        (f64.mul
+                          (local.get 2)
+                          (f64.const 0x1.11110896efbb2p-7 (;=0.008333329385889463;)))
+                        (f64.const -0x1.5555554cbac77p-3 (;=-0.16666666641626524;))))))))
+            (br 3 (;@1;)))
+          (block ;; label = @4
+            (br_if 0 (;@4;)
+              (i32.lt_s
+                (local.get 3)
+                (i32.const 0)))
+            (local.set 0
+              (f32.neg
+                (f32.demote_f64
+                  (f64.add
+                    (f64.add
+                      (f64.add
+                        (f64.mul
+                          (local.tee 2
+                            (f64.mul
+                              (local.tee 2
+                                (f64.add
+                                  (local.get 2)
+                                  (f64.const -0x1.2d97c7f3321d2p+2 (;=-4.71238898038469;))))
+                              (local.get 2)))
+                          (f64.const -0x1.ffffffd0c5e81p-2 (;=-0.499999997251031;)))
+                        (f64.const 0x1p+0 (;=1;)))
+                      (f64.mul
+                        (local.tee 5
+                          (f64.mul
+                            (local.get 2)
+                            (local.get 2)))
+                        (f64.const 0x1.55553e1053a42p-5 (;=0.04166662332373906;))))
+                    (f64.mul
+                      (f64.mul
+                        (local.get 2)
+                        (local.get 5))
+                      (f64.add
+                        (f64.mul
+                          (local.get 2)
+                          (f64.const 0x1.99342e0ee5069p-16 (;=0.00002439044879627741;)))
+                        (f64.const -0x1.6c087e80f1e27p-10 (;=-0.001388676377460993;))))))))
+            (br 3 (;@1;)))
+          (local.set 0
+            (f32.demote_f64
+              (f64.add
+                (f64.add
+                  (f64.add
+                    (f64.mul
+                      (local.tee 2
+                        (f64.mul
+                          (local.tee 2
+                            (f64.add
+                              (local.get 2)
+                              (f64.const 0x1.2d97c7f3321d2p+2 (;=4.71238898038469;))))
+                          (local.get 2)))
+                      (f64.const -0x1.ffffffd0c5e81p-2 (;=-0.499999997251031;)))
+                    (f64.const 0x1p+0 (;=1;)))
+                  (f64.mul
+                    (local.tee 5
+                      (f64.mul
+                        (local.get 2)
+                        (local.get 2)))
+                    (f64.const 0x1.55553e1053a42p-5 (;=0.04166662332373906;))))
+                (f64.mul
+                  (f64.mul
+                    (local.get 2)
+                    (local.get 5))
+                  (f64.add
+                    (f64.mul
+                      (local.get 2)
+                      (f64.const 0x1.99342e0ee5069p-16 (;=0.00002439044879627741;)))
+                    (f64.const -0x1.6c087e80f1e27p-10 (;=-0.001388676377460993;)))))))
+          (br 2 (;@1;)))
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i32.lt_u
+              (local.get 4)
+              (i32.const 1075235812)))
+          (local.set 0
+            (f32.demote_f64
+              (f64.add
+                (f64.mul
+                  (f64.mul
+                    (local.tee 6
+                      (f64.mul
+                        (local.tee 2
+                          (f64.mul
+                            (local.tee 5
+                              (f64.add
+                                (select
+                                  (f64.const -0x1.921fb54442d18p+1 (;=-3.141592653589793;))
+                                  (f64.const 0x1.921fb54442d18p+1 (;=3.141592653589793;))
+                                  (i32.gt_s
+                                    (local.get 3)
+                                    (i32.const -1)))
+                                (local.get 2)))
+                            (local.get 5)))
+                        (f64.neg
+                          (local.get 5))))
+                    (f64.mul
+                      (local.get 2)
+                      (local.get 2)))
+                  (f64.add
+                    (f64.mul
+                      (local.get 2)
+                      (f64.const 0x1.6cd878c3b46a7p-19 (;=0.000002718311493989822;)))
+                    (f64.const -0x1.a00f9e2cae774p-13 (;=-0.00019839334836096632;))))
+                (f64.sub
+                  (f64.mul
+                    (local.get 6)
+                    (f64.add
+                      (f64.mul
+                        (local.get 2)
+                        (f64.const 0x1.11110896efbb2p-7 (;=0.008333329385889463;)))
+                      (f64.const -0x1.5555554cbac77p-3 (;=-0.16666666641626524;))))
+                  (local.get 5)))))
+          (br 2 (;@1;)))
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i32.lt_s
+              (local.get 3)
+              (i32.const 0)))
+          (local.set 0
+            (f32.demote_f64
+              (f64.add
+                (f64.add
+                  (f64.add
+                    (f64.mul
+                      (local.tee 2
+                        (f64.mul
+                          (local.tee 2
+                            (f64.add
+                              (local.get 2)
+                              (f64.const -0x1.921fb54442d18p+0 (;=-1.5707963267948966;))))
+                          (local.get 2)))
+                      (f64.const -0x1.ffffffd0c5e81p-2 (;=-0.499999997251031;)))
+                    (f64.const 0x1p+0 (;=1;)))
+                  (f64.mul
+                    (local.tee 5
+                      (f64.mul
+                        (local.get 2)
+                        (local.get 2)))
+                    (f64.const 0x1.55553e1053a42p-5 (;=0.04166662332373906;))))
+                (f64.mul
+                  (f64.mul
+                    (local.get 2)
+                    (local.get 5))
+                  (f64.add
+                    (f64.mul
+                      (local.get 2)
+                      (f64.const 0x1.99342e0ee5069p-16 (;=0.00002439044879627741;)))
+                    (f64.const -0x1.6c087e80f1e27p-10 (;=-0.001388676377460993;)))))))
+          (br 2 (;@1;)))
+        (local.set 0
+          (f32.neg
+            (f32.demote_f64
+              (f64.add
+                (f64.add
+                  (f64.add
+                    (f64.mul
+                      (local.tee 2
+                        (f64.mul
+                          (local.tee 2
+                            (f64.add
+                              (local.get 2)
+                              (f64.const 0x1.921fb54442d18p+0 (;=1.5707963267948966;))))
+                          (local.get 2)))
+                      (f64.const -0x1.ffffffd0c5e81p-2 (;=-0.499999997251031;)))
+                    (f64.const 0x1p+0 (;=1;)))
+                  (f64.mul
+                    (local.tee 5
+                      (f64.mul
+                        (local.get 2)
+                        (local.get 2)))
+                    (f64.const 0x1.55553e1053a42p-5 (;=0.04166662332373906;))))
+                (f64.mul
+                  (f64.mul
+                    (local.get 2)
+                    (local.get 5))
+                  (f64.add
+                    (f64.mul
+                      (local.get 2)
+                      (f64.const 0x1.99342e0ee5069p-16 (;=0.00002439044879627741;)))
+                    (f64.const -0x1.6c087e80f1e27p-10 (;=-0.001388676377460993;))))))))
+        (br 1 (;@1;)))
+      (block ;; label = @2
+        (br_if 0 (;@2;)
+          (i32.lt_u
+            (local.get 4)
+            (i32.const 964689920)))
+        (local.set 0
+          (f32.demote_f64
+            (f64.add
+              (f64.mul
+                (f64.mul
+                  (local.tee 6
+                    (f64.mul
+                      (local.tee 5
+                        (f64.mul
+                          (local.get 2)
+                          (local.get 2)))
+                      (local.get 2)))
+                  (f64.mul
+                    (local.get 5)
+                    (local.get 5)))
+                (f64.add
+                  (f64.mul
+                    (local.get 5)
+                    (f64.const 0x1.6cd878c3b46a7p-19 (;=0.000002718311493989822;)))
+                  (f64.const -0x1.a00f9e2cae774p-13 (;=-0.00019839334836096632;))))
+              (f64.add
+                (f64.mul
+                  (local.get 6)
+                  (f64.add
+                    (f64.mul
+                      (local.get 5)
+                      (f64.const 0x1.11110896efbb2p-7 (;=0.008333329385889463;)))
+                    (f64.const -0x1.5555554cbac77p-3 (;=-0.16666666641626524;))))
+                (local.get 2)))))
+        (br 1 (;@1;)))
+      (f32.store
+        (local.get 1)
+        (select
+          (f32.mul
+            (local.get 0)
+            (f32.const 0x1p-120 (;=0.0000000000000000000000000000000000007523164;)))
+          (f32.add
+            (local.get 0)
+            (f32.const 0x1p+120 (;=1329228000000000000000000000000000000;)))
+          (i32.lt_u
+            (local.get 4)
+            (i32.const 8388608))))
+      (drop
+        (f32.load
+          (local.get 1))))
+    (global.set $__stack_pointer
+      (i32.add
+        (local.get 1)
+        (i32.const 16)))
+    (local.get 0)
+  )
+  (func $f32_sinh (;43;) (type 0) (param f32) (result f32)
+    (local f32 f32 i32)
+    (local.set 1
+      (f32.copysign
+        (f32.const 0x1p-1 (;=0.5;))
+        (local.get 0)))
+    (block ;; label = @1
+      (br_if 0 (;@1;)
+        (i32.lt_u
+          (local.tee 3
+            (i32.reinterpret_f32
+              (local.tee 2
+                (f32.abs
+                  (local.get 0)))))
+          (i32.const 1118925335)))
+      (return
+        (f32.mul
+          (f32.add
+            (local.get 1)
+            (local.get 1))
+          (f32.mul
+            (f32.mul
+              (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4expf4expf
+                (f32.add
+                  (local.get 2)
+                  (f32.const -0x1.45c778p+7 (;=-162.88959;))))
+              (f32.const 0x1p+117 (;=166153500000000000000000000000000000;)))
+            (f32.const 0x1p+117 (;=166153500000000000000000000000000000;))))))
+    (local.set 2
+      (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math6expm1f6expm1f
+        (local.get 2)))
+    (block ;; label = @1
+      (br_if 0 (;@1;)
+        (i32.lt_u
+          (local.get 3)
+          (i32.const 1065353216)))
+      (return
+        (f32.mul
+          (local.get 1)
+          (f32.add
+            (local.get 2)
+            (f32.div
+              (local.get 2)
+              (f32.add
+                (local.get 2)
+                (f32.const 0x1p+0 (;=1;))))))))
+    (block ;; label = @1
+      (br_if 0 (;@1;)
+        (i32.lt_u
+          (local.get 3)
+          (i32.const 964689920)))
+      (local.set 0
+        (f32.mul
+          (local.get 1)
+          (f32.sub
+            (f32.add
+              (local.get 2)
+              (local.get 2))
+            (f32.div
+              (f32.mul
+                (local.get 2)
+                (local.get 2))
+              (f32.add
+                (local.get 2)
+                (f32.const 0x1p+0 (;=1;))))))))
+    (local.get 0)
+  )
+  (func $f32_tan (;44;) (type 0) (param f32) (result f32)
+    (local i32 f64 i32 i32 f64 f64)
+    (global.set $__stack_pointer
+      (local.tee 1
+        (i32.sub
+          (global.get $__stack_pointer)
+          (i32.const 16))))
+    (local.set 2
+      (f64.promote_f32
+        (local.get 0)))
+    (block ;; label = @1
+      (block ;; label = @2
+        (br_if 0 (;@2;)
+          (i32.lt_u
+            (local.tee 4
+              (i32.and
+                (local.tee 3
+                  (i32.reinterpret_f32
+                    (local.get 0)))
+                (i32.const 2147483647)))
+            (i32.const 1061752795)))
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i32.lt_u
+              (local.get 4)
+              (i32.const 1081824210)))
+          (block ;; label = @4
+            (br_if 0 (;@4;)
+              (i32.lt_u
+                (local.get 4)
+                (i32.const 1088565718)))
+            (block ;; label = @5
+              (br_if 0 (;@5;)
+                (i32.gt_u
+                  (local.get 4)
+                  (i32.const 2139095039)))
+              (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math9rem_pio2f9rem_pio2f
+                (local.get 1)
+                (local.get 0))
+              (local.set 0
+                (f32.demote_f64
+                  (select
+                    (f64.div
+                      (f64.const -0x1p+0 (;=-1;))
+                      (local.tee 2
+                        (f64.add
+                          (f64.add
+                            (local.tee 5
+                              (f64.load offset=8
+                                (local.get 1)))
+                            (f64.mul
+                              (local.tee 5
+                                (f64.mul
+                                  (local.get 5)
+                                  (local.tee 2
+                                    (f64.mul
+                                      (local.get 5)
+                                      (local.get 5)))))
+                              (f64.add
+                                (f64.mul
+                                  (local.get 2)
+                                  (f64.const 0x1.112fd38999f72p-3 (;=0.13339200271297674;)))
+                                (f64.const 0x1.5554d3418c99fp-2 (;=0.3333313950307914;)))))
+                          (f64.mul
+                            (f64.mul
+                              (local.get 5)
+                              (local.tee 6
+                                (f64.mul
+                                  (local.get 2)
+                                  (local.get 2))))
+                            (f64.add
+                              (f64.add
+                                (f64.mul
+                                  (local.get 2)
+                                  (f64.const 0x1.91df3908c33cep-6 (;=0.024528318116654728;)))
+                                (f64.const 0x1.b54c91d865afep-5 (;=0.05338123784456704;)))
+                              (f64.mul
+                                (local.get 6)
+                                (f64.add
+                                  (f64.mul
+                                    (local.get 2)
+                                    (f64.const 0x1.362b9bf971bcdp-7 (;=0.009465647849436732;)))
+                                  (f64.const 0x1.85dadfcecf44ep-9 (;=0.002974357433599673;)))))))))
+                    (local.get 2)
+                    (i32.and
+                      (i32.load
+                        (local.get 1))
+                      (i32.const 1)))))
+              (br 4 (;@1;)))
+            (local.set 0
+              (f32.sub
+                (local.get 0)
+                (local.get 0)))
+            (br 3 (;@1;)))
+          (block ;; label = @4
+            (br_if 0 (;@4;)
+              (i32.lt_u
+                (local.get 4)
+                (i32.const 1085271520)))
+            (local.set 0
+              (f32.demote_f64
+                (f64.add
+                  (f64.add
+                    (local.tee 5
+                      (f64.add
+                        (select
+                          (f64.const -0x1.921fb54442d18p+2 (;=-6.283185307179586;))
+                          (f64.const 0x1.921fb54442d18p+2 (;=6.283185307179586;))
+                          (i32.gt_s
+                            (local.get 3)
+                            (i32.const -1)))
+                        (local.get 2)))
+                    (f64.mul
+                      (local.tee 5
+                        (f64.mul
+                          (local.get 5)
+                          (local.tee 2
+                            (f64.mul
+                              (local.get 5)
+                              (local.get 5)))))
+                      (f64.add
+                        (f64.mul
+                          (local.get 2)
+                          (f64.const 0x1.112fd38999f72p-3 (;=0.13339200271297674;)))
+                        (f64.const 0x1.5554d3418c99fp-2 (;=0.3333313950307914;)))))
+                  (f64.mul
+                    (f64.mul
+                      (local.get 5)
+                      (local.tee 6
+                        (f64.mul
+                          (local.get 2)
+                          (local.get 2))))
+                    (f64.add
+                      (f64.add
+                        (f64.mul
+                          (local.get 2)
+                          (f64.const 0x1.91df3908c33cep-6 (;=0.024528318116654728;)))
+                        (f64.const 0x1.b54c91d865afep-5 (;=0.05338123784456704;)))
+                      (f64.mul
+                        (local.get 6)
+                        (f64.add
+                          (f64.mul
+                            (local.get 2)
+                            (f64.const 0x1.362b9bf971bcdp-7 (;=0.009465647849436732;)))
+                          (f64.const 0x1.85dadfcecf44ep-9 (;=0.002974357433599673;)))))))))
+            (br 3 (;@1;)))
+          (local.set 0
+            (f32.demote_f64
+              (f64.div
+                (f64.const -0x1p+0 (;=-1;))
+                (f64.add
+                  (f64.add
+                    (local.tee 5
+                      (f64.add
+                        (select
+                          (f64.const -0x1.2d97c7f3321d2p+2 (;=-4.71238898038469;))
+                          (f64.const 0x1.2d97c7f3321d2p+2 (;=4.71238898038469;))
+                          (i32.gt_s
+                            (local.get 3)
+                            (i32.const -1)))
+                        (local.get 2)))
+                    (f64.mul
+                      (local.tee 5
+                        (f64.mul
+                          (local.get 5)
+                          (local.tee 2
+                            (f64.mul
+                              (local.get 5)
+                              (local.get 5)))))
+                      (f64.add
+                        (f64.mul
+                          (local.get 2)
+                          (f64.const 0x1.112fd38999f72p-3 (;=0.13339200271297674;)))
+                        (f64.const 0x1.5554d3418c99fp-2 (;=0.3333313950307914;)))))
+                  (f64.mul
+                    (f64.mul
+                      (local.get 5)
+                      (local.tee 6
+                        (f64.mul
+                          (local.get 2)
+                          (local.get 2))))
+                    (f64.add
+                      (f64.add
+                        (f64.mul
+                          (local.get 2)
+                          (f64.const 0x1.91df3908c33cep-6 (;=0.024528318116654728;)))
+                        (f64.const 0x1.b54c91d865afep-5 (;=0.05338123784456704;)))
+                      (f64.mul
+                        (local.get 6)
+                        (f64.add
+                          (f64.mul
+                            (local.get 2)
+                            (f64.const 0x1.362b9bf971bcdp-7 (;=0.009465647849436732;)))
+                          (f64.const 0x1.85dadfcecf44ep-9 (;=0.002974357433599673;))))))))))
+          (br 2 (;@1;)))
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i32.lt_u
+              (local.get 4)
+              (i32.const 1075235812)))
+          (local.set 0
+            (f32.demote_f64
+              (f64.add
+                (f64.add
+                  (local.tee 5
+                    (f64.add
+                      (select
+                        (f64.const -0x1.921fb54442d18p+1 (;=-3.141592653589793;))
+                        (f64.const 0x1.921fb54442d18p+1 (;=3.141592653589793;))
+                        (i32.gt_s
+                          (local.get 3)
+                          (i32.const -1)))
+                      (local.get 2)))
+                  (f64.mul
+                    (local.tee 5
+                      (f64.mul
+                        (local.get 5)
+                        (local.tee 2
+                          (f64.mul
+                            (local.get 5)
+                            (local.get 5)))))
+                    (f64.add
+                      (f64.mul
+                        (local.get 2)
+                        (f64.const 0x1.112fd38999f72p-3 (;=0.13339200271297674;)))
+                      (f64.const 0x1.5554d3418c99fp-2 (;=0.3333313950307914;)))))
+                (f64.mul
+                  (f64.mul
+                    (local.get 5)
+                    (local.tee 6
+                      (f64.mul
+                        (local.get 2)
+                        (local.get 2))))
+                  (f64.add
+                    (f64.add
+                      (f64.mul
+                        (local.get 2)
+                        (f64.const 0x1.91df3908c33cep-6 (;=0.024528318116654728;)))
+                      (f64.const 0x1.b54c91d865afep-5 (;=0.05338123784456704;)))
+                    (f64.mul
+                      (local.get 6)
+                      (f64.add
+                        (f64.mul
+                          (local.get 2)
+                          (f64.const 0x1.362b9bf971bcdp-7 (;=0.009465647849436732;)))
+                        (f64.const 0x1.85dadfcecf44ep-9 (;=0.002974357433599673;)))))))))
+          (br 2 (;@1;)))
+        (local.set 0
+          (f32.demote_f64
+            (f64.div
+              (f64.const -0x1p+0 (;=-1;))
+              (f64.add
+                (f64.add
+                  (local.tee 5
+                    (f64.add
+                      (select
+                        (f64.const -0x1.921fb54442d18p+0 (;=-1.5707963267948966;))
+                        (f64.const 0x1.921fb54442d18p+0 (;=1.5707963267948966;))
+                        (i32.gt_s
+                          (local.get 3)
+                          (i32.const -1)))
+                      (local.get 2)))
+                  (f64.mul
+                    (local.tee 5
+                      (f64.mul
+                        (local.get 5)
+                        (local.tee 2
+                          (f64.mul
+                            (local.get 5)
+                            (local.get 5)))))
+                    (f64.add
+                      (f64.mul
+                        (local.get 2)
+                        (f64.const 0x1.112fd38999f72p-3 (;=0.13339200271297674;)))
+                      (f64.const 0x1.5554d3418c99fp-2 (;=0.3333313950307914;)))))
+                (f64.mul
+                  (f64.mul
+                    (local.get 5)
+                    (local.tee 6
+                      (f64.mul
+                        (local.get 2)
+                        (local.get 2))))
+                  (f64.add
+                    (f64.add
+                      (f64.mul
+                        (local.get 2)
+                        (f64.const 0x1.91df3908c33cep-6 (;=0.024528318116654728;)))
+                      (f64.const 0x1.b54c91d865afep-5 (;=0.05338123784456704;)))
+                    (f64.mul
+                      (local.get 6)
+                      (f64.add
+                        (f64.mul
+                          (local.get 2)
+                          (f64.const 0x1.362b9bf971bcdp-7 (;=0.009465647849436732;)))
+                        (f64.const 0x1.85dadfcecf44ep-9 (;=0.002974357433599673;))))))))))
+        (br 1 (;@1;)))
+      (block ;; label = @2
+        (br_if 0 (;@2;)
+          (i32.lt_u
+            (local.get 4)
+            (i32.const 964689920)))
+        (local.set 0
+          (f32.demote_f64
+            (f64.add
+              (f64.add
+                (f64.mul
+                  (local.tee 6
+                    (f64.mul
+                      (local.tee 5
+                        (f64.mul
+                          (local.get 2)
+                          (local.get 2)))
+                      (local.get 2)))
+                  (f64.add
+                    (f64.mul
+                      (local.get 5)
+                      (f64.const 0x1.112fd38999f72p-3 (;=0.13339200271297674;)))
+                    (f64.const 0x1.5554d3418c99fp-2 (;=0.3333313950307914;))))
+                (local.get 2))
+              (f64.mul
+                (f64.mul
+                  (local.get 6)
+                  (local.tee 2
+                    (f64.mul
+                      (local.get 5)
+                      (local.get 5))))
+                (f64.add
+                  (f64.add
+                    (f64.mul
+                      (local.get 5)
+                      (f64.const 0x1.91df3908c33cep-6 (;=0.024528318116654728;)))
+                    (f64.const 0x1.b54c91d865afep-5 (;=0.05338123784456704;)))
+                  (f64.mul
+                    (local.get 2)
+                    (f64.add
+                      (f64.mul
+                        (local.get 5)
+                        (f64.const 0x1.362b9bf971bcdp-7 (;=0.009465647849436732;)))
+                      (f64.const 0x1.85dadfcecf44ep-9 (;=0.002974357433599673;)))))))))
+        (br 1 (;@1;)))
+      (f32.store
+        (local.get 1)
+        (select
+          (f32.mul
+            (local.get 0)
+            (f32.const 0x1p-120 (;=0.0000000000000000000000000000000000007523164;)))
+          (f32.add
+            (local.get 0)
+            (f32.const 0x1p+120 (;=1329228000000000000000000000000000000;)))
+          (i32.lt_u
+            (local.get 4)
+            (i32.const 8388608))))
+      (drop
+        (f32.load
+          (local.get 1))))
+    (global.set $__stack_pointer
+      (i32.add
+        (local.get 1)
+        (i32.const 16)))
+    (local.get 0)
+  )
+  (func $f32_tanh (;45;) (type 0) (param f32) (result f32)
+    (local i32 f32 i32)
+    (global.set $__stack_pointer
+      (local.tee 1
+        (i32.sub
+          (global.get $__stack_pointer)
+          (i32.const 16))))
     (block ;; label = @1
       (block ;; label = @2
         (block ;; label = @3
           (br_if 0 (;@3;)
             (i32.gt_u
-              (i32.add
-                (local.tee 1
-                  (i32.reinterpret_f32
-                    (local.get 0)))
-                (i32.const -2139095040))
-              (i32.const -2130706433)))
-          (br_if 2 (;@1;)
-            (f32.eq
-              (local.get 0)
-              (f32.const 0x0p+0 (;=0;))))
-          (br_if 2 (;@1;)
-            (i32.eq
-              (local.get 1)
-              (i32.const 2139095040)))
-          (local.set 2
-            (f32.const nan (;=NaN;)))
+              (local.tee 3
+                (i32.reinterpret_f32
+                  (local.tee 2
+                    (f32.abs
+                      (local.get 0)))))
+              (i32.const 1057791828)))
           (br_if 1 (;@2;)
             (i32.gt_u
+              (local.get 3)
+              (i32.const 1048757624)))
+          (block ;; label = @4
+            (br_if 0 (;@4;)
+              (i32.gt_u
+                (local.get 3)
+                (i32.const 8388607)))
+            (f32.store offset=12
               (local.get 1)
-              (i32.const 2139095040)))
-          (local.set 1
-            (i32.add
-              (i32.reinterpret_f32
-                (f32.mul
-                  (local.get 0)
-                  (f32.const 0x1p+23 (;=8388608;))))
-              (i32.const -192937984))))
-        (local.set 3
-          (i32.const -1))
-        (local.set 5
-          (local.tee 4
-            (i32.shl
-              (i32.load16_u offset=1058160
-                (i32.and
-                  (i32.shr_u
-                    (local.get 1)
-                    (i32.const 16))
-                  (i32.const 254)))
-              (i32.const 16))))
-        (local.set 7
-          (local.tee 6
-            (select
-              (i32.and
-                (i32.shl
-                  (local.get 1)
-                  (i32.const 7))
-                (i32.const 2147483520))
-              (i32.or
-                (i32.shl
-                  (local.get 1)
-                  (i32.const 8))
-                (i32.const -2147483648))
-              (i32.and
-                (local.get 1)
-                (i32.const 8388608)))))
-        (loop ;; label = @3
-          (local.set 4
-            (i32.and
-              (i32.wrap_i64
-                (i64.shr_u
-                  (i64.mul
-                    (i64.extend_i32_u
-                      (local.tee 5
-                        (i32.sub
-                          (i32.const -1073741824)
-                          (i32.wrap_i64
-                            (i64.shr_u
-                              (i64.mul
-                                (i64.extend_i32_u
-                                  (local.tee 7
-                                    (i32.shl
-                                      (i32.wrap_i64
-                                        (i64.shr_u
-                                          (i64.mul
-                                            (i64.extend_i32_u
-                                              (local.get 7))
-                                            (i64.extend_i32_u
-                                              (local.get 5)))
-                                          (i64.const 32)))
-                                      (i32.eqz
-                                        (local.get 3)))))
-                                (local.tee 8
-                                  (i64.extend_i32_u
-                                    (local.get 4))))
-                              (i64.const 32))))))
-                    (local.get 8))
-                  (i64.const 31)))
-              (i32.const -2)))
+              (f32.mul
+                (local.get 0)
+                (local.get 0)))
+            (drop
+              (f32.load offset=12
+                (local.get 1)))
+            (br 3 (;@1;)))
+          (local.set 2
+            (f32.div
+              (f32.neg
+                (local.tee 2
+                  (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math6expm1f6expm1f
+                    (f32.mul
+                      (local.get 2)
+                      (f32.const -0x1p+1 (;=-2;))))))
+              (f32.add
+                (local.get 2)
+                (f32.const 0x1p+1 (;=2;)))))
+          (br 2 (;@1;)))
+        (block ;; label = @3
           (br_if 0 (;@3;)
-            (i32.ne
-              (local.tee 3
-                (i32.add
-                  (local.get 3)
-                  (i32.const 1)))
-              (i32.const 2))))
+            (i32.gt_u
+              (local.get 3)
+              (i32.const 1092616192)))
+          (local.set 2
+            (f32.sub
+              (f32.const 0x1p+0 (;=1;))
+              (f32.div
+                (f32.const 0x1p+1 (;=2;))
+                (f32.add
+                  (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math6expm1f6expm1f
+                    (f32.add
+                      (local.get 2)
+                      (local.get 2)))
+                  (f32.const 0x1p+1 (;=2;))))))
+          (br 2 (;@1;)))
         (local.set 2
           (f32.add
-            (f32.reinterpret_i32
-              (local.tee 3
-                (i32.or
-                  (i32.and
-                    (i32.add
-                      (i32.shr_u
-                        (local.tee 7
-                          (i32.add
-                            (i32.sub
-                              (i32.mul
-                                (local.tee 3
-                                  (i32.shr_u
-                                    (local.get 7)
-                                    (i32.const 6)))
-                                (local.get 3))
-                              (i32.shl
-                                (local.get 6)
-                                (i32.const 16)))
-                            (local.get 3)))
-                        (i32.const 31))
-                      (local.get 3))
-                    (i32.const 8388607))
-                  (i32.and
-                    (i32.add
-                      (i32.shr_u
-                        (local.get 1)
-                        (i32.const 1))
-                      (i32.const 532676608))
-                    (i32.const 2139095040)))))
-            (f32.reinterpret_i32
-              (i32.or
-                (select
-                  (i32.const 8388608)
-                  (i32.const 0)
-                  (local.tee 3
-                    (i32.add
-                      (i32.add
-                        (local.get 7)
-                        (local.get 3))
-                      (i32.const 1))))
-                (i32.and
-                  (i32.xor
-                    (local.get 3)
-                    (local.get 7))
-                  (i32.const -2147483648)))))))
-      (return
-        (local.get 2)))
-    (local.get 0)
+            (f32.div
+              (f32.const 0x0p+0 (;=0;))
+              (local.get 2))
+            (f32.const 0x1p+0 (;=1;))))
+        (br 1 (;@1;)))
+      (local.set 2
+        (f32.div
+          (local.tee 2
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math6expm1f6expm1f
+              (f32.add
+                (local.get 2)
+                (local.get 2))))
+          (f32.add
+            (local.get 2)
+            (f32.const 0x1p+1 (;=2;))))))
+    (global.set $__stack_pointer
+      (i32.add
+        (local.get 1)
+        (i32.const 16)))
+    (select
+      (f32.neg
+        (local.get 2))
+      (local.get 2)
+      (i32.lt_s
+        (i32.reinterpret_f32
+          (local.get 0))
+        (i32.const 0)))
   )
-  (func $libm_acosh (;4;) (type 0) (param f64) (result f64)
+  (func $f64_acos (;46;) (type 1) (param f64) (result f64)
+    (local i64 i32 f64 f64)
+    (block ;; label = @1
+      (block ;; label = @2
+        (block ;; label = @3
+          (br_if 0 (;@3;)
+            (i32.gt_u
+              (local.tee 2
+                (i32.and
+                  (i32.wrap_i64
+                    (i64.shr_u
+                      (local.tee 1
+                        (i64.reinterpret_f64
+                          (local.get 0)))
+                      (i64.const 32)))
+                  (i32.const 2147483647)))
+              (i32.const 1072693247)))
+          (block ;; label = @4
+            (br_if 0 (;@4;)
+              (i32.lt_u
+                (local.get 2)
+                (i32.const 1071644672)))
+            (block ;; label = @5
+              (br_if 0 (;@5;)
+                (i64.le_s
+                  (local.get 1)
+                  (i64.const -1)))
+              (return
+                (f64.add
+                  (local.tee 0
+                    (f64.add
+                      (f64.add
+                        (f64.mul
+                          (f64.div
+                            (f64.mul
+                              (local.tee 0
+                                (f64.mul
+                                  (f64.sub
+                                    (f64.const 0x1p+0 (;=1;))
+                                    (local.get 0))
+                                  (f64.const 0x1p-1 (;=0.5;))))
+                              (f64.add
+                                (f64.mul
+                                  (local.get 0)
+                                  (f64.add
+                                    (f64.mul
+                                      (local.get 0)
+                                      (f64.add
+                                        (f64.mul
+                                          (local.get 0)
+                                          (f64.add
+                                            (f64.mul
+                                              (local.get 0)
+                                              (f64.add
+                                                (f64.mul
+                                                  (local.get 0)
+                                                  (f64.const 0x1.23de10dfdf709p-15 (;=0.00003479331075960212;)))
+                                                (f64.const 0x1.9efe07501b288p-11 (;=0.0007915349942898145;))))
+                                            (f64.const -0x1.48228b5688f3bp-5 (;=-0.04005553450067941;))))
+                                        (f64.const 0x1.9c1550e884455p-3 (;=0.20121253213486293;))))
+                                    (f64.const -0x1.4d61203eb6f7dp-2 (;=-0.3255658186224009;))))
+                                (f64.const 0x1.5555555555555p-3 (;=0.16666666666666666;))))
+                            (f64.add
+                              (f64.mul
+                                (local.get 0)
+                                (f64.add
+                                  (f64.mul
+                                    (local.get 0)
+                                    (f64.add
+                                      (f64.mul
+                                        (local.get 0)
+                                        (f64.add
+                                          (f64.mul
+                                            (local.get 0)
+                                            (f64.const 0x1.3b8c5b12e9282p-4 (;=0.07703815055590194;)))
+                                          (f64.const -0x1.6066c1b8d0159p-1 (;=-0.6882839716054533;))))
+                                      (f64.const 0x1.02ae59c598ac8p+1 (;=2.0209457602335057;))))
+                                  (f64.const -0x1.33a271c8a2d4bp+1 (;=-2.403394911734414;))))
+                              (f64.const 0x1p+0 (;=1;))))
+                          (local.tee 3
+                            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4sqrt4sqrt
+                              (local.get 0))))
+                        (f64.div
+                          (f64.sub
+                            (local.get 0)
+                            (f64.mul
+                              (local.tee 4
+                                (f64.reinterpret_i64
+                                  (i64.and
+                                    (i64.reinterpret_f64
+                                      (local.get 3))
+                                    (i64.const -4294967296))))
+                              (local.get 4)))
+                          (f64.add
+                            (local.get 3)
+                            (local.get 4))))
+                      (local.get 4)))
+                  (local.get 0))))
+            (return
+              (f64.add
+                (local.tee 0
+                  (f64.sub
+                    (f64.const 0x1.921fb54442d18p+0 (;=1.5707963267948966;))
+                    (f64.add
+                      (local.tee 4
+                        (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4sqrt4sqrt
+                          (local.tee 0
+                            (f64.mul
+                              (f64.add
+                                (local.get 0)
+                                (f64.const 0x1p+0 (;=1;)))
+                              (f64.const 0x1p-1 (;=0.5;))))))
+                      (f64.add
+                        (f64.mul
+                          (local.get 4)
+                          (f64.div
+                            (f64.mul
+                              (local.get 0)
+                              (f64.add
+                                (f64.mul
+                                  (local.get 0)
+                                  (f64.add
+                                    (f64.mul
+                                      (local.get 0)
+                                      (f64.add
+                                        (f64.mul
+                                          (local.get 0)
+                                          (f64.add
+                                            (f64.mul
+                                              (local.get 0)
+                                              (f64.add
+                                                (f64.mul
+                                                  (local.get 0)
+                                                  (f64.const 0x1.23de10dfdf709p-15 (;=0.00003479331075960212;)))
+                                                (f64.const 0x1.9efe07501b288p-11 (;=0.0007915349942898145;))))
+                                            (f64.const -0x1.48228b5688f3bp-5 (;=-0.04005553450067941;))))
+                                        (f64.const 0x1.9c1550e884455p-3 (;=0.20121253213486293;))))
+                                    (f64.const -0x1.4d61203eb6f7dp-2 (;=-0.3255658186224009;))))
+                                (f64.const 0x1.5555555555555p-3 (;=0.16666666666666666;))))
+                            (f64.add
+                              (f64.mul
+                                (local.get 0)
+                                (f64.add
+                                  (f64.mul
+                                    (local.get 0)
+                                    (f64.add
+                                      (f64.mul
+                                        (local.get 0)
+                                        (f64.add
+                                          (f64.mul
+                                            (local.get 0)
+                                            (f64.const 0x1.3b8c5b12e9282p-4 (;=0.07703815055590194;)))
+                                          (f64.const -0x1.6066c1b8d0159p-1 (;=-0.6882839716054533;))))
+                                      (f64.const 0x1.02ae59c598ac8p+1 (;=2.0209457602335057;))))
+                                  (f64.const -0x1.33a271c8a2d4bp+1 (;=-2.403394911734414;))))
+                              (f64.const 0x1p+0 (;=1;)))))
+                        (f64.const -0x1.1a62633145c07p-54 (;=-0.00000000000000006123233995736766;))))))
+                (local.get 0))))
+          (local.set 4
+            (f64.const 0x1.921fb54442d18p+0 (;=1.5707963267948966;)))
+          (br_if 1 (;@2;)
+            (i32.lt_u
+              (local.get 2)
+              (i32.const 1012924417)))
+          (return
+            (f64.add
+              (f64.sub
+                (f64.sub
+                  (f64.const 0x1.1a62633145c07p-54 (;=0.00000000000000006123233995736766;))
+                  (f64.mul
+                    (local.get 0)
+                    (f64.div
+                      (f64.mul
+                        (local.tee 4
+                          (f64.mul
+                            (local.get 0)
+                            (local.get 0)))
+                        (f64.add
+                          (f64.mul
+                            (local.get 4)
+                            (f64.add
+                              (f64.mul
+                                (local.get 4)
+                                (f64.add
+                                  (f64.mul
+                                    (local.get 4)
+                                    (f64.add
+                                      (f64.mul
+                                        (local.get 4)
+                                        (f64.add
+                                          (f64.mul
+                                            (local.get 4)
+                                            (f64.const 0x1.23de10dfdf709p-15 (;=0.00003479331075960212;)))
+                                          (f64.const 0x1.9efe07501b288p-11 (;=0.0007915349942898145;))))
+                                      (f64.const -0x1.48228b5688f3bp-5 (;=-0.04005553450067941;))))
+                                  (f64.const 0x1.9c1550e884455p-3 (;=0.20121253213486293;))))
+                              (f64.const -0x1.4d61203eb6f7dp-2 (;=-0.3255658186224009;))))
+                          (f64.const 0x1.5555555555555p-3 (;=0.16666666666666666;))))
+                      (f64.add
+                        (f64.mul
+                          (local.get 4)
+                          (f64.add
+                            (f64.mul
+                              (local.get 4)
+                              (f64.add
+                                (f64.mul
+                                  (local.get 4)
+                                  (f64.add
+                                    (f64.mul
+                                      (local.get 4)
+                                      (f64.const 0x1.3b8c5b12e9282p-4 (;=0.07703815055590194;)))
+                                    (f64.const -0x1.6066c1b8d0159p-1 (;=-0.6882839716054533;))))
+                                (f64.const 0x1.02ae59c598ac8p+1 (;=2.0209457602335057;))))
+                            (f64.const -0x1.33a271c8a2d4bp+1 (;=-2.403394911734414;))))
+                        (f64.const 0x1p+0 (;=1;))))))
+                (local.get 0))
+              (f64.const 0x1.921fb54442d18p+0 (;=1.5707963267948966;)))))
+        (br_if 1 (;@1;)
+          (i32.eqz
+            (i32.or
+              (i32.add
+                (local.get 2)
+                (i32.const -1072693248))
+              (i32.wrap_i64
+                (local.get 1)))))
+        (local.set 4
+          (f64.div
+            (f64.const 0x0p+0 (;=0;))
+            (f64.sub
+              (local.get 0)
+              (local.get 0)))))
+      (return
+        (local.get 4)))
+    (select
+      (f64.const 0x0p+0 (;=0;))
+      (f64.const 0x1.921fb54442d18p+1 (;=3.141592653589793;))
+      (i64.gt_s
+        (local.get 1)
+        (i64.const -1)))
+  )
+  (func $f64_acosh (;47;) (type 1) (param f64) (result f64)
     (local i32)
     (block ;; label = @1
       (br_if 0 (;@1;)
@@ -890,11 +7668,11 @@
             (i32.const 1049)))
         (return
           (f64.add
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3log3log
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3log3log
               (local.get 0))
             (f64.const 0x1.62e42fefa39efp-1 (;=0.6931471805599453;)))))
       (return
-        (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3log3log
+        (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3log3log
           (f64.add
             (f64.add
               (local.get 0)
@@ -903,7 +7681,7 @@
               (f64.const -0x1p+0 (;=-1;))
               (f64.add
                 (local.get 0)
-                (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4sqrt4sqrt
+                (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4sqrt4sqrt
                   (f64.add
                     (f64.mul
                       (local.get 0)
@@ -913,10 +7691,10 @@
       (f64.add
         (local.get 0)
         (f64.const -0x1p+0 (;=-1;))))
-    (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5log1p5log1p
+    (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5log1p5log1p
       (f64.add
         (local.get 0)
-        (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4sqrt4sqrt
+        (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4sqrt4sqrt
           (f64.add
             (f64.mul
               (local.get 0)
@@ -925,7 +7703,7 @@
               (local.get 0)
               (local.get 0))))))
   )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math3log3log (;5;) (type 0) (param f64) (result f64)
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math3log3log (;48;) (type 1) (param f64) (result f64)
     (local i64 i32 i64 i32 f64 f64)
     (block ;; label = @1
       (block ;; label = @2
@@ -1080,7 +7858,7 @@
           (f64.const 0x0p+0 (;=0;)))))
     (local.get 0)
   )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math5log1p5log1p (;6;) (type 0) (param f64) (result f64)
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math5log1p5log1p (;49;) (type 1) (param f64) (result f64)
     (local i32 i64 i32 f64 f64 f64)
     (local.set 1
       (i32.sub
@@ -1277,353 +8055,7 @@
                       (f64.const 0x1.5555555555593p-1 (;=0.6666666666666735;))))))))
           (local.get 6))))
   )
-  (func $libm_acoshf (;7;) (type 1) (param f32) (result f32)
-    (local i32)
-    (block ;; label = @1
-      (br_if 0 (;@1;)
-        (i32.lt_u
-          (local.tee 1
-            (i32.and
-              (i32.reinterpret_f32
-                (local.get 0))
-              (i32.const 2147483647)))
-          (i32.const 1073741824)))
-      (block ;; label = @2
-        (br_if 0 (;@2;)
-          (i32.lt_u
-            (local.get 1)
-            (i32.const 1166016512)))
-        (return
-          (f32.add
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4logf4logf
-              (local.get 0))
-            (f32.const 0x1.62e43p-1 (;=0.6931472;)))))
-      (return
-        (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4logf4logf
-          (f32.add
-            (f32.add
-              (local.get 0)
-              (local.get 0))
-            (f32.div
-              (f32.const -0x1p+0 (;=-1;))
-              (f32.add
-                (local.get 0)
-                (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4sqrt5sqrtf
-                  (f32.add
-                    (f32.mul
-                      (local.get 0)
-                      (local.get 0))
-                    (f32.const -0x1p+0 (;=-1;))))))))))
-    (local.set 0
-      (f32.add
-        (local.get 0)
-        (f32.const -0x1p+0 (;=-1;))))
-    (call $_RNvNtNtCs5s8uptHhuCz_4libm4math6log1pf6log1pf
-      (f32.add
-        (local.get 0)
-        (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4sqrt5sqrtf
-          (f32.add
-            (f32.mul
-              (local.get 0)
-              (local.get 0))
-            (f32.add
-              (local.get 0)
-              (local.get 0))))))
-  )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math4logf4logf (;8;) (type 1) (param f32) (result f32)
-    (local i32 i32 f32 f32)
-    (block ;; label = @1
-      (block ;; label = @2
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.lt_s
-              (local.tee 1
-                (i32.reinterpret_f32
-                  (local.get 0)))
-              (i32.const 8388608)))
-          (br_if 1 (;@2;)
-            (i32.gt_u
-              (local.get 1)
-              (i32.const 2139095039)))
-          (local.set 2
-            (i32.const -127))
-          (local.set 0
-            (f32.const 0x0p+0 (;=0;)))
-          (br_if 1 (;@2;)
-            (i32.eq
-              (local.get 1)
-              (i32.const 1065353216)))
-          (br 2 (;@1;)))
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (f32.ne
-              (local.get 0)
-              (f32.const 0x0p+0 (;=0;))))
-          (return
-            (f32.div
-              (f32.const -0x1p+0 (;=-1;))
-              (f32.mul
-                (local.get 0)
-                (local.get 0)))))
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.lt_s
-              (local.get 1)
-              (i32.const 0)))
-          (local.set 1
-            (i32.reinterpret_f32
-              (f32.mul
-                (local.get 0)
-                (f32.const 0x1p+25 (;=33554432;)))))
-          (local.set 2
-            (i32.const -152))
-          (br 2 (;@1;)))
-        (local.set 0
-          (f32.div
-            (f32.sub
-              (local.get 0)
-              (local.get 0))
-            (f32.const 0x0p+0 (;=0;)))))
-      (return
-        (local.get 0)))
-    (f32.add
-      (f32.mul
-        (local.tee 3
-          (f32.convert_i32_s
-            (i32.add
-              (local.get 2)
-              (i32.shr_u
-                (local.tee 1
-                  (i32.add
-                    (local.get 1)
-                    (i32.const 4913933)))
-                (i32.const 23)))))
-        (f32.const 0x1.62e3p-1 (;=0.6931381;)))
-      (f32.add
-        (local.tee 0
-          (f32.add
-            (f32.reinterpret_i32
-              (i32.add
-                (i32.and
-                  (local.get 1)
-                  (i32.const 8388607))
-                (i32.const 1060439283)))
-            (f32.const -0x1p+0 (;=-1;))))
-        (f32.sub
-          (f32.add
-            (f32.mul
-              (local.get 3)
-              (f32.const 0x1.2fefa2p-17 (;=0.000009058001;)))
-            (f32.mul
-              (local.tee 3
-                (f32.div
-                  (local.get 0)
-                  (f32.add
-                    (local.get 0)
-                    (f32.const 0x1p+1 (;=2;)))))
-              (f32.add
-                (local.tee 4
-                  (f32.mul
-                    (local.get 0)
-                    (f32.mul
-                      (local.get 0)
-                      (f32.const 0x1p-1 (;=0.5;)))))
-                (f32.add
-                  (f32.mul
-                    (local.tee 0
-                      (f32.mul
-                        (local.get 3)
-                        (local.get 3)))
-                    (f32.add
-                      (f32.mul
-                        (local.tee 0
-                          (f32.mul
-                            (local.get 0)
-                            (local.get 0)))
-                        (f32.const 0x1.23d3dcp-2 (;=0.28498787;)))
-                      (f32.const 0x1.555554p-1 (;=0.6666666;))))
-                  (f32.mul
-                    (local.get 0)
-                    (f32.add
-                      (f32.mul
-                        (local.get 0)
-                        (f32.const 0x1.f13c4cp-3 (;=0.24279079;)))
-                      (f32.const 0x1.999c26p-2 (;=0.40000972;))))))))
-          (local.get 4))))
-  )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math6log1pf6log1pf (;9;) (type 1) (param f32) (result f32)
-    (local i32 i32 f32 f32)
-    (local.set 1
-      (i32.sub
-        (global.get $__stack_pointer)
-        (i32.const 16)))
-    (block ;; label = @1
-      (block ;; label = @2
-        (block ;; label = @3
-          (block ;; label = @4
-            (block ;; label = @5
-              (block ;; label = @6
-                (block ;; label = @7
-                  (block ;; label = @8
-                    (br_if 0 (;@8;)
-                      (i32.gt_s
-                        (local.tee 2
-                          (i32.reinterpret_f32
-                            (local.get 0)))
-                        (i32.const 1054086095)))
-                    (br_if 2 (;@6;)
-                      (i32.gt_u
-                        (local.get 2)
-                        (i32.const -1082130433)))
-                    (br_if 1 (;@7;)
-                      (i32.ge_u
-                        (i32.shl
-                          (local.get 2)
-                          (i32.const 1))
-                        (i32.const 1728053248)))
-                    (br_if 3 (;@5;)
-                      (i32.eqz
-                        (i32.and
-                          (local.get 2)
-                          (i32.const 2139095040))))
-                    (br 7 (;@1;)))
-                  (br_if 6 (;@1;)
-                    (i32.gt_u
-                      (local.get 2)
-                      (i32.const 2139095039)))
-                  (br 4 (;@3;)))
-                (local.set 3
-                  (f32.const 0x0p+0 (;=0;)))
-                (br_if 3 (;@3;)
-                  (i32.gt_u
-                    (local.get 2)
-                    (i32.const -1097468391)))
-                (local.set 4
-                  (f32.const 0x0p+0 (;=0;)))
-                (br 4 (;@2;)))
-              (br_if 1 (;@4;)
-                (f32.ne
-                  (local.get 0)
-                  (f32.const -0x1p+0 (;=-1;))))
-              (return
-                (f32.const -inf (;=-inf;))))
-            (f32.store offset=12
-              (local.get 1)
-              (f32.mul
-                (local.get 0)
-                (local.get 0)))
-            (drop
-              (f32.load offset=12
-                (local.get 1)))
-            (br 3 (;@1;)))
-          (return
-            (f32.div
-              (f32.sub
-                (local.get 0)
-                (local.get 0))
-              (f32.const 0x0p+0 (;=0;)))))
-        (local.set 1
-          (i32.add
-            (i32.shr_u
-              (local.tee 2
-                (i32.add
-                  (i32.reinterpret_f32
-                    (local.tee 4
-                      (f32.add
-                        (local.get 0)
-                        (f32.const 0x1p+0 (;=1;)))))
-                  (i32.const 4913933)))
-              (i32.const 23))
-            (i32.const -127)))
-        (local.set 3
-          (f32.const 0x0p+0 (;=0;)))
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.ge_u
-              (local.get 2)
-              (i32.const 1275068416)))
-          (local.set 3
-            (f32.div
-              (select
-                (f32.add
-                  (f32.sub
-                    (local.get 0)
-                    (local.get 4))
-                  (f32.const 0x1p+0 (;=1;)))
-                (f32.sub
-                  (local.get 0)
-                  (f32.add
-                    (local.get 4)
-                    (f32.const -0x1p+0 (;=-1;))))
-                (i32.gt_u
-                  (local.get 2)
-                  (i32.const 1082130431)))
-              (local.get 4))))
-        (local.set 0
-          (f32.add
-            (f32.reinterpret_i32
-              (i32.add
-                (i32.and
-                  (local.get 2)
-                  (i32.const 8388607))
-                (i32.const 1060439283)))
-            (f32.const -0x1p+0 (;=-1;))))
-        (local.set 4
-          (f32.convert_i32_s
-            (local.get 1))))
-      (return
-        (f32.add
-          (f32.mul
-            (local.get 4)
-            (f32.const 0x1.62e3p-1 (;=0.6931381;)))
-          (f32.add
-            (local.get 0)
-            (f32.sub
-              (f32.add
-                (f32.add
-                  (local.get 3)
-                  (f32.mul
-                    (local.get 4)
-                    (f32.const 0x1.2fefa2p-17 (;=0.000009058001;))))
-                (f32.mul
-                  (local.tee 4
-                    (f32.div
-                      (local.get 0)
-                      (f32.add
-                        (local.get 0)
-                        (f32.const 0x1p+1 (;=2;)))))
-                  (f32.add
-                    (local.tee 3
-                      (f32.mul
-                        (local.get 0)
-                        (f32.mul
-                          (local.get 0)
-                          (f32.const 0x1p-1 (;=0.5;)))))
-                    (f32.add
-                      (f32.mul
-                        (local.tee 4
-                          (f32.mul
-                            (local.get 4)
-                            (local.get 4)))
-                        (f32.add
-                          (f32.mul
-                            (local.tee 4
-                              (f32.mul
-                                (local.get 4)
-                                (local.get 4)))
-                            (f32.const 0x1.23d3dcp-2 (;=0.28498787;)))
-                          (f32.const 0x1.555554p-1 (;=0.6666666;))))
-                      (f32.mul
-                        (local.get 4)
-                        (f32.add
-                          (f32.mul
-                            (local.get 4)
-                            (f32.const 0x1.f13c4cp-3 (;=0.24279079;)))
-                          (f32.const 0x1.999c26p-2 (;=0.40000972;))))))))
-              (local.get 3))))))
-    (local.get 0)
-  )
-  (func $libm_asin (;10;) (type 0) (param f64) (result f64)
+  (func $f64_asin (;50;) (type 1) (param f64) (result f64)
     (local i64 i32 f64 f64 f64)
     (block ;; label = @1
       (block ;; label = @2
@@ -1696,7 +8128,7 @@
                           (f64.const -0x1.33a271c8a2d4bp+1 (;=-2.403394911734414;))))
                       (f64.const 0x1p+0 (;=1;)))))
                 (local.set 4
-                  (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4sqrt4sqrt
+                  (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4sqrt4sqrt
                     (local.get 0)))
                 (br_if 1 (;@5;)
                   (i32.gt_u
@@ -1835,121 +8267,7 @@
         (f64.const 0x1.921fb54442d18p+0 (;=1.5707963267948966;)))
       (f64.const 0x1p-120 (;=0.000000000000000000000000000000000000752316384526264;)))
   )
-  (func $libm_asinf (;11;) (type 1) (param f32) (result f32)
-    (local f32 i32 f64)
-    (block ;; label = @1
-      (block ;; label = @2
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.gt_u
-              (local.tee 2
-                (i32.reinterpret_f32
-                  (local.tee 1
-                    (f32.abs
-                      (local.get 0)))))
-              (i32.const 1065353215)))
-          (block ;; label = @4
-            (br_if 0 (;@4;)
-              (i32.lt_u
-                (local.get 2)
-                (i32.const 1056964608)))
-            (return
-              (select
-                (f32.neg
-                  (local.tee 1
-                    (f32.demote_f64
-                      (f64.sub
-                        (f64.const 0x1.921fb54442d18p+0 (;=1.5707963267948966;))
-                        (f64.add
-                          (local.tee 3
-                            (f64.add
-                              (local.tee 3
-                                (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4sqrt4sqrt
-                                  (f64.promote_f32
-                                    (local.tee 1
-                                      (f32.mul
-                                        (f32.sub
-                                          (f32.const 0x1p+0 (;=1;))
-                                          (local.get 1))
-                                        (f32.const 0x1p-1 (;=0.5;)))))))
-                              (f64.mul
-                                (local.get 3)
-                                (f64.promote_f32
-                                  (f32.div
-                                    (f32.mul
-                                      (local.get 1)
-                                      (f32.add
-                                        (f32.mul
-                                          (local.get 1)
-                                          (f32.add
-                                            (f32.mul
-                                              (local.get 1)
-                                              (f32.const -0x1.1ba6d6p-7 (;=-0.008656363;)))
-                                            (f32.const -0x1.5e2774p-5 (;=-0.042743422;))))
-                                        (f32.const 0x1.5554eap-3 (;=0.16666587;))))
-                                    (f32.add
-                                      (f32.mul
-                                        (local.get 1)
-                                        (f32.const -0x1.69cb5cp-1 (;=-0.70662963;)))
-                                      (f32.const 0x1p+0 (;=1;))))))))
-                          (local.get 3))))))
-                (local.get 1)
-                (i32.lt_s
-                  (i32.reinterpret_f32
-                    (local.get 0))
-                  (i32.const 0)))))
-          (br_if 1 (;@2;)
-            (i32.lt_u
-              (i32.add
-                (local.get 2)
-                (i32.const -8388608))
-              (i32.const 956301312)))
-          (return
-            (f32.add
-              (local.get 0)
-              (f32.mul
-                (local.get 0)
-                (f32.div
-                  (f32.mul
-                    (local.tee 1
-                      (f32.mul
-                        (local.get 0)
-                        (local.get 0)))
-                    (f32.add
-                      (f32.mul
-                        (local.get 1)
-                        (f32.add
-                          (f32.mul
-                            (local.get 1)
-                            (f32.const -0x1.1ba6d6p-7 (;=-0.008656363;)))
-                          (f32.const -0x1.5e2774p-5 (;=-0.042743422;))))
-                      (f32.const 0x1.5554eap-3 (;=0.16666587;))))
-                  (f32.add
-                    (f32.mul
-                      (local.get 1)
-                      (f32.const -0x1.69cb5cp-1 (;=-0.70662963;)))
-                    (f32.const 0x1p+0 (;=1;))))))))
-        (br_if 1 (;@1;)
-          (i32.eq
-            (local.get 2)
-            (i32.const 1065353216)))
-        (local.set 0
-          (f32.div
-            (f32.const 0x0p+0 (;=0;))
-            (f32.sub
-              (local.get 0)
-              (local.get 0)))))
-      (return
-        (local.get 0)))
-    (f32.demote_f64
-      (f64.add
-        (f64.mul
-          (f64.promote_f32
-            (local.get 0))
-          (f64.const 0x1.921fb54442d18p+0 (;=1.5707963267948966;)))
-        (f64.const 0x1p-120 (;=0.000000000000000000000000000000000000752316384526264;))))
-  )
-  (func $libm_asinh (;12;) (type 0) (param f64) (result f64)
+  (func $f64_asinh (;51;) (type 1) (param f64) (result f64)
     (local i32 f64 i64 i32)
     (global.set $__stack_pointer
       (local.tee 1
@@ -1997,13 +8315,13 @@
               (local.get 0)
               (local.get 0)))
           (local.set 2
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5log1p5log1p
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5log1p5log1p
               (f64.add
                 (local.get 2)
                 (f64.div
                   (local.get 0)
                   (f64.add
-                    (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4sqrt4sqrt
+                    (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4sqrt4sqrt
                       (f64.add
                         (local.get 0)
                         (f64.const 0x1p+0 (;=1;))))
@@ -2011,12 +8329,12 @@
           (br 2 (;@1;)))
         (local.set 2
           (f64.add
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3log3log
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3log3log
               (local.get 2))
             (f64.const 0x1.62e42fefa39efp-1 (;=0.6931471805599453;))))
         (br 1 (;@1;)))
       (local.set 2
-        (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3log3log
+        (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3log3log
           (f64.add
             (f64.add
               (local.get 2)
@@ -2025,7 +8343,7 @@
               (f64.const 0x1p+0 (;=1;))
               (f64.add
                 (local.get 2)
-                (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4sqrt4sqrt
+                (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4sqrt4sqrt
                   (f64.add
                     (f64.mul
                       (local.get 0)
@@ -2043,99 +8361,11 @@
         (local.get 3)
         (i64.const 0)))
   )
-  (func $libm_asinhf (;13;) (type 1) (param f32) (result f32)
-    (local i32 f32 i32 f32)
-    (global.set $__stack_pointer
-      (local.tee 1
-        (i32.sub
-          (global.get $__stack_pointer)
-          (i32.const 16))))
-    (block ;; label = @1
-      (block ;; label = @2
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.gt_u
-              (local.tee 3
-                (i32.reinterpret_f32
-                  (local.tee 2
-                    (f32.abs
-                      (local.get 0)))))
-              (i32.const 1166016511)))
-          (br_if 1 (;@2;)
-            (i32.gt_u
-              (local.get 3)
-              (i32.const 1073741823)))
-          (block ;; label = @4
-            (br_if 0 (;@4;)
-              (i32.gt_u
-                (local.get 3)
-                (i32.const 964689919)))
-            (f32.store offset=12
-              (local.get 1)
-              (f32.add
-                (local.get 2)
-                (f32.const 0x1p+120 (;=1329228000000000000000000000000000000;))))
-            (drop
-              (f32.load offset=12
-                (local.get 1)))
-            (br 3 (;@1;)))
-          (local.set 4
-            (f32.mul
-              (local.get 0)
-              (local.get 0)))
-          (local.set 2
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math6log1pf6log1pf
-              (f32.add
-                (local.get 2)
-                (f32.div
-                  (local.get 4)
-                  (f32.add
-                    (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4sqrt5sqrtf
-                      (f32.add
-                        (local.get 4)
-                        (f32.const 0x1p+0 (;=1;))))
-                    (f32.const 0x1p+0 (;=1;)))))))
-          (br 2 (;@1;)))
-        (local.set 2
-          (f32.add
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4logf4logf
-              (local.get 2))
-            (f32.const 0x1.62e43p-1 (;=0.6931472;))))
-        (br 1 (;@1;)))
-      (local.set 2
-        (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4logf4logf
-          (f32.add
-            (f32.add
-              (local.get 2)
-              (local.get 2))
-            (f32.div
-              (f32.const 0x1p+0 (;=1;))
-              (f32.add
-                (local.get 2)
-                (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4sqrt5sqrtf
-                  (f32.add
-                    (f32.mul
-                      (local.get 0)
-                      (local.get 0))
-                    (f32.const 0x1p+0 (;=1;))))))))))
-    (global.set $__stack_pointer
-      (i32.add
-        (local.get 1)
-        (i32.const 16)))
-    (select
-      (f32.neg
-        (local.get 2))
-      (local.get 2)
-      (i32.lt_s
-        (i32.reinterpret_f32
-          (local.get 0))
-        (i32.const 0)))
-  )
-  (func $libm_atan (;14;) (type 0) (param f64) (result f64)
-    (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4atan4atan
+  (func $f64_atan (;52;) (type 1) (param f64) (result f64)
+    (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4atan4atan
       (local.get 0))
   )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math4atan4atan (;15;) (type 0) (param f64) (result f64)
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math4atan4atan (;53;) (type 1) (param f64) (result f64)
     (local i32 i64 i32 i32 f64 f64 f64)
     (local.set 1
       (i32.sub
@@ -2338,7 +8568,7 @@
               (local.get 6))))))
     (local.get 0)
   )
-  (func $libm_atan2 (;16;) (type 2) (param f64 f64) (result f64)
+  (func $f64_atan2 (;54;) (type 9) (param f64 f64) (result f64)
     (local i64 i32 i32 i32 i32 i32 f64)
     (block ;; label = @1
       (br_if 0 (;@1;)
@@ -2369,7 +8599,7 @@
             (i32.wrap_i64
               (local.get 2)))))
       (return
-        (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4atan4atan
+        (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4atan4atan
           (local.get 0))))
     (local.set 6
       (i32.or
@@ -2429,7 +8659,7 @@
                   (local.get 7)
                   (i32.const 2146435072)))
               (return
-                (f64.load offset=1058416
+                (f64.load offset=1058448
                   (i32.shl
                     (local.get 6)
                     (i32.const 3)))))
@@ -2457,7 +8687,7 @@
                       (i32.const 67108864))
                     (local.get 3))))
               (local.set 8
-                (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4atan4atan
+                (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4atan4atan
                   (f64.abs
                     (f64.div
                       (local.get 0)
@@ -2483,7 +8713,7 @@
                   (local.get 8)
                   (f64.const -0x1.1a62633145c07p-53 (;=-0.00000000000000012246467991473532;))))))
           (local.set 8
-            (f64.load offset=1058448
+            (f64.load offset=1058480
               (i32.shl
                 (local.get 6)
                 (i32.const 3)))))
@@ -2497,333 +8727,7 @@
       (f64.const 0x1.921fb54442d18p+0 (;=1.5707963267948966;))
       (local.get 0))
   )
-  (func $libm_atan2f (;17;) (type 3) (param f32 f32) (result f32)
-    (local i32 i32 i32 i32 f32)
-    (block ;; label = @1
-      (br_if 0 (;@1;)
-        (i32.and
-          (f32.eq
-            (local.get 1)
-            (local.get 1))
-          (f32.eq
-            (local.get 0)
-            (local.get 0))))
-      (return
-        (f32.add
-          (local.get 0)
-          (local.get 1))))
-    (block ;; label = @1
-      (br_if 0 (;@1;)
-        (i32.ne
-          (local.tee 2
-            (i32.reinterpret_f32
-              (local.get 1)))
-          (i32.const 1065353216)))
-      (return
-        (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5atanf5atanf
-          (local.get 0))))
-    (local.set 5
-      (i32.or
-        (local.tee 3
-          (i32.and
-            (i32.shr_u
-              (local.get 2)
-              (i32.const 30))
-            (i32.const 2)))
-        (i32.shr_u
-          (local.tee 4
-            (i32.reinterpret_f32
-              (local.get 0)))
-          (i32.const 31))))
-    (block ;; label = @1
-      (block ;; label = @2
-        (block ;; label = @3
-          (block ;; label = @4
-            (block ;; label = @5
-              (block ;; label = @6
-                (block ;; label = @7
-                  (block ;; label = @8
-                    (br_if 0 (;@8;)
-                      (local.tee 4
-                        (i32.and
-                          (local.get 4)
-                          (i32.const 2147483647))))
-                    (local.set 6
-                      (f32.const -0x1.921fb6p+1 (;=-3.1415927;)))
-                    (br_table 1 (;@7;) 1 (;@7;) 2 (;@6;) 6 (;@2;) 1 (;@7;)
-                      (local.get 5)))
-                  (br_if 2 (;@5;)
-                    (i32.eqz
-                      (local.tee 2
-                        (i32.and
-                          (local.get 2)
-                          (i32.const 2147483647)))))
-                  (br_if 3 (;@4;)
-                    (i32.ne
-                      (local.get 2)
-                      (i32.const 2139095040)))
-                  (br_if 4 (;@3;)
-                    (i32.ne
-                      (local.get 4)
-                      (i32.const 2139095040)))
-                  (return
-                    (f32.load offset=1058480
-                      (i32.shl
-                        (local.get 5)
-                        (i32.const 2)))))
-                (return
-                  (local.get 0)))
-              (return
-                (f32.const 0x1.921fb6p+1 (;=3.1415927;))))
-            (return
-              (f32.copysign
-                (f32.const 0x1.921fb6p+0 (;=1.5707964;))
-                (local.get 0))))
-          (br_if 2 (;@1;)
-            (i32.eq
-              (local.get 4)
-              (i32.const 2139095040)))
-          (br_if 2 (;@1;)
-            (i32.lt_u
-              (i32.add
-                (local.get 2)
-                (i32.const 218103808))
-              (local.get 4)))
-          (block ;; label = @4
-            (block ;; label = @5
-              (br_if 0 (;@5;)
-                (i32.eqz
-                  (local.get 3)))
-              (local.set 6
-                (f32.const 0x0p+0 (;=0;)))
-              (br_if 1 (;@4;)
-                (i32.lt_u
-                  (i32.add
-                    (local.get 4)
-                    (i32.const 218103808))
-                  (local.get 2))))
-            (local.set 6
-              (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5atanf5atanf
-                (f32.abs
-                  (f32.div
-                    (local.get 0)
-                    (local.get 1))))))
-          (block ;; label = @4
-            (block ;; label = @5
-              (block ;; label = @6
-                (br_table 4 (;@2;) 1 (;@5;) 2 (;@4;) 0 (;@6;) 4 (;@2;)
-                  (local.get 5)))
-              (return
-                (f32.add
-                  (f32.add
-                    (local.get 6)
-                    (f32.const 0x1.777a5cp-24 (;=0.00000008742278;)))
-                  (f32.const -0x1.921fb6p+1 (;=-3.1415927;)))))
-            (return
-              (f32.neg
-                (local.get 6))))
-          (return
-            (f32.sub
-              (f32.const 0x1.921fb6p+1 (;=3.1415927;))
-              (f32.add
-                (local.get 6)
-                (f32.const 0x1.777a5cp-24 (;=0.00000008742278;))))))
-        (local.set 6
-          (f32.load offset=1058496
-            (i32.shl
-              (local.get 5)
-              (i32.const 2)))))
-      (return
-        (local.get 6)))
-    (f32.copysign
-      (f32.const 0x1.921fb6p+0 (;=1.5707964;))
-      (local.get 0))
-  )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math5atanf5atanf (;18;) (type 1) (param f32) (result f32)
-    (local i32 i32 f32 i32 i32 f32 f32)
-    (local.set 1
-      (i32.sub
-        (global.get $__stack_pointer)
-        (i32.const 16)))
-    (local.set 2
-      (i32.reinterpret_f32
-        (local.get 0)))
-    (block ;; label = @1
-      (block ;; label = @2
-        (br_if 0 (;@2;)
-          (i32.gt_u
-            (local.tee 4
-              (i32.reinterpret_f32
-                (local.tee 3
-                  (f32.abs
-                    (local.get 0)))))
-            (i32.const 1283457023)))
-        (block ;; label = @3
-          (block ;; label = @4
-            (block ;; label = @5
-              (block ;; label = @6
-                (br_if 0 (;@6;)
-                  (i32.le_u
-                    (local.get 4)
-                    (i32.const 1054867455)))
-                (br_if 2 (;@4;)
-                  (i32.lt_u
-                    (local.get 4)
-                    (i32.const 1066926080)))
-                (br_if 1 (;@5;)
-                  (i32.lt_u
-                    (local.get 4)
-                    (i32.const 1075576832)))
-                (local.set 0
-                  (f32.div
-                    (f32.const -0x1p+0 (;=-1;))
-                    (local.get 3)))
-                (local.set 5
-                  (i32.const 3))
-                (br 3 (;@3;)))
-              (local.set 5
-                (i32.const -1))
-              (br_if 2 (;@3;)
-                (i32.ge_u
-                  (local.get 4)
-                  (i32.const 964689920)))
-              (br_if 4 (;@1;)
-                (i32.ge_u
-                  (local.get 4)
-                  (i32.const 8388608)))
-              (f32.store offset=12
-                (local.get 1)
-                (f32.mul
-                  (local.get 0)
-                  (local.get 0)))
-              (drop
-                (f32.load offset=12
-                  (local.get 1)))
-              (return
-                (local.get 0)))
-            (local.set 0
-              (f32.div
-                (f32.add
-                  (local.get 3)
-                  (f32.const -0x1.8p+0 (;=-1.5;)))
-                (f32.add
-                  (f32.mul
-                    (local.get 3)
-                    (f32.const 0x1.8p+0 (;=1.5;)))
-                  (f32.const 0x1p+0 (;=1;)))))
-            (local.set 5
-              (i32.const 2))
-            (br 1 (;@3;)))
-          (block ;; label = @4
-            (br_if 0 (;@4;)
-              (i32.lt_u
-                (local.get 4)
-                (i32.const 1060110336)))
-            (local.set 0
-              (f32.div
-                (f32.add
-                  (local.get 3)
-                  (f32.const -0x1p+0 (;=-1;)))
-                (f32.add
-                  (local.get 3)
-                  (f32.const 0x1p+0 (;=1;)))))
-            (local.set 5
-              (i32.const 1))
-            (br 1 (;@3;)))
-          (local.set 0
-            (f32.div
-              (f32.add
-                (f32.add
-                  (local.get 3)
-                  (local.get 3))
-                (f32.const -0x1p+0 (;=-1;)))
-              (f32.add
-                (local.get 3)
-                (f32.const 0x1p+1 (;=2;)))))
-          (local.set 5
-            (i32.const 0)))
-        (local.set 7
-          (f32.mul
-            (local.tee 3
-              (f32.mul
-                (local.tee 6
-                  (f32.mul
-                    (local.get 0)
-                    (local.get 0)))
-                (local.get 6)))
-            (f32.add
-              (f32.mul
-                (local.get 3)
-                (f32.const -0x1.b4248ep-4 (;=-0.106480174;)))
-              (f32.const -0x1.99953p-3 (;=-0.19999158;)))))
-        (local.set 3
-          (f32.mul
-            (local.get 6)
-            (f32.add
-              (f32.mul
-                (local.get 3)
-                (f32.add
-                  (f32.mul
-                    (local.get 3)
-                    (f32.const 0x1.f9584ap-5 (;=0.061687607;)))
-                  (f32.const 0x1.23ea1ap-3 (;=0.14253636;))))
-              (f32.const 0x1.555552p-2 (;=0.33333328;)))))
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.le_u
-              (local.get 4)
-              (i32.const 1054867455)))
-          (return
-            (select
-              (local.tee 0
-                (f32.sub
-                  (f32.load offset=1057296
-                    (local.tee 4
-                      (i32.shl
-                        (local.get 5)
-                        (i32.const 2))))
-                  (f32.sub
-                    (f32.sub
-                      (f32.mul
-                        (local.get 0)
-                        (f32.add
-                          (local.get 7)
-                          (local.get 3)))
-                      (f32.load offset=1057312
-                        (local.get 4)))
-                    (local.get 0))))
-              (f32.neg
-                (local.get 0))
-              (i32.gt_s
-                (local.get 2)
-                (i32.const -1)))))
-        (local.set 0
-          (f32.sub
-            (local.get 0)
-            (f32.mul
-              (local.get 0)
-              (f32.add
-                (local.get 7)
-                (local.get 3)))))
-        (br 1 (;@1;)))
-      (br_if 0 (;@1;)
-        (f32.ne
-          (local.get 0)
-          (local.get 0)))
-      (return
-        (select
-          (f32.const 0x1.921fb4p+0 (;=1.5707963;))
-          (f32.const -0x1.921fb4p+0 (;=-1.5707963;))
-          (i32.gt_s
-            (local.get 2)
-            (i32.const -1)))))
-    (local.get 0)
-  )
-  (func $libm_atanf (;19;) (type 1) (param f32) (result f32)
-    (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5atanf5atanf
-      (local.get 0))
-  )
-  (func $libm_atanh (;20;) (type 0) (param f64) (result f64)
+  (func $f64_atanh (;55;) (type 1) (param f64) (result f64)
     (local i32 f64 i64 i32)
     (global.set $__stack_pointer
       (local.tee 1
@@ -2849,7 +8753,7 @@
             (i32.const 1022)))
         (local.set 2
           (f64.mul
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5log1p5log1p
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5log1p5log1p
               (f64.add
                 (local.tee 2
                   (f64.div
@@ -2867,7 +8771,7 @@
             (i32.const 991)))
         (local.set 2
           (f64.mul
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5log1p5log1p
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5log1p5log1p
               (f64.add
                 (local.tee 0
                   (f64.add
@@ -2903,84 +8807,7 @@
         (local.get 3)
         (i64.const 0)))
   )
-  (func $libm_atanhf (;21;) (type 1) (param f32) (result f32)
-    (local i32 f32 i32 f32)
-    (global.set $__stack_pointer
-      (local.tee 1
-        (i32.sub
-          (global.get $__stack_pointer)
-          (i32.const 16))))
-    (block ;; label = @1
-      (block ;; label = @2
-        (br_if 0 (;@2;)
-          (i32.lt_u
-            (local.tee 3
-              (i32.reinterpret_f32
-                (local.tee 2
-                  (f32.abs
-                    (local.get 0)))))
-            (i32.const 1056964608)))
-        (local.set 2
-          (f32.mul
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math6log1pf6log1pf
-              (f32.add
-                (local.tee 2
-                  (f32.div
-                    (local.get 2)
-                    (f32.sub
-                      (f32.const 0x1p+0 (;=1;))
-                      (local.get 2))))
-                (local.get 2)))
-            (f32.const 0x1p-1 (;=0.5;))))
-        (br 1 (;@1;)))
-      (block ;; label = @2
-        (br_if 0 (;@2;)
-          (i32.lt_u
-            (local.get 3)
-            (i32.const 796917760)))
-        (local.set 2
-          (f32.mul
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math6log1pf6log1pf
-              (f32.add
-                (local.tee 4
-                  (f32.add
-                    (local.get 2)
-                    (local.get 2)))
-                (f32.div
-                  (f32.mul
-                    (local.get 2)
-                    (local.get 4))
-                  (f32.sub
-                    (f32.const 0x1p+0 (;=1;))
-                    (local.get 2)))))
-            (f32.const 0x1p-1 (;=0.5;))))
-        (br 1 (;@1;)))
-      (br_if 0 (;@1;)
-        (i32.gt_u
-          (local.get 3)
-          (i32.const 8388607)))
-      (f32.store offset=12
-        (local.get 1)
-        (f32.mul
-          (local.get 0)
-          (local.get 0)))
-      (drop
-        (f32.load offset=12
-          (local.get 1))))
-    (global.set $__stack_pointer
-      (i32.add
-        (local.get 1)
-        (i32.const 16)))
-    (select
-      (f32.neg
-        (local.get 2))
-      (local.get 2)
-      (i32.lt_s
-        (i32.reinterpret_f32
-          (local.get 0))
-        (i32.const 0)))
-  )
-  (func $libm_cbrt (;22;) (type 0) (param f64) (result f64)
+  (func $f64_cbrt (;56;) (type 1) (param f64) (result f64)
     (local i32 i64 i32 i32 i64 i64 f64 f64 f64 i32 f64 f64 f64 f64)
     (global.set $__stack_pointer
       (local.tee 1
@@ -3063,7 +8890,7 @@
                 (local.get 6)))
             (i32.const 12))))
       (local.set 11
-        (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3fma3fma
+        (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3fma3fma
           (local.tee 7
             (f64.mul
               (f64.sub
@@ -3181,7 +9008,7 @@
                                           (local.get 9)))
                                       (f64.add
                                         (f64.add
-                                          (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3fma3fma
+                                          (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3fma3fma
                                             (local.get 7)
                                             (local.get 8)
                                             (f64.neg
@@ -3217,7 +9044,7 @@
                     (f64.const -0x1.8p-52 (;=-0.00000000000000033306690738754696;))))
                 (f64.const 0x1p-75 (;=0.000000000000000000000026469779601696886;))))))
         (local.set 9
-          (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3fma3fma
+          (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3fma3fma
             (local.get 8)
             (local.get 8)
             (f64.neg
@@ -3254,7 +9081,7 @@
                                               (local.get 7)))
                                           (local.get 13))
                                         (f64.add
-                                          (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3fma3fma
+                                          (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3fma3fma
                                             (local.get 8)
                                             (local.get 7)
                                             (f64.neg
@@ -3345,7 +9172,7 @@
     (f64.reinterpret_i64
       (local.get 2))
   )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math3fma3fma (;23;) (type 4) (param f64 f64 f64) (result f64)
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math3fma3fma (;57;) (type 10) (param f64 f64 f64) (result f64)
     (local i32 i64 i64 i32 i64 i64 i32 i32 i64 i64 i64 i64 i32 i64)
     (global.set $__stack_pointer
       (local.tee 3
@@ -3956,97 +9783,7 @@
         (i32.const 16)))
     (local.get 0)
   )
-  (func $libm_cbrtf (;24;) (type 1) (param f32) (result f32)
-    (local i32 i32 f32 f64 f64 f64 f64)
-    (block ;; label = @1
-      (block ;; label = @2
-        (br_if 0 (;@2;)
-          (i32.gt_u
-            (local.tee 1
-              (i32.and
-                (i32.reinterpret_f32
-                  (local.get 0))
-                (i32.const 2147483647)))
-            (i32.const 2139095039)))
-        (local.set 2
-          (i32.const 709958130))
-        (block ;; label = @3
-          (block ;; label = @4
-            (br_if 0 (;@4;)
-              (i32.lt_u
-                (local.get 1)
-                (i32.const 8388608)))
-            (local.set 3
-              (local.get 0))
-            (br 1 (;@3;)))
-          (br_if 2 (;@1;)
-            (i32.eqz
-              (local.get 1)))
-          (local.set 1
-            (i32.and
-              (i32.reinterpret_f32
-                (local.tee 3
-                  (f32.mul
-                    (local.get 0)
-                    (f32.const 0x1p+24 (;=16777216;)))))
-              (i32.const 2147483647)))
-          (local.set 2
-            (i32.const 642849266)))
-        (return
-          (f32.demote_f64
-            (f64.div
-              (f64.mul
-                (local.tee 6
-                  (f64.div
-                    (f64.mul
-                      (f64.add
-                        (local.tee 5
-                          (f64.add
-                            (local.tee 4
-                              (f64.promote_f32
-                                (local.get 0)))
-                            (local.get 4)))
-                        (local.tee 7
-                          (f64.mul
-                            (f64.mul
-                              (local.tee 6
-                                (f64.promote_f32
-                                  (f32.copysign
-                                    (f32.reinterpret_i32
-                                      (i32.add
-                                        (i32.div_u
-                                          (local.get 1)
-                                          (i32.const 3))
-                                        (local.get 2)))
-                                    (local.get 3))))
-                              (local.get 6))
-                            (local.get 6))))
-                      (local.get 6))
-                    (f64.add
-                      (local.get 7)
-                      (f64.add
-                        (local.get 7)
-                        (local.get 4)))))
-                (f64.add
-                  (local.get 5)
-                  (local.tee 6
-                    (f64.mul
-                      (local.get 6)
-                      (f64.mul
-                        (local.get 6)
-                        (local.get 6))))))
-              (f64.add
-                (local.get 6)
-                (f64.add
-                  (local.get 6)
-                  (local.get 4)))))))
-      (local.set 0
-        (f32.add
-          (local.get 0)
-          (local.get 0))))
-    (local.get 0)
-  )
-  (func $libm_cos (;25;) (type 0) (param f64) (result f64)
+  (func $f64_cos (;58;) (type 1) (param f64) (result f64)
     (local i32 i32 f64 f64 f64)
     (global.set $__stack_pointer
       (local.tee 1
@@ -4075,7 +9812,7 @@
                     (i32.gt_u
                       (local.get 2)
                       (i32.const 2146435071)))
-                  (call $_RNvNtNtCs5s8uptHhuCz_4libm4math8rem_pio28rem_pio2
+                  (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math8rem_pio28rem_pio2
                     (i32.add
                       (local.get 1)
                       (i32.const 8))
@@ -4102,7 +9839,7 @@
                       (local.get 2)
                       (i32.const 1044816030))))
                 (local.set 3
-                  (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5k_cos5k_cos
+                  (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5k_cos5k_cos
                     (local.get 0)
                     (f64.const 0x0p+0 (;=0;))))
                 (br 5 (;@1;)))
@@ -4157,7 +9894,7 @@
                     (local.get 3)))))
             (br 3 (;@1;)))
           (local.set 3
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5k_cos5k_cos
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5k_cos5k_cos
               (local.get 0)
               (local.get 3)))
           (br 2 (;@1;)))
@@ -4209,7 +9946,7 @@
         (br 1 (;@1;)))
       (local.set 3
         (f64.neg
-          (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5k_cos5k_cos
+          (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5k_cos5k_cos
             (local.get 0)
             (local.get 3)))))
     (global.set $__stack_pointer
@@ -4218,7 +9955,7 @@
         (i32.const 32)))
     (local.get 3)
   )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math8rem_pio28rem_pio2 (;26;) (type 5) (param i32 f64)
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math8rem_pio28rem_pio2 (;59;) (type 11) (param i32 f64)
     (local i32 i64 i32 i32 i32 i32 i32 f64 i32 i32)
     (global.set $__stack_pointer
       (local.tee 2
@@ -4345,7 +10082,7 @@
                     (local.get 2)
                     (i64.const 0))
                   (local.set 4
-                    (call $_RNvNtNtCs5s8uptHhuCz_4libm4math14rem_pio2_large14rem_pio2_large
+                    (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math14rem_pio2_large14rem_pio2_large
                       (local.get 2)
                       (select
                         (local.get 11)
@@ -4405,7 +10142,7 @@
                       (i32.ne
                         (local.get 5)
                         (i32.const 1075388923)))
-                    (call $_RNvNvNtNtCs5s8uptHhuCz_4libm4math8rem_pio28rem_pio26medium
+                    (call $_RNvNvNtNtCs7dDIqmAoxPF_4libm4math8rem_pio28rem_pio26medium
                       (local.get 0)
                       (local.get 1)
                       (i32.const 1075388923))
@@ -4617,12 +10354,12 @@
                 (local.get 9))
               (f64.const -0x1.0b4611a626331p-34 (;=-0.00000000006077100506506192;))))
           (br 2 (;@1;)))
-        (call $_RNvNvNtNtCs5s8uptHhuCz_4libm4math8rem_pio28rem_pio26medium
+        (call $_RNvNvNtNtCs7dDIqmAoxPF_4libm4math8rem_pio28rem_pio26medium
           (local.get 0)
           (local.get 1)
           (local.get 5))
         (br 1 (;@1;)))
-      (call $_RNvNvNtNtCs5s8uptHhuCz_4libm4math8rem_pio28rem_pio26medium
+      (call $_RNvNvNtNtCs7dDIqmAoxPF_4libm4math8rem_pio28rem_pio26medium
         (local.get 0)
         (local.get 1)
         (i32.const 1074977148)))
@@ -4631,7 +10368,7 @@
         (local.get 2)
         (i32.const 48)))
   )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math5k_cos5k_cos (;27;) (type 2) (param f64 f64) (result f64)
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math5k_cos5k_cos (;60;) (type 9) (param f64 f64) (result f64)
     (local f64 f64 f64)
     (f64.add
       (local.tee 4
@@ -4685,563 +10422,7 @@
             (local.get 0)
             (local.get 1)))))
   )
-  (func $libm_cosf (;28;) (type 1) (param f32) (result f32)
-    (local i32 f64 i32 i32 f64 f64)
-    (global.set $__stack_pointer
-      (local.tee 1
-        (i32.sub
-          (global.get $__stack_pointer)
-          (i32.const 16))))
-    (local.set 2
-      (f64.promote_f32
-        (local.get 0)))
-    (block ;; label = @1
-      (block ;; label = @2
-        (block ;; label = @3
-          (block ;; label = @4
-            (br_if 0 (;@4;)
-              (i32.lt_u
-                (local.tee 4
-                  (i32.and
-                    (local.tee 3
-                      (i32.reinterpret_f32
-                        (local.get 0)))
-                    (i32.const 2147483647)))
-                (i32.const 1061752795)))
-            (block ;; label = @5
-              (br_if 0 (;@5;)
-                (i32.lt_u
-                  (local.get 4)
-                  (i32.const 1081824210)))
-              (block ;; label = @6
-                (br_if 0 (;@6;)
-                  (i32.lt_u
-                    (local.get 4)
-                    (i32.const 1088565718)))
-                (block ;; label = @7
-                  (block ;; label = @8
-                    (block ;; label = @9
-                      (block ;; label = @10
-                        (block ;; label = @11
-                          (br_if 0 (;@11;)
-                            (i32.gt_u
-                              (local.get 4)
-                              (i32.const 2139095039)))
-                          (call $_RNvNtNtCs5s8uptHhuCz_4libm4math9rem_pio2f9rem_pio2f
-                            (local.get 1)
-                            (local.get 0))
-                          (local.set 2
-                            (f64.load offset=8
-                              (local.get 1)))
-                          (br_table 2 (;@9;) 3 (;@8;) 4 (;@7;) 1 (;@10;) 2 (;@9;)
-                            (i32.and
-                              (i32.load
-                                (local.get 1))
-                              (i32.const 3))))
-                        (local.set 0
-                          (f32.sub
-                            (local.get 0)
-                            (local.get 0)))
-                        (br 9 (;@1;)))
-                      (local.set 0
-                        (f32.demote_f64
-                          (f64.add
-                            (f64.mul
-                              (f64.mul
-                                (local.tee 6
-                                  (f64.mul
-                                    (local.get 2)
-                                    (local.tee 5
-                                      (f64.mul
-                                        (local.get 2)
-                                        (local.get 2)))))
-                                (f64.mul
-                                  (local.get 5)
-                                  (local.get 5)))
-                              (f64.add
-                                (f64.mul
-                                  (local.get 5)
-                                  (f64.const 0x1.6cd878c3b46a7p-19 (;=0.000002718311493989822;)))
-                                (f64.const -0x1.a00f9e2cae774p-13 (;=-0.00019839334836096632;))))
-                            (f64.add
-                              (local.get 2)
-                              (f64.mul
-                                (local.get 6)
-                                (f64.add
-                                  (f64.mul
-                                    (local.get 5)
-                                    (f64.const 0x1.11110896efbb2p-7 (;=0.008333329385889463;)))
-                                  (f64.const -0x1.5555554cbac77p-3 (;=-0.16666666641626524;))))))))
-                      (br 8 (;@1;)))
-                    (local.set 0
-                      (f32.demote_f64
-                        (f64.add
-                          (f64.add
-                            (f64.add
-                              (f64.mul
-                                (local.tee 2
-                                  (f64.mul
-                                    (local.get 2)
-                                    (local.get 2)))
-                                (f64.const -0x1.ffffffd0c5e81p-2 (;=-0.499999997251031;)))
-                              (f64.const 0x1p+0 (;=1;)))
-                            (f64.mul
-                              (local.tee 5
-                                (f64.mul
-                                  (local.get 2)
-                                  (local.get 2)))
-                              (f64.const 0x1.55553e1053a42p-5 (;=0.04166662332373906;))))
-                          (f64.mul
-                            (f64.mul
-                              (local.get 2)
-                              (local.get 5))
-                            (f64.add
-                              (f64.mul
-                                (local.get 2)
-                                (f64.const 0x1.99342e0ee5069p-16 (;=0.00002439044879627741;)))
-                              (f64.const -0x1.6c087e80f1e27p-10 (;=-0.001388676377460993;)))))))
-                    (br 7 (;@1;)))
-                  (local.set 0
-                    (f32.demote_f64
-                      (f64.add
-                        (f64.mul
-                          (f64.mul
-                            (local.tee 6
-                              (f64.mul
-                                (local.tee 5
-                                  (f64.mul
-                                    (local.get 2)
-                                    (local.get 2)))
-                                (f64.neg
-                                  (local.get 2))))
-                            (f64.mul
-                              (local.get 5)
-                              (local.get 5)))
-                          (f64.add
-                            (f64.mul
-                              (local.get 5)
-                              (f64.const 0x1.6cd878c3b46a7p-19 (;=0.000002718311493989822;)))
-                            (f64.const -0x1.a00f9e2cae774p-13 (;=-0.00019839334836096632;))))
-                        (f64.sub
-                          (f64.mul
-                            (local.get 6)
-                            (f64.add
-                              (f64.mul
-                                (local.get 5)
-                                (f64.const 0x1.11110896efbb2p-7 (;=0.008333329385889463;)))
-                              (f64.const -0x1.5555554cbac77p-3 (;=-0.16666666641626524;))))
-                          (local.get 2)))))
-                  (br 6 (;@1;)))
-                (local.set 0
-                  (f32.neg
-                    (f32.demote_f64
-                      (f64.add
-                        (f64.add
-                          (f64.add
-                            (f64.mul
-                              (local.tee 2
-                                (f64.mul
-                                  (local.get 2)
-                                  (local.get 2)))
-                              (f64.const -0x1.ffffffd0c5e81p-2 (;=-0.499999997251031;)))
-                            (f64.const 0x1p+0 (;=1;)))
-                          (f64.mul
-                            (local.tee 5
-                              (f64.mul
-                                (local.get 2)
-                                (local.get 2)))
-                            (f64.const 0x1.55553e1053a42p-5 (;=0.04166662332373906;))))
-                        (f64.mul
-                          (f64.mul
-                            (local.get 2)
-                            (local.get 5))
-                          (f64.add
-                            (f64.mul
-                              (local.get 2)
-                              (f64.const 0x1.99342e0ee5069p-16 (;=0.00002439044879627741;)))
-                            (f64.const -0x1.6c087e80f1e27p-10 (;=-0.001388676377460993;))))))))
-                (br 5 (;@1;)))
-              (br_if 2 (;@3;)
-                (i32.gt_u
-                  (local.get 4)
-                  (i32.const 1085271519)))
-              (block ;; label = @6
-                (br_if 0 (;@6;)
-                  (i32.le_s
-                    (local.get 3)
-                    (i32.const -1)))
-                (local.set 0
-                  (f32.demote_f64
-                    (f64.add
-                      (f64.mul
-                        (f64.mul
-                          (local.tee 6
-                            (f64.mul
-                              (local.tee 5
-                                (f64.add
-                                  (local.get 2)
-                                  (f64.const -0x1.2d97c7f3321d2p+2 (;=-4.71238898038469;))))
-                              (local.tee 2
-                                (f64.mul
-                                  (local.get 5)
-                                  (local.get 5)))))
-                          (f64.mul
-                            (local.get 2)
-                            (local.get 2)))
-                        (f64.add
-                          (f64.mul
-                            (local.get 2)
-                            (f64.const 0x1.6cd878c3b46a7p-19 (;=0.000002718311493989822;)))
-                          (f64.const -0x1.a00f9e2cae774p-13 (;=-0.00019839334836096632;))))
-                      (f64.add
-                        (local.get 5)
-                        (f64.mul
-                          (local.get 6)
-                          (f64.add
-                            (f64.mul
-                              (local.get 2)
-                              (f64.const 0x1.11110896efbb2p-7 (;=0.008333329385889463;)))
-                            (f64.const -0x1.5555554cbac77p-3 (;=-0.16666666641626524;))))))))
-                (br 5 (;@1;)))
-              (local.set 0
-                (f32.demote_f64
-                  (f64.add
-                    (f64.mul
-                      (f64.mul
-                        (local.tee 6
-                          (f64.mul
-                            (local.tee 5
-                              (f64.sub
-                                (f64.const -0x1.2d97c7f3321d2p+2 (;=-4.71238898038469;))
-                                (local.get 2)))
-                            (local.tee 2
-                              (f64.mul
-                                (local.get 5)
-                                (local.get 5)))))
-                        (f64.mul
-                          (local.get 2)
-                          (local.get 2)))
-                      (f64.add
-                        (f64.mul
-                          (local.get 2)
-                          (f64.const 0x1.6cd878c3b46a7p-19 (;=0.000002718311493989822;)))
-                        (f64.const -0x1.a00f9e2cae774p-13 (;=-0.00019839334836096632;))))
-                    (f64.add
-                      (local.get 5)
-                      (f64.mul
-                        (local.get 6)
-                        (f64.add
-                          (f64.mul
-                            (local.get 2)
-                            (f64.const 0x1.11110896efbb2p-7 (;=0.008333329385889463;)))
-                          (f64.const -0x1.5555554cbac77p-3 (;=-0.16666666641626524;))))))))
-              (br 4 (;@1;)))
-            (br_if 2 (;@2;)
-              (i32.gt_u
-                (local.get 4)
-                (i32.const 1075235811)))
-            (block ;; label = @5
-              (br_if 0 (;@5;)
-                (i32.le_s
-                  (local.get 3)
-                  (i32.const -1)))
-              (local.set 0
-                (f32.demote_f64
-                  (f64.add
-                    (f64.mul
-                      (f64.mul
-                        (local.tee 6
-                          (f64.mul
-                            (local.tee 5
-                              (f64.sub
-                                (f64.const 0x1.921fb54442d18p+0 (;=1.5707963267948966;))
-                                (local.get 2)))
-                            (local.tee 2
-                              (f64.mul
-                                (local.get 5)
-                                (local.get 5)))))
-                        (f64.mul
-                          (local.get 2)
-                          (local.get 2)))
-                      (f64.add
-                        (f64.mul
-                          (local.get 2)
-                          (f64.const 0x1.6cd878c3b46a7p-19 (;=0.000002718311493989822;)))
-                        (f64.const -0x1.a00f9e2cae774p-13 (;=-0.00019839334836096632;))))
-                    (f64.add
-                      (local.get 5)
-                      (f64.mul
-                        (local.get 6)
-                        (f64.add
-                          (f64.mul
-                            (local.get 2)
-                            (f64.const 0x1.11110896efbb2p-7 (;=0.008333329385889463;)))
-                          (f64.const -0x1.5555554cbac77p-3 (;=-0.16666666641626524;))))))))
-              (br 4 (;@1;)))
-            (local.set 0
-              (f32.demote_f64
-                (f64.add
-                  (f64.mul
-                    (f64.mul
-                      (local.tee 6
-                        (f64.mul
-                          (local.tee 5
-                            (f64.add
-                              (local.get 2)
-                              (f64.const 0x1.921fb54442d18p+0 (;=1.5707963267948966;))))
-                          (local.tee 2
-                            (f64.mul
-                              (local.get 5)
-                              (local.get 5)))))
-                      (f64.mul
-                        (local.get 2)
-                        (local.get 2)))
-                    (f64.add
-                      (f64.mul
-                        (local.get 2)
-                        (f64.const 0x1.6cd878c3b46a7p-19 (;=0.000002718311493989822;)))
-                      (f64.const -0x1.a00f9e2cae774p-13 (;=-0.00019839334836096632;))))
-                  (f64.add
-                    (local.get 5)
-                    (f64.mul
-                      (local.get 6)
-                      (f64.add
-                        (f64.mul
-                          (local.get 2)
-                          (f64.const 0x1.11110896efbb2p-7 (;=0.008333329385889463;)))
-                        (f64.const -0x1.5555554cbac77p-3 (;=-0.16666666641626524;))))))))
-            (br 3 (;@1;)))
-          (block ;; label = @4
-            (br_if 0 (;@4;)
-              (i32.lt_u
-                (local.get 4)
-                (i32.const 964689920)))
-            (local.set 0
-              (f32.demote_f64
-                (f64.add
-                  (f64.add
-                    (f64.add
-                      (f64.mul
-                        (local.tee 2
-                          (f64.mul
-                            (local.get 2)
-                            (local.get 2)))
-                        (f64.const -0x1.ffffffd0c5e81p-2 (;=-0.499999997251031;)))
-                      (f64.const 0x1p+0 (;=1;)))
-                    (f64.mul
-                      (local.tee 5
-                        (f64.mul
-                          (local.get 2)
-                          (local.get 2)))
-                      (f64.const 0x1.55553e1053a42p-5 (;=0.04166662332373906;))))
-                  (f64.mul
-                    (f64.mul
-                      (local.get 2)
-                      (local.get 5))
-                    (f64.add
-                      (f64.mul
-                        (local.get 2)
-                        (f64.const 0x1.99342e0ee5069p-16 (;=0.00002439044879627741;)))
-                      (f64.const -0x1.6c087e80f1e27p-10 (;=-0.001388676377460993;)))))))
-            (br 3 (;@1;)))
-          (f32.store
-            (local.get 1)
-            (f32.add
-              (local.get 0)
-              (f32.const 0x1p+120 (;=1329228000000000000000000000000000000;))))
-          (drop
-            (f32.load
-              (local.get 1)))
-          (local.set 0
-            (f32.const 0x1p+0 (;=1;)))
-          (br 2 (;@1;)))
-        (local.set 0
-          (f32.demote_f64
-            (f64.add
-              (f64.add
-                (f64.add
-                  (f64.mul
-                    (local.tee 2
-                      (f64.mul
-                        (local.tee 2
-                          (f64.add
-                            (select
-                              (f64.const -0x1.921fb54442d18p+2 (;=-6.283185307179586;))
-                              (f64.const 0x1.921fb54442d18p+2 (;=6.283185307179586;))
-                              (i32.gt_s
-                                (local.get 3)
-                                (i32.const -1)))
-                            (local.get 2)))
-                        (local.get 2)))
-                    (f64.const -0x1.ffffffd0c5e81p-2 (;=-0.499999997251031;)))
-                  (f64.const 0x1p+0 (;=1;)))
-                (f64.mul
-                  (local.tee 5
-                    (f64.mul
-                      (local.get 2)
-                      (local.get 2)))
-                  (f64.const 0x1.55553e1053a42p-5 (;=0.04166662332373906;))))
-              (f64.mul
-                (f64.mul
-                  (local.get 2)
-                  (local.get 5))
-                (f64.add
-                  (f64.mul
-                    (local.get 2)
-                    (f64.const 0x1.99342e0ee5069p-16 (;=0.00002439044879627741;)))
-                  (f64.const -0x1.6c087e80f1e27p-10 (;=-0.001388676377460993;)))))))
-        (br 1 (;@1;)))
-      (local.set 0
-        (f32.neg
-          (f32.demote_f64
-            (f64.add
-              (f64.add
-                (f64.add
-                  (f64.mul
-                    (local.tee 2
-                      (f64.mul
-                        (local.tee 2
-                          (f64.add
-                            (select
-                              (f64.const -0x1.921fb54442d18p+1 (;=-3.141592653589793;))
-                              (f64.const 0x1.921fb54442d18p+1 (;=3.141592653589793;))
-                              (i32.gt_s
-                                (local.get 3)
-                                (i32.const -1)))
-                            (local.get 2)))
-                        (local.get 2)))
-                    (f64.const -0x1.ffffffd0c5e81p-2 (;=-0.499999997251031;)))
-                  (f64.const 0x1p+0 (;=1;)))
-                (f64.mul
-                  (local.tee 5
-                    (f64.mul
-                      (local.get 2)
-                      (local.get 2)))
-                  (f64.const 0x1.55553e1053a42p-5 (;=0.04166662332373906;))))
-              (f64.mul
-                (f64.mul
-                  (local.get 2)
-                  (local.get 5))
-                (f64.add
-                  (f64.mul
-                    (local.get 2)
-                    (f64.const 0x1.99342e0ee5069p-16 (;=0.00002439044879627741;)))
-                  (f64.const -0x1.6c087e80f1e27p-10 (;=-0.001388676377460993;)))))))))
-    (global.set $__stack_pointer
-      (i32.add
-        (local.get 1)
-        (i32.const 16)))
-    (local.get 0)
-  )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math9rem_pio2f9rem_pio2f (;29;) (type 6) (param i32 f32)
-    (local i32 f64 i32 i32 i32 f64)
-    (global.set $__stack_pointer
-      (local.tee 2
-        (i32.sub
-          (global.get $__stack_pointer)
-          (i32.const 16))))
-    (i64.store offset=8
-      (local.get 2)
-      (i64.const 0))
-    (local.set 3
-      (f64.promote_f32
-        (local.get 1)))
-    (block ;; label = @1
-      (block ;; label = @2
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.lt_u
-              (local.tee 5
-                (i32.and
-                  (local.tee 4
-                    (i32.reinterpret_f32
-                      (local.get 1)))
-                  (i32.const 2147483647)))
-              (i32.const 1305022427)))
-          (br_if 1 (;@2;)
-            (i32.gt_u
-              (local.get 5)
-              (i32.const 2139095039)))
-          (f64.store
-            (local.get 2)
-            (f64.promote_f32
-              (f32.reinterpret_i32
-                (i32.sub
-                  (local.get 5)
-                  (i32.shl
-                    (local.tee 6
-                      (i32.add
-                        (i32.shr_u
-                          (local.get 5)
-                          (i32.const 23))
-                        (i32.const -150)))
-                    (i32.const 23))))))
-          (local.set 5
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math14rem_pio2_large14rem_pio2_large
-              (local.get 2)
-              (i32.const 1)
-              (i32.add
-                (local.get 2)
-                (i32.const 8))
-              (local.get 6)
-              (i32.const 0)))
-          (block ;; label = @4
-            (br_if 0 (;@4;)
-              (i32.le_s
-                (local.get 4)
-                (i32.const -1)))
-            (local.set 3
-              (f64.load offset=8
-                (local.get 2)))
-            (br 3 (;@1;)))
-          (local.set 5
-            (i32.sub
-              (i32.const 0)
-              (local.get 5)))
-          (local.set 3
-            (f64.neg
-              (f64.load offset=8
-                (local.get 2))))
-          (br 2 (;@1;)))
-        (local.set 3
-          (f64.add
-            (f64.add
-              (local.get 3)
-              (f64.mul
-                (local.tee 7
-                  (f64.add
-                    (f64.add
-                      (f64.mul
-                        (local.get 3)
-                        (f64.const 0x1.45f306dc9c883p-1 (;=0.6366197723675814;)))
-                      (f64.const 0x1.8p+52 (;=6755399441055744;)))
-                    (f64.const -0x1.8p+52 (;=-6755399441055744;))))
-                (f64.const -0x1.921fb5p+0 (;=-1.5707963109016418;))))
-            (f64.mul
-              (local.get 7)
-              (f64.const -0x1.110b4611a6263p-26 (;=-0.000000015893254773528196;)))))
-        (local.set 5
-          (i32.trunc_sat_f64_s
-            (local.get 7)))
-        (br 1 (;@1;)))
-      (local.set 3
-        (f64.sub
-          (local.get 3)
-          (local.get 3)))
-      (local.set 5
-        (i32.const 0)))
-    (f64.store offset=8
-      (local.get 0)
-      (local.get 3))
-    (i32.store
-      (local.get 0)
-      (local.get 5))
-    (global.set $__stack_pointer
-      (i32.add
-        (local.get 2)
-        (i32.const 16)))
-  )
-  (func $libm_cosh (;30;) (type 0) (param f64) (result f64)
+  (func $f64_cosh (;61;) (type 1) (param f64) (result f64)
     (local i32 i64)
     (global.set $__stack_pointer
       (local.tee 1
@@ -5266,7 +10447,7 @@
           (local.set 0
             (f64.mul
               (f64.mul
-                (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3exp3exp
+                (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3exp3exp
                   (f64.add
                     (local.get 0)
                     (f64.const -0x1.62066151add8bp+10 (;=-1416.0996898839683;))))
@@ -5277,7 +10458,7 @@
           (f64.mul
             (f64.add
               (local.tee 0
-                (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3exp3exp
+                (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3exp3exp
                   (local.get 0)))
               (f64.div
                 (f64.const 0x1p+0 (;=1;))
@@ -5294,7 +10475,7 @@
             (f64.div
               (f64.mul
                 (local.tee 0
-                  (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5expm15expm1
+                  (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5expm15expm1
                     (local.get 0)))
                 (local.get 0))
               (f64.add
@@ -5321,7 +10502,7 @@
         (i32.const 16)))
     (local.get 0)
   )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math3exp3exp (;31;) (type 0) (param f64) (result f64)
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math3exp3exp (;62;) (type 1) (param f64) (result f64)
     (local i32 i64 i32 i32 f64 f64 f64)
     (global.set $__stack_pointer
       (local.tee 1
@@ -5498,7 +10679,7 @@
         (i32.eqz
           (local.get 4)))
       (local.set 5
-        (call $_RNvNtNtCs5s8uptHhuCz_4libm4math6scalbn6scalbn
+        (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math6scalbn6scalbn
           (local.get 5)
           (local.get 4))))
     (global.set $__stack_pointer
@@ -5507,7 +10688,7 @@
         (i32.const 16)))
     (local.get 5)
   )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math5expm15expm1 (;32;) (type 0) (param f64) (result f64)
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math5expm15expm1 (;63;) (type 1) (param f64) (result f64)
     (local i32 i64 i32 f64 f64 f64 f64)
     (f64.store offset=8
       (local.tee 1
@@ -5805,562 +10986,7 @@
           (local.get 4))))
     (local.get 0)
   )
-  (func $libm_coshf (;33;) (type 1) (param f32) (result f32)
-    (local i32 i32)
-    (global.set $__stack_pointer
-      (local.tee 1
-        (i32.sub
-          (global.get $__stack_pointer)
-          (i32.const 16))))
-    (block ;; label = @1
-      (block ;; label = @2
-        (br_if 0 (;@2;)
-          (i32.lt_u
-            (local.tee 2
-              (i32.reinterpret_f32
-                (local.tee 0
-                  (f32.abs
-                    (local.get 0)))))
-            (i32.const 1060205079)))
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.lt_u
-              (local.get 2)
-              (i32.const 1118925335)))
-          (local.set 0
-            (f32.mul
-              (f32.mul
-                (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4expf4expf
-                  (f32.add
-                    (local.get 0)
-                    (f32.const -0x1.45c778p+7 (;=-162.88959;))))
-                (f32.const 0x1p+117 (;=166153500000000000000000000000000000;)))
-              (f32.const 0x1p+117 (;=166153500000000000000000000000000000;))))
-          (br 2 (;@1;)))
-        (local.set 0
-          (f32.mul
-            (f32.add
-              (local.tee 0
-                (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4expf4expf
-                  (local.get 0)))
-              (f32.div
-                (f32.const 0x1p+0 (;=1;))
-                (local.get 0)))
-            (f32.const 0x1p-1 (;=0.5;))))
-        (br 1 (;@1;)))
-      (block ;; label = @2
-        (br_if 0 (;@2;)
-          (i32.lt_u
-            (local.get 2)
-            (i32.const 964689920)))
-        (local.set 0
-          (f32.add
-            (f32.div
-              (f32.mul
-                (local.tee 0
-                  (call $_RNvNtNtCs5s8uptHhuCz_4libm4math6expm1f6expm1f
-                    (local.get 0)))
-                (local.get 0))
-              (f32.add
-                (local.tee 0
-                  (f32.add
-                    (local.get 0)
-                    (f32.const 0x1p+0 (;=1;))))
-                (local.get 0)))
-            (f32.const 0x1p+0 (;=1;))))
-        (br 1 (;@1;)))
-      (f32.store offset=12
-        (local.get 1)
-        (f32.add
-          (local.get 0)
-          (f32.const 0x1p+120 (;=1329228000000000000000000000000000000;))))
-      (drop
-        (f32.load offset=12
-          (local.get 1)))
-      (local.set 0
-        (f32.const 0x1p+0 (;=1;))))
-    (global.set $__stack_pointer
-      (i32.add
-        (local.get 1)
-        (i32.const 16)))
-    (local.get 0)
-  )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math4expf4expf (;34;) (type 1) (param f32) (result f32)
-    (local i32 i32 i32 i32 f32 f32 f32)
-    (global.set $__stack_pointer
-      (local.tee 1
-        (i32.sub
-          (global.get $__stack_pointer)
-          (i32.const 16))))
-    (local.set 3
-      (i32.shr_u
-        (local.tee 2
-          (i32.reinterpret_f32
-            (local.get 0)))
-        (i32.const 31)))
-    (block ;; label = @1
-      (block ;; label = @2
-        (block ;; label = @3
-          (block ;; label = @4
-            (block ;; label = @5
-              (block ;; label = @6
-                (block ;; label = @7
-                  (br_if 0 (;@7;)
-                    (i32.lt_u
-                      (local.tee 4
-                        (i32.and
-                          (local.get 2)
-                          (i32.const 2147483647)))
-                      (i32.const 1118743632)))
-                  (block ;; label = @8
-                    (br_if 0 (;@8;)
-                      (i32.le_u
-                        (local.get 4)
-                        (i32.const 2139095040)))
-                    (local.set 5
-                      (local.get 0))
-                    (br 7 (;@1;)))
-                  (block ;; label = @8
-                    (br_if 0 (;@8;)
-                      (i32.gt_u
-                        (local.get 4)
-                        (i32.const 1118925335)))
-                    (br_if 2 (;@6;)
-                      (i32.gt_s
-                        (local.get 2)
-                        (i32.const -1)))
-                    (f32.store offset=8
-                      (local.get 1)
-                      (f32.div
-                        (f32.const -0x1p-126 (;=-0.000000000000000000000000000000000000011754944;))
-                        (local.get 0)))
-                    (drop
-                      (f32.load offset=8
-                        (local.get 1)))
-                    (br 2 (;@6;)))
-                  (block ;; label = @8
-                    (br_if 0 (;@8;)
-                      (i32.gt_s
-                        (local.get 2)
-                        (i32.const -1)))
-                    (f32.store offset=8
-                      (local.get 1)
-                      (f32.div
-                        (f32.const -0x1p-126 (;=-0.000000000000000000000000000000000000011754944;))
-                        (local.get 0)))
-                    (drop
-                      (f32.load offset=8
-                        (local.get 1)))
-                    (local.set 5
-                      (f32.const 0x0p+0 (;=0;)))
-                    (br_if 2 (;@6;)
-                      (i32.le_u
-                        (local.get 4)
-                        (i32.const 1120924084)))
-                    (br 7 (;@1;)))
-                  (local.set 5
-                    (f32.mul
-                      (local.get 0)
-                      (f32.const 0x1p+127 (;=170141180000000000000000000000000000000;))))
-                  (br 6 (;@1;)))
-                (block ;; label = @7
-                  (br_if 0 (;@7;)
-                    (i32.gt_u
-                      (local.get 4)
-                      (i32.const 1051816472)))
-                  (br_if 2 (;@5;)
-                    (i32.le_u
-                      (local.get 4)
-                      (i32.const 956301312)))
-                  (local.set 4
-                    (i32.const 0))
-                  (local.set 6
-                    (f32.const 0x0p+0 (;=0;)))
-                  (local.set 5
-                    (local.get 0))
-                  (br 5 (;@2;)))
-                (br_if 2 (;@4;)
-                  (i32.le_u
-                    (local.get 4)
-                    (i32.const 1065686418))))
-              (local.set 4
-                (i32.trunc_sat_f32_s
-                  (f32.add
-                    (f32.mul
-                      (local.get 0)
-                      (f32.const 0x1.715476p+0 (;=1.442695;)))
-                    (f32.load offset=1057264
-                      (i32.shl
-                        (local.get 3)
-                        (i32.const 2))))))
-              (br 2 (;@3;)))
-            (f32.store offset=12
-              (local.get 1)
-              (f32.add
-                (local.get 0)
-                (f32.const 0x1p+127 (;=170141180000000000000000000000000000000;))))
-            (local.set 5
-              (f32.add
-                (local.get 0)
-                (f32.const 0x1p+0 (;=1;))))
-            (drop
-              (f32.load offset=12
-                (local.get 1)))
-            (br 3 (;@1;)))
-          (local.set 4
-            (i32.sub
-              (i32.xor
-                (local.get 3)
-                (i32.const 1))
-              (local.get 3))))
-        (local.set 5
-          (f32.sub
-            (local.tee 0
-              (f32.add
-                (local.get 0)
-                (f32.mul
-                  (local.tee 5
-                    (f32.convert_i32_s
-                      (local.get 4)))
-                  (f32.const -0x1.62e4p-1 (;=-0.69314575;)))))
-            (local.tee 6
-              (f32.mul
-                (local.get 5)
-                (f32.const 0x1.7f7d1cp-20 (;=0.0000014286068;)))))))
-      (local.set 5
-        (f32.add
-          (f32.add
-            (local.get 0)
-            (f32.sub
-              (f32.div
-                (f32.mul
-                  (local.get 5)
-                  (local.tee 7
-                    (f32.sub
-                      (local.get 5)
-                      (f32.mul
-                        (local.tee 7
-                          (f32.mul
-                            (local.get 5)
-                            (local.get 5)))
-                        (f32.add
-                          (f32.mul
-                            (local.get 7)
-                            (f32.const -0x1.6aa42ap-9 (;=-0.0027667333;)))
-                          (f32.const 0x1.55551ep-3 (;=0.16666625;)))))))
-                (f32.sub
-                  (f32.const 0x1p+1 (;=2;))
-                  (local.get 7)))
-              (local.get 6)))
-          (f32.const 0x1p+0 (;=1;))))
-      (br_if 0 (;@1;)
-        (i32.eqz
-          (local.get 4)))
-      (local.set 5
-        (call $_RNvNtNtCs5s8uptHhuCz_4libm4math6scalbn7scalbnf
-          (local.get 5)
-          (local.get 4))))
-    (global.set $__stack_pointer
-      (i32.add
-        (local.get 1)
-        (i32.const 16)))
-    (local.get 5)
-  )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math6expm1f6expm1f (;35;) (type 1) (param f32) (result f32)
-    (local i32 i32 i32 f32 f32 f32 f32)
-    (local.set 1
-      (i32.sub
-        (global.get $__stack_pointer)
-        (i32.const 16)))
-    (block ;; label = @1
-      (block ;; label = @2
-        (block ;; label = @3
-          (block ;; label = @4
-            (block ;; label = @5
-              (block ;; label = @6
-                (block ;; label = @7
-                  (block ;; label = @8
-                    (block ;; label = @9
-                      (block ;; label = @10
-                        (br_if 0 (;@10;)
-                          (i32.gt_u
-                            (local.tee 3
-                              (i32.and
-                                (local.tee 2
-                                  (i32.reinterpret_f32
-                                    (local.get 0)))
-                                (i32.const 2147483647)))
-                            (i32.const 1100331075)))
-                        (br_if 1 (;@9;)
-                          (i32.gt_u
-                            (local.get 3)
-                            (i32.const 1051816472)))
-                        (br_if 6 (;@4;)
-                          (i32.lt_u
-                            (local.get 3)
-                            (i32.const 855638016)))
-                        (local.set 3
-                          (i32.const 0))
-                        (local.set 4
-                          (f32.const 0x0p+0 (;=0;)))
-                        (br 5 (;@5;)))
-                      (local.set 5
-                        (select
-                          (local.get 0)
-                          (f32.const -0x1p+0 (;=-1;))
-                          (local.tee 1
-                            (i32.gt_u
-                              (local.get 3)
-                              (i32.const 2139095040)))))
-                      (br_if 7 (;@2;)
-                        (i32.lt_s
-                          (local.get 2)
-                          (i32.const 0)))
-                      (br_if 7 (;@2;)
-                        (local.get 1))
-                      (local.set 5
-                        (f32.const 0x1p-1 (;=0.5;)))
-                      (br_if 1 (;@8;)
-                        (i32.lt_u
-                          (local.get 3)
-                          (i32.const 1118925336)))
-                      (return
-                        (f32.mul
-                          (local.get 0)
-                          (f32.const 0x1p+127 (;=170141180000000000000000000000000000000;)))))
-                    (br_if 1 (;@7;)
-                      (i32.lt_u
-                        (local.get 3)
-                        (i32.const 1065686418)))
-                    (local.set 5
-                      (select
-                        (f32.const -0x1p-1 (;=-0.5;))
-                        (f32.const 0x1p-1 (;=0.5;))
-                        (i32.lt_s
-                          (local.get 2)
-                          (i32.const 0)))))
-                  (local.set 5
-                    (f32.mul
-                      (local.tee 4
-                        (f32.convert_i32_s
-                          (local.tee 3
-                            (i32.trunc_sat_f32_s
-                              (f32.add
-                                (f32.mul
-                                  (local.get 0)
-                                  (f32.const 0x1.715476p+0 (;=1.442695;)))
-                                (local.get 5))))))
-                      (f32.const 0x1.2fefa2p-17 (;=0.000009058001;))))
-                  (local.set 4
-                    (f32.add
-                      (local.get 0)
-                      (f32.mul
-                        (local.get 4)
-                        (f32.const -0x1.62e3p-1 (;=-0.6931381;)))))
-                  (br 1 (;@6;)))
-                (block ;; label = @7
-                  (br_if 0 (;@7;)
-                    (i32.lt_s
-                      (local.get 2)
-                      (i32.const 0)))
-                  (local.set 4
-                    (f32.add
-                      (local.get 0)
-                      (f32.const -0x1.62e3p-1 (;=-0.6931381;))))
-                  (local.set 5
-                    (f32.const 0x1.2fefa2p-17 (;=0.000009058001;)))
-                  (local.set 3
-                    (i32.const 1))
-                  (br 1 (;@6;)))
-                (local.set 4
-                  (f32.add
-                    (local.get 0)
-                    (f32.const 0x1.62e3p-1 (;=0.6931381;))))
-                (local.set 5
-                  (f32.const -0x1.2fefa2p-17 (;=-0.000009058001;)))
-                (local.set 3
-                  (i32.const -1)))
-              (local.set 4
-                (f32.sub
-                  (f32.sub
-                    (local.get 4)
-                    (local.tee 0
-                      (f32.sub
-                        (local.get 4)
-                        (local.get 5))))
-                  (local.get 5))))
-            (local.set 6
-              (f32.mul
-                (local.tee 5
-                  (f32.mul
-                    (local.get 0)
-                    (local.tee 6
-                      (f32.mul
-                        (local.get 0)
-                        (f32.const 0x1p-1 (;=0.5;))))))
-                (f32.div
-                  (f32.sub
-                    (local.tee 7
-                      (f32.add
-                        (f32.mul
-                          (local.get 5)
-                          (f32.add
-                            (f32.mul
-                              (local.get 5)
-                              (f32.const 0x1.9e602p-10 (;=0.001580717;)))
-                            (f32.const -0x1.1110dp-5 (;=-0.033333212;))))
-                        (f32.const 0x1p+0 (;=1;))))
-                    (local.tee 6
-                      (f32.sub
-                        (f32.const 0x1.8p+1 (;=3;))
-                        (f32.mul
-                          (local.get 6)
-                          (local.get 7)))))
-                  (f32.sub
-                    (f32.const 0x1.8p+2 (;=6;))
-                    (f32.mul
-                      (local.get 0)
-                      (local.get 6))))))
-            (br_if 1 (;@3;)
-              (local.get 3))
-            (return
-              (f32.sub
-                (local.get 0)
-                (f32.sub
-                  (f32.mul
-                    (local.get 0)
-                    (local.get 6))
-                  (local.get 5)))))
-          (br_if 2 (;@1;)
-            (i32.ge_u
-              (local.get 3)
-              (i32.const 8388608)))
-          (f32.store offset=12
-            (local.get 1)
-            (f32.mul
-              (local.get 0)
-              (local.get 0)))
-          (drop
-            (f32.load offset=12
-              (local.get 1)))
-          (br 2 (;@1;)))
-        (local.set 5
-          (f32.sub
-            (f32.sub
-              (f32.mul
-                (local.get 0)
-                (f32.sub
-                  (local.get 6)
-                  (local.get 4)))
-              (local.get 4))
-            (local.get 5)))
-        (block ;; label = @3
-          (block ;; label = @4
-            (block ;; label = @5
-              (br_table 0 (;@5;) 2 (;@3;) 1 (;@4;) 2 (;@3;)
-                (i32.add
-                  (local.get 3)
-                  (i32.const 1))))
-            (return
-              (f32.add
-                (f32.mul
-                  (f32.sub
-                    (local.get 0)
-                    (local.get 5))
-                  (f32.const 0x1p-1 (;=0.5;)))
-                (f32.const -0x1p-1 (;=-0.5;)))))
-          (block ;; label = @4
-            (br_if 0 (;@4;)
-              (f32.lt
-                (local.get 0)
-                (f32.const -0x1p-2 (;=-0.25;))))
-            (return
-              (f32.add
-                (f32.add
-                  (local.tee 0
-                    (f32.sub
-                      (local.get 0)
-                      (local.get 5)))
-                  (local.get 0))
-                (f32.const 0x1p+0 (;=1;)))))
-          (return
-            (f32.mul
-              (f32.sub
-                (local.get 5)
-                (f32.add
-                  (local.get 0)
-                  (f32.const 0x1p-1 (;=0.5;))))
-              (f32.const -0x1p+1 (;=-2;)))))
-        (local.set 4
-          (f32.reinterpret_i32
-            (i32.add
-              (local.tee 2
-                (i32.shl
-                  (local.get 3)
-                  (i32.const 23)))
-              (i32.const 1065353216))))
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.lt_u
-              (local.get 3)
-              (i32.const 57)))
-          (return
-            (f32.add
-              (select
-                (f32.mul
-                  (f32.add
-                    (local.tee 0
-                      (f32.add
-                        (f32.sub
-                          (local.get 0)
-                          (local.get 5))
-                        (f32.const 0x1p+0 (;=1;))))
-                    (local.get 0))
-                  (f32.const 0x1p+127 (;=170141180000000000000000000000000000000;)))
-                (f32.mul
-                  (local.get 0)
-                  (local.get 4))
-                (i32.eq
-                  (local.get 3)
-                  (i32.const 128)))
-              (f32.const -0x1p+0 (;=-1;)))))
-        (local.set 6
-          (f32.reinterpret_i32
-            (i32.sub
-              (i32.const 1065353216)
-              (local.get 2))))
-        (block ;; label = @3
-          (block ;; label = @4
-            (br_if 0 (;@4;)
-              (i32.lt_u
-                (local.get 3)
-                (i32.const 23)))
-            (local.set 0
-              (f32.add
-                (f32.sub
-                  (local.get 0)
-                  (f32.add
-                    (local.get 5)
-                    (local.get 6)))
-                (f32.const 0x1p+0 (;=1;))))
-            (br 1 (;@3;)))
-          (local.set 0
-            (f32.add
-              (f32.sub
-                (f32.const 0x1p+0 (;=1;))
-                (local.get 6))
-              (f32.sub
-                (local.get 0)
-                (local.get 5)))))
-        (local.set 5
-          (f32.mul
-            (local.get 0)
-            (local.get 4))))
-      (return
-        (local.get 5)))
-    (local.get 0)
-  )
-  (func $libm_erf (;36;) (type 0) (param f64) (result f64)
+  (func $f64_erf (;64;) (type 1) (param f64) (result f64)
     (local i64 i32 i32 f64)
     (block ;; label = @1
       (br_if 0 (;@1;)
@@ -6389,7 +11015,7 @@
               (local.get 3)
               (i32.const 1075314688)))
           (local.set 4
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3erf5erfc2
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3erf5erfc2
               (local.get 3)
               (local.get 0))))
         (return
@@ -6478,7 +11104,7 @@
               (i32.const 30))
             (i32.const 2)))))
   )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math3erf5erfc2 (;37;) (type 7) (param i32 f64) (result f64)
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math3erf5erfc2 (;65;) (type 12) (param i32 f64) (result f64)
     (local f64 f64 f64 f64 f64 f64 f64 f64 f64)
     (local.set 2
       (f64.abs
@@ -6596,7 +11222,7 @@
       (return
         (f64.div
           (f64.mul
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3exp3exp
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3exp3exp
               (f64.sub
                 (f64.const -0x1.2p-1 (;=-0.5625;))
                 (f64.mul
@@ -6607,7 +11233,7 @@
                           (local.get 2))
                         (i64.const 9223372032559808512))))
                   (local.get 10))))
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3exp3exp
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3exp3exp
               (f64.add
                 (f64.mul
                   (f64.sub
@@ -6701,7 +11327,7 @@
               (f64.const 0x1.b3e6618eee323p-4 (;=0.10642088040084423;))))
           (f64.const 0x1p+0 (;=1;)))))
   )
-  (func $libm_erfc (;38;) (type 0) (param f64) (result f64)
+  (func $f64_erfc (;66;) (type 1) (param f64) (result f64)
     (local i64 i32 i32 f64)
     (block ;; label = @1
       (block ;; label = @2
@@ -6738,7 +11364,7 @@
           (return
             (select
               (local.tee 0
-                (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3erf5erfc2
+                (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3erf5erfc2
                   (local.get 3)
                   (local.get 0)))
               (f64.sub
@@ -6837,480 +11463,11 @@
       (f64.const 0x1p+0 (;=1;))
       (local.get 0))
   )
-  (func $libm_erfcf (;39;) (type 1) (param f32) (result f32)
-    (local i32 i32 f32)
-    (block ;; label = @1
-      (block ;; label = @2
-        (br_if 0 (;@2;)
-          (i32.gt_u
-            (local.tee 2
-              (i32.and
-                (local.tee 1
-                  (i32.reinterpret_f32
-                    (local.get 0)))
-                (i32.const 2147483647)))
-            (i32.const 2139095039)))
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.lt_u
-              (local.get 2)
-              (i32.const 1062731776)))
-          (block ;; label = @4
-            (br_if 0 (;@4;)
-              (i32.lt_u
-                (local.get 2)
-                (i32.const 1105199104)))
-            (return
-              (select
-                (f32.const 0x0p+0 (;=0;))
-                (f32.const 0x1p+1 (;=2;))
-                (i32.gt_s
-                  (local.get 1)
-                  (i32.const -1)))))
-          (return
-            (select
-              (local.tee 0
-                (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4erff5erfc2
-                  (local.get 2)
-                  (local.get 0)))
-              (f32.sub
-                (f32.const 0x1p+1 (;=2;))
-                (local.get 0))
-              (i32.gt_s
-                (local.get 1)
-                (i32.const -1)))))
-        (br_if 1 (;@1;)
-          (i32.lt_u
-            (local.get 2)
-            (i32.const 595591168)))
-        (local.set 3
-          (f32.div
-            (f32.add
-              (f32.mul
-                (local.tee 3
-                  (f32.mul
-                    (local.get 0)
-                    (local.get 0)))
-                (f32.add
-                  (f32.mul
-                    (local.get 3)
-                    (f32.add
-                      (f32.mul
-                        (local.get 3)
-                        (f32.add
-                          (f32.mul
-                            (local.get 3)
-                            (f32.const -0x1.8ead62p-16 (;=-0.000023763017;)))
-                          (f32.const -0x1.7a2912p-8 (;=-0.0057702702;))))
-                      (f32.const -0x1.d2a51ep-6 (;=-0.02848175;))))
-                  (f32.const -0x1.4cd7d6p-2 (;=-0.3250421;))))
-              (f32.const 0x1.06eba8p-3 (;=0.12837917;)))
-            (f32.add
-              (f32.mul
-                (local.get 3)
-                (f32.add
-                  (f32.mul
-                    (local.get 3)
-                    (f32.add
-                      (f32.mul
-                        (local.get 3)
-                        (f32.add
-                          (f32.mul
-                            (local.get 3)
-                            (f32.add
-                              (f32.mul
-                                (local.get 3)
-                                (f32.const -0x1.09c434p-18 (;=-0.0000039602282;)))
-                              (f32.const 0x1.15dc92p-13 (;=0.00013249474;))))
-                          (f32.const 0x1.4d022cp-8 (;=0.005081306;))))
-                      (f32.const 0x1.0a54c6p-4 (;=0.06502225;))))
-                  (f32.const 0x1.97779cp-2 (;=0.3979172;))))
-              (f32.const 0x1p+0 (;=1;)))))
-        (block ;; label = @3
-          (block ;; label = @4
-            (br_if 0 (;@4;)
-              (i32.lt_s
-                (local.get 1)
-                (i32.const 0)))
-            (br_if 1 (;@3;)
-              (i32.ge_u
-                (local.get 2)
-                (i32.const 1048576000))))
-          (return
-            (f32.sub
-              (f32.const 0x1p+0 (;=1;))
-              (f32.add
-                (local.get 0)
-                (f32.mul
-                  (local.get 0)
-                  (local.get 3))))))
-        (return
-          (f32.sub
-            (f32.const 0x1p-1 (;=0.5;))
-            (f32.add
-              (f32.add
-                (local.get 0)
-                (f32.const -0x1p-1 (;=-0.5;)))
-              (f32.mul
-                (local.get 0)
-                (local.get 3))))))
-      (return
-        (f32.add
-          (f32.div
-            (f32.const 0x1p+0 (;=1;))
-            (local.get 0))
-          (f32.convert_i32_u
-            (i32.and
-              (i32.shr_u
-                (local.get 1)
-                (i32.const 30))
-              (i32.const 2))))))
-    (f32.sub
-      (f32.const 0x1p+0 (;=1;))
+  (func $f64_exp (;67;) (type 1) (param f64) (result f64)
+    (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3exp3exp
       (local.get 0))
   )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math4erff5erfc2 (;40;) (type 8) (param i32 f32) (result f32)
-    (local f32 f32 f32 f32 f32 f32 f32 f32 f32)
-    (local.set 2
-      (f32.abs
-        (local.get 1)))
-    (block ;; label = @1
-      (br_if 0 (;@1;)
-        (i32.lt_u
-          (local.get 0)
-          (i32.const 1067450368)))
-      (local.set 1
-        (f32.div
-          (f32.const 0x1p+0 (;=1;))
-          (f32.mul
-            (local.get 1)
-            (local.get 1))))
-      (block ;; label = @2
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.lt_u
-              (local.get 0)
-              (i32.const 1077336941)))
-          (local.set 3
-            (f32.add
-              (f32.mul
-                (local.get 1)
-                (f32.const -0x1.670e24p+4 (;=-22.440952;)))
-              (f32.const 0x1.da874ep+8 (;=474.52853;))))
-          (local.set 4
-            (f32.add
-              (f32.mul
-                (local.get 1)
-                (f32.add
-                  (f32.mul
-                    (local.get 1)
-                    (f32.add
-                      (f32.mul
-                        (local.get 1)
-                        (f32.add
-                          (f32.mul
-                            (local.get 1)
-                            (f32.add
-                              (f32.mul
-                                (local.get 1)
-                                (f32.add
-                                  (f32.mul
-                                    (local.get 1)
-                                    (f32.const -0x1.e384eap+8 (;=-483.5192;)))
-                                  (f32.const -0x1.004616p+10 (;=-1025.0951;))))
-                              (f32.const -0x1.3ec882p+9 (;=-637.56647;))))
-                          (f32.const -0x1.4145d4p+7 (;=-160.63638;))))
-                      (f32.const -0x1.1c2096p+4 (;=-17.757956;))))
-                  (f32.const -0x1.993ba8p-1 (;=-0.79928327;))))
-              (f32.const -0x1.434124p-7 (;=-0.009864943;))))
-          (local.set 5
-            (f32.const 0x1.e568b2p+4 (;=30.33806;)))
-          (local.set 6
-            (f32.const 0x1.45cae2p+8 (;=325.7925;)))
-          (local.set 7
-            (f32.const 0x1.802eb2p+10 (;=1536.7296;)))
-          (local.set 8
-            (f32.const 0x1.8ffb76p+11 (;=3199.8582;)))
-          (local.set 9
-            (f32.const 0x1.3f219cp+11 (;=2553.0503;)))
-          (br 1 (;@2;)))
-        (local.set 3
-          (f32.add
-            (f32.mul
-              (local.get 1)
-              (f32.add
-                (f32.mul
-                  (local.get 1)
-                  (f32.const -0x1.eeff2ep-5 (;=-0.060424414;)))
-                (f32.const 0x1.a47ef8p+2 (;=6.5702496;))))
-            (f32.const 0x1.b28a3ep+6 (;=108.635;))))
-        (local.set 4
-          (f32.add
-            (f32.mul
-              (local.get 1)
-              (f32.add
-                (f32.mul
-                  (local.get 1)
-                  (f32.add
-                    (f32.mul
-                      (local.get 1)
-                      (f32.add
-                        (f32.mul
-                          (local.get 1)
-                          (f32.add
-                            (f32.mul
-                              (local.get 1)
-                              (f32.add
-                                (f32.mul
-                                  (local.get 1)
-                                  (f32.add
-                                    (f32.mul
-                                      (local.get 1)
-                                      (f32.const -0x1.3a0efcp+3 (;=-9.814329;)))
-                                    (f32.const -0x1.452656p+6 (;=-81.28744;))))
-                                (f32.const -0x1.7135cep+7 (;=-184.60509;))))
-                            (f32.const -0x1.44cb18p+7 (;=-162.39667;))))
-                        (f32.const -0x1.f300aep+5 (;=-62.37533;))))
-                    (f32.const -0x1.51e044p+3 (;=-10.558626;))))
-                (f32.const -0x1.63416ep-1 (;=-0.69385856;))))
-            (f32.const -0x1.434126p-7 (;=-0.009864944;))))
-        (local.set 5
-          (f32.const 0x1.3a6b9cp+4 (;=19.651272;)))
-        (local.set 6
-          (f32.const 0x1.1350c6p+7 (;=137.65776;)))
-        (local.set 7
-          (f32.const 0x1.b290dep+8 (;=434.5659;)))
-        (local.set 8
-          (f32.const 0x1.42b192p+9 (;=645.38727;)))
-        (local.set 9
-          (f32.const 0x1.ad0216p+8 (;=429.00815;))))
-      (return
-        (f32.div
-          (f32.mul
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4expf4expf
-              (f32.sub
-                (f32.const -0x1.2p-1 (;=-0.5625;))
-                (f32.mul
-                  (local.tee 10
-                    (f32.reinterpret_i32
-                      (i32.and
-                        (i32.reinterpret_f32
-                          (local.get 2))
-                        (i32.const 2147475456))))
-                  (local.get 10))))
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4expf4expf
-              (f32.add
-                (f32.mul
-                  (f32.sub
-                    (local.get 10)
-                    (local.get 2))
-                  (f32.add
-                    (local.get 2)
-                    (local.get 10)))
-                (f32.div
-                  (local.get 4)
-                  (f32.add
-                    (f32.mul
-                      (local.get 1)
-                      (f32.add
-                        (f32.mul
-                          (local.get 1)
-                          (f32.add
-                            (f32.mul
-                              (local.get 1)
-                              (f32.add
-                                (f32.mul
-                                  (local.get 1)
-                                  (f32.add
-                                    (f32.mul
-                                      (local.get 1)
-                                      (f32.add
-                                        (f32.mul
-                                          (local.get 1)
-                                          (local.get 3))
-                                        (local.get 9)))
-                                    (local.get 8)))
-                                (local.get 7)))
-                            (local.get 6)))
-                        (local.get 5)))
-                    (f32.const 0x1p+0 (;=1;)))))))
-          (local.get 2))))
-    (f32.sub
-      (f32.const 0x1.3d4fa8p-3 (;=0.15493709;))
-      (f32.div
-        (f32.add
-          (f32.mul
-            (local.tee 1
-              (f32.add
-                (local.get 2)
-                (f32.const -0x1p+0 (;=-1;))))
-            (f32.add
-              (f32.mul
-                (local.get 1)
-                (f32.add
-                  (f32.mul
-                    (local.get 1)
-                    (f32.add
-                      (f32.mul
-                        (local.get 1)
-                        (f32.add
-                          (f32.mul
-                            (local.get 1)
-                            (f32.add
-                              (f32.mul
-                                (local.get 1)
-                                (f32.const -0x1.1bf38p-9 (;=-0.0021663755;)))
-                              (f32.const 0x1.22a366p-5 (;=0.035478305;))))
-                          (f32.const -0x1.c63984p-4 (;=-0.110894695;))))
-                      (f32.const 0x1.45fca8p-2 (;=0.31834662;))))
-                  (f32.const -0x1.7d241p-2 (;=-0.37220788;))))
-              (f32.const 0x1.a8d00ap-2 (;=0.4148561;))))
-          (f32.const -0x1.359b8cp-9 (;=-0.0023621186;)))
-        (f32.add
-          (f32.mul
-            (local.get 1)
-            (f32.add
-              (f32.mul
-                (local.get 1)
-                (f32.add
-                  (f32.mul
-                    (local.get 1)
-                    (f32.add
-                      (f32.mul
-                        (local.get 1)
-                        (f32.add
-                          (f32.mul
-                            (local.get 1)
-                            (f32.add
-                              (f32.mul
-                                (local.get 1)
-                                (f32.const 0x1.88b546p-7 (;=0.0119845;)))
-                              (f32.const 0x1.bedc26p-7 (;=0.013637084;))))
-                          (f32.const 0x1.02660ep-3 (;=0.12617122;))))
-                      (f32.const 0x1.2635cep-4 (;=0.071828656;))))
-                  (f32.const 0x1.14af0ap-1 (;=0.54039794;))))
-              (f32.const 0x1.b3e662p-4 (;=0.10642088;))))
-          (f32.const 0x1p+0 (;=1;)))))
-  )
-  (func $libm_erff (;41;) (type 1) (param f32) (result f32)
-    (local i32 i32 f32)
-    (block ;; label = @1
-      (br_if 0 (;@1;)
-        (i32.gt_u
-          (local.tee 2
-            (i32.and
-              (local.tee 1
-                (i32.reinterpret_f32
-                  (local.get 0)))
-              (i32.const 2147483647)))
-          (i32.const 2139095039)))
-      (block ;; label = @2
-        (br_if 0 (;@2;)
-          (i32.lt_u
-            (local.get 2)
-            (i32.const 1062731776)))
-        (local.set 3
-          (f32.const 0x1p-120 (;=0.0000000000000000000000000000000000007523164;)))
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.ge_u
-              (local.get 2)
-              (i32.const 1086324736)))
-          (local.set 3
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4erff5erfc2
-              (local.get 2)
-              (local.get 0))))
-        (return
-          (select
-            (f32.neg
-              (local.tee 0
-                (f32.sub
-                  (f32.const 0x1p+0 (;=1;))
-                  (local.get 3))))
-            (local.get 0)
-            (i32.lt_s
-              (local.get 1)
-              (i32.const 0)))))
-      (block ;; label = @2
-        (br_if 0 (;@2;)
-          (i32.lt_u
-            (local.get 2)
-            (i32.const 830472192)))
-        (return
-          (f32.add
-            (local.get 0)
-            (f32.mul
-              (local.get 0)
-              (f32.div
-                (f32.add
-                  (f32.mul
-                    (local.tee 3
-                      (f32.mul
-                        (local.get 0)
-                        (local.get 0)))
-                    (f32.add
-                      (f32.mul
-                        (local.get 3)
-                        (f32.add
-                          (f32.mul
-                            (local.get 3)
-                            (f32.add
-                              (f32.mul
-                                (local.get 3)
-                                (f32.const -0x1.8ead62p-16 (;=-0.000023763017;)))
-                              (f32.const -0x1.7a2912p-8 (;=-0.0057702702;))))
-                          (f32.const -0x1.d2a51ep-6 (;=-0.02848175;))))
-                      (f32.const -0x1.4cd7d6p-2 (;=-0.3250421;))))
-                  (f32.const 0x1.06eba8p-3 (;=0.12837917;)))
-                (f32.add
-                  (f32.mul
-                    (local.get 3)
-                    (f32.add
-                      (f32.mul
-                        (local.get 3)
-                        (f32.add
-                          (f32.mul
-                            (local.get 3)
-                            (f32.add
-                              (f32.mul
-                                (local.get 3)
-                                (f32.add
-                                  (f32.mul
-                                    (local.get 3)
-                                    (f32.const -0x1.09c434p-18 (;=-0.0000039602282;)))
-                                  (f32.const 0x1.15dc92p-13 (;=0.00013249474;))))
-                              (f32.const 0x1.4d022cp-8 (;=0.005081306;))))
-                          (f32.const 0x1.0a54c6p-4 (;=0.06502225;))))
-                      (f32.const 0x1.97779cp-2 (;=0.3979172;))))
-                  (f32.const 0x1p+0 (;=1;))))))))
-      (return
-        (f32.mul
-          (f32.add
-            (f32.mul
-              (local.get 0)
-              (f32.const 0x1p+3 (;=8;)))
-            (f32.mul
-              (local.get 0)
-              (f32.const 0x1.06eba8p+0 (;=1.0270333;))))
-          (f32.const 0x1p-3 (;=0.125;)))))
-    (f32.add
-      (f32.div
-        (f32.const 0x1p+0 (;=1;))
-        (local.get 0))
-      (f32.sub
-        (f32.const 0x1p+0 (;=1;))
-        (f32.convert_i32_u
-          (i32.and
-            (i32.shr_u
-              (local.get 1)
-              (i32.const 30))
-            (i32.const 2)))))
-  )
-  (func $libm_exp (;42;) (type 0) (param f64) (result f64)
-    (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3exp3exp
-      (local.get 0))
-  )
-  (func $libm_exp10 (;43;) (type 0) (param f64) (result f64)
+  (func $f64_exp10 (;68;) (type 1) (param f64) (result f64)
     (local i64 i32 i32 i64 f64)
     (local.set 3
       (i32.add
@@ -7396,7 +11553,7 @@
             (i64.const 9218868437227405312))
           (i64.const 4625196817309499392)))
       (return
-        (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3pow3pow
+        (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3pow3pow
           (f64.const 0x1.4p+3 (;=10;))
           (local.get 0))))
     (local.set 0
@@ -7416,7 +11573,7 @@
                   (local.get 0))
                 (i32.const 3))
               (i32.const 1057448)))
-          (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4exp24exp2
+          (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4exp24exp2
             (f64.mul
               (local.get 5)
               (f64.const 0x1.a934f0979a371p+1 (;=3.321928094887362;)))))))
@@ -7428,7 +11585,7 @@
           (i32.const 3))
         (i32.const 1057448)))
   )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math3pow3pow (;44;) (type 2) (param f64 f64) (result f64)
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math3pow3pow (;69;) (type 9) (param f64 f64) (result f64)
     (local f64 i64 i32 i32 i32 i64 i32 i64 i32 i32 i32 i32 i32 f64 f64 f64 f64)
     (local.set 2
       (f64.const 0x1p+0 (;=1;)))
@@ -7644,7 +11801,7 @@
               (local.get 7)
               (i64.const 0)))
           (return
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4sqrt4sqrt
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4sqrt4sqrt
               (local.get 0))))
         (return
           (select
@@ -8298,7 +12455,7 @@
                     (i64.const 4294967295)))))
             (br 1 (;@3;)))
           (local.set 1
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math6scalbn6scalbn
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math6scalbn6scalbn
               (local.get 1)
               (local.get 8))))
         (local.set 2
@@ -8343,510 +12500,15 @@
             (i32.const 1)))))
     (local.get 2)
   )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math4exp24exp2 (;45;) (type 0) (param f64) (result f64)
-    (local i32 i64 i64 f64 i32 i32 f64)
-    (global.set $__stack_pointer
-      (local.tee 1
-        (i32.sub
-          (global.get $__stack_pointer)
-          (i32.const 16))))
-    (block ;; label = @1
-      (block ;; label = @2
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i64.gt_u
-              (local.tee 3
-                (i64.and
-                  (i64.shr_u
-                    (local.tee 2
-                      (i64.reinterpret_f64
-                        (local.get 0)))
-                    (i64.const 32))
-                  (i64.const 2147483647)))
-              (i64.const 1083174911)))
-          (br_if 1 (;@2;)
-            (i64.ge_u
-              (local.get 3)
-              (i64.const 1016070144)))
-          (local.set 0
-            (f64.add
-              (local.get 0)
-              (f64.const 0x1p+0 (;=1;))))
-          (br 2 (;@1;)))
-        (block ;; label = @3
-          (block ;; label = @4
-            (br_if 0 (;@4;)
-              (i64.lt_s
-                (local.get 2)
-                (i64.const 0)))
-            (br_if 1 (;@3;)
-              (i64.gt_u
-                (local.get 3)
-                (i64.const 1083179007))))
-          (block ;; label = @4
-            (block ;; label = @5
-              (br_if 0 (;@5;)
-                (i64.gt_u
-                  (local.get 3)
-                  (i64.const 2146435071)))
-              (br_if 1 (;@4;)
-                (i64.le_s
-                  (local.get 2)
-                  (i64.const -1)))
-              (br 3 (;@2;)))
-            (local.set 0
-              (f64.div
-                (f64.const -0x1p+0 (;=-1;))
-                (local.get 0)))
-            (br 3 (;@1;)))
-          (block ;; label = @4
-            (br_if 0 (;@4;)
-              (i32.eqz
-                (f64.le
-                  (local.get 0)
-                  (f64.const -0x1.0ccp+10 (;=-1075;)))))
-            (f32.store offset=12
-              (local.get 1)
-              (f32.demote_f64
-                (f64.div
-                  (f64.const -0x1p-149 (;=-0.000000000000000000000000000000000000000000001401298464324817;))
-                  (local.get 0))))
-            (drop
-              (f32.load offset=12
-                (local.get 1)))
-            (local.set 0
-              (f64.const 0x0p+0 (;=0;)))
-            (br 3 (;@1;)))
-          (br_if 1 (;@2;)
-            (f64.eq
-              (f64.add
-                (f64.add
-                  (local.get 0)
-                  (f64.const -0x1p+52 (;=-4503599627370496;)))
-                (f64.const 0x1p+52 (;=4503599627370496;)))
-              (local.get 0)))
-          (f32.store offset=12
-            (local.get 1)
-            (f32.demote_f64
-              (f64.div
-                (f64.const -0x1p-149 (;=-0.000000000000000000000000000000000000000000001401298464324817;))
-                (local.get 0))))
-          (drop
-            (f32.load offset=12
-              (local.get 1)))
-          (br 1 (;@2;)))
-        (local.set 0
-          (f64.mul
-            (local.get 0)
-            (f64.const 0x1p+1023 (;=89884656743115800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000;))))
-        (br 1 (;@1;)))
-      (local.set 0
-        (call $_RNvNtNtCs5s8uptHhuCz_4libm4math6scalbn6scalbn
-          (f64.add
-            (local.tee 7
-              (f64.load offset=1053168
-                (local.tee 6
-                  (i32.and
-                    (i32.shl
-                      (local.tee 5
-                        (i32.add
-                          (i32.wrap_i64
-                            (i64.reinterpret_f64
-                              (local.tee 4
-                                (f64.add
-                                  (local.get 0)
-                                  (f64.const 0x1.8p+44 (;=26388279066624;))))))
-                          (i32.const 128)))
-                      (i32.const 4))
-                    (i32.const 4080)))))
-            (f64.mul
-              (f64.mul
-                (local.get 7)
-                (local.tee 0
-                  (f64.sub
-                    (f64.sub
-                      (local.get 0)
-                      (f64.add
-                        (local.get 4)
-                        (f64.const -0x1.8p+44 (;=-26388279066624;))))
-                    (f64.load offset=1053176
-                      (local.get 6)))))
-              (f64.add
-                (f64.mul
-                  (local.get 0)
-                  (f64.add
-                    (f64.mul
-                      (local.get 0)
-                      (f64.add
-                        (f64.mul
-                          (local.get 0)
-                          (f64.add
-                            (f64.mul
-                              (local.get 0)
-                              (f64.const 0x1.5d88003875c74p-10 (;=0.0013333559164630223;)))
-                            (f64.const 0x1.3b2ab88f704p-7 (;=0.009618129842126066;))))
-                        (f64.const 0x1.c6b08d704a0a6p-5 (;=0.0555041086648214;))))
-                    (f64.const 0x1.ebfbdff82c575p-3 (;=0.2402265069591;))))
-                (f64.const 0x1.62e42fefa39efp-1 (;=0.6931471805599453;)))))
-          (i32.shr_s
-            (local.get 5)
-            (i32.const 8)))))
-    (global.set $__stack_pointer
-      (i32.add
-        (local.get 1)
-        (i32.const 16)))
-    (local.get 0)
-  )
-  (func $libm_exp10f (;46;) (type 1) (param f32) (result f32)
-    (local i32 i32 i32 f32 f32)
-    (local.set 3
-      (i32.add
-        (local.tee 2
-          (i32.and
-            (i32.shr_u
-              (local.tee 1
-                (i32.reinterpret_f32
-                  (local.get 0)))
-              (i32.const 23))
-            (i32.const 255)))
-        (i32.const -127)))
-    (block ;; label = @1
-      (block ;; label = @2
-        (block ;; label = @3
-          (block ;; label = @4
-            (block ;; label = @5
-              (br_if 0 (;@5;)
-                (i32.gt_u
-                  (local.get 2)
-                  (i32.const 149)))
-              (br_if 2 (;@3;)
-                (i32.lt_u
-                  (local.get 2)
-                  (i32.const 127)))
-              (br_if 3 (;@2;)
-                (i32.and
-                  (i32.shl
-                    (local.get 1)
-                    (local.get 3))
-                  (i32.const 8388607)))
-              (local.set 4
-                (f32.reinterpret_i32
-                  (i32.and
-                    (local.get 1)
-                    (i32.const -2147483648))))
-              (br 1 (;@4;)))
-            (block ;; label = @5
-              (br_if 0 (;@5;)
-                (i32.eqz
-                  (i32.and
-                    (local.get 1)
-                    (i32.const 8388607))))
-              (local.set 5
-                (local.get 0))
-              (local.set 4
-                (local.get 0))
-              (br_if 4 (;@1;)
-                (i32.eq
-                  (local.get 3)
-                  (i32.const 128))))
-            (local.set 4
-              (f32.reinterpret_i32
-                (i32.and
-                  (local.get 1)
-                  (i32.const -2147483648)))))
-          (local.set 5
-            (local.get 0))
-          (br 2 (;@1;)))
-        (local.set 5
-          (f32.reinterpret_i32
-            (i32.and
-              (local.get 1)
-              (i32.const -2147483648))))
-        (local.set 4
-          (local.get 0))
-        (br 1 (;@1;)))
-      (local.set 4
-        (f32.sub
-          (local.get 0)
-          (local.tee 5
-            (f32.reinterpret_i32
-              (i32.and
-                (i32.shr_s
-                  (i32.const -8388608)
-                  (local.get 3))
-                (local.get 1)))))))
-    (block ;; label = @1
-      (br_if 0 (;@1;)
-        (i32.lt_u
-          (i32.and
-            (i32.reinterpret_f32
-              (local.get 5))
-            (i32.const 2130706432))
-          (i32.const 1090519040)))
-      (return
-        (f32.demote_f64
-          (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4exp24exp2
-            (f64.mul
-              (f64.promote_f32
-                (local.get 0))
-              (f64.const 0x1.a934f0979a371p+1 (;=3.321928094887362;)))))))
-    (block ;; label = @1
-      (br_if 0 (;@1;)
-        (f32.eq
-          (local.get 4)
-          (f32.const 0x0p+0 (;=0;))))
-      (return
-        (f32.mul
-          (f32.load
-            (i32.add
-              (i32.shl
-                (i32.trunc_sat_f32_s
-                  (local.get 5))
-                (i32.const 2))
-              (i32.const 1057732)))
-          (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5exp2f5exp2f
-            (f32.mul
-              (local.get 4)
-              (f32.const 0x1.a934fp+1 (;=3.321928;)))))))
-    (f32.load
-      (i32.add
-        (i32.shl
-          (i32.trunc_sat_f32_s
-            (local.get 5))
-          (i32.const 2))
-        (i32.const 1057732)))
-  )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math5exp2f5exp2f (;47;) (type 1) (param f32) (result f32)
-    (local i32 i32 i32 f32 f64 f64)
-    (local.set 1
-      (i32.sub
-        (global.get $__stack_pointer)
-        (i32.const 16)))
-    (block ;; label = @1
-      (block ;; label = @2
-        (br_if 0 (;@2;)
-          (i32.gt_u
-            (local.tee 3
-              (i32.and
-                (local.tee 2
-                  (i32.reinterpret_f32
-                    (local.get 0)))
-                (i32.const 2147483647)))
-            (i32.const 1123811328)))
-        (br_if 1 (;@1;)
-          (i32.ge_u
-            (local.get 3)
-            (i32.const 855638017)))
-        (return
-          (f32.add
-            (local.get 0)
-            (f32.const 0x1p+0 (;=1;)))))
-      (block ;; label = @2
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.gt_u
-              (local.get 3)
-              (i32.const 2139095040)))
-          (block ;; label = @4
-            (br_if 0 (;@4;)
-              (i32.gt_s
-                (local.get 2)
-                (i32.const 1124073471)))
-            (br_if 3 (;@1;)
-              (i32.ge_s
-                (local.get 2)
-                (i32.const 0)))
-            (br_if 2 (;@2;)
-              (i32.gt_u
-                (local.get 2)
-                (i32.const -1021968385)))
-            (br_if 3 (;@1;)
-              (i32.eqz
-                (i32.and
-                  (local.get 2)
-                  (i32.const 65535))))
-            (f32.store offset=12
-              (local.get 1)
-              (f32.div
-                (f32.const -0x1.p-149 (;=-0.000000000000000000000000000000000000000000001;))
-                (local.get 0)))
-            (drop
-              (f32.load offset=12
-                (local.get 1)))
-            (br 3 (;@1;)))
-          (local.set 0
-            (f32.mul
-              (local.get 0)
-              (f32.const 0x1p+127 (;=170141180000000000000000000000000000000;)))))
-        (return
-          (local.get 0)))
-      (f32.store offset=12
-        (local.get 1)
-        (f32.div
-          (f32.const -0x1.p-149 (;=-0.000000000000000000000000000000000000000000001;))
-          (local.get 0)))
-      (drop
-        (f32.load offset=12
-          (local.get 1)))
-      (return
-        (f32.const 0x0p+0 (;=0;))))
-    (f32.demote_f64
-      (f64.mul
-        (f64.add
-          (f64.add
-            (local.tee 5
-              (f64.load offset=1057576
-                (i32.shl
-                  (i32.and
-                    (local.tee 3
-                      (i32.add
-                        (i32.reinterpret_f32
-                          (local.tee 4
-                            (f32.add
-                              (local.get 0)
-                              (f32.const 0x1.8p+19 (;=786432;)))))
-                        (i32.const 8)))
-                    (i32.const 15))
-                  (i32.const 3))))
-            (f64.mul
-              (f64.add
-                (f64.mul
-                  (local.tee 6
-                    (f64.promote_f32
-                      (f32.sub
-                        (local.get 0)
-                        (f32.add
-                          (local.get 4)
-                          (f32.const -0x1.8p+19 (;=-786432;))))))
-                  (f64.const 0x1.ebfbep-3 (;=0.24022650718688965;)))
-                (f64.const 0x1.62e43p-1 (;=0.6931471824645996;)))
-              (local.tee 5
-                (f64.mul
-                  (local.get 5)
-                  (local.get 6)))))
-          (f64.mul
-            (f64.add
-              (f64.mul
-                (local.get 6)
-                (f64.const 0x1.3b2c9cp-7 (;=0.009618354961276054;)))
-              (f64.const 0x1.c6b348p-5 (;=0.055505409836769104;)))
-            (f64.mul
-              (f64.mul
-                (local.get 6)
-                (local.get 6))
-              (local.get 5))))
-        (f64.reinterpret_i64
-          (i64.shl
-            (i64.extend_i32_u
-              (i32.add
-                (i32.shr_u
-                  (local.get 3)
-                  (i32.const 4))
-                (i32.const 1023)))
-            (i64.const 52)))))
-  )
-  (func $libm_exp2 (;48;) (type 0) (param f64) (result f64)
-    (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4exp24exp2
+  (func $f64_exp2 (;70;) (type 1) (param f64) (result f64)
+    (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4exp24exp2
       (local.get 0))
   )
-  (func $libm_exp2f (;49;) (type 1) (param f32) (result f32)
-    (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5exp2f5exp2f
+  (func $f64_expm1 (;71;) (type 1) (param f64) (result f64)
+    (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5expm15expm1
       (local.get 0))
   )
-  (func $libm_expf (;50;) (type 1) (param f32) (result f32)
-    (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4expf4expf
-      (local.get 0))
-  )
-  (func $libm_expm1 (;51;) (type 0) (param f64) (result f64)
-    (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5expm15expm1
-      (local.get 0))
-  )
-  (func $libm_expm1f (;52;) (type 1) (param f32) (result f32)
-    (call $_RNvNtNtCs5s8uptHhuCz_4libm4math6expm1f6expm1f
-      (local.get 0))
-  )
-  (func $libm_fma (;53;) (type 4) (param f64 f64 f64) (result f64)
-    (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3fma3fma
-      (local.get 0)
-      (local.get 1)
-      (local.get 2))
-  )
-  (func $libm_fmaf (;54;) (type 9) (param f32 f32 f32) (result f32)
-    (local f64 f64 f64 i64 i32)
-    (block ;; label = @1
-      (br_if 0 (;@1;)
-        (i64.ne
-          (i64.and
-            (local.tee 6
-              (i64.reinterpret_f64
-                (local.tee 5
-                  (f64.add
-                    (local.tee 3
-                      (f64.mul
-                        (f64.promote_f32
-                          (local.get 0))
-                        (f64.promote_f32
-                          (local.get 1))))
-                    (local.tee 4
-                      (f64.promote_f32
-                        (local.get 2)))))))
-            (i64.const 536870911))
-          (i64.const 268435456)))
-      (br_if 0 (;@1;)
-        (i64.eq
-          (i64.and
-            (local.get 6)
-            (i64.const 9218868437227405312))
-          (i64.const 9218868437227405312)))
-      (block ;; label = @2
-        (br_if 0 (;@2;)
-          (f64.ne
-            (f64.sub
-              (local.get 5)
-              (local.get 3))
-            (local.get 4)))
-        (br_if 1 (;@1;)
-          (f64.eq
-            (f64.sub
-              (local.get 5)
-              (local.get 4))
-            (local.get 3))))
-      (local.set 5
-        (f64.reinterpret_i64
-          (select
-            (i64.add
-              (local.get 6)
-              (i64.const -1))
-            (i64.or
-              (local.get 6)
-              (i64.const 1))
-            (i32.xor
-              (local.tee 7
-                (i64.lt_s
-                  (local.get 6)
-                  (i64.const 0)))
-              (f64.lt
-                (select
-                  (f64.add
-                    (local.get 3)
-                    (f64.sub
-                      (local.get 4)
-                      (local.get 5)))
-                  (f64.add
-                    (f64.sub
-                      (local.get 3)
-                      (local.get 5))
-                    (local.get 4))
-                  (i32.xor
-                    (local.get 7)
-                    (f64.lt
-                      (local.get 3)
-                      (local.get 4))))
-                (f64.const 0x0p+0 (;=0;))))))))
-    (f32.demote_f64
-      (local.get 5))
-  )
-  (func $libm_fmod (;55;) (type 2) (param f64 f64) (result f64)
+  (func $f64_fmod (;72;) (type 9) (param f64 f64) (result f64)
     (local i32 i64 i64 i64 i64 i64 i64 i64 i64 i32 i32 i32)
     (global.set $__stack_pointer
       (local.tee 2
@@ -9020,7 +12682,7 @@
                       (local.get 1)))
                   (local.get 0)))
               (br 4 (;@1;)))
-            (call $_RNvNtNtCskGMzdWn1DGZ_4core9panicking11panic_const23panic_const_rem_by_zero)
+            (call $_RNvNtNtCsknUcikIyyBm_4core9panicking11panic_const23panic_const_rem_by_zero)
             (unreachable))
           (block ;; label = @4
             (block ;; label = @5
@@ -9226,19 +12888,19 @@
                           (local.get 12)
                           (i32.const 64)))
                       (br 7 (;@2;)))
-                    (call $_RNvNtCskGMzdWn1DGZ_4core9panicking5panic
+                    (call $_RNvNtCsknUcikIyyBm_4core9panicking5panic
                       (i32.const 34))
                     (unreachable))
-                  (call $_RNvNtCskGMzdWn1DGZ_4core9panicking5panic
+                  (call $_RNvNtCsknUcikIyyBm_4core9panicking5panic
                     (i32.const 30))
                   (unreachable))
-                (call $_RNvNtCskGMzdWn1DGZ_4core9panicking5panic
+                (call $_RNvNtCsknUcikIyyBm_4core9panicking5panic
                   (i32.const 43))
                 (unreachable))
-              (call $_RNvNtCskGMzdWn1DGZ_4core9panicking5panic
+              (call $_RNvNtCsknUcikIyyBm_4core9panicking5panic
                 (i32.const 43))
               (unreachable))
-            (call $_RNvNtCskGMzdWn1DGZ_4core9panicking5panic
+            (call $_RNvNtCsknUcikIyyBm_4core9panicking5panic
               (i32.const 23))
             (unreachable))
           (local.set 4
@@ -9289,336 +12951,11 @@
         (i32.const 144)))
     (local.get 0)
   )
-  (func $_RNvNtNtCskGMzdWn1DGZ_4core9panicking11panic_const23panic_const_rem_by_zero (;56;) (type 10)
-    (call $_RNvNtCskGMzdWn1DGZ_4core9panicking9panic_fmt)
-    (unreachable)
+  (func $f64_gamma (;73;) (type 1) (param f64) (result f64)
+    (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math6tgamma6tgamma
+      (local.get 0))
   )
-  (func $_RNvNtCskGMzdWn1DGZ_4core9panicking5panic (;57;) (type 11) (param i32)
-    (call $_RNvNtCskGMzdWn1DGZ_4core9panicking9panic_fmt)
-    (unreachable)
-  )
-  (func $libm_fmodf (;58;) (type 3) (param f32 f32) (result f32)
-    (local i32 i32 i32 i32 i32 i32 i32 i32 i64 i64 i64 i64)
-    (block ;; label = @1
-      (block ;; label = @2
-        (block ;; label = @3
-          (block ;; label = @4
-            (block ;; label = @5
-              (block ;; label = @6
-                (br_if 0 (;@6;)
-                  (i32.eq
-                    (i32.and
-                      (local.tee 2
-                        (i32.reinterpret_f32
-                          (local.get 0)))
-                      (i32.const 2139095040))
-                    (i32.const 2139095040)))
-                (br_if 0 (;@6;)
-                  (i32.eqz
-                    (i32.and
-                      (i32.sub
-                        (i32.const 0)
-                        (local.tee 3
-                          (i32.reinterpret_f32
-                            (local.get 1))))
-                      (i32.const 2139095040))))
-                (br_if 5 (;@1;)
-                  (i32.lt_u
-                    (local.tee 4
-                      (i32.and
-                        (local.get 2)
-                        (i32.const 2147483647)))
-                    (local.tee 3
-                      (i32.and
-                        (local.get 3)
-                        (i32.const 2147483647)))))
-                (block ;; label = @7
-                  (br_if 0 (;@7;)
-                    (i32.lt_u
-                      (local.tee 5
-                        (i32.sub
-                          (local.get 4)
-                          (i32.and
-                            (local.tee 6
-                              (select
-                                (i32.const 0)
-                                (local.tee 5
-                                  (i32.add
-                                    (local.get 4)
-                                    (i32.const -8388608)))
-                                (i32.gt_u
-                                  (local.get 5)
-                                  (local.get 4))))
-                            (i32.const 2139095040))))
-                      (local.tee 9
-                        (i32.shl
-                          (local.tee 4
-                            (i32.sub
-                              (local.get 3)
-                              (local.tee 8
-                                (i32.and
-                                  (local.tee 7
-                                    (select
-                                      (i32.const 0)
-                                      (local.tee 4
-                                        (i32.add
-                                          (local.get 3)
-                                          (i32.const -8388608)))
-                                      (i32.gt_u
-                                        (local.get 4)
-                                        (local.get 3))))
-                                  (i32.const 2139095040)))))
-                          (i32.const 1)))))
-                  (br_if 2 (;@5;)
-                    (i32.eq
-                      (local.get 3)
-                      (local.get 8)))
-                  (local.set 5
-                    (i32.rem_u
-                      (local.get 5)
-                      (local.get 4))))
-                (local.set 8
-                  (i32.and
-                    (local.get 2)
-                    (i32.const -2147483648)))
-                (br_if 2 (;@4;)
-                  (i32.ge_u
-                    (local.tee 2
-                      (i32.sub
-                        (i32.shr_u
-                          (local.get 6)
-                          (i32.const 23))
-                        (local.tee 3
-                          (i32.shr_u
-                            (local.get 7)
-                            (i32.const 23)))))
-                    (i32.const 32)))
-                (br_if 2 (;@4;)
-                  (i32.le_u
-                    (local.get 4)
-                    (i32.wrap_i64
-                      (i64.shr_u
-                        (local.tee 10
-                          (i64.shl
-                            (i64.extend_i32_u
-                              (local.get 5))
-                            (i64.extend_i32_u
-                              (local.get 2))))
-                        (i64.const 32)))))
-                (local.set 2
-                  (i32.wrap_i64
-                    (i64.rem_u
-                      (local.get 10)
-                      (i64.extend_i32_u
-                        (local.get 4)))))
-                (br 3 (;@3;)))
-              (return
-                (f32.div
-                  (local.tee 0
-                    (f32.mul
-                      (local.get 0)
-                      (local.get 1)))
-                  (local.get 0))))
-            (call $_RNvNtNtCskGMzdWn1DGZ_4core9panicking11panic_const23panic_const_rem_by_zero)
-            (unreachable))
-          (block ;; label = @4
-            (block ;; label = @5
-              (block ;; label = @6
-                (block ;; label = @7
-                  (block ;; label = @8
-                    (block ;; label = @9
-                      (br_if 0 (;@9;)
-                        (i32.ge_u
-                          (local.get 4)
-                          (i32.const 1073741824)))
-                      (br_if 1 (;@8;)
-                        (i32.ge_u
-                          (local.get 5)
-                          (local.get 9)))
-                      (block ;; label = @10
-                        (br_if 0 (;@10;)
-                          (i32.eqz
-                            (i32.and
-                              (local.get 4)
-                              (local.tee 6
-                                (i32.add
-                                  (local.get 4)
-                                  (i32.const -1))))))
-                        (br_if 3 (;@7;)
-                          (i32.le_u
-                            (local.tee 4
-                              (i32.shl
-                                (local.get 4)
-                                (local.tee 6
-                                  (i32.add
-                                    (i32.clz
-                                      (local.get 4))
-                                    (i32.const -2)))))
-                            (i32.const 536870912)))
-                        (br_if 4 (;@6;)
-                          (i32.ge_u
-                            (local.get 4)
-                            (i32.const 1073741824)))
-                        (br_if 5 (;@5;)
-                          (i32.ge_u
-                            (local.get 5)
-                            (local.tee 7
-                              (i32.shl
-                                (local.get 4)
-                                (i32.const 1)))))
-                        (local.set 10
-                          (i64.mul
-                            (i64.add
-                              (local.tee 13
-                                (i64.div_u
-                                  (local.tee 11
-                                    (i64.shl
-                                      (i64.extend_i32_u
-                                        (i32.sub
-                                          (i32.const -2147483648)
-                                          (local.get 7)))
-                                      (i64.const 32)))
-                                  (local.tee 12
-                                    (i64.extend_i32_u
-                                      (local.get 7)))))
-                              (i64.const 4294967296))
-                            (i64.extend_i32_u
-                              (i32.shl
-                                (local.get 5)
-                                (i32.const 1)))))
-                        (local.set 11
-                          (i64.sub
-                            (local.get 11)
-                            (i64.mul
-                              (local.get 13)
-                              (local.get 12))))
-                        (block ;; label = @11
-                          (br_if 0 (;@11;)
-                            (i32.lt_u
-                              (local.tee 2
-                                (i32.add
-                                  (local.get 6)
-                                  (local.get 2)))
-                              (i32.const 31)))
-                          (loop ;; label = @12
-                            (local.set 10
-                              (i64.add
-                                (i64.mul
-                                  (i64.shr_u
-                                    (local.get 10)
-                                    (i64.const 32))
-                                  (local.get 11))
-                                (i64.and
-                                  (i64.shl
-                                    (local.get 10)
-                                    (i64.const 31))
-                                  (i64.const 9223372032559808512))))
-                            (br_if 0 (;@12;)
-                              (i32.gt_u
-                                (local.tee 2
-                                  (i32.add
-                                    (local.get 2)
-                                    (i32.const -31)))
-                                (i32.const 30)))))
-                        (local.set 2
-                          (i32.shr_u
-                            (i32.sub
-                              (local.tee 2
-                                (i32.wrap_i64
-                                  (i64.shr_u
-                                    (i64.mul
-                                      (i64.add
-                                        (i64.shr_u
-                                          (i64.add
-                                            (i64.mul
-                                              (local.get 11)
-                                              (i64.extend_i32_u
-                                                (i32.shr_u
-                                                  (i32.wrap_i64
-                                                    (i64.shr_u
-                                                      (local.get 10)
-                                                      (i64.const 32)))
-                                                  (i32.xor
-                                                    (local.get 2)
-                                                    (i32.const 31)))))
-                                            (i64.and
-                                              (i64.shl
-                                                (local.get 10)
-                                                (i64.extend_i32_u
-                                                  (local.get 2)))
-                                              (i64.const 9223372036854775807)))
-                                          (i64.const 32))
-                                        (i64.const 2))
-                                      (local.get 12))
-                                    (i64.const 32))))
-                              (select
-                                (i32.const 0)
-                                (local.get 4)
-                                (i32.gt_u
-                                  (local.get 4)
-                                  (local.get 2))))
-                            (local.get 6)))
-                        (br 7 (;@3;)))
-                      (br_if 5 (;@4;)
-                        (i32.lt_u
-                          (local.get 2)
-                          (i32.const 32)))
-                      (br 7 (;@2;)))
-                    (call $_RNvNtCskGMzdWn1DGZ_4core9panicking5panic
-                      (i32.const 34))
-                    (unreachable))
-                  (call $_RNvNtCskGMzdWn1DGZ_4core9panicking5panic
-                    (i32.const 30))
-                  (unreachable))
-                (call $_RNvNtCskGMzdWn1DGZ_4core9panicking5panic
-                  (i32.const 43))
-                (unreachable))
-              (call $_RNvNtCskGMzdWn1DGZ_4core9panicking5panic
-                (i32.const 43))
-              (unreachable))
-            (call $_RNvNtCskGMzdWn1DGZ_4core9panicking5panic
-              (i32.const 23))
-            (unreachable))
-          (local.set 2
-            (i32.and
-              (i32.shl
-                (local.get 5)
-                (local.get 2))
-              (local.get 6))))
-        (br_if 0 (;@2;)
-          (i32.eqz
-            (local.get 2)))
-        (return
-          (f32.reinterpret_i32
-            (i32.add
-              (i32.add
-                (i32.shl
-                  (local.get 2)
-                  (local.tee 4
-                    (select
-                      (local.tee 4
-                        (i32.sub
-                          (i32.const 23)
-                          (i32.xor
-                            (i32.clz
-                              (local.get 2))
-                            (i32.const 31))))
-                      (local.get 3)
-                      (i32.lt_u
-                        (local.get 4)
-                        (local.get 3)))))
-                (local.get 8))
-              (i32.shl
-                (i32.sub
-                  (local.get 3)
-                  (local.get 4))
-                (i32.const 23))))))
-      (local.set 0
-        (f32.reinterpret_i32
-          (local.get 8))))
-    (local.get 0)
-  )
-  (func $libm_hypot (;59;) (type 2) (param f64 f64) (result f64)
+  (func $f64_hypot (;74;) (type 9) (param f64 f64) (result f64)
     (local i64 i64 i64 i64 f64 f64 f64 f64)
     (local.set 1
       (f64.reinterpret_i64
@@ -9712,7 +13049,7 @@
         (local.set 1
           (f64.mul
             (local.get 6)
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4sqrt4sqrt
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math4sqrt4sqrt
               (f64.add
                 (local.tee 7
                   (f64.mul
@@ -9780,110 +13117,15 @@
         (local.get 1)))
     (local.get 0)
   )
-  (func $libm_hypotf (;60;) (type 3) (param f32 f32) (result f32)
-    (local i32 i32 i32 f32 f64)
-    (local.set 1
-      (f32.reinterpret_i32
-        (local.tee 4
-          (select
-            (local.tee 2
-              (i32.and
-                (i32.reinterpret_f32
-                  (local.get 0))
-                (i32.const 2147483647)))
-            (local.tee 3
-              (i32.and
-                (i32.reinterpret_f32
-                  (local.get 1))
-                (i32.const 2147483647)))
-            (i32.lt_u
-              (local.get 2)
-              (local.get 3))))))
-    (block ;; label = @1
-      (br_if 0 (;@1;)
-        (i32.eq
-          (local.get 4)
-          (i32.const 2139095040)))
-      (local.set 0
-        (f32.reinterpret_i32
-          (local.tee 2
-            (select
-              (local.get 2)
-              (local.get 3)
-              (i32.gt_u
-                (local.get 2)
-                (local.get 3))))))
-      (block ;; label = @2
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.gt_u
-              (local.get 2)
-              (i32.const 2139095039)))
-          (br_if 0 (;@3;)
-            (i32.eqz
-              (local.get 4)))
-          (br_if 1 (;@2;)
-            (i32.lt_u
-              (i32.sub
-                (local.get 2)
-                (local.get 4))
-              (i32.const 209715200))))
-        (return
-          (f32.add
-            (local.get 0)
-            (local.get 1))))
-      (block ;; label = @2
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.gt_u
-              (local.get 2)
-              (i32.const 1568669695)))
-          (local.set 5
-            (f32.const 0x1p+0 (;=1;)))
-          (br_if 1 (;@2;)
-            (i32.ge_u
-              (local.get 4)
-              (i32.const 562036736)))
-          (local.set 1
-            (f32.mul
-              (local.get 1)
-              (f32.const 0x1p+90 (;=1237940100000000000000000000;))))
-          (local.set 0
-            (f32.mul
-              (local.get 0)
-              (f32.const 0x1p+90 (;=1237940100000000000000000000;))))
-          (local.set 5
-            (f32.const 0x1p-90 (;=0.0000000000000000000000000008077936;)))
-          (br 1 (;@2;)))
-        (local.set 1
-          (f32.mul
-            (local.get 1)
-            (f32.const 0x1p-90 (;=0.0000000000000000000000000008077936;))))
-        (local.set 0
-          (f32.mul
-            (local.get 0)
-            (f32.const 0x1p-90 (;=0.0000000000000000000000000008077936;))))
-        (local.set 5
-          (f32.const 0x1p+90 (;=1237940100000000000000000000;))))
-      (local.set 1
-        (f32.mul
-          (local.get 5)
-          (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4sqrt5sqrtf
-            (f32.demote_f64
-              (f64.add
-                (f64.mul
-                  (local.tee 6
-                    (f64.promote_f32
-                      (local.get 1)))
-                  (local.get 6))
-                (f64.mul
-                  (local.tee 6
-                    (f64.promote_f32
-                      (local.get 0)))
-                  (local.get 6))))))))
-    (local.get 1)
+  (func $f64_ln (;75;) (type 1) (param f64) (result f64)
+    (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3log3log
+      (local.get 0))
   )
-  (func $libm_lgamma (;61;) (type 0) (param f64) (result f64)
+  (func $f64_ln1p (;76;) (type 1) (param f64) (result f64)
+    (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5log1p5log1p
+      (local.get 0))
+  )
+  (func $f64_ln_gamma (;77;) (type 1) (param f64) (result f64)
     (local i64 i32 f64 f64 i32 f64)
     (block ;; label = @1
       (block ;; label = @2
@@ -9928,7 +13170,7 @@
                                 (local.tee 4
                                   (f64.sub
                                     (local.get 4)
-                                    (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5floor5floor
+                                    (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5floor5floor
                                       (local.get 4))))
                                 (local.get 4)))
                             (f64.mul
@@ -9990,7 +13232,7 @@
                                       (f64.const -0x1.5555555555549p-3 (;=-0.16666666666666632;))))))
                               (br 3 (;@10;)))
                             (local.set 4
-                              (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5k_cos5k_cos
+                              (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5k_cos5k_cos
                                 (local.get 4)
                                 (f64.const 0x0p+0 (;=0;))))
                             (br 2 (;@10;)))
@@ -10033,7 +13275,7 @@
                           (br 1 (;@10;)))
                         (local.set 4
                           (f64.neg
-                            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5k_cos5k_cos
+                            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5k_cos5k_cos
                               (local.get 4)
                               (f64.const 0x0p+0 (;=0;))))))
                       (br_if 3 (;@6;)
@@ -10041,7 +13283,7 @@
                           (local.get 4)
                           (f64.const 0x0p+0 (;=0;))))
                       (local.set 3
-                        (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3log3log
+                        (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3log3log
                           (f64.div
                             (f64.const 0x1.921fb54442d18p+1 (;=3.141592653589793;))
                             (f64.mul
@@ -10082,7 +13324,7 @@
                             (local.get 2)
                             (i32.const 1075838976)))
                         (local.set 6
-                          (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3log3log
+                          (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3log3log
                             (local.get 0)))
                         (br_if 5 (;@5;)
                           (i32.lt_u
@@ -10166,7 +13408,7 @@
                       (local.set 0
                         (f64.add
                           (local.get 0)
-                          (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3log3log
+                          (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3log3log
                             (f64.mul
                               (f64.add
                                 (local.get 4)
@@ -10225,7 +13467,7 @@
                           (br 9 (;@2;)))
                         (local.set 4
                           (f64.neg
-                            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3log3log
+                            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3log3log
                               (local.get 0))))
                         (br_if 1 (;@9;)
                           (i32.le_u
@@ -10264,7 +13506,7 @@
                       (local.get 0))))
                 (return
                   (f64.neg
-                    (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3log3log
+                    (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3log3log
                       (f64.abs
                         (local.get 0))))))
               (return
@@ -10512,7 +13754,7 @@
         (local.get 1)
         (i64.const -1)))
   )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math5floor5floor (;62;) (type 0) (param f64) (result f64)
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math5floor5floor (;78;) (type 1) (param f64) (result f64)
     (local i64 i32 f64 i64 i64)
     (block ;; label = @1
       (br_if 0 (;@1;)
@@ -10577,722 +13819,7 @@
               (local.get 4))))))
     (local.get 3)
   )
-  (func $libm_lgammaf (;63;) (type 1) (param f32) (result f32)
-    (local f32 i32 i32 f32 f32 i32 i32 i32 f64 f64 f64)
-    (block ;; label = @1
-      (block ;; label = @2
-        (br_if 0 (;@2;)
-          (i32.gt_u
-            (local.tee 2
-              (i32.reinterpret_f32
-                (local.tee 1
-                  (f32.abs
-                    (local.get 0)))))
-            (i32.const 2139095039)))
-        (block ;; label = @3
-          (block ;; label = @4
-            (br_if 0 (;@4;)
-              (i32.lt_u
-                (local.get 2)
-                (i32.const 889192448)))
-            (local.set 1
-              (f32.const 0x0p+0 (;=0;)))
-            (br_if 1 (;@3;)
-              (i32.le_s
-                (local.tee 3
-                  (i32.reinterpret_f32
-                    (local.get 0)))
-                (i32.const -1)))
-            (local.set 4
-              (f32.const 0x0p+0 (;=0;)))
-            (br 3 (;@1;)))
-          (return
-            (f32.neg
-              (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4logf4logf
-                (local.get 1)))))
-        (local.set 5
-          (local.tee 4
-            (f32.mul
-              (local.get 0)
-              (f32.const -0x1p-1 (;=-0.5;)))))
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.gt_u
-              (local.tee 7
-                (i32.and
-                  (i32.shr_u
-                    (local.tee 6
-                      (i32.reinterpret_f32
-                        (local.get 4)))
-                    (i32.const 23))
-                  (i32.const 255)))
-              (i32.const 149)))
-          (block ;; label = @4
-            (br_if 0 (;@4;)
-              (i32.gt_u
-                (local.get 7)
-                (i32.const 126)))
-            (local.set 5
-              (select
-                (f32.const 0x0p+0 (;=0;))
-                (f32.const -0x1p+0 (;=-1;))
-                (i32.gt_s
-                  (local.get 6)
-                  (i32.const -1))))
-            (br 1 (;@3;)))
-          (local.set 5
-            (local.get 4))
-          (br_if 0 (;@3;)
-            (i32.eqz
-              (i32.and
-                (local.tee 8
-                  (i32.shr_u
-                    (i32.const 8388607)
-                    (local.tee 7
-                      (i32.add
-                        (local.get 7)
-                        (i32.const -127)))))
-                (local.get 6))))
-          (local.set 5
-            (f32.reinterpret_i32
-              (i32.and
-                (i32.add
-                  (i32.and
-                    (i32.shr_s
-                      (local.get 6)
-                      (i32.const 31))
-                    (local.get 8))
-                  (local.get 6))
-                (i32.shr_s
-                  (i32.const -8388608)
-                  (local.get 7))))))
-        (local.set 9
-          (f64.mul
-            (f64.add
-              (f64.promote_f32
-                (local.tee 4
-                  (f32.add
-                    (local.tee 4
-                      (f32.sub
-                        (local.get 4)
-                        (local.get 5)))
-                    (local.get 4))))
-              (f64.mul
-                (f64.convert_i32_s
-                  (local.tee 6
-                    (i32.div_s
-                      (i32.add
-                        (i32.trunc_sat_f32_s
-                          (f32.mul
-                            (local.get 4)
-                            (f32.const 0x1p+2 (;=4;))))
-                        (i32.const 1))
-                      (i32.const 2))))
-                (f64.const -0x1p-1 (;=-0.5;))))
-            (f64.const 0x1.921fb54442d18p+1 (;=3.141592653589793;))))
-        (block ;; label = @3
-          (block ;; label = @4
-            (block ;; label = @5
-              (block ;; label = @6
-                (block ;; label = @7
-                  (br_table 1 (;@6;) 2 (;@5;) 3 (;@4;) 0 (;@7;)
-                    (i32.add
-                      (local.get 6)
-                      (i32.const -1))))
-                (local.set 4
-                  (f32.demote_f64
-                    (f64.add
-                      (f64.mul
-                        (f64.mul
-                          (local.tee 11
-                            (f64.mul
-                              (local.get 9)
-                              (local.tee 10
-                                (f64.mul
-                                  (local.get 9)
-                                  (local.get 9)))))
-                          (f64.mul
-                            (local.get 10)
-                            (local.get 10)))
-                        (f64.add
-                          (f64.mul
-                            (local.get 10)
-                            (f64.const 0x1.6cd878c3b46a7p-19 (;=0.000002718311493989822;)))
-                          (f64.const -0x1.a00f9e2cae774p-13 (;=-0.00019839334836096632;))))
-                      (f64.add
-                        (local.get 9)
-                        (f64.mul
-                          (local.get 11)
-                          (f64.add
-                            (f64.mul
-                              (local.get 10)
-                              (f64.const 0x1.11110896efbb2p-7 (;=0.008333329385889463;)))
-                            (f64.const -0x1.5555554cbac77p-3 (;=-0.16666666641626524;))))))))
-                (br 3 (;@3;)))
-              (local.set 4
-                (f32.demote_f64
-                  (f64.add
-                    (f64.add
-                      (f64.add
-                        (f64.mul
-                          (local.tee 9
-                            (f64.mul
-                              (local.get 9)
-                              (local.get 9)))
-                          (f64.const -0x1.ffffffd0c5e81p-2 (;=-0.499999997251031;)))
-                        (f64.const 0x1p+0 (;=1;)))
-                      (f64.mul
-                        (local.tee 10
-                          (f64.mul
-                            (local.get 9)
-                            (local.get 9)))
-                        (f64.const 0x1.55553e1053a42p-5 (;=0.04166662332373906;))))
-                    (f64.mul
-                      (f64.mul
-                        (local.get 9)
-                        (local.get 10))
-                      (f64.add
-                        (f64.mul
-                          (local.get 9)
-                          (f64.const 0x1.99342e0ee5069p-16 (;=0.00002439044879627741;)))
-                        (f64.const -0x1.6c087e80f1e27p-10 (;=-0.001388676377460993;)))))))
-              (br 2 (;@3;)))
-            (local.set 4
-              (f32.demote_f64
-                (f64.add
-                  (f64.mul
-                    (f64.mul
-                      (local.tee 11
-                        (f64.mul
-                          (local.tee 10
-                            (f64.mul
-                              (local.get 9)
-                              (local.get 9)))
-                          (f64.neg
-                            (local.get 9))))
-                      (f64.mul
-                        (local.get 10)
-                        (local.get 10)))
-                    (f64.add
-                      (f64.mul
-                        (local.get 10)
-                        (f64.const 0x1.6cd878c3b46a7p-19 (;=0.000002718311493989822;)))
-                      (f64.const -0x1.a00f9e2cae774p-13 (;=-0.00019839334836096632;))))
-                  (f64.sub
-                    (f64.mul
-                      (local.get 11)
-                      (f64.add
-                        (f64.mul
-                          (local.get 10)
-                          (f64.const 0x1.11110896efbb2p-7 (;=0.008333329385889463;)))
-                        (f64.const -0x1.5555554cbac77p-3 (;=-0.16666666641626524;))))
-                    (local.get 9)))))
-            (br 1 (;@3;)))
-          (local.set 4
-            (f32.neg
-              (f32.demote_f64
-                (f64.add
-                  (f64.add
-                    (f64.add
-                      (f64.mul
-                        (local.tee 9
-                          (f64.mul
-                            (local.get 9)
-                            (local.get 9)))
-                        (f64.const -0x1.ffffffd0c5e81p-2 (;=-0.499999997251031;)))
-                      (f64.const 0x1p+0 (;=1;)))
-                    (f64.mul
-                      (local.tee 10
-                        (f64.mul
-                          (local.get 9)
-                          (local.get 9)))
-                      (f64.const 0x1.55553e1053a42p-5 (;=0.04166662332373906;))))
-                  (f64.mul
-                    (f64.mul
-                      (local.get 9)
-                      (local.get 10))
-                    (f64.add
-                      (f64.mul
-                        (local.get 9)
-                        (f64.const 0x1.99342e0ee5069p-16 (;=0.00002439044879627741;)))
-                      (f64.const -0x1.6c087e80f1e27p-10 (;=-0.001388676377460993;)))))))))
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (f32.eq
-              (local.get 4)
-              (f32.const 0x0p+0 (;=0;))))
-          (local.set 4
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4logf4logf
-              (f32.div
-                (f32.const 0x1.921fb6p+1 (;=3.1415927;))
-                (f32.mul
-                  (select
-                    (local.get 4)
-                    (f32.neg
-                      (local.get 4))
-                    (f32.gt
-                      (local.get 4)
-                      (f32.const 0x0p+0 (;=0;))))
-                  (local.tee 0
-                    (f32.neg
-                      (local.get 0)))))))
-          (br 2 (;@1;)))
-        (return
-          (f32.div
-            (f32.const 0x1p+0 (;=1;))
-            (f32.sub
-              (local.get 0)
-              (local.get 0)))))
-      (return
-        (f32.mul
-          (local.get 0)
-          (local.get 0))))
-    (block ;; label = @1
-      (br_if 0 (;@1;)
-        (i32.eq
-          (local.get 2)
-          (i32.const 1065353216)))
-      (br_if 0 (;@1;)
-        (i32.eq
-          (local.get 2)
-          (i32.const 1073741824)))
-      (block ;; label = @2
-        (br_if 0 (;@2;)
-          (i32.lt_u
-            (local.get 2)
-            (i32.const 1073741824)))
-        (block ;; label = @3
-          (block ;; label = @4
-            (block ;; label = @5
-              (br_if 0 (;@5;)
-                (i32.lt_u
-                  (local.get 2)
-                  (i32.const 1090519040)))
-              (local.set 5
-                (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4logf4logf
-                  (local.get 0)))
-              (br_if 1 (;@4;)
-                (i32.lt_u
-                  (local.get 2)
-                  (i32.const 1551892480)))
-              (local.set 1
-                (f32.mul
-                  (local.get 0)
-                  (f32.add
-                    (local.get 5)
-                    (f32.const -0x1p+0 (;=-1;)))))
-              (br 4 (;@1;)))
-            (local.set 1
-              (f32.add
-                (f32.mul
-                  (local.tee 0
-                    (f32.sub
-                      (local.get 0)
-                      (f32.convert_i32_s
-                        (local.tee 2
-                          (i32.trunc_sat_f32_s
-                            (local.get 0))))))
-                  (f32.const 0x1p-1 (;=0.5;)))
-                (f32.div
-                  (f32.mul
-                    (local.get 0)
-                    (f32.add
-                      (f32.mul
-                        (local.get 0)
-                        (f32.add
-                          (f32.mul
-                            (local.get 0)
-                            (f32.add
-                              (f32.mul
-                                (local.get 0)
-                                (f32.add
-                                  (f32.mul
-                                    (local.get 0)
-                                    (f32.add
-                                      (f32.mul
-                                        (local.get 0)
-                                        (f32.add
-                                          (f32.mul
-                                            (local.get 0)
-                                            (f32.const 0x1.0bfecep-15 (;=0.000031947533;)))
-                                          (f32.const 0x1.e26b68p-10 (;=0.0018402846;))))
-                                      (f32.const 0x1.b481c8p-6 (;=0.02664227;))))
-                                  (f32.const 0x1.2bb9ccp-3 (;=0.14635047;))))
-                              (f32.const 0x1.4d98f4p-2 (;=0.32577878;))))
-                          (f32.const 0x1.b848b4p-3 (;=0.21498242;))))
-                      (f32.const -0x1.3c467ep-4 (;=-0.077215664;))))
-                  (f32.add
-                    (f32.mul
-                      (local.get 0)
-                      (f32.add
-                        (f32.mul
-                          (local.get 0)
-                          (f32.add
-                            (f32.mul
-                              (local.get 0)
-                              (f32.add
-                                (f32.mul
-                                  (local.get 0)
-                                  (f32.add
-                                    (f32.mul
-                                      (local.get 0)
-                                      (f32.add
-                                        (f32.mul
-                                          (local.get 0)
-                                          (f32.const 0x1.ebaf7ap-18 (;=0.000007326684;)))
-                                        (f32.const 0x1.97ddacp-11 (;=0.0007779425;))))
-                                    (f32.const 0x1.317ea8p-6 (;=0.01864592;))))
-                                (f32.const 0x1.601edcp-3 (;=0.17193386;))))
-                            (f32.const 0x1.71a18ap-1 (;=0.7219356;))))
-                        (f32.const 0x1.645a76p+0 (;=1.3920053;))))
-                    (f32.const 0x1p+0 (;=1;))))))
-            (br_if 1 (;@3;)
-              (i32.gt_s
-                (local.get 2)
-                (i32.const 2)))
-            (br 3 (;@1;)))
-          (local.set 1
-            (f32.add
-              (f32.add
-                (f32.mul
-                  (local.tee 1
-                    (f32.div
-                      (f32.const 0x1p+0 (;=1;))
-                      (local.get 0)))
-                  (f32.add
-                    (f32.mul
-                      (local.tee 1
-                        (f32.mul
-                          (local.get 1)
-                          (local.get 1)))
-                      (f32.add
-                        (f32.mul
-                          (local.get 1)
-                          (f32.add
-                            (f32.mul
-                              (local.get 1)
-                              (f32.add
-                                (f32.mul
-                                  (local.get 1)
-                                  (f32.add
-                                    (f32.mul
-                                      (local.get 1)
-                                      (f32.const -0x1.ab89dp-10 (;=-0.0016309293;)))
-                                    (f32.const 0x1.b67ba4p-11 (;=0.0008363399;))))
-                                (f32.const -0x1.380cb8p-11 (;=-0.00059518754;))))
-                            (f32.const 0x1.a019fap-11 (;=0.0007936506;))))
-                        (f32.const -0x1.6c16c2p-9 (;=-0.0027777778;))))
-                    (f32.const 0x1.555556p-4 (;=0.083333336;))))
-                (f32.const 0x1.acfe3ap-2 (;=0.41893855;)))
-              (f32.mul
-                (f32.add
-                  (local.get 0)
-                  (f32.const -0x1p-1 (;=-0.5;)))
-                (f32.add
-                  (local.get 5)
-                  (f32.const -0x1p+0 (;=-1;))))))
-          (br 2 (;@1;)))
-        (local.set 1
-          (f32.add
-            (local.get 1)
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4logf4logf
-              (f32.mul
-                (f32.add
-                  (local.get 0)
-                  (f32.const 0x1p+1 (;=2;)))
-                (select
-                  (f32.const 0x1p+0 (;=1;))
-                  (f32.mul
-                    (f32.add
-                      (local.get 0)
-                      (f32.const 0x1.8p+1 (;=3;)))
-                    (select
-                      (f32.mul
-                        (f32.add
-                          (local.get 0)
-                          (f32.const 0x1p+2 (;=4;)))
-                        (select
-                          (f32.mul
-                            (f32.add
-                              (local.get 0)
-                              (f32.const 0x1.4p+2 (;=5;)))
-                            (select
-                              (f32.add
-                                (local.get 0)
-                                (f32.const 0x1.8p+2 (;=6;)))
-                              (f32.const 0x1p+0 (;=1;))
-                              (i32.gt_u
-                                (local.get 2)
-                                (i32.const 6))))
-                          (f32.const 0x1p+0 (;=1;))
-                          (i32.gt_u
-                            (local.get 2)
-                            (i32.const 5))))
-                      (f32.const 0x1p+0 (;=1;))
-                      (i32.gt_u
-                        (local.get 2)
-                        (i32.const 4))))
-                  (i32.eq
-                    (local.get 2)
-                    (i32.const 3)))))))
-        (br 1 (;@1;)))
-      (block ;; label = @2
-        (block ;; label = @3
-          (block ;; label = @4
-            (block ;; label = @5
-              (block ;; label = @6
-                (block ;; label = @7
-                  (br_if 0 (;@7;)
-                    (i32.lt_u
-                      (local.get 2)
-                      (i32.const 1063675495)))
-                  (br_if 1 (;@6;)
-                    (i32.le_u
-                      (local.get 2)
-                      (i32.const 1071490583)))
-                  (local.set 5
-                    (f32.const 0x1p+1 (;=2;)))
-                  (local.set 1
-                    (f32.const 0x0p+0 (;=0;)))
-                  (br 5 (;@2;)))
-                (local.set 1
-                  (f32.neg
-                    (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4logf4logf
-                      (local.get 0))))
-                (br_if 1 (;@5;)
-                  (i32.le_u
-                    (local.get 2)
-                    (i32.const 1060850207)))
-                (local.set 5
-                  (f32.const 0x1p+0 (;=1;)))
-                (br 4 (;@2;)))
-              (block ;; label = @6
-                (br_if 0 (;@6;)
-                  (i32.le_u
-                    (local.get 2)
-                    (i32.const 1067296287)))
-                (local.set 1
-                  (f32.const 0x0p+0 (;=0;)))
-                (local.set 5
-                  (f32.const -0x1.762d86p+0 (;=-1.4616321;)))
-                (br 3 (;@3;)))
-              (local.set 0
-                (f32.add
-                  (local.get 0)
-                  (f32.const -0x1p+0 (;=-1;))))
-              (local.set 1
-                (f32.const 0x0p+0 (;=0;)))
-              (br 1 (;@4;)))
-            (br_if 0 (;@4;)
-              (i32.le_u
-                (local.get 2)
-                (i32.const 1047343879)))
-            (local.set 5
-              (f32.const -0x1.d8b618p-2 (;=-0.46163213;)))
-            (br 1 (;@3;)))
-          (local.set 1
-            (f32.add
-              (local.get 1)
-              (f32.add
-                (f32.div
-                  (f32.mul
-                    (local.get 0)
-                    (f32.add
-                      (f32.mul
-                        (local.get 0)
-                        (f32.add
-                          (f32.mul
-                            (local.get 0)
-                            (f32.add
-                              (f32.mul
-                                (local.get 0)
-                                (f32.add
-                                  (f32.mul
-                                    (local.get 0)
-                                    (f32.add
-                                      (f32.mul
-                                        (local.get 0)
-                                        (f32.const 0x1.b678bcp-7 (;=0.013381092;)))
-                                      (f32.const 0x1.d4eafp-3 (;=0.22896373;))))
-                                  (f32.const 0x1.f49764p-1 (;=0.9777175;))))
-                              (f32.const 0x1.7475cep+0 (;=1.4549226;))))
-                          (f32.const 0x1.4401e8p-1 (;=0.63282704;))))
-                      (f32.const -0x1.3c467ep-4 (;=-0.077215664;))))
-                  (f32.add
-                    (f32.mul
-                      (local.get 0)
-                      (f32.add
-                        (f32.mul
-                          (local.get 0)
-                          (f32.add
-                            (f32.mul
-                              (local.get 0)
-                              (f32.add
-                                (f32.mul
-                                  (local.get 0)
-                                  (f32.add
-                                    (f32.mul
-                                      (local.get 0)
-                                      (f32.const 0x1.a5abb6p-9 (;=0.0032170925;)))
-                                    (f32.const 0x1.aae55ep-4 (;=0.10422265;))))
-                                (f32.const 0x1.89dfbep-1 (;=0.76928514;))))
-                            (f32.const 0x1.10725ap+1 (;=2.1284897;))))
-                        (f32.const 0x1.3a5d7cp+1 (;=2.455978;))))
-                    (f32.const 0x1p+0 (;=1;))))
-                (f32.mul
-                  (local.get 0)
-                  (f32.const -0x1p-1 (;=-0.5;))))))
-          (br 2 (;@1;)))
-        (local.set 1
-          (f32.add
-            (local.get 1)
-            (f32.add
-              (f32.sub
-                (f32.mul
-                  (local.tee 0
-                    (f32.mul
-                      (local.tee 5
-                        (f32.add
-                          (local.get 0)
-                          (local.get 5)))
-                      (local.get 5)))
-                  (f32.add
-                    (f32.mul
-                      (local.tee 0
-                        (f32.mul
-                          (local.get 5)
-                          (local.get 0)))
-                      (f32.add
-                        (f32.mul
-                          (local.get 0)
-                          (f32.add
-                            (f32.mul
-                              (local.get 0)
-                              (f32.add
-                                (f32.mul
-                                  (local.get 0)
-                                  (f32.const 0x1.4af6d6p-12 (;=0.00031563206;)))
-                                (f32.const -0x1.6fe8ecp-10 (;=-0.0014034647;))))
-                            (f32.const 0x1.8fce0ep-8 (;=0.0061005387;))))
-                        (f32.const -0x1.0c9a8ep-5 (;=-0.03278854;))))
-                    (f32.const 0x1.ef72bcp-2 (;=0.4838361;))))
-                (f32.sub
-                  (f32.const 0x1.cc38a4p-28 (;=0.0000000066971007;))
-                  (f32.mul
-                    (local.get 0)
-                    (f32.add
-                      (f32.add
-                        (f32.mul
-                          (local.get 0)
-                          (f32.add
-                            (f32.mul
-                              (local.get 0)
-                              (f32.add
-                                (f32.mul
-                                  (local.get 0)
-                                  (f32.add
-                                    (f32.mul
-                                      (local.get 0)
-                                      (f32.const -0x1.47f24ep-12 (;=-0.00031275416;)))
-                                    (f32.const 0x1.cdf0cep-11 (;=0.00088108185;))))
-                                (f32.const -0x1.e2effcp-9 (;=-0.0036845203;))))
-                            (f32.const 0x1.266e7ap-6 (;=0.017970676;))))
-                        (f32.const -0x1.2e4278p-3 (;=-0.14758772;)))
-                      (f32.mul
-                        (local.get 5)
-                        (f32.add
-                          (f32.mul
-                            (local.get 0)
-                            (f32.add
-                              (f32.mul
-                                (local.get 0)
-                                (f32.add
-                                  (f32.mul
-                                    (local.get 0)
-                                    (f32.add
-                                      (f32.mul
-                                        (local.get 0)
-                                        (f32.const 0x1.5fd3eep-12 (;=0.00033552918;)))
-                                      (f32.const -0x1.1a610ap-11 (;=-0.0005385953;))))
-                                  (f32.const 0x1.282d32p-9 (;=0.0022596477;))))
-                              (f32.const -0x1.51f9fcp-7 (;=-0.010314224;))))
-                          (f32.const 0x1.08b42ap-4 (;=0.06462494;))))))))
-              (f32.const -0x1.f19b9ap-4 (;=-0.121486284;)))))
-        (br 1 (;@1;)))
-      (local.set 1
-        (f32.add
-          (local.get 1)
-          (f32.add
-            (f32.add
-              (f32.mul
-                (local.tee 5
-                  (f32.sub
-                    (local.get 5)
-                    (local.get 0)))
-                (f32.add
-                  (f32.mul
-                    (local.tee 0
-                      (f32.mul
-                        (local.get 5)
-                        (local.get 5)))
-                    (f32.add
-                      (f32.mul
-                        (local.get 0)
-                        (f32.add
-                          (f32.mul
-                            (local.get 0)
-                            (f32.add
-                              (f32.mul
-                                (local.get 0)
-                                (f32.add
-                                  (f32.mul
-                                    (local.get 0)
-                                    (f32.const 0x1.a70744p-16 (;=0.000025214456;)))
-                                  (f32.const 0x1.cf2ecep-13 (;=0.00022086278;))))
-                              (f32.const 0x1.38a942p-10 (;=0.0011927077;))))
-                          (f32.const 0x1.e404fcp-8 (;=0.007385551;))))
-                      (f32.const 0x1.13e002p-4 (;=0.0673523;))))
-                  (f32.const 0x1.3c467ep-4 (;=0.077215664;))))
-              (f32.mul
-                (local.get 0)
-                (f32.add
-                  (f32.mul
-                    (local.get 0)
-                    (f32.add
-                      (f32.mul
-                        (local.get 0)
-                        (f32.add
-                          (f32.mul
-                            (local.get 0)
-                            (f32.add
-                              (f32.mul
-                                (local.get 0)
-                                (f32.add
-                                  (f32.mul
-                                    (local.get 0)
-                                    (f32.const 0x1.7858eap-15 (;=0.000044864097;)))
-                                  (f32.const 0x1.c5088ap-14 (;=0.00010801157;))))
-                              (f32.const 0x1.0b6c68p-11 (;=0.0005100698;))))
-                          (f32.const 0x1.7add8cp-9 (;=0.0028905137;))))
-                      (f32.const 0x1.51322ap-6 (;=0.020580808;))))
-                  (f32.const 0x1.4a34ccp-2 (;=0.32246703;)))))
-            (f32.mul
-              (local.get 5)
-              (f32.const -0x1p-1 (;=-0.5;)))))))
-    (select
-      (local.get 1)
-      (f32.sub
-        (local.get 4)
-        (local.get 1))
-      (i32.gt_s
-        (local.get 3)
-        (i32.const -1)))
-  )
-  (func $libm_log (;64;) (type 0) (param f64) (result f64)
-    (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3log3log
-      (local.get 0))
-  )
-  (func $libm_log10 (;65;) (type 0) (param f64) (result f64)
+  (func $f64_log10 (;79;) (type 1) (param f64) (result f64)
     (local i64 i32 i64 i32 f64 f64 f64 f64 f64 f64)
     (block ;; label = @1
       (block ;; label = @2
@@ -11478,158 +14005,7 @@
           (f64.const 0x0p+0 (;=0;)))))
     (local.get 0)
   )
-  (func $libm_log10f (;66;) (type 1) (param f32) (result f32)
-    (local i32 i32 f32 f32 f32)
-    (block ;; label = @1
-      (block ;; label = @2
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.lt_s
-              (local.tee 1
-                (i32.reinterpret_f32
-                  (local.get 0)))
-              (i32.const 8388608)))
-          (br_if 1 (;@2;)
-            (i32.gt_u
-              (local.get 1)
-              (i32.const 2139095039)))
-          (local.set 2
-            (i32.const -127))
-          (local.set 0
-            (f32.const 0x0p+0 (;=0;)))
-          (br_if 1 (;@2;)
-            (i32.eq
-              (local.get 1)
-              (i32.const 1065353216)))
-          (br 2 (;@1;)))
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (f32.ne
-              (local.get 0)
-              (f32.const 0x0p+0 (;=0;))))
-          (return
-            (f32.div
-              (f32.const -0x1p+0 (;=-1;))
-              (f32.mul
-                (local.get 0)
-                (local.get 0)))))
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.lt_s
-              (local.get 1)
-              (i32.const 0)))
-          (local.set 1
-            (i32.reinterpret_f32
-              (f32.mul
-                (local.get 0)
-                (f32.const 0x1p+25 (;=33554432;)))))
-          (local.set 2
-            (i32.const -152))
-          (br 2 (;@1;)))
-        (local.set 0
-          (f32.div
-            (f32.sub
-              (local.get 0)
-              (local.get 0))
-            (f32.const 0x0p+0 (;=0;)))))
-      (return
-        (local.get 0)))
-    (f32.add
-      (f32.mul
-        (local.tee 3
-          (f32.convert_i32_s
-            (i32.add
-              (local.get 2)
-              (i32.shr_u
-                (local.tee 1
-                  (i32.add
-                    (local.get 1)
-                    (i32.const 4913933)))
-                (i32.const 23)))))
-        (f32.const 0x1.3441p-2 (;=0.3010292;)))
-      (f32.add
-        (f32.mul
-          (local.tee 5
-            (f32.reinterpret_i32
-              (i32.and
-                (i32.reinterpret_f32
-                  (f32.sub
-                    (local.tee 0
-                      (f32.add
-                        (f32.reinterpret_i32
-                          (i32.add
-                            (i32.and
-                              (local.get 1)
-                              (i32.const 8388607))
-                            (i32.const 1060439283)))
-                        (f32.const -0x1p+0 (;=-1;))))
-                    (local.tee 4
-                      (f32.mul
-                        (local.get 0)
-                        (f32.mul
-                          (local.get 0)
-                          (f32.const 0x1p-1 (;=0.5;)))))))
-                (i32.const -4096))))
-          (f32.const 0x1.bccp-2 (;=0.43432617;)))
-        (f32.add
-          (f32.mul
-            (local.tee 0
-              (f32.add
-                (f32.sub
-                  (f32.sub
-                    (local.get 0)
-                    (local.get 5))
-                  (local.get 4))
-                (f32.mul
-                  (local.tee 0
-                    (f32.div
-                      (local.get 0)
-                      (f32.add
-                        (local.get 0)
-                        (f32.const 0x1p+1 (;=2;)))))
-                  (f32.add
-                    (local.get 4)
-                    (f32.add
-                      (f32.mul
-                        (local.tee 0
-                          (f32.mul
-                            (local.get 0)
-                            (local.get 0)))
-                        (f32.add
-                          (f32.mul
-                            (local.tee 0
-                              (f32.mul
-                                (local.get 0)
-                                (local.get 0)))
-                            (f32.const 0x1.23d3dcp-2 (;=0.28498787;)))
-                          (f32.const 0x1.555554p-1 (;=0.6666666;))))
-                      (f32.mul
-                        (local.get 0)
-                        (f32.add
-                          (f32.mul
-                            (local.get 0)
-                            (f32.const 0x1.f13c4cp-3 (;=0.24279079;)))
-                          (f32.const 0x1.999c26p-2 (;=0.40000972;)))))))))
-            (f32.const 0x1.bccp-2 (;=0.43432617;)))
-          (f32.add
-            (f32.mul
-              (local.get 3)
-              (f32.const 0x1.a84fb6p-21 (;=0.0000007903415;)))
-            (f32.mul
-              (f32.add
-                (local.get 0)
-                (local.get 5))
-              (f32.const -0x1.09d5b2p-15 (;=-0.00003168997;)))))))
-  )
-  (func $libm_log1p (;67;) (type 0) (param f64) (result f64)
-    (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5log1p5log1p
-      (local.get 0))
-  )
-  (func $libm_log1pf (;68;) (type 1) (param f32) (result f32)
-    (call $_RNvNtNtCs5s8uptHhuCz_4libm4math6log1pf6log1pf
-      (local.get 0))
-  )
-  (func $libm_log2 (;69;) (type 0) (param f64) (result f64)
+  (func $f64_log2 (;80;) (type 1) (param f64) (result f64)
     (local i64 i32 i64 i32 f64 f64 f64 f64 f64)
     (block ;; label = @1
       (block ;; label = @2
@@ -11808,972 +14184,18 @@
           (f64.const 0x0p+0 (;=0;)))))
     (local.get 0)
   )
-  (func $libm_log2f (;70;) (type 1) (param f32) (result f32)
-    (local i32 i32 f32 f32)
-    (block ;; label = @1
-      (block ;; label = @2
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.lt_s
-              (local.tee 1
-                (i32.reinterpret_f32
-                  (local.get 0)))
-              (i32.const 8388608)))
-          (br_if 1 (;@2;)
-            (i32.gt_u
-              (local.get 1)
-              (i32.const 2139095039)))
-          (local.set 2
-            (i32.const -127))
-          (local.set 0
-            (f32.const 0x0p+0 (;=0;)))
-          (br_if 1 (;@2;)
-            (i32.eq
-              (local.get 1)
-              (i32.const 1065353216)))
-          (br 2 (;@1;)))
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (f32.ne
-              (local.get 0)
-              (f32.const 0x0p+0 (;=0;))))
-          (return
-            (f32.div
-              (f32.const -0x1p+0 (;=-1;))
-              (f32.mul
-                (local.get 0)
-                (local.get 0)))))
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.lt_s
-              (local.get 1)
-              (i32.const 0)))
-          (local.set 1
-            (i32.reinterpret_f32
-              (f32.mul
-                (local.get 0)
-                (f32.const 0x1p+25 (;=33554432;)))))
-          (local.set 2
-            (i32.const -152))
-          (br 2 (;@1;)))
-        (local.set 0
-          (f32.div
-            (f32.sub
-              (local.get 0)
-              (local.get 0))
-            (f32.const 0x0p+0 (;=0;)))))
-      (return
-        (local.get 0)))
-    (f32.add
-      (f32.add
-        (f32.mul
-          (local.tee 4
-            (f32.reinterpret_i32
-              (i32.and
-                (i32.reinterpret_f32
-                  (f32.sub
-                    (local.tee 0
-                      (f32.add
-                        (f32.reinterpret_i32
-                          (i32.add
-                            (i32.and
-                              (local.tee 1
-                                (i32.add
-                                  (local.get 1)
-                                  (i32.const 4913933)))
-                              (i32.const 8388607))
-                            (i32.const 1060439283)))
-                        (f32.const -0x1p+0 (;=-1;))))
-                    (local.tee 3
-                      (f32.mul
-                        (local.get 0)
-                        (f32.mul
-                          (local.get 0)
-                          (f32.const 0x1p-1 (;=0.5;)))))))
-                (i32.const -4096))))
-          (f32.const 0x1.716p+0 (;=1.4428711;)))
-        (f32.add
-          (f32.mul
-            (local.tee 0
-              (f32.add
-                (f32.sub
-                  (f32.sub
-                    (local.get 0)
-                    (local.get 4))
-                  (local.get 3))
-                (f32.mul
-                  (local.tee 0
-                    (f32.div
-                      (local.get 0)
-                      (f32.add
-                        (local.get 0)
-                        (f32.const 0x1p+1 (;=2;)))))
-                  (f32.add
-                    (local.get 3)
-                    (f32.add
-                      (f32.mul
-                        (local.tee 0
-                          (f32.mul
-                            (local.get 0)
-                            (local.get 0)))
-                        (f32.add
-                          (f32.mul
-                            (local.tee 0
-                              (f32.mul
-                                (local.get 0)
-                                (local.get 0)))
-                            (f32.const 0x1.23d3dcp-2 (;=0.28498787;)))
-                          (f32.const 0x1.555554p-1 (;=0.6666666;))))
-                      (f32.mul
-                        (local.get 0)
-                        (f32.add
-                          (f32.mul
-                            (local.get 0)
-                            (f32.const 0x1.f13c4cp-3 (;=0.24279079;)))
-                          (f32.const 0x1.999c26p-2 (;=0.40000972;)))))))))
-            (f32.const 0x1.716p+0 (;=1.4428711;)))
-          (f32.mul
-            (f32.add
-              (local.get 0)
-              (local.get 4))
-            (f32.const -0x1.7135a8p-13 (;=-0.00017605285;)))))
-      (f32.convert_i32_s
-        (i32.add
-          (local.get 2)
-          (i32.shr_u
-            (local.get 1)
-            (i32.const 23)))))
+  (func $f64_mul_add (;81;) (type 10) (param f64 f64 f64) (result f64)
+    (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3fma3fma
+      (local.get 0)
+      (local.get 1)
+      (local.get 2))
   )
-  (func $libm_logf (;71;) (type 1) (param f32) (result f32)
-    (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4logf4logf
-      (local.get 0))
-  )
-  (func $libm_pow (;72;) (type 2) (param f64 f64) (result f64)
-    (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3pow3pow
+  (func $f64_pow (;82;) (type 9) (param f64 f64) (result f64)
+    (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3pow3pow
       (local.get 0)
       (local.get 1))
   )
-  (func $libm_powf (;73;) (type 3) (param f32 f32) (result f32)
-    (local f32 i32 i32 i32 f32 i32 i32 i32 i32 f32 f32 f32)
-    (local.set 2
-      (f32.const 0x1p+0 (;=1;)))
-    (block ;; label = @1
-      (block ;; label = @2
-        (block ;; label = @3
-          (block ;; label = @4
-            (br_if 0 (;@4;)
-              (i32.eq
-                (local.tee 3
-                  (i32.reinterpret_f32
-                    (local.get 0)))
-                (i32.const 1065353216)))
-            (br_if 0 (;@4;)
-              (i32.eqz
-                (local.tee 5
-                  (i32.and
-                    (local.tee 4
-                      (i32.reinterpret_f32
-                        (local.get 1)))
-                    (i32.const 2147483647)))))
-            (block ;; label = @5
-              (block ;; label = @6
-                (block ;; label = @7
-                  (br_if 0 (;@7;)
-                    (i32.gt_u
-                      (local.tee 7
-                        (i32.reinterpret_f32
-                          (local.tee 6
-                            (f32.abs
-                              (local.get 0)))))
-                      (i32.const 2139095040)))
-                  (br_if 0 (;@7;)
-                    (i32.gt_u
-                      (local.get 5)
-                      (i32.const 2139095040)))
-                  (br_if 1 (;@6;)
-                    (i32.ge_s
-                      (local.get 3)
-                      (i32.const 0)))
-                  (local.set 8
-                    (i32.const 2))
-                  (br_if 2 (;@5;)
-                    (i32.gt_u
-                      (local.get 5)
-                      (i32.const 1266679807)))
-                  (br_if 1 (;@6;)
-                    (i32.lt_u
-                      (local.get 5)
-                      (i32.const 1065353216)))
-                  (local.set 8
-                    (i32.const 0))
-                  (br_if 2 (;@5;)
-                    (i32.ne
-                      (i32.shl
-                        (local.tee 10
-                          (i32.shr_u
-                            (local.get 5)
-                            (local.tee 9
-                              (i32.sub
-                                (i32.const 150)
-                                (i32.shr_u
-                                  (local.get 5)
-                                  (i32.const 23))))))
-                        (local.get 9))
-                      (local.get 5)))
-                  (local.set 8
-                    (i32.sub
-                      (i32.const 2)
-                      (i32.and
-                        (local.get 10)
-                        (i32.const 1))))
-                  (br 2 (;@5;)))
-                (return
-                  (f32.add
-                    (local.get 0)
-                    (local.get 1))))
-              (local.set 8
-                (i32.const 0)))
-            (block ;; label = @5
-              (block ;; label = @6
-                (br_if 0 (;@6;)
-                  (i32.eq
-                    (local.get 5)
-                    (i32.const 1065353216)))
-                (br_if 1 (;@5;)
-                  (i32.ne
-                    (local.get 5)
-                    (i32.const 2139095040)))
-                (block ;; label = @7
-                  (block ;; label = @8
-                    (br_table 4 (;@4;) 1 (;@7;) 0 (;@8;)
-                      (i32.and
-                        (i32.sub
-                          (i32.gt_s
-                            (local.get 7)
-                            (i32.const 1065353216))
-                          (i32.lt_s
-                            (local.get 7)
-                            (i32.const 1065353216)))
-                        (i32.const 255))))
-                  (return
-                    (select
-                      (f32.const 0x0p+0 (;=0;))
-                      (f32.neg
-                        (local.get 1))
-                      (i32.gt_s
-                        (local.get 4)
-                        (i32.const -1)))))
-                (return
-                  (select
-                    (local.get 1)
-                    (f32.const 0x0p+0 (;=0;))
-                    (i32.gt_s
-                      (local.get 4)
-                      (i32.const -1)))))
-              (br_if 2 (;@3;)
-                (i32.le_s
-                  (local.get 4)
-                  (i32.const -1)))
-              (return
-                (local.get 0)))
-            (block ;; label = @5
-              (block ;; label = @6
-                (br_if 0 (;@6;)
-                  (i32.eq
-                    (local.get 4)
-                    (i32.const 1056964608)))
-                (br_if 1 (;@5;)
-                  (i32.ne
-                    (local.get 4)
-                    (i32.const 1073741824)))
-                (return
-                  (f32.mul
-                    (local.get 0)
-                    (local.get 0))))
-              (br_if 3 (;@2;)
-                (i32.gt_s
-                  (local.get 3)
-                  (i32.const -1))))
-            (block ;; label = @5
-              (block ;; label = @6
-                (block ;; label = @7
-                  (block ;; label = @8
-                    (block ;; label = @9
-                      (block ;; label = @10
-                        (br_if 0 (;@10;)
-                          (i32.eq
-                            (i32.and
-                              (local.get 3)
-                              (i32.const 1073741823))
-                            (i32.const 1065353216)))
-                        (br_if 1 (;@9;)
-                          (local.get 7)))
-                      (local.set 2
-                        (select
-                          (f32.div
-                            (f32.const 0x1p+0 (;=1;))
-                            (local.get 6))
-                          (local.get 6)
-                          (i32.lt_s
-                            (local.get 4)
-                            (i32.const 0))))
-                      (br_if 5 (;@4;)
-                        (i32.ge_s
-                          (local.get 3)
-                          (i32.const 0)))
-                      (br_if 1 (;@8;)
-                        (i32.or
-                          (local.get 8)
-                          (i32.add
-                            (local.get 7)
-                            (i32.const -1065353216))))
-                      (return
-                        (f32.div
-                          (local.tee 0
-                            (f32.sub
-                              (local.get 2)
-                              (local.get 2)))
-                          (local.get 0))))
-                    (local.set 11
-                      (f32.const 0x1p+0 (;=1;)))
-                    (br_if 3 (;@5;)
-                      (i32.ge_s
-                        (local.get 3)
-                        (i32.const 0)))
-                    (br_table 1 (;@7;) 2 (;@6;) 3 (;@5;)
-                      (local.get 8)))
-                  (return
-                    (select
-                      (f32.neg
-                        (local.get 2))
-                      (local.get 2)
-                      (i32.eq
-                        (local.get 8)
-                        (i32.const 1)))))
-                (return
-                  (f32.div
-                    (local.tee 0
-                      (f32.sub
-                        (local.get 0)
-                        (local.get 0)))
-                    (local.get 0))))
-              (local.set 11
-                (f32.const -0x1p+0 (;=-1;))))
-            (block ;; label = @5
-              (br_if 0 (;@5;)
-                (i32.gt_u
-                  (local.get 5)
-                  (i32.const 1291845632)))
-              (local.set 5
-                (i32.or
-                  (local.tee 7
-                    (i32.and
-                      (local.tee 8
-                        (select
-                          (i32.reinterpret_f32
-                            (f32.mul
-                              (local.get 6)
-                              (f32.const 0x1p+24 (;=16777216;))))
-                          (local.get 7)
-                          (local.tee 3
-                            (i32.lt_u
-                              (local.get 7)
-                              (i32.const 8388608)))))
-                      (i32.const 8388607)))
-                  (i32.const 1065353216)))
-              (local.set 8
-                (i32.add
-                  (select
-                    (i32.const -151)
-                    (i32.const -127)
-                    (local.get 3))
-                  (i32.shr_s
-                    (local.get 8)
-                    (i32.const 23))))
-              (local.set 3
-                (i32.const 0))
-              (block ;; label = @6
-                (br_if 0 (;@6;)
-                  (i32.lt_u
-                    (local.get 7)
-                    (i32.const 1885298)))
-                (block ;; label = @7
-                  (br_if 0 (;@7;)
-                    (i32.ge_u
-                      (local.get 7)
-                      (i32.const 6140887)))
-                  (local.set 3
-                    (i32.const 1))
-                  (br 1 (;@6;)))
-                (local.set 5
-                  (i32.or
-                    (local.get 7)
-                    (i32.const 1056964608)))
-                (local.set 8
-                  (i32.add
-                    (local.get 8)
-                    (i32.const 1))))
-              (local.set 2
-                (f32.sub
-                  (local.tee 2
-                    (f32.add
-                      (f32.load offset=1057280
-                        (local.tee 7
-                          (i32.shl
-                            (local.get 3)
-                            (i32.const 2))))
-                      (f32.add
-                        (f32.mul
-                          (f32.sub
-                            (local.tee 6
-                              (f32.add
-                                (f32.mul
-                                  (local.tee 0
-                                    (f32.mul
-                                      (local.tee 2
-                                        (f32.div
-                                          (f32.const 0x1p+0 (;=1;))
-                                          (f32.add
-                                            (local.tee 0
-                                              (f32.load offset=1057272
-                                                (local.get 7)))
-                                            (local.tee 12
-                                              (f32.reinterpret_i32
-                                                (local.get 5))))))
-                                      (f32.sub
-                                        (f32.sub
-                                          (local.tee 6
-                                            (f32.sub
-                                              (local.get 12)
-                                              (local.get 0)))
-                                          (f32.mul
-                                            (local.tee 13
-                                              (f32.reinterpret_i32
-                                                (i32.add
-                                                  (i32.add
-                                                    (i32.and
-                                                      (i32.shr_u
-                                                        (local.get 5)
-                                                        (i32.const 1))
-                                                      (i32.const 536866816))
-                                                    (i32.shl
-                                                      (local.get 3)
-                                                      (i32.const 21)))
-                                                  (i32.const 541065216))))
-                                            (local.tee 2
-                                              (f32.reinterpret_i32
-                                                (i32.and
-                                                  (i32.reinterpret_f32
-                                                    (local.tee 6
-                                                      (f32.mul
-                                                        (local.get 6)
-                                                        (local.get 2))))
-                                                  (i32.const -4096))))))
-                                        (f32.mul
-                                          (f32.add
-                                            (f32.sub
-                                              (local.get 0)
-                                              (local.get 13))
-                                            (local.get 12))
-                                          (local.get 2)))))
-                                  (local.tee 0
-                                    (f32.reinterpret_i32
-                                      (i32.and
-                                        (i32.reinterpret_f32
-                                          (f32.add
-                                            (f32.add
-                                              (local.tee 12
-                                                (f32.mul
-                                                  (local.get 2)
-                                                  (local.get 2)))
-                                              (f32.const 0x1.8p+1 (;=3;)))
-                                            (local.tee 13
-                                              (f32.add
-                                                (f32.mul
-                                                  (local.get 0)
-                                                  (f32.add
-                                                    (local.get 6)
-                                                    (local.get 2)))
-                                                (f32.mul
-                                                  (f32.mul
-                                                    (local.tee 0
-                                                      (f32.mul
-                                                        (local.get 6)
-                                                        (local.get 6)))
-                                                    (local.get 0))
-                                                  (f32.add
-                                                    (f32.mul
-                                                      (local.get 0)
-                                                      (f32.add
-                                                        (f32.mul
-                                                          (local.get 0)
-                                                          (f32.add
-                                                            (f32.mul
-                                                              (local.get 0)
-                                                              (f32.add
-                                                                (f32.mul
-                                                                  (local.get 0)
-                                                                  (f32.add
-                                                                    (f32.mul
-                                                                      (local.get 0)
-                                                                      (f32.const 0x1.a7e284p-3 (;=0.20697501;)))
-                                                                    (f32.const 0x1.d864aap-3 (;=0.23066075;))))
-                                                                (f32.const 0x1.17460ap-2 (;=0.27272812;))))
-                                                            (f32.const 0x1.555556p-2 (;=0.33333334;))))
-                                                        (f32.const 0x1.b6db6ep-2 (;=0.42857143;))))
-                                                    (f32.const 0x1.333334p-1 (;=0.6;))))))))
-                                        (i32.const -4096)))))
-                                (f32.mul
-                                  (local.get 6)
-                                  (f32.sub
-                                    (local.get 13)
-                                    (f32.sub
-                                      (f32.add
-                                        (local.get 0)
-                                        (f32.const -0x1.8p+1 (;=-3;)))
-                                      (local.get 12))))))
-                            (f32.sub
-                              (local.tee 0
-                                (f32.reinterpret_i32
-                                  (i32.and
-                                    (i32.reinterpret_f32
-                                      (f32.add
-                                        (local.get 6)
-                                        (local.tee 2
-                                          (f32.mul
-                                            (local.get 2)
-                                            (local.get 0)))))
-                                    (i32.const -4096))))
-                              (local.get 2)))
-                          (f32.const 0x1.ec709ep-1 (;=0.9617967;)))
-                        (f32.mul
-                          (local.get 0)
-                          (f32.const -0x1.ec478cp-14 (;=-0.000117368574;))))))
-                  (f32.sub
-                    (f32.sub
-                      (f32.sub
-                        (local.tee 0
-                          (f32.reinterpret_i32
-                            (i32.and
-                              (i32.reinterpret_f32
-                                (f32.add
-                                  (f32.add
-                                    (local.tee 6
-                                      (f32.load offset=1057288
-                                        (local.get 7)))
-                                    (f32.add
-                                      (local.get 2)
-                                      (local.tee 12
-                                        (f32.mul
-                                          (local.get 0)
-                                          (f32.const 0x1.ec8p-1 (;=0.96191406;))))))
-                                  (local.tee 2
-                                    (f32.convert_i32_s
-                                      (local.get 8)))))
-                              (i32.const -4096))))
-                        (local.get 2))
-                      (local.get 6))
-                    (local.get 12))))
-              (br 4 (;@1;)))
-            (block ;; label = @5
-              (br_if 0 (;@5;)
-                (i32.lt_u
-                  (local.get 7)
-                  (i32.const 1065353208)))
-              (block ;; label = @6
-                (br_if 0 (;@6;)
-                  (i32.gt_u
-                    (local.get 7)
-                    (i32.const 1065353223)))
-                (local.set 2
-                  (f32.sub
-                    (local.tee 2
-                      (f32.add
-                        (f32.mul
-                          (local.tee 0
-                            (f32.add
-                              (local.get 6)
-                              (f32.const -0x1p+0 (;=-1;))))
-                          (f32.const 0x1.d94aep-18 (;=0.0000070526075;)))
-                        (f32.mul
-                          (f32.mul
-                            (f32.mul
-                              (local.get 0)
-                              (local.get 0))
-                            (f32.sub
-                              (f32.const 0x1p-1 (;=0.5;))
-                              (f32.mul
-                                (local.get 0)
-                                (f32.add
-                                  (f32.mul
-                                    (local.get 0)
-                                    (f32.const -0x1p-2 (;=-0.25;)))
-                                  (f32.const 0x1.555556p-2 (;=0.33333334;))))))
-                          (f32.const -0x1.715476p+0 (;=-1.442695;)))))
-                    (f32.sub
-                      (local.tee 0
-                        (f32.reinterpret_i32
-                          (i32.and
-                            (i32.reinterpret_f32
-                              (f32.add
-                                (local.get 2)
-                                (local.tee 6
-                                  (f32.mul
-                                    (local.get 0)
-                                    (f32.const 0x1.7154p+0 (;=1.442688;))))))
-                            (i32.const -4096))))
-                      (local.get 6))))
-                (br 5 (;@1;)))
-              (block ;; label = @6
-                (br_if 0 (;@6;)
-                  (i32.gt_s
-                    (local.get 4)
-                    (i32.const 0)))
-                (return
-                  (f32.mul
-                    (f32.mul
-                      (local.get 11)
-                      (f32.const 0x1.4484cp-100 (;=0.000000000000000000000000000001;)))
-                    (f32.const 0x1.4484cp-100 (;=0.000000000000000000000000000001;)))))
-              (return
-                (f32.mul
-                  (f32.mul
-                    (local.get 11)
-                    (f32.const 0x1.93e594p+99 (;=1000000000000000000000000000000;)))
-                  (f32.const 0x1.93e594p+99 (;=1000000000000000000000000000000;)))))
-            (block ;; label = @5
-              (br_if 0 (;@5;)
-                (i32.lt_s
-                  (local.get 4)
-                  (i32.const 0)))
-              (return
-                (f32.mul
-                  (f32.mul
-                    (local.get 11)
-                    (f32.const 0x1.4484cp-100 (;=0.000000000000000000000000000001;)))
-                  (f32.const 0x1.4484cp-100 (;=0.000000000000000000000000000001;)))))
-            (local.set 2
-              (f32.mul
-                (f32.mul
-                  (local.get 11)
-                  (f32.const 0x1.93e594p+99 (;=1000000000000000000000000000000;)))
-                (f32.const 0x1.93e594p+99 (;=1000000000000000000000000000000;)))))
-          (return
-            (local.get 2)))
-        (return
-          (f32.div
-            (f32.const 0x1p+0 (;=1;))
-            (local.get 0))))
-      (return
-        (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4sqrt5sqrtf
-          (local.get 0))))
-    (block ;; label = @1
-      (block ;; label = @2
-        (block ;; label = @3
-          (block ;; label = @4
-            (br_if 0 (;@4;)
-              (i32.gt_s
-                (local.tee 5
-                  (i32.reinterpret_f32
-                    (local.tee 1
-                      (f32.add
-                        (local.tee 12
-                          (f32.mul
-                            (local.get 0)
-                            (local.tee 6
-                              (f32.reinterpret_i32
-                                (i32.and
-                                  (local.get 4)
-                                  (i32.const -4096))))))
-                        (local.tee 0
-                          (f32.add
-                            (f32.mul
-                              (f32.sub
-                                (local.get 1)
-                                (local.get 6))
-                              (local.get 0))
-                            (f32.mul
-                              (local.get 1)
-                              (local.get 2))))))))
-                (i32.const 1124073472)))
-            (br_if 1 (;@3;)
-              (i32.ne
-                (local.get 5)
-                (i32.const 1124073472)))
-            (br_if 2 (;@2;)
-              (i32.eqz
-                (f32.gt
-                  (f32.add
-                    (local.get 0)
-                    (f32.const 0x1.715478p-25 (;=0.000000042995666;)))
-                  (f32.sub
-                    (local.get 1)
-                    (local.get 12)))))
-            (return
-              (f32.mul
-                (f32.mul
-                  (local.get 11)
-                  (f32.const 0x1.93e594p+99 (;=1000000000000000000000000000000;)))
-                (f32.const 0x1.93e594p+99 (;=1000000000000000000000000000000;)))))
-          (return
-            (f32.mul
-              (f32.mul
-                (local.get 11)
-                (f32.const 0x1.93e594p+99 (;=1000000000000000000000000000000;)))
-              (f32.const 0x1.93e594p+99 (;=1000000000000000000000000000000;)))))
-        (block ;; label = @3
-          (block ;; label = @4
-            (br_if 0 (;@4;)
-              (i32.gt_u
-                (local.tee 4
-                  (i32.and
-                    (i32.reinterpret_f32
-                      (local.get 1))
-                    (i32.const 2147483647)))
-                (i32.const 1125515264)))
-            (br_if 1 (;@3;)
-              (i32.ne
-                (local.get 5)
-                (i32.const -1021968384)))
-            (br_if 1 (;@3;)
-              (i32.eqz
-                (f32.le
-                  (local.get 0)
-                  (f32.sub
-                    (local.get 1)
-                    (local.get 12)))))
-            (return
-              (f32.mul
-                (f32.mul
-                  (local.get 11)
-                  (f32.const 0x1.4484cp-100 (;=0.000000000000000000000000000001;)))
-                (f32.const 0x1.4484cp-100 (;=0.000000000000000000000000000001;)))))
-          (return
-            (f32.mul
-              (f32.mul
-                (local.get 11)
-                (f32.const 0x1.4484cp-100 (;=0.000000000000000000000000000001;)))
-              (f32.const 0x1.4484cp-100 (;=0.000000000000000000000000000001;)))))
-        (local.set 3
-          (i32.const 0))
-        (br_if 1 (;@1;)
-          (i32.le_u
-            (local.get 4)
-            (i32.const 1056964608))))
-      (local.set 3
-        (select
-          (i32.sub
-            (i32.const 0)
-            (local.tee 3
-              (i32.shr_u
-                (i32.or
-                  (i32.and
-                    (local.tee 4
-                      (i32.add
-                        (i32.shr_u
-                          (i32.const 8388608)
-                          (i32.add
-                            (i32.shr_u
-                              (local.get 5)
-                              (i32.const 23))
-                            (i32.const 2)))
-                        (local.get 5)))
-                    (i32.const 8388607))
-                  (i32.const 8388608))
-                (i32.sub
-                  (i32.const 22)
-                  (local.tee 7
-                    (i32.shr_u
-                      (local.get 4)
-                      (i32.const 23)))))))
-          (local.get 3)
-          (i32.lt_s
-            (local.get 5)
-            (i32.const 0))))
-      (local.set 5
-        (i32.reinterpret_f32
-          (f32.add
-            (local.get 0)
-            (local.tee 12
-              (f32.sub
-                (local.get 12)
-                (f32.reinterpret_i32
-                  (i32.and
-                    (i32.shr_s
-                      (i32.const -8388608)
-                      (i32.add
-                        (local.get 7)
-                        (i32.const 1)))
-                    (local.get 4)))))))))
-    (block ;; label = @1
-      (block ;; label = @2
-        (br_if 0 (;@2;)
-          (i32.lt_s
-            (local.tee 5
-              (i32.add
-                (i32.shl
-                  (local.get 3)
-                  (i32.const 23))
-                (i32.reinterpret_f32
-                  (local.tee 0
-                    (f32.add
-                      (f32.sub
-                        (local.tee 0
-                          (f32.add
-                            (local.tee 2
-                              (f32.mul
-                                (local.tee 1
-                                  (f32.reinterpret_i32
-                                    (i32.and
-                                      (local.get 5)
-                                      (i32.const -32768))))
-                                (f32.const 0x1.62e4p-1 (;=0.69314575;))))
-                            (local.tee 6
-                              (f32.add
-                                (f32.mul
-                                  (local.get 1)
-                                  (f32.const 0x1.7f7d18p-20 (;=0.0000014286065;)))
-                                (f32.mul
-                                  (f32.sub
-                                    (local.get 0)
-                                    (f32.sub
-                                      (local.get 1)
-                                      (local.get 12)))
-                                  (f32.const 0x1.62e43p-1 (;=0.6931472;)))))))
-                        (f32.sub
-                          (f32.div
-                            (f32.mul
-                              (local.get 0)
-                              (local.tee 1
-                                (f32.sub
-                                  (local.get 0)
-                                  (f32.mul
-                                    (local.tee 1
-                                      (f32.mul
-                                        (local.get 0)
-                                        (local.get 0)))
-                                    (f32.add
-                                      (f32.mul
-                                        (local.get 1)
-                                        (f32.add
-                                          (f32.mul
-                                            (local.get 1)
-                                            (f32.add
-                                              (f32.mul
-                                                (local.get 1)
-                                                (f32.add
-                                                  (f32.mul
-                                                    (local.get 1)
-                                                    (f32.const 0x1.637698p-25 (;=0.00000004138137;)))
-                                                  (f32.const -0x1.bbd41cp-20 (;=-0.0000016533902;))))
-                                              (f32.const 0x1.1566aap-14 (;=0.00006613756;))))
-                                          (f32.const -0x1.6c16c2p-9 (;=-0.0027777778;))))
-                                      (f32.const 0x1.555556p-3 (;=0.16666667;)))))))
-                            (f32.add
-                              (local.get 1)
-                              (f32.const -0x1p+1 (;=-2;))))
-                          (f32.add
-                            (local.tee 1
-                              (f32.sub
-                                (local.get 6)
-                                (f32.sub
-                                  (local.get 0)
-                                  (local.get 2))))
-                            (f32.mul
-                              (local.get 0)
-                              (local.get 1)))))
-                      (f32.const 0x1p+0 (;=1;)))))))
-            (i32.const 8388608)))
-        (local.set 0
-          (f32.reinterpret_i32
-            (local.get 5)))
-        (br 1 (;@1;)))
-      (local.set 0
-        (call $_RNvNtNtCs5s8uptHhuCz_4libm4math6scalbn7scalbnf
-          (local.get 0)
-          (local.get 3))))
-    (f32.mul
-      (local.get 11)
-      (local.get 0))
-  )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math6scalbn7scalbnf (;74;) (type 12) (param f32 i32) (result f32)
-    (block ;; label = @1
-      (block ;; label = @2
-        (block ;; label = @3
-          (block ;; label = @4
-            (br_if 0 (;@4;)
-              (i32.gt_s
-                (local.get 1)
-                (i32.const 127)))
-            (br_if 3 (;@1;)
-              (i32.ge_s
-                (local.get 1)
-                (i32.const -126)))
-            (local.set 0
-              (f32.mul
-                (local.get 0)
-                (f32.const 0x1p-102 (;=0.00000000000000000000000000000019721523;))))
-            (br_if 1 (;@3;)
-              (i32.le_u
-                (local.get 1)
-                (i32.const -229)))
-            (local.set 1
-              (i32.add
-                (local.get 1)
-                (i32.const 102)))
-            (br 3 (;@1;)))
-          (local.set 0
-            (f32.mul
-              (local.get 0)
-              (f32.const 0x1p+127 (;=170141180000000000000000000000000000000;))))
-          (br_if 1 (;@2;)
-            (i32.gt_u
-              (local.get 1)
-              (i32.const 254)))
-          (local.set 1
-            (i32.add
-              (local.get 1)
-              (i32.const -127)))
-          (br 2 (;@1;)))
-        (local.set 0
-          (f32.mul
-            (local.get 0)
-            (f32.const 0x1p-102 (;=0.00000000000000000000000000000019721523;))))
-        (local.set 1
-          (i32.add
-            (select
-              (local.get 1)
-              (i32.const -330)
-              (i32.gt_u
-                (local.get 1)
-                (i32.const -330)))
-            (i32.const 204)))
-        (br 1 (;@1;)))
-      (local.set 0
-        (f32.mul
-          (local.get 0)
-          (f32.const 0x1p+127 (;=170141180000000000000000000000000000000;))))
-      (local.set 1
-        (i32.add
-          (select
-            (local.get 1)
-            (i32.const 381)
-            (i32.lt_u
-              (local.get 1)
-              (i32.const 381)))
-          (i32.const -254))))
-    (f32.mul
-      (local.get 0)
-      (f32.reinterpret_i32
-        (i32.and
-          (i32.add
-            (i32.shl
-              (local.get 1)
-              (i32.const 23))
-            (i32.const 1065353216))
-          (i32.const 2139095040))))
-  )
-  (func $libm_round (;75;) (type 0) (param f64) (result f64)
+  (func $f64_round (;83;) (type 1) (param f64) (result f64)
     (local i64 i32 i64)
     (block ;; label = @1
       (br_if 0 (;@1;)
@@ -12819,50 +14241,7 @@
             (local.get 1)))))
     (local.get 0)
   )
-  (func $libm_roundf (;76;) (type 1) (param f32) (result f32)
-    (local i32 i32)
-    (block ;; label = @1
-      (br_if 0 (;@1;)
-        (i32.gt_u
-          (local.tee 2
-            (i32.and
-              (i32.shr_u
-                (local.tee 1
-                  (i32.reinterpret_f32
-                    (local.tee 0
-                      (f32.add
-                        (local.get 0)
-                        (f32.copysign
-                          (f32.const 0x1.fffffep-2 (;=0.49999997;))
-                          (local.get 0))))))
-                (i32.const 23))
-              (i32.const 255)))
-          (i32.const 149)))
-      (br_if 0 (;@1;)
-        (i32.eqz
-          (i32.and
-            (i32.xor
-              (local.tee 2
-                (select
-                  (i32.const -2147483648)
-                  (i32.shr_s
-                    (i32.const -8388608)
-                    (i32.add
-                      (local.get 2)
-                      (i32.const -127)))
-                  (i32.lt_u
-                    (local.get 2)
-                    (i32.const 127))))
-              (i32.const -1))
-            (local.get 1))))
-      (local.set 0
-        (f32.reinterpret_i32
-          (i32.and
-            (local.get 2)
-            (local.get 1)))))
-    (local.get 0)
-  )
-  (func $libm_sin (;77;) (type 0) (param f64) (result f64)
+  (func $f64_sin (;84;) (type 1) (param f64) (result f64)
     (local i32 i32 f64 f64 f64)
     (global.set $__stack_pointer
       (local.tee 1
@@ -12891,7 +14270,7 @@
                     (i32.gt_u
                       (local.get 2)
                       (i32.const 2146435071)))
-                  (call $_RNvNtNtCs5s8uptHhuCz_4libm4math8rem_pio28rem_pio2
+                  (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math8rem_pio28rem_pio2
                     (i32.add
                       (local.get 1)
                       (i32.const 8))
@@ -12914,7 +14293,7 @@
                 (br 5 (;@1;)))
               (local.set 0
                 (f64.neg
-                  (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5k_cos5k_cos
+                  (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5k_cos5k_cos
                     (local.get 0)
                     (local.get 3))))
               (br 4 (;@1;)))
@@ -12964,7 +14343,7 @@
                     (local.get 3)))))
             (br 3 (;@1;)))
           (local.set 0
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5k_cos5k_cos
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5k_cos5k_cos
               (local.get 0)
               (local.get 3)))
           (br 2 (;@1;)))
@@ -13083,460 +14462,7 @@
         (i32.const 32)))
     (local.get 0)
   )
-  (func $libm_sinf (;78;) (type 1) (param f32) (result f32)
-    (local i32 f64 i32 i32 f64 f64)
-    (global.set $__stack_pointer
-      (local.tee 1
-        (i32.sub
-          (global.get $__stack_pointer)
-          (i32.const 16))))
-    (local.set 2
-      (f64.promote_f32
-        (local.get 0)))
-    (block ;; label = @1
-      (block ;; label = @2
-        (br_if 0 (;@2;)
-          (i32.lt_u
-            (local.tee 4
-              (i32.and
-                (local.tee 3
-                  (i32.reinterpret_f32
-                    (local.get 0)))
-                (i32.const 2147483647)))
-            (i32.const 1061752795)))
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.lt_u
-              (local.get 4)
-              (i32.const 1081824210)))
-          (block ;; label = @4
-            (br_if 0 (;@4;)
-              (i32.lt_u
-                (local.get 4)
-                (i32.const 1088565718)))
-            (block ;; label = @5
-              (block ;; label = @6
-                (block ;; label = @7
-                  (block ;; label = @8
-                    (block ;; label = @9
-                      (br_if 0 (;@9;)
-                        (i32.gt_u
-                          (local.get 4)
-                          (i32.const 2139095039)))
-                      (call $_RNvNtNtCs5s8uptHhuCz_4libm4math9rem_pio2f9rem_pio2f
-                        (local.get 1)
-                        (local.get 0))
-                      (local.set 2
-                        (f64.load offset=8
-                          (local.get 1)))
-                      (br_table 2 (;@7;) 3 (;@6;) 4 (;@5;) 1 (;@8;) 2 (;@7;)
-                        (i32.and
-                          (i32.load
-                            (local.get 1))
-                          (i32.const 3))))
-                    (local.set 0
-                      (f32.sub
-                        (local.get 0)
-                        (local.get 0)))
-                    (br 7 (;@1;)))
-                  (local.set 0
-                    (f32.neg
-                      (f32.demote_f64
-                        (f64.add
-                          (f64.add
-                            (f64.add
-                              (f64.mul
-                                (local.tee 2
-                                  (f64.mul
-                                    (local.get 2)
-                                    (local.get 2)))
-                                (f64.const -0x1.ffffffd0c5e81p-2 (;=-0.499999997251031;)))
-                              (f64.const 0x1p+0 (;=1;)))
-                            (f64.mul
-                              (local.tee 5
-                                (f64.mul
-                                  (local.get 2)
-                                  (local.get 2)))
-                              (f64.const 0x1.55553e1053a42p-5 (;=0.04166662332373906;))))
-                          (f64.mul
-                            (f64.mul
-                              (local.get 2)
-                              (local.get 5))
-                            (f64.add
-                              (f64.mul
-                                (local.get 2)
-                                (f64.const 0x1.99342e0ee5069p-16 (;=0.00002439044879627741;)))
-                              (f64.const -0x1.6c087e80f1e27p-10 (;=-0.001388676377460993;))))))))
-                  (br 6 (;@1;)))
-                (local.set 0
-                  (f32.demote_f64
-                    (f64.add
-                      (f64.mul
-                        (f64.mul
-                          (local.tee 6
-                            (f64.mul
-                              (local.get 2)
-                              (local.tee 5
-                                (f64.mul
-                                  (local.get 2)
-                                  (local.get 2)))))
-                          (f64.mul
-                            (local.get 5)
-                            (local.get 5)))
-                        (f64.add
-                          (f64.mul
-                            (local.get 5)
-                            (f64.const 0x1.6cd878c3b46a7p-19 (;=0.000002718311493989822;)))
-                          (f64.const -0x1.a00f9e2cae774p-13 (;=-0.00019839334836096632;))))
-                      (f64.add
-                        (local.get 2)
-                        (f64.mul
-                          (local.get 6)
-                          (f64.add
-                            (f64.mul
-                              (local.get 5)
-                              (f64.const 0x1.11110896efbb2p-7 (;=0.008333329385889463;)))
-                            (f64.const -0x1.5555554cbac77p-3 (;=-0.16666666641626524;))))))))
-                (br 5 (;@1;)))
-              (local.set 0
-                (f32.demote_f64
-                  (f64.add
-                    (f64.add
-                      (f64.add
-                        (f64.mul
-                          (local.tee 2
-                            (f64.mul
-                              (local.get 2)
-                              (local.get 2)))
-                          (f64.const -0x1.ffffffd0c5e81p-2 (;=-0.499999997251031;)))
-                        (f64.const 0x1p+0 (;=1;)))
-                      (f64.mul
-                        (local.tee 5
-                          (f64.mul
-                            (local.get 2)
-                            (local.get 2)))
-                        (f64.const 0x1.55553e1053a42p-5 (;=0.04166662332373906;))))
-                    (f64.mul
-                      (f64.mul
-                        (local.get 2)
-                        (local.get 5))
-                      (f64.add
-                        (f64.mul
-                          (local.get 2)
-                          (f64.const 0x1.99342e0ee5069p-16 (;=0.00002439044879627741;)))
-                        (f64.const -0x1.6c087e80f1e27p-10 (;=-0.001388676377460993;)))))))
-              (br 4 (;@1;)))
-            (local.set 0
-              (f32.demote_f64
-                (f64.add
-                  (f64.mul
-                    (f64.mul
-                      (local.tee 6
-                        (f64.mul
-                          (local.tee 5
-                            (f64.mul
-                              (local.get 2)
-                              (local.get 2)))
-                          (f64.neg
-                            (local.get 2))))
-                      (f64.mul
-                        (local.get 5)
-                        (local.get 5)))
-                    (f64.add
-                      (f64.mul
-                        (local.get 5)
-                        (f64.const 0x1.6cd878c3b46a7p-19 (;=0.000002718311493989822;)))
-                      (f64.const -0x1.a00f9e2cae774p-13 (;=-0.00019839334836096632;))))
-                  (f64.sub
-                    (f64.mul
-                      (local.get 6)
-                      (f64.add
-                        (f64.mul
-                          (local.get 5)
-                          (f64.const 0x1.11110896efbb2p-7 (;=0.008333329385889463;)))
-                        (f64.const -0x1.5555554cbac77p-3 (;=-0.16666666641626524;))))
-                    (local.get 2)))))
-            (br 3 (;@1;)))
-          (block ;; label = @4
-            (br_if 0 (;@4;)
-              (i32.lt_u
-                (local.get 4)
-                (i32.const 1085271520)))
-            (local.set 0
-              (f32.demote_f64
-                (f64.add
-                  (f64.mul
-                    (f64.mul
-                      (local.tee 6
-                        (f64.mul
-                          (local.tee 5
-                            (f64.add
-                              (select
-                                (f64.const -0x1.921fb54442d18p+2 (;=-6.283185307179586;))
-                                (f64.const 0x1.921fb54442d18p+2 (;=6.283185307179586;))
-                                (i32.gt_s
-                                  (local.get 3)
-                                  (i32.const -1)))
-                              (local.get 2)))
-                          (local.tee 2
-                            (f64.mul
-                              (local.get 5)
-                              (local.get 5)))))
-                      (f64.mul
-                        (local.get 2)
-                        (local.get 2)))
-                    (f64.add
-                      (f64.mul
-                        (local.get 2)
-                        (f64.const 0x1.6cd878c3b46a7p-19 (;=0.000002718311493989822;)))
-                      (f64.const -0x1.a00f9e2cae774p-13 (;=-0.00019839334836096632;))))
-                  (f64.add
-                    (local.get 5)
-                    (f64.mul
-                      (local.get 6)
-                      (f64.add
-                        (f64.mul
-                          (local.get 2)
-                          (f64.const 0x1.11110896efbb2p-7 (;=0.008333329385889463;)))
-                        (f64.const -0x1.5555554cbac77p-3 (;=-0.16666666641626524;))))))))
-            (br 3 (;@1;)))
-          (block ;; label = @4
-            (br_if 0 (;@4;)
-              (i32.lt_s
-                (local.get 3)
-                (i32.const 0)))
-            (local.set 0
-              (f32.neg
-                (f32.demote_f64
-                  (f64.add
-                    (f64.add
-                      (f64.add
-                        (f64.mul
-                          (local.tee 2
-                            (f64.mul
-                              (local.tee 2
-                                (f64.add
-                                  (local.get 2)
-                                  (f64.const -0x1.2d97c7f3321d2p+2 (;=-4.71238898038469;))))
-                              (local.get 2)))
-                          (f64.const -0x1.ffffffd0c5e81p-2 (;=-0.499999997251031;)))
-                        (f64.const 0x1p+0 (;=1;)))
-                      (f64.mul
-                        (local.tee 5
-                          (f64.mul
-                            (local.get 2)
-                            (local.get 2)))
-                        (f64.const 0x1.55553e1053a42p-5 (;=0.04166662332373906;))))
-                    (f64.mul
-                      (f64.mul
-                        (local.get 2)
-                        (local.get 5))
-                      (f64.add
-                        (f64.mul
-                          (local.get 2)
-                          (f64.const 0x1.99342e0ee5069p-16 (;=0.00002439044879627741;)))
-                        (f64.const -0x1.6c087e80f1e27p-10 (;=-0.001388676377460993;))))))))
-            (br 3 (;@1;)))
-          (local.set 0
-            (f32.demote_f64
-              (f64.add
-                (f64.add
-                  (f64.add
-                    (f64.mul
-                      (local.tee 2
-                        (f64.mul
-                          (local.tee 2
-                            (f64.add
-                              (local.get 2)
-                              (f64.const 0x1.2d97c7f3321d2p+2 (;=4.71238898038469;))))
-                          (local.get 2)))
-                      (f64.const -0x1.ffffffd0c5e81p-2 (;=-0.499999997251031;)))
-                    (f64.const 0x1p+0 (;=1;)))
-                  (f64.mul
-                    (local.tee 5
-                      (f64.mul
-                        (local.get 2)
-                        (local.get 2)))
-                    (f64.const 0x1.55553e1053a42p-5 (;=0.04166662332373906;))))
-                (f64.mul
-                  (f64.mul
-                    (local.get 2)
-                    (local.get 5))
-                  (f64.add
-                    (f64.mul
-                      (local.get 2)
-                      (f64.const 0x1.99342e0ee5069p-16 (;=0.00002439044879627741;)))
-                    (f64.const -0x1.6c087e80f1e27p-10 (;=-0.001388676377460993;)))))))
-          (br 2 (;@1;)))
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.lt_u
-              (local.get 4)
-              (i32.const 1075235812)))
-          (local.set 0
-            (f32.demote_f64
-              (f64.add
-                (f64.mul
-                  (f64.mul
-                    (local.tee 6
-                      (f64.mul
-                        (local.tee 2
-                          (f64.mul
-                            (local.tee 5
-                              (f64.add
-                                (select
-                                  (f64.const -0x1.921fb54442d18p+1 (;=-3.141592653589793;))
-                                  (f64.const 0x1.921fb54442d18p+1 (;=3.141592653589793;))
-                                  (i32.gt_s
-                                    (local.get 3)
-                                    (i32.const -1)))
-                                (local.get 2)))
-                            (local.get 5)))
-                        (f64.neg
-                          (local.get 5))))
-                    (f64.mul
-                      (local.get 2)
-                      (local.get 2)))
-                  (f64.add
-                    (f64.mul
-                      (local.get 2)
-                      (f64.const 0x1.6cd878c3b46a7p-19 (;=0.000002718311493989822;)))
-                    (f64.const -0x1.a00f9e2cae774p-13 (;=-0.00019839334836096632;))))
-                (f64.sub
-                  (f64.mul
-                    (local.get 6)
-                    (f64.add
-                      (f64.mul
-                        (local.get 2)
-                        (f64.const 0x1.11110896efbb2p-7 (;=0.008333329385889463;)))
-                      (f64.const -0x1.5555554cbac77p-3 (;=-0.16666666641626524;))))
-                  (local.get 5)))))
-          (br 2 (;@1;)))
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.lt_s
-              (local.get 3)
-              (i32.const 0)))
-          (local.set 0
-            (f32.demote_f64
-              (f64.add
-                (f64.add
-                  (f64.add
-                    (f64.mul
-                      (local.tee 2
-                        (f64.mul
-                          (local.tee 2
-                            (f64.add
-                              (local.get 2)
-                              (f64.const -0x1.921fb54442d18p+0 (;=-1.5707963267948966;))))
-                          (local.get 2)))
-                      (f64.const -0x1.ffffffd0c5e81p-2 (;=-0.499999997251031;)))
-                    (f64.const 0x1p+0 (;=1;)))
-                  (f64.mul
-                    (local.tee 5
-                      (f64.mul
-                        (local.get 2)
-                        (local.get 2)))
-                    (f64.const 0x1.55553e1053a42p-5 (;=0.04166662332373906;))))
-                (f64.mul
-                  (f64.mul
-                    (local.get 2)
-                    (local.get 5))
-                  (f64.add
-                    (f64.mul
-                      (local.get 2)
-                      (f64.const 0x1.99342e0ee5069p-16 (;=0.00002439044879627741;)))
-                    (f64.const -0x1.6c087e80f1e27p-10 (;=-0.001388676377460993;)))))))
-          (br 2 (;@1;)))
-        (local.set 0
-          (f32.neg
-            (f32.demote_f64
-              (f64.add
-                (f64.add
-                  (f64.add
-                    (f64.mul
-                      (local.tee 2
-                        (f64.mul
-                          (local.tee 2
-                            (f64.add
-                              (local.get 2)
-                              (f64.const 0x1.921fb54442d18p+0 (;=1.5707963267948966;))))
-                          (local.get 2)))
-                      (f64.const -0x1.ffffffd0c5e81p-2 (;=-0.499999997251031;)))
-                    (f64.const 0x1p+0 (;=1;)))
-                  (f64.mul
-                    (local.tee 5
-                      (f64.mul
-                        (local.get 2)
-                        (local.get 2)))
-                    (f64.const 0x1.55553e1053a42p-5 (;=0.04166662332373906;))))
-                (f64.mul
-                  (f64.mul
-                    (local.get 2)
-                    (local.get 5))
-                  (f64.add
-                    (f64.mul
-                      (local.get 2)
-                      (f64.const 0x1.99342e0ee5069p-16 (;=0.00002439044879627741;)))
-                    (f64.const -0x1.6c087e80f1e27p-10 (;=-0.001388676377460993;))))))))
-        (br 1 (;@1;)))
-      (block ;; label = @2
-        (br_if 0 (;@2;)
-          (i32.lt_u
-            (local.get 4)
-            (i32.const 964689920)))
-        (local.set 0
-          (f32.demote_f64
-            (f64.add
-              (f64.mul
-                (f64.mul
-                  (local.tee 6
-                    (f64.mul
-                      (local.tee 5
-                        (f64.mul
-                          (local.get 2)
-                          (local.get 2)))
-                      (local.get 2)))
-                  (f64.mul
-                    (local.get 5)
-                    (local.get 5)))
-                (f64.add
-                  (f64.mul
-                    (local.get 5)
-                    (f64.const 0x1.6cd878c3b46a7p-19 (;=0.000002718311493989822;)))
-                  (f64.const -0x1.a00f9e2cae774p-13 (;=-0.00019839334836096632;))))
-              (f64.add
-                (f64.mul
-                  (local.get 6)
-                  (f64.add
-                    (f64.mul
-                      (local.get 5)
-                      (f64.const 0x1.11110896efbb2p-7 (;=0.008333329385889463;)))
-                    (f64.const -0x1.5555554cbac77p-3 (;=-0.16666666641626524;))))
-                (local.get 2)))))
-        (br 1 (;@1;)))
-      (f32.store
-        (local.get 1)
-        (select
-          (f32.mul
-            (local.get 0)
-            (f32.const 0x1p-120 (;=0.0000000000000000000000000000000000007523164;)))
-          (f32.add
-            (local.get 0)
-            (f32.const 0x1p+120 (;=1329228000000000000000000000000000000;)))
-          (i32.lt_u
-            (local.get 4)
-            (i32.const 8388608))))
-      (drop
-        (f32.load
-          (local.get 1))))
-    (global.set $__stack_pointer
-      (i32.add
-        (local.get 1)
-        (i32.const 16)))
-    (local.get 0)
-  )
-  (func $libm_sinh (;79;) (type 0) (param f64) (result f64)
+  (func $f64_sinh (;85;) (type 1) (param f64) (result f64)
     (local f64 f64 i64)
     (local.set 1
       (f64.copysign
@@ -13558,14 +14484,14 @@
             (local.get 1))
           (f64.mul
             (f64.mul
-              (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3exp3exp
+              (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math3exp3exp
                 (f64.add
                   (local.get 2)
                   (f64.const -0x1.62066151add8bp+10 (;=-1416.0996898839683;))))
               (f64.const 0x1p+1021 (;=22471164185778950000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000;)))
             (f64.const 0x1p+1021 (;=22471164185778950000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000;))))))
     (local.set 2
-      (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5expm15expm1
+      (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5expm15expm1
         (local.get 2)))
     (block ;; label = @1
       (br_if 0 (;@1;)
@@ -13603,74 +14529,7 @@
                 (f64.const 0x1p+0 (;=1;))))))))
     (local.get 0)
   )
-  (func $libm_sinhf (;80;) (type 1) (param f32) (result f32)
-    (local f32 f32 i32)
-    (local.set 1
-      (f32.copysign
-        (f32.const 0x1p-1 (;=0.5;))
-        (local.get 0)))
-    (block ;; label = @1
-      (br_if 0 (;@1;)
-        (i32.lt_u
-          (local.tee 3
-            (i32.reinterpret_f32
-              (local.tee 2
-                (f32.abs
-                  (local.get 0)))))
-          (i32.const 1118925335)))
-      (return
-        (f32.mul
-          (f32.add
-            (local.get 1)
-            (local.get 1))
-          (f32.mul
-            (f32.mul
-              (call $_RNvNtNtCs5s8uptHhuCz_4libm4math4expf4expf
-                (f32.add
-                  (local.get 2)
-                  (f32.const -0x1.45c778p+7 (;=-162.88959;))))
-              (f32.const 0x1p+117 (;=166153500000000000000000000000000000;)))
-            (f32.const 0x1p+117 (;=166153500000000000000000000000000000;))))))
-    (local.set 2
-      (call $_RNvNtNtCs5s8uptHhuCz_4libm4math6expm1f6expm1f
-        (local.get 2)))
-    (block ;; label = @1
-      (br_if 0 (;@1;)
-        (i32.lt_u
-          (local.get 3)
-          (i32.const 1065353216)))
-      (return
-        (f32.mul
-          (local.get 1)
-          (f32.add
-            (local.get 2)
-            (f32.div
-              (local.get 2)
-              (f32.add
-                (local.get 2)
-                (f32.const 0x1p+0 (;=1;))))))))
-    (block ;; label = @1
-      (br_if 0 (;@1;)
-        (i32.lt_u
-          (local.get 3)
-          (i32.const 964689920)))
-      (local.set 0
-        (f32.mul
-          (local.get 1)
-          (f32.sub
-            (f32.add
-              (local.get 2)
-              (local.get 2))
-            (f32.div
-              (f32.mul
-                (local.get 2)
-                (local.get 2))
-              (f32.add
-                (local.get 2)
-                (f32.const 0x1p+0 (;=1;))))))))
-    (local.get 0)
-  )
-  (func $libm_tan (;81;) (type 0) (param f64) (result f64)
+  (func $f64_tan (;86;) (type 1) (param f64) (result f64)
     (local i32 i32)
     (global.set $__stack_pointer
       (local.tee 1
@@ -13695,13 +14554,13 @@
             (i32.gt_u
               (local.get 2)
               (i32.const 2146435071)))
-          (call $_RNvNtNtCs5s8uptHhuCz_4libm4math8rem_pio28rem_pio2
+          (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math8rem_pio28rem_pio2
             (i32.add
               (local.get 1)
               (i32.const 8))
             (local.get 0))
           (local.set 0
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5k_tan5k_tan
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5k_tan5k_tan
               (f64.load offset=8
                 (local.get 1))
               (f64.load offset=24
@@ -13722,7 +14581,7 @@
             (local.get 2)
             (i32.const 1044381696)))
         (local.set 0
-          (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5k_tan5k_tan
+          (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5k_tan5k_tan
             (local.get 0)
             (f64.const 0x0p+0 (;=0;))
             (i32.const 0)))
@@ -13748,7 +14607,7 @@
         (i32.const 32)))
     (local.get 0)
   )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math5k_tan5k_tan (;82;) (type 13) (param f64 f64 i32) (result f64)
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math5k_tan5k_tan (;87;) (type 13) (param f64 f64 i32) (result f64)
     (local i64 i32 f64 f64 f64)
     (block ;; label = @1
       (br_if 0 (;@1;)
@@ -13918,368 +14777,7 @@
         (local.get 3)
         (i64.const 0)))
   )
-  (func $libm_tanf (;83;) (type 1) (param f32) (result f32)
-    (local i32 f64 i32 i32 f64 f64)
-    (global.set $__stack_pointer
-      (local.tee 1
-        (i32.sub
-          (global.get $__stack_pointer)
-          (i32.const 16))))
-    (local.set 2
-      (f64.promote_f32
-        (local.get 0)))
-    (block ;; label = @1
-      (block ;; label = @2
-        (br_if 0 (;@2;)
-          (i32.lt_u
-            (local.tee 4
-              (i32.and
-                (local.tee 3
-                  (i32.reinterpret_f32
-                    (local.get 0)))
-                (i32.const 2147483647)))
-            (i32.const 1061752795)))
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.lt_u
-              (local.get 4)
-              (i32.const 1081824210)))
-          (block ;; label = @4
-            (br_if 0 (;@4;)
-              (i32.lt_u
-                (local.get 4)
-                (i32.const 1088565718)))
-            (block ;; label = @5
-              (br_if 0 (;@5;)
-                (i32.gt_u
-                  (local.get 4)
-                  (i32.const 2139095039)))
-              (call $_RNvNtNtCs5s8uptHhuCz_4libm4math9rem_pio2f9rem_pio2f
-                (local.get 1)
-                (local.get 0))
-              (local.set 0
-                (f32.demote_f64
-                  (select
-                    (f64.div
-                      (f64.const -0x1p+0 (;=-1;))
-                      (local.tee 2
-                        (f64.add
-                          (f64.add
-                            (local.tee 5
-                              (f64.load offset=8
-                                (local.get 1)))
-                            (f64.mul
-                              (local.tee 5
-                                (f64.mul
-                                  (local.get 5)
-                                  (local.tee 2
-                                    (f64.mul
-                                      (local.get 5)
-                                      (local.get 5)))))
-                              (f64.add
-                                (f64.mul
-                                  (local.get 2)
-                                  (f64.const 0x1.112fd38999f72p-3 (;=0.13339200271297674;)))
-                                (f64.const 0x1.5554d3418c99fp-2 (;=0.3333313950307914;)))))
-                          (f64.mul
-                            (f64.mul
-                              (local.get 5)
-                              (local.tee 6
-                                (f64.mul
-                                  (local.get 2)
-                                  (local.get 2))))
-                            (f64.add
-                              (f64.add
-                                (f64.mul
-                                  (local.get 2)
-                                  (f64.const 0x1.91df3908c33cep-6 (;=0.024528318116654728;)))
-                                (f64.const 0x1.b54c91d865afep-5 (;=0.05338123784456704;)))
-                              (f64.mul
-                                (local.get 6)
-                                (f64.add
-                                  (f64.mul
-                                    (local.get 2)
-                                    (f64.const 0x1.362b9bf971bcdp-7 (;=0.009465647849436732;)))
-                                  (f64.const 0x1.85dadfcecf44ep-9 (;=0.002974357433599673;)))))))))
-                    (local.get 2)
-                    (i32.and
-                      (i32.load
-                        (local.get 1))
-                      (i32.const 1)))))
-              (br 4 (;@1;)))
-            (local.set 0
-              (f32.sub
-                (local.get 0)
-                (local.get 0)))
-            (br 3 (;@1;)))
-          (block ;; label = @4
-            (br_if 0 (;@4;)
-              (i32.lt_u
-                (local.get 4)
-                (i32.const 1085271520)))
-            (local.set 0
-              (f32.demote_f64
-                (f64.add
-                  (f64.add
-                    (local.tee 5
-                      (f64.add
-                        (select
-                          (f64.const -0x1.921fb54442d18p+2 (;=-6.283185307179586;))
-                          (f64.const 0x1.921fb54442d18p+2 (;=6.283185307179586;))
-                          (i32.gt_s
-                            (local.get 3)
-                            (i32.const -1)))
-                        (local.get 2)))
-                    (f64.mul
-                      (local.tee 5
-                        (f64.mul
-                          (local.get 5)
-                          (local.tee 2
-                            (f64.mul
-                              (local.get 5)
-                              (local.get 5)))))
-                      (f64.add
-                        (f64.mul
-                          (local.get 2)
-                          (f64.const 0x1.112fd38999f72p-3 (;=0.13339200271297674;)))
-                        (f64.const 0x1.5554d3418c99fp-2 (;=0.3333313950307914;)))))
-                  (f64.mul
-                    (f64.mul
-                      (local.get 5)
-                      (local.tee 6
-                        (f64.mul
-                          (local.get 2)
-                          (local.get 2))))
-                    (f64.add
-                      (f64.add
-                        (f64.mul
-                          (local.get 2)
-                          (f64.const 0x1.91df3908c33cep-6 (;=0.024528318116654728;)))
-                        (f64.const 0x1.b54c91d865afep-5 (;=0.05338123784456704;)))
-                      (f64.mul
-                        (local.get 6)
-                        (f64.add
-                          (f64.mul
-                            (local.get 2)
-                            (f64.const 0x1.362b9bf971bcdp-7 (;=0.009465647849436732;)))
-                          (f64.const 0x1.85dadfcecf44ep-9 (;=0.002974357433599673;)))))))))
-            (br 3 (;@1;)))
-          (local.set 0
-            (f32.demote_f64
-              (f64.div
-                (f64.const -0x1p+0 (;=-1;))
-                (f64.add
-                  (f64.add
-                    (local.tee 5
-                      (f64.add
-                        (select
-                          (f64.const -0x1.2d97c7f3321d2p+2 (;=-4.71238898038469;))
-                          (f64.const 0x1.2d97c7f3321d2p+2 (;=4.71238898038469;))
-                          (i32.gt_s
-                            (local.get 3)
-                            (i32.const -1)))
-                        (local.get 2)))
-                    (f64.mul
-                      (local.tee 5
-                        (f64.mul
-                          (local.get 5)
-                          (local.tee 2
-                            (f64.mul
-                              (local.get 5)
-                              (local.get 5)))))
-                      (f64.add
-                        (f64.mul
-                          (local.get 2)
-                          (f64.const 0x1.112fd38999f72p-3 (;=0.13339200271297674;)))
-                        (f64.const 0x1.5554d3418c99fp-2 (;=0.3333313950307914;)))))
-                  (f64.mul
-                    (f64.mul
-                      (local.get 5)
-                      (local.tee 6
-                        (f64.mul
-                          (local.get 2)
-                          (local.get 2))))
-                    (f64.add
-                      (f64.add
-                        (f64.mul
-                          (local.get 2)
-                          (f64.const 0x1.91df3908c33cep-6 (;=0.024528318116654728;)))
-                        (f64.const 0x1.b54c91d865afep-5 (;=0.05338123784456704;)))
-                      (f64.mul
-                        (local.get 6)
-                        (f64.add
-                          (f64.mul
-                            (local.get 2)
-                            (f64.const 0x1.362b9bf971bcdp-7 (;=0.009465647849436732;)))
-                          (f64.const 0x1.85dadfcecf44ep-9 (;=0.002974357433599673;))))))))))
-          (br 2 (;@1;)))
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.lt_u
-              (local.get 4)
-              (i32.const 1075235812)))
-          (local.set 0
-            (f32.demote_f64
-              (f64.add
-                (f64.add
-                  (local.tee 5
-                    (f64.add
-                      (select
-                        (f64.const -0x1.921fb54442d18p+1 (;=-3.141592653589793;))
-                        (f64.const 0x1.921fb54442d18p+1 (;=3.141592653589793;))
-                        (i32.gt_s
-                          (local.get 3)
-                          (i32.const -1)))
-                      (local.get 2)))
-                  (f64.mul
-                    (local.tee 5
-                      (f64.mul
-                        (local.get 5)
-                        (local.tee 2
-                          (f64.mul
-                            (local.get 5)
-                            (local.get 5)))))
-                    (f64.add
-                      (f64.mul
-                        (local.get 2)
-                        (f64.const 0x1.112fd38999f72p-3 (;=0.13339200271297674;)))
-                      (f64.const 0x1.5554d3418c99fp-2 (;=0.3333313950307914;)))))
-                (f64.mul
-                  (f64.mul
-                    (local.get 5)
-                    (local.tee 6
-                      (f64.mul
-                        (local.get 2)
-                        (local.get 2))))
-                  (f64.add
-                    (f64.add
-                      (f64.mul
-                        (local.get 2)
-                        (f64.const 0x1.91df3908c33cep-6 (;=0.024528318116654728;)))
-                      (f64.const 0x1.b54c91d865afep-5 (;=0.05338123784456704;)))
-                    (f64.mul
-                      (local.get 6)
-                      (f64.add
-                        (f64.mul
-                          (local.get 2)
-                          (f64.const 0x1.362b9bf971bcdp-7 (;=0.009465647849436732;)))
-                        (f64.const 0x1.85dadfcecf44ep-9 (;=0.002974357433599673;)))))))))
-          (br 2 (;@1;)))
-        (local.set 0
-          (f32.demote_f64
-            (f64.div
-              (f64.const -0x1p+0 (;=-1;))
-              (f64.add
-                (f64.add
-                  (local.tee 5
-                    (f64.add
-                      (select
-                        (f64.const -0x1.921fb54442d18p+0 (;=-1.5707963267948966;))
-                        (f64.const 0x1.921fb54442d18p+0 (;=1.5707963267948966;))
-                        (i32.gt_s
-                          (local.get 3)
-                          (i32.const -1)))
-                      (local.get 2)))
-                  (f64.mul
-                    (local.tee 5
-                      (f64.mul
-                        (local.get 5)
-                        (local.tee 2
-                          (f64.mul
-                            (local.get 5)
-                            (local.get 5)))))
-                    (f64.add
-                      (f64.mul
-                        (local.get 2)
-                        (f64.const 0x1.112fd38999f72p-3 (;=0.13339200271297674;)))
-                      (f64.const 0x1.5554d3418c99fp-2 (;=0.3333313950307914;)))))
-                (f64.mul
-                  (f64.mul
-                    (local.get 5)
-                    (local.tee 6
-                      (f64.mul
-                        (local.get 2)
-                        (local.get 2))))
-                  (f64.add
-                    (f64.add
-                      (f64.mul
-                        (local.get 2)
-                        (f64.const 0x1.91df3908c33cep-6 (;=0.024528318116654728;)))
-                      (f64.const 0x1.b54c91d865afep-5 (;=0.05338123784456704;)))
-                    (f64.mul
-                      (local.get 6)
-                      (f64.add
-                        (f64.mul
-                          (local.get 2)
-                          (f64.const 0x1.362b9bf971bcdp-7 (;=0.009465647849436732;)))
-                        (f64.const 0x1.85dadfcecf44ep-9 (;=0.002974357433599673;))))))))))
-        (br 1 (;@1;)))
-      (block ;; label = @2
-        (br_if 0 (;@2;)
-          (i32.lt_u
-            (local.get 4)
-            (i32.const 964689920)))
-        (local.set 0
-          (f32.demote_f64
-            (f64.add
-              (f64.add
-                (f64.mul
-                  (local.tee 6
-                    (f64.mul
-                      (local.tee 5
-                        (f64.mul
-                          (local.get 2)
-                          (local.get 2)))
-                      (local.get 2)))
-                  (f64.add
-                    (f64.mul
-                      (local.get 5)
-                      (f64.const 0x1.112fd38999f72p-3 (;=0.13339200271297674;)))
-                    (f64.const 0x1.5554d3418c99fp-2 (;=0.3333313950307914;))))
-                (local.get 2))
-              (f64.mul
-                (f64.mul
-                  (local.get 6)
-                  (local.tee 2
-                    (f64.mul
-                      (local.get 5)
-                      (local.get 5))))
-                (f64.add
-                  (f64.add
-                    (f64.mul
-                      (local.get 5)
-                      (f64.const 0x1.91df3908c33cep-6 (;=0.024528318116654728;)))
-                    (f64.const 0x1.b54c91d865afep-5 (;=0.05338123784456704;)))
-                  (f64.mul
-                    (local.get 2)
-                    (f64.add
-                      (f64.mul
-                        (local.get 5)
-                        (f64.const 0x1.362b9bf971bcdp-7 (;=0.009465647849436732;)))
-                      (f64.const 0x1.85dadfcecf44ep-9 (;=0.002974357433599673;)))))))))
-        (br 1 (;@1;)))
-      (f32.store
-        (local.get 1)
-        (select
-          (f32.mul
-            (local.get 0)
-            (f32.const 0x1p-120 (;=0.0000000000000000000000000000000000007523164;)))
-          (f32.add
-            (local.get 0)
-            (f32.const 0x1p+120 (;=1329228000000000000000000000000000000;)))
-          (i32.lt_u
-            (local.get 4)
-            (i32.const 8388608))))
-      (drop
-        (f32.load
-          (local.get 1))))
-    (global.set $__stack_pointer
-      (i32.add
-        (local.get 1)
-        (i32.const 16)))
-    (local.get 0)
-  )
-  (func $libm_tanh (;84;) (type 0) (param f64) (result f64)
+  (func $f64_tanh (;88;) (type 1) (param f64) (result f64)
     (local i32 f64 i64)
     (global.set $__stack_pointer
       (local.tee 1
@@ -14318,7 +14816,7 @@
             (f64.div
               (f64.neg
                 (local.tee 2
-                  (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5expm15expm1
+                  (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5expm15expm1
                     (f64.mul
                       (local.get 2)
                       (f64.const -0x1p+1 (;=-2;))))))
@@ -14337,7 +14835,7 @@
               (f64.div
                 (f64.const 0x1p+1 (;=2;))
                 (f64.add
-                  (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5expm15expm1
+                  (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5expm15expm1
                     (f64.add
                       (local.get 2)
                       (local.get 2)))
@@ -14353,7 +14851,7 @@
       (local.set 2
         (f64.div
           (local.tee 2
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5expm15expm1
+            (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5expm15expm1
               (f64.add
                 (local.get 2)
                 (local.get 2))))
@@ -14373,508 +14871,10 @@
           (local.get 0))
         (i64.const 0)))
   )
-  (func $libm_tanhf (;85;) (type 1) (param f32) (result f32)
-    (local i32 f32 i32)
-    (global.set $__stack_pointer
-      (local.tee 1
-        (i32.sub
-          (global.get $__stack_pointer)
-          (i32.const 16))))
-    (block ;; label = @1
-      (block ;; label = @2
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.gt_u
-              (local.tee 3
-                (i32.reinterpret_f32
-                  (local.tee 2
-                    (f32.abs
-                      (local.get 0)))))
-              (i32.const 1057791828)))
-          (br_if 1 (;@2;)
-            (i32.gt_u
-              (local.get 3)
-              (i32.const 1048757624)))
-          (block ;; label = @4
-            (br_if 0 (;@4;)
-              (i32.gt_u
-                (local.get 3)
-                (i32.const 8388607)))
-            (f32.store offset=12
-              (local.get 1)
-              (f32.mul
-                (local.get 0)
-                (local.get 0)))
-            (drop
-              (f32.load offset=12
-                (local.get 1)))
-            (br 3 (;@1;)))
-          (local.set 2
-            (f32.div
-              (f32.neg
-                (local.tee 2
-                  (call $_RNvNtNtCs5s8uptHhuCz_4libm4math6expm1f6expm1f
-                    (f32.mul
-                      (local.get 2)
-                      (f32.const -0x1p+1 (;=-2;))))))
-              (f32.add
-                (local.get 2)
-                (f32.const 0x1p+1 (;=2;)))))
-          (br 2 (;@1;)))
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (i32.gt_u
-              (local.get 3)
-              (i32.const 1092616192)))
-          (local.set 2
-            (f32.sub
-              (f32.const 0x1p+0 (;=1;))
-              (f32.div
-                (f32.const 0x1p+1 (;=2;))
-                (f32.add
-                  (call $_RNvNtNtCs5s8uptHhuCz_4libm4math6expm1f6expm1f
-                    (f32.add
-                      (local.get 2)
-                      (local.get 2)))
-                  (f32.const 0x1p+1 (;=2;))))))
-          (br 2 (;@1;)))
-        (local.set 2
-          (f32.add
-            (f32.div
-              (f32.const 0x0p+0 (;=0;))
-              (local.get 2))
-            (f32.const 0x1p+0 (;=1;))))
-        (br 1 (;@1;)))
-      (local.set 2
-        (f32.div
-          (local.tee 2
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math6expm1f6expm1f
-              (f32.add
-                (local.get 2)
-                (local.get 2))))
-          (f32.add
-            (local.get 2)
-            (f32.const 0x1p+1 (;=2;))))))
-    (global.set $__stack_pointer
-      (i32.add
-        (local.get 1)
-        (i32.const 16)))
-    (select
-      (f32.neg
-        (local.get 2))
-      (local.get 2)
-      (i32.lt_s
-        (i32.reinterpret_f32
-          (local.get 0))
-        (i32.const 0)))
-  )
-  (func $libm_tgamma (;86;) (type 0) (param f64) (result f64)
-    (call $_RNvNtNtCs5s8uptHhuCz_4libm4math6tgamma6tgamma
-      (local.get 0))
-  )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math6tgamma6tgamma (;87;) (type 0) (param f64) (result f64)
-    (local i32 i64 i32 f64 i32 f64 f64 f64 f64 f64 i32)
-    (global.set $__stack_pointer
-      (local.tee 1
-        (i32.sub
-          (global.get $__stack_pointer)
-          (i32.const 16))))
-    (block ;; label = @1
-      (block ;; label = @2
-        (block ;; label = @3
-          (block ;; label = @4
-            (block ;; label = @5
-              (br_if 0 (;@5;)
-                (i32.gt_u
-                  (local.tee 3
-                    (i32.and
-                      (i32.wrap_i64
-                        (i64.shr_u
-                          (local.tee 2
-                            (i64.reinterpret_f64
-                              (local.get 0)))
-                          (i64.const 32)))
-                      (i32.const 2147483647)))
-                  (i32.const 2146435071)))
-              (br_if 1 (;@4;)
-                (i32.lt_u
-                  (local.get 3)
-                  (i32.const 1016070144)))
-              (block ;; label = @6
-                (block ;; label = @7
-                  (block ;; label = @8
-                    (br_if 0 (;@8;)
-                      (f64.eq
-                        (local.get 0)
-                        (local.tee 4
-                          (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5floor5floor
-                            (local.get 0)))))
-                    (br_if 1 (;@7;)
-                      (i32.gt_u
-                        (local.get 3)
-                        (i32.const 1080492031)))
-                    (local.set 4
-                      (f64.abs
-                        (local.get 0)))
-                    (br 6 (;@2;)))
-                  (br_if 1 (;@6;)
-                    (i64.gt_s
-                      (local.get 2)
-                      (i64.const -1)))
-                  (local.set 4
-                    (f64.const nan (;=NaN;)))
-                  (br 6 (;@1;)))
-                (br_if 3 (;@3;)
-                  (i64.gt_s
-                    (local.get 2)
-                    (i64.const -1)))
-                (f32.store offset=12
-                  (local.get 1)
-                  (f32.demote_f64
-                    (f64.div
-                      (f64.const 0x1p-126 (;=0.000000000000000000000000000000000000011754943508222875;))
-                      (local.get 0))))
-                (drop
-                  (f32.load offset=12
-                    (local.get 1)))
-                (local.set 4
-                  (select
-                    (f64.const 0x0p+0 (;=0;))
-                    (f64.const -0x0p+0 (;=-0;))
-                    (f64.eq
-                      (f64.mul
-                        (local.get 4)
-                        (f64.const 0x1p-1 (;=0.5;)))
-                      (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5floor5floor
-                        (f64.mul
-                          (local.get 0)
-                          (f64.const 0x1p-1 (;=0.5;)))))))
-                (br 5 (;@1;)))
-              (block ;; label = @6
-                (br_if 0 (;@6;)
-                  (f64.le
-                    (local.get 0)
-                    (f64.const 0x1.7p+4 (;=23;))))
-                (local.set 4
-                  (local.get 0))
-                (br_if 4 (;@2;)
-                  (i32.le_u
-                    (local.get 3)
-                    (i32.const 1080492031)))
-                (br 3 (;@3;)))
-              (local.set 4
-                (f64.load
-                  (i32.add
-                    (i32.shl
-                      (i32.trunc_sat_f64_u
-                        (local.get 0))
-                      (i32.const 3))
-                    (i32.const 1057968))))
-              (br 4 (;@1;)))
-            (local.set 4
-              (f64.add
-                (local.get 0)
-                (f64.const inf (;=inf;))))
-            (br 3 (;@1;)))
-          (local.set 4
-            (f64.div
-              (f64.const 0x1p+0 (;=1;))
-              (local.get 0)))
-          (br 2 (;@1;)))
-        (local.set 4
-          (f64.mul
-            (local.get 0)
-            (f64.const 0x1p+1023 (;=89884656743115800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000;))))
-        (br 1 (;@1;)))
-      (local.set 5
-        (f64.gt
-          (local.get 4)
-          (f64.const 0x1.61945b98p+2 (;=5.52468004077673;))))
-      (local.set 7
-        (f64.sub
-          (f64.add
-            (local.tee 6
-              (f64.add
-                (local.get 4)
-                (f64.const 0x1.61945b98p+2 (;=5.52468004077673;))))
-            (f64.const -0x1.61945b98p+2 (;=-5.52468004077673;)))
-          (local.get 4)))
-      (local.set 8
-        (f64.add
-          (f64.sub
-            (local.get 6)
-            (local.get 4))
-          (f64.const -0x1.61945b98p+2 (;=-5.52468004077673;))))
-      (block ;; label = @2
-        (block ;; label = @3
-          (br_if 0 (;@3;)
-            (f64.lt
-              (local.get 4)
-              (f64.const 0x1p+3 (;=8;))))
-          (local.set 3
-            (i32.const 0))
-          (local.set 9
-            (f64.const 0x0p+0 (;=0;)))
-          (local.set 10
-            (f64.const 0x0p+0 (;=0;)))
-          (loop ;; label = @4
-            (local.set 10
-              (f64.add
-                (f64.div
-                  (local.get 10)
-                  (local.get 4))
-                (f64.load offset=1057872
-                  (local.tee 11
-                    (i32.shl
-                      (local.get 3)
-                      (i32.const 3))))))
-            (local.set 9
-              (f64.add
-                (f64.div
-                  (local.get 9)
-                  (local.get 4))
-                (f64.load offset=1057768
-                  (local.get 11))))
-            (br_if 2 (;@2;)
-              (local.tee 11
-                (i32.eq
-                  (local.get 3)
-                  (i32.const 12))))
-            (br_if 0 (;@4;)
-              (i32.le_u
-                (local.tee 3
-                  (select
-                    (i32.const 12)
-                    (i32.add
-                      (local.get 3)
-                      (i32.const 1))
-                    (local.get 11)))
-                (i32.const 12)))
-            (br 2 (;@2;))))
-        (local.set 9
-          (f64.const 0x0p+0 (;=0;)))
-        (local.set 3
-          (i32.const 96))
-        (local.set 10
-          (f64.const 0x0p+0 (;=0;)))
-        (loop ;; label = @3
-          (local.set 10
-            (f64.add
-              (f64.mul
-                (local.get 4)
-                (local.get 10))
-              (f64.load
-                (i32.add
-                  (local.get 3)
-                  (i32.const 1057872)))))
-          (local.set 9
-            (f64.add
-              (f64.mul
-                (local.get 4)
-                (local.get 9))
-              (f64.load
-                (i32.add
-                  (local.get 3)
-                  (i32.const 1057768)))))
-          (br_if 0 (;@3;)
-            (i32.ne
-              (local.tee 3
-                (i32.add
-                  (local.get 3)
-                  (i32.const -8)))
-              (i32.const -8)))))
-      (local.set 7
-        (select
-          (local.get 8)
-          (local.get 7)
-          (local.get 5)))
-      (local.set 8
-        (f64.add
-          (local.get 4)
-          (f64.const -0x1p-1 (;=-0.5;))))
-      (local.set 9
-        (f64.mul
-          (f64.div
-            (local.get 9)
-            (local.get 10))
-          (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3exp3exp
-            (f64.neg
-              (local.get 6)))))
-      (block ;; label = @2
-        (br_if 0 (;@2;)
-          (i32.eqz
-            (f64.lt
-              (local.get 0)
-              (f64.const 0x0p+0 (;=0;)))))
-        (local.set 10
-          (f64.mul
-            (local.get 4)
-            (f64.const 0x1p-1 (;=0.5;))))
-        (local.set 10
-          (f64.mul
-            (f64.sub
-              (local.tee 10
-                (f64.add
-                  (local.tee 10
-                    (f64.sub
-                      (local.get 10)
-                      (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5floor5floor
-                        (local.get 10))))
-                  (local.get 10)))
-              (f64.mul
-                (f64.convert_i32_s
-                  (local.tee 3
-                    (i32.div_s
-                      (i32.add
-                        (i32.trunc_sat_f64_s
-                          (f64.mul
-                            (local.get 10)
-                            (f64.const 0x1p+2 (;=4;))))
-                        (i32.const 1))
-                      (i32.const 2))))
-                (f64.const 0x1p-1 (;=0.5;))))
-            (f64.const 0x1.921fb54442d18p+1 (;=3.141592653589793;))))
-        (block ;; label = @3
-          (block ;; label = @4
-            (block ;; label = @5
-              (block ;; label = @6
-                (block ;; label = @7
-                  (br_table 1 (;@6;) 2 (;@5;) 3 (;@4;) 0 (;@7;)
-                    (i32.add
-                      (local.get 3)
-                      (i32.const -1))))
-                (local.set 10
-                  (f64.add
-                    (local.get 10)
-                    (f64.mul
-                      (f64.mul
-                        (local.get 10)
-                        (local.tee 0
-                          (f64.mul
-                            (local.get 10)
-                            (local.get 10))))
-                      (f64.add
-                        (f64.mul
-                          (local.get 0)
-                          (f64.add
-                            (f64.mul
-                              (f64.mul
-                                (local.get 0)
-                                (f64.mul
-                                  (local.get 0)
-                                  (local.get 0)))
-                              (f64.add
-                                (f64.mul
-                                  (local.get 0)
-                                  (f64.const 0x1.5d93a5acfd57cp-33 (;=0.000000000158969099521155;)))
-                                (f64.const -0x1.ae5e68a2b9cebp-26 (;=-0.000000025050760253406863;))))
-                            (f64.add
-                              (f64.mul
-                                (local.get 0)
-                                (f64.add
-                                  (f64.mul
-                                    (local.get 0)
-                                    (f64.const 0x1.71de357b1fe7dp-19 (;=0.0000027557313707070068;)))
-                                  (f64.const -0x1.a01a019c161d5p-13 (;=-0.0001984126982985795;))))
-                              (f64.const 0x1.111111110f8a6p-7 (;=0.00833333333332249;)))))
-                        (f64.const -0x1.5555555555549p-3 (;=-0.16666666666666632;))))))
-                (br 3 (;@3;)))
-              (local.set 10
-                (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5k_cos5k_cos
-                  (local.get 10)
-                  (f64.const 0x0p+0 (;=0;))))
-              (br 2 (;@3;)))
-            (local.set 10
-              (f64.sub
-                (f64.mul
-                  (f64.mul
-                    (local.tee 0
-                      (f64.mul
-                        (local.get 10)
-                        (local.get 10)))
-                    (f64.neg
-                      (local.get 10)))
-                  (f64.add
-                    (f64.mul
-                      (local.get 0)
-                      (f64.add
-                        (f64.mul
-                          (f64.mul
-                            (local.get 0)
-                            (f64.mul
-                              (local.get 0)
-                              (local.get 0)))
-                          (f64.add
-                            (f64.mul
-                              (local.get 0)
-                              (f64.const 0x1.5d93a5acfd57cp-33 (;=0.000000000158969099521155;)))
-                            (f64.const -0x1.ae5e68a2b9cebp-26 (;=-0.000000025050760253406863;))))
-                        (f64.add
-                          (f64.mul
-                            (local.get 0)
-                            (f64.add
-                              (f64.mul
-                                (local.get 0)
-                                (f64.const 0x1.71de357b1fe7dp-19 (;=0.0000027557313707070068;)))
-                              (f64.const -0x1.a01a019c161d5p-13 (;=-0.0001984126982985795;))))
-                          (f64.const 0x1.111111110f8a6p-7 (;=0.00833333333332249;)))))
-                    (f64.const -0x1.5555555555549p-3 (;=-0.16666666666666632;))))
-                (local.get 10)))
-            (br 1 (;@3;)))
-          (local.set 10
-            (f64.neg
-              (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5k_cos5k_cos
-                (local.get 10)
-                (f64.const 0x0p+0 (;=0;))))))
-        (local.set 9
-          (f64.div
-            (f64.const -0x1.921fb54442d18p+1 (;=-3.141592653589793;))
-            (f64.mul
-              (local.get 9)
-              (f64.mul
-                (local.get 4)
-                (local.get 10)))))
-        (local.set 8
-          (f64.neg
-            (local.get 8)))
-        (local.set 7
-          (f64.neg
-            (local.get 7))))
-      (local.set 4
-        (f64.mul
-          (local.tee 4
-            (call $_RNvNtNtCs5s8uptHhuCz_4libm4math3pow3pow
-              (local.get 6)
-              (f64.mul
-                (local.get 8)
-                (f64.const 0x1p-1 (;=0.5;)))))
-          (f64.mul
-            (local.get 4)
-            (f64.add
-              (local.get 9)
-              (f64.div
-                (f64.mul
-                  (local.get 9)
-                  (f64.mul
-                    (local.get 7)
-                    (f64.const 0x1.81945b98p+2 (;=6.02468004077673;))))
-                (local.get 6)))))))
-    (global.set $__stack_pointer
-      (i32.add
-        (local.get 1)
-        (i32.const 16)))
-    (local.get 4)
-  )
-  (func $libm_tgammaf (;88;) (type 1) (param f32) (result f32)
-    (f32.demote_f64
-      (call $_RNvNtNtCs5s8uptHhuCz_4libm4math6tgamma6tgamma
-        (f64.promote_f32
-          (local.get 0))))
-  )
-  (func $_RNvNtCskGMzdWn1DGZ_4core9panicking9panic_fmt (;89;) (type 10)
+  (func $_RNvNtCsknUcikIyyBm_4core9panicking9panic_fmt (;89;) (type 5)
     (unreachable)
   )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math14rem_pio2_large14rem_pio2_large (;90;) (type 14) (param i32 i32 i32 i32 i32) (result i32)
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math14rem_pio2_large14rem_pio2_large (;90;) (type 14) (param i32 i32 i32 i32 i32) (result i32)
     (local i32 i32 i32 i32 i32 i32 i32 f64 i32 i32 i32 i32 i32 i32 i32 f64 i32 i32 i32)
     (global.set $__stack_pointer
       (local.tee 5
@@ -15155,7 +15155,7 @@
                     (i32.const -1))
                   (local.get 10))))))
         (local.set 12
-          (call $_RNvNtNtCs5s8uptHhuCz_4libm4math6scalbn6scalbn
+          (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math6scalbn6scalbn
             (local.get 12)
             (local.get 17)))
         (local.set 12
@@ -15164,7 +15164,7 @@
               (f64.add
                 (local.get 12)
                 (f64.mul
-                  (call $_RNvNtNtCs5s8uptHhuCz_4libm4math5floor5floor
+                  (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math5floor5floor
                     (f64.mul
                       (local.get 12)
                       (f64.const 0x1p-3 (;=0.125;))))
@@ -15344,7 +15344,7 @@
             (local.set 12
               (f64.sub
                 (local.get 12)
-                (call $_RNvNtNtCs5s8uptHhuCz_4libm4math6scalbn6scalbn
+                (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math6scalbn6scalbn
                   (f64.const 0x1p+0 (;=1;))
                   (local.get 17))))
             (br 1 (;@3;)))
@@ -15539,7 +15539,7 @@
           (br_if 0 (;@3;)
             (f64.ge
               (local.tee 12
-                (call $_RNvNtNtCs5s8uptHhuCz_4libm4math6scalbn6scalbn
+                (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math6scalbn6scalbn
                   (local.get 12)
                   (i32.sub
                     (i32.const 0)
@@ -15600,7 +15600,7 @@
           (local.get 3)
           (i32.const 2))))
     (local.set 12
-      (call $_RNvNtNtCs5s8uptHhuCz_4libm4math6scalbn6scalbn
+      (call $_RNvNtNtCs7dDIqmAoxPF_4libm4math6scalbn6scalbn
         (f64.const 0x1p+0 (;=1;))
         (local.get 17)))
     (local.set 0
@@ -15832,7 +15832,7 @@
       (local.get 21)
       (i32.const 7))
   )
-  (func $_RNvNvNtNtCs5s8uptHhuCz_4libm4math8rem_pio28rem_pio26medium (;91;) (type 15) (param i32 f64 i32)
+  (func $_RNvNvNtNtCs7dDIqmAoxPF_4libm4math8rem_pio28rem_pio26medium (;91;) (type 15) (param i32 f64 i32)
     (local f64 f64 f64 f64)
     (block ;; label = @1
       (br_if 0 (;@1;)
@@ -15936,7 +15936,7 @@
           (local.get 5))
         (local.get 4)))
   )
-  (func $_RNvNtNtCs5s8uptHhuCz_4libm4math6scalbn6scalbn (;92;) (type 16) (param f64 i32) (result f64)
+  (func $_RNvNtNtCs7dDIqmAoxPF_4libm4math6scalbn6scalbn (;92;) (type 16) (param f64 i32) (result f64)
     (block ;; label = @1
       (block ;; label = @2
         (block ;; label = @3
@@ -16012,70 +16012,7 @@
               (i32.const 1023)))
           (i64.const 52))))
   )
-  (func $__multi3 (;93;) (type 17) (param i32 i64 i64 i64 i64)
-    (local i64 i64 i64 i64 i64 i64)
-    (i64.store
-      (local.get 0)
-      (local.tee 10
-        (i64.add
-          (local.tee 7
-            (i64.mul
-              (local.tee 5
-                (i64.and
-                  (local.get 3)
-                  (i64.const 4294967295)))
-              (local.tee 6
-                (i64.and
-                  (local.get 1)
-                  (i64.const 4294967295)))))
-          (i64.shl
-            (local.tee 5
-              (i64.add
-                (local.tee 6
-                  (i64.mul
-                    (local.tee 8
-                      (i64.shr_u
-                        (local.get 3)
-                        (i64.const 32)))
-                    (local.get 6)))
-                (i64.mul
-                  (local.get 5)
-                  (local.tee 9
-                    (i64.shr_u
-                      (local.get 1)
-                      (i64.const 32))))))
-            (i64.const 32)))))
-    (i64.store offset=8
-      (local.get 0)
-      (i64.add
-        (i64.add
-          (i64.add
-            (i64.mul
-              (local.get 8)
-              (local.get 9))
-            (i64.or
-              (i64.shl
-                (i64.extend_i32_u
-                  (i64.lt_u
-                    (local.get 5)
-                    (local.get 6)))
-                (i64.const 32))
-              (i64.shr_u
-                (local.get 5)
-                (i64.const 32))))
-          (i64.extend_i32_u
-            (i64.lt_u
-              (local.get 10)
-              (local.get 7))))
-        (i64.add
-          (i64.mul
-            (local.get 4)
-            (local.get 1))
-          (i64.mul
-            (local.get 3)
-            (local.get 2)))))
-  )
-  (func $_RNvNtNtCsdjK9AldMud9_17compiler_builtins3int19specialized_div_rem12u128_div_rem (;94;) (type 17) (param i32 i64 i64 i64 i64)
+  (func $_RNvNtNtCsbVTeWY9Asto_17compiler_builtins3int19specialized_div_rem12u128_div_rem (;93;) (type 17) (param i32 i64 i64 i64 i64)
     (local i32 i64 i32 i32 i32 i64 i64 i64 i64)
     (global.set $__stack_pointer
       (local.tee 5
@@ -16634,85 +16571,14 @@
         (local.get 5)
         (i32.const 176)))
   )
-  (func $__umodti3 (;95;) (type 17) (param i32 i64 i64 i64 i64)
+  (func $__udivti3 (;94;) (type 17) (param i32 i64 i64 i64 i64)
     (local i32)
     (global.set $__stack_pointer
       (local.tee 5
         (i32.sub
           (global.get $__stack_pointer)
           (i32.const 32))))
-    (call $_RNvNtNtCsdjK9AldMud9_17compiler_builtins3int19specialized_div_rem12u128_div_rem
-      (local.get 5)
-      (local.get 1)
-      (local.get 2)
-      (local.get 3)
-      (local.get 4))
-    (local.set 4
-      (i64.load offset=16
-        (local.get 5)))
-    (i64.store offset=8
-      (local.get 0)
-      (i64.load offset=24
-        (local.get 5)))
-    (i64.store
-      (local.get 0)
-      (local.get 4))
-    (global.set $__stack_pointer
-      (i32.add
-        (local.get 5)
-        (i32.const 32)))
-  )
-  (func $__lshrti3 (;96;) (type 18) (param i32 i64 i64 i32)
-    (local i64)
-    (block ;; label = @1
-      (block ;; label = @2
-        (br_if 0 (;@2;)
-          (i32.and
-            (local.get 3)
-            (i32.const 64)))
-        (br_if 1 (;@1;)
-          (i32.eqz
-            (local.get 3)))
-        (local.set 1
-          (i64.or
-            (i64.shl
-              (local.get 2)
-              (i64.extend_i32_u
-                (i32.sub
-                  (i32.const 0)
-                  (local.get 3))))
-            (i64.shr_u
-              (local.get 1)
-              (local.tee 4
-                (i64.extend_i32_u
-                  (local.get 3))))))
-        (local.set 2
-          (i64.shr_u
-            (local.get 2)
-            (local.get 4)))
-        (br 1 (;@1;)))
-      (local.set 1
-        (i64.shr_u
-          (local.get 2)
-          (i64.extend_i32_u
-            (local.get 3))))
-      (local.set 2
-        (i64.const 0)))
-    (i64.store
-      (local.get 0)
-      (local.get 1))
-    (i64.store offset=8
-      (local.get 0)
-      (local.get 2))
-  )
-  (func $__udivti3 (;97;) (type 17) (param i32 i64 i64 i64 i64)
-    (local i32)
-    (global.set $__stack_pointer
-      (local.tee 5
-        (i32.sub
-          (global.get $__stack_pointer)
-          (i32.const 32))))
-    (call $_RNvNtNtCsdjK9AldMud9_17compiler_builtins3int19specialized_div_rem12u128_div_rem
+    (call $_RNvNtNtCsbVTeWY9Asto_17compiler_builtins3int19specialized_div_rem12u128_div_rem
       (local.get 5)
       (local.get 1)
       (local.get 2)
@@ -16733,7 +16599,7 @@
         (local.get 5)
         (i32.const 32)))
   )
-  (func $__ashlti3 (;98;) (type 18) (param i32 i64 i64 i32)
+  (func $__ashlti3 (;95;) (type 18) (param i32 i64 i64 i32)
     (local i64)
     (block ;; label = @1
       (block ;; label = @2
@@ -16776,10 +16642,144 @@
       (local.get 0)
       (local.get 2))
   )
-  (data $.rodata (;0;) (i32.const 1052672) "\03\00\00\00\04\00\00\00\04\00\00\00\06\00\00\00\83\f9\a2\00DNn\00\fc)\15\00\d1W'\00\dd4\f5\00b\db\c0\00<\99\95\00A\90C\00cQ\fe\00\bb\de\ab\00\b7a\c5\00:n$\00\d2MB\00I\06\e0\00\09\ea.\00\1c\92\d1\00\eb\1d\fe\00)\b1\1c\00\e8>\a7\00\f55\82\00D\bb.\00\9c\e9\84\00\b4&p\00A~_\00\d6\919\00S\839\00\9c\f49\00\8b_\84\00(\f9\bd\00\f8\1f;\00\de\ff\97\00\0f\98\05\00\11/\ef\00\0aZ\8b\00m\1fm\00\cf~6\00\09\cb'\00FO\b7\00\9ef?\00-\ea_\00\ba'u\00\e5\eb\c7\00={\f1\00\f79\07\00\92R\8a\00\fbk\ea\00\1f\b1_\00\08]\8d\000\03V\00{\fcF\00\f0\abk\00 \bc\cf\006\f4\9a\00\e3\a9\1d\00^a\91\00\08\1b\e6\00\85\99e\00\a0\14_\00\8d@h\00\80\d8\ff\00'sM\00\06\061\00\caV\15\00\c9\a8s\00{\e2`\00k\8c\c0\00\00\00\00@\fb!\f9?\00\00\00\00-Dt>\00\00\00\80\98F\f8<\00\00\00`Q\ccx;\00\00\00\80\83\1b\f09\00\00\00@ %z8\00\00\00\80\22\82\e36\00\00\00\00\1d\f3i5\00\00\00\00\00\00\e0?\00\00\00\00\00\00\e0\bf\00\00\00\00\00\00\f0?\00\00\00\00\00\00\f8?\00\00\00\00\00\00\00\00\06\d0\cfC\eb\fdL>\00\00\00\00\00\00\00\00\00\00\00@\03\b8\e2?O\bba\05g\ac\dd?\18-DT\fb!\e9?\9b\f6\81\d2\0bs\ef?\18-DT\fb!\f9?\e2e/\22\7f+z<\07\5c\143&\a6\81<\bd\cb\f0z\88\07p<\07\5c\143&\a6\91<\00\00\00\00\00\00\f0?\8br\8d\f9\a2(\f4?=n=\a5\fee\f9?]=\7ff\9e\a0\e6?\00\00\00\00\00\889=D\17u\faR\b0\e6?\00\00\00\00\00\00\d8<\fe\d9\0bu\12\c0\e6?\00\00\00\00\00x(\bd\bfv\d4\dd\dc\cf\e6?\00\00\00\00\00\c0\1e=)\1ae<\b2\df\e6?\00\00\00\00\00\00\d8\bc\e3:Y\98\92\ef\e6?\00\00\00\00\00\00\bc\bc\86\93Q\f9}\ff\e6?\00\00\00\00\00\d8/\bd\a3-\f4ft\0f\e7?\00\00\00\00\00\88,\bd\c3_\ec\e8u\1f\e7?\00\00\00\00\00\c0\13=\05\cf\ea\86\82/\e7?\00\00\00\00\0008\bdR\81\a5H\9a?\e7?\00\00\00\00\00\c0\00\bd\fc\cc\d75\bdO\e7?\00\00\00\00\00\88/=\f1gBV\eb_\e7?\00\00\00\00\00\e0\03=Hm\ab\b1$p\e7?\00\00\00\00\00\d0'\bd8]\deOi\80\e7?\00\00\00\00\00\00\dd\bc\00\1d\ac8\b9\90\e7?\00\00\00\00\00\00\e3<x\01\ebs\14\a1\e7?\00\00\00\00\00\00\ed\bc`\d0v\09{\b1\e7?\00\00\00\00\00@ =3\c10\01\ed\c1\e7?\00\00\00\00\00\00\a0<6\86\ffbj\d2\e7?\00\00\00\00\00\90&\bd;N\cf6\f3\e2\e7?\00\00\00\00\00\e0\02\bd\e8\c3\91\84\87\f3\e7?\00\00\00\00\00X$\bdN\1b>T'\04\e8?\00\00\00\00\00\003=\1a\07\d1\ad\d2\14\e8?\00\00\00\00\00\00\0f=~\cdL\99\89%\e8?\00\00\00\00\00\c0!\bd\d0B\b9\1eL6\e8?\00\00\00\00\00\d0)=\b5\ca#F\1aG\e8?\00\00\00\00\00\10G=\bc[\9f\17\f4W\e8?\00\00\00\00\00`\22=\af\91D\9b\d9h\e8?\00\00\00\00\00\c42\bd\95\a31\d9\cay\e8?\00\00\00\00\00\00#\bd\b8e\8a\d9\c7\8a\e8?\00\00\00\00\00\80*\bd\00Xx\a4\d0\9b\e8?\00\00\00\00\00\00\ed\bc#\a2*B\e5\ac\e8?\00\00\00\00\00(3=\fa\19\d6\ba\05\be\e8?\00\00\00\00\00\b4B=\83C\b5\162\cf\e8?\00\00\00\00\00\d0.\bdLf\08^j\e0\e8?\00\00\00\00\00P \bd\07x\15\99\ae\f1\e8?\00\00\00\00\00((=\0e,(\d0\fe\02\e9?\00\00\00\00\00\b0\1c\bd\96\ff\91\0b[\14\e9?\00\00\00\00\00\e0\05\bd\f9/\aaS\c3%\e9?\00\00\00\00\00@\f5<J\c6\cd\b077\e9?\00\00\00\00\00 \17=\ae\98_+\b8H\e9?\00\00\00\00\00\00\09\bd\cbR\c8\cbDZ\e9?\00\00\00\00\00h%=!ov\9a\ddk\e9?\00\00\00\00\00\d06\bd*N\de\9f\82}\e9?\00\00\00\00\00\00\01\bd\a3#z\e43\8f\e9?\00\00\00\00\00\00-=\04\06\cap\f1\a0\e9?\00\00\00\00\00\a48\bd\89\ffSM\bb\b2\e9?\00\00\00\00\00\5c5=[\f1\a3\82\91\c4\e9?\00\00\00\00\00\b8&=\c5\b8K\19t\d6\e9?\00\00\00\00\00\00\ec\bc\8e#\e3\19c\e8\e9?\00\00\00\00\00\d0\17=\02\f3\07\8d^\fa\e9?\00\00\00\00\00@\16=M\e5]{f\0c\ea?\00\00\00\00\00\00\f5\bc\f6\b8\8e\edz\1e\ea?\00\00\00\00\00\e0\09='.J\ec\9b0\ea?\00\00\00\00\00\d8*=]\0aF\80\c9B\ea?\00\00\00\00\00\f0\1a\bd\9b%>\b2\03U\ea?\00\00\00\00\00`\0b=\13b\f4\8aJg\ea?\00\00\00\00\00\888=\a7\b30\13\9ey\ea?\00\00\00\00\00 \11=\8d.\c1S\fe\8b\ea?\00\00\00\00\00\c0\06=\d2\fcyUk\9e\ea?\00\00\00\00\00\b8)\bd\b8o5!\e5\b0\ea?\00\00\00\00\00p+=\81\f3\d3\bfk\c3\ea?\00\00\00\00\00\00\d9<\80'<:\ff\d5\ea?\00\00\00\00\00\00\e4<\a3\d2Z\99\9f\e8\ea?\00\00\00\00\00\90,\bdg\f3\22\e6L\fb\ea?\00\00\00\00\00P\16=\90\b7\8d)\07\0e\eb?\00\00\00\00\00\d4/=\a9\89\9al\ce \eb?\00\00\00\00\00p\12=K\1aO\b8\a23\eb?\00\00\00\00\00GM=\e7G\b7\15\84F\eb?\00\00\00\00\0088\bd:Y\e5\8drY\eb?\00\00\00\00\00\00\98<j\c5\f1)nl\eb?\00\00\00\00\00\d0\0a=P^\fb\f2v\7f\eb?\00\00\00\00\00\80\de<\b2I'\f2\8c\92\eb?\00\00\00\00\00\c0\04\bd\03\06\a10\b0\a5\eb?\00\00\00\00\00p\0d\bdfo\9a\b7\e0\b8\eb?\00\00\00\00\00\90\0d=\ff\c1K\90\1e\cc\eb?\00\00\00\00\00\a0\02=o\a1\f3\c3i\df\eb?\00\00\00\00\00x\1f\bd\b8\1d\d7[\c2\f2\eb?\00\00\00\00\00\a0\10\bd\e9\b2Aa(\06\ec?\00\00\00\00\00@\11\bd\e0R\85\dd\9b\19\ec?\00\00\00\00\00\e0\0b=\eed\fa\d9\1c-\ec?\00\00\00\00\00@\09\bd/\d0\ff_\ab@\ec?\00\00\00\00\00\d0\0e\bd\15\fd\faxGT\ec?\00\00\00\00\00f9=\cb\d0W.\f1g\ec?\00\00\00\00\00\10\1a\bd\b6\c1\88\89\a8{\ec?\00\00\00\00\80EX\bd3\e7\06\94m\8f\ec?\00\00\00\00\00H\1a\bd\df\c4QW@\a3\ec?\00\00\00\00\00\00\cb<\94\90\ef\dc \b7\ec?\00\00\00\00\00@\01=\89\16m.\0f\cb\ec?\00\00\00\00\00 \f0<\12\c4]U\0b\df\ec?\00\00\00\00\00`\f3<;\ab[[\15\f3\ec?\00\00\00\00\00\90\06\bd\bc\89\07J-\07\ed?\00\00\00\00\00\a0\09=\fa\c8\08+S\1b\ed?\00\00\00\00\00\e0\15\bd\85\8a\0d\08\87/\ed?\00\00\00\00\00(\1d=\03\a2\ca\ea\c8C\ed?\00\00\00\00\00\a0\01=\91\a4\fb\dc\18X\ed?\00\00\00\00\00\00\df<\a1\e6b\e8vl\ed?\00\00\00\00\00\a0\03\bdN\83\c9\16\e3\80\ed?\00\00\00\00\00\d8\0c\bd\90`\ffq]\95\ed?\00\00\00\00\00\c0\f4<\ae2\db\03\e6\a9\ed?\00\00\00\00\00\90\ff<%\83:\d6|\be\ed?\00\00\00\00\00\80\e9<E\b4\01\f3!\d3\ed?\00\00\00\00\00 \f5\bc\bf\05\1cd\d5\e7\ed?\00\00\00\00\00p\1d\bd\ec\9a{3\97\fc\ed?\00\00\00\00\00\14\16\bd^}\19kg\11\ee?\00\00\00\00\00H\0b=\e7\a3\f5\14F&\ee?\00\00\00\00\00\ce@=\5c\ee\16;3;\ee?\00\00\00\00\00h\0c=\b4?\8b\e7.P\ee?\00\00\00\00\000\09\bdhmg$9e\ee?\00\00\00\00\00\00\e5\bcDL\c7\fbQz\ee?\00\00\00\00\00\f8\07\bd&\b7\cdwy\8f\ee?\00\00\00\00\00p\f3\bc\e8\90\a4\a2\af\a4\ee?\00\00\00\00\00\d0\e5<\e4\ca|\86\f4\b9\ee?\00\00\00\00\00\1a\16=\0dh\8e-H\cf\ee?\00\00\00\00\00P\f5<\14\85\18\a2\aa\e4\ee?\00\00\00\00\00@\c6<\13Za\ee\1b\fa\ee?\00\00\00\00\00\80\ee\bc\06A\b6\1c\9c\0f\ef?\00\00\00\00\00\88\fa\bcc\b9k7+%\ef?\00\00\00\00\00\90,\bdur\ddH\c9:\ef?\00\00\00\00\00\00\aa<$En[vP\ef?\00\00\00\00\00\f0\f4\bc\fdD\88y2f\ef?\00\00\00\00\00\80\ca<8\be\9c\ad\fd{\ef?\00\00\00\00\00\bc\fa<\82<$\02\d8\91\ef?\00\00\00\00\00`\d4\bc\8e\90\9e\81\c1\a7\ef?\00\00\00\00\00\0c\0b\bd\11\d5\926\ba\bd\ef?\00\00\00\00\00\e0\c0\bc\94q\8f+\c2\d3\ef?\00\00\00\00\80\de\10\bd\ee#*k\d9\e9\ef?\00\00\00\00\00C\ee<\00\00\00\00\00\00\f0?\00\00\00\00\00\00\00\00\be\bcZ\fa\1a\0b\f0?\00\00\00\00\00@\b3\bc\033\fb\a9=\16\f0?\00\00\00\00\00\17\12\bd\82\02;\14h!\f0?\00\00\00\00\00@\ba<l\80w>\9a,\f0?\00\00\00\00\00\98\ef<\ca\bb\11.\d47\f0?\00\00\00\00\00@\c7\bc\89\7fn\e8\15C\f0?\00\00\00\00\000\d8<gT\f6r_N\f0?\00\00\00\00\00?\1a\bdZ\85\15\d3\b0Y\f0?\00\00\00\00\00\84\02\bd\95\1f<\0e\0ae\f0?\00\00\00\00\00`\f1<\1a\f7\dd)kp\f0?\00\00\00\00\00$\15=-\a8r+\d4{\f0?\00\00\00\00\00\a0\e9\bc\d0\9bu\18E\87\f0?\00\00\00\00\00@\e6<\c8\07f\f6\bd\92\f0?\00\00\00\00\00x\00\bd\83\f3\c6\ca>\9e\f0?\00\00\00\00\00\00\98\bc09\1f\9b\c7\a9\f0?\00\00\00\00\00\a0\ff<\fc\88\f9lX\b5\f0?\00\00\00\00\00\c8\fa\bc\8al\e4E\f1\c0\f0?\00\00\00\00\00\c0\d9<\16Hr+\92\cc\f0?\00\00\00\00\00 \05=\d8]9#;\d8\f0?\00\00\00\00\00\d0\fa\bc\f3\d1\d32\ec\e3\f0?\00\00\00\00\00\ac\1b=\a6\a9\df_\a5\ef\f0?\00\00\00\00\00\e8\04\bd\f0\d2\fe\aff\fb\f0?\00\00\00\00\000\0d\bdK#\d7(0\07\f1?\00\00\00\00\00P\f1<[[\12\d0\01\13\f1?\00\00\00\00\00\00\ec<\f9*^\ab\db\1e\f1?\00\00\00\00\00\bc\16=\d51l\c0\bd*\f1?\00\00\00\00\00@\e8<}\04\f2\14\a86\f1?\00\00\00\00\00\d0\0e\bd\e9-\a9\ae\9aB\f1?\00\00\00\00\00\e0\e8<81O\93\95N\f1?\00\00\00\00\00@\eb<q\8e\a5\c8\98Z\f1?\00\00\00\00\000\05=\df\c3qT\a4f\f1?\00\00\00\00\008\03=\11R}<\b8r\f1?\00\00\00\00\00\d4(=\9f\bb\95\86\d4~\f1?\00\00\00\00\00\d0\05\bd\93\8d\8c8\f9\8a\f1?\00\00\00\00\00\88\1c\bdf]7X&\97\f1?\00\00\00\00\00\f0\11=\a7\cbo\eb[\a3\f1?\00\00\00\00\00H\10=\e3\87\13\f8\99\af\f1?\00\00\00\00\009G\bdT]\04\84\e0\bb\f1?\00\00\00\00\00\e4$=C\1c(\95/\c8\f1?\00\00\00\00\00 \0a\bd\b2\b9h1\87\d4\f1?\00\00\00\00\00\80\e3<1@\b4^\e7\e0\f1?\00\00\00\00\00\c0\ea<8\d9\fc\22P\ed\f1?\00\00\00\00\00\90\01=\f7\cd8\84\c1\f9\f1?\00\00\00\00\00x\1b\bd\8f\8db\88;\06\f2?\00\00\00\00\00\94-=\1e\a8x5\be\12\f2?\00\00\00\00\00\00\d8<A\dd}\91I\1f\f2?\00\00\00\00\004+=#\13y\a2\dd+\f2?\00\00\00\00\00\f8\19=\e7aunz8\f2?\00\00\00\00\00\c8\19\bd'\14\82\fb\1fE\f2?\00\00\00\00\000\02=\02\a6\b2O\ceQ\f2?\00\00\00\00\00H\13\bd\b0\ce\1eq\85^\f2?\00\00\00\00\00p\12=\16}\e2eEk\f2?\00\00\00\00\00\d0\11=\0f\e0\1d4\0ex\f2?\00\00\00\00\00\ee1=>c\f5\e1\df\84\f2?\00\00\00\00\00\c0\14\bd0\bb\91u\ba\91\f2?\00\00\00\00\00\d8\13\bd\09\df\1f\f5\9d\9e\f2?\00\00\00\00\00\b0\08=\9b\0e\d1f\8a\ab\f2?\00\00\00\00\00|\22\bd:\da\da\d0\7f\b8\f2?\00\00\00\00\004*=\f9\1aw9~\c5\f2?\00\00\00\00\00\80\10\bd\d9\02\e4\a6\85\d2\f2?\00\00\00\00\00\d0\0e\bdy\15d\1f\96\df\f2?\00\00\00\00\00 \f4\bc\cf.>\a9\af\ec\f2?\00\00\00\00\00\98$\bd\22\88\bdJ\d2\f9\f2?\00\00\00\00\000\16\bd%\b61\0a\fe\06\f3?\00\00\00\00\0062\bd\0b\a5\ee\ed2\14\f3?\00\00\00\00\80\dfp\bd\b8\d7L\fcp!\f3?\00\00\00\00\00H\22\bd\a2\e9\a8;\b8.\f3?\00\00\00\00\00\98%\bdf\17d\b2\08<\f3?\00\00\00\00\00\d0\1e='\fa\e3fbI\f3?\00\00\00\00\00\00\dc\bc\0f\9f\92_\c5V\f3?\00\00\00\00\00\d80\bd\b9\88\de\a21d\f3?\00\00\00\00\00\c8\22=9\aa:7\a7q\f3?\00\00\00\00\00` =\fet\1e#&\7f\f3?\00\00\00\00\00`\16\bd8\d8\05m\ae\8c\f3?\00\00\00\00\00\e0\0a\bd\c3>q\1b@\9a\f3?\00\00\00\00\00rD\bd \a0\e54\db\a7\f3?\00\00\00\00\00 \08=\95n\ec\bf\7f\b5\f3?\00\00\00\00\00\80>=\f2\a8\13\c3-\c3\f3?\00\00\00\00\00\80\ef<\22\e1\edD\e5\d0\f3?\00\00\00\00\00\a0\17\bd\bb4\12L\a6\de\f3?\00\00\00\00\000&=\ccN\1c\dfp\ec\f3?\00\00\00\00\00\a6H\bd\8c~\ac\04E\fa\f3?\00\00\00\00\00\dc<\bd\bb\a0g\c3\22\08\f4?\00\00\00\00\00\b8%=\95.\f7!\0a\16\f4?\00\00\00\00\00\c0\1e=FF\09'\fb#\f4?\00\00\00\00\00`\13\bd \a9P\d9\f51\f4?\00\00\00\00\00\98#=\eb\b9\84?\fa?\f4?\00\00\00\00\00\00\fa<\19\89a`\08N\f4?\00\00\00\00\00\c0\f6\bc\01\d2\a7B \5c\f4?\00\00\00\00\00\c0\0b\bd\16\00\1d\edAj\f4?\00\00\00\00\00\80\12\bd&3\8bfmx\f4?\00\00\00\00\00\e00=\00<\c1\b5\a2\86\f4?\00\00\00\00\00@-\bd\04\af\92\e1\e1\94\f4?\00\00\00\00\00 \0c=r\d3\d7\f0*\a3\f4?\00\00\00\00\00P\1e\bd\01\b8m\ea}\b1\f4?\00\00\00\00\00\80\07=\e1)6\d5\da\bf\f4?\00\00\00\00\00\80\13\bd2\c1\17\b8A\ce\f4?\00\00\00\00\00\80\00=\db\dd\fd\99\b2\dc\f4?\00\00\00\00\00p,=\96\ab\d8\81-\eb\f4?\00\00\00\00\00\e0\1c\bd\02-\9dv\b2\f9\f4?\00\00\00\00\00 \19=\c11E\7fA\08\f5?\00\00\00\00\00\c0\08\bd*f\cf\a2\da\16\f5?\00\00\00\00\00\00\fa\bc\eaQ?\e8}%\f5?\00\00\00\00\00\08J=\daN\9dV+4\f5?\00\00\00\00\00\d8&\bd\1a\ac\f6\f4\e2B\f5?\00\00\00\00\00D2\bd\db\94]\ca\a4Q\f5?\00\00\00\00\00<H=k\11\e9\ddp`\f5?\00\00\00\00\00\b0$=\de)\b56Go\f5?\00\00\00\00\00ZA=\0e\c4\e2\db'~\f5?\00\00\00\00\00\e0)\bdo\c7\97\d4\12\8d\f5?\00\00\00\00\00\08#\bdL\0b\ff'\08\9c\f5?\00\00\00\00\00\ecM='TH\dd\07\ab\f5?\00\00\00\00\00\00\c4\bc\f4z\a8\fb\11\ba\f5?\00\00\00\00\00\080=\0bFY\8a&\c9\f5?\00\00\00\00\00\c8&\bd?\8e\99\90E\d8\f5?\00\00\00\00\00\9aF=\e1 \ad\15o\e7\f5?\00\00\00\00\00@\1b\bd\ca\eb\dc \a3\f6\f5?\00\00\00\00\00p\17=\b8\dcv\b9\e1\05\f6?\00\00\00\00\00\f8&=\15\f7\cd\e6*\15\f6?\00\00\00\00\00\00\01=1U:\b0~$\f6?\00\00\00\00\00\d0\15\bd\b5)\19\1d\dd3\f6?\00\00\00\00\00\d0\12\bd\13\c3\cc4FC\f6?\00\00\00\00\00\80\ea\bc\fa\8e\bc\fe\b9R\f6?\00\00\00\00\00`(\bd\973U\828b\f6?\00\00\00\00\00\feq=\8e2\08\c7\c1q\f6?\00\00\00\00\00 7\bd~\a9L\d4U\81\f6?\00\00\00\00\00\80\e6<q\94\9e\b1\f4\90\f6?\00\00\00\00\00x)\bd\00\00\00?\00\00\00\bf\00\00\80?\00\00\c0?\00\00\00\00\dc\cf\d15\00\00\00\00\00\c0\15?8c\ed>\da\0fI?^\98{?\da\0f\c9?i7\ac1h!\223\b4\0f\143h!\a23\16V\e7\9e\af\03\d2<\9b+\a1\86\9b\84\06=\82vIh\c2%<=\11\ea-\81\99\97q=\95dy\e1\7f\fd\a5=\bb\bd\d7\d9\df|\db=\95\d6&\e8\0b.\11>:\8c0\e2\8eyE>H\af\bc\9a\f2\d7z>\8d\ed\b5\a0\f7\c6\b0>\f1h\e3\88\b5\f8\e4>-C\1c\eb\e26\1a?\fc\a9\f1\d2MbP?{\14\aeG\e1z\84?\9a\99\99\99\99\99\b9?\00\00\00\00\00\00\f0?\00\00\00\00\00\00$@\00\00\00\00\00\00Y@\00\00\00\00\00@\8f@\00\00\00\00\00\88\c3@\00\00\00\00\00j\f8@\00\00\00\00\80\84.A\00\00\00\00\d0\12cA\00\00\00\00\84\d7\97A\00\00\00\00e\cd\cdA\00\00\00 _\a0\02B\00\00\00\e8vH7B\00\00\00\a2\94\1amB\00\00@\e5\9c0\a2B\00\00\90\1e\c4\bc\d6B\00\004&\f5k\0cC\cd;\7ff\9e\a0\e6?\87\01\ebs\14\a1\e7?\db\a0*B\e5\ac\e8?\90\f0\a3\82\91\c4\e9?\ad\d3Z\99\9f\e8\ea?\9cR\85\dd\9b\19\ec?\87\a4\fb\dc\18X\ed?\da\90\a4\a2\af\a4\ee?\00\00\00\00\00\00\f0?\0f\89\f9lX\b5\f0?{Q}<\b8r\f1?8bunz8\f2?\15\b71\0a\fe\06\f3?\224\12L\a6\de\f3?'*6\d5\da\bf\f4?)TH\dd\07\ab\f5?\95\bf\d63\bd7\865\ac\c5'7\17\b7\d18o\12\83:\0a\d7#<\cd\cc\cc=\00\00\80?\00\00 A\00\00\c8B\00\00zD\00@\1cF\00P\c3G\00$tI\80\96\18K\00\00\00\00\9e\a4\c1CQ\ea\15BWL\f5up\fc#B\1a\b6\8a\812\a1 B\1a&\e8\22\b5\b0\10B\e8\a1\a5\b3\c1\7f\f6A?\f3\d3\f5\18t\d5A*_\b9{\0c\ab\adA\98\cc]\f9v\f8}AL\f4\80P\e9\f1EA\eb\87\87\1fB\b6\06A\04\d8X\08\ac\87\bf@R;\bc{`Zj@\05'\f6\1f\93\0d\04@\00\00\00\00\00\00\00\00\00\00\00\00\a8\08\83A\00\00\00\80i\bd\9cA\00\00\00\b0\a6\fd\a1A\00\00\00pq\18\99A\00\00\00\90\b6\ee\85A\00\00\00\e0qqiA\00\00\00\00{\1fDA\00\00\00\00\bc\d0\15A\00\00\00\00\80\e7\df@\00\00\00\00\00\14\9e@\00\00\00\00\00\80P@\00\00\00\00\00\00\f0?\00\00\00\00\00\00\f0?\00\00\00\00\00\00\f0?\00\00\00\00\00\00\00@\00\00\00\00\00\00\18@\00\00\00\00\00\008@\00\00\00\00\00\00^@\00\00\00\00\00\80\86@\00\00\00\00\00\b0\b3@\00\00\00\00\00\b0\e3@\00\00\00\00\00&\16A\00\00\00\00\80\afKA\00\00\00\00\a8\08\83A\00\00\00\00\fc\8c\bcA\00\00\00\c0\8c2\f7A\00\00\00(;L4B\00\00\80uw\07sB\00\00\80uw\07\b3B\00\00\d8\ec\ee7\f4B\00\00s\ca\ec\be6C\00\90h0\b9\02{C\00ZA\be\b3\e1\c0C \c6\b5\e9;(\06Dl\f0YaRwNDQ\b4\f0\b2\96\b1D\b0\f9\ae\b6\ady\acC\ab\14\aa\eb\a8\c8\a7\aa\a6\92\a5\80\a4s\a3k\a2h\a1j\a0p\9f{\9e\8a\9d\9d\9c\b5\9b\d1\9a\f0\99\13\99:\98e\97\93\96\c4\95\f8\940\94k\93\a9\92\ea\91.\91u\90\be\8f\0a\8fY\8e\aa\8d\fe\8cT\8c\ac\8b\07\8bd\8a\c4\89%\89\89\88\ee\87V\87\c0\86+\86\99\85\08\85y\84\ec\83a\83\d8\82P\82\c9\81E\81\c2\80@\80\02\ff\0e\fd%\fbG\f9s\f7\aa\f5\ea\f34\f2\87\f0\e3\eeG\ed\b3\eb'\ea\a3\e8'\e7\b2\e5C\e4\dc\e2z\e1 \e0\cb\de}\dd4\dc\f1\da\b3\d9{\d8H\d7\1a\d6\f1\d4\cd\d3\ad\d2\92\d1{\d0i\cf[\ceQ\cdJ\ccH\cbJ\caO\c9X\c8d\c7t\c6\87\c5\9d\c4\b7\c3\d4\c2\f4\c1\16\c1<\c0e\bf\90\be\be\bd\ef\bc#\bcY\bb\91\ba\cc\b9\0a\b9J\b8\8c\b7\d0\b6\17\b6`\b5\18-DT\fb!\e9?\18-DT\fb!\e9\bf\d2!3\7f|\d9\02@\d2!3\7f|\d9\02\c0\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\80\18-DT\fb!\09@\18-DT\fb!\09\c0\db\0fI?\db\0fI\bf\e4\cb\16@\e4\cb\16\c0\00\00\00\00\00\00\00\80\db\0fI@\db\0fI\c0")
+  (func $__multi3 (;96;) (type 17) (param i32 i64 i64 i64 i64)
+    (local i64 i64 i64 i64 i64 i64)
+    (i64.store
+      (local.get 0)
+      (local.tee 10
+        (i64.add
+          (local.tee 7
+            (i64.mul
+              (local.tee 5
+                (i64.and
+                  (local.get 3)
+                  (i64.const 4294967295)))
+              (local.tee 6
+                (i64.and
+                  (local.get 1)
+                  (i64.const 4294967295)))))
+          (i64.shl
+            (local.tee 5
+              (i64.add
+                (local.tee 6
+                  (i64.mul
+                    (local.tee 8
+                      (i64.shr_u
+                        (local.get 3)
+                        (i64.const 32)))
+                    (local.get 6)))
+                (i64.mul
+                  (local.get 5)
+                  (local.tee 9
+                    (i64.shr_u
+                      (local.get 1)
+                      (i64.const 32))))))
+            (i64.const 32)))))
+    (i64.store offset=8
+      (local.get 0)
+      (i64.add
+        (i64.add
+          (i64.add
+            (i64.mul
+              (local.get 8)
+              (local.get 9))
+            (i64.or
+              (i64.shl
+                (i64.extend_i32_u
+                  (i64.lt_u
+                    (local.get 5)
+                    (local.get 6)))
+                (i64.const 32))
+              (i64.shr_u
+                (local.get 5)
+                (i64.const 32))))
+          (i64.extend_i32_u
+            (i64.lt_u
+              (local.get 10)
+              (local.get 7))))
+        (i64.add
+          (i64.mul
+            (local.get 4)
+            (local.get 1))
+          (i64.mul
+            (local.get 3)
+            (local.get 2)))))
+  )
+  (func $__umodti3 (;97;) (type 17) (param i32 i64 i64 i64 i64)
+    (local i32)
+    (global.set $__stack_pointer
+      (local.tee 5
+        (i32.sub
+          (global.get $__stack_pointer)
+          (i32.const 32))))
+    (call $_RNvNtNtCsbVTeWY9Asto_17compiler_builtins3int19specialized_div_rem12u128_div_rem
+      (local.get 5)
+      (local.get 1)
+      (local.get 2)
+      (local.get 3)
+      (local.get 4))
+    (local.set 4
+      (i64.load offset=16
+        (local.get 5)))
+    (i64.store offset=8
+      (local.get 0)
+      (i64.load offset=24
+        (local.get 5)))
+    (i64.store
+      (local.get 0)
+      (local.get 4))
+    (global.set $__stack_pointer
+      (i32.add
+        (local.get 5)
+        (i32.const 32)))
+  )
+  (func $__lshrti3 (;98;) (type 18) (param i32 i64 i64 i32)
+    (local i64)
+    (block ;; label = @1
+      (block ;; label = @2
+        (br_if 0 (;@2;)
+          (i32.and
+            (local.get 3)
+            (i32.const 64)))
+        (br_if 1 (;@1;)
+          (i32.eqz
+            (local.get 3)))
+        (local.set 1
+          (i64.or
+            (i64.shl
+              (local.get 2)
+              (i64.extend_i32_u
+                (i32.sub
+                  (i32.const 0)
+                  (local.get 3))))
+            (i64.shr_u
+              (local.get 1)
+              (local.tee 4
+                (i64.extend_i32_u
+                  (local.get 3))))))
+        (local.set 2
+          (i64.shr_u
+            (local.get 2)
+            (local.get 4)))
+        (br 1 (;@1;)))
+      (local.set 1
+        (i64.shr_u
+          (local.get 2)
+          (i64.extend_i32_u
+            (local.get 3))))
+      (local.set 2
+        (i64.const 0)))
+    (i64.store
+      (local.get 0)
+      (local.get 1))
+    (i64.store offset=8
+      (local.get 0)
+      (local.get 2))
+  )
+  (data $.rodata (;0;) (i32.const 1052672) "\03\00\00\00\04\00\00\00\04\00\00\00\06\00\00\00\83\f9\a2\00DNn\00\fc)\15\00\d1W'\00\dd4\f5\00b\db\c0\00<\99\95\00A\90C\00cQ\fe\00\bb\de\ab\00\b7a\c5\00:n$\00\d2MB\00I\06\e0\00\09\ea.\00\1c\92\d1\00\eb\1d\fe\00)\b1\1c\00\e8>\a7\00\f55\82\00D\bb.\00\9c\e9\84\00\b4&p\00A~_\00\d6\919\00S\839\00\9c\f49\00\8b_\84\00(\f9\bd\00\f8\1f;\00\de\ff\97\00\0f\98\05\00\11/\ef\00\0aZ\8b\00m\1fm\00\cf~6\00\09\cb'\00FO\b7\00\9ef?\00-\ea_\00\ba'u\00\e5\eb\c7\00={\f1\00\f79\07\00\92R\8a\00\fbk\ea\00\1f\b1_\00\08]\8d\000\03V\00{\fcF\00\f0\abk\00 \bc\cf\006\f4\9a\00\e3\a9\1d\00^a\91\00\08\1b\e6\00\85\99e\00\a0\14_\00\8d@h\00\80\d8\ff\00'sM\00\06\061\00\caV\15\00\c9\a8s\00{\e2`\00k\8c\c0\00\00\00\00@\fb!\f9?\00\00\00\00-Dt>\00\00\00\80\98F\f8<\00\00\00`Q\ccx;\00\00\00\80\83\1b\f09\00\00\00@ %z8\00\00\00\80\22\82\e36\00\00\00\00\1d\f3i5\00\00\00\00\00\00\e0?\00\00\00\00\00\00\e0\bf\00\00\00\00\00\00\f0?\00\00\00\00\00\00\f8?\00\00\00\00\00\00\00\00\06\d0\cfC\eb\fdL>\00\00\00\00\00\00\00\00\00\00\00@\03\b8\e2?O\bba\05g\ac\dd?\18-DT\fb!\e9?\9b\f6\81\d2\0bs\ef?\18-DT\fb!\f9?\e2e/\22\7f+z<\07\5c\143&\a6\81<\bd\cb\f0z\88\07p<\07\5c\143&\a6\91<\00\00\00\00\00\00\f0?\8br\8d\f9\a2(\f4?=n=\a5\fee\f9?]=\7ff\9e\a0\e6?\00\00\00\00\00\889=D\17u\faR\b0\e6?\00\00\00\00\00\00\d8<\fe\d9\0bu\12\c0\e6?\00\00\00\00\00x(\bd\bfv\d4\dd\dc\cf\e6?\00\00\00\00\00\c0\1e=)\1ae<\b2\df\e6?\00\00\00\00\00\00\d8\bc\e3:Y\98\92\ef\e6?\00\00\00\00\00\00\bc\bc\86\93Q\f9}\ff\e6?\00\00\00\00\00\d8/\bd\a3-\f4ft\0f\e7?\00\00\00\00\00\88,\bd\c3_\ec\e8u\1f\e7?\00\00\00\00\00\c0\13=\05\cf\ea\86\82/\e7?\00\00\00\00\0008\bdR\81\a5H\9a?\e7?\00\00\00\00\00\c0\00\bd\fc\cc\d75\bdO\e7?\00\00\00\00\00\88/=\f1gBV\eb_\e7?\00\00\00\00\00\e0\03=Hm\ab\b1$p\e7?\00\00\00\00\00\d0'\bd8]\deOi\80\e7?\00\00\00\00\00\00\dd\bc\00\1d\ac8\b9\90\e7?\00\00\00\00\00\00\e3<x\01\ebs\14\a1\e7?\00\00\00\00\00\00\ed\bc`\d0v\09{\b1\e7?\00\00\00\00\00@ =3\c10\01\ed\c1\e7?\00\00\00\00\00\00\a0<6\86\ffbj\d2\e7?\00\00\00\00\00\90&\bd;N\cf6\f3\e2\e7?\00\00\00\00\00\e0\02\bd\e8\c3\91\84\87\f3\e7?\00\00\00\00\00X$\bdN\1b>T'\04\e8?\00\00\00\00\00\003=\1a\07\d1\ad\d2\14\e8?\00\00\00\00\00\00\0f=~\cdL\99\89%\e8?\00\00\00\00\00\c0!\bd\d0B\b9\1eL6\e8?\00\00\00\00\00\d0)=\b5\ca#F\1aG\e8?\00\00\00\00\00\10G=\bc[\9f\17\f4W\e8?\00\00\00\00\00`\22=\af\91D\9b\d9h\e8?\00\00\00\00\00\c42\bd\95\a31\d9\cay\e8?\00\00\00\00\00\00#\bd\b8e\8a\d9\c7\8a\e8?\00\00\00\00\00\80*\bd\00Xx\a4\d0\9b\e8?\00\00\00\00\00\00\ed\bc#\a2*B\e5\ac\e8?\00\00\00\00\00(3=\fa\19\d6\ba\05\be\e8?\00\00\00\00\00\b4B=\83C\b5\162\cf\e8?\00\00\00\00\00\d0.\bdLf\08^j\e0\e8?\00\00\00\00\00P \bd\07x\15\99\ae\f1\e8?\00\00\00\00\00((=\0e,(\d0\fe\02\e9?\00\00\00\00\00\b0\1c\bd\96\ff\91\0b[\14\e9?\00\00\00\00\00\e0\05\bd\f9/\aaS\c3%\e9?\00\00\00\00\00@\f5<J\c6\cd\b077\e9?\00\00\00\00\00 \17=\ae\98_+\b8H\e9?\00\00\00\00\00\00\09\bd\cbR\c8\cbDZ\e9?\00\00\00\00\00h%=!ov\9a\ddk\e9?\00\00\00\00\00\d06\bd*N\de\9f\82}\e9?\00\00\00\00\00\00\01\bd\a3#z\e43\8f\e9?\00\00\00\00\00\00-=\04\06\cap\f1\a0\e9?\00\00\00\00\00\a48\bd\89\ffSM\bb\b2\e9?\00\00\00\00\00\5c5=[\f1\a3\82\91\c4\e9?\00\00\00\00\00\b8&=\c5\b8K\19t\d6\e9?\00\00\00\00\00\00\ec\bc\8e#\e3\19c\e8\e9?\00\00\00\00\00\d0\17=\02\f3\07\8d^\fa\e9?\00\00\00\00\00@\16=M\e5]{f\0c\ea?\00\00\00\00\00\00\f5\bc\f6\b8\8e\edz\1e\ea?\00\00\00\00\00\e0\09='.J\ec\9b0\ea?\00\00\00\00\00\d8*=]\0aF\80\c9B\ea?\00\00\00\00\00\f0\1a\bd\9b%>\b2\03U\ea?\00\00\00\00\00`\0b=\13b\f4\8aJg\ea?\00\00\00\00\00\888=\a7\b30\13\9ey\ea?\00\00\00\00\00 \11=\8d.\c1S\fe\8b\ea?\00\00\00\00\00\c0\06=\d2\fcyUk\9e\ea?\00\00\00\00\00\b8)\bd\b8o5!\e5\b0\ea?\00\00\00\00\00p+=\81\f3\d3\bfk\c3\ea?\00\00\00\00\00\00\d9<\80'<:\ff\d5\ea?\00\00\00\00\00\00\e4<\a3\d2Z\99\9f\e8\ea?\00\00\00\00\00\90,\bdg\f3\22\e6L\fb\ea?\00\00\00\00\00P\16=\90\b7\8d)\07\0e\eb?\00\00\00\00\00\d4/=\a9\89\9al\ce \eb?\00\00\00\00\00p\12=K\1aO\b8\a23\eb?\00\00\00\00\00GM=\e7G\b7\15\84F\eb?\00\00\00\00\0088\bd:Y\e5\8drY\eb?\00\00\00\00\00\00\98<j\c5\f1)nl\eb?\00\00\00\00\00\d0\0a=P^\fb\f2v\7f\eb?\00\00\00\00\00\80\de<\b2I'\f2\8c\92\eb?\00\00\00\00\00\c0\04\bd\03\06\a10\b0\a5\eb?\00\00\00\00\00p\0d\bdfo\9a\b7\e0\b8\eb?\00\00\00\00\00\90\0d=\ff\c1K\90\1e\cc\eb?\00\00\00\00\00\a0\02=o\a1\f3\c3i\df\eb?\00\00\00\00\00x\1f\bd\b8\1d\d7[\c2\f2\eb?\00\00\00\00\00\a0\10\bd\e9\b2Aa(\06\ec?\00\00\00\00\00@\11\bd\e0R\85\dd\9b\19\ec?\00\00\00\00\00\e0\0b=\eed\fa\d9\1c-\ec?\00\00\00\00\00@\09\bd/\d0\ff_\ab@\ec?\00\00\00\00\00\d0\0e\bd\15\fd\faxGT\ec?\00\00\00\00\00f9=\cb\d0W.\f1g\ec?\00\00\00\00\00\10\1a\bd\b6\c1\88\89\a8{\ec?\00\00\00\00\80EX\bd3\e7\06\94m\8f\ec?\00\00\00\00\00H\1a\bd\df\c4QW@\a3\ec?\00\00\00\00\00\00\cb<\94\90\ef\dc \b7\ec?\00\00\00\00\00@\01=\89\16m.\0f\cb\ec?\00\00\00\00\00 \f0<\12\c4]U\0b\df\ec?\00\00\00\00\00`\f3<;\ab[[\15\f3\ec?\00\00\00\00\00\90\06\bd\bc\89\07J-\07\ed?\00\00\00\00\00\a0\09=\fa\c8\08+S\1b\ed?\00\00\00\00\00\e0\15\bd\85\8a\0d\08\87/\ed?\00\00\00\00\00(\1d=\03\a2\ca\ea\c8C\ed?\00\00\00\00\00\a0\01=\91\a4\fb\dc\18X\ed?\00\00\00\00\00\00\df<\a1\e6b\e8vl\ed?\00\00\00\00\00\a0\03\bdN\83\c9\16\e3\80\ed?\00\00\00\00\00\d8\0c\bd\90`\ffq]\95\ed?\00\00\00\00\00\c0\f4<\ae2\db\03\e6\a9\ed?\00\00\00\00\00\90\ff<%\83:\d6|\be\ed?\00\00\00\00\00\80\e9<E\b4\01\f3!\d3\ed?\00\00\00\00\00 \f5\bc\bf\05\1cd\d5\e7\ed?\00\00\00\00\00p\1d\bd\ec\9a{3\97\fc\ed?\00\00\00\00\00\14\16\bd^}\19kg\11\ee?\00\00\00\00\00H\0b=\e7\a3\f5\14F&\ee?\00\00\00\00\00\ce@=\5c\ee\16;3;\ee?\00\00\00\00\00h\0c=\b4?\8b\e7.P\ee?\00\00\00\00\000\09\bdhmg$9e\ee?\00\00\00\00\00\00\e5\bcDL\c7\fbQz\ee?\00\00\00\00\00\f8\07\bd&\b7\cdwy\8f\ee?\00\00\00\00\00p\f3\bc\e8\90\a4\a2\af\a4\ee?\00\00\00\00\00\d0\e5<\e4\ca|\86\f4\b9\ee?\00\00\00\00\00\1a\16=\0dh\8e-H\cf\ee?\00\00\00\00\00P\f5<\14\85\18\a2\aa\e4\ee?\00\00\00\00\00@\c6<\13Za\ee\1b\fa\ee?\00\00\00\00\00\80\ee\bc\06A\b6\1c\9c\0f\ef?\00\00\00\00\00\88\fa\bcc\b9k7+%\ef?\00\00\00\00\00\90,\bdur\ddH\c9:\ef?\00\00\00\00\00\00\aa<$En[vP\ef?\00\00\00\00\00\f0\f4\bc\fdD\88y2f\ef?\00\00\00\00\00\80\ca<8\be\9c\ad\fd{\ef?\00\00\00\00\00\bc\fa<\82<$\02\d8\91\ef?\00\00\00\00\00`\d4\bc\8e\90\9e\81\c1\a7\ef?\00\00\00\00\00\0c\0b\bd\11\d5\926\ba\bd\ef?\00\00\00\00\00\e0\c0\bc\94q\8f+\c2\d3\ef?\00\00\00\00\80\de\10\bd\ee#*k\d9\e9\ef?\00\00\00\00\00C\ee<\00\00\00\00\00\00\f0?\00\00\00\00\00\00\00\00\be\bcZ\fa\1a\0b\f0?\00\00\00\00\00@\b3\bc\033\fb\a9=\16\f0?\00\00\00\00\00\17\12\bd\82\02;\14h!\f0?\00\00\00\00\00@\ba<l\80w>\9a,\f0?\00\00\00\00\00\98\ef<\ca\bb\11.\d47\f0?\00\00\00\00\00@\c7\bc\89\7fn\e8\15C\f0?\00\00\00\00\000\d8<gT\f6r_N\f0?\00\00\00\00\00?\1a\bdZ\85\15\d3\b0Y\f0?\00\00\00\00\00\84\02\bd\95\1f<\0e\0ae\f0?\00\00\00\00\00`\f1<\1a\f7\dd)kp\f0?\00\00\00\00\00$\15=-\a8r+\d4{\f0?\00\00\00\00\00\a0\e9\bc\d0\9bu\18E\87\f0?\00\00\00\00\00@\e6<\c8\07f\f6\bd\92\f0?\00\00\00\00\00x\00\bd\83\f3\c6\ca>\9e\f0?\00\00\00\00\00\00\98\bc09\1f\9b\c7\a9\f0?\00\00\00\00\00\a0\ff<\fc\88\f9lX\b5\f0?\00\00\00\00\00\c8\fa\bc\8al\e4E\f1\c0\f0?\00\00\00\00\00\c0\d9<\16Hr+\92\cc\f0?\00\00\00\00\00 \05=\d8]9#;\d8\f0?\00\00\00\00\00\d0\fa\bc\f3\d1\d32\ec\e3\f0?\00\00\00\00\00\ac\1b=\a6\a9\df_\a5\ef\f0?\00\00\00\00\00\e8\04\bd\f0\d2\fe\aff\fb\f0?\00\00\00\00\000\0d\bdK#\d7(0\07\f1?\00\00\00\00\00P\f1<[[\12\d0\01\13\f1?\00\00\00\00\00\00\ec<\f9*^\ab\db\1e\f1?\00\00\00\00\00\bc\16=\d51l\c0\bd*\f1?\00\00\00\00\00@\e8<}\04\f2\14\a86\f1?\00\00\00\00\00\d0\0e\bd\e9-\a9\ae\9aB\f1?\00\00\00\00\00\e0\e8<81O\93\95N\f1?\00\00\00\00\00@\eb<q\8e\a5\c8\98Z\f1?\00\00\00\00\000\05=\df\c3qT\a4f\f1?\00\00\00\00\008\03=\11R}<\b8r\f1?\00\00\00\00\00\d4(=\9f\bb\95\86\d4~\f1?\00\00\00\00\00\d0\05\bd\93\8d\8c8\f9\8a\f1?\00\00\00\00\00\88\1c\bdf]7X&\97\f1?\00\00\00\00\00\f0\11=\a7\cbo\eb[\a3\f1?\00\00\00\00\00H\10=\e3\87\13\f8\99\af\f1?\00\00\00\00\009G\bdT]\04\84\e0\bb\f1?\00\00\00\00\00\e4$=C\1c(\95/\c8\f1?\00\00\00\00\00 \0a\bd\b2\b9h1\87\d4\f1?\00\00\00\00\00\80\e3<1@\b4^\e7\e0\f1?\00\00\00\00\00\c0\ea<8\d9\fc\22P\ed\f1?\00\00\00\00\00\90\01=\f7\cd8\84\c1\f9\f1?\00\00\00\00\00x\1b\bd\8f\8db\88;\06\f2?\00\00\00\00\00\94-=\1e\a8x5\be\12\f2?\00\00\00\00\00\00\d8<A\dd}\91I\1f\f2?\00\00\00\00\004+=#\13y\a2\dd+\f2?\00\00\00\00\00\f8\19=\e7aunz8\f2?\00\00\00\00\00\c8\19\bd'\14\82\fb\1fE\f2?\00\00\00\00\000\02=\02\a6\b2O\ceQ\f2?\00\00\00\00\00H\13\bd\b0\ce\1eq\85^\f2?\00\00\00\00\00p\12=\16}\e2eEk\f2?\00\00\00\00\00\d0\11=\0f\e0\1d4\0ex\f2?\00\00\00\00\00\ee1=>c\f5\e1\df\84\f2?\00\00\00\00\00\c0\14\bd0\bb\91u\ba\91\f2?\00\00\00\00\00\d8\13\bd\09\df\1f\f5\9d\9e\f2?\00\00\00\00\00\b0\08=\9b\0e\d1f\8a\ab\f2?\00\00\00\00\00|\22\bd:\da\da\d0\7f\b8\f2?\00\00\00\00\004*=\f9\1aw9~\c5\f2?\00\00\00\00\00\80\10\bd\d9\02\e4\a6\85\d2\f2?\00\00\00\00\00\d0\0e\bdy\15d\1f\96\df\f2?\00\00\00\00\00 \f4\bc\cf.>\a9\af\ec\f2?\00\00\00\00\00\98$\bd\22\88\bdJ\d2\f9\f2?\00\00\00\00\000\16\bd%\b61\0a\fe\06\f3?\00\00\00\00\0062\bd\0b\a5\ee\ed2\14\f3?\00\00\00\00\80\dfp\bd\b8\d7L\fcp!\f3?\00\00\00\00\00H\22\bd\a2\e9\a8;\b8.\f3?\00\00\00\00\00\98%\bdf\17d\b2\08<\f3?\00\00\00\00\00\d0\1e='\fa\e3fbI\f3?\00\00\00\00\00\00\dc\bc\0f\9f\92_\c5V\f3?\00\00\00\00\00\d80\bd\b9\88\de\a21d\f3?\00\00\00\00\00\c8\22=9\aa:7\a7q\f3?\00\00\00\00\00` =\fet\1e#&\7f\f3?\00\00\00\00\00`\16\bd8\d8\05m\ae\8c\f3?\00\00\00\00\00\e0\0a\bd\c3>q\1b@\9a\f3?\00\00\00\00\00rD\bd \a0\e54\db\a7\f3?\00\00\00\00\00 \08=\95n\ec\bf\7f\b5\f3?\00\00\00\00\00\80>=\f2\a8\13\c3-\c3\f3?\00\00\00\00\00\80\ef<\22\e1\edD\e5\d0\f3?\00\00\00\00\00\a0\17\bd\bb4\12L\a6\de\f3?\00\00\00\00\000&=\ccN\1c\dfp\ec\f3?\00\00\00\00\00\a6H\bd\8c~\ac\04E\fa\f3?\00\00\00\00\00\dc<\bd\bb\a0g\c3\22\08\f4?\00\00\00\00\00\b8%=\95.\f7!\0a\16\f4?\00\00\00\00\00\c0\1e=FF\09'\fb#\f4?\00\00\00\00\00`\13\bd \a9P\d9\f51\f4?\00\00\00\00\00\98#=\eb\b9\84?\fa?\f4?\00\00\00\00\00\00\fa<\19\89a`\08N\f4?\00\00\00\00\00\c0\f6\bc\01\d2\a7B \5c\f4?\00\00\00\00\00\c0\0b\bd\16\00\1d\edAj\f4?\00\00\00\00\00\80\12\bd&3\8bfmx\f4?\00\00\00\00\00\e00=\00<\c1\b5\a2\86\f4?\00\00\00\00\00@-\bd\04\af\92\e1\e1\94\f4?\00\00\00\00\00 \0c=r\d3\d7\f0*\a3\f4?\00\00\00\00\00P\1e\bd\01\b8m\ea}\b1\f4?\00\00\00\00\00\80\07=\e1)6\d5\da\bf\f4?\00\00\00\00\00\80\13\bd2\c1\17\b8A\ce\f4?\00\00\00\00\00\80\00=\db\dd\fd\99\b2\dc\f4?\00\00\00\00\00p,=\96\ab\d8\81-\eb\f4?\00\00\00\00\00\e0\1c\bd\02-\9dv\b2\f9\f4?\00\00\00\00\00 \19=\c11E\7fA\08\f5?\00\00\00\00\00\c0\08\bd*f\cf\a2\da\16\f5?\00\00\00\00\00\00\fa\bc\eaQ?\e8}%\f5?\00\00\00\00\00\08J=\daN\9dV+4\f5?\00\00\00\00\00\d8&\bd\1a\ac\f6\f4\e2B\f5?\00\00\00\00\00D2\bd\db\94]\ca\a4Q\f5?\00\00\00\00\00<H=k\11\e9\ddp`\f5?\00\00\00\00\00\b0$=\de)\b56Go\f5?\00\00\00\00\00ZA=\0e\c4\e2\db'~\f5?\00\00\00\00\00\e0)\bdo\c7\97\d4\12\8d\f5?\00\00\00\00\00\08#\bdL\0b\ff'\08\9c\f5?\00\00\00\00\00\ecM='TH\dd\07\ab\f5?\00\00\00\00\00\00\c4\bc\f4z\a8\fb\11\ba\f5?\00\00\00\00\00\080=\0bFY\8a&\c9\f5?\00\00\00\00\00\c8&\bd?\8e\99\90E\d8\f5?\00\00\00\00\00\9aF=\e1 \ad\15o\e7\f5?\00\00\00\00\00@\1b\bd\ca\eb\dc \a3\f6\f5?\00\00\00\00\00p\17=\b8\dcv\b9\e1\05\f6?\00\00\00\00\00\f8&=\15\f7\cd\e6*\15\f6?\00\00\00\00\00\00\01=1U:\b0~$\f6?\00\00\00\00\00\d0\15\bd\b5)\19\1d\dd3\f6?\00\00\00\00\00\d0\12\bd\13\c3\cc4FC\f6?\00\00\00\00\00\80\ea\bc\fa\8e\bc\fe\b9R\f6?\00\00\00\00\00`(\bd\973U\828b\f6?\00\00\00\00\00\feq=\8e2\08\c7\c1q\f6?\00\00\00\00\00 7\bd~\a9L\d4U\81\f6?\00\00\00\00\00\80\e6<q\94\9e\b1\f4\90\f6?\00\00\00\00\00x)\bd\00\00\00?\00\00\00\bf\00\00\80?\00\00\c0?\00\00\00\00\dc\cf\d15\00\00\00\00\00\c0\15?8c\ed>\da\0fI?^\98{?\da\0f\c9?i7\ac1h!\223\b4\0f\143h!\a23\16V\e7\9e\af\03\d2<\9b+\a1\86\9b\84\06=\82vIh\c2%<=\11\ea-\81\99\97q=\95dy\e1\7f\fd\a5=\bb\bd\d7\d9\df|\db=\95\d6&\e8\0b.\11>:\8c0\e2\8eyE>H\af\bc\9a\f2\d7z>\8d\ed\b5\a0\f7\c6\b0>\f1h\e3\88\b5\f8\e4>-C\1c\eb\e26\1a?\fc\a9\f1\d2MbP?{\14\aeG\e1z\84?\9a\99\99\99\99\99\b9?\00\00\00\00\00\00\f0?\00\00\00\00\00\00$@\00\00\00\00\00\00Y@\00\00\00\00\00@\8f@\00\00\00\00\00\88\c3@\00\00\00\00\00j\f8@\00\00\00\00\80\84.A\00\00\00\00\d0\12cA\00\00\00\00\84\d7\97A\00\00\00\00e\cd\cdA\00\00\00 _\a0\02B\00\00\00\e8vH7B\00\00\00\a2\94\1amB\00\00@\e5\9c0\a2B\00\00\90\1e\c4\bc\d6B\00\004&\f5k\0cC\cd;\7ff\9e\a0\e6?\87\01\ebs\14\a1\e7?\db\a0*B\e5\ac\e8?\90\f0\a3\82\91\c4\e9?\ad\d3Z\99\9f\e8\ea?\9cR\85\dd\9b\19\ec?\87\a4\fb\dc\18X\ed?\da\90\a4\a2\af\a4\ee?\00\00\00\00\00\00\f0?\0f\89\f9lX\b5\f0?{Q}<\b8r\f1?8bunz8\f2?\15\b71\0a\fe\06\f3?\224\12L\a6\de\f3?'*6\d5\da\bf\f4?)TH\dd\07\ab\f5?\95\bf\d63\bd7\865\ac\c5'7\17\b7\d18o\12\83:\0a\d7#<\cd\cc\cc=\00\00\80?\00\00 A\00\00\c8B\00\00zD\00@\1cF\00P\c3G\00$tI\80\96\18K\00\00\00\00\9e\a4\c1CQ\ea\15BWL\f5up\fc#B\1a\b6\8a\812\a1 B\1a&\e8\22\b5\b0\10B\e8\a1\a5\b3\c1\7f\f6A?\f3\d3\f5\18t\d5A*_\b9{\0c\ab\adA\98\cc]\f9v\f8}AL\f4\80P\e9\f1EA\eb\87\87\1fB\b6\06A\04\d8X\08\ac\87\bf@R;\bc{`Zj@\05'\f6\1f\93\0d\04@\00\00\00\00\00\00\00\00\00\00\00\00\a8\08\83A\00\00\00\80i\bd\9cA\00\00\00\b0\a6\fd\a1A\00\00\00pq\18\99A\00\00\00\90\b6\ee\85A\00\00\00\e0qqiA\00\00\00\00{\1fDA\00\00\00\00\bc\d0\15A\00\00\00\00\80\e7\df@\00\00\00\00\00\14\9e@\00\00\00\00\00\80P@\00\00\00\00\00\00\f0?\00\00\00\00\00\00\f0?\00\00\00\00\00\00\f0?\00\00\00\00\00\00\00@\00\00\00\00\00\00\18@\00\00\00\00\00\008@\00\00\00\00\00\00^@\00\00\00\00\00\80\86@\00\00\00\00\00\b0\b3@\00\00\00\00\00\b0\e3@\00\00\00\00\00&\16A\00\00\00\00\80\afKA\00\00\00\00\a8\08\83A\00\00\00\00\fc\8c\bcA\00\00\00\c0\8c2\f7A\00\00\00(;L4B\00\00\80uw\07sB\00\00\80uw\07\b3B\00\00\d8\ec\ee7\f4B\00\00s\ca\ec\be6C\00\90h0\b9\02{C\00ZA\be\b3\e1\c0C \c6\b5\e9;(\06Dl\f0YaRwNDQ\b4\f0\b2\96\b1D\b0\f9\ae\b6\ady\acC\ab\14\aa\eb\a8\c8\a7\aa\a6\92\a5\80\a4s\a3k\a2h\a1j\a0p\9f{\9e\8a\9d\9d\9c\b5\9b\d1\9a\f0\99\13\99:\98e\97\93\96\c4\95\f8\940\94k\93\a9\92\ea\91.\91u\90\be\8f\0a\8fY\8e\aa\8d\fe\8cT\8c\ac\8b\07\8bd\8a\c4\89%\89\89\88\ee\87V\87\c0\86+\86\99\85\08\85y\84\ec\83a\83\d8\82P\82\c9\81E\81\c2\80@\80\02\ff\0e\fd%\fbG\f9s\f7\aa\f5\ea\f34\f2\87\f0\e3\eeG\ed\b3\eb'\ea\a3\e8'\e7\b2\e5C\e4\dc\e2z\e1 \e0\cb\de}\dd4\dc\f1\da\b3\d9{\d8H\d7\1a\d6\f1\d4\cd\d3\ad\d2\92\d1{\d0i\cf[\ceQ\cdJ\ccH\cbJ\caO\c9X\c8d\c7t\c6\87\c5\9d\c4\b7\c3\d4\c2\f4\c1\16\c1<\c0e\bf\90\be\be\bd\ef\bc#\bcY\bb\91\ba\cc\b9\0a\b9J\b8\8c\b7\d0\b6\17\b6`\b5\db\0fI?\db\0fI\bf\e4\cb\16@\e4\cb\16\c0\00\00\00\00\00\00\00\80\db\0fI@\db\0fI\c0\18-DT\fb!\e9?\18-DT\fb!\e9\bf\d2!3\7f|\d9\02@\d2!3\7f|\d9\02\c0\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\80\18-DT\fb!\09@\18-DT\fb!\09\c0")
   (@producers
     (language "Rust" "")
-    (processed-by "rustc" "1.98.0 (88d9e12ae 2026-08-18)")
+    (processed-by "rustc" "1.98.1 (48a229cea 2026-09-01)")
   )
   (@custom "target_features" (after data) "\08+\0bbulk-memory+\0fbulk-memory-opt+\16call-indirect-overlong+\0amultivalue+\0fmutable-globals+\13nontrapping-fptoint+\0freference-types+\08sign-ext")
   ;; Which data bytes each function reads, resolved from the `linking` and
@@ -16792,22 +16792,22 @@
   ;; 17 functions claim 5836 of 5840 data bytes; the rest is padding.
   ;; Regenerate with `mise run update-bundled` — never edit by hand.
   (@custom "wado.dataref" (after data)
-    "_RNvNtNtCs5s8uptHhuCz_4libm4math14rem_pio2_large14rem_pio2_large 0:0+344\n"
-    "_RNvNtNtCs5s8uptHhuCz_4libm4math3exp3exp                         0:344+16\n"
-    "_RNvNtNtCs5s8uptHhuCz_4libm4math3pow3pow                         0:360+48\n"
-    "_RNvNtNtCs5s8uptHhuCz_4libm4math4atan4atan                       0:408+64\n"
-    "libm_cbrt                                                        0:472+24\n"
-    "_RNvNtNtCs5s8uptHhuCz_4libm4math4exp24exp2                       0:496+4096\n"
-    "_RNvNtNtCs5s8uptHhuCz_4libm4math4expf4expf                       0:4592+8\n"
-    "libm_powf                                                        0:4600+24\n"
-    "_RNvNtNtCs5s8uptHhuCz_4libm4math5atanf5atanf                     0:4624+32\n"
-    "libm_exp10                                                       0:4656+248\n"
-    "_RNvNtNtCs5s8uptHhuCz_4libm4math5exp2f5exp2f                     0:4904+128\n"
-    "libm_exp10f                                                      0:5032+60\n"
-    "_RNvNtNtCs5s8uptHhuCz_4libm4math6tgamma6tgamma                   0:5096+392\n"
-    "_RNvNtNtCs5s8uptHhuCz_4libm4math4sqrt4sqrt                       0:5488+256\n"
-    "_RNvNtNtCs5s8uptHhuCz_4libm4math4sqrt5sqrtf                      0:5488+256\n"
-    "libm_atan2                                                       0:5744+64\n"
-    "libm_atan2f                                                      0:5808+32\n"
+    "_RNvNtNtCs7dDIqmAoxPF_4libm4math14rem_pio2_large14rem_pio2_large 0:0+344\n"
+    "_RNvNtNtCs7dDIqmAoxPF_4libm4math3exp3exp                         0:344+16\n"
+    "_RNvNtNtCs7dDIqmAoxPF_4libm4math3pow3pow                         0:360+48\n"
+    "_RNvNtNtCs7dDIqmAoxPF_4libm4math4atan4atan                       0:408+64\n"
+    "f64_cbrt                                                         0:472+24\n"
+    "_RNvNtNtCs7dDIqmAoxPF_4libm4math4exp24exp2                       0:496+4096\n"
+    "_RNvNtNtCs7dDIqmAoxPF_4libm4math4expf4expf                       0:4592+8\n"
+    "f32_pow                                                          0:4600+24\n"
+    "_RNvNtNtCs7dDIqmAoxPF_4libm4math5atanf5atanf                     0:4624+32\n"
+    "f64_exp10                                                        0:4656+248\n"
+    "_RNvNtNtCs7dDIqmAoxPF_4libm4math5exp2f5exp2f                     0:4904+128\n"
+    "f32_exp10                                                        0:5032+60\n"
+    "_RNvNtNtCs7dDIqmAoxPF_4libm4math6tgamma6tgamma                   0:5096+392\n"
+    "_RNvNtNtCs7dDIqmAoxPF_4libm4math4sqrt4sqrt                       0:5488+256\n"
+    "_RNvNtNtCs7dDIqmAoxPF_4libm4math4sqrt5sqrtf                      0:5488+256\n"
+    "f32_atan2                                                        0:5744+32\n"
+    "f64_atan2                                                        0:5776+64\n"
   )
 )

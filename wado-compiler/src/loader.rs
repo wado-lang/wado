@@ -620,7 +620,7 @@ fn wasm_core_val_type_name(ty: WasmCoreValType) -> &'static str {
 /// asset, each carrying `#[canonical("<namespace>", "<export>")]` so the existing
 /// import lowering picks the call up. Emitted as text and fed back through the
 /// regular parse/bind pipeline. The identifiers are the wat export names
-/// verbatim, so a re-exporter's `pub use { libm_sin, … }` lines up.
+/// verbatim, so a re-exporter's `pub use { f64_sin, … }` lines up.
 fn synthesize_wasm_bindings_source(namespace: &str, exports: &[WasmExportSig]) -> String {
     use std::fmt::Write;
     let mut out = String::with_capacity(64 * exports.len().saturating_add(8));
@@ -1603,7 +1603,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
         // Synthesize a Wado AST module from the asset's exports and run
         // it through the regular parse/bind pipeline so that
-        // named imports (`use { libm_sin } from "./libm.wat" ...`)
+        // named imports (`use { f64_sin } from "./libm.wat" ...`)
         // resolve through the same path as imports of any other Wado
         // module. The synthesized declarations carry
         // `#[canonical("wasm:<path>", "<export>")]` so the existing

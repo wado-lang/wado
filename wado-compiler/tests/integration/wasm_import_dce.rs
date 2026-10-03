@@ -183,7 +183,7 @@ fn the_bundled_libm_is_pruned_to_what_the_program_calls() {
 
     assert_eq!(
         function_exports(&libm),
-        ["libm_sin"],
+        ["f64_sin"],
         "only the called export survives"
     );
     let kept = code_entry_count(&libm);
@@ -270,7 +270,7 @@ export fn run() with Stdout {
         }) = payload
         {
             let module = &result.wasm[unchecked_range.start as usize..unchecked_range.end as usize];
-            if module_has_export(module, "libm_sin") {
+            if module_has_export(module, "f64_sin") {
                 return module.to_vec();
             }
         }
