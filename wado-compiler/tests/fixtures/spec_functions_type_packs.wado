@@ -14,6 +14,15 @@ test {
     assert prepend(0, [1, "x"]) == [0, 1, "x"];
 }
 
+fn defaults<..T: Default>() -> [..T] {
+    return [..T::default()];
+}
+
+test {
+    assert defaults() == [];                            // T = []
+    assert defaults::<i32, String>() == [0, ""];
+}
+
 fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] {
     return [..a, ..b];
 }

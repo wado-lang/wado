@@ -1027,8 +1027,8 @@ test "a default names a type parameter" {
 The same holds for an instance or static method, where the `impl` block's
 parameters come from the receiver, and for a struct field default, where they
 come from the type the literal is annotated with. A type parameter pack is named
-the same way (`t: [..T] = [..T::default()]`). A call that leaves no type
-argument for the pack settles it to the empty pack.
+the same way (`t: [..T] = [..T::default()]`), and a call that omits the
+argument leaves the pack [empty](#variadic-type-packs).
 
 ### Where a Default Resolves
 
@@ -1199,6 +1199,22 @@ A pack is used inside a tuple type as `[..T]`, alone or beside fixed elements:
 [value spread](./spec-literals.md#value-spread) builds a value of such a type,
 as `[a, ..rest]` does.
 
+A pack that no argument, annotation or turbofish names is the empty pack. Unlike
+a scalar parameter, a pack has one answer when nothing constrains it: no types.
+
+<!-- {"fixture":"spec_functions_type_packs.wado"} -->
+
+```wado
+fn defaults<..T: Default>() -> [..T] {
+    return [..T::default()];
+}
+
+test {
+    assert defaults() == [];                            // T = []
+    assert defaults::<i32, String>() == [0, ""];
+}
+```
+
 ### Multiple Type Packs
 
 A parameter list may declare more than one pack. Each is settled from the
@@ -1248,10 +1264,11 @@ Without them, the same functions are rejected:
 ```wado
 joined([[1], [true]], [1, true, "x"]);    // ERROR: expected `[i32, bool]`
 middle([1, "mid", true]);                 // ERROR: cannot infer `Pre`, `K`, `Post`
+split([]);                                // ERROR: cannot infer `A`, `B`
 ```
 
-A pack nothing settles is reported at the use site as an uninferred type
-parameter, as a scalar parameter no argument reaches is. To settle both packs
+A pack that only such a tuple names is reported at the use site as an
+uninferred type parameter, even where the tuple is `[]`. To settle both packs
 from one value, give each a tuple of its own (`[[..A], [..B]]`).
 
 Where such a tuple is produced, its ends still place elements. The elements ahead
