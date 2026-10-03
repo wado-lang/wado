@@ -1445,6 +1445,32 @@ pub struct TestDecl {
     pub span: Span,
 }
 
+/// Where a TODO test's mark comes from: its own `#[TODO]`, or its module's
+/// `#![TODO]`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TodoMark {
+    Test,
+    Module,
+}
+
+impl TodoMark {
+    /// What to do about a TODO test that passed, worded for a reader who has
+    /// not met TODO tests before.
+    #[must_use]
+    pub fn resolved_advice(self) -> &'static str {
+        match self {
+            Self::Test => {
+                "marked #[TODO] (expected to fail until the feature works), but it passed: \
+                 remove #[TODO] so it runs as a regular test"
+            }
+            Self::Module => {
+                "its module is #![TODO] (every test expected to fail until the feature works), \
+                 but this test passed: replace #![TODO] with #[TODO] on each test that still fails"
+            }
+        }
+    }
+}
+
 /// Test attributes resolved from a `TestDecl`'s `#[...]` annotations (plus the
 /// enclosing module's `#[TODO]`). Shared by the annotate and reify walks so the
 /// attribute semantics live in one place.

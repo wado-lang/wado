@@ -454,10 +454,11 @@ impl TestReporter for HeartbeatReporter {
             TestOutcome::TodoResolved => {
                 self.state.todo_resolved.fetch_add(1, Ordering::Relaxed);
                 self.announce(&format!(
-                    "resolved  {} :: {} ({}) — remove the #[TODO] attribute",
+                    "resolved  {} :: {} ({})\n  {}",
                     result.file_path,
                     result.display_name,
-                    result.cost()
+                    result.cost(),
+                    result.resolved_advice()
                 ));
             }
         }
@@ -767,9 +768,10 @@ impl TestReporter for TapReporter {
             }
             TestOutcome::TodoPending => (vec![format!("not ok - {name} ({cost}) # TODO")], false),
             TestOutcome::TodoResolved => (
-                vec![format!(
-                    "ok - {name} ({cost}) # TODO resolved — remove the #[TODO] attribute"
-                )],
+                vec![
+                    format!("ok - {name} ({cost}) # TODO resolved"),
+                    format!("# {}", result.resolved_advice()),
+                ],
                 false,
             ),
         };
