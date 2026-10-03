@@ -1,0 +1,183 @@
+//! The JavaScript recognizer with its base ports installed.
+//!
+//! `JavaScriptLexer.g4` and `JavaScriptParser.g4` name a `superClass`, whose
+//! predicates and actions carry state the grammar cannot: whether `/` opens a
+//! regular expression, whether a `}` closes a template interpolation, and
+//! whether a line break ends a statement. These are the Wado twins of the
+//! upstream `JavaScriptLexerBase.java` and `JavaScriptParserBase.java`.
+
+use js from "../grammar/JavaScriptLexer.g4"
+    with {
+        generator: {
+            module: "lib:gale",
+            inputs: ["../grammar/JavaScriptParser.g4", "../grammar/JavaScript.highlights.scm"],
+        },
+    };
+use {
+    JavaScriptLexerBase,
+    JavaScriptParserBase,
+    LexerView,
+    Lexer,
+    Parser,
+    TK_Identifier,
+    TK_NullLiteral,
+    TK_BooleanLiteral,
+    TK_This,
+    TK_CloseBracket,
+    TK_CloseParen,
+    TK_OctalIntegerLiteral,
+    TK_DecimalLiteral,
+    TK_HexIntegerLiteral,
+    TK_StringLiteral,
+    TK_PlusPlus,
+    TK_MinusMinus,
+    TK_OpenBrace,
+    TK_CloseBrace,
+    TK_Function_,
+} from "../grammar/JavaScriptLexer.g4";
+use { Highlight } from "./highlight.wado";
+
+struct JsParserBase {
+}
+
+impl JavaScriptParserBase for JsParserBase {
+    fn p(&self, p: &Parser, a0: String) -> bool {
+        resume p.token_text(p.lt(0)) == a0;
+    }
+
+    fn prev(&self, p: &Parser, a0: String) -> bool {
+        resume p.token_text(p.lt(0)) == a0;
+    }
+
+    fn n(&self, p: &Parser, a0: String) -> bool {
+        resume p.token_text(p.lt(1)) == a0;
+    }
+
+    fn next(&self, p: &Parser, a0: String) -> bool {
+        resume p.token_text(p.lt(1)) == a0;
+    }
+
+    /// Upstream reads the hidden tokens before the next one. A line break
+    /// among them is exactly a change of line between the two default-channel
+    /// tokens around them.
+    fn not_line_terminator(&self, p: &Parser) -> bool {
+        resume p.token_line(p.lt(1)) == p.token_line(p.lt(0));
+    }
+
+    fn line_terminator_ahead(&self, p: &Parser) -> bool {
+        resume p.token_line(p.lt(1)) != p.token_line(p.lt(0));
+    }
+
+    fn not_open_brace_and_not_function(&self, p: &Parser) -> bool {
+        resume !p.la(1) matches { TK_OpenBrace | TK_Function_ };
+    }
+
+    fn close_brace(&self, p: &Parser) -> bool {
+        resume p.la(1) == TK_CloseBrace;
+    }
+}
+
+struct JsLexerBase {
+    /// The strictness each open brace restores when it closes.
+    scope_strict_modes: List<bool>,
+    strict: bool,
+    /// Braces open, template interpolations included.
+    depth: i32,
+    /// The `depth` at which each open `${` closes.
+    template_depths: List<i32>,
+    /// `-1` before the first default-channel token. Upstream tracks this by
+    /// overriding `nextToken`.
+    last_token: i32,
+}
+
+/// Whether a token ends an operand, so a following `/` divides rather than
+/// opening a regular expression.
+fn ends_operand(kind: i32) -> bool {
+    return kind matches { TK_Identifier | TK_NullLiteral | TK_BooleanLiteral | TK_This | TK_CloseBracket | TK_CloseParen | TK_OctalIntegerLiteral | TK_DecimalLiteral | TK_HexIntegerLiteral | TK_StringLiteral | TK_PlusPlus | TK_MinusMinus };
+}
+
+impl JavaScriptLexerBase for JsLexerBase {
+    fn emit(&mut self, view: LexerView, ty: i32, channel: i32) -> i32 {
+        if channel == 0 {
+            self.last_token = ty;
+        }
+        resume ty;
+    }
+
+    fn is_start_of_file(&self, view: LexerView) -> bool {
+        resume self.last_token < 0;
+    }
+
+    fn is_regex_possible(&self, view: LexerView) -> bool {
+        resume !ends_operand(self.last_token);
+    }
+
+    fn is_in_template_string(&self, view: LexerView) -> bool {
+        resume self.template_depths.last() matches { Some(d) && d == self.depth };
+    }
+
+    fn is_strict_mode(&self, view: LexerView) -> bool {
+        resume self.strict;
+    }
+
+    fn process_open_brace(&mut self, view: LexerView, lx: &mut Lexer) {
+        self.depth += 1;
+        self.strict = self.scope_strict_modes.last() matches { Some(true) };
+        self.scope_strict_modes.push(self.strict);
+        resume ();
+    }
+
+    fn process_close_brace(&mut self, view: LexerView, lx: &mut Lexer) {
+        self.strict = self.scope_strict_modes.pop().unwrap_or(false);
+        self.depth -= 1;
+        resume ();
+    }
+
+    fn process_template_open_brace(&mut self, view: LexerView, lx: &mut Lexer) {
+        self.depth += 1;
+        self.template_depths.push(self.depth);
+        resume ();
+    }
+
+    fn process_template_close_brace(&mut self, view: LexerView, lx: &mut Lexer) {
+        self.template_depths.pop();
+        self.depth -= 1;
+        resume ();
+    }
+
+    /// A `"use strict"` directive opening a file or a block makes that scope
+    /// strict, which turns `let`, `static` and the rest into keywords.
+    fn process_string_literal(&mut self, view: LexerView, lx: &mut Lexer) {
+        if self.last_token < 0 || self.last_token == TK_OpenBrace {
+            let text = view.text();
+            if text == "'use strict'" || text == "\"use strict\"" {
+                self.scope_strict_modes.pop();
+                self.strict = true;
+                self.scope_strict_modes.push(true);
+            }
+        }
+        resume ();
+    }
+}
+
+/// Parses a JavaScript program with the base ports installed.
+pub fn parse_javascript<S: AsStrSlice>(source: S) -> js::ParseResult {
+    let mut lexer_base = JsLexerBase { scope_strict_modes: [], strict: false, depth: 0, template_depths: [], last_token: -1 };
+    let mut parser_base = JsParserBase {};
+    with JavaScriptLexerBase => &mut lexer_base, JavaScriptParserBase => &mut parser_base do {
+        return js::parse_program(source);
+    };
+}
+
+/// The highlight captures of a JavaScript program, in source order.
+pub fn javascript_highlights<S: AsStrSlice>(source: S) -> List<Highlight> {
+    let result = parse_javascript(source);
+    let mut visitor = js::HighlightVisitor::new(&js::HIGHLIGHT_MAPPING);
+    js::highlight_walk(&mut visitor, &result.tokens, &result.cst);
+    visitor.hl_cover_unvisited(&result.tokens);
+    let mut out: List<Highlight> = [];
+    for let c of &visitor.captures {
+        out.push(Highlight { start: c.start, end: c.end, class: js::HIGHLIGHT_MAPPING.capture_classes[c.capture_id] });
+    }
+    return out;
+}

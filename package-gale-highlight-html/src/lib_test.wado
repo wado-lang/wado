@@ -1,0 +1,97 @@
+use { highlight } from "./lib.wado";
+
+/// The visible text of a highlight fragment: strip the `<span>` tags and
+/// unescape the entities the highlighter emits (`&amp;` last, so an escaped
+/// `&` in the source round-trips).
+fn visible_text<S: AsStrSlice>(html: S) -> String {
+    let mut out = String::new();
+    let mut in_tag = false;
+    for let c of html.chars() {
+        if in_tag {
+            if c == '>' {
+                in_tag = false;
+            }
+        } else if c == '<' {
+            in_tag = true;
+        } else {
+            out.push(c);
+        }
+    }
+    return out.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&amp;", "&");
+}
+
+/// Highlights `src` and checks that stripping the spans gives `src` back, so
+/// merging the languages dropped, duplicated and reordered nothing.
+fn highlighted<S: AsStrSlice>(src: S) -> String {
+    let html = highlight(src.to_string());
+    assert visible_text(&html) == src.to_string(), `not text-preserving:\n${html}`;
+    return html;
+}
+
+fn span<S: AsStrSlice, S1: AsStrSlice>(class: S, text: S1) -> String {
+    return `<span class="${class.to_string()}">${text.to_string()}</span>`;
+}
+
+test "a script body is JavaScript and a style body is CSS" {
+    let html = highlighted("<style>p { color: red; }</style><script>let p = 1;</script>");
+    assert html.contains(`${span("tag", "p")} ${span("punctuation bracket", "{")} ${span("property", "color")}`), html;
+    assert html.contains(`${span("keyword", "let")} p ${span("operator", "=")} ${span("number", "1")}`), html;
+}
+
+test "a closing tag is markup again" {
+    let html = highlighted("<script>f();</script>");
+    assert html.ends_with(`${span("punctuation bracket", "&lt;/")}${span("tag", "script")}${span("punctuation bracket", "&gt;")}`), html;
+}
+
+test "an opening script or style tag carries ordinary attributes" {
+    let html = highlighted("<style media=\"print\">p {}</style>");
+    assert html.starts_with(`${span("punctuation bracket", "&lt;")}${span("tag", "style")} ${span("attribute", "media")}${span("operator", "=")}${span("string", "&quot;print&quot;")}`), html;
+}
+
+test "the script type picks the language" {
+    // A JSON number takes its sign; JavaScript reads it as an operator.
+    let json = highlighted("<script type=\"application/ld+json\">{\"n\": -1}</script>");
+    assert json.contains(span("number", "-1")), json;
+    let js = highlighted("<script type=\"module\">x = -1</script>");
+    assert js.contains(`${span("operator", "-")}${span("number", "1")}`), js;
+    let opaque = highlighted("<script type=\"text/template\"><b>hi</b></script>");
+    assert opaque.contains("</span>&lt;b&gt;hi&lt;/b&gt;<span"), opaque;
+}
+
+test "a style or event handler attribute holds its language" {
+    let html = highlighted("<p style=\"color: red; padding: 4px\" onclick='return f(1)'>x</p>");
+    assert html.contains(`${span("string", "&quot;")}${span("property", "color")}`), html;
+    assert html.contains(span("property", "padding")), html;
+    assert html.contains(`${span("string", "'")}${span("keyword", "return")} f`), html;
+}
+
+test "the lexer base tells a division from a regular expression" {
+    let html = highlighted("<script>let q = a / b / c, r = /b+/g;</script>");
+    assert html.contains(`a ${span("operator", "/")} b ${span("operator", "/")} c`), html;
+    assert html.contains(span("string regexp", "/b+/g")), html;
+}
+
+test "the lexer base closes a template interpolation at its own brace" {
+    // The object literal inside the interpolation opens and closes a brace of
+    // its own; only the outer `}` returns to the template text.
+    let html = highlighted("<script>let s = `a${ {x: 1}.x }b`;</script>");
+    assert html.contains(`${span("string", "`a")}${span("punctuation special", "${")}`), html;
+    assert html.contains(`${span("property", "x")} ${span("punctuation special", "}")}${span("string", "b`")}`), html;
+}
+
+test "positions count characters, not bytes" {
+    let html = highlighted("<p>日本</p><script>let a = \"é\";</script>");
+    assert html.contains(span("string", "&quot;é&quot;")), html;
+}
+
+test "broken and empty bodies still highlight" {
+    highlighted("<script>let = ;</script>");
+    highlighted("<script></script><style></style>");
+    highlighted("<style>p { color: </style><p>after</p>");
+}
+
+global PAGE: String = #include_str("../example/page.html");
+
+test "the example page round-trips" {
+    highlighted(&PAGE);
+}
