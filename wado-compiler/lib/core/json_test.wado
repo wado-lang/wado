@@ -316,6 +316,34 @@ test "write_escaped_string helper" {
     assert buf == `"pre\\tmid\\\\end"`;
 }
 
+test "write_escaped_string finds an escape at every offset of a four-byte block" {
+    let specials: List<[String, String]> = [
+        ["\"", "\\\""],
+        ["\\", "\\\\"],
+        ["\u{1f}", "\\u001f"],
+        ["日", "日"],
+    ];
+    for let [raw, escaped] of specials {
+        for let at of 0..<9 {
+            let mut s = "";
+            let mut want = "\"";
+            for let k of 0..<9 {
+                if k == at {
+                    s.push_str(&raw);
+                    want.push_str(&escaped);
+                } else {
+                    s.push('x');
+                    want.push('x');
+                }
+            }
+            want.push('"');
+            let mut buf = "";
+            write_escaped_string(&mut buf, &s);
+            assert buf == want;
+        }
+    }
+}
+
 test "deserialize i32" {
     let r: Result<i32, DeserializeError> = from_string("42");
     assert r matches { Ok(v) && v == 42 };

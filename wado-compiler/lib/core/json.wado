@@ -80,6 +80,33 @@ fn json_plain_byte(b: u8) -> bool {
     return b >= 0x20 && b != 0x22 && b != 0x5C;
 }
 
+/// `json_plain_byte` for each of the four bytes packed little-endian in
+/// `quad`, as one test. Per byte, the three compares cost twice the
+/// bounds-checked read itself; these bit tricks test all four at once.
+fn json_plain_quad(quad: u32) -> bool {
+    let quote = quad ^ 0x22222222;
+    let backslash = quad ^ 0x5C5C5C5C;
+    // A byte's high bit survives each term only where that byte is below
+    // 0x20, is `"`, or is `\`. A borrow can set a higher byte's bit as well,
+    // but only out of a byte that is a hit itself.
+    let hits = quad - 0x20202020 & ~quad | quote - 0x01010101 & ~quote | backslash - 0x01010101 & ~backslash;
+    return hits & 0x80808080 == 0;
+}
+
+test "json_plain_quad agrees with json_plain_byte on every adjacent pair" {
+    let filler: u32 = 0x61616161;
+    for let pair_at of 0_u32..<3 {
+        let shift = pair_at * 8;
+        for let lo of 0_u32..<256 {
+            for let hi of 0_u32..<256 {
+                let quad = filler & ~(0xFFFF_u32 << shift) | lo << shift | hi << shift + 8;
+                let expected = json_plain_byte(lo as u8) && json_plain_byte(hi as u8);
+                assert json_plain_quad(quad) == expected;
+            }
+        }
+    }
+}
+
 /// True when `s` holds no byte JSON must escape. Pure and closed over `s`, so a
 /// constant key folds this away at compile time.
 fn json_escape_free<S: AsStrSlice>(s: S) -> bool {
@@ -101,6 +128,15 @@ pub fn write_escaped_string<S: AsStrSlice>(buf: &mut String, s: S) {
     // which the NIR append fusion collapses.
     let n = s.len();
     let mut i = 0;
+    while i + 4 <= n {
+        let quad = s.get_byte_unchecked(i) as u32 | s.get_byte_unchecked(i + 1) as u32 << 8 | s.get_byte_unchecked(
+            i + 2,
+        ) as u32 << 16 | s.get_byte_unchecked(i + 3) as u32 << 24;
+        if !json_plain_quad(quad) {
+            break;
+        }
+        i += 4;
+    }
     while i < n {
         if json_plain_byte(s.get_byte_unchecked(i)) {
             i += 1;
