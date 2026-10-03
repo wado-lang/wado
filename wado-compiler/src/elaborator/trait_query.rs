@@ -3302,13 +3302,15 @@ fn bound_as_written(name: &str, trait_: &FqTraitName) -> String {
 /// spelled `prim_name`. `v128` is excluded with the non-numeric ones: its
 /// arithmetic is lane-wise, and only the lane type's own impl knows the width.
 pub(super) fn primitive_has_operator(prim_name: &str, op: CompilerItem) -> bool {
-    let is_int = matches!(prim_name.as_bytes().first(), Some(b'i' | b'u'));
+    let is_signed = prim_name.starts_with('i');
+    let is_int = is_signed || prim_name.starts_with('u');
+    let is_float = matches!(prim_name, "f32" | "f64");
     match op {
-        CompilerItem::Add
-        | CompilerItem::Sub
-        | CompilerItem::Mul
-        | CompilerItem::Div
-        | CompilerItem::Neg => is_int || matches!(prim_name, "f32" | "f64"),
+        CompilerItem::Add | CompilerItem::Sub | CompilerItem::Mul | CompilerItem::Div => {
+            is_int || is_float
+        }
+        // As in Rust: an unsigned value negates through `wrapping_neg`.
+        CompilerItem::Neg => is_signed || is_float,
         // `%` has no float lowering.
         CompilerItem::Rem => is_int,
         // Bit patterns. `bool` holds one bit, so `b & c` and `~b` are both

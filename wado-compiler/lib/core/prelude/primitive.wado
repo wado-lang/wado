@@ -748,6 +748,11 @@ impl u8 {
         return u8::min(u8::max(value, low), high);
     }
 
+    /// The negation modulo 2^8: `0` for `0`, `MAX - self + 1` otherwise.
+    pub fn wrapping_neg(&self) -> u8 {
+        return 0 - *self;
+    }
+
     /// Returns true if the byte is an ASCII digit: 0-9.
     pub fn is_ascii_digit(&self) -> bool {
         return (*self as char).is_ascii_digit();
@@ -918,6 +923,11 @@ impl u16 {
         return u16::min(u16::max(value, low), high);
     }
 
+    /// The negation modulo 2^16: `0` for `0`, `MAX - self + 1` otherwise.
+    pub fn wrapping_neg(&self) -> u16 {
+        return 0 - *self;
+    }
+
     fn fmt_into(&self, f: &mut Formatter) {
         (*self as i32).fmt_decimal(f);
     }
@@ -1057,6 +1067,11 @@ impl u32 {
     pub fn clamp(value: u32, low: u32, high: u32) -> u32 {
         assert low <= high;
         return u32::min(u32::max(value, low), high);
+    }
+
+    /// The negation modulo 2^32: `0` for `0`, `MAX - self + 1` otherwise.
+    pub fn wrapping_neg(&self) -> u32 {
+        return 0 - *self;
     }
 
     fn fmt_decimal(&self, f: &mut Formatter) {
@@ -1206,6 +1221,11 @@ impl u64 {
     pub fn clamp(value: u64, low: u64, high: u64) -> u64 {
         assert low <= high;
         return u64::min(u64::max(value, low), high);
+    }
+
+    /// The negation modulo 2^64: `0` for `0`, `MAX - self + 1` otherwise.
+    pub fn wrapping_neg(&self) -> u64 {
+        return 0 - *self;
     }
 
     fn fmt_decimal(&self, f: &mut Formatter) {

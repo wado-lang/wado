@@ -1023,3 +1023,8 @@ test "a float casts to a wide integer truncating and saturating, NaN to zero" {
     assert builtin::black_box(-2.5) as i128 == -2;
     assert builtin::black_box(1.0e20) as u128 == 100000000000000000000;
 }
+
+test "u128 wrapping_neg negates modulo 2^128" {
+    assert builtin::black_box(1_u128).wrapping_neg() == u128::MAX;
+    assert builtin::black_box(0_u128).wrapping_neg() == 0;
+}

@@ -161,6 +161,11 @@ impl u128 {
         return u128::min(u128::max(value, low), high);
     }
 
+    /// The negation modulo 2^128: `0` for `0`, `MAX - self + 1` otherwise.
+    pub fn wrapping_neg(&self) -> u128 {
+        return 0 - *self;
+    }
+
     /// Gets the low 64 bits
     /// Used by the compiler to lower truncating `u128 as <int>` casts.
     #[compiler_item("u128_low")]
