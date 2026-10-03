@@ -6,7 +6,6 @@
 //   - Lezer             (pure-JS LR parser; @codemirror/lang-sql + @lezer/highlight)
 //   - tree-sitter (JS)  (web-tree-sitter, the official WASM-via-JS binding,
 //                        using the same SQL grammar as the Rust native row)
-//   - Shiki (JS engine) (TextMate grammars, VSCode-quality reference)
 //
 // How to run:
 //   node syntax_highlight.js
@@ -23,8 +22,6 @@ import { sql as sqlLang, SQLite } from "@codemirror/lang-sql";
 import { classHighlighter, highlightTree } from "@lezer/highlight";
 
 import { Language, Parser, Query } from "web-tree-sitter";
-
-import { createHighlighter, createJavaScriptRegexEngine } from "shiki";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SQL_PATH = join(__dirname, "..", "sqlite_parse", "queries.sql");
@@ -153,15 +150,3 @@ bench("Prism.js", () => Prism.highlight(sql, Prism.languages.sql, "sql"));
   });
 }
 
-// ---------- Shiki (JS engine) ----------
-{
-  const highlighter = await createHighlighter({
-    themes: ["github-dark"],
-    langs: ["sql"],
-    engine: createJavaScriptRegexEngine(),
-  });
-  bench("Shiki (JS engine)", () =>
-    highlighter.codeToHtml(sql, { lang: "sql", theme: "github-dark" }),
-  );
-  highlighter.dispose();
-}

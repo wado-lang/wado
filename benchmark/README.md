@@ -258,7 +258,7 @@ if absent.
 
 ### Syntax Highlight
 
-Highlight 81 SQL statements (13321 bytes). Gale-generated highlighter vs five
+Highlight 81 SQL statements (13321 bytes). Gale-generated highlighter vs four
 reference SQL highlighters:
 
 - **Prism.js** — regex-based, the speed reference
@@ -269,19 +269,17 @@ reference SQL highlighters:
 - **tree-sitter (web-tree-sitter)** — official JS WASM binding, same
   `tree-sitter-sequel` grammar as the Rust row (upstream
   `@derekstride/tree-sitter-sql`)
-- **Shiki (JS engine)** — TextMate grammars, VSCode-quality output
 
 Labels here name the highlighter rather than the language: this benchmark is
 about what a browser would run.
 
-| Implementation                | Throughput |   ms/iter | vs best |
-| ----------------------------- | ---------: | --------: | ------- |
-| **Gale** (Wado)               | 13.22 MB/s |  1.007 ms | 1.00x   |
-| Prism.js                      | 12.25 MB/s |  1.088 ms | 1.08x   |
-| Lezer (CodeMirror)            |  5.12 MB/s |  2.602 ms | 2.58x   |
-| tree-sitter (Rust native)     |  4.75 MB/s |  2.804 ms | 2.78x   |
-| tree-sitter (web-tree-sitter) |  2.96 MB/s |  4.505 ms | 4.47x   |
-| Shiki (JS engine)             |  1.10 MB/s | 12.066 ms | 11.98x  |
+| Implementation                | Throughput |  ms/iter | vs best |
+| ----------------------------- | ---------: | -------: | ------- |
+| **Gale** (Wado)               | 13.22 MB/s | 1.007 ms | 1.00x   |
+| Prism.js                      | 12.25 MB/s | 1.088 ms | 1.08x   |
+| Lezer (CodeMirror)            |  5.12 MB/s | 2.602 ms | 2.58x   |
+| tree-sitter (Rust native)     |  4.75 MB/s | 2.804 ms | 2.78x   |
+| tree-sitter (web-tree-sitter) |  2.96 MB/s | 4.505 ms | 4.47x   |
 
 Every highlighter parses the corpus without errors: a highlighter that gives up
 on a region skips the work of colouring it, so the constructs two of them

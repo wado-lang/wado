@@ -89,5 +89,5 @@ src/
   lib_test.wado     highlight tests
 example/
   page.html         a page using every language
-benchmark/          throughput against tree-sitter, Prism, Lezer and Shiki
+benchmark/          throughput against tree-sitter and Prism
 ```
