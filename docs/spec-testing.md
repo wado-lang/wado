@@ -148,8 +148,8 @@ Tests marked with `#[TODO]` are reported separately from regular tests. They do 
 A TODO test that unexpectedly passes fails the run. This enforces cleanup: once the underlying feature is implemented, the `#[TODO]` attribute must be removed so the test joins the regular pass/fail pool.
 
 A pending TODO test never causes a failure. So fixing a compiler bug cannot
-raise the failure count: a TODO test the fix makes pass shows as unexpectedly passed on
-the TODO axis, not as a failure on the pass/fail axis.
+raise the failure count: a TODO test the fix makes pass shows as unexpectedly
+passed on the TODO axis, not as a failure on the pass/fail axis.
 
 ### `#![TODO]` Modules
 
@@ -157,14 +157,14 @@ The `#![TODO]` inner attribute applies TODO semantics to an entire module:
 
 - If the module fails to compile, it is reported as a single pending TODO entry.
 - If the module compiles, each test block is treated as `#[TODO]`, so every one
-  of them must trap: a single test that completes normally has unexpectedly passed.
+  of them must trap, and a single test that completes normally fails the run.
 
 ### Run Result
 
 A run reports a third axis beside the two above: compile (passed / failed),
 over every [discovered](#test-discovery) file. It exits non-zero when any test
-fails, any TODO test unexpectedly passes, or any file fails to compile other than a
-`#![TODO]` module, which counts as a pending TODO instead.
+fails, any TODO test unexpectedly passes, or any file fails to compile other
+than a `#![TODO]` module, which counts as a pending TODO instead.
 
 ## Test Discovery
 
