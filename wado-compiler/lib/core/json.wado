@@ -129,10 +129,9 @@ pub fn write_escaped_string<S: AsStrSlice>(buf: &mut String, s: S) {
     let n = s.len();
     let mut i = 0;
     while i + 4 <= n {
-        let quad = s.get_byte_unchecked(i) as u32 | s.get_byte_unchecked(i + 1) as u32 << 8 | s.get_byte_unchecked(
-            i + 2,
-        ) as u32 << 16 | s.get_byte_unchecked(i + 3) as u32 << 24;
-        if !json_plain_quad(quad) {
+        let lo = s.get_byte_unchecked(i) as u32 | s.get_byte_unchecked(i + 1) as u32 << 8;
+        let hi = s.get_byte_unchecked(i + 2) as u32 | s.get_byte_unchecked(i + 3) as u32 << 8;
+        if !json_plain_quad(lo | hi << 16) {
             break;
         }
         i += 4;
