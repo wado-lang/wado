@@ -12,7 +12,8 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
     ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, Selection, SolverType,
-    TraitDeclId, TypeDeclId, TypeDef, bound_candidates, candidates, derive, holds_with_args, rank,
+    TraitDeclId, TypeDeclId, TypeDef, bound_candidates, candidates, derive, derive_eq_from_ord,
+    holds_with_args, rank, written_at_self,
 };
 
 use super::trait_env::{BlanketReceiver, ImplHeader, ImplTargetKey, written_arg_nodes};
@@ -1006,7 +1007,10 @@ impl SolverBridge {
     }
 
     /// The impls the declarations derive. A variant never derives `Ord`, so
-    /// the variants come last and `Ord` stops before them.
+    /// the variants come last and `Ord` stops before them. `Eq` and `Ord`
+    /// derive from each other before from the members: a written `cmp` gives
+    /// `Eq`, and a written `eq` gives no `Ord` (spec-traits.md §Derivation
+    /// Policy).
     fn derive_all(
         tysys: &TypeSystem,
         table: &TypeTable,
@@ -1018,10 +1022,46 @@ impl SolverBridge {
         declarations.extend(variants);
         let handles_from = declarations.len();
         declarations.extend(handles);
-        for item in Self::DERIVED {
-            let Some(trait_) = tysys.compiler_trait_def(item) else {
-                continue;
+        let traits: Vec<(CompilerItem, TraitDeclId)> = Self::DERIVED
+            .into_iter()
+            .filter_map(|item| Some((item, lowering.trait_decl(tysys.compiler_trait_def(item)?))))
+            .collect();
+        let trait_of = |item| traits.iter().find(|(i, _)| *i == item).map(|&(_, t)| t);
+        let mut from_cmp: IndexSet<ImplId> = IndexSet::default();
+        // An impl with no block is one the compiler states on a primitive,
+        // whose target writes no argument. One derived from `cmp` copies a
+        // written impl that covers its head.
+        let covers = |from_cmp: &IndexSet<ImplId>, id: ImplId, def: &ImplDef| {
+            if from_cmp.contains(&id) {
+                return true;
+            }
+            if let Some(&block) = lowering.impl_defs.get(&id) {
+                return table.impl_covers_every_instance(block);
+            }
+            assert!(
+                matches!(&def.target, SolverType::Decl(_, args) if args.is_empty()),
+                "a compiler-stated impl targets a head writing no argument"
+            );
+            true
+        };
+        let (writes_eq, writes_ord) =
+            match (trait_of(CompilerItem::Eq), trait_of(CompilerItem::Ord)) {
+                (Some(eq), Some(ord)) => {
+                    let writes = |trait_| {
+                        written_at_self(program, trait_, |id, def| covers(&from_cmp, id, def))
+                    };
+                    (writes(eq), writes(ord))
+                }
+                _ => Default::default(),
             };
+        if let Some(eq) = trait_of(CompilerItem::Eq) {
+            let ords = writes_ord
+                .iter()
+                .filter(|(head, _)| !writes_eq.contains_key(*head))
+                .map(|(_, &id)| id);
+            from_cmp = derive_eq_from_ord(program, eq, ords.collect::<Vec<_>>());
+        }
+        for &(item, trait_) in &traits {
             let eligible = match item {
                 CompilerItem::Eq => &declarations[..],
                 CompilerItem::Ord => &declarations[..variants_from],
@@ -1030,20 +1070,17 @@ impl SolverBridge {
                 }
                 other => unreachable!("{other:?} is not derived"),
             };
-            let trait_ = lowering.trait_decl(trait_);
-            // An impl with no block is one the compiler states on a primitive,
-            // whose target writes no argument.
-            let covers = |id: ImplId, def: &ImplDef| {
-                if let Some(&block) = lowering.impl_defs.get(&id) {
-                    return table.impl_covers_every_instance(block);
-                }
-                assert!(
-                    matches!(&def.target, SolverType::Decl(_, args) if args.is_empty()),
-                    "a compiler-stated impl targets a head writing no argument"
-                );
-                true
+            let eligible: Vec<Declaration> = match item {
+                CompilerItem::Ord => eligible
+                    .iter()
+                    .filter(|d| !writes_eq.contains_key(&d.id))
+                    .cloned()
+                    .collect(),
+                _ => eligible.to_vec(),
             };
-            derive(program, trait_, eligible, covers);
+            derive(program, trait_, &eligible, |id, def| {
+                covers(&from_cmp, id, def)
+            });
         }
     }
 

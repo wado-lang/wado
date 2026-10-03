@@ -305,12 +305,14 @@ impl Query<'_> {
     }
 }
 
-/// Whether the program declares `trait_` for `ty`'s own head, by an impl or a
-/// marker whose target reaches it. A declared impl always wins over a derived one.
+/// Whether the program declares `trait_` at its defaults for `ty`'s own head,
+/// by an impl or a marker whose target reaches it. A declared impl always wins
+/// over a derived one, which answers only at the defaults.
 fn declared_for(program: &Program, trait_: TraitDeclId, ty: &SolverType) -> bool {
     program.impls.values().any(|def| {
         def.trait_ == Some(trait_)
             && matches!(def.origin, ImplOrigin::Written | ImplOrigin::Marker)
+            && at_defaults(program, def)
             && matches!(def.target, SolverType::Decl(..))
             && match_target(&def.target, ty, &mut vec![None; def.params.len()])
     })
@@ -426,6 +428,12 @@ pub(super) fn answers_args(
         // one no bound can name, so every impl answers there.
         asks.is_empty() || asks.iter().any(|ask| said(i, written.get(i)).contains(ask))
     })
+}
+
+/// Whether the impl answers its trait at the declared defaults, as a derived
+/// impl does: `impl Eq for D`, not `impl Eq<String> for D`.
+pub(super) fn at_defaults(program: &Program, def: &ImplDef) -> bool {
+    answers_args(program, def, &def.target, None, &def.trait_args, &[])
 }
 
 /// Match an impl target against a type, binding the target's parameters by

@@ -19,7 +19,7 @@ use super::coercion::{
 use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::replace_on_assign_place;
 use super::scope::ScopedBound;
-use super::trait_query::primitive_has_operator;
+use super::trait_query::{OnBoundTrait, primitive_has_operator};
 use super::types::{FunctionContext, MethodInfo, OperatorImpl, ResolvedTraitMethod, TypeError};
 use super::tysys::TypeSystem;
 use super::util::bound_param_name;
@@ -390,9 +390,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // A type that erases to a scalar is still its own type, so an impl
             // it writes — or inherits from a link below — answers the
             // comparison before the erased form's instruction does.
+            // A written `cmp` answers `==` too, through the `Eq` derived from it.
             let comparison_impl_link = operator_compiler_item(&op)
                 .and_then(|item| self.tysys.compiler_trait_def(item))
-                .and_then(|trait_| self.tysys.own_impl_link(left, trait_));
+                .and_then(|trait_| self.tysys.own_impl_link(left, trait_))
+                .or_else(|| {
+                    let ord = self.tysys.compiler_trait_def(CompilerItem::Ord)?;
+                    let link = self.tysys.own_impl_link(left, ord)?;
+                    (matches!(op, BinaryOp::Eq | BinaryOp::NotEq)
+                        && self.tysys.comparison_written_alone(link) == Some(OnBoundTrait::Ord))
+                    .then_some(link)
+                });
             // The receiver for trait lookup, named by its declaring module and
             // read off the resolved type. `Enum` and `Flags` appear only under
             // the guard above — absent an impl of their own, `==` lowers to a

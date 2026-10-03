@@ -39,7 +39,9 @@ use crate::name::{
 };
 use crate::synthesis::common;
 use crate::synthesis::common::{locals_from_params, option_some, relocate_synthetic_locals};
-use crate::synthesis::template::{blanket_dispatch_for, ref_blanket_call, trait_call_template};
+use crate::synthesis::template::{
+    blanket_dispatch_for, comparison_written_alone, ref_blanket_call, trait_call_template,
+};
 use crate::{hashmap, tir};
 
 /// Snapshot of every `core:prelude/{traits,format}` symbol name that the
@@ -328,6 +330,8 @@ pub fn synthesize_traits(project: Package) -> Package {
             names: &names,
             partial_impls: &partial_impls,
         };
+        // First, so the member-wise `Eq` derivations find the impl recorded.
+        generate_eq_from_cmp_impls(module, &mut ctx);
         generate_enum_trait_impls(module, &mut ctx);
         generate_flags_trait_impls(module, &mut ctx);
         generate_handle_eq_impls(module, &mut ctx);
@@ -3550,6 +3554,133 @@ fn collect_generic_variant_cases(
             (v.name.clone(), v.type_params.clone(), cases, v.span, v.def)
         })
         .collect()
+}
+
+/// Generate `T^Eq::eq` for each requested type that writes `cmp` and no `eq`,
+/// which takes `==` from that order (spec-traits.md §Derivation Policy).
+fn generate_eq_from_cmp_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
+    let module_source = module.module_source.clone();
+    let mut tt = module.type_table.borrow_mut();
+    let eq_trait_name = tt.compiler_trait_fq(CompilerItem::Eq);
+    let eq_key = eq_trait_name.canonical().expect(KEYED);
+    let ord_key = tt
+        .compiler_trait_fq(CompilerItem::Ord)
+        .canonical()
+        .expect(KEYED);
+
+    let mut declarations: Vec<(FqTypeName, TypeId, Vec<TirTypeParam>, Span)> = Vec::new();
+    for s in module.structs.iter().filter(|s| s.monomorph_info.is_none()) {
+        let (receiver, ty) = if s.type_params.is_empty() {
+            (tt.fq_struct_head(s.def), tt.make_struct(s.def))
+        } else {
+            let def = s
+                .def
+                .decl()
+                .expect("a generic struct names its declaration");
+            let params = make_type_param_ids(&s.type_params, &mut tt);
+            let receiver = FqTypeName::declared(tt.defs(), def);
+            (receiver, tt.make_generic_instance(def, params))
+        };
+        declarations.push((receiver, ty, s.type_params.clone(), s.span));
+    }
+    for e in &module.enums {
+        let receiver = FqTypeName::declared(tt.defs(), e.def);
+        declarations.push((receiver, tt.make_enum(e.def), Vec::new(), e.span));
+    }
+    for v in &module.variants {
+        let receiver = FqTypeName::declared(tt.defs(), v.def);
+        let ty = if v.type_params.is_empty() {
+            tt.make_variant(v.def)
+        } else {
+            let params = make_type_param_ids(&v.type_params, &mut tt);
+            tt.make_generic_instance(v.def, params)
+        };
+        declarations.push((receiver, ty, v.type_params.clone(), v.span));
+    }
+
+    let mut generated = Vec::new();
+    for (receiver, ty, type_params, span) in &declarations {
+        if !ctx.should_synthesize(receiver, &eq_key)
+            || comparison_written_alone(ctx.trait_env, [eq_key, ord_key], *ty, &tt)
+                != Some(CompilerItem::Ord)
+        {
+            continue;
+        }
+        let func = generate_eq_from_cmp_fn(
+            receiver,
+            type_params,
+            *ty,
+            ctx.trait_env,
+            &module_source,
+            &eq_trait_name,
+            &mut tt,
+            *span,
+            ctx.names,
+        );
+        generated.push(Rc::new(RefCell::new(func)));
+        ctx.record_impl(receiver, &eq_key);
+    }
+    drop(tt);
+    module.functions.extend(generated);
+}
+
+/// Generate `T^Eq::eq(&self, &Self) -> bool` as `self.cmp(other) == Equal`.
+fn generate_eq_from_cmp_fn(
+    receiver: &FqTypeName,
+    impl_type_params: &[TirTypeParam],
+    ty: TypeId,
+    trait_env: &TraitEnv,
+    module_source: &ModuleSource,
+    eq_trait_name: &FqTraitName,
+    tt: &mut TypeTable,
+    span: Span,
+    names: &TraitsStdlibNames,
+) -> TirFunction {
+    let method_info = trait_method_info(receiver, eq_trait_name, "eq");
+    let qualified_name = method_info.to_mangled_name();
+    let ref_type = tt.make_ref(ty);
+    let ordering_type = tt.make_compiler_enum(CompilerItem::Ordering);
+    let order = cmp_call_expr(
+        deref_local(0, "self", ref_type, ty, span),
+        deref_local(1, "other", ref_type, ty, span),
+        ty,
+        ordering_type,
+        trait_env,
+        module_source,
+        tt,
+        span,
+    );
+    let equal = TirExpr::new(
+        TirExprKind::Binary {
+            left: Box::new(order),
+            op: TirBinaryOp::Eq,
+            right: Box::new(ordering_construct(
+                ordering_type,
+                names.equal_index,
+                &names.equal_name,
+                span,
+            )),
+        },
+        TypeTable::BOOL,
+        span,
+    );
+    let body = TirBlock::new(
+        vec![TirStmt::new(
+            TirStmtKind::Return { value: Some(equal) },
+            span,
+        )],
+        span,
+    );
+    make_trait_method(
+        qualified_name,
+        method_info,
+        impl_type_params.to_vec(),
+        binary_method_params(ref_type, span),
+        TypeTable::BOOL,
+        body,
+        binary_method_locals(ref_type),
+        span,
+    )
 }
 
 /// Generate auto-derived trait implementations (Eq, Ord) for enum types in a module.

@@ -1,13 +1,13 @@
 //! Derivation as impl generation: a declaration whose members all satisfy a
 //! structural trait contributes `impl<Pi: Tr, …> Tr for D<P1..Pn>`.
 
-use super::holds::holds;
+use super::holds::{at_defaults, holds};
 use super::program::ParamBound;
 use super::program::{
     Declaration, Env, ImplDef, ImplId, ImplOrigin, ParamDef, Program, SolverType, TraitDeclId,
     TypeDeclId,
 };
-use crate::hashmap::IndexSet;
+use crate::hashmap::{IndexMap, IndexSet};
 
 /// Add to `program` the impls of `trait_` that `declarations` derive, in order:
 /// each but those an impl `covers` at every instance of their head.
@@ -17,10 +17,12 @@ pub fn derive(
     declarations: &[Declaration],
     covers: impl Fn(ImplId, &ImplDef) -> bool,
 ) {
+    // An impl at other arguments (`Eq<String>`) leaves the defaults, where a
+    // derived impl answers, to derive.
     let has_impl: IndexSet<TypeDeclId> = program
         .impls
         .iter()
-        .filter(|(_, def)| def.trait_ == Some(trait_))
+        .filter(|(_, def)| def.trait_ == Some(trait_) && at_defaults(program, def))
         .filter_map(|(&id, def)| match &def.target {
             SolverType::Decl(head, _) if covers(id, def) => Some(*head),
             SolverType::Decl(..)
@@ -70,6 +72,51 @@ pub fn derive(
     }
 }
 
+/// The written impls of `trait_` at `Self` reaching every instance of a
+/// declaration, by that declaration: `impl Eq for D`, not
+/// `impl Eq<String> for D` nor a marker.
+pub fn written_at_self(
+    program: &Program,
+    trait_: TraitDeclId,
+    covers: impl Fn(ImplId, &ImplDef) -> bool,
+) -> IndexMap<TypeDeclId, ImplId> {
+    program
+        .impls
+        .iter()
+        .filter(|&(&id, def)| {
+            def.trait_ == Some(trait_)
+                && def.origin == ImplOrigin::Written
+                && at_defaults(program, def)
+                && covers(id, def)
+        })
+        .filter_map(|(&id, def)| match def.target {
+            SolverType::Decl(head, _) => Some((head, id)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Add an impl of `eq` beside each of `ords`, written impls of `Ord`, at its
+/// target and with its bounds: a written `cmp` gives `==` whatever the members
+/// are (spec-traits.md §Derivation Policy). Answers the impls added.
+pub fn derive_eq_from_ord(
+    program: &mut Program,
+    eq: TraitDeclId,
+    ords: impl IntoIterator<Item = ImplId>,
+) -> IndexSet<ImplId> {
+    ords.into_iter()
+        .map(|id| {
+            let ord = program.impls[&id].clone();
+            program.push_impl(ImplDef {
+                trait_: Some(eq),
+                trait_args: Vec::new(),
+                origin: ImplOrigin::Derived,
+                ..ord
+            })
+        })
+        .collect()
+}
+
 /// The bound each parameter of the derived impl carries: `trait_` where a
 /// member mentions it, none otherwise.
 fn derived_bounds(trait_: TraitDeclId, decl: &Declaration) -> Vec<Vec<TraitDeclId>> {
@@ -83,8 +130,8 @@ fn derived_bounds(trait_: TraitDeclId, decl: &Declaration) -> Vec<Vec<TraitDeclI
 
 #[cfg(test)]
 mod tests {
-    use super::super::program::ModuleId;
-    use super::super::testing::{Builder, concrete, decl};
+    use super::super::program::{ArgDefault, ModuleId};
+    use super::super::testing::{Builder, bounded, concrete, decl};
     use super::*;
 
     const EQ: TraitDeclId = TraitDeclId(0);
@@ -307,6 +354,41 @@ mod tests {
         marker(&mut p);
         let d = derived(p, &[declaration(POINT, 0, vec![decl(I32)])]);
         assert_eq!(d, vec![]);
+    }
+
+    /// `impl Eq<i32> for Point` answers another argument than a derived impl
+    /// would, so `Point` still derives `Eq<Self>`.
+    #[test]
+    fn an_impl_at_another_argument_leaves_the_defaults_to_derive() {
+        let mut p = prelude();
+        p.traits.entry(EQ).or_default().arg_defaults = vec![Some(ArgDefault::SelfType)];
+        p.push_impl(ImplDef {
+            trait_args: vec![decl(I32)],
+            ..concrete(EQ, decl(POINT))
+        });
+        let d = derived(p, &[declaration(POINT, 0, vec![decl(I32)])]);
+        assert_eq!(targets(&d), vec![decl(POINT)]);
+    }
+
+    /// `impl<T: Ord> Ord for Wrapper<T>` gives `impl<T: Ord> Eq for Wrapper<T>`,
+    /// whatever `Wrapper`'s members are.
+    #[test]
+    fn eq_from_ord_copies_the_target_and_the_bounds() {
+        const ORD: TraitDeclId = TraitDeclId(1);
+        let mut p = prelude();
+        let wrapper = SolverType::Decl(WRAPPER, vec![SolverType::Param(0)]);
+        let ord = p.push_impl(bounded(ORD, wrapper.clone(), vec![ORD]));
+        let ords = written_at_self(&p, ORD, every_instance);
+        assert_eq!(ords.get(&WRAPPER), Some(&ord));
+        let added = derive_eq_from_ord(&mut p, EQ, ords.values().copied());
+        let eq = &p.impls[added.first().expect("one impl added")];
+        assert_eq!(
+            eq,
+            &ImplDef {
+                origin: ImplOrigin::Derived,
+                ..bounded(EQ, wrapper, vec![ORD])
+            }
+        );
     }
 
     /// A member that reaches a declaration through the marker's impl derives:

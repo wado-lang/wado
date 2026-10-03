@@ -1,0 +1,34 @@
+// A written `eq` stops `Ord` from deriving: an order derived from the members
+// would ignore the equality written beside it. A use that needs one is an
+// error until `cmp` is written too.
+
+struct Name {
+    text: String,
+}
+
+impl Eq for Name {
+    fn eq(&self, other: &Self) -> bool {
+        return self.text.len() == other.text.len();
+    }
+}
+
+fn less(a: Name, b: Name) -> bool {
+    return a < b;
+}
+
+fn least<T: Ord>(a: T, b: T) -> T {
+    return if a < b { a } else { b };
+}
+
+test {
+    assert !less(Name { text: "a" }, Name { text: "b" });
+    let _ = least(Name { text: "a" }, Name { text: "b" });
+}
+
+__DATA__
+{
+    "compile_error": ":16:12: analysis error: operator `<` cannot be applied to type `Name`: type does not implement `Ord`",
+    "compile_errors_contains": [
+        "`Name` writes `eq`, so no `Ord` is derived for it; write `cmp` beside it"
+    ]
+}

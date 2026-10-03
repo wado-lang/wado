@@ -1201,6 +1201,38 @@ pub(crate) fn written_impl_reaches(
         .any(|block| tt.impl_reaches_instance(block, receiver))
 }
 
+/// Whether a written impl of `trait_` at its declared defaults (`Eq<Self>`,
+/// not `Eq<String>`) reaches every instance of `receiver`'s head.
+fn written_default_impl_covers(
+    trait_env: &TraitEnv,
+    trait_: DefId,
+    receiver: TypeId,
+    tt: &TypeTable,
+) -> bool {
+    trait_env
+        .methodful_default_impls_by_receiver(&tt.impl_receiver_key(receiver), trait_)
+        .any(|block| tt.impl_covers_every_instance(block))
+}
+
+/// Which of `eq` and `ord` (the `Eq` and `Ord` traits) `receiver` writes at
+/// `Self` without the other. That one decides how the other derives
+/// (spec-traits.md §Derivation Policy): a written `cmp` gives `==`, and a
+/// written `eq` gives no `Ord`. An impl reaching only some instances decides
+/// nothing, since one derived body serves them all.
+pub(crate) fn comparison_written_alone(
+    trait_env: &TraitEnv,
+    [eq, ord]: [DefId; 2],
+    receiver: TypeId,
+    tt: &TypeTable,
+) -> Option<CompilerItem> {
+    let writes = |trait_| written_default_impl_covers(trait_env, trait_, receiver, tt);
+    match (writes(eq), writes(ord)) {
+        (true, false) => Some(CompilerItem::Eq),
+        (false, true) => Some(CompilerItem::Ord),
+        _ => None,
+    }
+}
+
 /// Whether `type_id` is one of the five reflection kinds, i.e. whether a
 /// `Reflect*`-bounded blanket can claim it.
 pub(crate) fn has_reflect_kind(type_id: TypeId, tt: &TypeTable) -> bool {

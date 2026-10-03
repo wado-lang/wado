@@ -1,0 +1,192 @@
+// A type with a written `cmp` and no written `eq` takes `==` from `cmp`, not
+// from its members: `a == b` is `a.cmp(&b) == Equal`. So the two cannot
+// disagree, and a member `cmp` ignores is ignored by `==` too.
+
+struct Entry {
+    key: i32,
+    hits: i32,
+}
+
+impl Ord for Entry {
+    fn cmp(&self, other: &Self) -> Ordering {
+        return self.key.cmp(&other.key);
+    }
+}
+
+// A member that is not `Eq` does not stop it: `==` never reads the members.
+struct Handler {
+    priority: i32,
+    run: fn() -> i32,
+}
+
+impl Ord for Handler {
+    fn cmp(&self, other: &Self) -> Ordering {
+        return self.priority.cmp(&other.priority);
+    }
+}
+
+// A container derives from its members, so it reaches `Handler`'s `==` too.
+struct Queue {
+    head: Handler,
+    len: i32,
+}
+
+type Urgent = Handler;
+
+struct Keyed<T> {
+    key: i32,
+    value: T,
+}
+
+impl<T> Ord for Keyed<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        return self.key.cmp(&other.key);
+    }
+}
+
+// The derived `Eq` carries the bounds of the `Ord` it comes from.
+struct Ranked<T> {
+    rank: T,
+    note: String,
+}
+
+impl<T: Ord> Ord for Ranked<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        return self.rank.cmp(&other.rank);
+    }
+}
+
+// An `Eq` at another `Rhs` has no order to agree with, so `==` between two
+// `Label`s still comes from `cmp`.
+struct Label {
+    text: String,
+    order: i32,
+}
+
+impl Eq<String> for Label {
+    fn eq(&self, other: &String) -> bool {
+        return self.text == *other;
+    }
+}
+
+impl Ord for Label {
+    fn cmp(&self, other: &Self) -> Ordering {
+        return self.order.cmp(&other.order);
+    }
+}
+
+// A marker asks for the impl the rule gives, which here is the one from `cmp`.
+struct Version {
+    major: i32,
+    build: String,
+}
+
+impl Ord for Version {
+    fn cmp(&self, other: &Self) -> Ordering {
+        return self.major.cmp(&other.major);
+    }
+}
+
+impl Eq for Version;
+
+enum Size {
+    Tiny,
+    Small,
+    Large,
+}
+
+impl Ord for Size {
+    fn cmp(&self, other: &Self) -> Ordering {
+        return rank(self).cmp(&rank(other));
+    }
+}
+
+fn rank(s: &Size) -> i32 {
+    return match *s {
+        Tiny | Small => 0,
+        Large => 1,
+    };
+}
+
+variant Reading {
+    Exact(i32),
+    Estimate(i32),
+}
+
+impl Ord for Reading {
+    fn cmp(&self, other: &Self) -> Ordering {
+        return value(self).cmp(&value(other));
+    }
+}
+
+fn value(r: &Reading) -> i32 {
+    return match *r {
+        Exact(v) | Estimate(v) => v,
+    };
+}
+
+fn one() -> i32 {
+    return 1;
+}
+
+fn same<T: Eq>(a: &T, b: &T) -> bool {
+    return a == b;
+}
+
+test "a struct takes == from cmp" {
+    let a = Entry { key: 1, hits: 0 };
+    let b = Entry { key: 1, hits: 9 };
+    let c = Entry { key: 2, hits: 0 };
+    assert a == b && !(a != b) && a != c;
+    assert same(&a, &b);
+    let entries: List<Entry> = [c, b];
+    assert entries.contains(&a);
+}
+
+test "a member that is not Eq does not matter" {
+    let a = Handler { priority: 1, run: one };
+    let b = Handler { priority: 1, run: || 2 };
+    assert a == b && a != Handler { priority: 2, run: one };
+}
+
+test "a container, a newtype, an Option and a List reach it" {
+    let a = Handler { priority: 1, run: one };
+    let b = Handler { priority: 1, run: || 2 };
+    assert Queue { head: a, len: 3 } == Queue { head: b, len: 3 };
+    assert same(&Queue { head: a, len: 3 }, &Queue { head: b, len: 3 });
+    assert a as Urgent == b as Urgent;
+    let some_a: Option<Handler> = Some(a);
+    let some_b: Option<Handler> = Some(b);
+    assert some_a == some_b;
+    let handlers: List<Handler> = [b];
+    assert handlers.contains(&a);
+}
+
+test "a generic struct takes == from cmp at every instance" {
+    assert Keyed { key: 1, value: "a" } == Keyed { key: 1, value: "b" };
+    assert Keyed { key: 1, value: 1.5 } != Keyed { key: 2, value: 1.5 };
+    assert Ranked { rank: 2, note: "a" } == Ranked { rank: 2, note: "b" };
+    assert same(&Ranked { rank: "x", note: "a" }, &Ranked { rank: "x", note: "b" });
+}
+
+test "an Eq at another Rhs leaves == between two values to cmp" {
+    let a = Label { text: "x", order: 1 };
+    assert a == Label { text: "y", order: 1 } && a != Label { text: "x", order: 2 };
+    assert a == "x";
+}
+
+test "a marker takes == from cmp" {
+    assert Version { major: 3, build: "a" } == Version { major: 3, build: "b" };
+}
+
+test "an enum takes == from cmp" {
+    assert Size::Tiny == Size::Small && Size::Small != Size::Large;
+}
+
+test "a variant takes == from cmp" {
+    assert Reading::Exact(3) == Reading::Estimate(3);
+    assert Reading::Exact(3) != Reading::Exact(4);
+}
+
+__DATA__
+{"test": {}}

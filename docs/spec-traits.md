@@ -1027,15 +1027,19 @@ and no written `Eq` gets its `Eq` from `cmp`, not from its members:
 `a == b` is `a.cmp(&b) == Ordering::Equal`. A type with a written `Eq` derives
 no `Ord`, so a use that needs one is a compile error until `cmp` is written
 too. Only `Eq<Self>` counts here; an `Eq<Rhs>` for another type has no `Ord` to
-agree with. [Ord - Ordering](./spec-standard-traits.md#ord---ordering) says what
-holds when both are written.
+agree with, and leaves `Eq<Self>` to derive as if it were not written.
+[Ord - Ordering](./spec-standard-traits.md#ord---ordering) says what holds when
+both are written.
+
+An `Eq` taken from `cmp` holds wherever the written `Ord` does, so
+`impl<T: Ord> Ord for Ranked<T>` makes `Ranked<T>` an `Eq` where `T: Ord`. Only
+an impl reaching every instance of its head counts, since a generic declaration
+derives one body for all of them: `impl Ord for Ranked<i32>` leaves every
+`Ranked` deriving `Eq` from its members.
 
 A [marker](#compiler-synthesized-impl) asks for the impl this rule gives. So
 `impl Eq for T;` beside a written `cmp` takes `Eq` from `cmp`, and
 `impl Ord for T;` beside a written `eq` is an error.
-
-> Not yet implemented: a written `Ord` beside no written `Eq` derives `Eq` from
-> the members, and a written `Eq` does not stop `Ord` from deriving.
 
 An on-demand impl is generated only where a use needs it, not for every declared
 type. For `Eq` and `Ord` that use is an operator, a comparison method, or a

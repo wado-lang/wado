@@ -1255,6 +1255,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ) {
             return;
         }
+        if on_bound == OnBoundTrait::Ord
+            && self.tysys.comparison_written_alone(target_type_id) == Some(OnBoundTrait::Eq)
+        {
+            let _ = self.emit(types::TypeError::OrdMarkerBesideWrittenEq {
+                type_name: target_type_name.to_string(),
+                span,
+            });
+            return;
+        }
         let reason = self.tysys.trait_unimpl_reason_chain(
             &self.annotate_ctx,
             &self.type_lookup(),

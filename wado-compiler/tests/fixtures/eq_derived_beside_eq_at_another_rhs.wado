@@ -1,0 +1,27 @@
+// An `Eq` at another `Rhs` is not the type's own: `==` between two values of
+// the type still derives from the members.
+
+struct Named {
+    text: String,
+    n: i32,
+}
+
+impl Eq<String> for Named {
+    fn eq(&self, other: &String) -> bool {
+        return self.text == *other;
+    }
+}
+
+fn same<T: Eq>(a: &T, b: &T) -> bool {
+    return a == b;
+}
+
+test {
+    let a = Named { text: "x", n: 1 };
+    assert a == Named { text: "x", n: 1 } && a != Named { text: "x", n: 2 };
+    assert same(&a, &Named { text: "x", n: 1 });
+    assert a == "x" && a != "y";
+}
+
+__DATA__
+{"test": {}}

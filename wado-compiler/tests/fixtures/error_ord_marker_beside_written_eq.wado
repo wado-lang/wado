@@ -1,0 +1,19 @@
+// A marker asks for the impl the derivation rule gives, and beside a written
+// `eq` the rule gives no `Ord`.
+
+struct Name {
+    text: String,
+}
+
+impl Eq for Name {
+    fn eq(&self, other: &Self) -> bool {
+        return self.text.len() == other.text.len();
+    }
+}
+
+impl Ord for Name;
+
+test {}
+
+__DATA__
+{"compile_error": ":14:1: analysis error: cannot derive `Ord` for `Name`: it writes `eq`, so write `cmp` beside it"}
