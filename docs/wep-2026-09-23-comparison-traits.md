@@ -108,6 +108,11 @@ The first three rows cannot disagree. An order cannot be built from an equality,
 so the third row asks for `cmp` rather than deriving one that ignores the
 written `eq`.
 
+A newtype reads the table by what it writes itself. One writing `cmp` alone
+takes `==` from it, not from its base. One writing `eq` alone inherits no `Ord`
+from its base, which orders values its `eq` may call equal, and a newtype over
+it inherits none from it.
+
 The second row's `==` holds where the written `cmp` does, under its bounds. A
 generic declaration derives one body for every instance (WEP 2026-06-25), so a
 `cmp` written for only some instances (`impl Ord for Ranked<i32>`) decides
@@ -347,6 +352,9 @@ overlap, which is what `benchmark/ab.ts` decides.
 - [x] Derive `Eq` from a written `cmp`, and reject a use of `Ord` on a type
   whose `Eq` is written and whose `cmp` is not, a marker included. Each with a
   fixture.
+- [x] Apply the table to a newtype: its own `cmp` gives its `==`, and its own
+  `eq` alone leaves it no `Ord`, through an operator, a bound and a method
+  call. Each with a fixture.
 - [x] Make `f32::min`, `f64::min` and their `max` follow the order, add
   `minimum` and `maximum` on the Wasm instructions, and make `clamp` keep a NaN
   `x` and trap on a NaN bound, `high` included, which `low <= high` passes.

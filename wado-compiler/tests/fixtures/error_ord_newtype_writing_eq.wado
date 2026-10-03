@@ -1,0 +1,55 @@
+// A newtype writing `eq` alone has no `Ord`: its base's would order values
+// the written `eq` does not tell apart. So does a newtype over it, and
+// `cmp` must be written beside `eq` to compare.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+type Tagged = Point;
+
+impl Eq for Tagged {
+    fn eq(&self, other: &Self) -> bool {
+        return self.x == other.x;
+    }
+}
+
+type Relabeled = Tagged;
+
+type Coarse = f64;
+
+impl Eq for Coarse {
+    fn eq(&self, other: &Self) -> bool {
+        return f64::round(*self as f64) == f64::round(*other as f64);
+    }
+}
+
+fn least<T: Ord>(a: T, b: T) -> T {
+    return if a < b { a } else { b };
+}
+
+test {
+    let a = Point { x: 1, y: 2 } as Tagged;
+    let b = Point { x: 1, y: 3 } as Tagged;
+    let _ = a < b;
+    let _ = least(a, b);
+    let _ = a.cmp(&b);
+    let _ = least(a as Relabeled, b as Relabeled);
+    let c: Coarse = builtin::black_box(1.2);
+    let _ = c > 2.0;
+    let _ = c.cmp(&c);
+}
+
+__DATA__
+{
+    "compile_error": ":35:13: analysis error: operator `<` cannot be applied to type `Tagged`: type does not implement `Ord`",
+    "compile_errors_contains": [
+        "type 'Tagged' does not implement trait 'Ord' required by bound on 'T'",
+        "no method 'cmp' found on type 'Tagged'",
+        "type 'Relabeled' does not implement trait 'Ord' required by bound on 'T'",
+        "`Tagged` writes `eq`, so no `Ord` is derived for it; write `cmp` beside it",
+        "operator `>` cannot be applied to type `Coarse`: type does not implement `Ord`",
+        "no method 'cmp' found on type 'Coarse'"
+    ]
+}

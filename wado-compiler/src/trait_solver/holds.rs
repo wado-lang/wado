@@ -199,7 +199,7 @@ impl Query<'_> {
                 if self.at_itself.as_ref() == Some(ty) {
                     return None;
                 }
-                let base = newtype_base(program, ty)?;
+                let base = inherited_base(program, ty, trait_)?;
                 self.holds_at(&base, trait_, args, subject.or(Some(ty)))
             })
             .or_else(|| {
@@ -398,6 +398,21 @@ pub(super) fn newtype_base(program: &Program, ty: &SolverType) -> Option<SolverT
         base.map_params(&|i| args.get(i as usize).cloned())
             .unwrap_or_else(|| panic!("{base:?} mentions a parameter {ty:?} has no argument for")),
     )
+}
+
+/// [`newtype_base`], where the newtype inherits `trait_` from it.
+pub(super) fn inherited_base(
+    program: &Program,
+    ty: &SolverType,
+    trait_: TraitDeclId,
+) -> Option<SolverType> {
+    let SolverType::Decl(head, _) = ty else {
+        return None;
+    };
+    if program.types.get(head)?.withholds.contains(&trait_) {
+        return None;
+    }
+    newtype_base(program, ty)
 }
 
 /// Whether the impl answers a bound writing `args`: at every position each side
@@ -985,10 +1000,33 @@ mod tests {
             DURATION,
             TypeDef {
                 newtype_base: Some(decl(I32)),
+                ..TypeDef::default()
             },
         );
         assert_eq!(
             holds(&p, &Env::default(), &decl(DURATION), ALPHA, HERE),
+            Some(Holds::default())
+        );
+    }
+
+    /// A newtype writing `eq` alone withholds its base's `Ord`, and only that.
+    #[test]
+    fn a_newtype_does_not_inherit_what_it_withholds() {
+        const COARSE: TypeDeclId = TypeDeclId(9);
+        let mut p = Builder::default()
+            .concrete(ALPHA, decl(I32))
+            .concrete(BETA, decl(I32))
+            .build();
+        p.types.insert(
+            COARSE,
+            TypeDef {
+                newtype_base: Some(decl(I32)),
+                withholds: vec![ALPHA],
+            },
+        );
+        assert_eq!(holds(&p, &Env::default(), &decl(COARSE), ALPHA, HERE), None);
+        assert_eq!(
+            holds(&p, &Env::default(), &decl(COARSE), BETA, HERE),
             Some(Holds::default())
         );
     }
@@ -1005,6 +1043,7 @@ mod tests {
             MY_LIST,
             TypeDef {
                 newtype_base: Some(list_of(SolverType::Param(0))),
+                ..TypeDef::default()
             },
         );
         assert_eq!(
@@ -1044,6 +1083,7 @@ mod tests {
             DURATION,
             TypeDef {
                 newtype_base: Some(decl(I32)),
+                ..TypeDef::default()
             },
         );
         // Answered through the marker, so it owes the body; through the base

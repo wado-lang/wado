@@ -980,6 +980,7 @@ impl SolverBridge {
                 head,
                 TypeDef {
                     newtype_base: Some(base),
+                    ..TypeDef::default()
                 },
             );
         };
@@ -1049,7 +1050,13 @@ impl SolverBridge {
             let writes =
                 |trait_| written_at_self(program, trait_, |id, def| covers(&from_cmp, id, def));
             writes_eq = writes(eq);
-            let ords: Vec<ImplId> = writes(ord)
+            let writes_ord = writes(ord);
+            for head in writes_eq.keys().filter(|head| !writes_ord.contains_key(*head)) {
+                if let Some(newtype) = program.types.get_mut(head) {
+                    newtype.withholds.push(ord);
+                }
+            }
+            let ords: Vec<ImplId> = writes_ord
                 .into_iter()
                 .filter(|(head, _)| !writes_eq.contains_key(head))
                 .map(|(_, id)| id)

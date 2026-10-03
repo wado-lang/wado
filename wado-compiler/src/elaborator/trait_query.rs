@@ -934,17 +934,22 @@ impl TypeSystem {
             // A variant derives no `Ord` whatever it writes, so its `eq` is no cause.
             let derives_ord = self.type_table.borrow().reflect_kind(type_id)
                 != Some(CompilerItem::ReflectVariant);
-            let written_instead = match (tr, self.comparison_written_alone(type_id)) {
-                (OnBoundTrait::Ord, Some(OnBoundTrait::Eq)) if derives_ord => {
-                    Some("writes `eq`, so no `Ord` is derived for it; write `cmp` beside it")
-                }
-                (OnBoundTrait::Eq, Some(OnBoundTrait::Ord)) => {
-                    Some("takes `Eq` from its written `cmp`, and does not implement `Ord`")
+            let written_instead = match tr {
+                OnBoundTrait::Ord if derives_ord => self.ord_withheld_by(type_id).map(|link| {
+                    (link, "writes `eq`, so no `Ord` is derived for it; write `cmp` beside it")
+                }),
+                OnBoundTrait::Eq
+                    if self.comparison_written_alone(type_id) == Some(OnBoundTrait::Ord) =>
+                {
+                    Some((
+                        type_id,
+                        "takes `Eq` from its written `cmp`, and does not implement `Ord`",
+                    ))
                 }
                 _ => None,
             };
-            if let Some(why) = written_instead {
-                let owner = self.type_id_to_string(type_id);
+            if let Some((link, why)) = written_instead {
+                let owner = self.type_id_to_string(link);
                 chain.push(format!("`{owner}` {why}"));
                 break;
             }
@@ -1390,13 +1395,19 @@ impl TypeSystem {
         // to record the synthesis request.
         let nominal = self.type_table.borrow().nominal_head(type_id);
         // A written `cmp` gives `==` whatever the members are, and a written
-        // `eq` leaves `Ord` to be written beside it (spec-traits.md
-        // §Derivation Policy).
+        // `eq` leaves `Ord` to be written beside it, whether the members or a
+        // newtype's base would supply one (spec-traits.md §Derivation Policy).
         let written_alone = if is_eq_or_ord && wanted.is_empty() && nominal.is_some() {
             self.comparison_written_alone(type_id)
         } else {
             None
         };
+        if on_bound == Some(OnBoundTrait::Ord)
+            && wanted.is_empty()
+            && self.ord_withheld_by(type_id).is_some()
+        {
+            return false;
+        }
         if is_eq
             && written_alone == Some(OnBoundTrait::Ord)
             && let Some((_, module_source)) = &nominal
@@ -1429,7 +1440,6 @@ impl TypeSystem {
         if let Some(tr) = on_bound
             && tr.is_field_recursive()
             && wanted.is_empty()
-            && !(tr == OnBoundTrait::Ord && written_alone == Some(OnBoundTrait::Eq))
             && let Some((_, module_source)) = nominal
         {
             let serde_blocked =
@@ -1650,6 +1660,15 @@ impl TypeSystem {
         let (written, _) =
             comparison_written_alone(&self.trait_env, &tt.impl_receiver_key(type_id), &tt)?;
         OnBoundTrait::of_compiler_item(written)
+    }
+
+    /// The link of `type_id`'s newtype chain, itself included, that leaves it
+    /// no `Ord`: the one its `Eq` comes from, where that link writes `eq`
+    /// alone. No member derives an `Ord` then, and no base lends one
+    /// (spec-traits.md §Derivation Policy).
+    pub(super) fn ord_withheld_by(&self, type_id: TypeId) -> Option<TypeId> {
+        let link = self.impl_link(type_id, self.compiler_trait_def(CompilerItem::Eq)?)?;
+        (self.comparison_written_alone(link) == Some(OnBoundTrait::Eq)).then_some(link)
     }
 
     /// Whether a bound writing `wanted` selects the header — see

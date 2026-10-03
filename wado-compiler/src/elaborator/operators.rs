@@ -387,6 +387,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         if is_comparison {
+            // A newtype's representation would answer `<` as it is, so ask the
+            // chain before it does.
+            if matches!(
+                op,
+                BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
+            ) && self.tysys.ord_withheld_by(left).is_some()
+            {
+                let type_name = self.tysys.type_table.borrow().type_name(left);
+                let _ = self.emit(TypeError::OperatorNotApplicable {
+                    op: binary_op_str(op).to_string(),
+                    operands: vec![type_name],
+                    note: Some("type does not implement `Ord`".to_string()),
+                    span,
+                });
+                return TypeTable::ERROR;
+            }
             // A type that erases to a scalar is still its own type, so an impl
             // it writes — or inherits from a link below — answers the
             // comparison before the erased form's instruction does.

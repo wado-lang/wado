@@ -1026,7 +1026,8 @@ derives `Eq` but never `Ord`.
 and no written `Eq` gets its `Eq` from `cmp`, not from its members:
 `a == b` is `a.cmp(&b) == Ordering::Equal`. A type with a written `Eq` derives
 no `Ord`, so a use that needs one is a compile error until `cmp` is written
-too. Only `Eq<Self>` counts here; an `Eq<Rhs>` for another type has no `Ord` to
+too. A newtype writing `eq` alone inherits no `Ord` from its base either, and a
+newtype over it none from it. Only `Eq<Self>` counts here; an `Eq<Rhs>` for another type has no `Ord` to
 agree with, and leaves `Eq<Self>` to derive as if it were not written.
 [Ord - Ordering](./spec-standard-traits.md#ord---ordering) says what holds when
 both are written.
