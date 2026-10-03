@@ -803,7 +803,7 @@ impl ClosureLowerer {
 
             // Synthesize a per-functor `Inspect` impl, so trait dispatch on a
             // specialised `&$Closure_N` writes the per-literal signature and
-            // unparsed source. A closure has no `Display`. Template expansion
+            // unparsed source. Template expansion
             // routes fn-typed receivers through `fn(..)^<Trait>::<method>`,
             // which `ClosureCallSiteLowerer` retargets here.
             let signature = format_closure_signature(&collected.params, return_type, type_table);
