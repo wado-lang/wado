@@ -212,6 +212,28 @@ test "f32 wasm instruction math" {
     assert f32::copysign(-5.0, 1.0) == 5.0;
 }
 
+test "the ieee754 comparisons answer false on a NaN but ne" {
+    let one = 1.0;
+    assert one.ieee754_eq(1.0) && one.ieee754_ne(f64::NAN) && one.ieee754_lt(2.0);
+    assert one.ieee754_le(1.0) && one.ieee754_gt(0.0) && one.ieee754_ge(1.0);
+    assert !f64::NAN.ieee754_eq(f64::NAN) && !f64::NAN.ieee754_ge(one);
+
+    let one32: f32 = 1.0;
+    assert one32.ieee754_eq(1.0) && one32.ieee754_ne(f32::NAN) && one32.ieee754_lt(2.0);
+    assert one32.ieee754_le(1.0) && one32.ieee754_gt(0.0) && one32.ieee754_ge(1.0);
+    assert !f32::NAN.ieee754_eq(f32::NAN) && !f32::NAN.ieee754_le(one32);
+
+    let half: f16 = 1.0;
+    assert half.ieee754_eq(1.0) && half.ieee754_ne(f16::NAN) && half.ieee754_lt(2.0);
+    assert half.ieee754_le(1.0) && half.ieee754_gt(0.0) && half.ieee754_ge(1.0);
+    assert !f16::NAN.ieee754_eq(f16::NAN);
+
+    let brain: bf16 = 1.0;
+    assert brain.ieee754_eq(1.0) && brain.ieee754_ne(bf16::NAN) && brain.ieee754_lt(2.0);
+    assert brain.ieee754_le(1.0) && brain.ieee754_gt(0.0) && brain.ieee754_ge(1.0);
+    assert !bf16::NAN.ieee754_gt(brain);
+}
+
 test "float min and max follow the order, where NaN is greatest" {
     assert f64::min(3.0, 5.0) == 3.0;
     assert f64::max(3.0, 5.0) == 5.0;

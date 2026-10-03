@@ -346,7 +346,7 @@ overlap, which is what `benchmark/ab.ts` decides.
   Each with a fixture. Then measure Loam's kernels, which compare floats
   through `f32::max`, and record it in [Cost](#cost).
 - [x] Rename `minimum` and `maximum` to `ieee754_min` and `ieee754_max`.
-- [ ] Add the six `ieee754_*` comparison methods to `f16`, `bf16`, `f32` and
+- [x] Add the six `ieee754_*` comparison methods to `f16`, `bf16`, `f32` and
   `f64`, each lowering to one Wasm instruction, with a fixture holding each
   method's answers on a NaN, `-0.0` and an ordinary pair.
 - [ ] Report the `self_comparison` lint, with a fixture for each operator, the
