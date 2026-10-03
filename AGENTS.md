@@ -94,7 +94,7 @@ that proposed a feature at `docs/wep-*.md`.
 
 ## Repository Map
 
-- `wado-compiler/` — the compiler: frontend, IR pipeline, optimizer, codegen. The Wado standard library (`core:*`, `wasi:*`) lives in `wado-compiler/lib/`. Internals: `docs/compiler.md`, `docs/optimizer.md`.
+- `wado-compiler/` — the compiler, as three crates: `frontend/` (source to NIR), `backend/` (optimizer and codegen), and the driver in `src/`. The Wado standard library (`core:*`, `wasi:*`) lives in `wado-compiler/lib/`. Internals: `docs/compiler.md`, `docs/optimizer.md`.
 - `wado-cli/` — the `wado` binary.
 - `wado-run-webgpu/` — the `wado run-webgpu` subcommand, a separate binary and a workspace of its own: it links a GPU stack on a wasmtime other than the pin. The `test-webgpu` CI job is the only one that builds it.
 - `wado-lsp/` — the language service engine, also compiled to Wasm for the browser.

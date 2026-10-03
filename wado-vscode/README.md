@@ -13,7 +13,7 @@ compiler development.
 Runtime shape:
 
 - Grammar and language configuration are generated from
-  `wado-compiler/src/syntax.rs` so highlighting stays in sync with the lexer.
+  `wado-compiler/frontend/src/syntax.rs` so highlighting stays in sync with the lexer.
 - `src/extension.ts` loads `out/wado_lsp.wasm` via `@vscode/wasm-wasi-lsp` and
   speaks LSP over stdio through `vscode-languageclient`.
 - `ms-vscode.wasm-wasi-core` is declared as an `extensionDependencies` entry
@@ -85,7 +85,7 @@ mise run update-wado-vscode-grammar
 ```
 
 This regenerates `syntaxes/wado.tmLanguage.json` and
-`language-configuration.json` from `wado-compiler/src/syntax.rs` and
+`language-configuration.json` from `wado-compiler/frontend/src/syntax.rs` and
 validates them against the TextMate / language-config JSON schemas. Run it
 whenever the lexer keyword set changes.
 

@@ -214,8 +214,8 @@ the strings the env vars want.
 
 ## See also
 
-- `wado-compiler/src/trace.rs` — `compiler_trace!` macro and filter
+- `wado-compiler/frontend/src/trace.rs` — `compiler_trace!` macro and filter
   parsing (with unit tests).
-- `wado-compiler/src/optimize.rs` — `run_pass` for NIR passes; defines
-  the env-var hook implementation in `mod pass_dump`.
-- `wado-compiler/src/wir_optimize.rs` — `wir_pass` for WIR passes.
+- `wado-compiler/backend/src/optimize.rs` — `run_pass` for NIR passes;
+  defines the env-var hook implementation in `mod pass_dump`.
+- `wado-compiler/backend/src/wir_optimize.rs` — `wir_pass` for WIR passes.

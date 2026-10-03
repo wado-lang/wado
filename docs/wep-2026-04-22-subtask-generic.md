@@ -13,7 +13,7 @@ lowered via `canon lower async`. The canonical ABI for this form:
 4. The caller later calls `waitable-set.wait` on the subtask to wait for
    completion and then lifts the result from outptr.
 
-Wado's current CM binding synthesis (`wado-compiler/src/synthesis/cm_binding.rs`,
+Wado's current CM binding synthesis (`wado-compiler/frontend/src/synthesis/cm_binding.rs`,
 `needs_async_lower` branch around line 3205) combines all four steps into a
 single adapter function that blocks the caller until the subtask returns.
 

@@ -321,7 +321,7 @@ pub trait DiagnosticConsumer {
 
 ## Implementation Plan
 
-1. **Phase 1**: Define `CompilerHost` trait and `Diagnostic` types in `wado-compiler/src/compiler_host.rs`
+1. **Phase 1**: Define `CompilerHost` trait and `Diagnostic` types in `wado-compiler/frontend/src/compiler_host.rs`
 2. **Phase 2**: Refactor compiler to accept `&mut dyn CompilerHost`
 3. **Phase 3**: Migrate error reporting to use `emit_diagnostic`
 4. **Phase 4**: Implement `CliCompilerHost` in `wado-cli`

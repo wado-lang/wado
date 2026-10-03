@@ -83,7 +83,7 @@ WASI P3 defines async primitives as canonical ABI operations:
 - `subtask` — handle for an in-flight async import call
 
 These are the **guest-visible** async primitives. Wado's compiler synthesizes CM
-binding adapters that use these operations (see `wado-compiler/src/synthesis/cm_binding.rs`).
+binding adapters that use these operations (see `wado-compiler/frontend/src/synthesis/cm_binding.rs`).
 
 ### 2.2 Wasmtime's Stackful Async
 

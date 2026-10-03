@@ -66,7 +66,7 @@ use _ from "./helpers.wasm" with { type: "wasm" };
 The bundled libm path was the motivating use case. Phase 1 retires the previous special "bundled" namespace and the `core:builtin` libm declarations:
 
 - `lib/builtins/wado-bundled-libm.wat` → `lib/core/libm.wat`
-- `wado-compiler/src/bundled.rs` → folded into `stdlib.rs` (`get_stdlib_wasm_asset` returns the bytes by canonical path)
+- `wado-compiler/frontend/src/bundled.rs` → folded into `stdlib.rs` (`get_stdlib_wasm_asset` returns the bytes by canonical path)
 - `core:prelude/primitive.wado` name-imports the libm exports directly from `../libm.wat`, renaming each onto its Wado-side identifier (`libm_sin as f64_sin`, …, `libm_log as f64_ln`, etc.) at the import site, and calls them as ordinary functions in place of the previous `builtin::f64_sin(x)` style. There is no intermediate stdlib module — `primitive.wado` is the only consumer, so a `core:libm` re-exporter would be pure indirection.
 - The libm function declarations have been removed from `lib/core/builtin.wado`.
 - `embed_bundled_modules` in `codegen/component.rs` is generalised into `embed_imported_wasm_modules`, driven by post-DCE imports grouped by namespace.

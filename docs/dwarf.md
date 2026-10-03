@@ -118,7 +118,7 @@ Standard DWARF type DIEs do not apply. Skip unless a specific debugger integrati
 
 ## Implementation Details
 
-### New File: `wado-compiler/src/codegen/dwarf.rs`
+### New File: `wado-compiler/backend/src/codegen/dwarf.rs`
 
 ```
 pub struct DwarfInput<'a> {
@@ -132,7 +132,7 @@ pub fn build_dwarf_sections(input: &DwarfInput) -> Vec<(String, Vec<u8>)>
 
 Returns a list of `(section_name, bytes)` pairs to be added as custom sections.
 
-### Integration Point: `wado-compiler/src/codegen/emit.rs`
+### Integration Point: `wado-compiler/backend/src/codegen/emit.rs`
 
 ```
 pub fn emit_core_module(wir: &WirPackage, strip_names: bool, emit_dwarf: bool) -> Vec<u8>
@@ -144,7 +144,7 @@ After building the core module bytes:
 2. Call `build_dwarf_sections`
 3. Append each as `wasm_encoder::RawSection`
 
-### Control: `wado-compiler/src/package.rs`
+### Control: `wado-compiler/frontend/src/package.rs`
 
 Add `emit_dwarf: bool` to `CompileOptions` (or equivalent). Default: `true` for `-O0`/`-O1`,
 `false` for `-O2`/`-O3`/`-Os`.

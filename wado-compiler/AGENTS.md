@@ -1,11 +1,21 @@
 # wado-compiler
 
-The Wado compiler crate.
+The Wado compiler, as three crates:
+
+| Crate                    | Directory   | Holds                                        |
+| ------------------------ | ----------- | -------------------------------------------- |
+| `wado-compiler-frontend` | `frontend/` | Source to NIR, and the source-level lints    |
+| `wado-compiler-backend`  | `backend/`  | The NIR optimizer, WIR, and codegen          |
+| `wado-compiler`          | `src/`      | The driver that runs both, re-exporting each |
+
+The language service needs only the frontend, so `wado-lsp` depends on it
+alone. An item is `pub` only where another crate reads it. The e2e and
+integration tests in `tests/` drive the whole pipeline through `wado-compiler`.
 
 ## Rules
 
-- Nothing in this crate writes to a stream: `println!`, `eprintln!` and `dbg!`
-  are denied at the crate root. A user-facing message goes through `Logger` and
+- Nothing in these crates writes to a stream: `println!`, `eprintln!` and
+  `dbg!` are denied at each crate root. A user-facing message goes through `Logger` and
   a developer trace through `compiler_trace!`.
 - An `assert!` states an invariant the compiler establishes for itself. What a
   source file can violate is a `Diagnostic`: a panic on user input is a crash,
@@ -15,9 +25,9 @@ The Wado compiler crate.
   the user reads. `Display` is for an error the CLI prints itself
   (`CompileError`, `WitEmitError`), or one whose text a `Diagnostic` builder
   reads (`LexError`, `LoadError`).
-- `src/codegen.rs` emits the `NirPackage` and `WirPackage` as they are; it
+- `backend/src/codegen.rs` emits the `NirPackage` and `WirPackage` as they are; it
   knows nothing of the earlier phases.
-- Only `src/name.rs` knows a name format. Mangling and monomorphization go
+- Only `frontend/src/name.rs` knows a name format. Mangling and monomorphization go
   through it.
 - Every name the compiler mints for itself starts with one `$`
   (`name::INTERNAL_PREFIX`), which no Wado identifier can spell.
@@ -47,7 +57,7 @@ The Wado compiler crate.
 
 ## Standard Libraries
 
-`src/stdlib.rs` maps every import to its file under `lib/`. A dev build reads
+`frontend/src/stdlib.rs` maps every import to its file under `lib/`. A dev build reads
 them from disk, so editing one takes effect on the next `wado` run with no
 rebuild. A release build embeds them, as does any `wasm32` build, which has no
 filesystem. `lib/wasi/`, `lib/core/kiln/`, `lib/core/eval/` and
@@ -89,7 +99,7 @@ test can reach it. Remove what a new test covers with
 `builtin::select` evaluates both operands and hands one back, so it is planned
 as the merge it is: the copy keeping a composite result independent lands on the
 result, as the equivalent `if` pays. Choose between them on eagerness, not on
-copies. `src/optimize/select_lowering.rs` goes the other way, rewriting an `if`
+copies. `backend/src/optimize/select_lowering.rs` goes the other way, rewriting an `if`
 into a branchless select only where both arms are duplicable pure leaves.
 
 ## E2E Tests

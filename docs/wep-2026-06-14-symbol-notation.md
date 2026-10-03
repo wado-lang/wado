@@ -4,7 +4,7 @@
 
 Wado needs one official, written way to name "this symbol in this module" — for docs, `wado query`, and diagnostics. The hard part is that a module reference is heterogeneous: a scheme (`core:json`), a relative path (`./utils.wado`), a remote URL (`https://x/lib.wado`, not yet implemented), or a bare dependency name (`parser-lib`). These already contain `:`, `/`, `.`, and `#`, so the module/symbol boundary must be unambiguous.
 
-The compiler already has an _internal_ canonical name (`wado-compiler/src/name.rs`): module and symbol joined by `/`, members by `::`, trait impls by `^`. That `/` join is ambiguous against paths and URLs, so it is unfit as a user-facing notation.
+The compiler already has an _internal_ canonical name (`wado-compiler/frontend/src/name.rs`): module and symbol joined by `/`, members by `::`, trait impls by `^`. That `/` join is ambiguous against paths and URLs, so it is unfit as a user-facing notation.
 
 ## Decision
 

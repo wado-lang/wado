@@ -24,7 +24,7 @@ Language service engine for the Wado compiler toolchain.
 | `src/diagnostics.rs`        | Compiler `Diagnostic` to LSP-compatible `Diagnostic` conversion (re-encodes spans in the negotiated position encoding; tags unused / dead-code lints with `DiagnosticTag::Unnecessary`) |
 | `src/semantic_tokens.rs`    | `classify_all` is the verdict — every token, by byte span; `compute` narrows it to the LSP wire. Identifiers classify by resolved `SymbolKind`, else heuristics                         |
 | `src/definition.rs`         | Go-to-definition via `Cursor::{def_key, def_span}` and a file-path matcher for `use`/`#include` paths                                                                                   |
-| `src/hover.rs`              | Hover info; `Cursor::def_symbol` selects the binding, locals render from the AST node, items via `wado_compiler::unparse`                                                               |
+| `src/hover.rs`              | Hover info; `Cursor::def_symbol` selects the binding, locals render from the AST node, items via `wado_compiler_frontend::unparse`                                                               |
 | `src/inlay_hints.rs`        | Inlay hints: inferred-type hints on `let` / closure / `for-of` bindings, plus parameter-name hints at call sites                                                                        |
 | `src/references.rs`         | Find-references via `Cursor::references_to_def`                                                                                                                                         |
 | `src/document_highlight.rs` | Document highlight; Read/Write classification consults `Semantics::is_write_target`                                                                                                     |
@@ -40,7 +40,7 @@ Language service engine for the Wado compiler toolchain.
 
 ### AST walking
 
-Every AST walk goes through `wado_compiler::ast::AstVisitor` and its `walk_*`
+Every AST walk goes through `wado_compiler_frontend::ast::AstVisitor` and its `walk_*`
 functions — never a hand-written traversal, which silently skips whatever a
 later AST node adds.
 
@@ -70,8 +70,8 @@ its parameter binding and colour as a parameter.
 ### Engine
 
 `Engine` owns per-document state: source text and a cached
-`Rc<Snapshot>` built by composing `wado_compiler::parse` →
-`wado_compiler::load` → `wado_compiler::semantics_of`, with kiln
+`Rc<Snapshot>` built by composing `wado_compiler_frontend::parse` →
+`wado_compiler_frontend::load` → `wado_compiler_frontend::semantics_of`, with kiln
 invocation discovery (`kiln::prepare_invocations`) interleaved between
 parse and load. A runtime-backed host that already ran the generators
 can instead supply a precomputed `InvocationIndex` via
@@ -190,7 +190,7 @@ dependency index — and, for `source_exists`, turn a stat back into a full read
 
 ### Bundled stdlib content
 
-Jump-to-definition into bundled stdlib modules emits `core:<name>` / `wasi:<interface>` URIs from `module_uri` (`src/location.rs`). The server advertises a `workspace.textDocumentContent` capability for the `core` and `wasi` schemes; clients call `workspace/textDocumentContent` to retrieve the source. The handler in `src/server/dispatch.rs` resolves it via `Engine::text_document_content` (`src/lib.rs`), which looks the URI up in `wado_compiler::stdlib::get_stdlib_module`. Both `core:cli` and the rfc3986-normalised form `core:/cli` are accepted.
+Jump-to-definition into bundled stdlib modules emits `core:<name>` / `wasi:<interface>` URIs from `module_uri` (`src/location.rs`). The server advertises a `workspace.textDocumentContent` capability for the `core` and `wasi` schemes; clients call `workspace/textDocumentContent` to retrieve the source. The handler in `src/server/dispatch.rs` resolves it via `Engine::text_document_content` (`src/lib.rs`), which looks the URI up in `wado_compiler_frontend::stdlib::get_stdlib_module`. Both `core:cli` and the rfc3986-normalised form `core:/cli` are accepted.
 
 The VS Code extension (`wado-vscode/src/extension.ts`) bridges this with a `TextDocumentContentProvider` registered for both schemes, and forces opened documents to language `wado` because opaque URIs (e.g. `core:cli`) carry no extension for VS Code's language detector.
 
@@ -321,6 +321,6 @@ concrete code location involved.
   `ModuleSource::Wasm { path, .. }` arm of `module_uri` in
   `src/location.rs` still returns the import path verbatim — clients have
   no way to open `core:libm.wat`. Extend `Engine::text_document_content`
-  to dispatch to `wado_compiler::stdlib::get_stdlib_wasm_asset` for `.wat`
+  to dispatch to `wado_compiler_frontend::stdlib::get_stdlib_wasm_asset` for `.wat`
   assets (text) and either disassemble or skip `.wasm` (binary). Decide
   whether to advertise additional schemes or reuse `core:` / `wasi:`.

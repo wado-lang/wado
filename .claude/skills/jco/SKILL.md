@@ -91,7 +91,7 @@ so any component containing those opcodes fails `WebAssembly.compile` with
 
 `-f no-wide-arithmetic` rewrites each such builtin call, before NIR, to a
 32-bit-limb software form in `core:rt` (`i64_mul_wide_u_soft` and so on;
-`wado-compiler/src/lower/wide_arith.rs`). NIR and WIR then show ordinary calls,
+`wado-compiler/frontend/src/lower/wide_arith.rs`). NIR and WIR then show ordinary calls,
 which the optimizer inlines. **Compile every Node-bound Wado program with this
 flag** — a bare `println` of a float needs it.
 

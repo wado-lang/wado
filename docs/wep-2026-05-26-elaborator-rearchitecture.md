@@ -3,7 +3,7 @@
 ## Context
 
 The `elaborate` phase is the largest and most entangled part of the compiler.
-Everything under `wado-compiler/src/elaborator/` extends one
+Everything under `wado-compiler/frontend/src/elaborator/` extends one
 `Elaborator<'a, H>` struct, which was the single home for type interning,
 trait resolution, method dispatch, name resolution, use→def recording, and
 AST → TIR construction. Adding a fact, cache, or registry had no principled
@@ -610,7 +610,7 @@ the code around them is the same.
 ### Naming
 
 `elaborate` survives as the umbrella term and physical directory name;
-`wado-compiler/src/elaborator/` hosts the layers as submodules. The phase
+`wado-compiler/frontend/src/elaborator/` hosts the layers as submodules. The phase
 names exposed in pipeline diagrams and entry points are `annotate` and
 `reify`. This matches the established use of "elaboration" in PL theory (Coq,
 Lean, Idris) for the same kind of work.
@@ -629,8 +629,8 @@ walker. The digest removes the cause.
 ### Module layout
 
 ```
-wado-compiler/src/elaborator.rs    # umbrella
-wado-compiler/src/elaborator/
+wado-compiler/frontend/src/elaborator.rs    # umbrella
+wado-compiler/frontend/src/elaborator/
 ├── tysys.rs       # TypeSystem and its operations
 ├── sig.rs         # Signatures, DeclSig / MethodSig / ImplSig
 ├── scope.rs       # Scope and its RAII guards

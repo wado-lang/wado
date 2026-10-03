@@ -124,7 +124,7 @@ The lexer detects `///` and `//!` patterns after the initial `//` and assigns th
 
 ### Architecture: Serde DOM
 
-The compiler (`wado-compiler/src/doc.rs`) extracts documentation into a serde-serializable DOM:
+The compiler (`wado-compiler/frontend/src/doc.rs`) extracts documentation into a serde-serializable DOM:
 
 ```rust
 pub struct DocModule {
@@ -422,7 +422,7 @@ Nested items (struct fields, trait methods, enum/variant cases, effect methods) 
 
 ### Phase 2: `wado doc` CLI with Serde DOM — Done
 
-1. Create `wado-compiler/src/doc.rs` with serde-serializable DOM types and `extract_doc()`
+1. Create `wado-compiler/frontend/src/doc.rs` with serde-serializable DOM types and `extract_doc()`
 2. Add `parse()` to `wado-compiler/src/lib.rs` for lightweight lex+parse
 3. Add `Doc` to `Cmd` enum in `main.rs`
 4. Create `wado-cli/src/doc.rs` with `--format` flag (markdown/simple/json)

@@ -238,7 +238,7 @@ Refuse:
 - Reconciling a type's size across the places that compute it. This is Hike's
   sharpest defect: `StructType.Size()` is an unpadded sum while the emitted LLVM
   struct is padded, two answers to one question with nothing between them. It
-  does not reach Wado. Checked: `wado-compiler/src/cm_abi.rs` is the sole owner
+  does not reach Wado. Checked: `wado-compiler/frontend/src/cm_abi.rs` is the sole owner
   of canonical-ABI layout and every caller goes through it, and a WasmGC struct
   has typed slots rather than a byte layout, so there is no second answer for the
   first to disagree with. The lesson survives; the work item does not.
@@ -253,7 +253,7 @@ Refuse:
   and validates at the CM boundary. A second surface type would add a spelling
   without adding a guarantee.
 - A gate against two spellings of one keyword. Checked, and structurally
-  impossible in Wado: `wado-compiler/src/syntax.rs` generates the keyword table,
+  impossible in Wado: `wado-compiler/frontend/src/syntax.rs` generates the keyword table,
   the lexer's lookup and the reverse mapping from one `keyword_registry!` entry
   list, so a duplicate literal is an unreachable match arm and the workspace
   compiles with zero warnings. Hike's `Async` / `async` pair needs a hand-written

@@ -1,23 +1,23 @@
 ---
 name: coverage-investigation
-description: Investigate and improve code coverage for the wado-compiler crate. Use for any question about what the tests do and do not reach, dead code included.
+description: Investigate and improve code coverage for the wado-compiler crates. Use for any question about what the tests do and do not reach, dead code included.
 ---
 
 ## Coverage Investigation Methodology
 
 ### Step 1: Collect Coverage Data
 
-Use `cargo-llvm-cov` to generate line-level coverage. The tool must be installed via `cargo install cargo-llvm-cov`.
+Use `cargo-llvm-cov` to generate line-level coverage. The tool must be installed via `cargo install cargo-llvm-cov`. The compiler is three packages (driver, frontend, backend), and each command names all three so the report covers every one.
 
 ```sh
 # Full coverage report (HTML)
-cargo llvm-cov --html -p wado-compiler
+cargo llvm-cov --html -p wado-compiler -p wado-compiler-frontend -p wado-compiler-backend
 
 # JSON summary for overall metrics
-cargo llvm-cov --json -p wado-compiler 2>/dev/null | jq '.data[0].totals.lines'
+cargo llvm-cov --json -p wado-compiler -p wado-compiler-frontend -p wado-compiler-backend 2>/dev/null | jq '.data[0].totals.lines'
 
 # Per-file coverage in JSON (for programmatic analysis)
-cargo llvm-cov --json -p wado-compiler 2>/dev/null | jq '.data[0].files[] | {filename, summary: .summary.lines}' > /tmp/coverage-per-file.json
+cargo llvm-cov --json -p wado-compiler -p wado-compiler-frontend -p wado-compiler-backend 2>/dev/null | jq '.data[0].files[] | {filename, summary: .summary.lines}' > /tmp/coverage-per-file.json
 ```
 
 ### Step 2: Identify Low-Coverage Files
@@ -25,7 +25,7 @@ cargo llvm-cov --json -p wado-compiler 2>/dev/null | jq '.data[0].files[] | {fil
 Sort files by uncovered line count to find the biggest improvement opportunities:
 
 ```sh
-cargo llvm-cov --json -p wado-compiler 2>/dev/null \
+cargo llvm-cov --json -p wado-compiler -p wado-compiler-frontend -p wado-compiler-backend 2>/dev/null \
   | jq -r '.data[0].files[] | "\(.summary.lines.count - .summary.lines.covered)\t\(.summary.lines.percent | round)%\t\(.filename)"' \
   | sort -rn | head -30
 ```
@@ -53,10 +53,10 @@ To see exactly which lines are uncovered in a file:
 
 ```sh
 # Generate lcov and extract file-specific data
-cargo llvm-cov --lcov -p wado-compiler 2>/dev/null > /tmp/lcov.info
+cargo llvm-cov --lcov -p wado-compiler -p wado-compiler-frontend -p wado-compiler-backend 2>/dev/null > /tmp/lcov.info
 
 # Or use the HTML report
-cargo llvm-cov --html -p wado-compiler
+cargo llvm-cov --html -p wado-compiler -p wado-compiler-frontend -p wado-compiler-backend
 # Then read target/llvm-cov/html/src/synthesis/inspect.rs.html etc.
 ```
 
@@ -64,7 +64,7 @@ To find dead code (functions never called):
 
 ```sh
 # Check if a function has any callers
-rg 'function_name' wado-compiler/src/ --type rust
+rg 'function_name' wado-compiler/ --type rust
 ```
 
 ### Step 5: Add E2E Tests
@@ -91,10 +91,10 @@ After changes, re-run coverage and compare:
 
 ```sh
 # Before
-cargo llvm-cov --json -p wado-compiler 2>/dev/null | jq '.data[0].totals.lines.percent'
+cargo llvm-cov --json -p wado-compiler -p wado-compiler-frontend -p wado-compiler-backend 2>/dev/null | jq '.data[0].totals.lines.percent'
 
 # After changes
-cargo llvm-cov --json -p wado-compiler 2>/dev/null | jq '.data[0].totals.lines.percent'
+cargo llvm-cov --json -p wado-compiler -p wado-compiler-frontend -p wado-compiler-backend 2>/dev/null | jq '.data[0].totals.lines.percent'
 ```
 
 ### Key Insights from Past Investigations

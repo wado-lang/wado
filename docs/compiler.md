@@ -29,9 +29,14 @@ shape. Each module's doc says how it works.
 | WIR Optimize         | WIR              | `wir_optimize/`                                 |
 | Codegen              | Component bytes  | `codegen/`                                      |
 
-The driver is `compile_with_options` in `src/lib.rs`. It loads the modules,
-compiles any inline providers, and hands the rest to `compile_after_load`. The
-LSP runs the same phases up to liveness and stops there.
+Load through Lower are the `wado-compiler-frontend` crate, under
+`wado-compiler/frontend/src/`. Optimize through Codegen are
+`wado-compiler-backend`, under `wado-compiler/backend/src/`.
+
+The driver is `compile_with_options` in `wado-compiler/src/lib.rs`, the
+`wado-compiler` crate. It loads the modules, compiles any inline providers, and
+hands the rest to `compile_after_load`. The LSP runs the same phases up to
+liveness and stops there, so it depends on the frontend alone.
 
 ## IRs
 

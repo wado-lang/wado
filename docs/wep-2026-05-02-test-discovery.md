@@ -187,7 +187,7 @@ whatever the walk returns, so naming a file directly always resolves it.
   the compile/run pipeline per package, and emits the per-package and
   aggregate three-axis summaries.
 - `wado-manifest/`: `[test].exclude: Vec<String>` on the manifest schema.
-- `wado-compiler/src/loader.rs`: `#include_str` / `#include_bytes` path
+- `wado-compiler/frontend/src/loader.rs`: `#include_str` / `#include_bytes` path
   resolution recognises the entry module so that running with a
   `./pkg/src/main.wado`-style argument no longer doubles the base path.
 - `wado-compiler` (test runner side): only entry-module test blocks are

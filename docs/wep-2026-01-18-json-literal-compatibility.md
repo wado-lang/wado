@@ -114,5 +114,5 @@ let names = ["Alice", "Bob"] as List<String>;
 
 - WEP: JSON Module Import - Importing `.json` files as compile-time modules
 - WEP: Tuple and List Literals - Detailed syntax specification for `[...]` literals
-- Current implementation: `wado-compiler/src/lexer.rs` (string/number parsing), `wado-compiler/src/parser.rs` (object/array literals)
+- Current implementation: `wado-compiler/frontend/src/lexer.rs` (string/number parsing), `wado-compiler/frontend/src/parser.rs` (object/array literals)
 - Documentation: `docs/json-compatibility.md` (to be deprecated and replaced by this WEP)

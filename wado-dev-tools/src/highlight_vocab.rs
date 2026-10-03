@@ -1,7 +1,7 @@
 //! `highlight-vocab`: hold the Gale highlight query to the compiler's canonical
 //! syntax registries.
 //!
-//! `wado-compiler/src/syntax.rs` is the single source of truth for which words
+//! `wado-compiler/frontend/src/syntax.rs` is the single source of truth for which words
 //! are keywords and how each is categorized; the lexer, the token↔text
 //! mapping, and the `TextMate` grammar all generate from it, while `Wado.g4`
 //! and `Wado.highlights.scm` are hand-written and wired to nothing.

@@ -31,7 +31,7 @@ stdio (Content-Length + JSON-RPC 2.0)
                |
     +----------v-----------+
     |    CompilerHost      |   FilesystemCompilerHost, or
-    |    (wado-compiler)   |   any caller-provided impl
+    | (compiler frontend)  |   any caller-provided impl
     +----------------------+
 ```
 
@@ -50,7 +50,7 @@ let host = FilesystemCompilerHost::new(PathBuf::from("/path/to"));
 let diagnostics = engine.diagnostics("file:///path/to/file.wado", &host).await;
 ```
 
-Each query takes a `&impl wado_compiler::CompilerHost` so the caller controls how imported modules are loaded (filesystem, in-memory, or a VS Code workspace API).
+Each query takes a `&impl wado_compiler_frontend::CompilerHost` so the caller controls how imported modules are loaded (filesystem, in-memory, or a VS Code workspace API).
 
 ## Building
 

@@ -2,8 +2,8 @@
 
 The optimizer rewrites NIR ([WEP: NIR](./wep-2026-05-11-nir.md)), then a smaller
 set of passes rewrites WIR before emission. This document lists what runs, one
-line per pass. The order is the one in `src/optimize.rs` and
-`src/wir_optimize.rs`, and `WADO_LIST_PASSES` prints it. Each pass's module doc
+line per pass. The order is the one in `wado-compiler/backend/src/optimize.rs`
+and `wado-compiler/backend/src/wir_optimize.rs`, and `WADO_LIST_PASSES` prints it. Each pass's module doc
 says how it works.
 
 ## Philosophy

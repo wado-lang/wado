@@ -3,7 +3,7 @@
 // Runtime failure (gale at -O3 --optimize-inline-threshold 18+):
 //   `CodeWriter: unbalanced indentation (level=N>0)` inside `CodeWriter::to_string`.
 //
-// Root cause (HFS pass in wado-compiler/src/optimize/field_scalarize.rs):
+// Root cause (HFS pass in wado-compiler/backend/src/optimize/field_scalarize.rs):
 // `collect_inner_labels` flattened every label name anywhere in the loop body.
 // When a callee that was inlined into the HFS scope defines a label with the
 // same name as the outer for-of's own label block, HFS mistakes `break $for_1`

@@ -177,7 +177,7 @@ density is what makes a bad threshold visible.
 
 Sharing the canonicalization with a function-merging pass. The same canonical
 form would identify bodies that a NIR pass could merge after monomorphization,
-and `wado-compiler/src/optimize/` has no such pass today. The two want opposite
+and `wado-compiler/backend/src/optimize/` has no such pass today. The two want opposite
 policies, though: this check skips monomorphization clones and a merging pass
 would target them. So only the canonicalization could be shared, and the pass is
 not designed here.

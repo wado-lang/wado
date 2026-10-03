@@ -784,13 +784,13 @@ The measurable difference between the two designs is everything in
 ## References
 
 - Issue #1742.
-- `wado-compiler/src/optimize/sroa_param.rs` — the in-loop interprocedural
+- `wado-compiler/backend/src/optimize/sroa_param.rs` — the in-loop interprocedural
   signature rewrite this mirrors.
-- `wado-compiler/src/optimize/multi_value_return.rs` — the tuple ABI classifier
+- `wado-compiler/backend/src/optimize/multi_value_return.rs` — the tuple ABI classifier
   this pass feeds.
-- `wado-compiler/src/wir_optimize/sroa_variant_return/` — the WIR pass this
+- `wado-compiler/backend/src/wir_optimize/sroa_variant_return/` — the WIR pass this
   replaces.
-- `wado-compiler/src/wir_optimize/nullable_ref.rs` — the lowering that makes
+- `wado-compiler/backend/src/wir_optimize/nullable_ref.rs` — the lowering that makes
   the `Option<T>` slot free.
 - [Variant Wasm GC Representation](./wep-2026-02-08-variant-representation.md)
 - [NIR Optimizer Architecture](./wep-2026-06-05-nir-optimizer-architecture.md)

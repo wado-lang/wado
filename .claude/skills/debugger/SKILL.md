@@ -25,7 +25,7 @@ cargo build --profile debugger --bin wado
 cat > /tmp/gdb_commands.txt << 'EOF'
 file ./target/debugger/wado
 set pagination off
-break wado-compiler/src/codegen.rs:5985
+break wado-compiler/backend/src/codegen.rs:5985
 run compile -o /tmp/out.wasm example/hello.wado
 info locals
 print *expr
@@ -41,7 +41,7 @@ A breakpoint that fires thousands of times and gets `grep`ed answers one
 question and costs a rebuild for the next. Make the breakpoint itself select:
 
 ```
-break wado-compiler/src/wir_build/calls.rs:131 if $_streq(name->data_ptr, "…")
+break wado-compiler/backend/src/wir_build/calls.rs:131 if $_streq(name->data_ptr, "…")
 break …/func_inst.rs:2052
 commands
 silent

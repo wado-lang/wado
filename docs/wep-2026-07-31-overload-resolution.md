@@ -6,7 +6,7 @@ A method call `recv.m(args)` resolves by receiver type and method name. Lookup
 is sequential and first-hit-wins — concrete ref impls, inherent impls, trait
 impls on the base type, type-parameter bounds, associated-type projection
 bounds (`resolve_method_call_with`,
-`wado-compiler/src/elaborator/method_call.rs`). Arguments are elaborated
+`wado-compiler/frontend/src/elaborator/method_call.rs`). Arguments are elaborated
 _after_ the winner is known, against its signature, so that parameter types
 drive literal coercion and default insertion. That ordering is the
 chicken-and-egg noted in

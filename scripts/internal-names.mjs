@@ -68,7 +68,7 @@ function main(argv) {
     console.error("");
     console.error(
       "error: a name the compiler mints starts with one `$`" +
-        " (wado-compiler/src/name.rs > INTERNAL_PREFIX), not `__`.",
+        " (wado-compiler/frontend/src/name.rs > INTERNAL_PREFIX), not `__`.",
     );
     console.error(
       "A name Wado source must spell belongs in this script's ALLOWED list," +
