@@ -450,7 +450,6 @@ fn argument_local(body: &Body, arg: Operand) -> Option<(u32, ExprId)> {
     body.borrowed_local(arg).or_else(|| body.local_read(arg))
 }
 
-#[allow(clippy::too_many_arguments)]
 fn classify_argument(
     body: &Body,
     tracked: &IndexSet<u32>,

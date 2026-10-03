@@ -947,7 +947,6 @@ fn reflect_meta_int_field(
 /// Build `Struct^ReflectStruct::members()` as
 /// `return [Field { index: 0, field_name: "f", wire_override: …, has_default: …,
 /// is_secret: … }, …];` — one fat member per field, each typed `StructField<S, F_k>`.
-#[allow(clippy::too_many_arguments)]
 fn generate_struct_members_fn(
     type_table: &RefCell<TypeTable>,
     env: &ReflectSynthEnv,
@@ -4441,7 +4440,6 @@ fn generate_enum_display_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_
 
 /// Generate `EnumName^Display::fmt(&self, &mut Formatter)` writing the bare case
 /// name. Mirrors [`generate_enum_inspect_fn`] but omits the `EnumName::` prefix.
-#[allow(clippy::too_many_arguments)]
 fn generate_enum_display_fn(
     receiver: &FqTypeName,
     cases: &[(String, u32)],
@@ -4550,7 +4548,6 @@ fn generate_fn_inspect_fn(
 
 /// Generate `Inspect` for an opaque handle (a resource, Future, Stream), rendered as `Name#0x<hex>`,
 /// or as `Name { type_id, object_id }` for an unrestricted one.
-#[allow(clippy::too_many_arguments)]
 fn generate_opaque_inspect_fn(
     receiver: &FqTypeName,
     type_arg_names: &[FqTypeName],

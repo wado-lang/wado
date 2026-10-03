@@ -1524,7 +1524,6 @@ impl Drop for EpochTicker {
 /// Under `--no-run`, the load and execute stages are replaced with
 /// "drain to /dev/null" tasks so the compile stage producers don't
 /// block on a full channel — all the work after stage 1 disappears.
-#[allow(clippy::too_many_arguments)]
 async fn run_pipeline(
     paths: &[String],
     flags: Arc<CompileFlags>,
@@ -2205,7 +2204,6 @@ fn tally_test_results(results: &[TestResult]) -> (u32, u32, u32, u32) {
     (passed, failed, todo_pending, todo_resolved)
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn run_one_package(
     pkg_run: &PackageRun,
     flags: Arc<CompileFlags>,

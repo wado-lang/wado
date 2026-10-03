@@ -1256,7 +1256,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `Trait::method(recv, …)` ident form, and the trait-turbofish
     /// `Take::<A>::take(recv, …)` static form whose `required_trait` carries
     /// the resolved trait arguments and thereby pins one argument list.
-    #[allow(clippy::too_many_arguments)]
     fn resolve_trait_qualified_call_parts(
         &mut self,
         required_trait: RequiredTrait,

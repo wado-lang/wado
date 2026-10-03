@@ -905,7 +905,6 @@ impl ClosureLowerer {
 
     /// Build `$Closure_N^Trait::method(&self, &mut Formatter)` whose body is
     /// `if f.alternate { f.write_str("<source>") } else { f.write_str("<signature>") }`.
-    #[allow(clippy::too_many_arguments)]
     fn build_functor_write_method(
         &self,
         struct_name: &str,
@@ -994,7 +993,6 @@ impl ClosureLowerer {
     /// Build `$Closure_N^Trait::method(&self, &mut Formatter)` whose body is
     /// `self.<target trait>::<target method>(f)` (used for `Display`, which
     /// delegates to `Inspect`).
-    #[allow(clippy::too_many_arguments)]
     fn build_functor_delegate_method(
         &self,
         struct_name: &str,

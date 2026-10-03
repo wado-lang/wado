@@ -737,7 +737,6 @@ fn assign_flat_values_into_slots(
 /// returning the lifted expression and how many flat params it consumed.
 /// `lift_ctx` carries the CM resolution stack the List and nested-struct lifts
 /// need, plus the `struct_type_map` lookup WIR performs.
-#[allow(clippy::too_many_arguments)]
 pub(super) fn synthesize_lift_from_flat_params(
     ty: &Type,
     flat_param_locals: &[u32],
@@ -1129,7 +1128,6 @@ fn synthetic_result_variant_decl(type_table: &TypeTable, result_type_id: TypeId)
 /// different core class. Returns `(local_indices, natural_flat_types)` to feed
 /// the recursive payload lift; coercion `let`s are appended to `stmts` so they
 /// run only inside the active case's branch.
-#[allow(clippy::too_many_arguments)]
 fn coerce_payload_slots(
     payload: TypeId,
     slot_locals: &[u32],
@@ -1214,7 +1212,6 @@ fn free_ptr_len_temp(tmp: u32, stmts: &mut Vec<TirStmt>) {
 
 /// Lift a record from the flat CM ABI, the concatenation of its fields'
 /// flattenings, into a local of `struct_type_id`.
-#[allow(clippy::too_many_arguments)]
 fn lift_struct_from_flat_params(
     struct_decl: &TirStruct,
     flat_param_locals: &[u32],
@@ -1283,7 +1280,6 @@ fn lift_struct_from_flat_params(
 /// join of every case's flattening. Reads the discriminant, lifts the active
 /// case's payload from `flat[1..]`, and builds the GC value through an if/else
 /// chain, mirroring the memory-based `synthesize_lift_wasi_variant`.
-#[allow(clippy::too_many_arguments)]
 fn lift_variant_from_flat_params(
     variant_decl: &TirVariantDecl,
     flat_param_locals: &[u32],
@@ -1992,7 +1988,6 @@ fn push_result_task_return_epilogue(
 /// payload slots. A named `variant` payload goes through
 /// [`synthesize_variant_lower_to_flat`]; everything else through
 /// [`synthesize_lower_to_flat`].
-#[allow(clippy::too_many_arguments)]
 fn lower_result_arm(
     disc: i32,
     payload_local: u32,

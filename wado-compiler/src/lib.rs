@@ -2069,7 +2069,6 @@ pub async fn dump_with_host<H: CompilerHost>(
 /// their Kiln-generated output, exactly as [`compile_with_options`]'s
 /// `CompilerOptions::invocations` does — the caller is responsible for
 /// running the Kiln pipeline first (see `wado-cli`'s `maybe_run_pipeline`).
-#[allow(clippy::too_many_arguments)]
 pub async fn dump_with_host_and_world<H: CompilerHost>(
     source: &str,
     host: &H,

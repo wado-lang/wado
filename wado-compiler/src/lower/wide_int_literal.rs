@@ -271,7 +271,6 @@ pub(crate) fn compare(
 /// `<item>^<trait_item>::<method>(&left, &right)`. Both operands go by
 /// reference because that is how the prelude declares every `Eq` / `Ord`
 /// method.
-#[allow(clippy::too_many_arguments)]
 fn trait_method_call(
     item: CompilerItem,
     trait_item: CompilerItem,

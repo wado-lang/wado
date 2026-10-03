@@ -278,7 +278,6 @@ fn make_async_call_literal(
     )
 }
 
-#[allow(clippy::too_many_arguments)]
 fn synthesize_async_wrap_function(
     name: String,
     func_info: &CmFunctionInfo,

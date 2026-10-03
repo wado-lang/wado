@@ -968,7 +968,6 @@ fn build_dispatch_wrapper_function(
 /// pre-cm_binding shape user code emits — a method call for instance ops, `Call`
 /// for static ones — with `method_info` carrying the original `cm_name`, which
 /// is what lets `rewrite_cm_resource_methods` route it afterwards.
-#[allow(clippy::too_many_arguments)]
 fn build_resource_fallback_call(
     effect_module: &ModuleSource,
     base_name: &str,
