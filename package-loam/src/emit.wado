@@ -698,21 +698,19 @@ fn emit_forward(
             w.line(&line);
         }
     }
-    let mut fields: List<String> = [];
-    for let vi of &graph.outputs {
-        let value = if converted(checked, held, &vi.name) {
-            `narrow(${exprs.reference(&vi.name)})`;
-        } else {
-            exprs.value(&vi.name);
-        };
-        if !several {
-            w.line(`return ${value};`);
-            break;
+    let returned: List<String> = graph.outputs.into_iter().map(|vi| if converted(checked, held, &vi.name) {
+        `narrow(${exprs.reference(&vi.name)})`;
+    } else {
+        exprs.value(&vi.name);
+    }).collect();
+    if !several {
+        w.line(`return ${returned[0]};`);
+    } else {
+        let mut fields: List<String> = [];
+        for let [i, value] of returned.into_iter().enumerate() {
+            let field = names.get(&graph.outputs[i].name);
+            fields.push(if value == field { value } else { `${field}: ${value}` });
         }
-        let field = names.get(&vi.name);
-        fields.push(if value == field { value } else { `${field}: ${value}` });
-    }
-    if several {
         w.line(`return Outputs { ${fields.join(", ")} };`);
     }
     w.end();
