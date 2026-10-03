@@ -1128,8 +1128,8 @@ call's other arguments settle, so with `fn pick<T>(b: Box<T>, fallback: T)` and
 with the arguments swapped. Where no argument settles a parameter, the type
 expected of the call does: `let y: u64 = pick(Box { value: 1 }, 2)` is
 `pick::<u64>`. Only a parameter neither settles takes a default from its
-literals: `f64` if one of them is a float, else `i32`, else `u8` when every one
-is a byte literal.
+literals: `f64` if one of them is a float, else `u8` if every one is a byte
+literal, else `i32`.
 
 Arithmetic on literals answers as a literal does (`Box { value: 1 << 32 }`), and
 so does a literal behind a field, method or subscript of a generic call's or
