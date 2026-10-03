@@ -143,8 +143,7 @@ fn open_tag(chars: &List<char>, start: i32, end: i32) -> [List<Highlight>, List<
         i += 1;
     }
     masked.push_str(&text_of(chars, i, end));
-    let tag_chars: List<char> = masked.chars().collect();
-    let [highlights, attrs] = markup(&masked, &tag_chars);
+    let [highlights, attrs] = markup_of(&masked);
     let mut shifted_attrs: List<Attribute> = [];
     for let attr of &attrs {
         shifted_attrs.push(Attribute { name: attr.name, start: attr.start + start, end: attr.end + start });
@@ -205,6 +204,12 @@ fn markup(source: &String, chars: &List<char>) -> [List<Highlight>, List<Attribu
     return [out, attrs];
 }
 
+/// `markup` of a fragment cut out of the page, in the fragment's positions.
+fn markup_of(text: &String) -> [List<Highlight>, List<Attribute>] {
+    let chars: List<char> = text.chars().collect();
+    return markup(text, &chars);
+}
+
 /// The highlights of a `<script>` / `<style>` body token: the text up to the
 /// closing tag in `language`, the closing tag as markup.
 fn embedded(chars: &List<char>, start: i32, end: i32, language: Language) -> List<Highlight> {
@@ -216,9 +221,7 @@ fn embedded(chars: &List<char>, start: i32, end: i32, language: Language) -> Lis
     assert close >= start, "a body token ends with its closing tag";
     let mut out: List<Highlight> = [];
     push_shifted(&mut out, &highlights_in(language, &text_of(chars, start, close)), start);
-    let close_text = text_of(chars, close, end);
-    let close_chars: List<char> = close_text.chars().collect();
-    let [close_tag, _] = markup(&close_text, &close_chars);
+    let [close_tag, _] = markup_of(&text_of(chars, close, end));
     push_shifted(&mut out, &close_tag, close);
     return out;
 }

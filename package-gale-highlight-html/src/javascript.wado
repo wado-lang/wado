@@ -40,32 +40,25 @@ use { Highlight } from "./highlight.wado";
 struct JsParserBase {
 }
 
+/// Whether a line break separates the token just consumed from the next one,
+/// which is what automatic semicolon insertion asks. Upstream looks at only the
+/// one or two hidden tokens before the next; a change of line is the answer
+/// the language defines.
+fn line_break_ahead(p: &Parser) -> bool {
+    return p.token_line(p.lt(1)) != p.token_line(p.lt(0));
+}
+
 impl JavaScriptParserBase for JsParserBase {
-    fn p(&self, p: &Parser, a0: String) -> bool {
-        resume p.token_text(p.lt(0)) == a0;
-    }
-
-    fn prev(&self, p: &Parser, a0: String) -> bool {
-        resume p.token_text(p.lt(0)) == a0;
-    }
-
     fn n(&self, p: &Parser, a0: String) -> bool {
         resume p.token_text(p.lt(1)) == a0;
     }
 
-    fn next(&self, p: &Parser, a0: String) -> bool {
-        resume p.token_text(p.lt(1)) == a0;
-    }
-
-    /// Upstream reads the hidden tokens before the next one. A line break
-    /// among them is exactly a change of line between the two default-channel
-    /// tokens around them.
     fn not_line_terminator(&self, p: &Parser) -> bool {
-        resume p.token_line(p.lt(1)) == p.token_line(p.lt(0));
+        resume !line_break_ahead(p);
     }
 
     fn line_terminator_ahead(&self, p: &Parser) -> bool {
-        resume p.token_line(p.lt(1)) != p.token_line(p.lt(0));
+        resume line_break_ahead(p);
     }
 
     fn not_open_brace_and_not_function(&self, p: &Parser) -> bool {
