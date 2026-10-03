@@ -1,6 +1,5 @@
 // An unsigned type has no `Neg`, so `-x` on one is an error at every width.
 // `wrapping_neg` is the method that negates modulo the width.
-// The unary operators read the same table as the binary ones.
 
 fn on_u8(x: u8) -> u8 {
     return -x;
@@ -40,7 +39,7 @@ export fn run() {
 
 __DATA__
 {
-    "compile_error": ":6:12: analysis error: operator `-` cannot be applied to type `u8`: type does not implement `Neg`",
+    "compile_error": ":5:12: analysis error: operator `-` cannot be applied to type `u8`: type does not implement `Neg`",
     "compile_errors_contains": [
         "operator `-` cannot be applied to type `char`: type does not implement `Neg`",
         "operator `~` cannot be applied to type `char`: type does not implement `BitNot`",

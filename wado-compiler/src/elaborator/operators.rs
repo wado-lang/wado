@@ -242,12 +242,11 @@ impl TypeSystem {
             UnaryOp::BitNot => CompilerItem::BitNot,
             UnaryOp::Not | UnaryOp::Ref | UnaryOp::MutRef | UnaryOp::Deref => return false,
         };
-        let tt = self.type_table.borrow();
-        !matches!(
-            tt.primitive_head(type_id),
-            Some(prim) if tt.is_scalar_primitive_like(type_id)
-                && primitive_has_operator(prim.as_str(), item)
-        )
+        !self
+            .type_table
+            .borrow()
+            .primitive_head(type_id)
+            .is_some_and(|prim| primitive_has_operator(prim.as_str(), item))
     }
 
     /// The primitive whose `core:prelude` impl answers an operator on `operand`

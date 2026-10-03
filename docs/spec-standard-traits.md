@@ -723,8 +723,8 @@ lists (see [One Trait at Two Argument Lists](./spec-traits.md#one-trait-at-two-a
 
 The compiler supplies these impls for the integers, and for `f32` / `f64`
 except `Rem`. An unsigned integer has no `Neg`, as in Rust: `x.wrapping_neg()`
-negates it modulo its width. `bool` holds one bit, so it gets the bit operators and no shift;
-`v128` gets none, since its arithmetic is lane-wise and only a lane type's own
+negates it modulo its width. `bool` holds one bit, so it gets the bit operators
+and no shift; `v128` gets none, since its arithmetic is lane-wise and only a lane type's own
 impl knows it.
 
 An operator yields `Output`, which a widening impl may make another type, so a

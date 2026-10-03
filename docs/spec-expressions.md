@@ -418,8 +418,7 @@ checked or saturating arithmetic, is a method rather than an operator.
 
 So integer `+`, `-` and `*` wrap in two's complement at every width, signed and
 unsigned alike, as does unary `-` on a signed integer, and their overflow never
-traps. An integer `/` or `%`
-whose divisor is zero traps. A signed `MIN / -1` traps, as `div_s` does, because
+traps. An integer `/` or `%` whose divisor is zero traps. A signed `MIN / -1` traps, as `div_s` does, because
 the quotient is one past `MAX`. A signed `MIN % -1` is 0, as `rem_s` gives. A
 float operation follows IEEE 754: dividing by zero gives an infinity, or NaN for
 `0.0 / 0.0`.
