@@ -1,7 +1,7 @@
 //! The ONNX graph Loam reads, in the shape the rest of the package consumes.
 //! Dimensions are extents without identity, since an ONNX shape is positional.
 
-use { TreeMap } from "core:collections";
+use { TreeMap, TreeSet } from "core:collections";
 use { Enumeration } from "lib:grog";
 use onnx from "./onnx.proto"
     with {
@@ -367,6 +367,18 @@ impl Node {
         return `${self.name()} = ${self.op}`;
     }
 
+    /// Every tensor the node reads: its operands, and what each subgraph it
+    /// carries reads from the graph around it.
+    pub fn reads(&self) -> List<String> {
+        let mut read = self.inputs;
+        for let a of self.attrs {
+            if let Some(g) = a.graph {
+                read.extend(&g.outer_reads());
+            }
+        }
+        return read;
+    }
+
     /// The attribute `name`, where the node carries it.
     pub fn attr<S: AsStrSlice>(&self, name: S) -> Option<Attr> {
         for let a of self.attrs {
@@ -412,6 +424,39 @@ pub struct Graph {
     /// The default domain's opset, which fixes what an operator means. `None`
     /// where the graph names none, read as the current one.
     pub opset: Option<i64> = null,
+}
+
+impl Graph {
+    /// The tensors the graph reads and does not define, which a subgraph reads
+    /// from the scope around it.
+    pub fn outer_reads(&self) -> List<String> {
+        let mut defined = TreeSet::<String>::new();
+        for let declared of [&self.inputs, &self.initializers] {
+            for let vi of *declared {
+                defined.insert(vi.name);
+            }
+        }
+        for let [name, _] of self.constants.entries() {
+            defined.insert(*name);
+        }
+        let mut read: List<String> = [];
+        for let node of &self.nodes {
+            for let input of node.reads() {
+                if input != "" && !defined.contains(input) {
+                    read.push(input);
+                }
+            }
+            for let output of node.outputs {
+                defined.insert(output);
+            }
+        }
+        for let vi of &self.outputs {
+            if !defined.contains(vi.name) {
+                read.push(vi.name);
+            }
+        }
+        return read;
+    }
 }
 
 /// The version a model imports the default domain at, from `(domain, version)`

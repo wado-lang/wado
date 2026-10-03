@@ -125,7 +125,7 @@ pub fn keep_outputs(graph: &mut Graph, names: &List<String>) -> Result<(), Optio
         if !produces_any(&node, &needed) {
             continue;
         }
-        for let input of node.inputs {
+        for let input of node.reads() {
             needed.insert(input);
         }
         nodes.push(node);

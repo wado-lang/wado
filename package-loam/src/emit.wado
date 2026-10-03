@@ -118,7 +118,7 @@ pub fn emit(graph: &Graph, checked: &Checked) -> Result<String, EmitError> {
     w.line("//! share the type that names it.");
     w.blank();
 
-    let axes = axis_names(graph, shapes);
+    let axes = axis_names(graph, checked);
     let scalars = scalar_literals(checked);
     let literals = literal_tensors(graph, checked, &scalars);
     let carriers = symbol_carriers(graph, shapes);
@@ -222,23 +222,43 @@ impl Names {
         for let vi of &graph.initializers {
             names.take(&mut taken, &vi.name)?;
         }
-        for let node of &graph.nodes {
-            for let output of node.outputs {
-                if !checked.known.contains_key(output) {
-                    names.take(&mut taken, &output)?;
-                }
-            }
-        }
-        for let tensor of *literals {
-            names.take(&mut taken, &tensor)?;
-        }
+        names.take_scope(&mut taken, graph, checked, literals)?;
         for let c of carriers {
             names.take(&mut taken, &symbol_key(&c.symbol))?;
         }
         return Result::Ok(names);
     }
 
+    /// The tensors one scope computes and spells, then each branch's. A tensor
+    /// two branches both name is one identifier, bound in each branch's block.
+    fn take_scope(
+        &mut self,
+        taken: &mut TreeMap<String, String>,
+        graph: &Graph,
+        checked: &Checked,
+        literals: &List<String>,
+    ) -> Result<(), EmitError> {
+        for let node of &graph.nodes {
+            for let output of node.outputs {
+                if !checked.known.contains_key(output) {
+                    self.take(taken, &output)?;
+                }
+            }
+        }
+        for let tensor of *literals {
+            self.take(taken, &tensor)?;
+        }
+        for let [branch_graph, branch] of branches_of(graph, checked) {
+            let spelled = literal_tensors(&branch_graph, &branch, &scalar_literals(&branch)).spelled;
+            self.take_scope(taken, &branch_graph, &branch, &spelled)?;
+        }
+        return Result::Ok(());
+    }
+
     fn take(&mut self, taken: &mut TreeMap<String, String>, tensor: &String) -> Result<(), EmitError> {
+        if self.idents.contains_key(*tensor) {
+            return Result::Ok(());
+        }
         let mut ident = sanitize(tensor);
         // A name the generated module already binds is not this tensor's to
         // take, and a trailing `_` is a name no other rule here produces.
@@ -649,40 +669,7 @@ fn emit_forward(
         w.line(&line);
     }
     // A symbol is bound once something spells it, which the body decides.
-    let mut body: List<String> = [];
-    for let tensor of literals.spelled {
-        let ident = names.get(&tensor);
-        body.push(`let ${ident} = ${literal_tensor(checked, &tensor, &mut symbols)?};`);
-        exprs.values[tensor] = ident;
-    }
-    for let [alias, spelled] of literals.aliases.entries() {
-        exprs.values[*alias] = names.get(spelled);
-    }
-    for let node of &graph.nodes {
-        let produced = node.outputs[0];
-        if checked.known.contains_key(produced) {
-            continue;
-        }
-        if is_alias(node, checked) {
-            let source = node.inputs[0];
-            exprs.values[produced] = exprs.values.get(source).unwrap();
-            if exprs.already_reference.contains(source) {
-                exprs.already_reference.insert(produced);
-            }
-            continue;
-        }
-        let calls = if node.op == "Split" {
-            split_calls(node, checked, &exprs, &mut symbols)?;
-        } else {
-            [node_call(node, checked, &exprs, &mut symbols, graph.opset)?] as List<String>;
-        };
-        for let [i, call] of calls.into_iter().enumerate() {
-            let output = node.outputs[i];
-            let ident = names.get(&output);
-            body.push(`let ${ident} = ${call};`);
-            exprs.values[output] = ident;
-        }
-    }
+    let body = scope_body(graph, checked, names, &mut exprs, literals, &mut symbols)?;
     let mut owed: List<String> = [];
     for let spelled of spelled_axes {
         let SpelledAxis { tensor, axis, extent, length } = spelled;
@@ -690,9 +677,7 @@ fn emit_forward(
             wado`refuse(extent_mismatch("${tensor}", "${axis}", ${extent}, "${length}", ${symbols.spell(&length)?}));`,
         );
     }
-    for let c of &checked.owed {
-        owed.push(wado`refuse(unmet(${symbols.spell(&c.slack)?}, "${c.reason}"));`);
-    }
+    owed.extend(&owed_checks(checked, &mut symbols)?);
     for let lines of [symbols.bindings(), owed, body] as List<List<String>> {
         for let line of lines {
             w.line(&line);
@@ -715,6 +700,135 @@ fn emit_forward(
     }
     w.end();
     return Result::Ok(());
+}
+
+/// The checks of what a scope owes, which run before any kernel in it.
+fn owed_checks(checked: &Checked, symbols: &mut Symbols) -> Result<List<String>, EmitError> {
+    let mut lines: List<String> = [];
+    for let c of &checked.owed {
+        lines.push(wado`refuse(unmet(${symbols.spell(&c.slack)?}, "${c.reason}"));`);
+    }
+    return Result::Ok(lines);
+}
+
+/// One scope's statements: the literals it spells that no scope around it
+/// did, then each node's kernel call.
+fn scope_body(
+    graph: &Graph,
+    checked: &Checked,
+    names: &Names,
+    exprs: &mut Operands,
+    literals: &Literals,
+    symbols: &mut Symbols,
+) -> Result<List<String>, EmitError> {
+    let mut body: List<String> = [];
+    for let tensor of literals.spelled {
+        if exprs.values.contains_key(tensor) {
+            continue;
+        }
+        let ident = names.get(&tensor);
+        body.push(`let ${ident} = ${literal_tensor(checked, &tensor, symbols)?};`);
+        exprs.values[tensor] = ident;
+    }
+    for let [alias, spelled] of literals.aliases.entries() {
+        if !exprs.values.contains_key(*alias) {
+            exprs.values[*alias] = names.get(spelled);
+        }
+    }
+    for let node of &graph.nodes {
+        let produced = node.outputs[0];
+        if checked.known.contains_key(produced) {
+            continue;
+        }
+        if is_alias(node, checked) {
+            let source = node.inputs[0];
+            exprs.values[produced] = exprs.values.get(source).unwrap();
+            if exprs.already_reference.contains(source) {
+                exprs.already_reference.insert(produced);
+            }
+            continue;
+        }
+        if node.op == "If" {
+            body.extend(&branch_block(node, checked, names, exprs, symbols)?);
+            continue;
+        }
+        let calls = if node.op == "Split" {
+            split_calls(node, checked, exprs, symbols)?;
+        } else {
+            [node_call(node, checked, exprs, symbols, graph.opset)?] as List<String>;
+        };
+        for let [i, call] of calls.into_iter().enumerate() {
+            let output = node.outputs[i];
+            let ident = names.get(&output);
+            body.push(`let ${ident} = ${call};`);
+            exprs.values[output] = ident;
+        }
+    }
+    return Result::Ok(body);
+}
+
+/// An `If` as one `if` over its condition's element, each branch a block
+/// that checks what it owes, computes its outputs, and yields them under the
+/// axes the node's outputs carry.
+fn branch_block(
+    node: &Node,
+    checked: &Checked,
+    names: &Names,
+    exprs: &mut Operands,
+    symbols: &mut Symbols,
+) -> Result<List<String>, EmitError> {
+    let [then_scope, else_scope] = checked.branches[node.outputs[0]];
+    let outputs: List<String> = node.outputs.into_iter().map(|o| names.get(&o)).collect();
+    let bound = if outputs.len() == 1 { outputs[0] } else { `[${outputs.join(", ")}]` };
+    let mut lines: List<String> = [`let ${bound} = if ${exprs.values[node.inputs[0]]}.data[0] {`];
+    lines.extend(&indented(branch_lines(node, "then_branch", &then_scope, checked, names, exprs, symbols)?));
+    lines.push("} else {");
+    lines.extend(&indented(branch_lines(node, "else_branch", &else_scope, checked, names, exprs, symbols)?));
+    lines.push("};");
+    for let [i, output] of node.outputs.into_iter().enumerate() {
+        exprs.values[output] = outputs[i];
+    }
+    return Result::Ok(lines);
+}
+
+/// One branch's block, in a copy of the operands around it.
+fn branch_lines(
+    node: &Node,
+    attr: String,
+    branch: &Checked,
+    around: &Checked,
+    names: &Names,
+    exprs: &Operands,
+    symbols: &mut Symbols,
+) -> Result<List<String>, EmitError> {
+    let graph = subgraph(node, attr);
+    let mut inner = Operands {
+        values: exprs.values,
+        already_reference: exprs.already_reference,
+        scalars: scalar_literals(branch),
+    };
+    let literals = literal_tensors(&graph, branch, &inner.scalars);
+    let mut lines = owed_checks(branch, symbols)?;
+    lines.extend(&scope_body(&graph, branch, names, &mut inner, &literals, symbols)?);
+    let mut yielded: List<String> = [];
+    for let [i, vi] of graph.outputs.into_iter().enumerate() {
+        let from = branch.shapes[vi.name];
+        let to = around.shapes[node.outputs[i]];
+        if axis_list(&from) == axis_list(&to) {
+            yielded.push(inner.value(&vi.name));
+            continue;
+        }
+        let element = around.primitives[node.outputs[i]];
+        yielded.push(
+            `lift::<${element}, [${axis_list(&from)}], [${axis_list(&to)}]>(${inner.reference(&vi.name)}, ${to.rank()})`,
+        );
+    }
+    lines.push(if yielded.len() == 1 { yielded[0] } else { `[${yielded.join(", ")}]` });
+    return Result::Ok(lines);
+}
+
+fn indented(lines: List<String>) -> List<String> {
+    return lines.into_iter().map(|line| `    ${line}`).collect();
 }
 
 /// The struct `forward` returns a graph's several outputs in, one field each.
@@ -1511,7 +1625,8 @@ fn unary_body(op: &String) -> Option<String> {
 
 /// Every axis name the checked graph uses, in first-seen order so the emitted
 /// module is stable across runs.
-fn axis_names(graph: &Graph, shapes: &TreeMap<String, Shape>) -> List<String> {
+fn axis_names(graph: &Graph, checked: &Checked) -> List<String> {
+    let shapes = &checked.shapes;
     let mut seen = TreeSet::<String>::new();
     let mut names: List<String> = [];
     for let vi of &graph.inputs {
@@ -1525,7 +1640,37 @@ fn axis_names(graph: &Graph, shapes: &TreeMap<String, Shape>) -> List<String> {
             push_axes(&mut names, &mut seen, shapes, &output);
         }
     }
+    push_branch_axes(&mut names, &mut seen, graph, checked);
     return names;
+}
+
+/// The axes every tensor in each `If`'s branches carries.
+fn push_branch_axes(names: &mut List<String>, seen: &mut TreeSet<String>, graph: &Graph, checked: &Checked) {
+    for let [branch_graph, branch] of branches_of(graph, checked) {
+        for let [_, shape] of branch.shapes.entries() {
+            push_markers(names, seen, &shape.axes);
+        }
+        push_branch_axes(names, seen, &branch_graph, &branch);
+    }
+}
+
+/// Each `If`'s two branches in `graph`, in order: the graph each holds, and the
+/// scope stage 0 checked it in.
+fn branches_of(graph: &Graph, checked: &Checked) -> List<[Graph, Checked]> {
+    let mut found: List<[Graph, Checked]> = [];
+    for let node of &graph.nodes {
+        let Some(scopes) = checked.branches.get(node.outputs[0]) else {
+            continue;
+        };
+        found.push([subgraph(node, "then_branch"), scopes.0]);
+        found.push([subgraph(node, "else_branch"), scopes.1]);
+    }
+    return found;
+}
+
+/// The graph a branch attribute holds, which stage 0 has read.
+fn subgraph(node: &Node, attr: String) -> Graph {
+    return node.attr(attr).unwrap().graph.unwrap();
 }
 
 fn push_axes(names: &mut List<String>, seen: &mut TreeSet<String>, shapes: &TreeMap<String, Shape>, tensor: &String) {

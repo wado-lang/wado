@@ -1,0 +1,19 @@
+# An If as a merged decoder writes one: the branch with a past joins it to
+# the sequence, the other reads the sequence alone, and both read a weight and
+# a constant from the graph around them. Only the branch with a past reads V,
+# so only it owes that V is as long as X.
+<ir_version: 8, opset_import: [ "" : 13 ]>
+branch (bool[1] C, float[N, 2] X, float[M, 2] P, float[L, 2] V) => (float[?, 2] Y, float[N, 2] Z)
+<float[2] W = {1.0, -1.0}>
+{
+    K = Constant<value_floats = [10.0, 20.0]>()
+    Y, Z = If <then_branch = with_past () => (float[?, 2] T, float[N, 2] TZ) {
+        T = Concat<axis = 0>(P, X)
+        S = Add(X, V)
+        SK = Add(S, K)
+        TZ = Mul(SK, W)
+    }, else_branch = no_past () => (float[N, 2] E, float[N, 2] EZ) {
+        E = Relu(X)
+        EZ = Sub(X, K)
+    }> (C)
+}

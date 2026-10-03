@@ -1,0 +1,82 @@
+//! An If, each branch a block of `forward` that runs only where the condition
+//! picks it.
+
+use { Embed, One, Past, Seq, Tensor, Total, Weights, forward } from "./branch.onnxtext"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: {
+                layout: [
+                    {
+                        pattern: "C",
+                        axes: ["One"],
+                    },
+                    {
+                        pattern: "X",
+                        axes: ["Seq", "Embed"],
+                    },
+                    {
+                        pattern: "P",
+                        axes: ["Past", "Embed"],
+                    },
+                    {
+                        pattern: "V",
+                        axes: ["Seq", "Embed"],
+                    },
+                    {
+                        pattern: "K",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "W",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "T",
+                        axes: ["Total", "Embed"],
+                        graph: "with_past",
+                    },
+                    {
+                        pattern: "Y",
+                        axes: ["Total", "Embed"],
+                    },
+                ],
+            },
+        },
+    };
+
+fn cond(taken: bool) -> Tensor<bool, [One]> {
+    return Tensor { data: [taken], extents: [1] };
+}
+
+fn x(data: List<f32>) -> Tensor<f32, [Seq, Embed]> {
+    return Tensor { data, extents: [data.len() / 2, 2] };
+}
+
+fn past(data: List<f32>) -> Tensor<f32, [Past, Embed]> {
+    return Tensor { data, extents: [data.len() / 2, 2] };
+}
+
+test "the then branch joins the past to the sequence" {
+    let o = forward(&cond(true), &x([1.0, 2.0]), &past([3.0, 4.0]), &x([3.0, 4.0]), &Weights::embedded());
+    assert o.Y.extents == [2, 2];
+    assert o.Y.data == [3.0, 4.0, 1.0, 2.0];
+    assert o.Z.data == [14.0, -26.0];
+}
+
+test "the else branch reads the sequence alone" {
+    let o = forward(&cond(false), &x([-1.0, 2.0]), &past([]), &x([]), &Weights::embedded());
+    assert o.Y.extents == [1, 2];
+    assert o.Y.data == [0.0, 2.0];
+    assert o.Z.data == [-11.0, -18.0];
+}
+
+test "what one branch owes is not checked where the other runs" {
+    let o = forward(&cond(false), &x([1.0, 2.0]), &past([]), &x([3.0, 4.0, 5.0, 6.0]), &Weights::embedded());
+    assert o.Z.data == [-9.0, -18.0];
+}
+
+#[expect_trap]
+test "what a branch owes is checked where it runs" {
+    forward(&cond(true), &x([1.0, 2.0]), &past([]), &x([3.0, 4.0, 5.0, 6.0]), &Weights::embedded());
+}

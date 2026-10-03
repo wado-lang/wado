@@ -422,8 +422,8 @@ fn branched(
     local: &Schema,
 ) -> Result<(), InferError> {
     branch_condition(node, scope)?;
-    let [then_graph, then_scope] = branch(node, "then_branch", scope, schema)?;
-    let [else_graph, else_scope] = branch(node, "else_branch", scope, schema)?;
+    let [then_graph, then_scope] = checked_branch(node, "then_branch", scope, schema)?;
+    let [else_graph, else_scope] = checked_branch(node, "else_branch", scope, schema)?;
     for let [i, output] of node.outputs.into_iter().enumerate() {
         let t = then_scope.shapes[then_graph.outputs[i].name];
         let e = else_scope.shapes[else_graph.outputs[i].name];
@@ -456,8 +456,25 @@ fn branched(
             scope.primitives[output] = p;
         }
     }
+    hoist_constants(scope, &then_scope, &else_scope);
+    hoist_constants(scope, &else_scope, &then_scope);
     scope.branches[node.outputs[0]] = [then_scope, else_scope];
     return Result::Ok(());
+}
+
+/// Give `scope` the shape `branch` read a constant of `scope` under, so the
+/// constant is spelled once around the branches rather than in each. One the
+/// other branch reads under other axes is left to each branch.
+fn hoist_constants(scope: &mut Checked, branch: &Checked, other: &Checked) {
+    for let [name, shape] of branch.shapes.entries() {
+        if !scope.known.contains_key(*name) || scope.shapes.contains_key(*name) {
+            continue;
+        }
+        if let Some(theirs) = other.shapes.get(*name) && theirs != *shape {
+            continue;
+        }
+        scope.shapes[*name] = *shape;
+    }
 }
 
 /// What a message calls a tensor's primitive, where it may have none.
@@ -490,7 +507,7 @@ fn branch_condition(node: &Node, scope: &Checked) -> Result<(), InferError> {
 
 /// The graph an `If` attribute holds, checked in a copy of `scope` that owes
 /// nothing yet.
-fn branch(
+fn checked_branch(
     node: &Node,
     attr: String,
     scope: &Checked,
