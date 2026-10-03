@@ -1,7 +1,7 @@
 //! The stderr [`TraceSink`] every native host installs, so `WADO_TRACE` and
 //! `WADO_DUMP_PASS_*` reach a stream wherever the compiler is driven from.
 
-use wado_compiler::{TraceSink, set_trace_sink};
+use wado_compiler_frontend::{TraceSink, set_trace_sink};
 
 struct StderrTraceSink;
 

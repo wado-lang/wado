@@ -1,0 +1,8661 @@
+//! Typed Intermediate Representation — the post-type-resolution form used for
+//! lowering, optimization, and codegen. Every type is a `TypeId`, every variable
+//! reference a local index, every call a resolved target, and all syntactic
+//! sugar is already desugared.
+
+use std::cell::RefCell;
+use std::fmt::Write;
+use std::rc::Rc;
+
+use sha2::Digest;
+
+use crate::call_args::CallArgs;
+use crate::canonical::CmCallTarget;
+use crate::compiler_item::CompilerItem;
+use crate::format_spec::TemplateFormatSpec;
+use crate::hashmap::{IndexMap, IndexSet};
+
+use crate::ast::{
+    AstId, HandleClasses, NamePolicy, NumericSuffix, RangeKind, RestClause, Visibility,
+};
+use crate::compiler_item::CompilerItems;
+use crate::defs::{DefId, DefKind, DefTable};
+use crate::module_source::{CmNamespace, ModuleSource};
+use crate::name::{
+    FqTraitName, FqTypeName, LocalMethodName, NEVER_TYPE_NAME, Receiver, RefKind,
+    TEMPLATE_SHAPE_PREFIX, TypeHead, TypeNameInfo, UNIT_TYPE_NAME, format_type_name,
+    mangle_builtin_array_type, mangle_generic_name, mangle_local_item_name, mangle_tuple_type,
+};
+use crate::primitive::PrimitiveType;
+use crate::symbol_notation::render;
+use crate::token::Span;
+use crate::{hashmap, name};
+
+/// `ReflectNewtype`'s only associated type (`type Base`): what the newtype
+/// wraps. Sealed and compiler-defined, so its spelling is fixed rather than
+/// registry-driven.
+pub(crate) const REFLECT_NEWTYPE_BASE: &str = "Base";
+
+/// Identifies the scope where a type parameter is defined
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TypeParamScope {
+    /// Type parameter from struct/impl block (e.g., T in `impl Container<T>`)
+    Impl,
+    /// Type parameter from method signature (e.g., U in `fn transform<U>`)
+    Method,
+    /// Type parameter from free function (e.g., T in `fn identity<T>`)
+    Function,
+}
+
+/// A resolved effect reference — a bare string in the AST, carrying its defining
+/// module here. Identity is `(module_source, name)` for `Concrete` and `name`
+/// alone for `Param`. The elaborator canonicalises the module, so `with Stdout`
+/// imported from `wasi:cli` and from `core:cli` compare equal.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum EffectRef {
+    /// A concrete effect resolved to a module source (e.g., `Stdout` from `wasi:cli`)
+    Concrete {
+        name: String,
+        module_source: ModuleSource,
+    },
+    /// An effect parameter from a generic effect declaration (e.g., `E` in `<effect E>`)
+    Param { name: String },
+}
+
+impl EffectRef {
+    pub fn name(&self) -> &str {
+        match self {
+            EffectRef::Concrete { name, .. } | EffectRef::Param { name } => name,
+        }
+    }
+
+    /// The name a message prints: in `MODULE#SYMBOL` notation when `qualified`,
+    /// for a concrete effect that another of its name would otherwise print as.
+    pub fn display_name(&self, qualified: bool) -> String {
+        match self {
+            EffectRef::Concrete {
+                name,
+                module_source,
+            } if qualified => render(&module_source.to_string(), name),
+            EffectRef::Concrete { name, .. } | EffectRef::Param { name } => name.clone(),
+        }
+    }
+
+    pub fn is_param(&self) -> bool {
+        matches!(self, EffectRef::Param { .. })
+    }
+
+    /// A `with`-clause name written in `module` that reaches no effect; it
+    /// stands as a concrete effect of its spelling, already reported.
+    pub fn unresolved(name: &str, module: &ModuleSource) -> Self {
+        EffectRef::Concrete {
+            name: name.to_string(),
+            module_source: module.clone(),
+        }
+    }
+}
+
+/// Identifies a type parameter with its scope and index
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TypeParamId {
+    pub scope: TypeParamScope,
+    pub index: u32,
+}
+
+impl TypeParamId {
+    pub fn impl_param(index: u32) -> Self {
+        Self {
+            scope: TypeParamScope::Impl,
+            index,
+        }
+    }
+
+    pub fn method_param(index: u32) -> Self {
+        Self {
+            scope: TypeParamScope::Method,
+            index,
+        }
+    }
+
+    pub fn function_param(index: u32) -> Self {
+        Self {
+            scope: TypeParamScope::Function,
+            index,
+        }
+    }
+}
+
+/// What a use site chose for a declaration's type parameters.
+///
+/// Keyed by the parameter itself. A slot carries its own index, and only the
+/// declaration knows which index each of its parameters holds — a generic,
+/// `&`-target, blanket or variadic-tuple impl numbers its slots differently,
+/// and a partially concrete target leaves gaps no positional list can express.
+/// Keying by position asks the caller to reconstruct that, which it cannot;
+/// `impl<T, ..F> Emit for T` is enough to break the reconstruction.
+/// `instantiate_call` takes the same view.
+#[derive(Debug, Clone, Default)]
+pub struct SubstitutionContext {
+    substitutions: IndexMap<TypeId, TypeId>,
+}
+
+impl SubstitutionContext {
+    pub fn new() -> Self {
+        Self {
+            substitutions: IndexMap::default(),
+        }
+    }
+
+    /// Bind a declaration's type parameters to the arguments a use site chose.
+    ///
+    /// `params` are the parameters as the declaration holds them: a lookup
+    /// reports them, a declaration record carries them. Nothing recomputes
+    /// them. Parameters past the end of `args` stay unbound.
+    pub fn bind(mut self, params: &[TypeId], args: &[TypeId]) -> Self {
+        for (&param, &arg) in params.iter().zip(args.iter()) {
+            self.substitutions.insert(param, arg);
+        }
+        self
+    }
+
+    /// Substitute type parameters in a type
+    pub fn substitute(&self, type_id: TypeId, type_table: &mut TypeTable) -> TypeId {
+        match type_table.get(type_id).clone() {
+            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. } => {
+                self.substitutions.get(&type_id).copied().unwrap_or(type_id)
+            }
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_name,
+                owning_trait,
+                bounds,
+                assoc_type_bindings,
+            } => {
+                let concrete_id = self.substitute(param_id, type_table);
+                // A projection that knows its trait is answered by identity:
+                // the entry is keyed by the declaring `DefId`, so two traits
+                // declaring the same associated-type name on one implementor
+                // stay apart (WEP-2026-08-12). The name-keyed chain below gives
+                // up on exactly that case, so it must not be reached first.
+                if let Some(resolved) = type_table.resolve_trait_assoc_type_of_instance(
+                    concrete_id,
+                    &owning_trait,
+                    &assoc_name,
+                ) {
+                    return resolved;
+                }
+                if let Some(resolved) =
+                    type_table.resolve_assoc_type_qualified(concrete_id, &owning_trait, &assoc_name)
+                {
+                    return resolved;
+                }
+                // GenericInstance fallback: e.g. ListIter<i32>::Item -> i32.
+                // Use the monomorphizing variant so a reference / nested
+                // associated type (`&T`, `I::Item`) is substituted with the
+                // instance's type args instead of returned verbatim.
+                if let Some(resolved) =
+                    type_table.resolve_generic_assoc_type_mono(concrete_id, &assoc_name)
+                {
+                    return resolved;
+                }
+                // The associated type cannot be resolved yet because the
+                // projected parameter is still abstract (e.g. substituting
+                // `I::Item` with `I -> I`, or `I -> some other type param`).
+                // Preserve the projection over the substituted parameter
+                // rather than collapsing to the bare parameter, so later
+                // monomorphization can resolve `concrete::assoc_name`.
+                if concrete_id == param_id {
+                    type_id
+                } else {
+                    type_table.intern(ResolvedType::AssocTypeProjection {
+                        param_id: concrete_id,
+                        assoc_name,
+                        owning_trait,
+                        bounds,
+                        assoc_type_bindings,
+                    })
+                }
+            }
+            ResolvedType::BuiltinArray(elem) => {
+                let new_elem = self.substitute(elem, type_table);
+                type_table.make_builtin_array(new_elem)
+            }
+            ResolvedType::Ref(inner) => {
+                let new_inner = self.substitute(inner, type_table);
+                type_table.make_ref(new_inner)
+            }
+            ResolvedType::MutRef(inner) => {
+                let new_inner = self.substitute(inner, type_table);
+                type_table.make_mut_ref(new_inner)
+            }
+            ResolvedType::GenericInstance { def, type_args } => {
+                let splices_packs = type_table.is_tuple_def(def);
+                let mut new_args: Vec<TypeId> = Vec::new();
+                for &arg in &type_args {
+                    // A pack in a tuple stands for the elements it took, not
+                    // for the tuple holding them: `[..T]` with `T = [i32,
+                    // bool]` is `[i32, bool]`, never `[[i32, bool]]`.
+                    let is_plain_pack = splices_packs
+                        && matches!(
+                            type_table.get(arg),
+                            ResolvedType::TypePack {
+                                mapped_elem: None,
+                                ..
+                            }
+                        );
+                    let substituted = self.substitute(arg, type_table);
+                    if is_plain_pack
+                        && substituted != arg
+                        && let Some(elements) = type_table.as_tuple(substituted)
+                    {
+                        new_args.extend(elements);
+                        continue;
+                    }
+                    new_args.push(substituted);
+                }
+                type_table.make_generic_instance(def, new_args)
+            }
+            ResolvedType::Function {
+                is_mut,
+                params,
+                return_type,
+                effects,
+            } => {
+                let new_params: Vec<TypeId> = params
+                    .iter()
+                    .map(|&p| self.substitute(p, type_table))
+                    .collect();
+                let new_return = self.substitute(return_type, type_table);
+                type_table.make_function_with_mut(is_mut, new_params, new_return, effects)
+            }
+            ResolvedType::GenericResource { def, type_args } => {
+                let new_args: Vec<TypeId> = type_args
+                    .iter()
+                    .map(|&a| self.substitute(a, type_table))
+                    .collect();
+                type_table.intern(ResolvedType::GenericResource {
+                    def,
+                    type_args: new_args,
+                })
+            }
+            ResolvedType::Reactive(inner) => {
+                let new_inner = self.substitute(inner, type_table);
+                type_table.intern(ResolvedType::Reactive(new_inner))
+            }
+            // Other types don't contain type parameters
+            _ => type_id,
+        }
+    }
+
+    /// Check if this context has any substitutions
+    pub fn is_empty(&self) -> bool {
+        self.substitutions.is_empty()
+    }
+}
+
+/// Type identifier for resolved types in TIR.
+/// This is a newtype wrapper to prevent misuse of raw integers as `TypeId`s.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct TypeId(pub u32);
+
+impl std::fmt::Display for TypeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// What a [`TypeId`] resolves to, as a value to compare or key a map by.
+/// An id addresses a slot; this answers identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TypeKey(TypeId);
+
+/// An arbitrary but fixed order, for a key that has to sort.
+impl Ord for TypeKey {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.0.cmp(&other.0.0)
+    }
+}
+
+impl PartialOrd for TypeKey {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+/// Identity of an inference variable — see [`ResolvedType::InferVar`].
+///
+/// Minted per module by the elaborator, so two uses of the same polymorphic
+/// signature get distinct variables. Unlike a [`ResolvedType::TypeParam`]
+/// index, this is not positional: it names one unknown, not a slot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct InferVarId(pub u32);
+
+impl std::fmt::Display for InferVarId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "?{}", self.0)
+    }
+}
+
+/// An anonymous struct's shape, interned by its field list.
+///
+/// Minted only by [`TypeTable::intern_anon_struct`]. Two literals of the same
+/// shape reach one of these, which is why the shape is the identity and no
+/// declaration is involved.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct AnonStructId(u32);
+
+impl std::fmt::Debug for AnonStructId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Anon({})", self.0)
+    }
+}
+
+/// A struct shape the compiler minted rather than source declared.
+///
+/// A struct literal is identified by its fields, because two literals of the
+/// same shape are one type. A closure environment is identified by the name
+/// lowering assigns it, because two closures with identical captures are
+/// still two environments.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum AnonShape {
+    Fields(Vec<(String, TypeId)>),
+    Synthetic(String),
+    /// The type a tagged template literal denotes, identified by its static
+    /// shape: two sites writing one template reach one type (WEP 2026-01-10).
+    Template(TemplateShape),
+}
+
+/// One hole of a template shape: its expression's type, its specifier as
+/// written, and its expression's source text.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct TemplateHole {
+    pub ty: TypeId,
+    pub spec: Option<String>,
+    pub source: String,
+}
+
+/// The static part of a tagged template literal: the raw literal segments —
+/// one more than the holes, cooked forms derived on demand — and the holes.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct TemplateShape {
+    pub segments: Vec<String>,
+    pub holes: Vec<TemplateHole>,
+}
+
+/// How many characters of a template's text its type name shows.
+const TEMPLATE_NAME_MAX_CHARS: usize = 50;
+
+impl TemplateShape {
+    /// The struct field holding hole `k`.
+    #[must_use]
+    pub fn field_name(k: usize) -> String {
+        format!("h{k}")
+    }
+}
+
+/// An interned shape with the mangle it was minted under. The mangle renders
+/// the shape's field types, and erasure later redirects a newtype among them
+/// to its base: rendering again would spell a different name from the one the
+/// `TirStruct` was registered under, so the name is fixed at interning.
+#[derive(Debug, Clone)]
+struct AnonEntry {
+    module: ModuleSource,
+    shape: AnonShape,
+    mangle: String,
+}
+
+/// What a struct type's head is.
+///
+/// A struct literal with no type name has no declaration and no node to
+/// identify it by — two literals of the same shape intern to one type on
+/// purpose — so the head says which of the two it is rather than carrying a
+/// `DefId` that would have to be invented for the second.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum StructDef {
+    Decl(DefId),
+    Anon(AnonStructId),
+}
+
+impl StructDef {
+    /// The declaration this head names, or `None` for a shape that names none.
+    #[must_use]
+    pub fn decl(self) -> Option<DefId> {
+        match self {
+            Self::Decl(def) => Some(def),
+            Self::Anon(_) => None,
+        }
+    }
+}
+
+/// One position in a tuple's layout: a pack standing for a run of positions,
+/// or a single slot holding one type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TupleSlot {
+    Fixed,
+    Pack(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ResolvedType {
+    Primitive(PrimitiveType),
+    Unit,
+    Never,
+    Struct {
+        /// The declaration this was written from, or the shape it was built
+        /// from. Never a spelling: a monomorphized struct used to store the
+        /// rendered `TreeMap<String,i32>` and a `base_name` to recover the head
+        /// from, which is what let its spelling pass as a declaration name
+        /// wherever the two were matched together.
+        def: StructDef,
+        /// What this instantiation was made with; empty for a declaration
+        /// written as such. The rendered spelling is derived from the two —
+        /// see [`TypeTable::struct_rendered_name`].
+        type_args: Vec<TypeId>,
+    },
+    Enum {
+        def: DefId,
+    },
+    /// Resource type - opaque handle (i32) to a Component Model resource
+    Resource {
+        def: DefId,
+    },
+    Variant {
+        def: DefId,
+    },
+    // `Option<T>` is a `GenericInstance`, not a variant here — see
+    // `TypeTable::as_option`. `Future<T>` / `Stream<T>` and their writable twins
+    // are `GenericResource`, built by `make_future` / `make_future_writable`.
+    //
+    // TODO: represent `Option<T>` as `ref null T` when `T` is a non-nullable
+    // reference, dropping the discriminant struct. `Option<Option<T>>` must not
+    // take that route — its null would be ambiguous.
+    /// Generic resource instantiation (e.g., `Future<i32>`, `Stream<String>`).
+    /// Represents opaque i32 handles to Component Model resources with type parameters.
+    GenericResource {
+        def: DefId,
+        type_args: Vec<TypeId>,
+    },
+    Ref(TypeId),
+    MutRef(TypeId),
+    Function {
+        /// `true` for `fn mut(...)` (closure type that may mutate its captures).
+        /// `false` for `fn(...)` (read-only).
+        is_mut: bool,
+        params: Vec<TypeId>,
+        return_type: TypeId,
+        effects: Vec<EffectRef>,
+    },
+    Reactive(TypeId),
+    /// Type parameter (e.g., `T` in `struct Box<T>`) — a *rigid* variable.
+    ///
+    /// It stands for whatever a caller instantiates the binding item with, so
+    /// inside that item it is opaque: nothing but itself is assignable to it.
+    /// It appears only within the item that binds it; a *use* of a polymorphic
+    /// signature instantiates these into [`ResolvedType::InferVar`]s.
+    TypeParam {
+        name: String,
+        /// Index of the type parameter in the generic definition (0 for first param)
+        index: u32,
+    },
+    /// Inference variable — a *flexible* variable standing for a type the
+    /// solver has yet to determine. Minted when a use site instantiates a
+    /// polymorphic signature: where a rigid parameter rejects anything but
+    /// itself, a variable accepts and records.
+    ///
+    /// Reaches no recorded fact — `finalize_infer_holes` substitutes every
+    /// one away. The intermediate types built on one stay interned, as every
+    /// type ever considered does, so a pass enumerating
+    /// [`TypeTable::all_types`] must select with [`TypeTable::is_concrete`].
+    InferVar(InferVarId),
+    /// Type pack parameter (`..T` in `fn foo<..T>(x: [..T])`), living inside
+    /// tuples until substitution expands it. `mapped_elem` separates an identity
+    /// pack (`None` — element `i` is `F_i`) from a mapped one (`Some(R)` —
+    /// element `i` is `R[F := F_i]`, degenerating to `|F|` copies of `R` when
+    /// `R` does not mention the pack).
+    TypePack {
+        name: String,
+        index: u32,
+        mapped_elem: Option<TypeId>,
+    },
+    /// Generic struct instantiation (e.g., `Box<i32>`)
+    /// Used to track instantiation sites before monomorphization
+    GenericInstance {
+        /// The generic declaration this instantiates.
+        def: DefId,
+        /// Concrete type arguments (e.g., [i32])
+        type_args: Vec<TypeId>,
+    },
+    /// Associated type projection: `T::X` where T is a type parameter with a trait bound.
+    /// During concrete instantiation this is resolved to the concrete associated type.
+    AssocTypeProjection {
+        /// The type-parameter `TypeId` (must be a `TypeParam` variant)
+        param_id: TypeId,
+        /// Name of the associated type (e.g., `"Value"` in `T::Value`)
+        assoc_name: String,
+        /// The trait declaring `assoc_name`: `Self::Err` inside `trait FromStr`
+        /// is `<Self as FromStr>::Err`.
+        // Part of the identity, so a projection built under one module's
+        // `FromStr` is never answered by another's.
+        owning_trait: DefId,
+        /// Trait bounds on this associated type, named by the declarations the
+        /// trait's own `type A: Bound` references resolve to. A projection
+        /// outlives the frame that built it, so a spelling here would be read
+        /// back from a vantage that never wrote it.
+        bounds: Vec<FqTraitName>,
+        /// Resolved associated type bindings (e.g., [("Item", `u8_typeid`)] for `I::Iter`
+        /// when I: `IntoIterator`<Item = u8> and `IntoIterator::Iter`: Iterator<Item = `Self::Item`>)
+        assoc_type_bindings: Vec<(String, TypeId)>,
+    },
+    /// Raw GC array intrinsic (`Array<T>`)
+    /// This is the underlying storage type for `String` and `List<T>` structs
+    BuiltinArray(TypeId),
+    /// Newtype: a distinct type wrapping a base type with the same representation.
+    /// Created by `type T = U;` declarations.
+    /// Newtypes are distinct from their base types but can be cast between them.
+    Newtype {
+        def: DefId,
+        /// What this instantiation was made with; empty for a declaration
+        /// written as such. The same head/arguments split `Struct` has — the
+        /// stored name used to bake them into the head (`MyArray<i32>`), which
+        /// is a fused spelling no `impl` header writes.
+        type_args: Vec<TypeId>,
+        /// The direct base type (may be another newtype for chained newtypes)
+        base_type: TypeId,
+    },
+    /// Flags: a bitmask type over u32.
+    /// Created by `flags F { A, B, C }` declarations.
+    /// Distinct from Newtype so flags can be detected without name-based lookup.
+    Flags {
+        def: DefId,
+    },
+    Unknown,
+    Error,
+}
+
+/// A dense map from [`TypeId`] to `V`, backed by a `Vec` indexed by `TypeId.0`.
+/// `TypeId`s are dense and sequential, so every access is a hash-free array
+/// index — [`TypeTable::get`] is the compiler's hottest accessor. The newtype
+/// keeps the lone `TypeId`→`usize` conversion in one place. Erased entries are
+/// `None`: [`TypeMap::retain`] punches holes rather than renumbering.
+#[derive(Debug, Clone)]
+pub(crate) struct TypeMap<V> {
+    slots: Vec<Option<V>>,
+}
+
+impl<V> Default for TypeMap<V> {
+    fn default() -> Self {
+        Self { slots: Vec::new() }
+    }
+}
+
+impl<V> TypeMap<V> {
+    /// The `TypeId` the next [`Self::push`] will occupy.
+    pub(crate) fn next_id(&self) -> TypeId {
+        TypeId(self.slots.len() as u32)
+    }
+
+    /// Live value at `id`, or `None` if absent, erased, or out of range.
+    pub(crate) fn get(&self, id: TypeId) -> Option<&V> {
+        self.slots.get(id.0 as usize).and_then(Option::as_ref)
+    }
+
+    /// Append a value at the next dense `TypeId` (== [`Self::next_id`]).
+    pub(crate) fn push(&mut self, value: V) {
+        self.slots.push(Some(value));
+    }
+
+    /// Set `id`'s value, growing the backing storage with empty slots as
+    /// needed. Used for sparse maps such as erasure redirects.
+    pub(crate) fn set_growing(&mut self, id: TypeId, value: V) {
+        let idx = id.0 as usize;
+        if idx >= self.slots.len() {
+            self.slots.resize_with(idx + 1, || None);
+        }
+        self.slots[idx] = Some(value);
+    }
+
+    /// Drop every live slot for which `keep(id, &value)` returns false.
+    pub(crate) fn retain(&mut self, mut keep: impl FnMut(TypeId, &V) -> bool) {
+        for (i, slot) in self.slots.iter_mut().enumerate() {
+            if let Some(value) = slot
+                && !keep(TypeId(i as u32), value)
+            {
+                *slot = None;
+            }
+        }
+    }
+
+    /// Iterate live `(TypeId, &value)` pairs, skipping erased holes.
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (TypeId, &V)> {
+        self.slots
+            .iter()
+            .enumerate()
+            .filter_map(|(i, slot)| slot.as_ref().map(|v| (TypeId(i as u32), v)))
+    }
+
+    /// Iterate the `TypeId`s of every live slot.
+    pub(crate) fn ids(&self) -> impl Iterator<Item = TypeId> + '_ {
+        self.slots
+            .iter()
+            .enumerate()
+            .filter_map(|(i, slot)| slot.as_ref().map(|_| TypeId(i as u32)))
+    }
+}
+
+/// A dense set of [`TypeId`], backed by a bitset — the set-shaped companion to
+/// [`TypeMap`]. One bit per type, so a transient "visited" set over the type
+/// graph costs a small `Vec<u64>` instead of a hash set that reallocates as it
+/// grows. Iteration yields ascending `TypeId` order, *not* insertion order.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct TypeSet {
+    words: Vec<u64>,
+}
+
+impl TypeSet {
+    fn slot(id: TypeId) -> (usize, u64) {
+        ((id.0 / 64) as usize, 1u64 << (id.0 % 64))
+    }
+
+    /// Insert `id`, returning `true` if it was not already present.
+    pub(crate) fn insert(&mut self, id: TypeId) -> bool {
+        let (word, mask) = Self::slot(id);
+        if word >= self.words.len() {
+            self.words.resize(word + 1, 0);
+        }
+        let newly = self.words[word] & mask == 0;
+        self.words[word] |= mask;
+        newly
+    }
+}
+
+/// A trait at the arguments it was instantiated at (WEP 2026-08-12): `Combine`
+/// and `Combine<Inch>` are two. `args` holds only what an impl wrote beyond the
+/// declared defaults, so a bound — writing none — is always [`TraitRef::bare`].
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TraitRef {
+    pub decl: DefId,
+    pub args: Vec<TypeId>,
+}
+
+impl TraitRef {
+    #[must_use]
+    pub fn bare(decl: DefId) -> Self {
+        Self {
+            decl,
+            args: Vec::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn new(decl: DefId, args: Vec<TypeId>) -> Self {
+        Self { decl, args }
+    }
+}
+
+/// [`AssocTypeKey`] for a generic impl, whose target is a declaration rather
+/// than an instantiated type.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct GenericAssocTypeKey {
+    target_decl: AstId,
+    trait_decl: DefId,
+    assoc_name: String,
+}
+
+/// What an associated type belongs to. The trait's arguments are not part of
+/// it: a bound writes none, so every lookup names them all and
+/// [`AssocAnswers`] picks between them.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct AssocTypeKey {
+    receiver: InstanceKey,
+    trait_decl: DefId,
+    assoc_name: String,
+}
+
+/// A type keyed by its declaration and arguments: one key whether read as the
+/// instance or as the monomorphized struct, which [`TypeKey`] keeps apart.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum InstanceKey {
+    Nominal(DefId, Vec<InstanceKey>),
+    Ref(Box<InstanceKey>),
+    MutRef(Box<InstanceKey>),
+    /// The interned slot of the unerased type: a newtype keeps its own impls.
+    Other(TypeId),
+}
+
+/// The answers registered under one key, by the arguments the impl wrote
+/// beyond the declared defaults: `impl Add for Cm` and `impl Add<Inch> for Cm`
+/// both give `Output`.
+#[derive(Debug, Clone, Default)]
+struct AssocAnswers(Vec<(Vec<TypeId>, TypeId)>);
+
+impl AssocAnswers {
+    fn insert(&mut self, args: Vec<TypeId>, answer: TypeId) {
+        match self.0.iter_mut().find(|(written, _)| *written == args) {
+            Some(slot) => slot.1 = answer,
+            None => self.0.push((args, answer)),
+        }
+    }
+
+    /// The one answer a bound names: the bare instantiation where one is
+    /// registered, else whatever the arguments-writing impls agree on. A bound
+    /// writes no arguments, so it cannot pick between impls that disagree.
+    fn bare(&self) -> Option<TypeId> {
+        one_assoc_answer(self.tagged())
+    }
+
+    /// Each answer paired with whether a bare bound names it, for a caller
+    /// weighing answers from several traits at once.
+    fn tagged(&self) -> impl Iterator<Item = (bool, TypeId)> + Clone {
+        self.0
+            .iter()
+            .map(|(args, answer)| (args.is_empty(), *answer))
+    }
+}
+
+/// The Component Model coordinate `module` is addressed by, or `None` where it
+/// declares nothing at that boundary. A `core:` module carries no namespace.
+fn cm_module_key(
+    name: &str,
+    module: &ModuleSource,
+) -> Option<(String, Option<CmNamespace>, String)> {
+    match module {
+        ModuleSource::Binding {
+            namespace,
+            interface,
+        } => Some((
+            name.to_string(),
+            Some(*namespace),
+            interface.as_str().to_string(),
+        )),
+        ModuleSource::Core { name: cm_name } => {
+            Some((name.to_string(), None, cm_name.as_str().to_string()))
+        }
+        _ => None,
+    }
+}
+
+/// The one answer among `candidates`, preferring those a bare bound names when
+/// any is registered: a bound writes no trait arguments, so an impl that does
+/// is consulted only when nothing else answers. `None` when they disagree.
+fn one_assoc_answer<T: Copy + PartialEq>(
+    candidates: impl Iterator<Item = (bool, T)> + Clone,
+) -> Option<T> {
+    let bare = candidates.clone().any(|(bare, _)| bare);
+    let mut answers = candidates
+        .filter(|(is_bare, _)| *is_bare || !bare)
+        .map(|(_, answer)| answer);
+    let first = answers.next()?;
+    answers.all(|answer| answer == first).then_some(first)
+}
+
+/// Whether a slot search descends into a projection's base or stops there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Through {
+    Projection,
+    ProjectionStops,
+}
+
+#[derive(Debug, Clone)]
+pub struct TypeTable {
+    /// `TypeId` → `ResolvedType`. See [`TypeMap`]; `get` reads this on
+    /// essentially every type query, so it is a hash-free `Vec` index.
+    types: TypeMap<ResolvedType>,
+    intern_map: IndexMap<ResolvedType, TypeId>,
+    /// The slot each inference variable stands for, read only by diagnostics.
+    /// Beside the variant, not inside it, so the interning key stays the id.
+    infer_var_names: IndexMap<InferVarId, String>,
+    /// Registry of stdlib items the compiler is allowed to reference
+    /// (Box, Option, Default, `push_str`, …). Populated during the
+    /// annotate pass from `#[compiler_item("...")]` attributes; see
+    /// [`crate::compiler_item`].
+    compiler_items: CompilerItems,
+    /// Associated type resolutions:
+    /// `(concrete_type_id, declaring trait, assoc_name)` → `resolved_type_id`.
+    /// Populated when impl blocks with associated type bindings are processed.
+    ///
+    /// Keyed by trait because one type may implement several declaring the
+    /// same name — `f32` has both `FromStr::Err` and `LenientFromStr::Err`.
+    /// `<type as trait[args]>::name` → the type it resolves to, the arguments
+    /// being what the impl wrote beyond the declared defaults — so a bare bound
+    /// and `impl Add<Cm> for Cm` meet at the empty list.
+    assoc_type_resolutions: IndexMap<AssocTypeKey, AssocAnswers>,
+    /// Generic associated type definitions:
+    /// `(base decl, declaring trait, assoc_name)` → `TypeId`.
+    /// The `TypeId` is typically a `TypeParam` that can be substituted using the
+    /// `GenericInstance`'s `type_args`. Populated when processing generic impl blocks
+    /// (e.g., `impl Iterator for ListIter<T> { type Item = T; }`).
+    /// Used by the monomorphizer to resolve associated types for `GenericInstance` types.
+    /// A generic impl's `type X = …` before substitution, keyed like
+    /// [`Self::assoc_type_resolutions`] but by the target's declaration: two
+    /// generic impls of one trait at different instantiations are two answers.
+    generic_assoc_type_defs: IndexMap<GenericAssocTypeKey, AssocAnswers>,
+    /// Erasure redirects: set by `erase_newtypes_and_flags()`.
+    /// After erasure, `get(id)` for any erased `TypeId` returns the base type.
+    /// Newtype → ultimate base type; Flags → u32.
+    ///
+    /// A sparse [`TypeMap`] (most types are not erased): `Some(target)` is a
+    /// live redirect, an absent slot means "no redirect". `get` consults it
+    /// on every call, so the hash-free index matters here too.
+    redirects: TypeMap<TypeId>,
+    /// Reverse mapping `Box<T>` `TypeId` → `T`'s `TypeId`, populated by the
+    /// boxing pass (`lower/plan/boxing.rs`). The pass rewrites `&T` /
+    /// `&mut T` into `Box<T>` wrapper structs for primitives, variants and
+    /// function types. Sites that read receiver / argument types in
+    /// post-boxing IR (DCE inspect scanning, dispatch synthesis, etc.) use
+    /// [`Self::peel_refs_and_box`] to look through both the reference
+    /// layer and any boxing wrapper in a single step.
+    ///
+    /// A sparse [`TypeMap`] keyed by the wrapper `TypeId`.
+    box_payload_types: TypeMap<TypeId>,
+    /// Index from (struct name, module source) to `TypeId` for O(1) lookup.
+    /// Populated incrementally when Struct types are interned.
+    struct_name_index: IndexMap<(String, ModuleSource), TypeId>,
+    /// `(name, module) -> TypeId` for the nominal declarations that are not
+    /// structs. `find_decl_type_by_name` scanned every interned type for these,
+    /// which an instantiation now pays on the way in — see
+    /// `make_generic_instance`.
+    decl_name_index: IndexMap<(String, ModuleSource), TypeId>,
+    /// Canonical map: declared-type symbol → `TypeId`, populated whenever the
+    /// elaborator mints a decl-backed type, so an LSP-style query can go from an
+    /// [`AstId`](crate::ast::AstId) to its type without searching by name.
+    /// Monomorphized instances are not entered — the base generic's key still
+    /// resolves to the base id; `symbol_of_type` walks the other way.
+    type_by_symbol: IndexMap<AstId, TypeId>,
+    /// Inverse of `type_by_symbol` plus monomorphization tracking: every
+    /// decl-backed `TypeId` — including monomorphized instances —
+    /// maps to the [`AstId`](crate::ast::AstId) of its declaring AST node.
+    ///
+    /// A sparse [`TypeMap`] keyed by the decl-backed `TypeId`.
+    symbol_by_type: TypeMap<AstId>,
+    /// `(receiver head, module, trait)` triples that satisfied a `Serialize` /
+    /// `Deserialize` / `Eq` / `Ord` bound structurally during elaboration
+    /// (bound-driven synthesis, WEP 2026-06-25). Keyed by the receiver's head
+    /// rather than by `TypeId`, so a generic records once against its
+    /// declaration. Lives on the shared `TypeTable` because elaboration runs one
+    /// `Elaborator` per module.
+    bound_driven_synth_requests: IndexSet<(TypeHead, ModuleSource, DefId)>,
+    /// What each impl block's target writes: what decides which instances of
+    /// the head the block reaches.
+    impl_targets: IndexMap<DefId, ImplTarget>,
+    /// Variant case templates: `(variant name, module)` → `(case name, case
+    /// index, payload TypeId)`. Payload ids are in the declaring template's
+    /// terms; unit cases use `TypeTable::UNIT`.
+    variant_case_index: IndexMap<DefId, Vec<(String, u32, TypeId)>>,
+    /// Every struct shape the compiler minted, by [`AnonStructId`].
+    anon_structs: Vec<AnonEntry>,
+    /// Dedup for the above: the same shape in the same module is one id.
+    anon_struct_index: IndexMap<(ModuleSource, AnonShape), AnonStructId>,
+    /// Every mangle handed out, so a template shape's hash cannot name two.
+    anon_struct_mangles: IndexSet<(ModuleSource, String)>,
+    /// `(WIT name, generated module)` of each type declaration, for
+    /// [`Self::cm_decl_in`]. Built with [`Self::attach_defs`], so it answers at
+    /// any point in the pipeline rather than only after a declaration's type is
+    /// interned.
+    decl_index: IndexMap<(String, ModuleSource), DefId>,
+    /// [`Self::decl_index`] addressed by the module's CM coordinate instead, for
+    /// [`Self::cm_decl_in_module_named`]: a caller holding an interface FQ can
+    /// spell that without an interner.
+    cm_decl_index: IndexMap<(String, Option<CmNamespace>, String), DefId>,
+    /// Resources declared `#[cm(..., linearity = "unrestricted")]`, with the
+    /// classes their handles carry where they declare them.
+    unrestricted_resources: IndexMap<DefId, Option<HandleClasses>>,
+    /// `resource Child extends Parent`, child → parent.
+    resource_parents: IndexMap<DefId, DefId>,
+    /// Every declaration in the program, for rendering a nominal type's head.
+    ///
+    /// A name comes out of an identity and never goes back in. Attached where
+    /// [`crate::resolve::Resolutions`] is built, and again on the snapshot
+    /// restore path with the seeded table — which is what keeps a `DefId` a
+    /// cached type carries pointing at the same declaration.
+    defs: std::sync::Arc<DefTable>,
+}
+
+impl Default for TypeTable {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TypeTable {
+    pub const I8: TypeId = TypeId(0);
+    pub const I16: TypeId = TypeId(1);
+    pub const I32: TypeId = TypeId(2);
+    pub const I64: TypeId = TypeId(3);
+    pub const U8: TypeId = TypeId(4);
+    pub const U16: TypeId = TypeId(5);
+    pub const U32: TypeId = TypeId(6);
+    pub const U64: TypeId = TypeId(7);
+    pub const F32: TypeId = TypeId(8);
+    pub const F64: TypeId = TypeId(9);
+    pub const F16: TypeId = TypeId(10);
+    pub const BF16: TypeId = TypeId(11);
+    pub const BOOL: TypeId = TypeId(12);
+    pub const CHAR: TypeId = TypeId(13);
+    pub const V128: TypeId = TypeId(14);
+    pub const UNIT: TypeId = TypeId(15);
+    pub const NEVER: TypeId = TypeId(16);
+    pub const UNKNOWN: TypeId = TypeId(17);
+    pub const ERROR: TypeId = TypeId(18);
+
+    /// The well-known id `prim` interns to. [`Self::new`] asserts each one
+    /// against what it actually interns, so neither can drift.
+    #[must_use]
+    pub fn primitive_type_id(prim: PrimitiveType) -> TypeId {
+        match prim {
+            PrimitiveType::I8 => Self::I8,
+            PrimitiveType::I16 => Self::I16,
+            PrimitiveType::I32 => Self::I32,
+            PrimitiveType::I64 => Self::I64,
+            PrimitiveType::U8 => Self::U8,
+            PrimitiveType::U16 => Self::U16,
+            PrimitiveType::U32 => Self::U32,
+            PrimitiveType::U64 => Self::U64,
+            PrimitiveType::F32 => Self::F32,
+            PrimitiveType::F64 => Self::F64,
+            PrimitiveType::F16 => Self::F16,
+            PrimitiveType::Bf16 => Self::BF16,
+            PrimitiveType::Bool => Self::BOOL,
+            PrimitiveType::Char => Self::CHAR,
+            PrimitiveType::V128 => Self::V128,
+        }
+    }
+
+    /// The type spelling → well-known `TypeId` mapping, the single source for
+    /// every by-name primitive resolution. `i128` / `u128` are struct-backed.
+    pub fn primitive_by_name(name: &str) -> Option<TypeId> {
+        match name {
+            UNIT_TYPE_NAME => Some(Self::UNIT),
+            NEVER_TYPE_NAME => Some(Self::NEVER),
+            _ => PrimitiveType::from_name(name).map(Self::primitive_type_id),
+        }
+    }
+
+    /// The type `def` declares where it is a primitive, `()` or `!`.
+    pub fn primitive_of_decl(defs: &DefTable, def: DefId) -> Option<TypeId> {
+        if defs.kind(def) != DefKind::BuiltinType {
+            return None;
+        }
+        Self::primitive_by_name(defs.name(def))
+    }
+
+    /// Canonical user-facing name of the raw GC array (`ResolvedType::BuiltinArray`).
+    /// Single source of truth for both the resolver arms that recognise the
+    /// `Array<T>` spelling and the dispatch arms that report it as the
+    /// method-owner base name (`impl Array<T>` in `core:prelude/array.wado`),
+    /// so those scattered sites cannot drift out of agreement.
+    pub const ARRAY_TYPE_NAME: &'static str = "Array";
+
+    /// The primitive a `flags` type lowers to, whose methods it inherits.
+    pub const FLAGS_BASE_NAME: &'static str = "u32";
+
+    /// The `(base name, struct type args)` a generic container (`GenericInstance`
+    /// or the raw GC array `Array<T>`, whose methods live in `impl Array<T>`)
+    /// dispatches under. A trait-method call site
+    /// (`synthesis::template::method_name_for_type`) and the monomorphizer's
+    /// `struct_info_for_method` must agree on this, or a call mangles to a
+    /// name no impl was registered under. `None` for every other type (their
+    /// dispatch name is derived differently).
+    pub fn generic_dispatch_components(&self, type_id: TypeId) -> Option<(String, Vec<TypeId>)> {
+        match self.get(type_id) {
+            ResolvedType::GenericInstance { def, type_args }
+            | ResolvedType::GenericResource { def, type_args } => {
+                Some((self.def_name(*def).to_string(), type_args.clone()))
+            }
+            ResolvedType::BuiltinArray(elem) => {
+                Some((Self::ARRAY_TYPE_NAME.to_string(), vec![*elem]))
+            }
+            _ => None,
+        }
+    }
+
+    pub fn new() -> Self {
+        let mut table = Self {
+            types: TypeMap::default(),
+            intern_map: IndexMap::default(),
+            infer_var_names: IndexMap::default(),
+            compiler_items: CompilerItems::new(),
+            assoc_type_resolutions: IndexMap::default(),
+            generic_assoc_type_defs: IndexMap::default(),
+            redirects: TypeMap::default(),
+            box_payload_types: TypeMap::default(),
+            struct_name_index: IndexMap::default(),
+            decl_name_index: IndexMap::default(),
+            type_by_symbol: IndexMap::default(),
+            symbol_by_type: TypeMap::default(),
+            bound_driven_synth_requests: IndexSet::default(),
+            impl_targets: IndexMap::default(),
+            variant_case_index: IndexMap::default(),
+            anon_structs: Vec::new(),
+            anon_struct_index: IndexMap::default(),
+            anon_struct_mangles: IndexSet::default(),
+            decl_index: IndexMap::default(),
+            cm_decl_index: IndexMap::default(),
+            unrestricted_resources: IndexMap::default(),
+            resource_parents: IndexMap::default(),
+            defs: std::sync::Arc::default(),
+        };
+
+        for &prim in PrimitiveType::ALL {
+            let id = table.intern(ResolvedType::Primitive(prim));
+            assert_eq!(id, Self::primitive_type_id(prim));
+        }
+        // Landing here says `ALL` holds every variant once: a missing or
+        // repeated entry shifts everything after the primitives.
+        assert_eq!(table.intern(ResolvedType::Unit), Self::UNIT);
+        table.intern(ResolvedType::Never);
+        table.intern(ResolvedType::Unknown);
+        table.intern(ResolvedType::Error);
+
+        table
+    }
+
+    pub fn intern(&mut self, ty: ResolvedType) -> TypeId {
+        if let Some(&id) = self.intern_map.get(&ty) {
+            return id;
+        }
+        let id = self.types.next_id();
+        // Update struct name index for O(1) lookups by (name, module_source).
+        // Keyed on the *rendered* spelling: every instantiation of a generic
+        // struct is a distinct type, and keying on the declaration would
+        // collapse them all onto one entry.
+        if let ResolvedType::Struct {
+            ref def,
+            ref type_args,
+        } = ty
+        {
+            let rendered = self.struct_rendered_name(*def, type_args);
+            let module_source = self.struct_head_module(*def).clone();
+            self.struct_name_index.insert((rendered, module_source), id);
+        }
+        if let Some(def) = Self::nominal_key(&ty) {
+            let key = (self.def_name(def).to_string(), self.def_module(def).clone());
+            self.decl_name_index.insert(key, id);
+        }
+        self.types.push(ty.clone());
+        self.intern_map.insert(ty, id);
+        id
+    }
+
+    /// The slot holding `id`'s value: itself, or what a redirect points it at.
+    /// One hop — [`Self::redefine_to`] refuses a target that is redirected.
+    fn resolved_id(&self, id: TypeId) -> TypeId {
+        self.redirects.get(id).copied().unwrap_or(id)
+    }
+
+    /// [`Self::get`] for a caller holding an id from another table. One this
+    /// table does not carry answers `None` rather than panicking.
+    pub fn try_get(&self, id: TypeId) -> Option<&ResolvedType> {
+        self.types.get(self.resolved_id(id))
+    }
+
+    pub fn get(&self, id: TypeId) -> &ResolvedType {
+        let id = self.resolved_id(id);
+        self.types
+            .get(id)
+            .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
+    }
+
+    /// Where [`Self::redefine_to`] pointed `id`, when `id` is a borrow it
+    /// redefined. Erasure's redirect is not one, and the spelling tells them
+    /// apart: only a borrow is ever redefined.
+    fn box_redefinition(&self, id: TypeId) -> Option<TypeId> {
+        let target = self.redirects.get(id).copied()?;
+        self.spelled_borrow(id).map(|_| target)
+    }
+
+    /// [`Self::get`] before the newtype / flags erasure, which runs once
+    /// monomorphize is done. A boxing redefinition is no part of that, so a
+    /// redefined borrow reads as the `Box<T>` here too.
+    ///
+    /// Erasure is a representation choice — a `flags` value is a `u32` at
+    /// runtime — but `impl Trait for Perms` is still keyed under `Perms`. A
+    /// name that has to match an impl must read the identity; only code that
+    /// cares how the value is stored should read [`Self::get`].
+    #[must_use]
+    pub fn get_unerased(&self, id: TypeId) -> &ResolvedType {
+        let id = self.box_redefinition(id).unwrap_or(id);
+        self.types
+            .get(id)
+            .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
+    }
+
+    /// Whether `id` names a newtype, erased or not.
+    pub fn is_newtype(&self, id: TypeId) -> bool {
+        matches!(self.get_unerased(id), ResolvedType::Newtype { .. })
+    }
+
+    /// [`Self::get`] returning `None` for ids pruned by DCE's `retain`.
+    pub fn get_pruned(&self, id: TypeId) -> Option<&ResolvedType> {
+        self.types.get(self.resolved_id(id))
+    }
+
+    /// The [`TypeKey`] for `id`.
+    ///
+    /// Newtype erasure and the boxing rewrite both leave many ids resolving to
+    /// one type, so an id is a slot and not a type identity.
+    #[must_use]
+    pub fn type_key(&self, id: TypeId) -> TypeKey {
+        let resolved = self.resolved_id(id);
+        TypeKey(
+            self.types
+                .get(resolved)
+                .and_then(|ty| self.intern_map.get(ty).copied())
+                .unwrap_or(resolved),
+        )
+    }
+
+    /// True when `id` resolves to the never type `!`, through any newtype. An
+    /// expression of this type diverges and never yields a value.
+    pub fn is_never(&self, id: TypeId) -> bool {
+        matches!(self.get(self.representation_head(id)), ResolvedType::Never)
+    }
+
+    /// Iterate over all live types in the type table. Erased slots (`None`,
+    /// produced by [`Self::retain`]) are skipped.
+    pub fn all_types(&self) -> impl Iterator<Item = (TypeId, &ResolvedType)> {
+        self.types.iter()
+    }
+
+    /// The primitive `id` bottoms out in, through any newtype chain.
+    pub fn primitive_head(&self, id: TypeId) -> Option<PrimitiveType> {
+        match self.get(self.representation_head(id)) {
+            ResolvedType::Primitive(p) => Some(*p),
+            _ => None,
+        }
+    }
+
+    /// Whether `id` resolves to exactly `want`, through any newtype chain.
+    pub fn is_primitive(&self, id: TypeId, want: PrimitiveType) -> bool {
+        self.primitive_head(id) == Some(want)
+    }
+
+    /// Whether `id` is one of the scalar integers. `i128` / `u128` answer
+    /// `false`: no Wasm integer instruction takes them.
+    pub fn is_integer(&self, id: TypeId) -> bool {
+        matches!(
+            self.primitive_head(id),
+            Some(
+                PrimitiveType::I8
+                    | PrimitiveType::I16
+                    | PrimitiveType::I32
+                    | PrimitiveType::I64
+                    | PrimitiveType::U8
+                    | PrimitiveType::U16
+                    | PrimitiveType::U32
+                    | PrimitiveType::U64
+            )
+        )
+    }
+
+    pub fn is_float(&self, id: TypeId) -> bool {
+        matches!(
+            self.primitive_head(id),
+            Some(PrimitiveType::F32 | PrimitiveType::F64)
+        )
+    }
+
+    pub fn is_half(&self, id: TypeId) -> bool {
+        self.primitive_head(id).is_some_and(PrimitiveType::is_half)
+    }
+
+    pub fn is_numeric(&self, id: TypeId) -> bool {
+        self.is_integer(id) || self.is_float(id)
+    }
+
+    /// Iterate over all live type IDs in the table. Erased slots are skipped.
+    pub fn iter_type_ids(&self) -> impl Iterator<Item = TypeId> + '_ {
+        self.types.ids()
+    }
+
+    /// Look up a struct `TypeId` by its name and module source.
+    /// Returns `None` if no struct with that name exists in the given module.
+    pub fn find_struct_by_name(&self, name: &str, module_source: &ModuleSource) -> Option<TypeId> {
+        self.struct_name_index
+            .get(&(name.to_string(), module_source.clone()))
+            .copied()
+    }
+
+    pub fn mark_unrestricted_resource(&mut self, def: DefId, classes: Option<HandleClasses>) {
+        self.unrestricted_resources.insert(def, classes);
+    }
+
+    /// Whether `def` declares an unrestricted resource, which no affine check
+    /// and no cleanup pass owns.
+    #[must_use]
+    pub fn is_unrestricted_resource(&self, def: DefId) -> bool {
+        self.unrestricted_resources.contains_key(&def)
+    }
+
+    /// The classes an unrestricted resource's handles carry, where it declares them.
+    #[must_use]
+    pub fn handle_classes(&self, def: DefId) -> Option<HandleClasses> {
+        self.unrestricted_resources.get(&def).copied().flatten()
+    }
+
+    /// The classes a narrowing to the resource `target` tests.
+    #[must_use]
+    pub fn narrowing_classes(&self, target: TypeId) -> Option<HandleClasses> {
+        let ResolvedType::Resource { def } = self.get(target) else {
+            unreachable!("only a resource is narrowed to");
+        };
+        self.handle_classes(*def)
+    }
+
+    /// Each class the resource tree holding `def` numbers, with the resource
+    /// whose own class it is.
+    pub fn handle_class_owners(&self, def: DefId) -> impl Iterator<Item = (u16, DefId)> {
+        let root = self
+            .resource_chain(def)
+            .last()
+            .expect("a chain starts at `def`");
+        self.unrestricted_resources
+            .iter()
+            .filter_map(move |(&member, classes)| {
+                let lo = classes.as_ref()?.lo;
+                self.is_resource_subtype(member, root)
+                    .then_some((lo, member))
+            })
+    }
+
+    /// The scalar a resource handle is in the guest: the `u64` bits of the `f64`
+    /// an unrestricted handle is outside it, or an `i32`. `None` for a non-resource.
+    #[must_use]
+    pub fn handle_scalar(&self, ty: TypeId) -> Option<TypeId> {
+        match self.get(ty) {
+            ResolvedType::Resource { def } if self.is_unrestricted_resource(*def) => {
+                Some(Self::U64)
+            }
+            ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => Some(Self::I32),
+            _ => None,
+        }
+    }
+
+    /// Whether `ty` is an unrestricted resource, whose handle is an `f64` outside the guest.
+    #[must_use]
+    pub fn is_unrestricted_handle(&self, ty: TypeId) -> bool {
+        self.handle_scalar(ty) == Some(Self::U64)
+    }
+
+    /// Record `child extends parent`, already validated by the caller.
+    pub fn set_resource_parent(&mut self, child: DefId, parent: DefId) {
+        assert_ne!(child, parent, "a resource cannot extend itself");
+        assert!(
+            !self.is_resource_subtype(parent, child),
+            "a resource inheritance cycle would make every chain walk unbounded"
+        );
+        self.resource_parents.insert(child, parent);
+    }
+
+    #[must_use]
+    pub fn resource_parent(&self, def: DefId) -> Option<DefId> {
+        self.resource_parents.get(&def).copied()
+    }
+
+    /// The ancestor two branches agree on when one resource extends the other,
+    /// under the shared reference they were written with. `&mut` is invariant.
+    /// The answer is always one of `a` and `b`, so nothing new is interned.
+    #[must_use]
+    pub fn resource_join(&self, a: TypeId, b: TypeId) -> Option<TypeId> {
+        if let (ResolvedType::Ref(a_inner), ResolvedType::Ref(b_inner)) = (self.get(a), self.get(b))
+        {
+            let (a_inner, b_inner) = (*a_inner, *b_inner);
+            let joined = self.resource_join(a_inner, b_inner)?;
+            return Some(if joined == a_inner { a } else { b });
+        }
+        let (ResolvedType::Resource { def: a_def }, ResolvedType::Resource { def: b_def }) =
+            (self.get(a), self.get(b))
+        else {
+            return None;
+        };
+        if self.is_resource_subtype(*a_def, *b_def) {
+            return Some(b);
+        }
+        self.is_resource_subtype(*b_def, *a_def).then_some(a)
+    }
+
+    /// `def` and every resource it extends, nearest first.
+    pub fn resource_chain(&self, def: DefId) -> impl Iterator<Item = DefId> {
+        std::iter::successors(Some(def), |&current| self.resource_parent(current))
+    }
+
+    /// Whether `sub` is `sup` or extends it, directly or transitively.
+    #[must_use]
+    pub fn is_resource_subtype(&self, sub: DefId, sup: DefId) -> bool {
+        self.resource_chain(sub).any(|current| current == sup)
+    }
+
+    /// Whether only the host can tell a `value` is a `target`: `target` is a
+    /// resource strictly extending `value`'s, which makes both unrestricted.
+    #[must_use]
+    pub fn is_resource_narrowing(&self, value: TypeId, target: TypeId) -> bool {
+        let (ResolvedType::Resource { def: value }, ResolvedType::Resource { def: target }) =
+            (self.get(value), self.get(target))
+        else {
+            return false;
+        };
+        value != target && self.is_resource_subtype(*target, *value)
+    }
+
+    /// Whether `==` compares `a` and `b` as handles: both unrestricted, one
+    /// extending the other. The host interns handles, so equal means same object.
+    #[must_use]
+    pub fn handles_compare(&self, a: TypeId, b: TypeId) -> bool {
+        self.resource_join(a, b)
+            .is_some_and(|joined| self.is_unrestricted_handle(joined))
+    }
+
+    /// Attach the program's declarations, so a nominal type can render its
+    /// head once it carries one instead of a spelling.
+    pub fn attach_defs(&mut self, defs: std::sync::Arc<DefTable>) {
+        // A module-level declaration is entered first and kept: a
+        // function-local item shares its module, and a spelling that reaches
+        // both means the module-level one everywhere this index is consulted.
+        self.decl_index = IndexMap::default();
+        self.cm_decl_index = IndexMap::default();
+        for def in defs.iter() {
+            if !defs.kind(def).is_type() {
+                continue;
+            }
+            let name = defs.name(def).to_string();
+            let module = defs.module(def);
+            if let Some(key) = cm_module_key(&name, module) {
+                self.cm_decl_index.entry(key).or_insert(def);
+            }
+            self.decl_index.entry((name, module.clone())).or_insert(def);
+        }
+        self.defs = defs;
+    }
+
+    /// Every declaration in the program.
+    #[must_use]
+    pub fn defs(&self) -> &DefTable {
+        &self.defs
+    }
+
+    /// The name `def` writes — a rendering, for a diagnostic or a mangle.
+    #[must_use]
+    pub fn def_name(&self, def: DefId) -> &str {
+        self.defs.name(def)
+    }
+
+    /// The name `def` renders to — its declared name, with a function-local
+    /// declaration's disambiguator applied.
+    ///
+    /// [`Self::def_name`] is the *declared* name, which is what an `impl`
+    /// header spells and what a by-name declaration lookup keys on. This is
+    /// the *rendered* one, which is what a mangle embeds and what every
+    /// name-keyed downstream registry stores. They differ for exactly one kind
+    /// of declaration: two sibling functions may each declare a `struct
+    /// Point`, and a registry keyed on the declared name would hold one entry
+    /// for two types.
+    #[must_use]
+    pub fn decl_render_name(&self, def: DefId) -> String {
+        let name = self.defs.name(def);
+        if self.defs.is_function_local(def) {
+            return mangle_local_item_name(name, self.defs.ast_id(def));
+        }
+        name.to_string()
+    }
+
+    /// The module that declares `def`.
+    #[must_use]
+    pub fn def_module(&self, def: DefId) -> &ModuleSource {
+        self.defs.module(def)
+    }
+
+    /// Intern an anonymous struct's shape. The fields are the identity, so two
+    /// literals writing the same shape in the same module reach one id.
+    pub fn intern_anon_struct(
+        &mut self,
+        module_source: ModuleSource,
+        fields: Vec<(String, TypeId)>,
+    ) -> AnonStructId {
+        self.intern_shape(module_source, AnonShape::Fields(fields))
+    }
+
+    /// A struct the compiler mints under a name it assigns — a closure
+    /// environment, which names no declaration but is not identified by its
+    /// captures either.
+    pub fn intern_synthetic_struct(
+        &mut self,
+        module_source: ModuleSource,
+        name: String,
+    ) -> AnonStructId {
+        self.intern_shape(module_source, AnonShape::Synthetic(name))
+    }
+
+    /// Intern a tagged template literal's shape. The shape is the identity, so
+    /// two sites writing one template in one module reach one id.
+    pub fn intern_template_shape(
+        &mut self,
+        module_source: ModuleSource,
+        shape: TemplateShape,
+    ) -> AnonStructId {
+        self.intern_shape(module_source, AnonShape::Template(shape))
+    }
+
+    /// The template shape behind an anonymous struct, or `None` for a struct
+    /// literal's or a synthetic one.
+    #[must_use]
+    pub fn template_shape(&self, id: AnonStructId) -> Option<&TemplateShape> {
+        match &self.anon_structs[id.0 as usize].shape {
+            AnonShape::Template(shape) => Some(shape),
+            AnonShape::Fields(_) | AnonShape::Synthetic(_) => None,
+        }
+    }
+
+    /// The template shape a type denotes, or `None` where it is not one.
+    #[must_use]
+    pub fn template_shape_of_type(&self, id: TypeId) -> Option<&TemplateShape> {
+        match self.get(id) {
+            ResolvedType::Struct {
+                def: StructDef::Anon(shape),
+                ..
+            } => self.template_shape(*shape),
+            _ => None,
+        }
+    }
+
+    /// The field type holding a hole of type `ty`: the handle where a
+    /// reference is one, the value where a reference would be a box — a
+    /// scalar copy is free and a box is an allocation (WEP 2026-01-10).
+    pub fn hole_field_type(&mut self, ty: TypeId) -> TypeId {
+        if self.is_boxed_reference_target(ty) {
+            ty
+        } else {
+            self.make_ref(ty)
+        }
+    }
+
+    /// Whether `ty` is an instance of the compiler struct `item`, as a generic
+    /// instance or as the monomorphized struct its declaration heads.
+    #[must_use]
+    pub fn is_compiler_struct_instance(&self, ty: TypeId, item: CompilerItem) -> bool {
+        match self.get(ty) {
+            ResolvedType::GenericInstance { def, .. } => self.is_compiler_item(*def, item),
+            ResolvedType::Struct { def, type_args } => {
+                !type_args.is_empty() && self.is_compiler_struct(*def, item)
+            }
+            ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Never
+            | ResolvedType::Ref(_)
+            | ResolvedType::MutRef(_)
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::GenericResource { .. }
+            | ResolvedType::Function { .. }
+            | ResolvedType::Reactive(_)
+            | ResolvedType::TypeParam { .. }
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::AssocTypeProjection { .. }
+            | ResolvedType::BuiltinArray(_)
+            | ResolvedType::Newtype { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::InferVar(_)
+            | ResolvedType::Unknown
+            | ResolvedType::Error => false,
+        }
+    }
+
+    /// Whether `&T` / `&mut T` is represented as a `Box<T>` cell rather than
+    /// `T`'s own GC handle (WEP 2026-06-13, Reference Representation). The
+    /// boxing pass and every consumer deciding by representation read this one
+    /// predicate.
+    #[must_use]
+    pub fn is_boxed_reference_target(&self, ty: TypeId) -> bool {
+        match self.get(ty) {
+            ResolvedType::Primitive(_) => true,
+            ResolvedType::Enum { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Function { .. } => true,
+            ResolvedType::GenericInstance { def, .. } => self.find_variant_type(*def).is_some(),
+            _ => false,
+        }
+    }
+
+    fn intern_shape(&mut self, module_source: ModuleSource, shape: AnonShape) -> AnonStructId {
+        let key = (module_source, shape);
+        if let Some(&id) = self.anon_struct_index.get(&key) {
+            return id;
+        }
+        let id = AnonStructId(u32::try_from(self.anon_structs.len()).expect("anon struct space"));
+        let mut mangle = self.render_shape(&key.1, &|tt, ty| tt.mangle_type_arg_for_generic(ty));
+        // A template shape renders as a hash of its text, so two shapes can
+        // collide; the mangle is the whole identity of a shape, and sharing
+        // one would give both the other's bridges. Widen the loser instead.
+        while !self
+            .anon_struct_mangles
+            .insert((key.0.clone(), mangle.clone()))
+        {
+            mangle.push('_');
+        }
+        self.anon_structs.push(AnonEntry {
+            module: key.0.clone(),
+            shape: key.1.clone(),
+            mangle,
+        });
+        self.anon_struct_index.insert(key, id);
+        id
+    }
+
+    /// The fields of an anonymous struct shape; empty for a synthetic one.
+    #[must_use]
+    pub fn anon_struct_fields(&self, id: AnonStructId) -> &[(String, TypeId)] {
+        match &self.anon_structs[id.0 as usize].shape {
+            AnonShape::Fields(fields) => fields,
+            AnonShape::Synthetic(_) | AnonShape::Template(_) => &[],
+        }
+    }
+
+    /// Whether the shape is one the compiler minted under a name: no literal
+    /// wrote it and no field walk reads it.
+    #[must_use]
+    pub fn anon_struct_is_synthetic(&self, id: AnonStructId) -> bool {
+        matches!(
+            self.anon_structs[id.0 as usize].shape,
+            AnonShape::Synthetic(_)
+        )
+    }
+
+    /// The module the shape was written in.
+    #[must_use]
+    pub fn anon_struct_module(&self, id: AnonStructId) -> &ModuleSource {
+        &self.anon_structs[id.0 as usize].module
+    }
+
+    /// The spelling an anonymous struct shows a reader —
+    /// `$anon_{x:i32,y:i32}`, or a template's text. The declaration namespace;
+    /// [`Self::anon_struct_mangle`] is what a key is built from.
+    #[must_use]
+    pub fn anon_struct_name(&self, id: AnonStructId) -> String {
+        match &self.anon_structs[id.0 as usize].shape {
+            AnonShape::Template(shape) => self.template_shape_name(shape),
+            shape @ (AnonShape::Fields(_) | AnonShape::Synthetic(_)) => {
+                self.render_shape(shape, &|tt, ty| tt.type_name(ty))
+            }
+        }
+    }
+
+    /// A template shape as its text, each hole spelled as its type and
+    /// specifier, cut to [`TEMPLATE_NAME_MAX_CHARS`] characters.
+    fn template_shape_name(&self, shape: &TemplateShape) -> String {
+        let mut name = String::from("`");
+        let mut room = TEMPLATE_NAME_MAX_CHARS;
+        let mut push = |text: &str| {
+            for c in text.chars() {
+                let shown: String = if c.is_control() {
+                    c.escape_default().collect()
+                } else {
+                    c.into()
+                };
+                let width = shown.chars().count();
+                if width > room {
+                    return false;
+                }
+                room -= width;
+                name.push_str(&shown);
+            }
+            true
+        };
+        let complete = shape.segments.iter().enumerate().all(|(k, segment)| {
+            push(segment)
+                && shape.holes.get(k).is_none_or(|hole| {
+                    let spec = hole
+                        .spec
+                        .as_ref()
+                        .map_or(String::new(), |s| format!(":{s}"));
+                    push(&format!("${{{}{spec}}}", self.type_name(hole.ty)))
+                })
+        });
+        if !complete {
+            name.push_str("...");
+        }
+        name.push('`');
+        name
+    }
+
+    /// [`Self::anon_struct_name`] in the mangled namespace: every field type is
+    /// module-qualified. A shape has no declaration, so its rendering *is* its
+    /// identity, and an unqualified one collapses two shapes onto one helper.
+    /// Fixed when the shape is interned (see [`AnonEntry`]).
+    #[must_use]
+    pub fn anon_struct_mangle(&self, id: AnonStructId) -> String {
+        self.anon_structs[id.0 as usize].mangle.clone()
+    }
+
+    fn render_shape(
+        &self,
+        shape: &AnonShape,
+        field_type: &dyn Fn(&Self, TypeId) -> String,
+    ) -> String {
+        fn digest_len(h: &mut sha2::Sha256, n: usize) {
+            h.update((n as u64).to_le_bytes());
+        }
+        fn digest_str(h: &mut sha2::Sha256, s: &str) {
+            digest_len(h, s.len());
+            h.update(s.as_bytes());
+        }
+
+        match shape {
+            AnonShape::Synthetic(name) => name.clone(),
+            AnonShape::Fields(fields) => {
+                let parts: Vec<String> = fields
+                    .iter()
+                    .map(|(n, ty)| format!("{n}:{}", field_type(self, *ty)))
+                    .collect();
+                format!("$anon_{{{}}}", parts.join(","))
+            }
+            // The literal text is arbitrary, so the name is a digest of the
+            // shape, its hole types rendered through `field_type`. It names a
+            // compiled artifact, so no Rust release may move it, and every
+            // piece goes in length-prefixed so no two shapes encode alike.
+            AnonShape::Template(shape) => {
+                let mut h = sha2::Sha256::new();
+                digest_len(&mut h, shape.segments.len());
+                for segment in &shape.segments {
+                    digest_str(&mut h, segment);
+                }
+                digest_len(&mut h, shape.holes.len());
+                for hole in &shape.holes {
+                    digest_str(&mut h, &field_type(self, hole.ty));
+                    match &hole.spec {
+                        Some(spec) => {
+                            h.update([1u8]);
+                            digest_str(&mut h, spec);
+                        }
+                        None => h.update([0u8]),
+                    }
+                    digest_str(&mut h, &hole.source);
+                }
+                let bytes: [u8; 32] = h.finalize().into();
+                let mut mangle = TEMPLATE_SHAPE_PREFIX.to_string();
+                for b in &bytes[..8] {
+                    let _ = write!(mangle, "{b:02x}");
+                }
+                mangle
+            }
+        }
+    }
+
+    /// The name a struct head renders to: the declaration's, or the shape's.
+    #[must_use]
+    pub fn struct_head_name(&self, head: StructDef) -> String {
+        match head {
+            StructDef::Decl(def) => self.decl_render_name(def),
+            StructDef::Anon(id) => self.anon_struct_mangle(id),
+        }
+    }
+
+    /// Whether `id` is stored as `i128` or `u128`, newtypes of them included.
+    #[must_use]
+    pub fn is_wide_int(&self, id: TypeId) -> bool {
+        self.wide_int_item(id).is_some()
+    }
+
+    /// A struct head as a mangled name embeds it: the declaration when it names
+    /// one, the interned shape otherwise.
+    #[must_use]
+    pub fn fq_struct_head(&self, head: StructDef) -> FqTypeName {
+        match head {
+            StructDef::Decl(def) => FqTypeName::declared(&self.defs, def),
+            StructDef::Anon(id) => {
+                FqTypeName::shape(self.anon_struct_module(id), &self.anon_struct_mangle(id))
+            }
+        }
+    }
+
+    /// The head as source spells it: the declared name, with no storage
+    /// disambiguator. [`Self::struct_head_name`]'s counterpart in the
+    /// declaration namespace — what a diagnostic shows, never a lookup key.
+    #[must_use]
+    pub fn struct_head_decl_name(&self, head: StructDef) -> String {
+        match head {
+            StructDef::Decl(def) => self.def_name(def).to_string(),
+            StructDef::Anon(id) => self.anon_struct_name(id),
+        }
+    }
+
+    /// The module a struct head belongs to.
+    #[must_use]
+    pub fn struct_head_module(&self, head: StructDef) -> &ModuleSource {
+        match head {
+            StructDef::Decl(def) => self.def_module(def),
+            StructDef::Anon(id) => self.anon_struct_module(id),
+        }
+    }
+
+    /// The declaration a compiler item names.
+    ///
+    /// The registry records the declaring node for every kind that names a
+    /// type of its own, so this answers at any point in the pipeline and for
+    /// any stdlib type the compiler knows — no site has to spell one.
+    #[must_use]
+    pub fn compiler_item_def(&self, item: CompilerItem) -> Option<DefId> {
+        self.compiler_items
+            .decl(item)
+            .and_then(|ast| self.defs.of_ast_id(ast))
+    }
+
+    /// Whether `def` is the declaration `item` names.
+    #[must_use]
+    pub fn is_compiler_item(&self, def: DefId, item: CompilerItem) -> bool {
+        self.compiler_item_def(item) == Some(def)
+    }
+
+    /// Whether `head` is the struct `item` names.
+    #[must_use]
+    pub fn is_compiler_struct(&self, head: StructDef, item: CompilerItem) -> bool {
+        head.decl()
+            .is_some_and(|def| self.is_compiler_item(def, item))
+    }
+
+    /// Like [`Self::compiler_item_def`], but ICEs rather than answering `None`
+    /// — for the items the compiler requires to be registered.
+    #[must_use]
+    pub fn require_compiler_item_def(&self, item: CompilerItem) -> DefId {
+        self.compiler_item_def(item)
+            .unwrap_or_else(|| panic!("compiler item `{item}` names no declaration"))
+    }
+
+    /// The declaration a nominal type was written from, if it names one.
+    ///
+    /// This is identity: compare these, never the names below.
+    #[must_use]
+    pub fn nominal_def(&self, id: TypeId) -> Option<DefId> {
+        match self.get(id) {
+            ResolvedType::Struct { def, .. } => def.decl(),
+            ResolvedType::Enum { def }
+            | ResolvedType::Variant { def }
+            | ResolvedType::Resource { def }
+            | ResolvedType::Flags { def }
+            | ResolvedType::Newtype { def, .. }
+            | ResolvedType::GenericInstance { def, .. }
+            | ResolvedType::GenericResource { def, .. } => Some(*def),
+            _ => None,
+        }
+    }
+
+    /// What a nominal type's head renders to — for a diagnostic, a mangle, or
+    /// a consumer still keyed on the pair. A rendering out of an identity, and
+    /// never a way back to one.
+    #[must_use]
+    pub fn nominal_head(&self, id: TypeId) -> Option<(String, ModuleSource)> {
+        match self.get(id) {
+            ResolvedType::Struct { def, .. } => Some((
+                self.struct_head_name(*def),
+                self.struct_head_module(*def).clone(),
+            )),
+            ResolvedType::Enum { def }
+            | ResolvedType::Variant { def }
+            | ResolvedType::Resource { def }
+            | ResolvedType::Flags { def }
+            | ResolvedType::Newtype { def, .. }
+            | ResolvedType::GenericInstance { def, .. }
+            | ResolvedType::GenericResource { def, .. } => {
+                Some((self.decl_render_name(*def), self.def_module(*def).clone()))
+            }
+            _ => None,
+        }
+    }
+
+    pub fn register_decl_type(&mut self, key: AstId, type_id: TypeId) {
+        self.type_by_symbol.insert(key, type_id);
+        self.symbol_by_type.set_growing(type_id, key);
+    }
+
+    /// Register a monomorphized `TypeId` as pointing at its generic base symbol.
+    ///
+    /// Monomorphized types do not have their own `AstId` — they are synthesized
+    /// from a generic declaration. Registering `(mono_type_id -> base_key)` on
+    /// `symbol_by_type` lets LSP queries walk any decl-backed `TypeId` back to
+    /// the declaring AST node. The forward `type_by_symbol` index is NOT
+    /// updated: that keeps the base generic's `TypeId` as the canonical entry.
+    pub fn register_mono_type(&mut self, base_key: AstId, type_id: TypeId) {
+        self.symbol_by_type.set_growing(type_id, base_key);
+    }
+
+    /// Canonical `TypeId` for a declared-type [`AstId`](crate::ast::AstId).
+    ///
+    /// Returns `None` if the symbol is not a decl-backed type, or if the
+    /// elaborator has not yet created a `TypeId` for it.
+    pub fn type_of_symbol(&self, key: &AstId) -> Option<TypeId> {
+        self.type_by_symbol.get(key).copied()
+    }
+
+    /// Canonical `TypeId` for a declared-type [`AstId`](crate::ast::AstId).
+    /// Prefer this over re-deriving one from `(name, module_source)`: the
+    /// `AstId` is a cheap `Copy` key, and it stays unique even where name+module
+    /// does not — a local type can share another's name.
+    ///
+    /// Panics if `collect_types` has not run for this declaration; both that and
+    /// a non-decl-backed `AstId` are compiler bugs, not recoverable conditions.
+    pub fn type_id_of_decl(&self, key: AstId) -> TypeId {
+        self.type_of_symbol(&key).unwrap_or_else(|| {
+            panic!(
+                "type_id_of_decl: no TypeId registered for {key:?} — \
+                 collect_types must run before type resolution queries it"
+            )
+        })
+    }
+
+    /// Walk a decl-backed `TypeId` (including monomorphizations) back to the
+    /// declaring [`AstId`](crate::ast::AstId).
+    pub fn symbol_of_type(&self, type_id: TypeId) -> Option<&AstId> {
+        self.symbol_by_type.get(type_id)
+    }
+
+    /// The declaring [`AstId`](crate::ast::AstId) behind `type_id`, whether it
+    /// is a plain declaration, a monomorphization, or a `GenericInstance`.
+    ///
+    /// `Node<i32>` and `Node<String>` answer with the one `Node` they were
+    /// spelled from; a `Node` in another module answers with a different id.
+    pub fn decl_of_type(&self, type_id: TypeId) -> Option<AstId> {
+        let type_id = self.peel_refs(type_id);
+        if let Some(key) = self.symbol_by_type.get(type_id) {
+            return Some(*key);
+        }
+        // `Array<T>` is declared definitionless (`type Array<T>;`), so an
+        // instantiation is a `BuiltinArray` that carries no `def` and that
+        // `symbol_by_type` does not key. The `array` compiler item names its
+        // declaration by identity — a primitive needs no such step because its
+        // declaration and its instantiation are the same type.
+        if matches!(self.get(type_id), ResolvedType::BuiltinArray(_)) {
+            return self.compiler_items.decl(CompilerItem::Array);
+        }
+        // An instantiation records the declaration it came from, so the
+        // answer is read off the type rather than re-derived from a spelling
+        // whose base may already have been pruned.
+        let ResolvedType::GenericInstance { def, .. } = self.get(type_id) else {
+            return None;
+        };
+        Some(self.defs.ast_id(*def))
+    }
+
+    /// Whether `decl` is one of the four reflection member handles, whose own
+    /// `Members` would mention `StructField<Self, …>` and grow `Self` without
+    /// bound (WEP 2026-06-13).
+    ///
+    /// Matched by declaration, so a user type spelled `StructField` stays
+    /// reflectable.
+    pub fn is_sealed_reflect_member(&self, decl: AstId) -> bool {
+        [
+            CompilerItem::ReflectStructField,
+            CompilerItem::ReflectVariantCase,
+            CompilerItem::ReflectEnumCase,
+            CompilerItem::ReflectFlagsBit,
+            CompilerItem::ReflectTemplateHole,
+        ]
+        .into_iter()
+        .filter_map(|item| self.compiler_items().struct_owned_opt(item))
+        .filter_map(|(module_source, name)| self.find_struct_by_name(&name, &module_source))
+        .any(|sealed| self.symbol_by_type.get(sealed) == Some(&decl))
+    }
+
+    /// The `TypeId` of `Array<element>`, when the program already has one.
+    /// Lookup only: a reader holds the table by shared reference and cannot
+    /// mint a type, and an array a constant describes is one the program
+    /// declared.
+    #[must_use]
+    pub fn find_builtin_array(&self, element: TypeId) -> Option<TypeId> {
+        self.intern_map
+            .get(&ResolvedType::BuiltinArray(element))
+            .copied()
+    }
+
+    /// Whether `type_id` is the `String` / `List` container the lower phase
+    /// writes as `{ repr, used }`. Shape does not identify one: a struct over
+    /// an array and an `i32` looks the same and means something else, so the
+    /// answer comes from the registered item rather than the field positions.
+    ///
+    /// By declared name, as everywhere else the compiler asks this — a
+    /// monomorphized instance carries the instantiation's module, not the one
+    /// the generic was declared in.
+    #[must_use]
+    pub fn is_seq_container(&self, type_id: TypeId) -> bool {
+        self.is_string(type_id) || self.is_list(type_id)
+    }
+
+    /// Find the `TypeId` of a user-declared type (struct, enum, variant, flags,
+    /// newtype, resource) by its source-level name and owning module. Returns
+    /// only non-monomorphized declarations — monomorphized generic instances
+    /// are skipped because they do not correspond to an `AstId` of their own.
+    pub fn find_decl_type_by_name(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<TypeId> {
+        if let Some(id) = self.find_struct_by_name(name, module_source) {
+            return Some(id);
+        }
+        self.decl_name_index
+            .get(&(name.to_string(), module_source.clone()))
+            .copied()
+    }
+
+    /// Remove all type entries whose `TypeId` is not in `keep`. Erased entries
+    /// become `None` holes rather than being renumbered away, so surviving ids
+    /// keep their indices, and the intern map and secondary indices are rebuilt.
+    /// `get(id)` must not panic for a surviving id, so `keep` is implicitly
+    /// closed under `redirects` and stale redirect entries are dropped.
+    pub fn retain(&mut self, keep: &IndexSet<TypeId>) {
+        // Implicit closure under `redirects`: every kept id whose `get`
+        // result lives at a different id must keep that target alive too.
+        let mut effective_keep: IndexSet<TypeId> = keep.clone();
+        let mut queue: Vec<TypeId> = Vec::new();
+        let keep_id = |set: &mut IndexSet<TypeId>, queue: &mut Vec<TypeId>, id: TypeId| {
+            if set.insert(id) {
+                queue.push(id);
+            }
+        };
+        for &id in keep {
+            if let Some(&target) = self.redirects.get(id) {
+                keep_id(&mut effective_keep, &mut queue, target);
+            }
+            queue.push(id);
+        }
+        // A surviving type spells itself with the ids it is built from, and the
+        // reachability walk reaches it through its erased view alone. Whatever
+        // reads one back — `contains_type_param` over a `Function`'s params,
+        // `peel_refs_and_box` over a `Box` wrapper — needs them to resolve.
+        while let Some(id) = queue.pop() {
+            let mut components: Vec<TypeId> = Vec::new();
+            if let Some(&payload) = self.box_payload_types.get(id) {
+                components.push(payload);
+            }
+            if let Some(ty) = self.types.get(id) {
+                match ty {
+                    ResolvedType::Struct { type_args, .. }
+                    | ResolvedType::GenericInstance { type_args, .. }
+                    | ResolvedType::GenericResource { type_args, .. } => {
+                        components.extend(type_args.iter().copied());
+                    }
+                    ResolvedType::Newtype {
+                        type_args,
+                        base_type,
+                        ..
+                    } => {
+                        components.extend(type_args.iter().copied());
+                        components.push(*base_type);
+                    }
+                    ResolvedType::Ref(inner)
+                    | ResolvedType::MutRef(inner)
+                    | ResolvedType::Reactive(inner)
+                    | ResolvedType::BuiltinArray(inner) => components.push(*inner),
+                    ResolvedType::Function {
+                        params,
+                        return_type,
+                        ..
+                    } => {
+                        components.extend(params.iter().copied());
+                        components.push(*return_type);
+                    }
+                    ResolvedType::TypePack { mapped_elem, .. } => {
+                        components.extend(mapped_elem.iter().copied());
+                    }
+                    ResolvedType::AssocTypeProjection {
+                        param_id,
+                        assoc_type_bindings,
+                        ..
+                    } => {
+                        components.push(*param_id);
+                        components.extend(assoc_type_bindings.iter().map(|(_, t)| *t));
+                    }
+                    ResolvedType::Primitive(_)
+                    | ResolvedType::Unit
+                    | ResolvedType::Never
+                    | ResolvedType::Enum { .. }
+                    | ResolvedType::Resource { .. }
+                    | ResolvedType::Variant { .. }
+                    | ResolvedType::Flags { .. }
+                    | ResolvedType::TypeParam { .. }
+                    | ResolvedType::InferVar(_)
+                    | ResolvedType::Unknown
+                    | ResolvedType::Error => {}
+                }
+            }
+            for component in components {
+                keep_id(&mut effective_keep, &mut queue, component);
+                if let Some(&target) = self.redirects.get(component) {
+                    keep_id(&mut effective_keep, &mut queue, target);
+                }
+            }
+        }
+
+        // Punch holes for dropped ids; `TypeId`s are never renumbered, so
+        // surviving entries keep their indices.
+        self.types.retain(|id, _| effective_keep.contains(&id));
+        // A redirect entry is meaningful only when both endpoints survive.
+        self.redirects
+            .retain(|id, &target| effective_keep.contains(&id) && effective_keep.contains(&target));
+        self.box_payload_types.retain(|id, &payload| {
+            effective_keep.contains(&id) && effective_keep.contains(&payload)
+        });
+        // Retain symbol indices to surviving TypeIds only.
+        self.symbol_by_type
+            .retain(|id, _| effective_keep.contains(&id));
+        self.type_by_symbol
+            .retain(|_, id| effective_keep.contains(id));
+        // Rebuild intern map from the surviving entries.
+        self.intern_map.clear();
+        self.struct_name_index.clear();
+        self.decl_name_index.clear();
+        for (id, ty) in self.types.iter() {
+            // A redefined borrow keeps its spelling in the slot alone.
+            // Re-interning it would hand a later `intern(&T)` an id that no
+            // longer resolves as a borrow.
+            if self.box_redefinition(id).is_none() {
+                self.intern_map.insert(ty.clone(), id);
+            }
+            if let Some(def) = Self::nominal_key(ty) {
+                let key = (self.def_name(def).to_string(), self.def_module(def).clone());
+                self.decl_name_index.insert(key, id);
+            }
+        }
+        // Structs index under the spelling they render to, the way `intern`
+        // enters them — `Box` for the declaration, `Box<i32>` for that
+        // instantiation. Keying the rebuild on `decl_name` alone would put
+        // every instantiation of `Box` on one entry, and whichever survived
+        // last would answer for the declaration and for its siblings.
+        // Rendered up front because deriving one reads the arguments' types.
+        let rendered: Vec<((String, ModuleSource), TypeId)> = self
+            .types
+            .iter()
+            .filter_map(|(id, ty)| match ty {
+                ResolvedType::Struct { def, type_args } => Some((
+                    (
+                        self.struct_rendered_name(*def, type_args),
+                        self.struct_head_module(*def).clone(),
+                    ),
+                    id,
+                )),
+                _ => None,
+            })
+            .collect();
+        self.struct_name_index.extend(rendered);
+    }
+
+    /// The declaration a non-struct nominal type interns under.
+    fn nominal_key(ty: &ResolvedType) -> Option<DefId> {
+        match ty {
+            ResolvedType::Enum { def }
+            | ResolvedType::Resource { def }
+            | ResolvedType::Flags { def }
+            | ResolvedType::Variant { def }
+            | ResolvedType::Newtype { def, .. } => Some(*def),
+            _ => None,
+        }
+    }
+
+    /// Create a raw GC array type (`Array<T>`)
+    pub fn make_builtin_array(&mut self, element: TypeId) -> TypeId {
+        self.intern(ResolvedType::BuiltinArray(element))
+    }
+
+    /// Access the registry of compiler-recognised stdlib items.
+    pub fn compiler_items(&self) -> &CompilerItems {
+        &self.compiler_items
+    }
+
+    /// Mutable handle on the registry. Used by the elaborator during the
+    /// annotate pass to register each `#[compiler_item("...")]`
+    /// declaration.
+    pub fn compiler_items_mut(&mut self) -> &mut CompilerItems {
+        &mut self.compiler_items
+    }
+
+    /// Record that `head` satisfied a `T: <trait>` bound structurally. A no-op if
+    /// already recorded — the same type is rediscovered from many call sites.
+    ///
+    /// The head is the identity synthesis compares: a declaration by its
+    /// [`crate::defs::DefId`], a shape by its rendering.
+    pub fn record_bound_driven_synth_request(
+        &mut self,
+        head: &TypeHead,
+        module_source: &ModuleSource,
+        trait_key: &DefId,
+    ) {
+        let already_recorded = self
+            .bound_driven_synth_requests
+            .iter()
+            .any(|(h, m, t)| h == head && m == module_source && t == trait_key);
+        if !already_recorded {
+            self.bound_driven_synth_requests.insert((
+                head.clone(),
+                module_source.clone(),
+                *trait_key,
+            ));
+        }
+    }
+
+    /// [`Self::record_bound_driven_synth_request`] for a receiver held as a
+    /// type: the head comes off the type itself, so it is the same head
+    /// synthesis builds for that receiver.
+    pub fn record_bound_driven_synth_request_for(
+        &mut self,
+        receiver: TypeId,
+        module_source: &ModuleSource,
+        trait_key: &DefId,
+    ) {
+        let head = self.fq_base_type_name(receiver).head().clone();
+        self.record_bound_driven_synth_request(&head, module_source, trait_key);
+    }
+
+    /// Requests recorded by [`Self::record_bound_driven_synth_request`] so
+    /// far whose trait name satisfies `matches`. A snapshot, not a drain:
+    /// `synthesize_serde` and `synthesize_traits` each read this same
+    /// shared set and filter for the trait names they own, so consuming it
+    /// here would drop whichever runs second. Filtering before cloning
+    /// means each caller only clones the entries it keeps.
+    pub fn bound_driven_synth_requests(
+        &self,
+        mut matches: impl FnMut(&DefId) -> bool,
+    ) -> Vec<(TypeHead, ModuleSource, DefId)> {
+        self.bound_driven_synth_requests
+            .iter()
+            .filter(|(_, _, trait_key)| matches(trait_key))
+            .cloned()
+            .collect()
+    }
+
+    /// Canonical name of a registered struct / trait / variant / enum
+    /// [`CompilerItem`](crate::compiler_item::CompilerItem), forwarded from the
+    /// registry so call sites read `tt.compiler_struct_name(item)` instead of
+    /// chaining through `compiler_items()`.
+    pub fn compiler_struct_name(&self, item: CompilerItem) -> &str {
+        self.compiler_items.struct_name(item)
+    }
+
+    /// The fq name of a compiler-item struct: its declaring module plus its
+    /// name, the form any name that embeds a receiver expects.
+    pub fn compiler_struct_fq_name(&self, item: CompilerItem) -> FqTypeName {
+        let decl = self
+            .compiler_items
+            .struct_decl(item)
+            .expect("a registered struct item records its declaring node");
+        let def = self.defs.def_at(decl);
+        FqTypeName::declared(&self.defs, def)
+    }
+
+    pub fn compiler_trait_name(&self, item: CompilerItem) -> &str {
+        self.compiler_items.trait_name(item)
+    }
+
+    /// Whether `type_id` is an unsigned integer, `u128` included. An integer
+    /// literal pattern asks this to pick the `u128` over the `i128` comparison.
+    #[must_use]
+    pub fn is_unsigned_int(&self, type_id: TypeId) -> bool {
+        // Through the newtype chain: a newtype over `u32` compares unsigned, or
+        // a bound past `i32::MAX` never matches.
+        matches!(
+            self.primitive_head(type_id),
+            Some(PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::U32 | PrimitiveType::U64)
+        ) || self.wide_int_item(type_id) == Some(CompilerItem::U128)
+    }
+
+    /// Which wide-integer prelude struct `type_id` is stored as, through any
+    /// newtype chain; `None` for anything else. By declaration identity: a
+    /// name match also answers for a user type.
+    #[must_use]
+    pub fn wide_int_item(&self, type_id: TypeId) -> Option<CompilerItem> {
+        let ResolvedType::Struct {
+            def: StructDef::Decl(def),
+            ..
+        } = self.get(self.representation_head(type_id))
+        else {
+            return None;
+        };
+        self.compiler_type_item(*def)
+            .filter(|item| matches!(item, CompilerItem::I128 | CompilerItem::U128))
+    }
+
+    /// Which compiler item declares the type `def`; `None` for a trait.
+    #[must_use]
+    pub fn compiler_type_item(&self, def: DefId) -> Option<CompilerItem> {
+        self.compiler_items.type_item_of_decl(self.defs.ast_id(def))
+    }
+
+    /// How the compiler builds an application of `def`, for the generic heads
+    /// it builds a type of its own for.
+    #[must_use]
+    pub fn compiler_generic_builder(&self, def: DefId) -> Option<fn(&mut Self, TypeId) -> TypeId> {
+        match self.compiler_type_item(def)? {
+            CompilerItem::Option => Some(Self::make_option),
+            CompilerItem::Stream => Some(Self::make_stream),
+            CompilerItem::StreamWritable => Some(Self::make_stream_writable),
+            CompilerItem::Future => Some(Self::make_future),
+            CompilerItem::FutureWritable => Some(Self::make_future_writable),
+            CompilerItem::Array => Some(Self::make_builtin_array),
+            _ => None,
+        }
+    }
+
+    /// The compiler trait item as a mangled method name embeds it — named by
+    /// the module that declares it.
+    #[must_use]
+    pub fn compiler_trait_fq(&self, item: CompilerItem) -> FqTraitName {
+        self.compiler_items.trait_fq(item)
+    }
+
+    pub fn compiler_variant_name(&self, item: CompilerItem) -> &str {
+        self.compiler_items.variant_name(item)
+    }
+
+    /// Whether `id` resolves to an instance of the compiler `Result` variant.
+    pub fn is_result(&self, id: TypeId) -> bool {
+        self.is_compiler_item_type(id, CompilerItem::Result)
+    }
+
+    /// Whether `id` is an instance of the compiler's `List` struct.
+    pub fn is_list(&self, id: TypeId) -> bool {
+        self.is_compiler_item_type(id, CompilerItem::List)
+    }
+
+    /// Whether `id` is the compiler's `String` struct.
+    pub fn is_string(&self, id: TypeId) -> bool {
+        self.is_compiler_item_type(id, CompilerItem::String)
+    }
+
+    /// Whether `id`, refs peeled, is the type a compiler item declares, compared
+    /// by the `def` it carries (WEP 2026-08-12).
+    pub fn is_compiler_item_type(&self, id: TypeId, item: CompilerItem) -> bool {
+        // A dead declaration's body is cleared in place and its signature types
+        // go with the prune, so an optimizer pass reading one off a function
+        // record holds an id this table no longer carries.
+        let Some(id) = self.try_peel_refs(id) else {
+            return false;
+        };
+        self.nominal_def(id)
+            .is_some_and(|def| self.is_compiler_item(def, item))
+    }
+
+    pub fn compiler_enum_name(&self, item: CompilerItem) -> &str {
+        self.compiler_items.enum_name(item)
+    }
+
+    /// Owned `(module, name)` for a registered struct / enum item — forwards
+    /// the registry's `CompilerItems::struct_owned` so single-expression
+    /// callers query the table directly instead of through `compiler_items()`.
+    pub fn compiler_struct_owned(&self, item: CompilerItem) -> (ModuleSource, String) {
+        self.compiler_items.struct_owned(item)
+    }
+
+    pub fn compiler_enum_owned(&self, item: CompilerItem) -> (ModuleSource, String) {
+        self.compiler_items.enum_owned(item)
+    }
+
+    /// Module source of a registered struct item, if present.
+    pub fn compiler_struct_module(&self, item: CompilerItem) -> Option<&ModuleSource> {
+        self.compiler_items.struct_module(item)
+    }
+
+    /// Case name of a registered variant-case item (e.g. `Option::Some`).
+    pub fn compiler_variant_case_name(&self, item: CompilerItem) -> &str {
+        self.compiler_items.variant_case_name(item)
+    }
+
+    /// Module + variant name + case name + discriminant of a registered
+    /// variant-case item.
+    pub fn compiler_variant_case(&self, item: CompilerItem) -> (&ModuleSource, &str, &str, u32) {
+        self.compiler_items.require_variant_case(item)
+    }
+
+    /// Module + owner-type name + method name of a registered method item.
+    pub fn compiler_method(&self, item: CompilerItem) -> (&ModuleSource, &str, &str) {
+        self.compiler_items.require_method(item)
+    }
+
+    /// Get the module source where the `Default` trait is defined, if
+    /// the stdlib has registered it. Thin wrapper around
+    /// `CompilerItems::trait_module`.
+    pub fn default_trait_module_source(&self) -> Option<&ModuleSource> {
+        self.compiler_items.trait_module(CompilerItem::Default)
+    }
+
+    /// The type a numeric literal's suffix names.
+    pub fn numeric_suffix_type(&mut self, suffix: NumericSuffix) -> TypeId {
+        match suffix {
+            NumericSuffix::I8 => Self::I8,
+            NumericSuffix::I16 => Self::I16,
+            NumericSuffix::I32 => Self::I32,
+            NumericSuffix::I64 => Self::I64,
+            NumericSuffix::I128 => self.make_compiler_struct(CompilerItem::I128),
+            NumericSuffix::U8 => Self::U8,
+            NumericSuffix::U16 => Self::U16,
+            NumericSuffix::U32 => Self::U32,
+            NumericSuffix::U64 => Self::U64,
+            NumericSuffix::U128 => self.make_compiler_struct(CompilerItem::U128),
+            NumericSuffix::F16 => Self::F16,
+            NumericSuffix::Bf16 => Self::BF16,
+            NumericSuffix::F32 => Self::F32,
+            NumericSuffix::F64 => Self::F64,
+        }
+    }
+
+    /// Make the struct type for a registered `CompilerItem` variant
+    /// of kind `CompilerItemKind::Struct`. Reads both the module
+    /// source and the struct name from the registry so the call site
+    /// does not hard-code either. Panics with a clear ICE message when
+    /// the item is not registered or has the wrong kind.
+    pub fn make_compiler_struct(&mut self, item: CompilerItem) -> TypeId {
+        let decl = self
+            .compiler_items
+            .struct_decl(item)
+            .and_then(|ast| self.defs.of_ast_id(ast))
+            .unwrap_or_else(|| panic!("compiler item {item:?} is not a registered struct"));
+        self.make_struct(StructDef::Decl(decl))
+    }
+
+    /// Make the enum type for a registered `CompilerItem` variant
+    /// of kind `CompilerItemKind::Enum` (currently `Ordering`).
+    /// Same shape as [`Self::make_compiler_struct`]: routes both name
+    /// and module through the registry.
+    pub fn make_compiler_enum(&mut self, item: CompilerItem) -> TypeId {
+        let def = self.require_compiler_item_def(item);
+        self.make_enum(def)
+    }
+
+    /// Create an `Option<T>` type using the module source registered
+    /// via `#[compiler_item("option")]`.
+    pub fn make_option(&mut self, inner: TypeId) -> TypeId {
+        let def = self
+            .compiler_item_def(CompilerItem::Option)
+            .expect("the Option declaration is a registered compiler item");
+        self.make_generic_instance(def, vec![inner])
+    }
+
+    /// Create a `Result<T, E>` type using the module source registered
+    /// via `#[compiler_item("result")]`.
+    pub fn make_result(&mut self, ok: TypeId, err: TypeId) -> TypeId {
+        let def = self
+            .compiler_item_def(CompilerItem::Result)
+            .expect("the Result declaration is a registered compiler item");
+        self.make_generic_instance(def, vec![ok, err])
+    }
+
+    /// Create a `Future<T>` generic resource type.
+    pub fn make_future(&mut self, inner: TypeId) -> TypeId {
+        let def = self.require_compiler_item_def(CompilerItem::Future);
+        self.intern(ResolvedType::GenericResource {
+            def,
+            type_args: vec![inner],
+        })
+    }
+
+    /// Create a `FutureWritable<T>` generic resource type.
+    pub fn make_future_writable(&mut self, inner: TypeId) -> TypeId {
+        let def = self.require_compiler_item_def(CompilerItem::FutureWritable);
+        self.intern(ResolvedType::GenericResource {
+            def,
+            type_args: vec![inner],
+        })
+    }
+
+    /// Create a `Stream<T>` generic resource type.
+    pub fn make_stream(&mut self, inner: TypeId) -> TypeId {
+        let def = self.require_compiler_item_def(CompilerItem::Stream);
+        self.intern(ResolvedType::GenericResource {
+            def,
+            type_args: vec![inner],
+        })
+    }
+
+    /// Create a `StreamWritable<T>` generic resource type.
+    pub fn make_stream_writable(&mut self, inner: TypeId) -> TypeId {
+        let def = self.require_compiler_item_def(CompilerItem::StreamWritable);
+        self.intern(ResolvedType::GenericResource {
+            def,
+            type_args: vec![inner],
+        })
+    }
+
+    /// The `StreamChunk<T>` a `Stream<T>::read` returns.
+    pub fn make_stream_chunk(&mut self, elem: TypeId) -> TypeId {
+        let def = self.require_compiler_item_def(CompilerItem::StreamChunk);
+        self.make_generic_instance(def, vec![elem])
+    }
+
+    /// Create a `AsyncCall<T>` generic struct instance type.
+    ///
+    /// Unlike `Future<T>` and `Stream<T>` (which are CM handle resources),
+    /// `AsyncCall<T>` is a Wado-level struct carrying both the raw subtask
+    /// handle and the result buffer, so it is represented as a
+    /// `GenericInstance`, not a `GenericResource`.
+    pub fn make_async_call(&mut self, inner: TypeId) -> TypeId {
+        let def = self.require_compiler_item_def(CompilerItem::AsyncCall);
+        self.make_generic_instance(def, vec![inner])
+    }
+
+    /// If `type_id` is a `AsyncCall<T>` `GenericInstance`, return `T`.
+    pub fn as_async_call(&self, type_id: TypeId) -> Option<TypeId> {
+        self.single_arg_of(type_id, CompilerItem::AsyncCall)
+    }
+
+    /// The one argument of an instance of the compiler generic `item`.
+    fn single_arg_of(&self, type_id: TypeId, item: CompilerItem) -> Option<TypeId> {
+        match self.get(type_id) {
+            ResolvedType::GenericInstance { type_args, .. }
+                if type_args.len() == 1 && self.is_compiler_item_type(type_id, item) =>
+            {
+                Some(type_args[0])
+            }
+            _ => None,
+        }
+    }
+
+    /// If `type_id` is a `GenericResource`, return `(name, module_source, type_args)`.
+    pub fn as_generic_resource(&self, type_id: TypeId) -> Option<(&str, &ModuleSource, &[TypeId])> {
+        if let ResolvedType::GenericResource { def, type_args } = self.get(type_id) {
+            Some((
+                self.def_name(*def),
+                self.def_module(*def),
+                type_args.as_slice(),
+            ))
+        } else {
+            None
+        }
+    }
+
+    /// The `T` of a compiler `Box<T>` instance.
+    pub fn as_box(&self, type_id: TypeId) -> Option<TypeId> {
+        self.single_arg_of(type_id, CompilerItem::Box)
+    }
+
+    /// Check if a type is `Option<T>`, returning the inner type if so.
+    pub fn as_option(&self, type_id: TypeId) -> Option<TypeId> {
+        self.single_arg_of(type_id, CompilerItem::Option)
+    }
+
+    /// `TreeMap<K, V>`'s key and value types, keyed by the declaration as
+    /// [`Self::as_option`] is.
+    pub fn as_tree_map(&self, type_id: TypeId) -> Option<(TypeId, TypeId)> {
+        let ResolvedType::GenericInstance { type_args, .. } = self.get(type_id) else {
+            return None;
+        };
+        let [key, value] = type_args[..] else {
+            return None;
+        };
+        self.is_compiler_item_type(type_id, CompilerItem::TreeMap)
+            .then_some((key, value))
+    }
+
+    /// `Result<T, E>`'s two arguments, keyed by the declaration the registry
+    /// records rather than the spelling `Result` (WEP 2026-08-12). A newtype
+    /// over one answers through its representation.
+    pub fn as_result(&self, type_id: TypeId) -> Option<(TypeId, TypeId)> {
+        let head = self.representation_head(type_id);
+        let ResolvedType::GenericInstance { type_args, .. } = self.get(head) else {
+            return None;
+        };
+        let [ok, err] = type_args[..] else {
+            return None;
+        };
+        self.is_compiler_item_type(head, CompilerItem::Result)
+            .then_some((ok, err))
+    }
+
+    pub fn make_tuple(&mut self, elements: Vec<TypeId>) -> TypeId {
+        let def = self.require_compiler_item_def(CompilerItem::Tuple);
+        self.intern(ResolvedType::GenericInstance {
+            def,
+            type_args: elements,
+        })
+    }
+
+    /// Whether `def` declares the built-in tuple family.
+    pub fn is_tuple_def(&self, def: DefId) -> bool {
+        self.is_compiler_item(def, CompilerItem::Tuple)
+    }
+
+    /// Whether a type is a built-in tuple.
+    pub fn is_tuple(&self, id: TypeId) -> bool {
+        matches!(
+            self.get(id),
+            ResolvedType::GenericInstance { def, .. } if self.is_tuple_def(*def)
+        )
+    }
+
+    /// Whether a type is a declared type pack, as opposed to one of the
+    /// tuples a pack stands for.
+    pub fn is_type_pack(&self, id: TypeId) -> bool {
+        matches!(self.get(id), ResolvedType::TypePack { .. })
+    }
+
+    /// How a tuple's positions divide into packs and single slots, or `None`
+    /// where `id` is no tuple. Equal layouts are the same shape for a value.
+    pub fn tuple_layout(&self, id: TypeId) -> Option<Vec<TupleSlot>> {
+        Some(
+            self.as_tuple(id)?
+                .into_iter()
+                .map(|e| match self.get(e) {
+                    ResolvedType::TypePack { name, .. } => TupleSlot::Pack(name.clone()),
+                    _ => TupleSlot::Fixed,
+                })
+                .collect(),
+        )
+    }
+
+    /// The type of `t.zip()`: the tuple-of-tuples `t` transposed column by
+    /// column, or `None` where its rows share no layout to transpose.
+    pub fn transposed_tuple(&mut self, id: TypeId) -> Option<TypeId> {
+        let row_ids = self.as_tuple(id)?;
+        let layout = self.tuple_layout(*row_ids.first()?)?;
+        let mut rows = Vec::with_capacity(row_ids.len());
+        for &row in &row_ids {
+            if self.tuple_layout(row).as_ref() != Some(&layout) {
+                return None;
+            }
+            rows.push(self.as_tuple(row).expect("a row with a layout is a tuple"));
+        }
+        let columns: Vec<TypeId> = layout
+            .iter()
+            .enumerate()
+            .map(|(col, slot)| {
+                let cells: Vec<TypeId> = rows.iter().map(|row| row[col]).collect();
+                match slot {
+                    TupleSlot::Fixed => self.make_tuple(cells),
+                    // A pack slot stands for a run, so its column is a pack too:
+                    // element `k` is the cells with the pack bound to its `k`-th.
+                    TupleSlot::Pack(name) => {
+                        let parts: Vec<(u32, TypeId)> =
+                            cells.iter().map(|&c| self.pack_element(c)).collect();
+                        let (index, _) = parts[0];
+                        assert!(
+                            parts.iter().all(|&(i, _)| i == index),
+                            "one scope gives a pack name one index"
+                        );
+                        let elem = self.make_tuple(parts.iter().map(|&(_, e)| e).collect());
+                        self.make_mapped_type_pack(name.clone(), index, elem)
+                    }
+                }
+            })
+            .collect();
+        Some(self.make_tuple(columns))
+    }
+
+    /// What one row contributes at a pack slot: the pack's index, and its
+    /// mapped element or the scalar placeholder an identity pack stands for.
+    fn pack_element(&mut self, cell: TypeId) -> (u32, TypeId) {
+        let ResolvedType::TypePack {
+            name,
+            index,
+            mapped_elem,
+        } = self.get(cell).clone()
+        else {
+            unreachable!("`tuple_layout` marks a slot a pack only for a `TypePack`")
+        };
+        (
+            index,
+            mapped_elem.unwrap_or_else(|| self.make_type_param(name, index)),
+        )
+    }
+
+    /// Like [`Self::as_tuple`], but also looks through `&`/`&mut` wrappers
+    /// (any nesting depth, via [`Self::peel_refs`]). Returns the element types
+    /// together with a `by_ref` flag that is `true` when the tuple was reached
+    /// through at least one reference. Used by for-of to iterate `&[..T]`
+    /// element-by-reference (`&T_k`), mirroring the `for v of &list` refiter
+    /// semantics. Peels to the same depth as tuple `.len()` / `.zip()`
+    /// (`peel_refs`) so a `&&tuple` is recognised consistently across both.
+    pub fn as_tuple_through_ref(&self, id: TypeId) -> Option<(Vec<TypeId>, bool)> {
+        if let Some(elems) = self.as_tuple(id) {
+            return Some((elems, false));
+        }
+        let peeled = self.peel_refs(id);
+        if peeled != id
+            && let Some(elems) = self.as_tuple(peeled)
+        {
+            return Some((elems, true));
+        }
+        None
+    }
+
+    /// If the type is a built-in tuple, return its element types.
+    pub fn as_tuple(&self, id: TypeId) -> Option<Vec<TypeId>> {
+        if let ResolvedType::GenericInstance { def, type_args } = self.get(id)
+            && self.is_tuple_def(*def)
+        {
+            Some(type_args.clone())
+        } else {
+            None
+        }
+    }
+
+    /// The element types `id` stands for: a tuple's own, and otherwise the one
+    /// type itself. This is what a spread splices into the tuple holding it.
+    pub fn elem_types_or_self(&self, id: TypeId) -> Vec<TypeId> {
+        self.as_tuple(id).unwrap_or_else(|| vec![id])
+    }
+
+    pub fn make_function(
+        &mut self,
+        params: Vec<TypeId>,
+        return_type: TypeId,
+        effects: Vec<EffectRef>,
+    ) -> TypeId {
+        self.make_function_with_mut(false, params, return_type, effects)
+    }
+
+    pub fn make_function_with_mut(
+        &mut self,
+        is_mut: bool,
+        params: Vec<TypeId>,
+        return_type: TypeId,
+        effects: Vec<EffectRef>,
+    ) -> TypeId {
+        self.intern(ResolvedType::Function {
+            is_mut,
+            params,
+            return_type,
+            effects,
+        })
+    }
+
+    pub fn make_struct(&mut self, def: StructDef) -> TypeId {
+        self.intern(ResolvedType::Struct {
+            def,
+            type_args: Vec::new(),
+        })
+    }
+
+    /// A struct type's rendered spelling: the declaration alone, or the
+    /// declaration with its arguments applied. Derived rather than stored, so
+    /// there is no fused name for a declaration lookup to mistake for one.
+    #[must_use]
+    pub fn struct_rendered_name(&self, head: StructDef, type_args: &[TypeId]) -> String {
+        self.rendered_name(&self.struct_head_name(head), type_args)
+    }
+
+    /// The rendered spelling of an instantiation of `def`: the sibling of
+    /// [`Self::struct_rendered_name`] for a declaration named by `DefId`.
+    #[must_use]
+    pub fn generic_rendered_name(&self, def: DefId, type_args: &[TypeId]) -> String {
+        self.rendered_name(&self.decl_render_name(def), type_args)
+    }
+
+    fn rendered_name(&self, decl_name: &str, type_args: &[TypeId]) -> String {
+        let args: Vec<String> = type_args
+            .iter()
+            .map(|&a| self.mangle_type_arg_for_generic(a))
+            .collect();
+        mangle_generic_name(decl_name, &args)
+    }
+
+    /// Intern the instantiation of `def` with `type_args`, deriving its
+    /// rendered spelling rather than taking one from the caller. An empty
+    /// `type_args` interns the *declaration* — a different type.
+    pub fn make_monomorphized_struct_from_args(
+        &mut self,
+        def: StructDef,
+        type_args: Vec<TypeId>,
+    ) -> TypeId {
+        self.intern(ResolvedType::Struct { def, type_args })
+    }
+
+    pub fn make_variant(&mut self, def: DefId) -> TypeId {
+        self.intern(ResolvedType::Variant { def })
+    }
+
+    /// The `TypeId` of the declaration itself — not of any instantiation of it.
+    pub fn find_struct_type(&self, def: StructDef) -> Option<TypeId> {
+        let key = ResolvedType::Struct {
+            def,
+            type_args: Vec::new(),
+        };
+        self.intern_map.get(&key).copied()
+    }
+
+    /// Register a variant declaration's case templates for
+    /// [`Self::variant_template_cases`].
+    pub fn register_variant_cases(&mut self, def: DefId, cases: Vec<(String, u32, TypeId)>) {
+        self.variant_case_index.insert(def, cases);
+    }
+
+    /// Case templates of a variant declaration (see `variant_case_index`).
+    pub fn variant_template_cases(&self, def: DefId) -> Option<&[(String, u32, TypeId)]> {
+        self.variant_case_index.get(&def).map(Vec::as_slice)
+    }
+
+    /// Find a variant type by (name, `module_source`) pair via `intern_map` (O(1)).
+    /// Collision-safe across modules when two variant types share a name.
+    pub fn find_variant_type(&self, def: DefId) -> Option<TypeId> {
+        self.intern_map.get(&ResolvedType::Variant { def }).copied()
+    }
+
+    /// Find a resource type by (name, `module_source`) pair via `intern_map` (O(1)).
+    /// Collision-safe across modules when two resource types share a name.
+    pub fn find_resource_type(&self, def: DefId) -> Option<TypeId> {
+        self.intern_map
+            .get(&ResolvedType::Resource { def })
+            .copied()
+    }
+
+    /// Find an enum type by (name, `module_source`) pair via `intern_map` (O(1)).
+    /// Collision-safe across modules when two enum types share a name.
+    pub fn find_enum_type(&self, def: DefId) -> Option<TypeId> {
+        self.intern_map.get(&ResolvedType::Enum { def }).copied()
+    }
+
+    /// Find a flags type by (name, `module_source`) pair via `intern_map` (O(1)).
+    /// Collision-safe across modules when two flags types share a name.
+    pub fn find_flags_type(&self, def: DefId) -> Option<TypeId> {
+        self.intern_map.get(&ResolvedType::Flags { def }).copied()
+    }
+
+    /// The declaration `module` declares under the WIT name `name`.
+    ///
+    /// The one place a name still reaches an identity. §9 of the
+    /// declaration-identity WEP says why that is unavoidable here alone.
+    ///
+    /// It cannot mis-identify: `wado-from-idl` generates one module per
+    /// interface and each declares a WIT name once, so `module` picks the
+    /// generated module and `name` the single declaration in it. A name that
+    /// declares nothing answers `None`.
+    ///
+    /// Only the Component Model boundary may ask it: `synthesis::cm_binding`
+    /// and [`crate::component_model::cm_decl_in_interface`]. A Wado name
+    /// resolves through [`crate::resolve::Resolutions`] and a stdlib type
+    /// through [`Self::compiler_item_def`].
+    #[must_use]
+    pub(crate) fn cm_decl_in(&self, name: &str, module: &ModuleSource) -> Option<DefId> {
+        self.decl_index
+            .get(&(name.to_string(), module.clone()))
+            .copied()
+    }
+
+    /// The interned type the CM declaration `module` names `name` was
+    /// registered under, whichever nominal shape it is.
+    pub fn find_named_type_by_source(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<TypeId> {
+        let def = self.cm_decl_in(name, module_source)?;
+        self.find_struct_type(StructDef::Decl(def))
+            .or_else(|| self.find_variant_type(def))
+            .or_else(|| self.find_enum_type(def))
+            .or_else(|| self.find_flags_type(def))
+            .or_else(|| self.find_resource_type(def))
+    }
+
+    /// [`Self::cm_decl_in`] addressed by the module's path rather than by a
+    /// `ModuleSource` value, for a caller holding an interface FQ and no
+    /// interner. Answers for a declaration whose type was never interned.
+    #[must_use]
+    pub fn cm_decl_in_module_named(
+        &self,
+        name: &str,
+        module_name: &str,
+        namespace: Option<CmNamespace>,
+    ) -> Option<DefId> {
+        self.cm_decl_index
+            .get(&(name.to_string(), namespace, module_name.to_string()))
+            .copied()
+    }
+
+    /// Find any decl-backed named type scoped to a single CM *interface*,
+    /// addressed by the namespace that owns it and the module it maps to (e.g.
+    /// `(Wasi, sockets/ip_name_lookup.wado)`). `namespace` is `None` for a
+    /// `core:` module, which carries none.
+    ///
+    /// [`Self::find_named_type_by_cm_package`] scopes to the package, which
+    /// holds several interfaces — two can declare the same name, and that scan
+    /// returns whichever registered first.
+    #[must_use]
+    pub fn find_named_type_by_module_name(
+        &self,
+        name: &str,
+        module_name: &str,
+        namespace: Option<CmNamespace>,
+    ) -> Option<TypeId> {
+        for (type_id, _) in self.all_types() {
+            let Some((n, ms)) = self.nominal_head(type_id) else {
+                continue;
+            };
+            if n != name {
+                continue;
+            }
+            let matches = match ms {
+                ModuleSource::Binding {
+                    namespace: ns,
+                    interface,
+                } => namespace == Some(ns) && interface.as_str() == module_name,
+                ModuleSource::Core { name: cm_name } => {
+                    namespace.is_none() && cm_name.as_str() == module_name
+                }
+                _ => false,
+            };
+            if matches {
+                return Some(type_id);
+            }
+        }
+        None
+    }
+
+    /// Find a decl-backed named type scoped to a CM package: any
+    /// `module_source` under the `{cm_package}/` prefix, restricted to
+    /// `namespace` when the caller knows it and searching every bundled one
+    /// when it does not. `cm_package` is the bare segment (`"http"`, `"kiln"`),
+    /// not a fully-qualified source; same-named types in distinct packages stay
+    /// distinct because `module_source` is part of the intern key.
+    pub fn find_named_type_by_cm_package(
+        &self,
+        name: &str,
+        cm_package: &str,
+        namespace: Option<CmNamespace>,
+    ) -> Option<TypeId> {
+        let prefix = format!("{cm_package}/");
+        for (type_id, _) in self.all_types() {
+            let Some((n, ms)) = self.nominal_head(type_id) else {
+                continue;
+            };
+            if n != name {
+                continue;
+            }
+            match ms {
+                ModuleSource::Binding {
+                    namespace: ns,
+                    interface,
+                } if namespace.is_none_or(|want| want == ns) && interface.starts_with(&prefix) => {
+                    return Some(type_id);
+                }
+                // Core-packaged CM types (e.g. `core:kiln/types.wado`) are
+                // registered under `ModuleSource::Core`; match them by the
+                // same package-prefix contract so generator bindings reach
+                // their stdlib types through this lookup.
+                ModuleSource::Core { name: cm_name } if cm_name.starts_with(&prefix) => {
+                    return Some(type_id);
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
+    /// The interned instance of `def` at `type_args`, if one exists.
+    fn find_generic_instance(&self, def: DefId, type_args: &[TypeId]) -> Option<TypeId> {
+        let spelling = ResolvedType::GenericInstance {
+            def,
+            type_args: type_args.to_vec(),
+        };
+        self.intern_map.get(&spelling).copied()
+    }
+
+    pub fn make_enum(&mut self, def: DefId) -> TypeId {
+        self.intern(ResolvedType::Enum { def })
+    }
+
+    pub fn make_resource(&mut self, def: DefId) -> TypeId {
+        self.intern(ResolvedType::Resource { def })
+    }
+
+    /// Redefine `id` to resolve as `target`, retiring its own spelling so a
+    /// later [`Self::intern`] of that spelling mints a fresh id instead.
+    ///
+    /// The boxing pass's `&T` → `Box<T>`. The slot keeps the borrow, which is
+    /// how [`Self::is_mut_box`] still tells `&T` from `&mut T`.
+    pub fn redefine_to(&mut self, id: TypeId, target: TypeId) {
+        assert!(
+            self.redirects.get(target).is_none(),
+            "a redirect target is never itself redirected: `get` takes one hop"
+        );
+        let spelling = self
+            .types
+            .get(id)
+            .cloned()
+            .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"));
+        assert!(
+            matches!(spelling, ResolvedType::Ref(_) | ResolvedType::MutRef(_)),
+            "only a borrow is redefined: `box_redefinition` tells one by that shape"
+        );
+        if self.intern_map.get(&spelling) == Some(&id) {
+            self.intern_map.shift_remove(&spelling);
+        }
+        self.redirects.set_growing(id, target);
+    }
+
+    /// Whether `id` bottoms out in a primitive, through any newtype chain.
+    pub fn is_primitive_like(&self, id: TypeId) -> bool {
+        self.primitive_head(id).is_some()
+    }
+
+    /// Whether `id` bottoms out in a primitive that carries Wasm arithmetic.
+    /// `v128`'s belongs to the lane type's own impl, and the half types carry
+    /// none at all.
+    pub fn is_scalar_primitive_like(&self, id: TypeId) -> bool {
+        matches!(self.primitive_head(id), Some(p) if p != PrimitiveType::V128 && !p.is_half())
+    }
+
+    /// Whether a value of this type leaves nothing on the Wasm stack: unit or
+    /// never, or a reference to either — `&x` is transparent at the WIR level.
+    /// `type_id_to_wir_type` asserts it answers `WirType::Unit` for exactly these.
+    pub fn is_stackless(&self, type_id: TypeId) -> bool {
+        let head = self.representation_head(self.peel_refs(type_id));
+        matches!(self.get(head), ResolvedType::Unit | ResolvedType::Never)
+    }
+
+    /// The referents a cast of `source` to `target` reads through, outermost
+    /// first: a cast to anything but a reference converts what its operand's
+    /// references point at, and the last of these is the type it converts.
+    #[must_use]
+    pub fn cast_read_through(&self, source: TypeId, target: TypeId) -> Vec<TypeId> {
+        let mut referents = Vec::new();
+        if RefKind::from_resolved(self.get(self.representation_head(target))).is_some() {
+            return referents;
+        }
+        let mut operand = source;
+        while let ResolvedType::Ref(referent) | ResolvedType::MutRef(referent) =
+            self.get(self.representation_head(operand))
+        {
+            operand = *referent;
+            referents.push(operand);
+        }
+        referents
+    }
+
+    /// The type a cast of `source` to `target` converts: the last referent it
+    /// reads through, or `source` itself.
+    #[must_use]
+    pub fn cast_operand_type(&self, source: TypeId, target: TypeId) -> TypeId {
+        self.cast_read_through(source, target)
+            .last()
+            .copied()
+            .unwrap_or(source)
+    }
+
+    /// Peel through Ref/MutRef wrappers to get the underlying type.
+    pub fn peel_refs(&self, mut type_id: TypeId) -> TypeId {
+        loop {
+            match self.get(type_id) {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => type_id = *inner,
+                _ => return type_id,
+            }
+        }
+    }
+
+    /// The reference layer holding the pointee: `&&mut X` → `&mut X`.
+    pub fn innermost_ref(&self, mut type_id: TypeId) -> TypeId {
+        while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = self.get(type_id)
+            && matches!(
+                self.get(*inner),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            )
+        {
+            type_id = *inner;
+        }
+        type_id
+    }
+
+    /// [`Self::peel_refs`] as [`Self::try_get`] is to [`Self::get`]: an id this
+    /// table does not carry answers `None` rather than panicking.
+    pub fn try_peel_refs(&self, mut type_id: TypeId) -> Option<TypeId> {
+        loop {
+            match self.try_get(type_id)? {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => type_id = *inner,
+                _ => return Some(type_id),
+            }
+        }
+    }
+
+    /// Peel reference layers and any `Box<T>` the boxing pass introduced,
+    /// returning the underlying value type. Post-boxing IR should use this over
+    /// [`Self::peel_refs`] so a `&fn(…)` parameter — by then `Box<fn(…)>` — and
+    /// an unwrapped `fn(…)` look the same. Matches `peel_refs` when unboxed.
+    pub fn peel_refs_and_box(&self, type_id: TypeId) -> TypeId {
+        let peeled = self.peel_refs(type_id);
+        self.box_payload_types
+            .get(peeled)
+            .copied()
+            .unwrap_or(peeled)
+    }
+
+    /// Register a `Box<T>` wrapper's `TypeId` → payload `T`'s `TypeId`
+    /// mapping. Called by the boxing pass for every wrapper it creates;
+    /// downstream phases consume the mapping via [`Self::peel_refs_and_box`].
+    pub fn register_box_payload(&mut self, wrapper: TypeId, payload: TypeId) {
+        self.box_payload_types.set_growing(wrapper, payload);
+    }
+
+    /// Direct lookup for the payload of a single `Box<T>` wrapper, or
+    /// `None` if the given `TypeId` is not a registered wrapper.
+    pub fn box_payload_of(&self, wrapper: TypeId) -> Option<TypeId> {
+        self.box_payload_types.get(wrapper).copied()
+    }
+
+    /// Whether `type_id` may name storage rather than hold a value: a `&T` /
+    /// `&mut T`, or the `Box<T>` the boxing pass redefines one into. Both
+    /// spellings answer yes, since after `prepare_types` no signature test
+    /// tells a boxed borrow from a by-value parameter of the same shape.
+    ///
+    /// [`RefKind::from_resolved`] alone sees only what is still spelled as a
+    /// borrow, so a caller reasoning about values asks this instead.
+    pub fn is_reference_shaped(&self, type_id: TypeId) -> bool {
+        RefKind::from_resolved(self.get(type_id)).is_some()
+            || self.box_payload_of(type_id).is_some()
+    }
+
+    /// Whether `wrapper` is a boxed reference that can be written through: a
+    /// `&mut T` collapsed onto `Box<T>`, where `*q = v` writes the box the
+    /// caller still holds. Only an id still spelled as a shared `&T` answers
+    /// `false`, so an unclassified wrapper stays writable.
+    pub fn is_mut_box(&self, wrapper: TypeId) -> bool {
+        self.box_payload_types.get(wrapper).is_some()
+            && !matches!(self.spelled_borrow(wrapper), Some((_, RefKind::Shared)))
+    }
+
+    /// How `id`'s own slot spells a borrow, or `None` when it is not one. The
+    /// sole reader of a redefined borrow; every other view answers `Box<T>`.
+    fn spelled_borrow(&self, id: TypeId) -> Option<(TypeId, RefKind)> {
+        match *self.types.get(id)? {
+            ResolvedType::Ref(payload) => Some((payload, RefKind::Shared)),
+            ResolvedType::MutRef(payload) => Some((payload, RefKind::Mut)),
+            _ => None,
+        }
+    }
+
+    pub fn make_ref(&mut self, inner: TypeId) -> TypeId {
+        self.intern(ResolvedType::Ref(inner))
+    }
+
+    pub fn make_mut_ref(&mut self, inner: TypeId) -> TypeId {
+        self.intern(ResolvedType::MutRef(inner))
+    }
+
+    /// Build the `(binding_type, value)` for one unrolled tuple-for-of element.
+    ///
+    /// By value (`by_ref == false`), the element is the field access itself,
+    /// typed `T_k`. By reference (`for v of &tuple`), the field access is
+    /// wrapped in `&` so the binding is `&T_k` — a reference to a fresh copy of
+    /// the element, the same semantics as `for v of &list` (refiter). Shared by
+    /// the annotate (`resolve_tuple_for_of`), reify (`reify_tuple_for_of`), and
+    /// monomorphize (`expand_variadic_for_of`) paths so the three stay in step.
+    pub fn tuple_element_binding(
+        &mut self,
+        field_access: TirExpr,
+        elem_type: TypeId,
+        by_ref: bool,
+        span: Span,
+    ) -> (TypeId, TirExpr) {
+        if by_ref {
+            let ref_type = self.make_ref(elem_type);
+            let value = TirExpr::new(
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Ref,
+                    expr: Box::new(field_access),
+                },
+                ref_type,
+                span,
+            );
+            (ref_type, value)
+        } else {
+            (elem_type, field_access)
+        }
+    }
+
+    /// Create a type parameter (e.g., `T` in `struct Box<T>`)
+    pub fn make_type_param(&mut self, name: String, index: u32) -> TypeId {
+        self.intern(ResolvedType::TypeParam { name, index })
+    }
+
+    /// The id a declaration's parameter at `index` interns to. A pack holds a
+    /// tuple in its one slot, so it is a `TypePack` and not a `TypeParam`.
+    pub fn make_declared_param(&mut self, name: String, index: u32, is_pack: bool) -> TypeId {
+        if is_pack {
+            self.make_type_pack(name, index)
+        } else {
+            self.make_type_param(name, index)
+        }
+    }
+
+    /// Create an inference variable (see [`ResolvedType::InferVar`]).
+    pub fn make_infer_var(&mut self, id: InferVarId) -> TypeId {
+        self.intern(ResolvedType::InferVar(id))
+    }
+
+    /// Record the slot `id` stands for, for diagnostics. Called on every mint,
+    /// `None` included: ids restart per module, so a reused id must not read
+    /// its last holder's name.
+    pub fn set_infer_var_name(&mut self, id: InferVarId, name: Option<String>) {
+        match name {
+            Some(name) => self.infer_var_names.insert(id, name),
+            None => self.infer_var_names.swap_remove(&id),
+        };
+    }
+
+    /// How `id` reads in a message: its slot's name, else its own.
+    fn infer_var_name(&self, id: InferVarId) -> String {
+        self.infer_var_names
+            .get(&id)
+            .cloned()
+            .unwrap_or_else(|| id.to_string())
+    }
+
+    /// Create a type pack parameter (e.g., `..T` in `fn foo<..T>(x: [..T])`)
+    pub fn make_type_pack(&mut self, name: String, index: u32) -> TypeId {
+        self.intern(ResolvedType::TypePack {
+            name,
+            index,
+            mapped_elem: None,
+        })
+    }
+
+    /// Create a mapped type pack: element `i` is `elem[F := F_i]`, where the
+    /// pack param may recur in `elem` as a scalar `TypeParam` placeholder.
+    /// Drives its arity from pack `(name, index)`. See
+    /// [`ResolvedType::TypePack`].
+    pub fn make_mapped_type_pack(&mut self, name: String, index: u32, elem: TypeId) -> TypeId {
+        self.intern(ResolvedType::TypePack {
+            name,
+            index,
+            mapped_elem: Some(elem),
+        })
+    }
+
+    /// Create an associated type projection `<T as Trait>::X`. The declaring
+    /// trait is required: without it the projection has no identity to compare.
+    pub fn make_assoc_type_projection(
+        &mut self,
+        param_id: TypeId,
+        owning_trait: DefId,
+        assoc_name: String,
+        bounds: Vec<FqTraitName>,
+        assoc_type_bindings: Vec<(String, TypeId)>,
+    ) -> TypeId {
+        self.intern(ResolvedType::AssocTypeProjection {
+            param_id,
+            assoc_name,
+            owning_trait,
+            bounds,
+            assoc_type_bindings,
+        })
+    }
+
+    /// Register `<concrete_id as trait_ref>::assoc_name` → `resolved_id`: for
+    /// `impl Serializer for JsonSerializer`, `"StructSerializer"` →
+    /// `JsonStructSerializer`.
+    pub fn register_assoc_type_resolution(
+        &mut self,
+        concrete_id: TypeId,
+        trait_ref: TraitRef,
+        assoc_name: String,
+        resolved_id: TypeId,
+    ) {
+        self.assoc_type_resolutions
+            .entry(AssocTypeKey {
+                receiver: self.instance_key(concrete_id),
+                trait_decl: trait_ref.decl,
+                assoc_name,
+            })
+            .or_default()
+            .insert(trait_ref.args, resolved_id);
+    }
+
+    /// The [`InstanceKey`] of `id`.
+    pub fn instance_key(&self, id: TypeId) -> InstanceKey {
+        let args = |type_args: &[TypeId]| type_args.iter().map(|a| self.instance_key(*a)).collect();
+        match self.get_unerased(id) {
+            ResolvedType::GenericInstance { def, type_args }
+            | ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                type_args,
+            } if !type_args.is_empty() => InstanceKey::Nominal(*def, args(type_args)),
+            ResolvedType::Ref(inner) => InstanceKey::Ref(Box::new(self.instance_key(*inner))),
+            ResolvedType::MutRef(inner) => InstanceKey::MutRef(Box::new(self.instance_key(*inner))),
+            unerased => InstanceKey::Other(self.intern_map.get(unerased).copied().unwrap_or(id)),
+        }
+    }
+
+    /// Resolve `<concrete_id as trait_key>::assoc_name` for a caller that knows
+    /// which trait the projection came from. Writing no trait arguments, it
+    /// names the defaulted instantiation, else what the rest agree on.
+    pub fn resolve_assoc_type_of_trait(
+        &self,
+        concrete_id: TypeId,
+        trait_key: &DefId,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
+        // `ReflectNewtype::Base` is the type itself: every newtype carries what
+        // it wraps, instantiation included, so reading it there answers for one
+        // written `type N = T` and for `N<i32>` alike.
+        if assoc_name == REFLECT_NEWTYPE_BASE
+            && let ResolvedType::Newtype { base_type, .. } = self.get(concrete_id)
+            && self
+                .compiler_items()
+                .trait_def(CompilerItem::ReflectNewtype)
+                == Some(*trait_key)
+        {
+            return Some(*base_type);
+        }
+        self.inheriting(concrete_id, |receiver| {
+            self.assoc_type_resolutions
+                .get(&AssocTypeKey {
+                    receiver: self.instance_key(receiver),
+                    trait_decl: *trait_key,
+                    assoc_name: assoc_name.to_string(),
+                })?
+                .bare()
+        })
+    }
+
+    /// Answer a receiver-keyed lookup, falling back to what a newtype inherits.
+    /// A newtype inherits its *immediate* base's impls (WEP 2026-01-29), so the
+    /// chain answers a link at a time: a middle link carrying its own impl is
+    /// what a jump to the base would step over.
+    fn inheriting<T>(&self, receiver: TypeId, lookup: impl Fn(TypeId) -> Option<T>) -> Option<T> {
+        let mut current = receiver;
+        loop {
+            if let Some(found) = lookup(current) {
+                return Some(found);
+            }
+            let ResolvedType::Newtype { base_type, .. } = self.get_unerased(current) else {
+                return None;
+            };
+            current = *base_type;
+        }
+    }
+
+    /// Resolve `assoc_name` on `concrete_id`, qualified by `owning_trait`,
+    /// falling back to the unqualified rule where that trait registered nothing.
+    // A projection built under a bound can name the trait that *declared* the
+    // associated type while the impl registered it under a subtrait.
+    pub fn resolve_assoc_type_qualified(
+        &self,
+        concrete_id: TypeId,
+        owning_trait: &DefId,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
+        if let Some(resolved) =
+            self.resolve_assoc_type_of_trait(concrete_id, owning_trait, assoc_name)
+        {
+            return Some(resolved);
+        }
+        self.resolve_assoc_type(concrete_id, assoc_name)
+    }
+
+    /// Resolve an associated type named `assoc_name` on `concrete_id`
+    /// without naming a trait.
+    ///
+    /// Answers only when exactly one implemented trait declares the name;
+    /// two make it a coin flip, so the caller must qualify with
+    /// [`Self::resolve_assoc_type_of_trait`] instead.
+    pub fn resolve_assoc_type(&self, concrete_id: TypeId, assoc_name: &str) -> Option<TypeId> {
+        self.inheriting(concrete_id, |receiver| {
+            let receiver = self.instance_key(receiver);
+            one_assoc_answer(
+                self.assoc_type_resolutions
+                    .iter()
+                    .filter(move |(key, _)| {
+                        key.receiver == receiver && key.assoc_name == assoc_name
+                    })
+                    .flat_map(|(_, answers)| answers.tagged()),
+            )
+        })
+    }
+
+    /// Register a generic associated type definition.
+    /// E.g., for `impl Iterator for ListIter<T> { type Item = T; }`,
+    /// register `(ListIter's ``AstId``, "Item") → TypeParam(0, "T")`.
+    ///
+    /// Keyed by the declaring [`AstId`](crate::ast::AstId): two modules may
+    /// each declare a `Node<T>`, and their definitions must not overwrite one
+    /// another.
+    pub fn register_generic_assoc_type_def(
+        &mut self,
+        base_decl: AstId,
+        trait_ref: TraitRef,
+        assoc_name: String,
+        type_param_id: TypeId,
+    ) {
+        self.generic_assoc_type_defs
+            .entry(GenericAssocTypeKey {
+                target_decl: base_decl,
+                trait_decl: trait_ref.decl,
+                assoc_name,
+            })
+            .or_default()
+            .insert(trait_ref.args, type_param_id);
+    }
+
+    /// The generic definition of `assoc_name` on `base_decl`, together with
+    /// the trait that declares it. `None` when no trait declares the name, or
+    /// when two disagree — the same unambiguity rule
+    /// [`Self::resolve_assoc_type`] applies to resolved types.
+    fn generic_assoc_type_def(
+        &self,
+        base_decl: AstId,
+        assoc_name: &str,
+    ) -> Option<(DefId, TypeId)> {
+        let mut candidates: Vec<(bool, DefId, TypeId)> = self
+            .generic_assoc_type_defs
+            .iter()
+            .filter(|(key, _)| key.target_decl == base_decl && key.assoc_name == assoc_name)
+            .flat_map(|(key, answers)| {
+                answers
+                    .tagged()
+                    .map(move |(bare, def_id)| (bare, key.trait_decl, def_id))
+            })
+            .collect();
+        if candidates.iter().any(|(bare, ..)| *bare) {
+            candidates.retain(|(bare, ..)| *bare);
+        }
+        // Several traits may declare one name over a single definition —
+        // `IterFilter` answers `Item` as both `Iterator` and `IntoIterator` —
+        // so the definitions decide agreement.
+        let (_, trait_decl, def_id) = *candidates.last()?;
+        candidates
+            .iter()
+            .all(|(_, _, def)| *def == def_id)
+            .then_some((trait_decl, def_id))
+    }
+
+    /// [`Self::generic_assoc_type_def`] for a caller that knows the trait.
+    fn generic_assoc_type_def_of_trait(
+        &self,
+        base_decl: AstId,
+        trait_key: &DefId,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
+        self.generic_assoc_type_defs
+            .get(&GenericAssocTypeKey {
+                target_decl: base_decl,
+                trait_decl: *trait_key,
+                assoc_name: assoc_name.to_string(),
+            })?
+            .bare()
+    }
+
+    /// Register associated-type resolutions for a freshly monomorphized struct.
+    /// A [`ResolvedType::Struct`] carries no type args, so `Foo<…>::Item` can no
+    /// longer go through [`Self::resolve_generic_assoc_type`]; each definition on
+    /// `base_decl` is instead resolved eagerly against `substitution` and
+    /// recorded under `concrete_id` for later [`Self::resolve_assoc_type`] hits.
+    pub fn register_monomorphized_assoc_types(
+        &mut self,
+        concrete_id: TypeId,
+        base_decl: AstId,
+        substitution: &IndexMap<u32, TypeId>,
+    ) {
+        let defs: Vec<(TraitRef, String, TypeId)> = self
+            .generic_assoc_type_defs
+            .iter()
+            .filter(|(key, _)| key.target_decl == base_decl)
+            .flat_map(|(key, answers)| {
+                answers.0.iter().map(move |(args, def_id)| {
+                    (
+                        TraitRef::new(key.trait_decl, args.clone()),
+                        key.assoc_name.clone(),
+                        *def_id,
+                    )
+                })
+            })
+            .collect();
+        for (trait_ref, assoc_name, def_id) in defs {
+            let resolved = self.substitute_type_params(def_id, substitution);
+            if !self.contains_type_param(resolved) {
+                self.register_assoc_type_resolution(concrete_id, trait_ref, assoc_name, resolved);
+            }
+        }
+    }
+
+    /// The type arguments a nominal instantiation binds to its declaration's
+    /// parameters — the companion to [`Self::decl_of_type`], which names the
+    /// declaration. Every query that reasons "declaration plus arguments" asks
+    /// here, so a shape that is not a `GenericInstance` is handled once.
+    ///
+    /// `Array<T>` is the shape that is not: it is declared definitionless, so
+    /// it interns as a `BuiltinArray` carrying its element type alone.
+    pub fn nominal_type_args(&self, type_id: TypeId) -> Option<Vec<TypeId>> {
+        match self.get(type_id) {
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => Some(type_args.clone()),
+            ResolvedType::BuiltinArray(elem) => Some(vec![*elem]),
+            // A monomorphized `Struct` is deliberately absent: it keeps no type
+            // args, and its associated types are registered against the
+            // instance itself by `register_monomorphized_assoc_types`.
+            _ => None,
+        }
+    }
+
+    /// The arguments `type_id`'s own declaration is instantiated with, a
+    /// newtype's included: what an `impl` header naming that declaration binds.
+    /// [`Self::nominal_type_args`] leaves a newtype out, since a newtype's
+    /// representation is its base's.
+    pub fn declared_type_args(&self, type_id: TypeId) -> Option<Vec<TypeId>> {
+        match self.get_unerased(type_id) {
+            ResolvedType::Newtype { type_args, .. } => Some(type_args.clone()),
+            _ => self.nominal_type_args(type_id),
+        }
+    }
+
+    /// Resolve an associated type for a `GenericInstance` type using generic definitions.
+    /// For `ListIter<i32>::Item`: looks up `("ListIter", "Item")` → `TypeParam(0)`,
+    /// then substitutes using the instance's `type_args` to get `i32`.
+    pub fn resolve_generic_assoc_type(
+        &self,
+        concrete_id: TypeId,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
+        let type_args = self.nominal_type_args(concrete_id)?;
+        let (_, def_type_id) =
+            self.generic_assoc_type_def(self.decl_of_type(concrete_id)?, assoc_name)?;
+        match self.get(def_type_id).clone() {
+            ResolvedType::TypeParam { index, .. } => type_args.get(index as usize).copied(),
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_name: inner_assoc_name,
+                ..
+            } => {
+                // The def is `I::InnerName`. Substitute I with the concrete type arg.
+                let inner_concrete_id =
+                    if let ResolvedType::TypeParam { index, .. } = self.get(param_id).clone() {
+                        type_args.get(index as usize).copied()?
+                    } else {
+                        param_id
+                    };
+                // Recursively resolve `inner_concrete_id::inner_assoc_name`.
+                if let Some(resolved) =
+                    self.resolve_assoc_type(inner_concrete_id, &inner_assoc_name)
+                {
+                    return Some(resolved);
+                }
+                self.resolve_generic_assoc_type(inner_concrete_id, &inner_assoc_name)
+            }
+            // A composite def (`&T`, `List<T>`, …) still carrying the base
+            // struct's type params cannot be substituted here without interning
+            // (this is a `&self` fast path). Return `None` so the caller keeps
+            // the projection unresolved; the `&mut`
+            // `resolve_generic_assoc_type_mono` resolves it with the instance's
+            // type args. A param-free composite def is returned as-is.
+            _ => {
+                if self.contains_type_param(def_type_id) {
+                    None
+                } else {
+                    Some(def_type_id)
+                }
+            }
+        }
+    }
+
+    /// Monomorphization-time associated-type resolution for a `GenericInstance`.
+    /// Where [`Self::resolve_generic_assoc_type`] is a `&self` fast path limited
+    /// to a bare-`TypeParam` def, this substitutes positionally through
+    /// [`Self::substitute_type_params`], so a composite or nested definition
+    /// (`&T`, `I::Item`) becomes fully concrete one level per recursion.
+    pub fn resolve_generic_assoc_type_mono(
+        &mut self,
+        concrete_id: TypeId,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
+        let type_args = self.nominal_type_args(concrete_id)?;
+        let (_, def_type_id) =
+            self.generic_assoc_type_def(self.decl_of_type(concrete_id)?, assoc_name)?;
+        Some(self.substitute_positional(def_type_id, &type_args))
+    }
+
+    /// Whether the declaration behind `type_id` can be reflected — every
+    /// declaration but a sealed member handle.
+    ///
+    /// The bound check and reflect synthesis both read this, so synthesis
+    /// covers exactly what the bound accepts without a demand channel between
+    /// them.
+    pub fn is_reflect_eligible(&self, type_id: TypeId) -> bool {
+        !self
+            .decl_of_type(type_id)
+            .is_some_and(|decl| self.is_sealed_reflect_member(decl))
+    }
+
+    /// Whether a generic definition of `assoc_name` is registered for the
+    /// declaration behind `type_id` — i.e. the generic type carries a
+    /// synthesized impl binding that associated type.
+    pub fn has_generic_assoc_type_def(&self, type_id: TypeId, assoc_name: &str) -> bool {
+        self.decl_of_type(type_id)
+            .is_some_and(|decl| self.has_generic_assoc_type_def_for_decl(decl, assoc_name))
+    }
+
+    /// [`Self::has_generic_assoc_type_def`] for a caller that already holds the
+    /// declaring [`AstId`](crate::ast::AstId).
+    pub fn has_generic_assoc_type_def_for_decl(&self, decl: AstId, assoc_name: &str) -> bool {
+        self.generic_assoc_type_def(decl, assoc_name).is_some()
+    }
+
+    /// Resolve an associated type for whatever form the subject currently has:
+    /// a registered resolution for a plain or monomorphized type, substitution
+    /// of the generic definition for a `GenericInstance`.
+    ///
+    /// Reflection projections hit both forms — the same receiver reads as an
+    /// instance before monomorphization and as a struct after.
+    pub fn resolve_assoc_type_of_instance(
+        &mut self,
+        concrete_id: TypeId,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
+        if let Some(resolved) = self.resolve_assoc_type(concrete_id, assoc_name) {
+            return Some(resolved);
+        }
+        self.resolve_generic_assoc_type_mono(concrete_id, assoc_name)
+    }
+
+    /// [`Self::resolve_assoc_type_of_instance`] for a caller that knows which
+    /// trait declares the associated type. The untyped form scans every trait
+    /// and gives up when two disagree, so a name several traits share — the
+    /// reflection kinds all spell their member channel `Members` — is only
+    /// unambiguous here.
+    pub fn resolve_trait_assoc_type_of_instance(
+        &mut self,
+        concrete_id: TypeId,
+        trait_key: &DefId,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
+        if let Some(resolved) = self.resolve_assoc_type_of_trait(concrete_id, trait_key, assoc_name)
+        {
+            return Some(resolved);
+        }
+        let type_args = self.nominal_type_args(concrete_id)?;
+        let decl = self.decl_of_type(concrete_id)?;
+        let def_type_id = self.generic_assoc_type_def_of_trait(decl, trait_key, assoc_name)?;
+        Some(self.substitute_positional(def_type_id, &type_args))
+    }
+
+    /// [`Self::substitute_type_params`] with `args` read positionally, which a
+    /// declaration's own parameters are, since it numbers them densely from zero.
+    pub fn substitute_positional(&mut self, type_id: TypeId, args: &[TypeId]) -> TypeId {
+        self.substitute_type_params(type_id, &positional_substitution(args))
+    }
+
+    /// Substitute `TypeParam` and `TypePack` indices in `type_id`, descending
+    /// through every container form, expanding a `TypePack` inside a tuple, and
+    /// resolving an `AssocTypeProjection` once its parameter turns concrete.
+    /// Missing indices are permissive — an unmatched `TypeParam` stays put, so
+    /// callers can substitute partially during inference.
+    pub fn substitute_type_params(
+        &mut self,
+        type_id: TypeId,
+        substitution: &IndexMap<u32, TypeId>,
+    ) -> TypeId {
+        self.substitute_type_params_with(type_id, substitution, &SlotProjections::default())
+    }
+
+    /// [`Self::substitute_type_params`], additionally answering the
+    /// projections rooted at a slot.
+    ///
+    /// A declaration frame is abstract over its slots *and* over what
+    /// `Self::X` means. Only the use site knows the second — it is written at
+    /// the caller — so it supplies the answers here.
+    pub fn substitute_type_params_with(
+        &mut self,
+        type_id: TypeId,
+        substitution: &IndexMap<u32, TypeId>,
+        projections: &SlotProjections,
+    ) -> TypeId {
+        self.subst_rec(type_id, substitution, &IndexMap::default(), projections)
+    }
+
+    /// Substitute solved inference variables into `type_id`.
+    ///
+    /// The flexible counterpart of [`Self::substitute_type_params`]: that one
+    /// fills a declaration's slots positionally, this one answers variables the
+    /// solver has determined. They share one traversal, differing only in which
+    /// leaf they replace.
+    pub fn substitute_infer_vars(
+        &mut self,
+        type_id: TypeId,
+        solutions: &IndexMap<InferVarId, TypeId>,
+    ) -> TypeId {
+        self.subst_rec(
+            type_id,
+            &IndexMap::default(),
+            solutions,
+            &SlotProjections::default(),
+        )
+    }
+
+    /// The shared traversal behind [`Self::substitute_type_params_with`] and
+    /// [`Self::substitute_infer_vars`].
+    fn subst_rec(
+        &mut self,
+        type_id: TypeId,
+        substitution: &IndexMap<u32, TypeId>,
+        vars: &IndexMap<InferVarId, TypeId>,
+        projections: &SlotProjections,
+    ) -> TypeId {
+        if substitution.is_empty() && vars.is_empty() && projections.is_empty() {
+            return type_id;
+        }
+        match self.get(type_id).clone() {
+            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
+                substitution.get(&index).copied().unwrap_or(type_id)
+            }
+            ResolvedType::InferVar(var) => vars.get(&var).copied().unwrap_or(type_id),
+            ResolvedType::BuiltinArray(elem) => {
+                let new_elem = self.subst_rec(elem, substitution, vars, projections);
+                if new_elem == elem {
+                    type_id
+                } else {
+                    self.intern(ResolvedType::BuiltinArray(new_elem))
+                }
+            }
+            ResolvedType::Ref(inner) => {
+                let new_inner = self.subst_rec(inner, substitution, vars, projections);
+                if new_inner == inner {
+                    type_id
+                } else {
+                    self.make_ref(new_inner)
+                }
+            }
+            ResolvedType::MutRef(inner) => {
+                let new_inner = self.subst_rec(inner, substitution, vars, projections);
+                if new_inner == inner {
+                    type_id
+                } else {
+                    self.make_mut_ref(new_inner)
+                }
+            }
+            ResolvedType::Function {
+                is_mut,
+                params,
+                return_type,
+                effects,
+            } => {
+                let new_params: Vec<TypeId> = params
+                    .iter()
+                    .map(|&p| self.subst_rec(p, substitution, vars, projections))
+                    .collect();
+                let new_return_type = self.subst_rec(return_type, substitution, vars, projections);
+                if new_params == params && new_return_type == return_type {
+                    type_id
+                } else {
+                    self.make_function_with_mut(is_mut, new_params, new_return_type, effects)
+                }
+            }
+            ResolvedType::GenericResource { def, type_args } => {
+                let new_args: Vec<TypeId> = type_args
+                    .iter()
+                    .map(|&a| self.subst_rec(a, substitution, vars, projections))
+                    .collect();
+                if new_args == type_args {
+                    type_id
+                } else {
+                    self.intern(ResolvedType::GenericResource {
+                        def,
+                        type_args: new_args,
+                    })
+                }
+            }
+            ResolvedType::GenericInstance { def, type_args } => {
+                if self.is_tuple_def(def) {
+                    // Tuples need TypePack expansion: splice pack elements
+                    // into the tuple's type-arg list.
+                    let mut new_elems: Vec<TypeId> = Vec::new();
+                    for &e in &type_args {
+                        match self.get(e).clone() {
+                            ResolvedType::TypePack {
+                                index, mapped_elem, ..
+                            } => {
+                                if let Some(&pack_type) = substitution.get(&index) {
+                                    match mapped_elem {
+                                        // Mapped pack: substitute the element
+                                        // once per source pack element, binding
+                                        // the pack param to that element — a
+                                        // constructor map `[..Case<T, P>]`
+                                        // yields `Case<T, P_k>` at position k;
+                                        // a pack-independent `..F::method()`
+                                        // repeats its return type `|F|` times.
+                                        Some(elem) => {
+                                            let pack_elems = self.elem_types_or_self(pack_type);
+                                            for pe in pack_elems {
+                                                let mut elem_substitution = substitution.clone();
+                                                elem_substitution.insert(index, pe);
+                                                new_elems.push(self.subst_rec(
+                                                    elem,
+                                                    &elem_substitution,
+                                                    vars,
+                                                    projections,
+                                                ));
+                                            }
+                                        }
+                                        None => {
+                                            new_elems.extend(self.elem_types_or_self(pack_type));
+                                        }
+                                    }
+                                } else {
+                                    new_elems.push(e);
+                                }
+                            }
+                            _ => {
+                                new_elems.push(self.subst_rec(e, substitution, vars, projections));
+                            }
+                        }
+                    }
+                    if new_elems == type_args {
+                        type_id
+                    } else {
+                        self.make_tuple(new_elems)
+                    }
+                } else {
+                    let new_args: Vec<TypeId> = type_args
+                        .iter()
+                        .map(|&a| self.subst_rec(a, substitution, vars, projections))
+                        .collect();
+                    if new_args == type_args {
+                        type_id
+                    } else {
+                        self.make_generic_instance(def, new_args)
+                    }
+                }
+            }
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_name,
+                owning_trait,
+                bounds,
+                assoc_type_bindings,
+            } => {
+                // The use site's answer wins: a rebuilt projection cannot
+                // re-derive what `Self::X` means there.
+                if let Some(slot) = self.param_slot(param_id)
+                    && let Some(answer) = projections.get(&slot).and_then(|answers| {
+                        answers
+                            .iter()
+                            .find(|(trait_, name, _)| {
+                                *trait_ == owning_trait && *name == assoc_name
+                            })
+                            .map(|(_, _, type_id)| *type_id)
+                    })
+                {
+                    return answer;
+                }
+                // Substitute the parameter first; only attempt projection
+                // resolution once the underlying type is fully concrete.
+                let substituted_base = self.subst_rec(param_id, substitution, vars, projections);
+                // A projection over a projection is answered by what the base
+                // carries: `IntoIterator::Iter: Iterator<Item = Self::Item>`
+                // makes `C::Iter::Item` the `C::Item` the frame already named.
+                if let ResolvedType::AssocTypeProjection {
+                    assoc_type_bindings: base_bindings,
+                    ..
+                } = self.get(substituted_base)
+                    && let Some((_, answer)) =
+                        base_bindings.iter().find(|(name, _)| *name == assoc_name)
+                {
+                    return *answer;
+                }
+                if !self.contains_type_param(substituted_base) {
+                    // An impl on the reference answers first, then the referent's,
+                    // as method-call auto-deref does: `&mut MyDe` projects `MyDe`'s.
+                    let concrete = self.peel_refs(substituted_base);
+                    if concrete != substituted_base
+                        && let Some(resolved) = self.resolve_assoc_type_of_trait(
+                            substituted_base,
+                            &owning_trait,
+                            &assoc_name,
+                        )
+                    {
+                        return resolved;
+                    }
+                    // Identity before spelling: a projection that names its
+                    // trait is answered exactly, so two traits declaring the
+                    // same associated-type name on one implementor stay apart
+                    // (WEP-2026-08-12). The name-keyed forms below give up on
+                    // that case rather than choosing.
+                    if let Some(resolved) = self.resolve_trait_assoc_type_of_instance(
+                        concrete,
+                        &owning_trait,
+                        &assoc_name,
+                    ) {
+                        return resolved;
+                    }
+                    if let Some(resolved) =
+                        self.resolve_assoc_type_qualified(concrete, &owning_trait, &assoc_name)
+                    {
+                        return resolved;
+                    }
+                    if let Some(resolved) =
+                        self.resolve_generic_assoc_type_mono(concrete, &assoc_name)
+                    {
+                        return resolved;
+                    }
+                    // A scalar primitive's arithmetic is compiler-supplied, so
+                    // nothing registered its `Output`: it is the receiver
+                    // itself, a newtype over one included. `v128` is not one —
+                    // only a lane type's own impl names its output.
+                    if assoc_name == "Output" && self.is_scalar_primitive_like(concrete) {
+                        return concrete;
+                    }
+                }
+                // Bindings are resolved in the same frame as the rest of the
+                // signature, so they carry its slots too.
+                let mut new_bindings: Vec<(String, TypeId)> =
+                    Vec::with_capacity(assoc_type_bindings.len());
+                for (name, bound) in &assoc_type_bindings {
+                    let substituted = self.subst_rec(*bound, substitution, vars, projections);
+                    new_bindings.push((name.clone(), substituted));
+                }
+                if substituted_base == param_id && new_bindings == assoc_type_bindings {
+                    type_id
+                } else {
+                    self.make_assoc_type_projection(
+                        substituted_base,
+                        owning_trait,
+                        assoc_name,
+                        bounds,
+                        new_bindings,
+                    )
+                }
+            }
+            // `Reactive` wraps an inner type, so substitute it recursively.
+            // Defensive: reactive bindings are typed with the underlying value
+            // type today, so the wrapper never reaches monomorphize — but the
+            // contract is "rewrite every embedded parameter", and it embeds one.
+            ResolvedType::Reactive(inner) => {
+                let new_inner = self.subst_rec(inner, substitution, vars, projections);
+                if new_inner == inner {
+                    type_id
+                } else {
+                    self.intern(ResolvedType::Reactive(new_inner))
+                }
+            }
+            ResolvedType::Newtype {
+                def,
+                type_args,
+                base_type,
+            } => {
+                let new_args: Vec<TypeId> = type_args
+                    .iter()
+                    .map(|&a| self.subst_rec(a, substitution, vars, projections))
+                    .collect();
+                if new_args == type_args {
+                    type_id
+                } else {
+                    let new_base = self.subst_rec(base_type, substitution, vars, projections);
+                    self.make_newtype_instance(def, new_args, new_base)
+                }
+            }
+            // Primitives, Unit, Never, Unknown, Error, Enum, Variant, Resource,
+            // Flags name no parameter; a `Struct` is a monomorphized instance.
+            _ => type_id,
+        }
+    }
+
+    /// Create a generic instance (e.g., `Box<i32>`)
+    pub fn make_generic_instance(&mut self, def: DefId, type_args: Vec<TypeId>) -> TypeId {
+        // The instantiation carries the declaration it came from, so nothing
+        // has to be registered beside it and nothing re-derives the answer
+        // from a spelling whose base `prune` may already have dropped.
+        self.intern(ResolvedType::GenericInstance { def, type_args })
+    }
+
+    /// Create a `List<T>` type (`GenericInstance` { name: "List", ... })
+    pub fn make_list(&mut self, element: TypeId) -> TypeId {
+        let def = self
+            .compiler_item_def(CompilerItem::List)
+            .expect("the List declaration is a registered compiler item");
+        self.make_generic_instance(def, vec![element])
+    }
+
+    /// Create a `TreeMap<K, V>` type — the Wado spelling of CM `map<K, V>`.
+    pub fn make_tree_map(&mut self, key: TypeId, value: TypeId) -> TypeId {
+        let def = self
+            .compiler_item_def(CompilerItem::TreeMap)
+            .expect("the TreeMap declaration is a registered compiler item");
+        self.make_generic_instance(def, vec![key, value])
+    }
+
+    /// Create the `ByteList` newtype (`type ByteList = List<u8>`).
+    pub fn make_byte_list(&mut self) -> TypeId {
+        let base = self.make_list(TypeTable::U8);
+        let def = self.require_compiler_item_def(CompilerItem::ByteList);
+        self.make_newtype(def, base)
+    }
+
+    /// Create a newtype wrapping a base type
+    pub fn make_newtype(&mut self, def: DefId, base_type: TypeId) -> TypeId {
+        self.intern(ResolvedType::Newtype {
+            def,
+            type_args: Vec::new(),
+            base_type,
+        })
+    }
+
+    /// A generic newtype's instantiation: the declaration with what it was
+    /// applied to, so the head stays the one an `impl` header writes.
+    pub fn make_newtype_instance(
+        &mut self,
+        def: DefId,
+        type_args: Vec<TypeId>,
+        base_type: TypeId,
+    ) -> TypeId {
+        self.intern(ResolvedType::Newtype {
+            def,
+            type_args,
+            base_type,
+        })
+    }
+
+    /// Create a flags type (bitmask over u32)
+    pub fn make_flags(&mut self, def: DefId) -> TypeId {
+        self.intern(ResolvedType::Flags { def })
+    }
+
+    /// Erase all `Newtype` and `Flags` entries from the type table by populating
+    /// the redirect map. After this call, `get(id)` for any erased `TypeId` returns
+    /// its ultimate base type (`Newtype` chains) or `u32` (`Flags`).
+    ///
+    /// Must be called after monomorphize, whose dispatch reads the identities
+    /// this replaces.
+    pub fn erase_newtypes_and_flags(&mut self) {
+        let ids: Vec<TypeId> = self.iter_type_ids().collect();
+        for id in ids {
+            let redirect = match self.types.get(id).unwrap() {
+                ResolvedType::Newtype { .. } => {
+                    Some(self.monomorphized_or_self(self.representation_head(id)))
+                }
+                ResolvedType::Flags { .. } => Some(TypeTable::U32),
+                _ => None,
+            };
+            if let Some(target) = redirect {
+                self.redirects.set_growing(id, target);
+            }
+        }
+    }
+
+    /// The monomorphized `Struct` an instantiation of `def` became, when the run
+    /// made one. Monomorphization registers each one under this spelling.
+    pub fn monomorphized_struct_of(&self, def: DefId, type_args: &[TypeId]) -> Option<TypeId> {
+        let name = self.generic_rendered_name(def, type_args);
+        self.find_struct_by_name(&name, self.def_module(def))
+    }
+
+    /// The monomorphized `Struct` a `GenericInstance` became. Monomorphization
+    /// rewrites the sites its walk reaches; a newtype base it never reached
+    /// still spells the instance, and a value of the newtype carries the struct.
+    pub fn monomorphized_struct(&self, id: TypeId) -> Option<TypeId> {
+        let ResolvedType::GenericInstance { def, type_args } = self.types.get(id)? else {
+            return None;
+        };
+        self.monomorphized_struct_of(*def, type_args)
+    }
+
+    /// [`Self::monomorphized_struct`] where there is one, else `id` itself.
+    pub fn monomorphized_or_self(&self, id: TypeId) -> TypeId {
+        self.monomorphized_struct(id).unwrap_or(id)
+    }
+
+    /// Get the base type if this is a newtype, or None otherwise
+    pub fn get_newtype_base(&self, id: TypeId) -> Option<TypeId> {
+        if let ResolvedType::Newtype { base_type, .. } = self.get(id) {
+            Some(*base_type)
+        } else {
+            None
+        }
+    }
+
+    /// A newtype's representation head, or `None` for anything else. The head
+    /// rather than one peel, which on a chain lands on another newtype.
+    #[must_use]
+    pub fn newtype_representation(&self, id: TypeId) -> Option<TypeId> {
+        matches!(self.get(id), ResolvedType::Newtype { .. }).then(|| self.representation_head(id))
+    }
+
+    /// The first link of `id`'s newtype chain that `owns` accepts, outermost
+    /// first: a link's impl serves every level above it, so the chain — not the
+    /// receiver alone — says which type a call dispatches to (WEP 2026-01-29).
+    /// References are stepped over. `None` when no link owns.
+    ///
+    /// Reads the unerased view: erasure redirects a link to its base, and the
+    /// erased view would report no chain at all.
+    pub fn newtype_link_owning(&self, id: TypeId, owns: impl Fn(TypeId) -> bool) -> Option<TypeId> {
+        let mut current = id;
+        loop {
+            match self.get_unerased(current) {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => current = *inner,
+                ResolvedType::Newtype { base_type, .. } => {
+                    if owns(current) {
+                        return Some(current);
+                    }
+                    current = *base_type;
+                }
+                _ => return None,
+            }
+        }
+    }
+
+    /// Whether `link` is a base anywhere in `id`'s newtype chain, rather than
+    /// one peel down, which a longer chain steps past.
+    #[must_use]
+    pub fn newtype_chain_reaches(&self, id: TypeId, link: TypeId) -> bool {
+        self.newtype_link_owning(id, |tid| self.get_newtype_base(tid) == Some(link))
+            .is_some()
+    }
+
+    /// The declaration a newtype inherits from: its chain peeled to what it
+    /// wraps, any other type unchanged (WEP 2026-01-29). That is where its
+    /// impls live, and so where a `Reflect*` kind reads its members.
+    ///
+    /// Unlike [`Self::representation_head`] the walk stops at a `flags`
+    /// type, which is a declaration carrying its own impls rather than a
+    /// stand-in for `u32`, and it reads the identity ([`Self::get_unerased`]):
+    /// erasure redirects a link to its base, and the erased view shows no chain
+    /// to walk. Identity is *not* inherited — a newtype names itself through
+    /// `Reflect` — so this never answers for a type's name.
+    pub fn reflect_structure_head(&self, id: TypeId) -> TypeId {
+        self.newtype_chain(id)
+            .last()
+            .expect("a chain holds the type it starts at")
+    }
+
+    /// `id` and every type its newtype chain wraps, nearest first.
+    fn newtype_chain(&self, id: TypeId) -> impl Iterator<Item = TypeId> {
+        std::iter::successors(Some(id), |&current| match self.get_unerased(current) {
+            ResolvedType::Newtype { base_type, .. } => Some(*base_type),
+            _ => None,
+        })
+    }
+
+    /// The structure a match takes its cases from: references peeled for match
+    /// ergonomics, then newtypes, a newtype's cases being its base's.
+    pub fn scrutinee_structure_head(&self, id: TypeId) -> TypeId {
+        self.reflect_structure_head(self.peel_refs(id))
+    }
+
+    /// Every declaration on `id`'s newtype chain, its head's included: the names
+    /// that stand for one structure, so any of them names `id`'s cases.
+    pub fn structure_chain_defs(&self, id: TypeId) -> Vec<DefId> {
+        self.newtype_chain(self.peel_refs(id))
+            .filter_map(|t| self.nominal_def(t))
+            .collect()
+    }
+
+    /// The reflection kind `id` is, or `None` where reflection does not cover
+    /// it: the one answer to which `Reflect*` the compiler synthesizes for a
+    /// type, and so to which kind bound can hold for it. A `GenericInstance`
+    /// takes its declaration's kind — `Pair<i32>` is a struct because `Pair` is.
+    ///
+    /// The sealed member handles are the one declared struct it withholds.
+    pub fn reflect_kind(&self, id: TypeId) -> Option<CompilerItem> {
+        if self
+            .decl_of_type(id)
+            .is_some_and(|decl| self.is_sealed_reflect_member(decl))
+        {
+            return None;
+        }
+        match self.get(id) {
+            ResolvedType::Struct {
+                def: StructDef::Anon(shape),
+                ..
+            } if self.template_shape(*shape).is_some() => Some(CompilerItem::ReflectTemplate),
+            ResolvedType::Struct { .. } => Some(CompilerItem::ReflectStruct),
+            ResolvedType::Variant { .. } => Some(CompilerItem::ReflectVariant),
+            ResolvedType::Enum { .. } => Some(CompilerItem::ReflectEnum),
+            ResolvedType::Flags { .. } => Some(CompilerItem::ReflectFlags),
+            ResolvedType::Newtype { .. } => Some(CompilerItem::ReflectNewtype),
+            ResolvedType::GenericInstance { def, .. } => {
+                let def = *def;
+                // A variant is asked first: a variant declaration also registers
+                // a struct-shaped payload layout under its own name, so the
+                // struct lookup answers for both kinds.
+                if self.find_variant_type(def).is_some() {
+                    Some(CompilerItem::ReflectVariant)
+                } else if self
+                    .find_struct_by_name(self.def_name(def), self.def_module(def))
+                    .is_some()
+                {
+                    Some(CompilerItem::ReflectStruct)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// The type `id` is represented by: its newtype chain followed to the end
+    /// and a `flags` type answered as `u32`, anything else unchanged.
+    /// [`Self::reflect_structure_head`] answers the other question — where a
+    /// declaration's impls live — and so stops at `flags`, which writes its own.
+    ///
+    /// Works before and after `erase_newtypes_and_flags()`: the redirect map is
+    /// consulted first, so `FieldName` answers `String` either way.
+    pub fn representation_head(&self, id: TypeId) -> TypeId {
+        // Fast path: after erasure, redirects always point directly to the base.
+        if let Some(&redirect) = self.redirects.get(id) {
+            return redirect;
+        }
+        let mut current = id;
+        loop {
+            match self
+                .types
+                .get(current)
+                .unwrap_or_else(|| panic!("TypeId {current:?} not found in TypeTable"))
+            {
+                ResolvedType::Newtype { base_type, .. } => {
+                    // Use redirect if already computed; otherwise follow the raw chain.
+                    current = self
+                        .redirects
+                        .get(*base_type)
+                        .copied()
+                        .unwrap_or(*base_type);
+                }
+                ResolvedType::Flags { .. } => return TypeTable::U32,
+                _ => return current,
+            }
+        }
+    }
+
+    /// Check if two types share a common base type (for cast validation).
+    /// Types share a common base if:
+    /// - They are the same type
+    /// - One is a newtype of the other
+    /// - Both are newtypes with the same ultimate base type
+    pub fn share_common_base(&self, a: TypeId, b: TypeId) -> bool {
+        self.type_key(self.representation_head(a)) == self.type_key(self.representation_head(b))
+    }
+
+    /// Whether `id` is `List<u8>` or a newtype chain over it (`ByteList`): what
+    /// a byte-string literal coerces to.
+    pub fn is_byte_list_representation(&self, id: TypeId) -> bool {
+        self.list_element(self.representation_head(id)) == Some(TypeTable::U8)
+    }
+
+    /// Whether `id` is a `List` whose element is still open, which a
+    /// byte-string literal settles as `u8`.
+    pub fn is_list_of_open_element(&self, id: TypeId) -> bool {
+        self.list_element(id).is_some_and(|element| {
+            matches!(
+                self.get(element),
+                ResolvedType::TypeParam { .. } | ResolvedType::InferVar(_)
+            )
+        })
+    }
+
+    /// The fixed-width primitive a sequence type (`Array<T>`, `List<T>`, or a
+    /// newtype over either) reads from little-endian data; `None` for the rest.
+    pub fn packed_element(&self, seq: TypeId) -> Option<PrimitiveType> {
+        self.primitive_head(self.seq_element(seq)?)
+            .filter(|p| p.data_width().is_some())
+    }
+
+    /// The element type of `Array<T>`, `List<T>`, or a newtype over either.
+    pub fn seq_element(&self, seq: TypeId) -> Option<TypeId> {
+        let head = self.representation_head(seq);
+        match self.get(head) {
+            ResolvedType::BuiltinArray(elem) => Some(*elem),
+            _ => self.as_list(head),
+        }
+    }
+
+    /// Check if a type is `List<T>` and return the element type if so.
+    /// Also unwraps Ref/MutRef types to check the inner type.
+    pub fn as_list(&self, id: TypeId) -> Option<TypeId> {
+        match self.get(id) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.as_list(*inner),
+            _ => self.list_element(id),
+        }
+    }
+
+    /// The element type of `id` when it is a `List` itself, not a reference to one.
+    pub fn list_element(&self, id: TypeId) -> Option<TypeId> {
+        self.single_arg_of(id, CompilerItem::List)
+    }
+
+    /// The element type of `id` when it is the range struct a `kind` range
+    /// literal builds.
+    pub fn range_element(&self, id: TypeId, kind: RangeKind) -> Option<TypeId> {
+        self.single_arg_of(id, range_item(kind))
+    }
+
+    /// Check if a type contains UNKNOWN (undefined type that was not resolved).
+    pub fn contains_unknown(&self, id: TypeId) -> bool {
+        match self.get(id) {
+            ResolvedType::Unknown => true,
+            _ => self.any_constituent(id, &mut |t| self.contains_unknown(t)),
+        }
+    }
+
+    /// Whether `id` carries `!` in an argument position — `Option<!>`, a bare
+    /// `null`'s type, names a value of every `Option` and so decides nothing.
+    /// `!` itself is not an argument position and answers `false`; callers that
+    /// mean "diverges" compare against [`Self::NEVER`].
+    pub fn contains_never_arg(&self, id: TypeId) -> bool {
+        fn mentions(tt: &TypeTable, id: TypeId) -> bool {
+            id == TypeTable::NEVER || tt.any_constituent(id, &mut |t| mentions(tt, t))
+        }
+        id != TypeTable::NEVER && mentions(self, id)
+    }
+
+    /// Whether `id` names no type of its own: it still holds UNKNOWN, or it is
+    /// a bare `null`'s `Option<!>`. Such a type never decides a branch
+    /// construct's result — a sibling with a definite type does.
+    pub fn is_indefinite(&self, id: TypeId) -> bool {
+        self.contains_unknown(id) || self.contains_never_arg(id)
+    }
+
+    /// Whether `id` (recursively) mentions anything a type check cannot decide
+    /// yet: an inference variable, a type pack, or an unresolved / error type.
+    /// A rigid type parameter is decided, and so is a projection over one.
+    pub fn contains_undecided(&self, id: TypeId) -> bool {
+        self.contains_hole(id, true)
+    }
+
+    /// [`Self::contains_undecided`] without the packs. A pack is decided
+    /// wherever its own declaration is in scope, so a rule about shape must not
+    /// read it as the hole an `InferVar` is.
+    pub fn awaits_inference(&self, id: TypeId) -> bool {
+        self.contains_hole(id, false)
+    }
+
+    /// The walk both of the above are, differing only in whether a declared
+    /// pack counts as a hole.
+    fn contains_hole(&self, id: TypeId, packs_count: bool) -> bool {
+        match self.get(id) {
+            ResolvedType::TypePack { .. } => packs_count,
+            ResolvedType::InferVar(_) | ResolvedType::Unknown | ResolvedType::Error => true,
+            ResolvedType::AssocTypeProjection { param_id, .. } => {
+                !self.projects_from_param(*param_id)
+            }
+            _ => self.any_constituent(id, &mut |t| self.contains_hole(t, packs_count)),
+        }
+    }
+
+    /// The name of every type pack `id` mentions, so a caller can ask whose
+    /// declaration they belong to.
+    pub fn pack_names(&self, id: TypeId) -> Vec<String> {
+        let mut out = Vec::new();
+        self.collect_pack_names(id, &mut out);
+        out
+    }
+
+    fn collect_pack_names(&self, id: TypeId, out: &mut Vec<String>) {
+        match self.get(id) {
+            ResolvedType::TypePack {
+                name, mapped_elem, ..
+            } => {
+                out.push(name.clone());
+                if let Some(elem) = mapped_elem {
+                    self.collect_pack_names(*elem, out);
+                }
+            }
+            _ => {
+                self.any_constituent(id, &mut |t| {
+                    self.collect_pack_names(t, out);
+                    false
+                });
+            }
+        }
+    }
+
+    /// Whether a projection over `base` bottoms out at a rigid type parameter,
+    /// chaining through nested projections (`I::Iter::Item`).
+    fn projects_from_param(&self, base: TypeId) -> bool {
+        match self.get(base) {
+            ResolvedType::TypeParam { .. } => true,
+            ResolvedType::AssocTypeProjection { param_id, .. } => {
+                self.projects_from_param(*param_id)
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether `id` (recursively) mentions a *rigid* type parameter — a slot
+    /// of some declaration's own frame, as opposed to an inference variable a
+    /// solver still owns.
+    pub fn contains_rigid_param(&self, id: TypeId) -> bool {
+        self.mentions_slot(id, Through::Projection)
+    }
+
+    /// Whether `id` mentions a slot a value assigned to it could still fill.
+    /// [`Self::contains_rigid_param`] stopping at a projection: `I::Item`
+    /// mentions a slot without being one, and inference cannot invert it.
+    pub fn contains_fillable_slot(&self, id: TypeId) -> bool {
+        self.mentions_slot(id, Through::ProjectionStops)
+    }
+
+    fn mentions_slot(&self, id: TypeId, through: Through) -> bool {
+        match self.get(id) {
+            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. } => true,
+            ResolvedType::AssocTypeProjection { param_id, .. } => match through {
+                Through::Projection => self.mentions_slot(*param_id, through),
+                Through::ProjectionStops => false,
+            },
+            _ => self.any_constituent(id, &mut |t| self.mentions_slot(t, through)),
+        }
+    }
+
+    /// Whether `id` is fully determined: no type parameter, no inference
+    /// variable, no projection awaiting a bound's impl, nothing unresolved —
+    /// anywhere inside it. A type that can be named, monomorphized, and
+    /// emitted. The negation of [`Self::contains_type_param`], spelled
+    /// positively so a caller filtering for real types need not reinvent the
+    /// recursion.
+    pub fn is_concrete(&self, id: TypeId) -> bool {
+        !self.contains_type_param(id)
+    }
+
+    /// Whether `id` is a `TypePack` or a tuple whose elements transitively
+    /// contain one.
+    pub fn contains_type_pack(&self, id: TypeId) -> bool {
+        match self.get(id) {
+            ResolvedType::TypePack { .. } => true,
+            ResolvedType::GenericInstance { def, type_args } if self.is_tuple_def(*def) => {
+                type_args.iter().any(|e| self.contains_type_pack(*e))
+            }
+            _ => false,
+        }
+    }
+
+    /// Check if a type is or contains type parameters or unresolved types (Unknown/Error)
+    pub fn contains_type_param(&self, id: TypeId) -> bool {
+        match self.get(id) {
+            ResolvedType::TypeParam { .. }
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::InferVar(_)
+            | ResolvedType::AssocTypeProjection { .. }
+            | ResolvedType::Unknown
+            | ResolvedType::Error => true,
+            _ => self.any_constituent(id, &mut |t| self.contains_type_param(t)),
+        }
+    }
+
+    /// Whether `f` holds of any type `id` is built over, through the
+    /// constructors a use site substitutes into (`Self::subst_rec`).
+    fn any_constituent(&self, id: TypeId, f: &mut dyn FnMut(TypeId) -> bool) -> bool {
+        match self.get(id) {
+            ResolvedType::BuiltinArray(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Reactive(inner) => f(*inner),
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => params.iter().any(|&p| f(p)) || f(*return_type),
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. }
+            | ResolvedType::Newtype { type_args, .. } => type_args.iter().any(|&t| f(t)),
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_type_bindings,
+                ..
+            } => f(*param_id) || assoc_type_bindings.iter().any(|(_, t)| f(*t)),
+            _ => false,
+        }
+    }
+
+    /// Whether a receiver of type `id` names no dispatch head until
+    /// substitution, which is what
+    /// [`crate::name::LocalMethodName::is_type_param_receiver`] marks.
+    pub fn receiver_head_awaits_substitution(&self, id: TypeId) -> bool {
+        matches!(
+            self.get(id),
+            ResolvedType::TypeParam { .. }
+                | ResolvedType::TypePack { .. }
+                | ResolvedType::AssocTypeProjection { .. }
+        )
+    }
+
+    /// Whether `id`'s representation is known only once substitution settles
+    /// it: a type parameter or a projection, read through newtypes.
+    pub fn representation_awaits_substitution(&self, id: TypeId) -> bool {
+        matches!(
+            self.get(self.representation_head(id)),
+            ResolvedType::TypeParam { .. } | ResolvedType::AssocTypeProjection { .. }
+        )
+    }
+
+    /// Whether `id` (recursively) mentions an associated-type projection
+    /// (`I::Item`), i.e. still needs a bound's impl to become concrete.
+    pub fn contains_assoc_type_projection(&self, id: TypeId) -> bool {
+        !self.assoc_type_projections(id).is_empty()
+    }
+
+    /// Every associated-type projection `id` mentions, outermost first.
+    pub fn assoc_type_projections(&self, id: TypeId) -> Vec<TypeId> {
+        let mut out = Vec::new();
+        self.collect_assoc_type_projections(id, &mut out);
+        out
+    }
+
+    fn collect_assoc_type_projections(&self, id: TypeId, out: &mut Vec<TypeId>) {
+        if let ResolvedType::AssocTypeProjection { .. } = self.get(id) {
+            out.push(id);
+            return;
+        }
+        self.any_constituent(id, &mut |t| {
+            self.collect_assoc_type_projections(t, out);
+            false
+        });
+    }
+
+    /// The frame slot `id` names where it is a type parameter or a pack.
+    pub fn param_slot(&self, id: TypeId) -> Option<u32> {
+        match self.get(id) {
+            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
+                Some(*index)
+            }
+            _ => None,
+        }
+    }
+
+    /// Whether `id` (recursively) mentions the frame slot `index`, projections
+    /// included; slot 0 of a trait's frame is `Self`. Tells whether a method
+    /// type parameter is inferable from an argument or only from the return.
+    pub fn contains_type_param_index(&self, id: TypeId, index: u32) -> bool {
+        match self.get(id) {
+            ResolvedType::TypeParam { index: i, .. } | ResolvedType::TypePack { index: i, .. } => {
+                *i == index
+            }
+            _ => self.any_constituent(id, &mut |t| self.contains_type_param_index(t, index)),
+        }
+    }
+
+    /// Whether every `TypeParam` / `TypePack` `id` (recursively) mentions is in
+    /// `allowed` (by `TypeId`). A type with no type parameters trivially holds.
+    /// Used to decide whether an inference hole may be solved against an
+    /// expected type: only when that type's parameters are outer-scope generics
+    /// (not a callee's own, still-being-inferred method parameters).
+    pub fn type_params_all_in(&self, id: TypeId, allowed: &[TypeId]) -> bool {
+        match self.get(id) {
+            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. } => allowed.contains(&id),
+            ResolvedType::InferVar(_) => false,
+            _ => !self.any_constituent(id, &mut |t| !self.type_params_all_in(t, allowed)),
+        }
+    }
+
+    /// Whether `id` is an inference variable or is built over one — through the
+    /// constructors a use site instantiates and substitutes through.
+    ///
+    /// A projection's base is: `?I::Item` is answered once `?I` is. A pack's
+    /// mapped element and the bindings a projection carries to be answered are
+    /// not what a use site is still waiting on. Reading them as such left
+    /// `Ok(v)` in `f32::from_str_lenient` with no resolved type.
+    pub fn contains_infer_var(&self, id: TypeId) -> bool {
+        self.any_infer_var(id, &mut |_| true)
+    }
+
+    /// Whether `id` is an inference variable itself, not a type naming one.
+    pub fn is_infer_var(&self, id: TypeId) -> bool {
+        matches!(self.get(id), ResolvedType::InferVar(_))
+    }
+
+    /// The inference variables [`Self::contains_infer_var`] finds in `id`,
+    /// each once, in the order it meets them.
+    pub fn infer_vars_in(&self, id: TypeId) -> Vec<TypeId> {
+        let mut out = Vec::new();
+        self.any_infer_var(id, &mut |var| {
+            if !out.contains(&var) {
+                out.push(var);
+            }
+            false
+        });
+        out
+    }
+
+    /// Whether `pred` holds of an inference variable
+    /// [`Self::contains_infer_var`] reaches in `id`, visiting them in order.
+    fn any_infer_var(&self, id: TypeId, pred: &mut impl FnMut(TypeId) -> bool) -> bool {
+        match self.get(id) {
+            ResolvedType::InferVar(_) => pred(id),
+            ResolvedType::AssocTypeProjection { param_id, .. } => {
+                self.any_infer_var(*param_id, pred)
+            }
+            _ => self.any_constituent(id, &mut |t| self.any_infer_var(t, pred)),
+        }
+    }
+
+    /// Get a human-readable name for a type
+    pub fn type_name(&self, id: TypeId) -> String {
+        self.render_type_name(id, false)
+    }
+
+    /// [`Self::type_name`] as the type read before `boxing::prepare_types`
+    /// redefined a borrow into `Box<T>`: what the source wrote, `&i32`.
+    #[must_use]
+    pub fn type_name_unboxed(&self, id: TypeId) -> String {
+        match self.spelled_borrow(id) {
+            Some((payload, RefKind::Shared)) => format!("&{}", self.type_name_unboxed(payload)),
+            Some((payload, RefKind::Mut)) => format!("&mut {}", self.type_name_unboxed(payload)),
+            None => self.type_name(id),
+        }
+    }
+
+    /// [`Self::type_name`] with every declared head written in the spec's
+    /// `MODULE#SYMBOL` notation.
+    ///
+    /// Ask [`Self::type_names_for_mismatch`] rather than this directly:
+    /// qualifying a name that was already unambiguous only makes the message
+    /// longer.
+    #[must_use]
+    pub fn type_name_qualified(&self, id: TypeId) -> String {
+        self.render_type_name(id, true)
+    }
+
+    /// The two spellings a mismatch message prints.
+    ///
+    /// Equal renderings mean two declarations of one name — the only case a
+    /// reader cannot settle from the message — and only then is each qualified.
+    /// Every other mismatch keeps the short form it prints today.
+    #[must_use]
+    pub fn type_names_for_mismatch(&self, expected: TypeId, found: TypeId) -> (String, String) {
+        let (a, b) = (self.type_name(expected), self.type_name(found));
+        if a != b {
+            return (a, b);
+        }
+        let (qa, qb) = (
+            self.type_name_qualified(expected),
+            self.type_name_qualified(found),
+        );
+        // Two renderings that stay equal even qualified are the same type, or
+        // two shapes no module names. Neither is helped by the longer form.
+        if qa == qb { (a, b) } else { (qa, qb) }
+    }
+
+    /// The declared name of `def`, qualified by its module when `qualified`.
+    fn head_name(&self, def: DefId, qualified: bool) -> String {
+        let name = self.def_name(def);
+        if qualified {
+            render(&self.def_module(def).to_string(), name)
+        } else {
+            name.to_string()
+        }
+    }
+
+    fn render_type_name(&self, id: TypeId, qualified: bool) -> String {
+        let type_name = |t: TypeId| self.render_type_name(t, qualified);
+        match self.get(id) {
+            ResolvedType::Primitive(p) => p.as_str().to_string(),
+            ResolvedType::Unit => UNIT_TYPE_NAME.to_string(),
+            ResolvedType::Never => NEVER_TYPE_NAME.to_string(),
+            ResolvedType::Unknown => "unknown".to_string(),
+            ResolvedType::Error => "error".to_string(),
+            ResolvedType::BuiltinArray(elem) => {
+                format!("Array<{}>", type_name(*elem))
+            }
+            ResolvedType::Struct { def, type_args } => {
+                // The declared head, not the rendered one: a message shows
+                // `Box<i32>`, never the `Box@<local>` a local declaration is
+                // stored under.
+                let head = match (qualified, def.decl()) {
+                    (true, Some(decl)) => self.head_name(decl, true),
+                    _ => self.struct_head_decl_name(*def),
+                };
+                if type_args.is_empty() {
+                    head
+                } else {
+                    let args: Vec<String> = type_args
+                        .iter()
+                        .map(|&a| self.mangle_type_arg_for_generic(a))
+                        .collect();
+                    mangle_generic_name(&head, &args)
+                }
+            }
+            ResolvedType::Enum { def } | ResolvedType::Resource { def } => {
+                self.head_name(*def, qualified)
+            }
+            ResolvedType::Function {
+                is_mut,
+                params,
+                return_type,
+                effects,
+            } => {
+                let param_names: Vec<String> = params.iter().map(|p| type_name(*p)).collect();
+                let keyword = if *is_mut { "fn mut" } else { "fn" };
+                let effect_names: Vec<String> =
+                    effects.iter().map(|e| e.display_name(qualified)).collect();
+                let clause = match effect_names.as_slice() {
+                    [] => String::new(),
+                    [one] => format!(" with {one}"),
+                    many => format!(" with ({})", many.join(", ")),
+                };
+                // A function-typed return is parenthesized, or a `with` after it
+                // would not say which of the two function types carries it.
+                let return_name = type_name(*return_type);
+                let return_name = match self.get(*return_type) {
+                    ResolvedType::Function { .. } => format!("({return_name})"),
+                    _ => return_name,
+                };
+                format!(
+                    "{}({}) -> {return_name}{clause}",
+                    keyword,
+                    param_names.join(", ")
+                )
+            }
+            ResolvedType::Ref(inner) => format!("&{}", type_name(*inner)),
+            ResolvedType::MutRef(inner) => format!("&mut {}", type_name(*inner)),
+            ResolvedType::Variant { def } => self.head_name(*def, qualified),
+            ResolvedType::GenericResource { def, type_args } => {
+                let arg_names: Vec<String> = type_args.iter().map(|t| type_name(*t)).collect();
+                format!(
+                    "{}<{}>",
+                    self.head_name(*def, qualified),
+                    arg_names.join(", ")
+                )
+            }
+            ResolvedType::Reactive(inner) => format!("Reactive<{}>", type_name(*inner)),
+            ResolvedType::TypeParam { name, .. } => name.clone(),
+            ResolvedType::InferVar(var) => self.infer_var_name(*var),
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_name,
+                owning_trait,
+                ..
+            } => {
+                let base = type_name(*param_id);
+                // The owning trait is part of a projection's identity, so two
+                // that differ only there render the same without it.
+                if qualified {
+                    let owner = self.head_name(*owning_trait, true);
+                    format!("<{base} as {owner}>::{assoc_name}")
+                } else {
+                    format!("{base}::{assoc_name}")
+                }
+            }
+            ResolvedType::GenericInstance { def, type_args } => {
+                let arg_names: Vec<String> = type_args.iter().map(|t| type_name(*t)).collect();
+                // A tuple is module-independent, so it has nothing to qualify.
+                if self.is_tuple_def(*def) {
+                    format!("[{}]", arg_names.join(", "))
+                } else {
+                    format!(
+                        "{}<{}>",
+                        self.head_name(*def, qualified),
+                        arg_names.join(", ")
+                    )
+                }
+            }
+            ResolvedType::Newtype { def, type_args, .. } => {
+                let head = self.head_name(*def, qualified);
+                if type_args.is_empty() {
+                    head
+                } else {
+                    let args: Vec<String> = type_args.iter().map(|t| type_name(*t)).collect();
+                    format!("{head}<{}>", args.join(", "))
+                }
+            }
+            ResolvedType::Flags { def } => self.head_name(*def, qualified),
+            ResolvedType::TypePack { name, .. } => format!("..{name}"),
+        }
+    }
+
+    /// Mangle a type name, resolving all newtypes/flags to their base types recursively.
+    /// E.g., `List<FieldName>` → `List<String>` when `FieldName = String`.
+    pub fn mangle_type_name_resolving_newtypes(&self, id: TypeId) -> String {
+        let base = self.representation_head(id);
+        match self.get(base) {
+            ResolvedType::GenericInstance { def, type_args } => {
+                let module_source = self.def_module(*def);
+                let args: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.mangle_type_name_resolving_newtypes(*t))
+                    .collect();
+                // A tuple is module-independent; every other instance is named
+                // by the module declaring its base.
+                if self.is_tuple_def(*def) {
+                    mangle_tuple_type(&args)
+                } else {
+                    let unqualified = mangle_generic_name(&self.decl_render_name(*def), &args);
+                    format!("{module_source}/{unqualified}")
+                }
+            }
+            ResolvedType::BuiltinArray(elem) => {
+                let elem_name = self.mangle_type_name_resolving_newtypes(*elem);
+                mangle_builtin_array_type(&elem_name)
+            }
+            _ => self.mangle_type_name(base),
+        }
+    }
+
+    /// Recursively resolve newtypes inside compound types (tuples, generics, arrays).
+    /// Returns the same `TypeId` if no newtypes are found, or a new `TypeId` with all
+    /// newtypes replaced by their base types.
+    pub fn resolve_newtypes_deep(&mut self, id: TypeId) -> TypeId {
+        let base = self.representation_head(id);
+        match self.get(base).clone() {
+            ResolvedType::GenericInstance { def, type_args } => {
+                let resolved: Vec<TypeId> = type_args
+                    .iter()
+                    .map(|t| self.resolve_newtypes_deep(*t))
+                    .collect();
+                if resolved == type_args {
+                    base
+                } else {
+                    self.make_generic_instance(def, resolved)
+                }
+            }
+            ResolvedType::BuiltinArray(elem) => {
+                let resolved = self.resolve_newtypes_deep(elem);
+                if resolved == elem {
+                    base
+                } else {
+                    self.intern(ResolvedType::BuiltinArray(resolved))
+                }
+            }
+            _ => base,
+        }
+    }
+
+    /// Like `resolve_newtypes_deep` but non-mutating — only resolves if all
+    /// intermediate types already exist. Returns the original `TypeId` if resolution
+    /// would require creating new types.
+    #[must_use]
+    pub fn resolve_newtypes_deep_readonly(&self, id: TypeId) -> TypeId {
+        let base = self.representation_head(id);
+        match self.get(base) {
+            ResolvedType::GenericInstance { def, type_args } => {
+                let resolved: Vec<TypeId> = type_args
+                    .iter()
+                    .map(|t| self.resolve_newtypes_deep_readonly(*t))
+                    .collect();
+                if resolved == *type_args {
+                    base
+                } else if let Some(existing) = self.find_generic_instance(*def, &resolved) {
+                    existing
+                } else {
+                    id // Can't create new type, return original
+                }
+            }
+            _ => base,
+        }
+    }
+
+    /// Mangle a type for use inside struct / function names — `Tuple<i32,String>`
+    /// where [`Self::type_name`] would give the human-readable `[i32, String]`.
+    /// A generic renders as `Name<T1,T2,…>`, a function as [`crate::name::mangle_fn_type`]
+    /// spells it, and references are stripped.
+    #[must_use]
+    pub fn mangle_type_name(&self, id: TypeId) -> String {
+        let info = self.get_type_name_info(id);
+        format_type_name(info)
+    }
+
+    /// Mangle `id` as a type argument inside a generic instance's identity — the
+    /// `T` in `Result<unit, T>`. Unlike [`Self::mangle_type_name`], every named
+    /// head is qualified by its declaring module, or two same-named types collapse.
+    ///
+    /// Delegates to [`crate::name::FqTypeName::to_mangled`], the one renderer, so
+    /// a definition's name and a lookup's cannot disagree.
+    #[must_use]
+    pub fn mangle_type_arg_for_generic(&self, id: TypeId) -> String {
+        self.fq_type_name(id).to_mangled()
+    }
+
+    /// Module-qualifying analogue of
+    /// [`Self::mangle_type_name_resolving_newtypes`]. Used by the few WIR
+    /// fq lookup sites that consult the newtype-resolved form
+    /// (`wir_build/context.rs`).
+    pub fn mangle_type_arg_for_generic_resolving_newtypes(&self, id: TypeId) -> String {
+        let resolved = self.representation_head(id);
+        self.mangle_type_arg_for_generic(resolved)
+    }
+
+    /// [`Self::mangle_type_arg_for_generic`] as it reads *after*
+    /// [`Self::erase_newtypes_and_flags`]: every `Newtype` collapses to its
+    /// ultimate base and every `Flags` to `u32`, recursively through composite
+    /// types. Lets pre-erasure synthesis (the `StructField::get` bridge helpers) mint a
+    /// name that matches the post-erasure call site, whose `field_ty` reads
+    /// through the erasure redirect map.
+    pub fn mangle_type_arg_erased(&self, id: TypeId) -> String {
+        match self.get(id) {
+            ResolvedType::Newtype { .. } | ResolvedType::Flags { .. } => {
+                self.mangle_type_arg_erased(self.representation_head(id))
+            }
+            ResolvedType::GenericInstance { def, type_args } => {
+                let args: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.mangle_type_arg_erased(*t))
+                    .collect();
+                if self.is_tuple_def(*def) {
+                    return mangle_tuple_type(&args);
+                }
+                let unqualified = mangle_generic_name(&self.decl_render_name(*def), &args);
+                format!("{}/{unqualified}", self.def_module(*def))
+            }
+            ResolvedType::Ref(inner) => format!("&{}", self.mangle_type_arg_erased(*inner)),
+            ResolvedType::MutRef(inner) => format!("&mut {}", self.mangle_type_arg_erased(*inner)),
+            ResolvedType::BuiltinArray(elem) => {
+                mangle_builtin_array_type(&self.mangle_type_arg_erased(*elem))
+            }
+            _ => self.mangle_type_arg_for_generic(id),
+        }
+    }
+
+    /// [`Self::mangle_type_arg_for_generic`] as the type read *before*
+    /// `boxing::prepare_types` redefined every borrowed `TypeId` into `Box<T>`,
+    /// so a post-boxing call site names the bridge pre-boxing synthesis minted.
+    pub fn mangle_type_arg_unboxed(&self, id: TypeId) -> String {
+        self.fq_type_name_unboxed(id).to_mangled()
+    }
+
+    /// The base type name without type arguments: the head's own name, so
+    /// `Option<String>` and a monomorphized `Option<String>` both answer
+    /// `"Option"`. Everything else falls back to `mangle_type_name`.
+    #[must_use]
+    pub fn base_type_name(&self, id: TypeId) -> String {
+        match self.get(id) {
+            // A generic resource heads its methods bare, like a generic struct:
+            // spelling the argument into the head applies it twice
+            // (`StreamWritable<u8><u8>::write_all`) and resolves to nothing.
+            ResolvedType::GenericInstance { def, .. }
+            | ResolvedType::GenericResource { def, .. } => self.def_name(*def).to_string(),
+            ResolvedType::Struct { def, .. } => self.struct_head_name(*def),
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.base_type_name(*inner),
+            _ => self.mangle_type_name(id),
+        }
+    }
+
+    /// The name a struct is *stored* under in the package's struct list: the
+    /// head left bare, with module disambiguation carried alongside as a
+    /// `ModuleSource` rather than folded in — unlike every mangler, because that
+    /// is how the list is keyed. It holds one entry per instantiation, so an
+    /// instantiation is spelled with its arguments. `None` if not struct-shaped.
+    #[must_use]
+    pub fn struct_list_name(&self, id: TypeId) -> Option<String> {
+        match self.get(id) {
+            ResolvedType::Struct { def, type_args } => {
+                Some(self.struct_rendered_name(*def, type_args))
+            }
+            ResolvedType::GenericInstance { def, type_args } => {
+                let args: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.mangle_type_arg_for_generic(*t))
+                    .collect();
+                Some(if self.is_tuple_def(*def) {
+                    mangle_tuple_type(&args)
+                } else {
+                    mangle_generic_name(&self.decl_render_name(*def), &args)
+                })
+            }
+            _ => None,
+        }
+    }
+
+    /// The receiver `id`'s impl blocks are indexed under, with the reference
+    /// kind lifted out.
+    ///
+    /// The head carries its declaring module, so two modules declaring the same
+    /// simple name index apart. Consumers pick the namespace they need:
+    /// [`Receiver::decl_key`] for the name an `impl` header writes,
+    /// [`Receiver::head_key`] for the mangled identity.
+    #[must_use]
+    pub fn impl_receiver_key(&self, id: TypeId) -> Receiver {
+        let declared = |def: DefId| Receiver::Type(FqTypeName::declared(&self.defs, def));
+        let builtin = |name: &str| Receiver::Type(FqTypeName::builtin(name));
+        // Unerased: which impls a type has is a fact about its identity, and
+        // erasure rewrites a newtype / flags id to the representation it is
+        // stored as, whose impls are a different set.
+        match self.get_unerased(id) {
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
+                Receiver::Ref(RefKind::from_resolved(self.get(id)).expect(
+                    "a borrow unerased is a borrow erased: `get_unerased` resolves the \
+                     box redefinition, the one rewrite that makes the two views differ",
+                ))
+            }
+            ResolvedType::Struct { def, .. } => Receiver::Type(self.fq_struct_head(*def)),
+            // The head is the declaration, arguments never spelled into it — an
+            // `impl` header writes `MyArray`, not `MyArray<i32>`, and
+            // `impl Stream<T>`, not `Stream<u8>`. A call keyed the other way
+            // mangles under a second head and never meets the impl's methods.
+            ResolvedType::Enum { def }
+            | ResolvedType::Variant { def }
+            | ResolvedType::Flags { def }
+            | ResolvedType::Resource { def }
+            | ResolvedType::Newtype { def, .. }
+            | ResolvedType::GenericInstance { def, .. }
+            | ResolvedType::GenericResource { def, .. } => declared(*def),
+            ResolvedType::TypeParam { name, .. } => Receiver::Type(FqTypeName::binder(name)),
+            ResolvedType::BuiltinArray(_) => builtin(Self::ARRAY_TYPE_NAME),
+            ResolvedType::Unit => builtin(UNIT_TYPE_NAME),
+            ResolvedType::Primitive(prim) => builtin(prim.as_str()),
+            ResolvedType::Function { .. } => Receiver::Type(self.fn_receiver_name(self.get(id))),
+            _ => builtin(&self.base_type_name(id)),
+        }
+    }
+
+    /// A `fn(..)` type's spelling. Shared by [`Self::mangle_type_name`] and
+    /// [`Self::fn_receiver_name`], so a stub's name and a call site's are one.
+    fn fn_type_name_info(
+        &self,
+        is_mut: bool,
+        params: &[TypeId],
+        return_type: TypeId,
+        effects: &[EffectRef],
+    ) -> TypeNameInfo {
+        let with_clause: Vec<String> = effects.iter().map(name::mangle_effect_ref).collect();
+        TypeNameInfo::Function {
+            is_mut,
+            params: params.iter().map(|p| self.mangle_type_name(*p)).collect(),
+            return_type: self.mangle_type_name(return_type),
+            return_is_function: matches!(self.get(return_type), ResolvedType::Function { .. }),
+            with_clause,
+        }
+    }
+
+    /// The receiver a `fn(..)` value dispatches through: its own name.
+    #[must_use]
+    pub fn fn_receiver_name(&self, resolved: &ResolvedType) -> FqTypeName {
+        let ResolvedType::Function {
+            is_mut,
+            params,
+            return_type,
+            effects,
+        } = resolved
+        else {
+            panic!("fn_receiver_name expects a function type");
+        };
+        let info = self.fn_type_name_info(*is_mut, params, *return_type, effects);
+        FqTypeName::builtin(&format_type_name(info))
+    }
+
+    /// The declaration a type's head names, with any arguments dropped. Read
+    /// off the identity ([`Self::get_unerased`]): this is the head an `impl`
+    /// header writes, and erasure would answer `u32` for a `flags` type and the
+    /// base's name for a newtype — templates no impl declares.
+    #[must_use]
+    pub fn fq_base_type_name(&self, id: TypeId) -> FqTypeName {
+        match self.get_unerased(id) {
+            ResolvedType::Struct { def, .. } => self.fq_struct_head(*def),
+            ResolvedType::Enum { def }
+            | ResolvedType::Variant { def }
+            | ResolvedType::Newtype { def, .. }
+            | ResolvedType::Flags { def }
+            | ResolvedType::Resource { def }
+            | ResolvedType::GenericInstance { def, .. }
+            | ResolvedType::GenericResource { def, .. } => FqTypeName::declared(&self.defs, *def),
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                self.fq_base_type_name(*inner)
+            }
+            ResolvedType::BuiltinArray(_) => FqTypeName::builtin(Self::ARRAY_TYPE_NAME),
+            ResolvedType::Unit => FqTypeName::builtin(UNIT_TYPE_NAME),
+            ResolvedType::Function { .. } => self.fn_receiver_name(self.get(id)),
+            // Tuples, primitives and function types are builtin shapes: no
+            // module declares them and every mangler spells them bare.
+            _ => FqTypeName::builtin(&self.base_type_name(id)),
+        }
+    }
+
+    /// The arguments an instantiation carries; `None` if `id` is not one.
+    #[must_use]
+    pub fn generic_type_args(&self, id: TypeId) -> Option<Vec<TypeId>> {
+        match self.get(id) {
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => Some(type_args.clone()),
+            // No fallback search: an empty list is a declaration, not an instantiation.
+            ResolvedType::Struct { type_args, .. } | ResolvedType::Newtype { type_args, .. }
+                if !type_args.is_empty() =>
+            {
+                Some(type_args.clone())
+            }
+            _ => None,
+        }
+    }
+
+    /// The structured fq name of `id`. The type table is the only thing that
+    /// knows a declaration's module, so it hands back structure and lets the
+    /// caller render or inspect. Rendering here would be one-way — a
+    /// `ModuleSource` cannot be rebuilt from a string without the interner — so
+    /// the name stays structured all the way to its consumers.
+    #[must_use]
+    pub fn fq_type_name(&self, id: TypeId) -> FqTypeName {
+        self.fq_type_name_spelled(id, false)
+    }
+
+    /// [`Self::fq_type_name`] as the type read *before* `boxing::prepare_types`
+    /// redefined every borrowed `TypeId` into `Box<T>`. Every shape recurses,
+    /// so a borrow nested anywhere in the spelling comes back as one.
+    pub fn fq_type_name_unboxed(&self, id: TypeId) -> FqTypeName {
+        self.fq_type_name_spelled(id, true)
+    }
+
+    fn fq_type_name_spelled(&self, id: TypeId, unboxed: bool) -> FqTypeName {
+        // Only a borrow is read off the slot's own type. Every other shape
+        // keeps the erased view below, where ids that erase together must
+        // answer one name.
+        if unboxed && let Some((payload, kind)) = self.spelled_borrow(id) {
+            return self
+                .fq_type_name_spelled(payload, unboxed)
+                .with_reference(kind);
+        }
+        let args_of = |type_args: &[TypeId]| -> Vec<FqTypeName> {
+            type_args
+                .iter()
+                .map(|t| self.fq_type_name_spelled(*t, unboxed))
+                .collect()
+        };
+        // The erased view, unlike [`Self::fq_base_type_name`]: this spelling
+        // also names representation-level functions minted after erasure — a
+        // canonical `$case_extract$` among them — where two ids that erase
+        // together must answer one name.
+        match self.get(id) {
+            ResolvedType::Primitive(prim) => FqTypeName::builtin(prim.as_str()),
+            ResolvedType::Unit => FqTypeName::builtin(UNIT_TYPE_NAME),
+            ResolvedType::Never => FqTypeName::builtin(NEVER_TYPE_NAME),
+            // Head and arguments come straight off the type — the same shape
+            // every other instantiated type has. No recovery step, because
+            // there is no fused spelling left to recover them from.
+            ResolvedType::Struct { def, type_args } => {
+                self.fq_struct_head(*def).with_args(args_of(type_args))
+            }
+            ResolvedType::Enum { def }
+            | ResolvedType::Resource { def }
+            | ResolvedType::Variant { def }
+            | ResolvedType::Flags { def } => FqTypeName::declared(&self.defs, *def),
+            // `MyArray<i32>` and `MyArray<String>` are two instantiations; the
+            // head alone names them the same.
+            ResolvedType::Newtype { def, type_args, .. } => {
+                FqTypeName::declared(&self.defs, *def).with_args(args_of(type_args))
+            }
+            ResolvedType::TypeParam { name, .. } => FqTypeName::binder(name),
+            ResolvedType::GenericInstance { def, type_args } => {
+                let args = args_of(type_args);
+                if self.is_tuple_def(*def) {
+                    FqTypeName::tuple(args)
+                } else {
+                    FqTypeName::declared(&self.defs, *def).with_args(args)
+                }
+            }
+            ResolvedType::GenericResource { def, type_args } => {
+                FqTypeName::declared(&self.defs, *def).with_args(args_of(type_args))
+            }
+            ResolvedType::BuiltinArray(elem) => FqTypeName::builtin(Self::ARRAY_TYPE_NAME)
+                .with_args(vec![self.fq_type_name_spelled(*elem, unboxed)]),
+            ResolvedType::Ref(inner) => self
+                .fq_type_name_spelled(*inner, unboxed)
+                .with_reference(RefKind::Shared),
+            ResolvedType::MutRef(inner) => self
+                .fq_type_name_spelled(*inner, unboxed)
+                .with_reference(RefKind::Mut),
+            // Structural, so substituting the base reaches it: the base is what
+            // a monomorphized call answers, and the projection follows.
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_name,
+                owning_trait,
+                ..
+            } => FqTypeName::projection(
+                self.fq_type_name_spelled(*param_id, unboxed),
+                assoc_name,
+                &self.defs,
+                *owning_trait,
+            ),
+            // Shapes that name no declaration — packs, `Unknown`. They carry no
+            // module, so the rendered spelling is already their whole identity.
+            _ => FqTypeName::builtin(&self.mangle_type_name(id)),
+        }
+    }
+
+    fn get_type_name_info(&self, id: TypeId) -> TypeNameInfo {
+        match self.get(id) {
+            ResolvedType::Primitive(prim) => TypeNameInfo::Primitive(prim.as_str().to_string()),
+            ResolvedType::Unit => TypeNameInfo::Unit,
+            // A declared type is named by its declaring module too: two modules
+            // may declare the same simple name, and a mangled name that omits
+            // the module collapses them onto one identity — the hazard
+            // `mangle_type_arg_for_generic` documents, reached from here as
+            // well.
+            // The identity every mangled name embeds, so the rendered
+            // spelling: each instantiation is its own type.
+            ResolvedType::Struct { def, type_args } => TypeNameInfo::Named(format!(
+                "{}/{}",
+                self.struct_head_module(*def),
+                self.struct_rendered_name(*def, type_args)
+            )),
+            ResolvedType::Enum { def }
+            | ResolvedType::Resource { def }
+            | ResolvedType::Variant { def }
+            | ResolvedType::Newtype { def, .. }
+            | ResolvedType::Flags { def } => {
+                TypeNameInfo::Named(format!("{}/{}", self.def_module(*def), self.def_name(*def)))
+            }
+            // A type parameter is a template's own binder, not a declaration.
+            ResolvedType::TypeParam { name, .. } => TypeNameInfo::Named(name.clone()),
+            // A mangled name is an identity, so two unsolved slots sharing a
+            // spelling must not collapse. The slot's name is for reading.
+            ResolvedType::InferVar(var) => TypeNameInfo::Named(var.to_string()),
+            ResolvedType::GenericInstance { def, type_args } => {
+                let args: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.mangle_type_arg_for_generic(*t))
+                    .collect();
+                // A tuple is module-independent; its elements stay qualified.
+                if self.is_tuple_def(*def) {
+                    return TypeNameInfo::Tuple(args);
+                }
+                TypeNameInfo::Generic {
+                    name: format!("{}/{}", self.def_module(*def), self.decl_render_name(*def)),
+                    args,
+                }
+            }
+            ResolvedType::Function {
+                is_mut,
+                params,
+                return_type,
+                effects,
+            } => self.fn_type_name_info(*is_mut, params, *return_type, effects),
+            ResolvedType::BuiltinArray(elem) => {
+                TypeNameInfo::BuiltinArray(self.mangle_type_name(*elem))
+            }
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                // For references, use the inner type's name (strip reference)
+                TypeNameInfo::Ref(self.mangle_type_name(*inner))
+            }
+            ResolvedType::GenericResource { def, type_args } => {
+                let args: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.mangle_type_arg_for_generic(*t))
+                    .collect();
+                TypeNameInfo::Generic {
+                    name: self.def_name(*def).to_string(),
+                    args,
+                }
+            }
+            ResolvedType::Reactive(inner) => TypeNameInfo::Reactive(self.mangle_type_name(*inner)),
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_name,
+                ..
+            } => TypeNameInfo::Named(format!(
+                "{}::{}",
+                self.mangle_type_name(*param_id),
+                assoc_name
+            )),
+            ResolvedType::TypePack { name, .. } => TypeNameInfo::Named(format!("..{name}")),
+            ResolvedType::Never => TypeNameInfo::Named(NEVER_TYPE_NAME.to_string()),
+            ResolvedType::Unknown | ResolvedType::Error => TypeNameInfo::Unknown,
+        }
+    }
+}
+
+/// The prelude struct a `kind` range literal builds.
+pub fn range_item(kind: RangeKind) -> CompilerItem {
+    match kind {
+        RangeKind::Exclusive => CompilerItem::RangeExclusive,
+        RangeKind::Inclusive => CompilerItem::RangeInclusive,
+    }
+}
+
+/// `args` keyed by the parameter slot each one fills, which is what
+/// [`TypeTable::substitute_type_params`] reads.
+#[must_use]
+pub fn positional_substitution(args: &[TypeId]) -> IndexMap<u32, TypeId> {
+    args.iter()
+        .enumerate()
+        .map(|(slot, &arg)| (slot as u32, arg))
+        .collect()
+}
+
+#[derive(Debug, Clone)]
+pub struct TirExpr {
+    pub kind: TirExprKind,
+    pub type_id: TypeId,
+    pub span: Span,
+}
+
+impl TirExpr {
+    pub fn new(kind: TirExprKind, type_id: TypeId, span: Span) -> Self {
+        Self {
+            kind,
+            type_id,
+            span,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FunctionRef {
+    pub module_source: ModuleSource,
+    pub name: String,
+    /// The declaration the call's producer selected, which a template call
+    /// instantiates. `None` where the producer selected none.
+    pub template: Option<TemplateId>,
+    pub monomorph_info: Option<MonomorphInfo>,
+    pub method_info: Option<LocalMethodName>,
+}
+
+impl FunctionRef {
+    /// Create a `FunctionRef` by extracting metadata from a resolved `TirFunction`.
+    pub fn from_resolved(func: &TirFunction, module_source: ModuleSource) -> Self {
+        Self {
+            module_source,
+            name: func.name.clone(),
+            template: func.template_id(),
+            monomorph_info: func.monomorph_info.clone(),
+            method_info: func.method_info.clone(),
+        }
+    }
+
+    /// Get the module path (for backwards compatibility)
+    pub fn module_path(&self) -> Vec<String> {
+        self.module_source.to_path()
+    }
+
+    /// Get the fully qualified function name including module path.
+    pub fn full_name(&self) -> String {
+        if let Some(info) = &self.method_info {
+            info.to_mangled_name()
+        } else {
+            let path = self.module_source.to_path();
+            format!("{}/{}", path.join("/"), self.name)
+        }
+    }
+
+    pub fn intrinsic(&self) -> Option<&str> {
+        DeclarationLookup::from(self).intrinsic()
+    }
+
+    /// Whether this is the `core:builtin` intrinsic `builtin`.
+    pub fn is_builtin_named(&self, builtin: &str) -> bool {
+        self.intrinsic() == Some(builtin)
+    }
+
+    /// Check if this function is monomorphized (instantiated from a generic)
+    pub fn is_monomorphized(&self) -> bool {
+        self.monomorph_info.is_some()
+    }
+
+    /// Check if this is a method (instance or static) as opposed to a free function.
+    pub fn is_method(&self) -> bool {
+        self.method_info.is_some()
+    }
+
+    /// Check if this is a trait method.
+    pub fn is_trait_method(&self) -> bool {
+        self.method_info
+            .as_ref()
+            .is_some_and(LocalMethodName::is_trait_method)
+    }
+}
+
+/// A function argument bundled with its parameter mutability metadata.
+///
+/// `is_mut` reflects whether the callee declares this parameter as `mut`.
+/// It controls value-copy semantics at the call site in the WIR translation phase.
+/// An empty `args` list or missing metadata defaults to conservative (copy).
+#[derive(Debug, Clone)]
+pub struct CallArg {
+    pub expr: TirExpr,
+    /// Whether the callee declares this parameter as `mut`.
+    pub is_mut: bool,
+}
+
+impl CallArg {
+    pub fn new(expr: TirExpr, is_mut: bool) -> Self {
+        Self { expr, is_mut }
+    }
+}
+
+impl TirExprKind {
+    /// Build `recv.m(args)`: a [`TirExprKind::Call`] whose receiver heads the
+    /// argument list, so `args[i]` maps to the callee's `params[i]`.
+    ///
+    /// Callers are expected to have typechecked `args` against the callee's
+    /// declared parameter types before reaching here.
+    ///
+    /// The receiver's `is_mut` is left `false`; `lower` fills the real value in
+    /// from the callee's `self` parameter, which is where every consumer of it
+    /// lives.
+    pub(crate) fn method_call(
+        receiver: Box<TirExpr>,
+        func: FunctionRef,
+        type_args: Vec<TypeId>,
+        args: Vec<CallArg>,
+    ) -> Self {
+        Self::Call {
+            func: Box::new(func),
+            type_args,
+            args: CallArgs::method(CallArg::new(*receiver, false), args),
+        }
+    }
+
+    /// An instance-method call viewed as receiver plus the arguments after it.
+    /// `None` for a free call.
+    ///
+    /// The split is a view, not storage: the node keeps one argument list in the
+    /// callee's parameter order, so a pass that treats every argument alike
+    /// (traversal, substitution, type-arg rewriting) matches `Call` directly and
+    /// never needs this.
+    pub fn as_method_call(&self) -> Option<(&TirExpr, &FunctionRef, &[CallArg])> {
+        let TirExprKind::Call { func, args, .. } = self else {
+            return None;
+        };
+        let (Some(receiver), rest) = args.split() else {
+            return None;
+        };
+        Some((&receiver.expr, func, rest))
+    }
+
+    /// `args[0]` of a call whose callee declares a receiver, whichever spelling
+    /// wrote it. [`Self::as_method_call`] answers for dot syntax alone, and
+    /// gates the lowering rules only that spelling may take.
+    pub fn call_receiver(&self) -> Option<(&TirExpr, &FunctionRef)> {
+        let TirExprKind::Call { func, args, .. } = self else {
+            return None;
+        };
+        Some((&args.first()?.expr, func))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum TirExprKind {
+    IntLiteral {
+        value: u64,
+        repr: String,
+    },
+    FloatLiteral {
+        value: f64,
+        repr: String,
+    },
+    BoolLiteral(bool),
+    CharLiteral(char),
+    StringLiteral(String),
+    /// Byte array literal from `#include_bytes`. Lowered to `List<u8>` via data segment.
+    BytesLiteral(Vec<u8>),
+    Null,
+    Unit,
+
+    Local {
+        index: u32,
+        name: String,
+    },
+    FuncRef {
+        module_source: ModuleSource,
+        name: String,
+        /// Type arguments pinned for a generic function reference (either via
+        /// turbofish `identity::<i32>` or inferred from an expected `fn(...)`
+        /// type at the use site). Empty for non-generic function references.
+        /// Consumed by the monomorphizer, which queues the corresponding
+        /// instantiation and rewrites `name` to the mangled form.
+        type_args: Vec<TypeId>,
+        /// The function declaration referenced, as [`FunctionRef::template`].
+        template: Option<TemplateId>,
+    },
+    /// Read a global variable
+    GlobalVarGet {
+        module_source: ModuleSource,
+        name: String,
+    },
+    /// Write to a global variable
+    GlobalVarSet {
+        module_source: ModuleSource,
+        name: String,
+        value: Box<TirExpr>,
+    },
+
+    Binary {
+        left: Box<TirExpr>,
+        op: TirBinaryOp,
+        right: Box<TirExpr>,
+    },
+    Unary {
+        op: TirUnaryOp,
+        expr: Box<TirExpr>,
+    },
+    Assign {
+        target: Box<TirExpr>,
+        value: Box<TirExpr>,
+    },
+    Cast {
+        expr: Box<TirExpr>,
+        target_type: TypeId,
+    },
+
+    /// Every call: free function (`foo(args)`), static method
+    /// (`Type::method(args)`), and instance method (`recv.method(args)`), which
+    /// all map to the same `WirInstr::Call` and share identical semantics.
+    Call {
+        /// Boxed: unboxed, it dominates the enum by ~290 bytes (clippy's
+        /// `large_enum_variant`).
+        func: Box<FunctionRef>,
+        /// Explicit type arguments for generic functions: `identity::<i32>(x)`
+        type_args: Vec<TypeId>,
+        /// Arguments in the callee's parameter order, `args[i]` for
+        /// `params[i]` in every call shape. Only `TirExprKind::method_call`
+        /// builds one with a receiver, so a trait-qualified (UFCS) call's
+        /// already reference-typed first argument needs none of the treatment a
+        /// receiver gets, notably `lower`'s never-value-copy-a-receiver rule.
+        args: CallArgs<CallArg>,
+    },
+    /// Raw Component Model call to a lowered WASI import or a canonical built-in.
+    ///
+    /// Used inside synthesized CM binding functions to call the flat-ABI function
+    /// directly, bypassing the normal effect call mechanism. Args are already lowered
+    /// to flat CM types (i32, i64, f32, f64).
+    CmRawCall {
+        /// Which function this calls, by identity rather than by rendered name.
+        target: CmCallTarget,
+        /// Flat ABI arguments (already lowered to core Wasm types)
+        args: Vec<TirExpr>,
+    },
+
+    FieldAccess {
+        expr: Box<TirExpr>,
+        field_index: u32,
+        field_name: String,
+    },
+    Index {
+        expr: Box<TirExpr>,
+        index: Box<TirExpr>,
+    },
+
+    Block(TirBlock),
+    If {
+        condition: Box<TirExpr>,
+        then_branch: TirBlock,
+        else_branch: Option<TirBlock>,
+    },
+    Match {
+        expr: Box<TirExpr>,
+        arms: Vec<TirMatchArm>,
+    },
+
+    StructLiteral {
+        struct_type: TypeId,
+        struct_name: String,
+        fields: Vec<TirStructField>,
+    },
+    TupleLiteral {
+        elements: Vec<TirExpr>,
+    },
+    /// `Array<T>` of exactly `elements.len()` slots, the value a `[e0, e1, …]`
+    /// literal denotes. Emitted by literal coercion, which then hands it to the
+    /// target type's `From<Array<T>>` impl. Lowers to `ExprKind::ArrayLiteral`.
+    ArrayLiteral {
+        elements: Vec<TirExpr>,
+    },
+
+    /// Spread a tuple expression into an enclosing `TupleLiteral`.
+    /// Created by the elaborator for `[..expr]` syntax. Expanded by monomorphization
+    /// into individual `FieldAccess` elements once the concrete tuple arity is known.
+    TupleSpread {
+        expr: Box<TirExpr>,
+    },
+
+    /// Transpose a tuple-of-tuples: `[a, b].zip()` → `[[a.0, b.0], [a.1, b.1], ...]`.
+    /// Created by the elaborator for the `.zip()` pseudo-method on tuples.
+    /// Expanded during monomorphization once concrete tuple arities are known.
+    TupleZip {
+        expr: Box<TirExpr>,
+    },
+
+    /// Compile-time arity of a tuple whose type still contains a type pack
+    /// (`[..T].len()`). For a fully concrete tuple the elaborator folds `.len()`
+    /// to an integer literal immediately; when a `..T` pack is present the arity
+    /// is unknown until monomorphization, so it is deferred here and expanded to
+    /// an `IntLiteral` once the concrete arity is known. The `expr` is evaluated
+    /// only for its type (tuples are value types with no side effects in `len`).
+    TupleLen {
+        expr: Box<TirExpr>,
+    },
+
+    /// Type pack expansion: `[..T::method()]` inside a `TupleLiteral`.
+    /// Expands at monomorphization to one call per concrete type in the pack:
+    /// `[T_0::method(), T_1::method(), ...]`.
+    ///
+    /// The `call_expr` is a resolved Call whose receiver/return type references
+    /// the `TypePack`. During monomorphization, the pack type is substituted
+    /// with each concrete element type to produce individual calls.
+    TypePackExpansion {
+        /// The call expression template (resolved with `TypePack` type)
+        call_expr: Box<TirExpr>,
+        /// The `TypePack` type ID (index into type table, pre-substitution)
+        pack_type_id: TypeId,
+        /// The tuple the pack stands for, on a node whose own site settled it:
+        /// a parameter default spliced into a caller nothing instantiates.
+        /// `None` where the enclosing function's instantiation settles it.
+        settled_pack: Option<TypeId>,
+    },
+
+    /// Deferred `[for let v of tuple { expr }]` over a pack-typed tuple.
+    ///
+    /// The body is resolved once with the binding typed as the pack element;
+    /// the monomorphizer unrolls it into a tuple literal once the pack is
+    /// concrete. See `docs/wep-2026-03-14-variadic-type-parameters.md`.
+    VariadicTupleComprehension {
+        /// The source tuple (type contains `TypePack` before substitution)
+        iterable: Box<TirExpr>,
+        /// The element binding's name and local slot
+        binding_name: String,
+        binding_local: u32,
+        /// Sub-bindings of a destructured binding (`[i, v]`), as
+        /// field reads off the binding local
+        destructure: Vec<TirStmt>,
+        /// The per-element expression
+        body: Box<TirExpr>,
+        /// Unique ID for generating labels
+        unique_id: u32,
+        /// Whether the binding is the `[index, value]` pair of `.enumerate()`
+        is_enumerate: bool,
+    },
+
+    /// Access to a captured variable inside a closure body
+    Capture {
+        /// Index into the closure's captures array
+        index: u32,
+        /// Variable name (for debugging)
+        name: String,
+    },
+
+    Closure {
+        params: Vec<(String, TypeId)>,
+        body: Box<TirExpr>,
+        captures: Vec<TirCapture>,
+        /// Optional functor ID assigned during lowering.
+        /// Used by monomorphize phase to look up the corresponding `ClosureFunctor`.
+        functor_id: Option<u32>,
+        /// Closure-scope address-taken locals, captured from the
+        /// closure's resolution `FunctionContext`. The boxing pass uses
+        /// this when descending into the closure body — the body's
+        /// `Local { index: N }` references closure locals, not the
+        /// parent function's, so the parent's set would mis-box. Empty
+        /// for synthesised closures (e.g. effect-handler dispatch),
+        /// which never take addresses.
+        address_taken_locals: hashmap::IndexSet<u32>,
+        /// Body-level let-bindings inside the closure, in declaration order,
+        /// occupying `params.len()..` in its local-index namespace (the params
+        /// themselves live in `params`). Captured at resolve time so pattern
+        /// lowering can seed a closure-scoped allocator without re-walking the
+        /// body. Empty for the synthetic closures `synthesis/` creates.
+        body_locals: Vec<TirLocal>,
+        /// Effects the closure type was annotated with at the use site (let
+        /// annotation, function-typed parameter, etc.). `Some` only when the
+        /// annotation provides a concrete effect set; the effect checker swaps
+        /// to these when entering the body so e.g. `let f: fn() = ||{println}`
+        /// rejects the Stdout leak. `None` means "unannotated, inherit outer
+        /// effects" (preserves the original behaviour for free closures).
+        declared_effects: Option<Vec<EffectRef>>,
+    },
+
+    /// Indirect call through a callable value (closure or funcref)
+    IndirectCall {
+        /// The callee expression (closure struct or funcref)
+        callee: Box<TirExpr>,
+        /// Arguments to pass to the callee
+        args: Vec<TirExpr>,
+    },
+
+    /// Custom variant construction: `Shape::Circle(5.0)` or `MyVariant::Unit`
+    VariantConstruct {
+        /// The variant type (e.g., `ResolvedType::Variant` { name: "Shape", ... })
+        variant_type: TypeId,
+        /// The case index (0-based position in variant declaration)
+        case_index: u32,
+        /// The case name (for debugging/error messages)
+        case_name: String,
+        /// Payload value (None for unit variants constructed without explicit payload)
+        payload: Option<Box<TirExpr>>,
+    },
+
+    /// Enum construction: `Color::Red`
+    /// Enums have no payload, just a discriminant value.
+    EnumConstruct {
+        /// The enum type (e.g., `ResolvedType::Enum` { name: "Color", ... })
+        enum_type: TypeId,
+        /// The case index (0-based position in enum declaration)
+        case_index: u32,
+        /// The case name (for debugging/error messages)
+        case_name: String,
+    },
+
+    /// Labeled block expression: `label: { ... }` that produces a value
+    /// The value must be returned via `break label: expr;`
+    LabeledBlock {
+        label: String,
+        block: TirBlock,
+        /// The type of value this block produces (from break expressions)
+        result_type: TypeId,
+    },
+
+    /// Get the discriminant (tag) of a variant value.
+    /// Generated from match expressions on variants.
+    /// Result type is i32.
+    VariantTag {
+        expr: Box<TirExpr>,
+    },
+
+    /// Test if a variant value is of a specific case.
+    /// Generated from if-let patterns on custom variants.
+    /// For unit variants: checks discriminator == `case_index`
+    /// For payload variants: uses ref.test on the case type
+    /// Result type is bool.
+    VariantTest {
+        expr: Box<TirExpr>,
+        /// The case index to test for
+        case_index: u32,
+        /// The case name (for error messages)
+        case_name: String,
+    },
+
+    /// Extract the payload from a variant value at a specific case index.
+    /// Generated from match expressions on variants.
+    VariantPayload {
+        expr: Box<TirExpr>,
+        /// The case index to extract payload from
+        case_index: u32,
+        /// The payload type for this case
+        payload_type: TypeId,
+    },
+
+    /// Unresolved template string expression.
+    ///
+    /// Created by the elaborator with resolved sub-expressions but without
+    /// expanding to formatting code. The synthesis phase (pre-monomorphize)
+    /// expands this into the `$tmpl` labeled block with `String::with_capacity`,
+    /// `push_str`, `Formatter`, and `Display`/inspect calls.
+    TemplateString {
+        parts: Vec<TirTemplatePart>,
+    },
+
+    /// Effect handler installation: `with E1 => h1, ... do { body }`.
+    /// See `docs/wep-2026-04-11-effect-handler.md`.
+    ///
+    /// Each binding installs a handler for one effect for the duration of `body`.
+    /// The block evaluates to `body`'s value; in MVP `result_type` is always Unit
+    /// because do-block bodies are statement blocks, not expression blocks.
+    WithHandler {
+        bindings: Vec<TirHandlerBinding>,
+        body: TirBlock,
+        result_type: TypeId,
+    },
+
+    /// `resume value` — control-flow expression valid only inside an effect
+    /// handler method body.
+    ///
+    /// In the MVP (no post-resume code), `resume` lowers to `Return { value }`.
+    /// The expression itself is typed as `Unit` because it does not produce a
+    /// value to its enclosing expression — it transfers control out.
+    Resume {
+        value: Box<TirExpr>,
+    },
+}
+
+/// One `Effect => handler` binding inside a `with ... do` block.
+#[derive(Debug, Clone)]
+pub struct TirHandlerBinding {
+    /// The effect being handled. The elaborator always fills this in with a
+    /// concrete effect reference — the bundled `with &mut h do` form is
+    /// expanded to one binding per implemented effect, each carrying a
+    /// concrete `EffectRef`. `None` only appears transiently when an
+    /// upstream diagnostic prevented resolution.
+    pub effect: Option<EffectRef>,
+    /// Concrete `TypeId`s of the trait / resource type arguments at this
+    /// installation site (e.g. `[u8]` for `with Stream<u8> => &mut s do`,
+    /// or as derived from the impl block in a bundled `with &mut s do`
+    /// where `MockCM` implements `Stream<u8>`). Empty for non-generic
+    /// effects / resources. The dispatch synthesis projects this together
+    /// with `effect.module_source` and `effect.name` into the
+    /// `InstantiationKey` it uses to look up the per-monomorphisation
+    /// dispatch infrastructure.
+    pub trait_type_args: Vec<TypeId>,
+    /// Handler value expression (e.g., `&mut mock`).
+    pub handler: TirExpr,
+    /// The concrete struct type (after deref) implementing the effect.
+    /// Used by codegen to pick the correct `impl E for T` methods.
+    pub handler_type: TypeId,
+    pub span: Span,
+    /// `Some(id)` marks a binding from a bundled `with &mut h do` expansion; all
+    /// bindings from one clause share the id, so dispatch synthesis can allocate
+    /// a single `$h_<bundle>` local that every per-effect closure captures —
+    /// the handler is evaluated once and one effect's mutations are seen by the
+    /// rest. `None` for an explicit `Effect => handler`. Unique per `WithHandler`.
+    pub bundle_group: Option<u32>,
+}
+
+/// A part of a resolved template string.
+#[derive(Debug, Clone)]
+pub enum TirTemplatePart {
+    /// A literal string segment.
+    Literal(String),
+    /// An interpolated expression with optional format specifier.
+    Interpolation {
+        expr: Box<TirExpr>,
+        format_spec: Option<TemplateFormatSpec>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TirBinaryOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Eq,
+    NotEq,
+    Lt,
+    LtEq,
+    Gt,
+    GtEq,
+    And,
+    Or,
+    BitAnd,
+    BitOr,
+    BitXor,
+    Shl,
+    Shr,
+    RefNotEq,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TirUnaryOp {
+    Neg,
+    Not,
+    BitNot,
+    Ref,
+    MutRef,
+    Deref,
+}
+
+#[derive(Debug, Clone)]
+pub struct TirMatchArm {
+    pub pattern: TirPattern,
+    /// Optional guard expression (the condition after `&&`)
+    pub guard: Option<TirExpr>,
+    pub body: TirExpr,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub enum TirPattern {
+    Wildcard,
+    Binding {
+        name: String,
+        local_index: u32,
+        type_id: TypeId,
+    },
+    Literal(TirLiteralPattern),
+    Tuple(Vec<TirPattern>, /* has_rest */ bool),
+    Variant {
+        enum_type: TypeId,
+        variant_name: String,
+        /// Which case of `enum_type` this matches. Resolved where the pattern is
+        /// elaborated, so no consumer re-derives it from `variant_name`.
+        case_index: u32,
+        bindings: Vec<TirPattern>,
+        /// Payload type for the matched variant case (unit for no-payload cases)
+        payload_type: TypeId,
+    },
+    /// Enum case pattern (enums are simple i32 discriminants with no payload)
+    Enum {
+        enum_type: TypeId,
+        case_name: String,
+        case_index: u32,
+    },
+    /// Struct destructuring pattern: `{ x, y }` or `Point { x, y }`
+    Struct {
+        struct_type: TypeId,
+        fields: Vec<TirStructPatternField>,
+        has_rest: bool,
+    },
+    /// Or pattern: matches if any alternative matches
+    Or(Vec<TirPattern>),
+    /// Constant value pattern: compares scrutinee against a constant expression
+    /// (immutable global variable or associated constant like `i32::MAX`)
+    ConstantValue {
+        expr: Box<TirExpr>,
+    },
+    /// Range pattern: `0..<10` or `'a'..='z'`
+    Range {
+        start: i128,
+        end: i128,
+        inclusive: bool,
+        is_unsigned: bool,
+    },
+    /// Holds the scrutinee in `local_index` at `type_id`, matching where `test` on
+    /// it holds: a host type check or a constant's `Eq`. `name` is what it binds.
+    Narrow {
+        name: Option<String>,
+        local_index: u32,
+        type_id: TypeId,
+        test: Box<TirExpr>,
+    },
+    /// A literal or range pattern on a scrutinee whose type is still a type
+    /// parameter. What it names depends on the instance, so monomorphization
+    /// settles `scrutinee_type` and `instance_patterns` judges and lowers it.
+    PerInstance {
+        pattern: InstancePattern,
+        scrutinee_type: TypeId,
+        span: Span,
+    },
+}
+
+/// What a [`TirPattern::PerInstance`] matches.
+#[derive(Debug, Clone)]
+pub enum InstancePattern {
+    Literal(PatternLiteral),
+    Range {
+        start: PatternLiteral,
+        end: PatternLiteral,
+        inclusive: bool,
+    },
+}
+
+impl InstancePattern {
+    /// This pattern on a scrutinee, unsigned where `is_unsigned`.
+    pub fn lower(&self, is_unsigned: bool) -> TirPattern {
+        match self {
+            InstancePattern::Literal(value) => TirPattern::Literal(value.to_tir(is_unsigned)),
+            InstancePattern::Range {
+                start,
+                end,
+                inclusive,
+            } => TirPattern::Range {
+                start: start.bits(),
+                end: end.bits(),
+                inclusive: *inclusive,
+                is_unsigned,
+            },
+        }
+    }
+}
+
+/// The value a literal pattern or range bound names, before a scrutinee type
+/// reads it.
+#[derive(Debug, Clone)]
+pub enum PatternLiteral {
+    /// `shown` is how a diagnostic writes it: `-5`, `b'a'`, `i32::MAX`.
+    Int {
+        magnitude: u128,
+        negated: bool,
+        suffix: Option<NumericSuffix>,
+        shown: String,
+    },
+    Char(char),
+    Bool(bool),
+}
+
+impl PatternLiteral {
+    /// The 128 bits a range bound compares by. An unsigned scrutinee reads
+    /// them as a `u128`.
+    pub fn bits(&self) -> i128 {
+        match self {
+            PatternLiteral::Int {
+                magnitude, negated, ..
+            } => {
+                let bits = magnitude.cast_signed();
+                if *negated { bits.wrapping_neg() } else { bits }
+            }
+            PatternLiteral::Char(c) => i128::from(u32::from(*c)),
+            PatternLiteral::Bool(_) => unreachable!("a range bound is never a `bool`"),
+        }
+    }
+
+    /// This literal as a pattern on a scrutinee, unsigned where `is_unsigned`.
+    pub fn to_tir(&self, is_unsigned: bool) -> TirLiteralPattern {
+        match self {
+            PatternLiteral::Int { .. } if is_unsigned => {
+                TirLiteralPattern::U128(self.bits().cast_unsigned())
+            }
+            PatternLiteral::Int { .. } => TirLiteralPattern::I128(self.bits()),
+            PatternLiteral::Char(c) => TirLiteralPattern::Char(*c),
+            PatternLiteral::Bool(b) => TirLiteralPattern::Bool(*b),
+        }
+    }
+}
+
+impl TirPattern {
+    /// The local this pattern itself declares, with its type: a binding's, or
+    /// the one a narrowing holds the scrutinee in. Sub-patterns are not asked.
+    pub fn declared_local(&self) -> Option<(u32, TypeId)> {
+        match self {
+            TirPattern::Binding {
+                local_index,
+                type_id,
+                ..
+            }
+            | TirPattern::Narrow {
+                local_index,
+                type_id,
+                ..
+            } => Some((*local_index, *type_id)),
+            TirPattern::Wildcard
+            | TirPattern::Literal(_)
+            | TirPattern::Tuple(..)
+            | TirPattern::Variant { .. }
+            | TirPattern::Enum { .. }
+            | TirPattern::Struct { .. }
+            | TirPattern::Or(_)
+            | TirPattern::ConstantValue { .. }
+            | TirPattern::Range { .. }
+            | TirPattern::PerInstance { .. } => None,
+        }
+    }
+
+    /// The index of the local [`Self::declared_local`] names, to renumber it.
+    pub fn declared_local_index_mut(&mut self) -> Option<&mut u32> {
+        match self {
+            TirPattern::Binding { local_index, .. } | TirPattern::Narrow { local_index, .. } => {
+                Some(local_index)
+            }
+            TirPattern::Wildcard
+            | TirPattern::Literal(_)
+            | TirPattern::Tuple(..)
+            | TirPattern::Variant { .. }
+            | TirPattern::Enum { .. }
+            | TirPattern::Struct { .. }
+            | TirPattern::Or(_)
+            | TirPattern::ConstantValue { .. }
+            | TirPattern::Range { .. }
+            | TirPattern::PerInstance { .. } => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TirStructPatternField {
+    pub field_name: String,
+    pub field_index: u32,
+    pub pattern: TirPattern,
+}
+
+#[derive(Debug, Clone)]
+pub enum TirLiteralPattern {
+    /// Signed integer literal (covers i8, i16, i32, i64, i128)
+    I128(i128),
+    /// Unsigned integer literal (covers u8, u16, u32, u64, u128)
+    U128(u128),
+    Bool(bool),
+    Char(char),
+    String(String),
+    Null,
+}
+
+#[derive(Debug, Clone)]
+pub struct TirStructField {
+    pub name: String,
+    pub value: TirExpr,
+    pub field_index: u32,
+}
+
+/// Where the frame constructing a closure finds a captured binding: a local it
+/// owns, or a slot of its own environment when it is a closure itself. See
+/// [WEP: Closure Implementation Internals](../../docs/wep-2026-01-25-closure-implementation-internals.md).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CaptureSource {
+    /// A local of the constructing frame.
+    Local(u32),
+    /// The constructing frame's own capture slot.
+    Capture(u32),
+}
+
+impl CaptureSource {
+    /// The constructing frame's local index, or `None` when the binding is
+    /// reached through that frame's own environment.
+    pub fn local(self) -> Option<u32> {
+        match self {
+            Self::Local(index) => Some(index),
+            Self::Capture(_) => None,
+        }
+    }
+
+    /// Apply `f` to a local index, leaving a capture slot alone.
+    pub fn map_local(self, f: impl FnOnce(u32) -> u32) -> Self {
+        match self {
+            Self::Local(index) => Self::Local(f(index)),
+            Self::Capture(_) => self,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TirCapture {
+    pub name: String,
+    pub source: CaptureSource,
+    pub type_id: TypeId,
+}
+
+/// The constructing frame's locals `captures` reads, in order. A slot read off
+/// that frame's own environment names no local of it, so it yields nothing here.
+pub fn capture_source_locals(captures: &[TirCapture]) -> impl Iterator<Item = u32> + '_ {
+    captures.iter().filter_map(|c| c.source.local())
+}
+
+/// The environment entry a `TirExprKind::Capture` names. A body only indexes the
+/// environment of the closure it belongs to, so `slot` is always one of these.
+pub fn capture_at(captures: &[TirCapture], slot: u32, span: Span) -> &TirCapture {
+    let Some(capture) = captures.get(slot as usize) else {
+        unreachable!(
+            "at {}: slot {slot} is read, but this closure's environment has {}",
+            span.location(),
+            captures.len()
+        )
+    };
+    capture
+}
+
+#[derive(Debug, Clone)]
+pub struct TirBlock {
+    pub stmts: Vec<TirStmt>,
+    pub span: Span,
+}
+
+impl TirBlock {
+    pub fn new(stmts: Vec<TirStmt>, span: Span) -> Self {
+        Self { stmts, span }
+    }
+
+    pub fn empty(span: Span) -> Self {
+        Self {
+            stmts: Vec::new(),
+            span,
+        }
+    }
+
+    /// The expression the block evaluates to, where its last statement is one.
+    pub fn tail_expr(&self) -> Option<&TirExpr> {
+        match &self.stmts.last()?.kind {
+            TirStmtKind::Expr(expr) => Some(expr),
+            _ => None,
+        }
+    }
+}
+
+/// `receiver.zip()` as a tuple literal: one column per position, each reading
+/// its cell out of every row. A `&`/`&mut` receiver transposes what it refers to.
+pub fn transpose_tuple_expr(receiver: &TirExpr, span: Span, type_table: &mut TypeTable) -> TirExpr {
+    assert!(
+        matches!(receiver.kind, TirExprKind::Local { .. }),
+        "every cell reads the receiver, so reify binds it before either expansion"
+    );
+    let tuple = type_table.peel_refs(receiver.type_id);
+    let transposed = type_table
+        .transposed_tuple(tuple)
+        .expect("method lookup admits `zip` only over rows that transpose");
+    let rows: Vec<(TypeId, Vec<TypeId>)> = type_table
+        .as_tuple(tuple)
+        .expect("a transpose has rows")
+        .into_iter()
+        .map(|row| {
+            let cells = type_table
+                .as_tuple(row)
+                .expect("a transposed row is a tuple");
+            (row, cells)
+        })
+        .collect();
+    let column_types = type_table
+        .as_tuple(transposed)
+        .expect("a transpose is a tuple");
+    let columns: Vec<TirExpr> = column_types
+        .into_iter()
+        .enumerate()
+        .map(|(col, column_type)| {
+            let elements: Vec<TirExpr> = rows
+                .iter()
+                .enumerate()
+                .map(|(row, (row_type, cells))| {
+                    let row_access = TirExpr::new(
+                        TirExprKind::FieldAccess {
+                            expr: Box::new(receiver.clone()),
+                            field_index: row as u32,
+                            field_name: row.to_string(),
+                        },
+                        *row_type,
+                        span,
+                    );
+                    TirExpr::new(
+                        TirExprKind::FieldAccess {
+                            expr: Box::new(row_access),
+                            field_index: col as u32,
+                            field_name: col.to_string(),
+                        },
+                        cells[col],
+                        span,
+                    )
+                })
+                .collect();
+            TirExpr::new(TirExprKind::TupleLiteral { elements }, column_type, span)
+        })
+        .collect();
+    TirExpr::new(
+        TirExprKind::TupleLiteral { elements: columns },
+        transposed,
+        span,
+    )
+}
+
+/// Value-yielding type of a block: the last statement decides, except that a
+/// two-branch `If` needs its branches to agree (or one to be `Never`)
+/// and falls back to `Unit`, and a diverging `Return` / `Break` / `Continue`
+/// yields `Never`. The elaborator enforces the agreement rule while typing the
+/// surrounding expression, so a mismatch here is already reported.
+pub fn block_result_type(tt: &TypeTable, block: &TirBlock) -> TypeId {
+    block
+        .stmts
+        .last()
+        .and_then(|s| match &s.kind {
+            TirStmtKind::Expr(e) => Some(e.type_id),
+            TirStmtKind::If {
+                then_block,
+                else_block: Some(else_block),
+                ..
+            } => agree_branch_types(
+                tt,
+                block_result_type(tt, then_block),
+                block_result_type(tt, else_block),
+            ),
+            TirStmtKind::Return { .. } | TirStmtKind::Break { .. } | TirStmtKind::Continue => {
+                Some(TypeTable::NEVER)
+            }
+            _ => None,
+        })
+        .unwrap_or(TypeTable::UNIT)
+}
+
+/// Combine two branch result types under the elaborator's rule:
+/// equal types agree; a `Never` branch defers to the other; two
+/// `extends`-related resources agree on the ancestor; an outright
+/// mismatch yields `None` so the caller falls back to `Unit`.
+pub(crate) fn agree_branch_types(tt: &TypeTable, t: TypeId, e: TypeId) -> Option<TypeId> {
+    if t == e {
+        Some(t)
+    } else if t == TypeTable::NEVER {
+        Some(e)
+    } else if e == TypeTable::NEVER {
+        Some(t)
+    } else {
+        tt.resource_join(t, e)
+    }
+}
+
+/// Whose storage a `let` binding holds, which decides whether it copies its
+/// value and whether the value-copy analysis may hand that storage on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LetStorage {
+    /// Its own: the value-copy analysis copies the value unless it proves the
+    /// value owned.
+    Planned,
+    /// Its own, taken over from the value without a copy. The producer vouches
+    /// that nothing reads that storage as another value afterwards.
+    Taken,
+    /// The value's, without a copy: the binding shares whatever storage the
+    /// value names, and the value-copy analysis follows that share as it
+    /// follows a planned binding's source.
+    Aliased,
+}
+
+impl LetStorage {
+    /// Whether the binding holds its value without copying it.
+    pub fn skips_copy(self) -> bool {
+        match self {
+            LetStorage::Planned => false,
+            LetStorage::Taken | LetStorage::Aliased => true,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TirStmt {
+    pub kind: TirStmtKind,
+    pub span: Span,
+}
+
+impl TirStmt {
+    pub fn new(kind: TirStmtKind, span: Span) -> Self {
+        Self { kind, span }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum TirStmtKind {
+    Let {
+        name: String,
+        local_index: u32,
+        is_mut: bool,
+        is_reactive: bool,
+        type_id: TypeId,
+        value: TirExpr,
+        /// Whose storage the binding holds.
+        storage: LetStorage,
+    },
+    Expr(TirExpr),
+    Return {
+        value: Option<TirExpr>,
+    },
+    /// `task return expr;` — delivers the async task result without terminating the function.
+    /// Eliminated by `synthesis::cm_binding` before lower/optimize phases.
+    TaskReturn {
+        value: TirExpr,
+    },
+    If {
+        condition: TirExpr,
+        then_block: TirBlock,
+        else_block: Option<TirBlock>,
+    },
+    /// Canonical loop: `loop { ... }` - infinite loop exited via break
+    Loop {
+        body: TirBlock,
+    },
+    /// Break statement: `break;`, `break label;`, or `break label: expr;`
+    Break {
+        /// Optional label to break to (for labeled blocks)
+        label: Option<String>,
+        /// Optional value to return from the labeled block
+        value: Option<TirExpr>,
+    },
+    Continue,
+    /// Labeled block: `LABEL: { ... }` - creates a new scope with local bindings
+    LabeledBlock {
+        label: String,
+        block: TirBlock,
+    },
+    /// Tuple destructuring let statement: `let [a, b] = tuple_expr;`
+    LetDestructure {
+        /// The pattern to bind (e.g., [a, b, c] or [x, [y, z]])
+        pattern: TirPattern,
+        /// The value expression (must be a tuple)
+        value: TirExpr,
+    },
+    /// Deferred tuple for-of expansion for variadic type packs.
+    ///
+    /// Created when `for let v of iterable` where `iterable` has a tuple type containing
+    /// `TypePack` elements. The monomorphizer expands this after type substitution resolves
+    /// the `TypePack` to a concrete tuple.
+    VariadicForOf {
+        /// The tuple iterable expression (type contains `TypePack` before substitution)
+        iterable: TirExpr,
+        /// The loop variable name
+        binding_name: String,
+        /// Local index for the loop variable
+        binding_local: u32,
+        /// Whether the binding is mutable
+        is_mut: bool,
+        /// The body to execute for each element (resolved with TypePack-typed binding)
+        body: TirBlock,
+        /// Unique ID for generating labels
+        unique_id: u32,
+        /// When the iterable is `&[..T]` (a reference to a variadic tuple),
+        /// each element is bound by reference (`&T_k`), matching the
+        /// `for v of &list` refiter semantics. The binding is resolved with
+        /// type `&TypePack`; expansion wraps each element field in `&`.
+        by_ref: bool,
+        /// When the iterable is `tuple.enumerate()`, the binding is the pair
+        /// `[i32, T_k]`; expansion pairs each element with its index literal.
+        is_enumerate: bool,
+    },
+}
+
+/// Generic type parameter in TIR (from AST `GenericParam`)
+#[derive(Debug, Clone)]
+pub struct TirTypeParam {
+    pub name: String,
+    /// Whether this is an effect parameter (`effect E`)
+    pub is_effect: bool,
+    /// Whether this is a type pack parameter (`..T`)
+    pub is_pack: bool,
+    pub bounds: Vec<String>,
+    /// Default type if specified (e.g., `Effects = []`)
+    pub default: Option<TypeId>,
+    pub index: u32,
+    /// Whether a blanket impl's bound projects it (`..F` in
+    /// `impl<T: ReflectStruct<FieldTypes = [..F]>, ..F>`). The instance key
+    /// carries the projection's answer at the parameter's own slot, a pack
+    /// as one tuple (`blanket_impl_args`).
+    pub projected: bool,
+}
+
+/// What a use site knows about the associated types projected from a slot,
+/// beyond the type filling it: slot index → `[(declaring trait,
+/// associated-type name, what it means here)]`.
+///
+/// The companion of the slot substitution in
+/// [`TypeTable::substitute_type_params_with`]. A declaration resolves
+/// `Self::Item` in its own frame, where it can only be a projection; what it
+/// stands for is written at the use site (`I: IntoIterator<Item = u8>`).
+pub type SlotProjections = IndexMap<u32, Vec<(DefId, String, TypeId)>>;
+
+/// Substitution-key base for method-level type params: past the highest
+/// impl-param *index*, not the count. A concrete type in a receiver slot
+/// (`String` in `impl<V> ... for TreeMap<String, V>`) is not a param, so a later
+/// param keeps a sparse index the count would undershoot, colliding a method
+/// param onto an impl slot. Elaboration and monomorphization both derive it here.
+#[must_use]
+pub fn method_param_offset(impl_type_params: &[TirTypeParam]) -> u32 {
+    impl_type_params
+        .iter()
+        .map(|p| p.index + 1)
+        .max()
+        .unwrap_or(0)
+}
+
+/// Information about monomorphization origin for instantiated items
+#[derive(Debug, Clone)]
+pub struct MonomorphInfo {
+    /// Original generic name: `"Box"` for `"Box<i32>"`, or
+    /// `"BTreeNode<K,V>::insert"` for methods.
+    pub generic_name: String,
+    /// Impl-level type arguments (from the struct/type, e.g. `[i32]` for `List<i32>`)
+    pub impl_type_args: Vec<TypeId>,
+    /// Method-level type arguments (from the method's own generics, e.g. `[String]` for `.transform::<String>()`)
+    pub method_type_args: Vec<TypeId>,
+    /// Whether this originates from a blanket impl (e.g., `impl<I: Iterator> IntoIterator for I`)
+    pub is_blanket: bool,
+}
+
+/// A generic function template's identity: what a call selected, and what the
+/// monomorphizer instantiates, with no name in between.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum TemplateId {
+    /// A written declaration, and the impl block its body was emitted into —
+    /// a trait's default body is emitted once per impl.
+    Declared { def: DefId, block: Option<DefId> },
+    /// A body synthesis minted, which declares nothing: the name it gave it in
+    /// its module.
+    Synthesized { module: ModuleSource, name: String },
+}
+
+impl TemplateId {
+    /// The declaration `def` as emitted into the impl block `block`.
+    pub fn in_block(def: DefId, block: DefId) -> Self {
+        Self::Declared {
+            def,
+            block: Some(block),
+        }
+    }
+
+    /// The module the body is emitted into: its block's where it has one.
+    pub fn home(&self, defs: &DefTable) -> ModuleSource {
+        match self {
+            Self::Declared {
+                block: Some(block), ..
+            } => defs.module(*block).clone(),
+            Self::Declared { def, block: None } => defs.module(*def).clone(),
+            Self::Synthesized { module, .. } => module.clone(),
+        }
+    }
+
+    /// The body derivation mints in `module` for the trait method `info`,
+    /// named by its receiver's head alone.
+    pub fn derived(module: ModuleSource, info: &LocalMethodName) -> Self {
+        Self::Synthesized {
+            module,
+            name: LocalMethodName::new(
+                info.fq_base_struct_name(),
+                info.trait_name.clone(),
+                info.method_name.clone(),
+            )
+            .to_mangled_name(),
+        }
+    }
+}
+
+/// The value a method call's receiver argument delivers, past the auto-`&` /
+/// `&mut` the elaborator takes of it. Every question about the receiver is about
+/// this value; the reference is only how the callee reaches it.
+#[must_use]
+pub fn receiver_value(receiver: &TirExpr) -> &TirExpr {
+    match &receiver.kind {
+        TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+            expr: value,
+        } => value,
+        _ => receiver,
+    }
+}
+
+/// A `#[param]` compile-time parameter declared on a `global`.
+///
+/// Carried from reify (which validates the attribute shape) to the
+/// param-resolution pass (which resolves an override and rewrites the
+/// initializer). See `wep-2026-04-26-compile-time-params.md`.
+#[derive(Debug, Clone)]
+pub struct ParamSpec {
+    /// Parameter name matched against `-D NAME=value`. Defaults to the
+    /// global's identifier; overridden by `#[param(name = "...")]`.
+    pub name: String,
+    /// Environment variable read at compile time, from
+    /// `#[param(from_env = "...")]`. Independent of `name`.
+    pub from_env: Option<String>,
+}
+
+/// How a global's storage gets its value.
+///
+/// One choice rather than a flag beside an initializer field, so a placeholder
+/// can never be read as the declared value — it is a plausible constant, and
+/// mistaking it folds every read of `global A: i32 = 1 + 2` to zero.
+///
+/// See [Global Variables](../../docs/wep-2026-01-27-global-variables.md).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GlobalInit<E> {
+    /// The storage holds the declared value, as a constant expression.
+    Direct(E),
+    /// The storage starts at this placeholder; the module's initialization
+    /// function assigns the declared value before anything else runs.
+    Deferred(E),
+}
+
+impl<E> GlobalInit<E> {
+    /// What the storage is initialized with: the declared value, or the
+    /// placeholder standing in for it.
+    pub fn slot_expr(&self) -> &E {
+        match self {
+            Self::Direct(e) | Self::Deferred(e) => e,
+        }
+    }
+
+    pub fn slot_expr_mut(&mut self) -> &mut E {
+        match self {
+            Self::Direct(e) | Self::Deferred(e) => e,
+        }
+    }
+
+    /// The declared value, or `None` when it is assigned elsewhere. Anything
+    /// asking what a global holds goes through this.
+    pub fn declared(&self) -> Option<&E> {
+        match self {
+            Self::Direct(e) => Some(e),
+            Self::Deferred(_) => None,
+        }
+    }
+
+    pub fn is_deferred(&self) -> bool {
+        matches!(self, Self::Deferred(_))
+    }
+}
+
+/// Whether the Wasm slot can hold this value directly. Under-approximates: the
+/// classifier on the lowered Wasm value promotes back what this defers.
+#[must_use]
+pub fn is_constant_initializer(expr: &TirExpr, type_table: &TypeTable) -> bool {
+    match &expr.kind {
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::Unit
+        | TirExprKind::Null => true,
+        TirExprKind::Cast { expr: inner, .. } => is_constant_initializer(inner, type_table),
+        TirExprKind::Unary { op, expr: inner } => {
+            matches!(op, TirUnaryOp::Neg) && is_constant_initializer(inner, type_table)
+        }
+        TirExprKind::Binary { op, left, right } => {
+            matches!(op, TirBinaryOp::Add | TirBinaryOp::Sub | TirBinaryOp::Mul)
+                && is_wasm_width_int(expr.type_id, type_table)
+                && is_constant_initializer(left, type_table)
+                && is_constant_initializer(right, type_table)
+        }
+        _ => false,
+    }
+}
+
+/// An integer whose Wado width matches the Wasm operand it lowers to, so
+/// wrapping needs no masking. Wasm folds `add` / `sub` / `mul` on these alone.
+fn is_wasm_width_int(type_id: TypeId, type_table: &TypeTable) -> bool {
+    matches!(
+        type_table.get(type_id),
+        ResolvedType::Primitive(
+            PrimitiveType::I32 | PrimitiveType::U32 | PrimitiveType::I64 | PrimitiveType::U64
+        )
+    )
+}
+
+/// The placeholder a deferred global's slot holds until its initialization
+/// function assigns the declared value.
+#[must_use]
+pub fn placeholder_value(type_id: TypeId, type_table: &TypeTable, span: Span) -> TirExpr {
+    let kind = match type_table.get(type_id) {
+        ResolvedType::Primitive(PrimitiveType::F32 | PrimitiveType::F64) => {
+            TirExprKind::FloatLiteral {
+                value: 0.0,
+                repr: "0.0".to_string(),
+            }
+        }
+        ResolvedType::Primitive(PrimitiveType::Bool) => TirExprKind::BoolLiteral(false),
+        ResolvedType::Primitive(PrimitiveType::Char) => TirExprKind::CharLiteral('\0'),
+        ResolvedType::Primitive(_) => TirExprKind::IntLiteral {
+            value: 0,
+            repr: "0".to_string(),
+        },
+        ResolvedType::Unit => TirExprKind::Unit,
+        // String, List, a struct — every reference type starts null.
+        _ => TirExprKind::Null,
+    };
+    TirExpr::new(kind, type_id, span)
+}
+
+/// A global initializer function's body: `{ return <value>; }`.
+#[must_use]
+pub fn initializer_body(value: TirExpr, span: Span) -> TirBlock {
+    TirBlock {
+        stmts: vec![TirStmt::new(
+            TirStmtKind::Return { value: Some(value) },
+            span,
+        )],
+        span,
+    }
+}
+
+/// Global variable declaration in TIR
+#[derive(Debug, Clone)]
+pub struct TirGlobal {
+    pub name: String,
+    pub ty: TypeId,
+    pub init: GlobalInit<TirExpr>,
+    /// `Some` when the global carries a `#[param]` attribute. Drives the
+    /// param-resolution pass; `None` for ordinary globals.
+    pub param: Option<ParamSpec>,
+    /// Whether the program may assign to this global — `global mut`. The Wasm
+    /// slot's mutability is wider and derived when the module is built.
+    pub wado_mutable: bool,
+    pub visibility: Visibility,
+    /// Module where this global is defined
+    pub module_source: ModuleSource,
+    pub span: Span,
+}
+
+/// What an impl block's target writes.
+#[derive(Debug, Clone)]
+struct ImplTarget {
+    /// The target as a whole, its reference included.
+    whole: TypeId,
+    /// The arguments of the head it names past any reference, a binder as its
+    /// own `TypeParam`.
+    args: Vec<TypeId>,
+    projections: Vec<ImplProjection>,
+}
+
+/// Slots of an impl block that a bound determines rather than its target:
+/// `B` in `impl<N: Tr<Assoc = B>, B> W<N>` is whatever `Assoc` is for the type
+/// filling `N`.
+#[derive(Debug, Clone)]
+pub struct ImplProjection {
+    /// The slot whose bound carries the constraint.
+    pub source: u32,
+    pub trait_: DefId,
+    pub assoc: String,
+    /// The constraint as written, its slots as `TypeParam`s.
+    pub pattern: TypeId,
+}
+
+/// What an impl target binds at a receiver's arguments.
+#[derive(Debug, Default)]
+pub struct TargetBinding {
+    /// The type each of the target's parameter slots takes.
+    pub slots: IndexMap<u32, TypeId>,
+    /// The type each open receiver variable must take for the target to match.
+    pub answers: IndexMap<TypeId, TypeId>,
+}
+
+impl TargetBinding {
+    /// `ty` read through the answers, where it is an answered variable.
+    fn answered(&self, mut ty: TypeId) -> TypeId {
+        while let Some(&answer) = self.answers.get(&ty) {
+            ty = answer;
+        }
+        ty
+    }
+}
+
+impl TypeTable {
+    /// Record what impl block `def`'s target writes: `whole`, and `args` for
+    /// the head it names, with the slots its bounds determine.
+    pub fn record_impl_target(
+        &mut self,
+        def: DefId,
+        whole: TypeId,
+        args: Vec<TypeId>,
+        projections: Vec<ImplProjection>,
+    ) {
+        self.impl_targets.insert(
+            def,
+            ImplTarget {
+                whole,
+                args,
+                projections,
+            },
+        );
+    }
+
+    /// Impl block `def`'s target head at `head_args`; `None` where the target
+    /// is no generic head of that arity.
+    pub fn impl_target_at(&mut self, def: DefId, head_args: &[TypeId]) -> Option<TypeId> {
+        match self.get_unerased(self.impl_target(def).whole) {
+            ResolvedType::GenericInstance {
+                def: head,
+                type_args,
+            } if type_args.len() == head_args.len() => {
+                let head = *head;
+                Some(self.make_generic_instance(head, head_args.to_vec()))
+            }
+            _ => None,
+        }
+    }
+
+    /// Impl block `def`'s target as a whole, its reference included.
+    pub fn impl_target_whole(&self, def: DefId) -> TypeId {
+        self.impl_target(def).whole
+    }
+
+    /// The arguments of the head impl block `def`'s target names past any
+    /// reference, a binder as its own `TypeParam`; empty for a non-generic one.
+    pub fn impl_target_args(&self, def: DefId) -> &[TypeId] {
+        &self.impl_target(def).args
+    }
+
+    /// The slots each of impl block `def`'s target positions holds, at any
+    /// depth, filled from the receiver's arguments: `T` in `Pair<List<T>, i32>`
+    /// from `Pair<List<String>, i32>`, then the slots its bounds project from
+    /// those. The target is recorded as its module's decl pass reaches the
+    /// block, so an earlier module's bound check can ask.
+    pub fn impl_slots(&mut self, def: DefId, receiver_args: &[TypeId]) -> IndexMap<u32, TypeId> {
+        let mut slots = IndexMap::default();
+        for (&declared, &concrete) in self.impl_target_args(def).iter().zip(receiver_args) {
+            if let Some(bound) = self.bind_type_params(&[declared], &[concrete]) {
+                for (slot, ty) in bound {
+                    slots.entry(slot).or_insert(ty);
+                }
+            }
+        }
+        self.project_impl_slots(def, &mut slots);
+        slots
+    }
+
+    /// The declaration impl block `def` targets, past any reference.
+    pub fn impl_target_decl(&self, def: DefId) -> Option<DefId> {
+        self.nominal_def(self.peel_refs(self.impl_target(def).whole))
+    }
+
+    /// `receiver`'s arguments as declaration `decl` names them, read at the
+    /// link of its newtype chain that `decl` declares: a newtype's own impls
+    /// take the newtype's arguments, its base's impls the base's, and a
+    /// re-shaping newtype (`type Pair<T> = List<[T, i32]>`) differs on the two.
+    /// `None` where no link is `decl`.
+    pub fn args_at_decl(&self, receiver: TypeId, decl: DefId) -> Option<Vec<TypeId>> {
+        let mut link = self.peel_refs(receiver);
+        loop {
+            if self.nominal_def(link) == Some(decl) {
+                return self.declared_type_args(link);
+            }
+            let ResolvedType::Newtype { base_type, .. } = self.get_unerased(link) else {
+                return None;
+            };
+            link = *base_type;
+        }
+    }
+
+    /// Fill the slots impl block `def`'s bounds project from those `slots`
+    /// already holds: `X` in `impl<T: Tr<Assoc = List<X>>, X>` once `T` is
+    /// settled, read through `Tr` itself, so another trait's `Assoc` on the
+    /// same type cannot answer.
+    pub fn project_impl_slots(&mut self, def: DefId, slots: &mut IndexMap<u32, TypeId>) {
+        for projection in self.impl_target(def).projections.clone() {
+            let Some(&source) = slots.get(&projection.source) else {
+                continue;
+            };
+            let Some(concrete) = self.resolve_trait_assoc_type_of_instance(
+                source,
+                &projection.trait_,
+                &projection.assoc,
+            ) else {
+                continue;
+            };
+            self.register_assoc_type_resolution(
+                source,
+                TraitRef::bare(projection.trait_),
+                projection.assoc,
+                concrete,
+            );
+            if let Some(bound) = self.bind_projection_pattern(projection.pattern, concrete) {
+                for (slot, ty) in bound {
+                    slots.entry(slot).or_insert(ty);
+                }
+            }
+        }
+    }
+
+    /// [`Self::bind_type_params`] for one pattern, where a tuple pattern may
+    /// spread a pack (`[A, ..F]`): the pack takes the elements its neighbours
+    /// leave, as one tuple.
+    fn bind_projection_pattern(
+        &mut self,
+        pattern: TypeId,
+        concrete: TypeId,
+    ) -> Option<IndexMap<u32, TypeId>> {
+        let (Some(written), Some(elements)) = (self.as_tuple(pattern), self.as_tuple(concrete))
+        else {
+            return self.bind_type_params(&[pattern], &[concrete]);
+        };
+        let Some(at) = written.iter().position(|&w| self.is_type_pack(w)) else {
+            return self.bind_type_params(&[pattern], &[concrete]);
+        };
+        let after = written.len() - at - 1;
+        let pack_end = elements.len().checked_sub(after)?;
+        if pack_end < at {
+            return None;
+        }
+        let pack = self.make_tuple(elements[at..pack_end].to_vec());
+        let mut rest_written = written.clone();
+        rest_written.remove(at);
+        let rest_concrete: Vec<TypeId> = elements[..at]
+            .iter()
+            .chain(&elements[pack_end..])
+            .copied()
+            .collect();
+        let mut bound = self.bind_type_params(&rest_written, &rest_concrete)?;
+        bound.insert(self.param_slot(written[at])?, pack);
+        Some(bound)
+    }
+
+    fn impl_target(&self, def: DefId) -> &ImplTarget {
+        self.impl_targets.get(&def).unwrap_or_else(|| {
+            panic!("impl block {def:?} is asked about before its target is recorded")
+        })
+    }
+
+    /// Whether impl block `def` reaches the receiver type `instance`. Reference
+    /// targets share one `&` head, so their referents' heads must agree too.
+    pub fn impl_reaches_instance(&self, def: DefId, instance: TypeId) -> bool {
+        let target = self.impl_target(def);
+        if let ResolvedType::Ref(written) | ResolvedType::MutRef(written) =
+            self.get_unerased(target.whole)
+            && let ResolvedType::Ref(asked) | ResolvedType::MutRef(asked) = self.get(instance)
+            && self.param_slot(*written).is_none()
+        {
+            let head = self.impl_receiver_key(*written);
+            let mut link = self.peel_refs(*asked);
+            while self.impl_receiver_key(link) != head {
+                let ResolvedType::Newtype { base_type, .. } = self.get_unerased(link) else {
+                    return false;
+                };
+                link = *base_type;
+            }
+        }
+        let written = &target.args;
+        let instance = self.peel_refs(instance);
+        let args = match self.get(instance) {
+            ResolvedType::Struct { type_args, .. } => type_args.clone(),
+            _ => self.nominal_type_args(instance).unwrap_or_default(),
+        };
+        self.impl_target_binding(written, &args).is_some()
+    }
+
+    /// Whether impl block `def` reaches every instance of its head: its target
+    /// names a head, not a shape, over distinct binders.
+    pub fn impl_covers_every_instance(&self, def: DefId) -> bool {
+        let target = self.impl_target(def);
+        let names_a_head = match self.get_unerased(target.whole) {
+            ResolvedType::Ref(_)
+            | ResolvedType::MutRef(_)
+            | ResolvedType::Unit
+            | ResolvedType::Function { .. } => false,
+            ResolvedType::GenericInstance { .. } => !self.is_tuple(target.whole),
+            ResolvedType::Primitive(_)
+            | ResolvedType::Never
+            | ResolvedType::Struct { .. }
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::GenericResource { .. }
+            | ResolvedType::Reactive(_)
+            | ResolvedType::TypeParam { .. }
+            | ResolvedType::InferVar(_)
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::AssocTypeProjection { .. }
+            | ResolvedType::BuiltinArray(_)
+            | ResolvedType::Newtype { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Unknown
+            | ResolvedType::Error => true,
+        };
+        let mut seen = IndexSet::default();
+        names_a_head
+            && target
+                .args
+                .iter()
+                .all(|&arg| self.param_slot(arg).is_some_and(|slot| seen.insert(slot)))
+    }
+
+    /// Every recorded impl block reaching only some instances of its head.
+    pub fn partial_impls(&self) -> IndexSet<DefId> {
+        self.impl_targets
+            .keys()
+            .copied()
+            .filter(|&def| !self.impl_covers_every_instance(def))
+            .collect()
+    }
+
+    /// What a target writing `written` binds at a receiver with `receiver_args`,
+    /// or `None` where it misses it. Unknown arguments and a pack's tail pin none.
+    pub fn impl_target_binding(
+        &self,
+        written: &[TypeId],
+        receiver_args: &[TypeId],
+    ) -> Option<IndexMap<u32, TypeId>> {
+        self.open_impl_target_binding(written, receiver_args, &|_| false)
+            .map(|binding| binding.slots)
+    }
+
+    /// [`Self::impl_target_binding`] where the receiver's arguments hold
+    /// variables still to be answered, which `open` tells. A variable takes the
+    /// one closed type the target puts at its place; it cannot take two, nor a
+    /// type naming another variable, nor a type naming the impl's parameters,
+    /// where its answer would have to be found first.
+    pub fn open_impl_target_binding(
+        &self,
+        written: &[TypeId],
+        receiver_args: &[TypeId],
+        open: &dyn Fn(TypeId) -> bool,
+    ) -> Option<TargetBinding> {
+        let mut binding = TargetBinding::default();
+        if written.is_empty() || receiver_args.is_empty() {
+            return Some(binding);
+        }
+        let fixed = written
+            .iter()
+            .position(|&w| self.is_type_pack(w))
+            .unwrap_or(written.len());
+        if receiver_args.len() < written.len() && fixed == written.len() {
+            return None;
+        }
+        self.bind_all(
+            &written[..fixed],
+            receiver_args.get(..fixed)?,
+            open,
+            &mut binding,
+        )
+        .then_some(binding)
+    }
+
+    /// The type-parameter slots `concrete` fills in `written`, at any depth;
+    /// `None` where they differ outside a slot or a slot would take two types.
+    pub fn bind_type_params(
+        &self,
+        written: &[TypeId],
+        concrete: &[TypeId],
+    ) -> Option<IndexMap<u32, TypeId>> {
+        let mut binding = TargetBinding::default();
+        self.bind_all(written, concrete, &|_| false, &mut binding)
+            .then_some(binding.slots)
+    }
+
+    fn bind_all(
+        &self,
+        written: &[TypeId],
+        concrete: &[TypeId],
+        open: &dyn Fn(TypeId) -> bool,
+        binding: &mut TargetBinding,
+    ) -> bool {
+        written.len() == concrete.len()
+            && written
+                .iter()
+                .zip(concrete)
+                .all(|(&w, &c)| self.bind_one(w, c, open, binding))
+    }
+
+    fn bind_one(
+        &self,
+        written: TypeId,
+        concrete: TypeId,
+        open: &dyn Fn(TypeId) -> bool,
+        binding: &mut TargetBinding,
+    ) -> bool {
+        if let Some(slot) = self.param_slot(written) {
+            if let Some(&prior) = binding.slots.get(&slot) {
+                return self.agree(prior, concrete, open, binding);
+            }
+            binding.slots.insert(slot, concrete);
+            return true;
+        }
+        if open(concrete) {
+            return !self.contains_type_param(written)
+                && self.agree(concrete, written, open, binding);
+        }
+        // An `_` or an unresolvable name: nothing written to match against.
+        if matches!(
+            self.get(written),
+            ResolvedType::Unknown | ResolvedType::Error
+        ) {
+            return true;
+        }
+        if let Some(agrees) =
+            self.zip_shapes(written, concrete, |w, c| self.bind_one(w, c, open, binding))
+        {
+            return agrees;
+        }
+        // A head written bare (`impl Slot<Box>`) constrains the head alone.
+        if self.peel_refs(written) == written
+            && self.decl_of_type(written).is_some()
+            && self.generic_type_args(written).is_none()
+            && self.generic_type_args(concrete).is_some()
+        {
+            return self.fq_base_type_name(written).head()
+                == self.fq_base_type_name(concrete).head();
+        }
+        self.type_key(written) == self.type_key(concrete)
+    }
+
+    /// Whether two receiver-side types can be one, answering an open variable
+    /// on either side with the other where that settles it.
+    fn agree(
+        &self,
+        a: TypeId,
+        b: TypeId,
+        open: &dyn Fn(TypeId) -> bool,
+        binding: &mut TargetBinding,
+    ) -> bool {
+        let (a, b) = (binding.answered(a), binding.answered(b));
+        if self.type_key(a) == self.type_key(b) {
+            return true;
+        }
+        let closed = |ty: TypeId| !self.any_infer_var(ty, &mut |var| open(var));
+        for (var, answer) in [(a, b), (b, a)] {
+            if open(var) {
+                if !closed(answer) {
+                    return false;
+                }
+                binding.answers.insert(var, answer);
+                return true;
+            }
+        }
+        self.zip_shapes(a, b, |x, y| self.agree(x, y, open, binding))
+            .unwrap_or(false)
+    }
+
+    /// Whether `each` holds of every pair of parts `a` and `b` line up, or
+    /// `None` where they share no outer shape to line parts up by.
+    fn zip_shapes(
+        &self,
+        a: TypeId,
+        b: TypeId,
+        mut each: impl FnMut(TypeId, TypeId) -> bool,
+    ) -> Option<bool> {
+        let mut all = |xs: &[TypeId], ys: &[TypeId]| {
+            xs.len() == ys.len() && xs.iter().zip(ys).all(|(&x, &y)| each(x, y))
+        };
+        match (self.get(a), self.get(b)) {
+            (ResolvedType::Ref(x), ResolvedType::Ref(y))
+            | (ResolvedType::MutRef(x), ResolvedType::MutRef(y))
+            | (ResolvedType::Reactive(x), ResolvedType::Reactive(y))
+            | (ResolvedType::BuiltinArray(x), ResolvedType::BuiltinArray(y)) => {
+                Some(all(&[*x], &[*y]))
+            }
+            (
+                ResolvedType::Function {
+                    is_mut: x_mut,
+                    params: x_params,
+                    return_type: x_ret,
+                    effects: x_effects,
+                },
+                ResolvedType::Function {
+                    is_mut: y_mut,
+                    params: y_params,
+                    return_type: y_ret,
+                    effects: y_effects,
+                },
+            ) => Some(
+                x_mut == y_mut
+                    && x_effects == y_effects
+                    && all(x_params, y_params)
+                    && all(&[*x_ret], &[*y_ret]),
+            ),
+            _ => match (self.generic_type_args(a), self.generic_type_args(b)) {
+                (Some(x), Some(y)) => Some(
+                    self.fq_base_type_name(a).head() == self.fq_base_type_name(b).head()
+                        && all(&x, &y),
+                ),
+                _ => None,
+            },
+        }
+    }
+
+    /// Whether some type instantiates both targets `a` and `b`, their type
+    /// parameters kept apart even where they share an id.
+    pub fn targets_overlap(&self, a: TypeId, b: TypeId) -> bool {
+        let mut subst = IndexMap::default();
+        self.unify_apart((Side::Left, a), (Side::Right, b), &mut subst)
+    }
+
+    fn unify_apart(&self, a: Term, b: Term, subst: &mut IndexMap<(Side, u32), Term>) -> bool {
+        let (a, b) = (self.walk_term(a, subst), self.walk_term(b, subst));
+        let var = |(side, id): Term| self.param_slot(id).map(|slot| (side, slot));
+        match (var(a), var(b)) {
+            (Some(x), Some(y)) if x == y => return true,
+            (Some(x), _) => return !self.occurs(x, b, subst) && subst.insert(x, b).is_none(),
+            (_, Some(y)) => return !self.occurs(y, a, subst) && subst.insert(y, a).is_none(),
+            (None, None) => {}
+        }
+        let unknown =
+            |id: TypeId| matches!(self.get(id), ResolvedType::Unknown | ResolvedType::Error);
+        if unknown(a.1) || unknown(b.1) {
+            return true;
+        }
+        self.zip_shapes(a.1, b.1, |x, y| self.unify_apart((a.0, x), (b.0, y), subst))
+            .unwrap_or_else(|| self.type_key(a.1) == self.type_key(b.1))
+    }
+
+    /// `term` past every parameter the substitution has bound.
+    fn walk_term(&self, mut term: Term, subst: &IndexMap<(Side, u32), Term>) -> Term {
+        while let Some(slot) = self.param_slot(term.1)
+            && let Some(&next) = subst.get(&(term.0, slot))
+        {
+            term = next;
+        }
+        term
+    }
+
+    /// Whether the parameter `var` appears in `term`, bindings followed: binding
+    /// it there would make a type contain itself.
+    fn occurs(&self, var: (Side, u32), term: Term, subst: &IndexMap<(Side, u32), Term>) -> bool {
+        let (side, id) = self.walk_term(term, subst);
+        if let Some(slot) = self.param_slot(id) {
+            return (side, slot) == var;
+        }
+        let inside = |ids: &[TypeId]| ids.iter().any(|&i| self.occurs(var, (side, i), subst));
+        match self.get(id) {
+            ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Reactive(inner)
+            | ResolvedType::BuiltinArray(inner) => inside(&[*inner]),
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => inside(params) || inside(&[*return_type]),
+            _ => self.generic_type_args(id).is_some_and(|args| inside(&args)),
+        }
+    }
+}
+
+/// Which of two impl targets a type parameter belongs to, in
+/// [`TypeTable::targets_overlap`].
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+enum Side {
+    Left,
+    Right,
+}
+
+type Term = (Side, TypeId);
+
+#[derive(Debug, Clone)]
+pub struct TirFunction {
+    pub name: String,
+    /// The source declaration reify emitted this from. `None` for anything the
+    /// compiler synthesizes, which declares nothing and so identifies nothing.
+    pub def_id: Option<DefId>,
+    /// Module this function belongs to. Set by the link phase when flattening
+    /// per-module TIR into flat lists; before link, the `module_source` is
+    /// carried implicitly by the parent `TirModule`.
+    pub module_source: ModuleSource,
+    pub visibility: Visibility,
+    /// Whether this function is exported at the Component Model boundary (world export)
+    pub is_export: bool,
+    /// Whether this is an async function (`export async fn`).
+    /// Async functions use `task return` instead of `return` to deliver results.
+    pub is_async: bool,
+    /// Generic type parameters (empty for non-generic functions)
+    pub type_params: Vec<TirTypeParam>,
+    /// Type parameters from the impl block (for methods on generic structs)
+    /// e.g., for a method in `impl Counter<T>`, this contains T's info
+    pub impl_type_params: Vec<TirTypeParam>,
+    /// The `impl` block a method was emitted into, which tells apart two blocks'
+    /// like-named templates. `None` for anything else, instances included.
+    pub impl_origin: Option<DefId>,
+    /// If this function was created by monomorphization, contains the origin info
+    pub monomorph_info: Option<MonomorphInfo>,
+    /// Parsed method info for methods (None for free functions)
+    /// Contains `struct_name`, `trait_name`, and `method_name` extracted from the function name.
+    pub method_info: Option<LocalMethodName>,
+    pub params: Vec<TirParam>,
+    pub return_type: TypeId,
+    /// The result an `async fn` delivers through `task return`. `None` for a
+    /// non-async fn and for a synthesized wrapper. The effect checker reads it
+    /// to infer signature resources.
+    pub task_return_type: Option<TypeId>,
+    pub effects: Vec<EffectRef>,
+    /// `#[retain(...)]` on a bodyless declaration — what the call keeps past
+    /// its return. A function with a body declares none: the body is read.
+    pub retains: Vec<RetainSpec<String>>,
+    /// `#[immediate(...)]` — parameters lowered to a Wasm immediate, whose
+    /// argument must still be a literal when codegen reads it.
+    pub immediates: Vec<String>,
+    /// `#[trap(...)]` on a bodyless declaration — when the call can trap.
+    pub trap: Option<TrapSpec<String>>,
+    /// `#[linear_memory(...)]` on a bodyless declaration.
+    pub linear_memory: Option<LinearMemory>,
+    pub body: Option<TirBlock>,
+    pub span: Span,
+    pub local_count: u32,
+    /// Per-local metadata — `name`, `type_id`, `is_mut` — indexed by Wasm
+    /// local index. Entries `0..params.len()` shadow the corresponding
+    /// `params[i]` (for uniform absolute indexing); body let-bindings and
+    /// elaborator/optimizer-allocated temporaries occupy `params.len()..`.
+    /// `local_count == locals.len()` post-resolve; passes that grow the
+    /// local set must keep the two in sync.
+    pub locals: Vec<TirLocal>,
+    /// Local indices that have their address taken (&x or &mut x).
+    /// For mutable primitives, these locals are stored in box structs.
+    pub address_taken_locals: IndexSet<u32>,
+
+    /// Local indices a decomposed struct's field held a reference to, which
+    /// SROA must not decompose in turn. Written by SROA alone; every earlier
+    /// phase leaves it empty and later ones only carry and remap it.
+    pub stores_aliased_locals: IndexSet<u32>,
+
+    /// Whether this function is a synthesized CM binding (generated by `synthesis::cm_binding`).
+    /// The inliner and effect checker both skip CM bindings because they are ABI bridges
+    /// between Wado GC types and CM linear memory with special effect semantics.
+    pub is_cm_binding: bool,
+
+    /// Whether this function is a synthesised effect-dispatch wrapper
+    /// (generated by `synthesis::effect_dispatch`). Effect-operation
+    /// call-site rewriting must skip these — their fallback path
+    /// directly calls `$cm_binding__<E>_<op>`, which would loop back
+    /// through the wrapper if rewritten.
+    pub is_dispatch_wrapper: bool,
+
+    /// Whether this function is a synthesized CM *export* binding (world export wrapper).
+    /// When true, the global initializer (`$initialize_modules`) is injected at the start
+    /// of this function's body during lowering.
+    pub is_cm_export: bool,
+
+    /// Whether this function is marked `#[ambient]`. Ambient functions are implicitly
+    /// available to callers without requiring matching `with` clauses — they still carry
+    /// interface declarations for documentation / implementation purposes, but the effect
+    /// checker does not propagate those requirements to callers.
+    pub is_ambient: bool,
+
+    /// Inline hint from `#[inline]`, `#[inline(always)]`, or `#[inline(never)]` attributes.
+    pub inline_hint: InlineHint,
+
+    /// The compiler-recognized stdlib role this function fills, if any.
+    /// Set from `#[compiler_item("...")]` on the source declaration; see
+    /// [`crate::compiler_item::CompilerItem`].
+    pub compiler_item: Option<CompilerItem>,
+
+    /// Custom wasm export name from `#[export_name("...")]` attribute.
+    pub export_name: Option<String>,
+
+    /// Allocator tag from `#[allocator("...")]` attribute (e.g., `"bump"`, `"debug"`).
+    pub allocator_tag: Option<String>,
+
+    /// What `#[result(...)]` declared. Read only where there is no body to
+    /// infer from, so one written on a body is recorded and ignored.
+    pub declared_return_convention: Option<ReturnConvention>,
+
+    /// Categorizes the function for kind-specific optimizations. Most functions
+    /// are `Regular`; synthesis passes set specialized kinds so the TIR
+    /// optimizer can apply targeted transformations (e.g. freshness-based
+    /// elision for `ValueCopy`).
+    pub kind: FunctionKind,
+
+    /// ABI for delivering the function's return value at WIR / Wasm level.
+    /// Defaults to [`ReturnAbi::Single`]; an analysis pass sets
+    /// [`ReturnAbi::MultiValue`] for tuple- or user-struct-returning
+    /// functions whose every call site destructures the result via
+    /// `FieldAccess` and whose body's returns produce a fresh
+    /// `TupleLiteral` / `StructLiteral`. WIR build then emits a
+    /// multi-value Wasm result signature (no heap struct round-trip).
+    pub return_abi: ReturnAbi,
+}
+
+/// How a function delivers its return value at the Wasm level.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum ReturnAbi {
+    /// Single Wasm return value. The function's TIR `return_type` is taken
+    /// as-is; tuple / user-struct types lower to a heap struct ref.
+    #[default]
+    Single,
+    /// Multi-value Wasm return: each tuple element / struct field becomes a
+    /// separate Wasm result. Carries the per-element TIR type ids and field
+    /// names for WIR-build's signature emission and call-site split-local
+    /// generation. The function's TIR `return_type` is unchanged (it remains
+    /// the tuple / struct type) — only the WIR-level ABI shifts.
+    ///
+    /// For tuple returns, `field_names` is `["0", "1", ...]` (matching the
+    /// numeric field names tuple structs carry). For user-struct returns,
+    /// `field_names` is the struct's fields in declaration order.
+    MultiValue {
+        /// TIR types of each result, in declaration order.
+        result_types: Vec<TypeId>,
+        /// Field names matching the source aggregate's declaration order.
+        /// Used by WIR build to look up the right split local from a
+        /// `FieldAccess` access on a multi-value-bound temp.
+        field_names: Vec<String>,
+    },
+}
+
+/// Semantic category of a `TirFunction`. Carries the type operand so the
+/// optimizer can reason about the call without re-deriving it from the
+/// signature.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum FunctionKind {
+    /// Ordinary user-defined or synthesized function.
+    #[default]
+    Regular,
+    /// Synthesized `copy_value` function that deep-copies a value of
+    /// `type_id`. Calls to such functions may be elided when the argument is
+    /// provably fresh.
+    ValueCopy { type_id: TypeId },
+    /// Auto-derived `fn(..)^Inspect::inspect` dispatch stub. The TIR body is
+    /// `unreachable()` — enough to register the function and resolve calls to
+    /// it — and WIR build supplies the real one, a `call_ref` through
+    /// `CanonicalClosure_K`'s vtable slot. `(arity, return_type)` are
+    /// structured so nobody parses the mangle.
+    FnCanonicalDispatch { arity: usize, return_type: TypeId },
+}
+
+/// Inline hint for a function, extracted from `#[inline(...)]` attributes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum InlineHint {
+    /// No hint — the optimizer decides based on heuristics.
+    #[default]
+    Auto,
+    /// `#[inline]` — suggest inlining (raises the threshold).
+    Hint,
+    /// `#[inline(always)]` — always inline regardless of size.
+    Always,
+    /// `#[inline(never)]` — never inline.
+    Never,
+}
+
+/// Where a bodyless declaration's result comes from. A body is read for the
+/// same fact, so this is the declared half of one notion: the result is either
+/// a fresh place or a projection of one parameter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReturnConvention {
+    /// `#[result(owned)]` — every returned value is freshly materialized, so a
+    /// caller may consume it as a move.
+    Owned,
+    /// `#[result(part_of = p)]` — the result names a component of parameter `p`
+    /// in place, so it lives as long as that argument's storage does.
+    PartOf(usize),
+}
+
+/// One `#[retain(...)]` clause on a bodyless declaration: what the call keeps
+/// past its return, and where that lands.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RetainSpec<Param> {
+    /// The retained parameter.
+    pub source: Param,
+    /// `elements_of = p` — what is retained is what `p` holds, not `p`.
+    pub elements: bool,
+    /// `into = q` — the parameter the retained reference lands in, `None`
+    /// where the declaration names no destination.
+    pub into: Option<Param>,
+}
+
+/// One `#[trap(...)]` condition: the call traps exactly where one fails.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TrapCheck<Param> {
+    /// `negative = p` — traps when `p < 0`.
+    Negative(Param),
+    /// `outside = a, at = i, len = n` — traps unless `[i, i + n)` lies within
+    /// the array `a`. `at` defaults to 0, `len` to 1.
+    Outside {
+        array: Param,
+        at: Option<Param>,
+        len: Option<Param>,
+    },
+    /// `unset = a` — traps when the element read is a slot of `a` that holds no
+    /// value, as a reference element `array_new` left at its default does.
+    Unset(Param),
+}
+
+/// What a bodyless declaration's `#[trap(...)]` attributes state. Silence is
+/// "may trap"; `#[trap(never)]` is a spec with no checks.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrapSpec<Param> {
+    pub checks: Vec<TrapCheck<Param>>,
+    /// `result_len = p` — the returned array holds exactly `p` elements.
+    pub result_len: Option<Param>,
+}
+
+impl<P> TrapSpec<P> {
+    fn map<Q>(&self, mut f: impl FnMut(&P) -> Q) -> TrapSpec<Q> {
+        TrapSpec {
+            checks: self
+                .checks
+                .iter()
+                .map(|check| match check {
+                    TrapCheck::Negative(p) => TrapCheck::Negative(f(p)),
+                    TrapCheck::Outside { array, at, len } => TrapCheck::Outside {
+                        array: f(array),
+                        at: at.as_ref().map(&mut f),
+                        len: len.as_ref().map(&mut f),
+                    },
+                    TrapCheck::Unset(array) => TrapCheck::Unset(f(array)),
+                })
+                .collect(),
+            result_len: self.result_len.as_ref().map(f),
+        }
+    }
+}
+
+/// `#[linear_memory(...)]`: how a bodyless declaration touches linear memory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinearMemory {
+    Read,
+    /// Writes, and reads too: a store is ordered against every other access.
+    Write,
+}
+
+/// What a bodyless `core:builtin` declared about storage, by parameter position.
+/// Link snapshots it because monomorphization drops the generic declarations.
+#[derive(Debug, Clone, Default)]
+pub struct BuiltinDeclaration {
+    /// How many parameters the declaration takes.
+    pub arity: usize,
+    /// `#[result(...)]`, or `None` where the declaration states none.
+    pub returns: Option<ReturnConvention>,
+    /// `#[retain(...)]` — what this call keeps beyond it.
+    pub retains: Vec<RetainSpec<usize>>,
+    /// Positions the declaration takes by `&mut`, the only ones it can write
+    /// the caller's storage through. Snapshot here because the bodyless
+    /// declaration keeps no parameters past lowering.
+    pub mut_params: IndexSet<usize>,
+    /// `#[immediate(...)]` positions, lowered to a Wasm immediate. Codegen
+    /// reads the argument's literal value, so nothing may rewrite it into a
+    /// load.
+    pub immediate_params: IndexSet<usize>,
+    /// `#[trap(...)]`, or `None` where the declaration states none.
+    pub trap: Option<TrapSpec<usize>>,
+    /// `#[linear_memory(...)]`, or `None` where it touches none.
+    pub linear_memory: Option<LinearMemory>,
+}
+
+/// All a declaration lookup reads of a call. TIR and NIR each carry their own
+/// `FunctionRef`, so the key is spelled out rather than taken from either.
+#[derive(Clone, Copy)]
+pub struct DeclarationLookup<'a> {
+    pub module_source: &'a ModuleSource,
+    pub name: &'a str,
+    /// The generic declaration a monomorphized instance came from.
+    pub generic_name: Option<&'a str>,
+}
+
+impl<'a> DeclarationLookup<'a> {
+    /// The `core:builtin` intrinsic this is, plain or monomorphized. A function
+    /// declared anywhere else may share the name, a wasm-asset export included.
+    pub fn intrinsic(self) -> Option<&'a str> {
+        self.module_source
+            .is_core_builtin()
+            .then(|| self.generic_name.unwrap_or(self.name))
+    }
+}
+
+impl<'a> From<&'a FunctionRef> for DeclarationLookup<'a> {
+    fn from(func: &'a FunctionRef) -> Self {
+        Self {
+            module_source: &func.module_source,
+            name: &func.name,
+            generic_name: func
+                .monomorph_info
+                .as_ref()
+                .map(|m| m.generic_name.as_str()),
+        }
+    }
+}
+
+/// One value per body-less declaration, found from a call to it.
+#[derive(Debug, Clone)]
+pub struct DeclarationTable<V>(IndexMap<(ModuleSource, String), V>);
+
+impl<V> Default for DeclarationTable<V> {
+    fn default() -> Self {
+        Self(IndexMap::default())
+    }
+}
+
+impl<V> DeclarationTable<V> {
+    /// A table over `declarations`, keyed by module and declared name.
+    pub fn new(declarations: IndexMap<(ModuleSource, String), V>) -> Self {
+        Self(declarations)
+    }
+
+    /// The value for the declaration `call` resolves to, or `None` where there
+    /// is none. Keyed by the generic name a monomorphized instance came from,
+    /// which is the name the declaration was snapshot under.
+    pub fn get<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> Option<&V> {
+        let call = call.into();
+        let key = |name: &str| (call.module_source.clone(), name.to_string());
+        if let Some(generic) = call.generic_name
+            && let Some(value) = self.0.get(&key(generic))
+        {
+            return Some(value);
+        }
+        self.0.get(&key(call.name))
+    }
+
+    /// The same declarations, each mapped to `f` of its value.
+    pub fn map<W>(&self, mut f: impl FnMut(&V) -> W) -> DeclarationTable<W> {
+        DeclarationTable(self.0.iter().map(|(k, v)| (k.clone(), f(v))).collect())
+    }
+}
+
+/// What each body-less declaration stated about storage, resolved from a call.
+/// Link snapshots these before monomorphization drops the generic declarations,
+/// and both the lowering plan and the NIR optimizer read them.
+pub type BuiltinDeclarations = DeclarationTable<BuiltinDeclaration>;
+
+impl DeclarationTable<BuiltinDeclaration> {
+    /// Whether `call` names a body-less declaration that stated a convention or
+    /// a retention — the calls that answer from a declaration rather than from
+    /// the fixpoint.
+    pub fn declares<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {
+        self.get(call.into())
+            .is_some_and(|d| d.returns.is_some() || !d.retains.is_empty())
+    }
+
+    /// Whether the call leaves the argument *object* at `pos` where the caller
+    /// put it: it neither writes through it (`&mut`) nor keeps it past the
+    /// return (`#[retain(p)]`). It says nothing about what that object holds —
+    /// `#[retain(elements_of = p)]` re-homes the elements and still answers
+    /// `true` here, so a caller asking about reachable storage must read the
+    /// retain specs itself.
+    ///
+    /// A call with no snapshot answers `false`. Link takes one for every
+    /// bodyless free function, so the gap is a method, whose key would not be
+    /// this one — never a declaration that simply had nothing to say.
+    pub fn reads_param<'a>(&self, call: impl Into<DeclarationLookup<'a>>, pos: usize) -> bool {
+        self.get(call.into()).is_some_and(|d| {
+            !d.mut_params.contains(&pos)
+                && !d.retains.iter().any(|r| r.source == pos && !r.elements)
+        })
+    }
+
+    /// The positions the call lowers to a Wasm immediate, where codegen reads
+    /// the argument's literal. An optimizer that would replace one with
+    /// anything else — a global read, a local — must leave it alone.
+    ///
+    /// Read from the snapshot rather than from the callee's parameters, which a
+    /// bodyless declaration does not keep past lowering.
+    pub fn immediate_params<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> IndexSet<usize> {
+        self.get(call.into())
+            .map(|d| d.immediate_params.clone())
+            .unwrap_or_default()
+    }
+
+    /// What `call` declared with `#[trap(...)]`; `None` is "may trap".
+    pub fn trap<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> Option<&TrapSpec<usize>> {
+        self.get(call.into())?.trap.as_ref()
+    }
+
+    /// What `call` declared with `#[linear_memory(...)]`.
+    pub fn linear_memory<'a>(
+        &self,
+        call: impl Into<DeclarationLookup<'a>>,
+    ) -> Option<LinearMemory> {
+        self.get(call.into())?.linear_memory
+    }
+
+    /// The positions `call` takes by `&mut`, `None` where nothing was snapshot.
+    pub fn mut_params<'a>(
+        &self,
+        call: impl Into<DeclarationLookup<'a>>,
+    ) -> Option<&IndexSet<usize>> {
+        self.get(call.into()).map(|d| &d.mut_params)
+    }
+
+    /// Whether the call declared `#[result(owned)]`: the object it hands back
+    /// is freshly allocated, and so never one it was given.
+    pub fn returns_owned<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {
+        self.get(call.into())
+            .is_some_and(|d| d.returns == Some(ReturnConvention::Owned))
+    }
+
+    /// The parameter a declaration's result is a component of, for a call that
+    /// declared `#[result(part_of = p)]`.
+    pub fn part_of<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> Option<usize> {
+        self.part_of_params(call).map(|params| params[0])
+    }
+
+    /// [`Self::part_of`] as the parameter set a result projects, which for a
+    /// declaration is that one parameter.
+    pub fn part_of_params<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> Option<&[usize]> {
+        match &self.get(call.into())?.returns {
+            Some(ReturnConvention::PartOf(param)) => Some(std::slice::from_ref(param)),
+            Some(ReturnConvention::Owned) | None => None,
+        }
+    }
+
+    /// The parameters a declaration keeps beyond the call, from `#[retain(p)]`.
+    pub fn retained_params<'a>(
+        &self,
+        call: impl Into<DeclarationLookup<'a>>,
+    ) -> impl Iterator<Item = usize> + '_ {
+        self.retain_specs(call).map(|r| r.source)
+    }
+
+    /// Every `#[retain(...)]` clause a declaration carries, destinations
+    /// included.
+    pub fn retain_specs<'a>(
+        &self,
+        call: impl Into<DeclarationLookup<'a>>,
+    ) -> impl Iterator<Item = &RetainSpec<usize>> + '_ {
+        self.get(call.into())
+            .into_iter()
+            .flat_map(|d| d.retains.iter())
+    }
+}
+
+/// A body's local frame. Taken and given whole, so a caller moving a body
+/// between functions cannot carry the locals and leave what describes them.
+#[derive(Debug, Clone, Default)]
+pub struct LocalFrame {
+    pub locals: Vec<TirLocal>,
+    /// Indices of the locals something takes the address of (`&x` / `&mut x`),
+    /// which codegen boxes so a write through the reference is seen.
+    pub address_taken: IndexSet<u32>,
+}
+
+impl LocalFrame {
+    /// Append `other`, renumbering its locals to follow this frame's.
+    pub fn absorb(&mut self, other: LocalFrame, shift: impl FnOnce(u32)) {
+        let count = u32::try_from(other.locals.len()).expect("local count fits in u32");
+        assert!(
+            other.address_taken.iter().all(|&i| i < count),
+            "an address-taken index names a local of its own frame"
+        );
+        let offset = u32::try_from(self.locals.len()).expect("local count fits in u32");
+        if offset > 0 && !other.locals.is_empty() {
+            shift(offset);
+        }
+        self.locals.extend(other.locals);
+        self.address_taken
+            .extend(other.address_taken.into_iter().map(|i| i + offset));
+    }
+}
+
+impl TirFunction {
+    /// Where an attribute's named parameter sits. Reify drops a clause naming
+    /// no parameter, so one reaching here names a parameter of this very
+    /// declaration.
+    fn param_position(&self, name: &str) -> usize {
+        self.params
+            .iter()
+            .position(|p| p.name == name)
+            .unwrap_or_else(|| {
+                panic!(
+                    "`{}` names `{name}`, which it takes no parameter for",
+                    self.name
+                )
+            })
+    }
+
+    /// This declaration's `#[retain(...)]` clauses by parameter position.
+    pub fn retains_by_position(&self) -> impl Iterator<Item = RetainSpec<usize>> + '_ {
+        self.retains.iter().map(move |r| RetainSpec {
+            source: self.param_position(&r.source),
+            elements: r.elements,
+            into: r.into.as_deref().map(|name| self.param_position(name)),
+        })
+    }
+
+    /// This declaration's `#[immediate(...)]` parameters by position.
+    pub fn immediates_by_position(&self) -> impl Iterator<Item = usize> + '_ {
+        self.immediates
+            .iter()
+            .map(move |name| self.param_position(name))
+    }
+
+    /// This declaration's `#[trap(...)]` by parameter position.
+    pub fn trap_by_position(&self) -> Option<TrapSpec<usize>> {
+        self.trap
+            .as_ref()
+            .map(|spec| spec.map(|name| self.param_position(name)))
+    }
+
+    /// Take the body's frame, leaving an empty one. The counterpart of
+    /// [`Self::set_frame`]: a caller moving a body elsewhere takes what
+    /// describes its locals with it.
+    pub fn take_frame(&mut self) -> LocalFrame {
+        self.local_count = 0;
+        LocalFrame {
+            locals: std::mem::take(&mut self.locals),
+            address_taken: std::mem::take(&mut self.address_taken_locals),
+        }
+    }
+
+    /// Give the body a whole new frame. The three fields describing one are
+    /// replaced together, so a caller swapping a body cannot leave one of them
+    /// describing the body it replaced.
+    pub fn set_frame(&mut self, frame: LocalFrame) {
+        let LocalFrame {
+            locals,
+            address_taken,
+        } = frame;
+        self.local_count = u32::try_from(locals.len()).expect("local count fits in u32");
+        self.locals = locals;
+        self.address_taken_locals = address_taken;
+    }
+
+    /// A parameterless function the compiler mints for itself: no declaration,
+    /// no generics, no effects.
+    #[must_use]
+    pub fn synthesized(
+        module_source: ModuleSource,
+        name: String,
+        return_type: TypeId,
+        body: TirBlock,
+        frame: LocalFrame,
+        span: Span,
+    ) -> Self {
+        let LocalFrame {
+            locals,
+            address_taken,
+        } = frame;
+        Self {
+            module_source,
+            def_id: None,
+            is_async: false,
+            name,
+            visibility: Visibility::Public,
+            is_export: false,
+            type_params: Vec::new(),
+            impl_type_params: Vec::new(),
+            impl_origin: None,
+            monomorph_info: None,
+            method_info: None,
+            params: Vec::new(),
+            return_type,
+            task_return_type: None,
+            effects: Vec::new(),
+            retains: Vec::new(),
+            immediates: Vec::new(),
+            trap: None,
+            linear_memory: None,
+            body: Some(body),
+            span,
+            local_count: u32::try_from(locals.len()).expect("local count fits in u32"),
+            locals,
+            address_taken_locals: address_taken,
+            stores_aliased_locals: IndexSet::default(),
+            is_cm_binding: false,
+            is_dispatch_wrapper: false,
+            is_cm_export: false,
+            is_ambient: false,
+            inline_hint: InlineHint::Auto,
+            compiler_item: None,
+            export_name: None,
+            allocator_tag: None,
+            declared_return_convention: None,
+            kind: FunctionKind::Regular,
+            return_abi: ReturnAbi::default(),
+        }
+    }
+
+    /// Returns true if this is a method (belongs to a struct)
+    #[inline]
+    pub fn is_method(&self) -> bool {
+        self.method_info.is_some()
+    }
+
+    /// Whether the first parameter is the `self` receiver.
+    #[inline]
+    pub fn takes_self(&self) -> bool {
+        self.params.first().is_some_and(TirParam::is_self)
+    }
+
+    /// Returns true if this is a trait method (implements a trait)
+    #[inline]
+    pub fn is_trait_method(&self) -> bool {
+        self.method_info
+            .as_ref()
+            .is_some_and(LocalMethodName::is_trait_method)
+    }
+
+    /// Returns true if this is the synthesized `$call` method on a
+    /// `$Closure_N` functor struct. See
+    /// [`LocalMethodName::is_closure_call`] for the rationale.
+    #[inline]
+    pub fn is_closure_call(&self) -> bool {
+        self.method_info
+            .as_ref()
+            .is_some_and(LocalMethodName::is_closure_call)
+    }
+
+    /// Returns true if this function has type params that need monomorphization
+    /// (excludes effect params, which are erased at compile time).
+    #[inline]
+    pub fn has_real_type_params(&self) -> bool {
+        self.type_params.iter().any(|p| !p.is_effect)
+    }
+
+    /// Whether monomorphization instantiates this function rather than
+    /// emitting it as written.
+    pub fn is_template(&self) -> bool {
+        self.has_real_type_params() || !self.impl_type_params.is_empty()
+    }
+
+    /// The identity a call of this function records: its declaration and block,
+    /// or the name synthesis gave it. `None` for an instance.
+    pub fn template_id(&self) -> Option<TemplateId> {
+        if self.monomorph_info.is_some() {
+            return None;
+        }
+        Some(match self.def_id {
+            Some(def) => TemplateId::Declared {
+                def,
+                block: self.impl_origin,
+            },
+            None => TemplateId::Synthesized {
+                module: self.module_source.clone(),
+                name: self.name.clone(),
+            },
+        })
+    }
+
+    /// Returns the copied type if this is a synthesized value-copy function.
+    #[inline]
+    pub fn value_copy_type(&self) -> Option<TypeId> {
+        match self.kind {
+            FunctionKind::ValueCopy { type_id } => Some(type_id),
+            _ => None,
+        }
+    }
+
+    /// Dispatch coordinates of an auto-derived `fn(..)^Inspect` stub, which WIR
+    /// build turns into the indirect-call body.
+    #[inline]
+    pub fn fn_canonical_dispatch(&self) -> Option<(usize, TypeId)> {
+        match self.kind {
+            FunctionKind::FnCanonicalDispatch { arity, return_type } => Some((arity, return_type)),
+            _ => None,
+        }
+    }
+
+    /// Returns true if this function was synthesized as a value-copy helper.
+    #[inline]
+    pub fn is_value_copy(&self) -> bool {
+        matches!(self.kind, FunctionKind::ValueCopy { .. })
+    }
+}
+
+/// A resolved local slot in a function, global initializer, or closure scope.
+/// `FunctionContext::locals` is the single source of truth — every parameter,
+/// `let`, destructure binding and elaborator temporary — and is projected onto
+/// `TirFunction::locals` (keyed by Wasm local index) and onto
+/// `Closure { body_locals }`, whose params stay in `params` instead.
+#[derive(Debug, Clone)]
+pub struct TirLocal {
+    /// Source-level name of the binding (or a synthesised `$name` for
+    /// elaborator-generated temporaries that have no surface syntax).
+    pub name: String,
+    pub type_id: TypeId,
+    pub is_mut: bool,
+    /// Where the binding was written. Default for a synthesised slot, which
+    /// no diagnostic can point at.
+    pub span: Span,
+}
+
+impl TirLocal {
+    /// Build a `TirLocal` for a synthesised slot whose name follows the
+    /// `$local_N` convention used by `wir_build` when no source-level
+    /// name is available.
+    pub fn synth(index: u32, type_id: TypeId, is_mut: bool) -> Self {
+        Self {
+            name: format!("$local_{index}"),
+            type_id,
+            is_mut,
+            span: Span::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TirParam {
+    pub name: String,
+    pub type_id: TypeId,
+    pub local_index: u32,
+    pub is_mut: bool,
+    /// The parameter is a `&mut T` borrow (captured here before the boxing
+    /// plan rewrites `&mut T` and `&T` to the same `Box<T>` type, erasing the
+    /// distinction). A `&T` cannot be written through, so only a `&mut`
+    /// parameter can mutate the caller's argument storage.
+    ///
+    /// `lower::plan` fills it, so anything running before that — `link` among
+    /// them — reads `false` here whatever the type says, and must ask the type.
+    pub is_mut_ref: bool,
+    pub span: Span,
+}
+
+impl TirParam {
+    /// Whether this is the `self` receiver.
+    #[must_use]
+    pub fn is_self(&self) -> bool {
+        self.name == "self"
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TirStruct {
+    /// The struct type this reifies, as its head plus what it was
+    /// instantiated with — the same pair `ResolvedType::Struct` carries, so a
+    /// consumer keys on it instead of re-rendering a spelling to match one
+    /// built elsewhere.
+    pub def: StructDef,
+    pub type_args: Vec<TypeId>,
+    pub name: String,
+    pub module_source: ModuleSource,
+    pub visibility: Visibility,
+    /// Generic type parameters (empty for non-generic structs)
+    pub type_params: Vec<TirTypeParam>,
+    /// If this struct was created by monomorphization, contains the origin info
+    pub monomorph_info: Option<MonomorphInfo>,
+    pub fields: Vec<TirField>,
+    pub span: Span,
+    /// `#[wire(name_policy = "...")]` — naming strategy for all fields.
+    pub wire_name_policy: Option<NamePolicy>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TirField {
+    pub name: String,
+    pub visibility: Visibility,
+    pub type_id: TypeId,
+    pub index: u32,
+    pub span: Span,
+    /// `#[secret]` — field not shown in debug inspect output.
+    pub is_secret: bool,
+    /// `#[wire(name = "name")]` — custom serialization name for this field.
+    pub wire_name_override: Option<String>,
+    /// `#[wire(default)]` — use default value when field is missing during deserialization.
+    pub serde_default: bool,
+    /// `#[wire(positional)]` — field is resolved by position, not by name.
+    /// Format-agnostic ordinal hint: synthesized `FieldSchema::lookup` omits it
+    /// (never matched by name) and `positional_at` enumerates it. Name-only and
+    /// sequence-only formats ignore it; `core:args` binds it to a bare token.
+    pub serde_positional: bool,
+    /// Resolved default expression for `struct S { x: T = expr }`.
+    /// Inserted by the elaborator when the field is omitted in a struct literal.
+    pub default_expr: Option<Box<TirExpr>>,
+}
+
+impl TirField {
+    /// A field the compiler adds itself: no attributes and no default.
+    pub fn plain(
+        name: String,
+        visibility: Visibility,
+        type_id: TypeId,
+        index: u32,
+        span: Span,
+    ) -> Self {
+        Self {
+            name,
+            visibility,
+            type_id,
+            index,
+            span,
+            is_secret: false,
+            wire_name_override: None,
+            serde_default: false,
+            serde_positional: false,
+            default_expr: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TirEnum {
+    /// The declaration this was reified from.
+    pub def: DefId,
+    pub name: String,
+    pub module_source: ModuleSource,
+    pub visibility: Visibility,
+    /// Generic type parameters (empty for non-generic enums)
+    pub type_params: Vec<TirTypeParam>,
+    /// If this enum was created by monomorphization, contains the origin info
+    pub monomorph_info: Option<MonomorphInfo>,
+    pub cases: Vec<TirEnumCase>,
+    pub span: Span,
+    /// `#[wire(name_policy = "...")]` — naming strategy for all cases.
+    pub wire_name_policy: Option<NamePolicy>,
+}
+
+/// A case in a TIR enum.
+/// Unlike `TirVariantCase`, enum cases have no payload.
+#[derive(Debug, Clone)]
+pub struct TirEnumCase {
+    pub name: String,
+    pub index: u32,
+    pub span: Span,
+    /// `#[wire(name = "...")]` — custom serialized name for this case.
+    pub wire_name_override: Option<String>,
+}
+
+/// A flags type declaration (bitmask type, like WIT flags)
+/// e.g., `flags PathFlags { SymlinkFollow }`
+/// Represented as `ResolvedType::Flags`; each member is a bitmask value (1 << index).
+#[derive(Debug, Clone)]
+pub struct TirFlags {
+    /// The declaration this was reified from.
+    pub def: DefId,
+    pub name: String,
+    pub module_source: ModuleSource,
+    pub visibility: Visibility,
+    /// The newtype `TypeId` (base type is u32)
+    pub type_id: TypeId,
+    pub members: Vec<TirFlagsMember>,
+    pub span: Span,
+    pub wire_name_policy: Option<NamePolicy>,
+}
+
+/// A member of a flags type
+#[derive(Debug, Clone)]
+pub struct TirFlagsMember {
+    pub name: String,
+    /// Bitmask value: `1 << index`
+    pub bitmask: u32,
+    pub span: Span,
+}
+
+/// A variant type declaration (tagged union, distinct from enum)
+/// e.g., `variant Shape { Circle(f64), Rectangle(f64, f64), Point }`
+#[derive(Debug, Clone)]
+pub struct TirVariantDecl {
+    /// The declaration this was reified from. Case indices are looked up
+    /// through it, so a same-named variant in another module cannot answer.
+    pub def: DefId,
+    pub name: String,
+    pub module_source: ModuleSource,
+    pub visibility: Visibility,
+    /// Generic type parameters (e.g., `T` in `variant Option<T>`)
+    pub type_params: Vec<TirTypeParam>,
+    /// Cases of the variant (e.g., Some, None for Option)
+    pub cases: Vec<TirVariantCase>,
+    pub span: Span,
+    /// `#[wire(name_policy = "...")]` — naming strategy for all cases.
+    pub wire_name_policy: Option<NamePolicy>,
+}
+
+/// A case in a variant declaration
+/// e.g., `Circle(f64)` or `Point`
+///
+/// Each variant case has exactly one payload type:
+/// - Unit variants: `None` → payload is `()` (unit type)
+/// - Scalar payloads: `Some(T)` → payload is `T`
+/// - Tuple payloads: `Rectangle([f64, f64])` → payload is `[f64, f64]`
+#[derive(Debug, Clone)]
+pub struct TirVariantCase {
+    pub name: String,
+    /// Case index (0-based)
+    pub index: u32,
+    /// Payload type for this case. Unit variants have `()` (unit type) payload.
+    pub payload: TypeId,
+    pub span: Span,
+    /// `#[wire(name = "...")]` — custom serialized name for this case.
+    pub wire_name_override: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TirNewtype {
+    pub name: String,
+    pub module_source: ModuleSource,
+    pub visibility: Visibility,
+    pub def: DefId,
+    /// Empty for `type N = T`; the declaration's parameters for `type N<T> = …`,
+    /// which is then one declaration over many types.
+    pub type_params: Vec<TirTypeParam>,
+    /// `None` for a generic declaration: it names no single type, since each
+    /// instantiation is its own. Its impls are synthesized over the declaration
+    /// and instantiated per use, the way a generic struct's are.
+    pub type_id: Option<TypeId>,
+    /// The declaration's own `#[wire(name_policy)]`. A newtype has no members
+    /// to rename, so this spells the *type's* name on the wire — what a schema
+    /// keys its `$defs` entry by.
+    pub wire_name_policy: Option<NamePolicy>,
+    pub span: Span,
+}
+
+/// Test declaration metadata
+/// The actual test code is stored as a `TirFunction` in the functions list.
+#[derive(Debug, Clone)]
+pub struct TirTest {
+    /// The original test name from source (None if unnamed)
+    pub name: Option<String>,
+    /// Generated function name (e.g., "$`test_0`", "$`test_trap_0`", or "$`test_todo_0`")
+    pub function_name: String,
+    /// Source line number for unnamed test identification
+    pub line: usize,
+    pub span: Span,
+    /// Whether this test is expected to trap (from `#[expect_trap]` attribute)
+    pub expect_trap: bool,
+    /// Whether this test is a TODO placeholder (from `#[TODO]` attribute).
+    /// Like `expect_trap`, the test passes when the body traps, but the runner emits
+    /// a distinct message when the body unexpectedly passes, reminding the developer
+    /// to remove the `#[TODO]` attribute.
+    pub is_todo: bool,
+    /// Per-test timeout in milliseconds (from `#[timeout_ms(N)]` attribute).
+    /// `None` means use the default timeout (1 second).
+    pub timeout_ms: Option<u64>,
+    pub is_synopsis: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct TirEffect {
+    pub name: String,
+    pub visibility: Visibility,
+    pub operations: Vec<TirEffectOp>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct TirEffectOp {
+    pub name: String,
+    pub params: Vec<TirParam>,
+    pub return_type: TypeId,
+    pub span: Span,
+    /// The `#[cm("...")]` payload on the operation, `None` where it carries
+    /// none.
+    pub cm_name: Option<String>,
+    pub is_async: bool,
+    /// Set when the declaration gave the operation a body: what it does when
+    /// dispatched with no handler installed. The dispatch wrapper calls
+    /// [`crate::name::effect_default_impl_name`] in that case instead of
+    /// trapping.
+    pub has_default: bool,
+}
+
+/// Resource declaration captured in TIR for effect propagation.
+///
+/// Resources are effects in Wado's effect system: every operation on a
+/// resource type requires the resource to be in scope. The `operations`
+/// list mirrors `TirEffect` so the propagation closure builder can treat
+/// effects and resources uniformly.
+#[derive(Debug, Clone)]
+pub struct TirResource {
+    /// The declaration this was reified from.
+    pub def: DefId,
+    pub name: String,
+    pub visibility: Visibility,
+    pub operations: Vec<TirEffectOp>,
+    pub is_generic: bool,
+    pub span: Span,
+}
+
+/// Trait declaration
+#[derive(Debug, Clone)]
+pub struct TirTrait {
+    pub name: String,
+    pub visibility: Visibility,
+    pub type_params: Vec<TirTypeParam>,
+    pub methods: Vec<TirTraitMethod>,
+    pub span: Span,
+}
+
+/// A method signature in a trait
+#[derive(Debug, Clone)]
+pub struct TirTraitMethod {
+    pub name: String,
+    pub params: Vec<TirParam>,
+    pub return_type: TypeId,
+    pub has_default_body: bool,
+    pub span: Span,
+}
+
+/// Which compiler-synthesizable trait an `impl Trait for Type;` request names.
+///
+/// The set is closed: the elaborator classifies the requested trait at the
+/// syntax boundary and rejects anything else with a diagnostic, so downstream
+/// synthesis never needs to re-parse a trait-name string. `From` carries its
+/// source type as a resolved [`TypeId`] rather than a mangled `From<…>` name.
+#[derive(Debug, Clone)]
+pub enum SynthTrait {
+    From { source: TypeId },
+    Serialize,
+    Deserialize,
+}
+
+/// An `impl` block as declared — its identity, not its methods, which live in
+/// [`TirModule::functions`] linked back by [`TirFunction::method_info`]. The
+/// record exists for a block whose only content is a rest clause
+/// (`impl Log for Passthrough { ..forward }`), which produces no methods at
+/// all. Consumed by the effect-dispatch synthesis; nothing past it sees an
+/// impl block.
+#[derive(Debug, Clone)]
+pub struct TirImpl {
+    /// Canonical `(declaring_module, base_trait_name)`; `None` for an inherent
+    /// impl. Matches `LocalMethodName::{base_trait_module, base_trait_name}`,
+    /// so a block and its methods agree on which declaration they target.
+    pub trait_canonical: Option<(ModuleSource, String)>,
+    /// Trait / resource type arguments at the impl site (`impl Stream<u8>` →
+    /// `[u8]`). Matches `LocalMethodName::trait_type_args`.
+    pub trait_type_args: Vec<TypeId>,
+    /// The target type's name, derived exactly as `reify_method` derives it
+    /// for this block's methods, so a block and its methods produce the same
+    /// key in the effect-dispatch handler index.
+    pub struct_name: String,
+    /// `..trap` / `..forward`, when the block ends with a rest clause.
+    pub rest: Option<RestClause>,
+    pub span: Span,
+}
+
+/// `impl Trait for Type;` — request the compiler to synthesize the trait implementation.
+#[derive(Debug, Clone)]
+pub struct SynthesisRequest {
+    pub trait_ref: SynthTrait,
+    pub target_type_name: String,
+    pub target_type_id: TypeId,
+    /// Type parameters: `(name, index, type_id)`
+    pub type_params: Vec<(String, u32, TypeId)>,
+    pub span: Span,
+}
+
+/// Metadata about a closure for optimization (especially inlining).
+///
+/// This is populated by the lower phase and used by the optimizer to inline
+/// closure calls when the closure is known at compile time.
+#[derive(Debug, Clone)]
+pub struct ClosureFunctor {
+    pub module_source: ModuleSource,
+    /// Unique closure ID (matches the order closures are visited in the module)
+    pub id: u32,
+    /// Name of the generated functor struct (e.g., `$Closure_0`)
+    pub struct_name: String,
+    /// Type ID of the generated functor struct (bare struct type for definitions)
+    pub struct_type_id: TypeId,
+    /// Type ID of reference to functor struct (for expression/local types)
+    /// Functors are reference types, so variables holding them have this type.
+    pub ref_type_id: TypeId,
+    /// The `$call` method for this closure (with body transformed:
+    /// Capture nodes become `FieldAccess` on self)
+    pub call_method: Rc<RefCell<TirFunction>>,
+    /// Captures from the original closure
+    pub captures: Vec<TirCapture>,
+    /// Canonical user-declared `(name, type)` pairs of the closure literal,
+    /// captured at functor creation and never mutated. `register_closure_wrappers`
+    /// derives the wrapper's external signature
+    /// (`fn(env, ..canonical_user_params) -> canonical_return`) from this
+    /// snapshot, so a later DAE shrink of `$call` cannot desynchronise it.
+    pub canonical_user_params: Vec<(String, TypeId)>,
+    /// Canonical return type of the closure literal. Same role as
+    /// `canonical_user_params` — drives the wrapper external signature.
+    pub canonical_return: TypeId,
+}
+
+/// Tracks a requested instantiation of a generic item.
+/// `name`, `module_source`, `impl_type_args`, and `method_type_args` are used for equality/hashing.
+/// `method_info` names an instance but never decides one: it is left out of
+/// both, so read a declaration's own `method_info` for anything else.
+#[derive(Debug, Clone)]
+pub struct InstantiationKey {
+    /// The generic declaration being instantiated, where the site holds one.
+    ///
+    /// `name` cannot stand in for it: two sibling functions may each declare a
+    /// `struct Box<T>` in one module, and a `(name, module)` lookup answers
+    /// with whichever was declared first — collapsing two distinct types onto
+    /// one. `None` for a function or enum instantiation, which key by name.
+    pub def: Option<DefId>,
+    /// Name of the generic item (struct, function, or enum)
+    pub name: String,
+    /// Module where the generic item is defined.
+    /// Distinguishes same-named generics from different modules.
+    pub module_source: ModuleSource,
+    /// Impl-level type arguments (from the struct/type)
+    pub impl_type_args: Vec<TypeId>,
+    /// Method-level type arguments (from the method's own generics)
+    pub method_type_args: Vec<TypeId>,
+    /// Method info for method instantiations (None for struct/enum instantiations)
+    /// Not included in equality/hash - used only for name formatting
+    pub method_info: Option<LocalMethodName>,
+    /// The function template instantiated, which is what the instance is
+    /// made from. `None` for a struct or enum.
+    pub template: Option<TemplateId>,
+}
+
+impl PartialEq for InstantiationKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.def == other.def
+            && self.template == other.template
+            && self.name == other.name
+            && self.module_source == other.module_source
+            && self.impl_type_args == other.impl_type_args
+            && self.method_type_args == other.method_type_args
+    }
+}
+
+impl Eq for InstantiationKey {}
+
+impl std::hash::Hash for InstantiationKey {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.def.hash(state);
+        self.template.hash(state);
+        self.name.hash(state);
+        self.module_source.hash(state);
+        self.impl_type_args.hash(state);
+        self.method_type_args.hash(state);
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TirModule {
+    pub module_source: ModuleSource,
+    /// Shared type table across all modules (enables cross-module type references)
+    pub type_table: Rc<RefCell<TypeTable>>,
+    pub functions: Vec<Rc<RefCell<TirFunction>>>,
+    pub structs: Vec<TirStruct>,
+    pub enums: Vec<TirEnum>,
+    /// Flags type declarations (bitmask types, newtypes over u32)
+    pub flags: Vec<TirFlags>,
+    /// Custom variant declarations (tagged unions with payloads)
+    pub variants: Vec<TirVariantDecl>,
+    pub newtypes: Vec<TirNewtype>,
+    pub effects: Vec<TirEffect>,
+    pub resources: Vec<TirResource>,
+    pub traits: Vec<TirTrait>,
+    /// `impl` blocks as declared (identity + rest clause); their methods are
+    /// in `functions`.
+    pub impls: Vec<TirImpl>,
+    /// `impl Trait for Type;` — synthesis requests (populated by elaborator, consumed by synthesis)
+    pub synthesis_requests: Vec<SynthesisRequest>,
+    /// Test declarations with their metadata
+    pub tests: Vec<TirTest>,
+    /// Global variable declarations
+    pub globals: Vec<TirGlobal>,
+    pub data_section: Option<String>,
+    /// `#![wasm_module("name")]` — items in this module compile to a separate Wasm core module.
+    pub wasm_module: Option<String>,
+}
+
+impl TirModule {
+    pub fn new(module_source: ModuleSource) -> Self {
+        Self {
+            module_source,
+            type_table: Rc::new(RefCell::new(TypeTable::new())),
+            functions: Vec::new(),
+            structs: Vec::new(),
+            enums: Vec::new(),
+            flags: Vec::new(),
+            variants: Vec::new(),
+            newtypes: Vec::new(),
+            effects: Vec::new(),
+            resources: Vec::new(),
+            traits: Vec::new(),
+            impls: Vec::new(),
+            synthesis_requests: Vec::new(),
+            tests: Vec::new(),
+            globals: Vec::new(),
+            data_section: None,
+            wasm_module: None,
+        }
+    }
+
+    pub fn with_type_table(
+        module_source: ModuleSource,
+        type_table: Rc<RefCell<TypeTable>>,
+    ) -> Self {
+        Self {
+            module_source,
+            type_table,
+            functions: Vec::new(),
+            structs: Vec::new(),
+            enums: Vec::new(),
+            flags: Vec::new(),
+            variants: Vec::new(),
+            newtypes: Vec::new(),
+            effects: Vec::new(),
+            resources: Vec::new(),
+            traits: Vec::new(),
+            impls: Vec::new(),
+            synthesis_requests: Vec::new(),
+            tests: Vec::new(),
+            globals: Vec::new(),
+            data_section: None,
+            wasm_module: None,
+        }
+    }
+
+    pub fn with_data_section(mut self, data_section: Option<String>) -> Self {
+        self.data_section = data_section;
+        self
+    }
+
+    pub fn data_section(&self) -> Option<&str> {
+        self.data_section.as_deref()
+    }
+
+    pub fn add_function(&mut self, func: TirFunction) -> Rc<RefCell<TirFunction>> {
+        let func_rc = Rc::new(RefCell::new(func));
+        self.functions.push(Rc::clone(&func_rc));
+        func_rc
+    }
+
+    pub fn add_struct(&mut self, s: TirStruct) {
+        self.structs.push(s);
+    }
+
+    pub fn add_enum(&mut self, e: TirEnum) {
+        self.enums.push(e);
+    }
+
+    pub fn add_flags(&mut self, f: TirFlags) {
+        self.flags.push(f);
+    }
+
+    pub fn add_newtype(&mut self, newtype: TirNewtype) {
+        self.newtypes.push(newtype);
+    }
+
+    pub fn add_effect(&mut self, effect: TirEffect) {
+        self.effects.push(effect);
+    }
+
+    pub fn add_resource(&mut self, resource: TirResource) {
+        self.resources.push(resource);
+    }
+
+    pub fn add_trait(&mut self, trait_decl: TirTrait) {
+        self.traits.push(trait_decl);
+    }
+
+    pub fn add_impl(&mut self, impl_block: TirImpl) {
+        self.impls.push(impl_block);
+    }
+
+    pub fn find_function(&self, name: &str) -> Option<Rc<RefCell<TirFunction>>> {
+        self.functions
+            .iter()
+            .find(|f| f.borrow().name == name)
+            .cloned()
+    }
+
+    pub fn find_struct(&self, name: &str) -> Option<&TirStruct> {
+        self.structs.iter().find(|s| s.name == name)
+    }
+
+    pub fn find_enum(&self, name: &str) -> Option<&TirEnum> {
+        self.enums.iter().find(|e| e.name == name)
+    }
+}
+
+#[derive(Debug)]
+pub struct TirProgram {
+    pub main_module: TirModule,
+    pub dependencies: Vec<TirModule>,
+    pub type_table: TypeTable,
+}
+
+impl TirProgram {
+    pub fn new(main_module: TirModule) -> Self {
+        Self {
+            type_table: TypeTable::new(),
+            main_module,
+            dependencies: Vec::new(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::{AstId, AstIdSpace};
+    use std::assert_matches;
+
+    #[test]
+    fn test_primitive_constants() {
+        let table = TypeTable::new();
+        assert_matches!(
+            table.get(TypeTable::I32),
+            ResolvedType::Primitive(PrimitiveType::I32)
+        );
+        assert_matches!(
+            table.get(TypeTable::BOOL),
+            ResolvedType::Primitive(PrimitiveType::Bool)
+        );
+        // Note: String is now a user-defined struct, not a builtin type
+        assert_matches!(table.get(TypeTable::UNIT), ResolvedType::Unit);
+    }
+
+    /// The boxing rewrite redefines many slots onto one type, so two ids that
+    /// resolve alike are the normal case and `==` is not the question to ask.
+    #[test]
+    fn a_key_unifies_ids_a_redefinition_left_resolving_alike() {
+        let mut table = TypeTable::new();
+        let shared = table.intern(ResolvedType::Ref(TypeTable::I32));
+        let redefined = table.intern(ResolvedType::MutRef(TypeTable::I32));
+        table.redefine_to(redefined, shared);
+
+        assert_ne!(shared, redefined);
+        assert_eq!(table.type_key(redefined), table.type_key(shared));
+        assert_ne!(table.type_key(shared), table.type_key(TypeTable::I32));
+    }
+
+    /// A redefinition reaches every view of the type: only `is_mut_box` reads
+    /// the borrow left in the slot. The spelling also leaves `intern`, so a
+    /// later ask for it mints a live borrow.
+    #[test]
+    fn a_redefinition_reaches_every_view_of_the_type() {
+        let mut table = TypeTable::new();
+        let shared = table.intern(ResolvedType::Ref(TypeTable::I32));
+        let redefined = table.intern(ResolvedType::MutRef(TypeTable::I32));
+        table.redefine_to(redefined, shared);
+
+        assert_matches!(table.get(redefined), ResolvedType::Ref(TypeTable::I32));
+        assert_matches!(
+            table.get_unerased(redefined),
+            ResolvedType::Ref(TypeTable::I32)
+        );
+        let minted = table.intern(ResolvedType::MutRef(TypeTable::I32));
+        assert_ne!(minted, redefined);
+        assert_matches!(table.get(minted), ResolvedType::MutRef(TypeTable::I32));
+    }
+
+    /// `&T` and `&mut T` share one `Box<T>`, so the borrow left in the slot is
+    /// the only thing that still tells a writable box from a shared one.
+    #[test]
+    fn a_redefined_borrow_still_says_whether_it_was_mut() {
+        let mut table = TypeTable::new();
+        let shared = table.intern(ResolvedType::Ref(TypeTable::I32));
+        let mutable = table.intern(ResolvedType::MutRef(TypeTable::I32));
+        for wrapper in [shared, mutable] {
+            table.redefine_to(wrapper, TypeTable::I32);
+            table.register_box_payload(wrapper, TypeTable::I32);
+        }
+
+        assert!(!table.is_mut_box(shared));
+        assert!(table.is_mut_box(mutable));
+    }
+
+    /// `retain` rebuilds the intern map from the surviving slots, and a
+    /// retired borrow is still spelled as one there.
+    #[test]
+    fn retain_leaves_a_retired_spelling_retired() {
+        let mut table = TypeTable::new();
+        let redefined = table.intern(ResolvedType::Ref(TypeTable::I32));
+        table.redefine_to(redefined, TypeTable::I32);
+        let mut keep = IndexSet::default();
+        keep.insert(redefined);
+        keep.insert(TypeTable::I32);
+        table.retain(&keep);
+
+        assert_eq!(table.type_key(redefined), table.type_key(TypeTable::I32));
+        assert_ne!(table.intern(ResolvedType::Ref(TypeTable::I32)), redefined);
+    }
+
+    #[test]
+    #[should_panic(expected = "type_id_of_decl")]
+    fn type_id_of_decl_panics_when_unregistered() {
+        let table = TypeTable::new();
+        let unregistered = AstId::new(AstIdSpace::next(), 0);
+        let _ = table.type_id_of_decl(unregistered);
+    }
+
+    fn make_projection(table: &mut TypeTable, base: TypeId, assoc: &str) -> TypeId {
+        table.make_assoc_type_projection(
+            base,
+            DefId::for_test(0),
+            assoc.to_string(),
+            vec![],
+            vec![],
+        )
+    }
+
+    /// Substituting a projection's base rewrites the projection even when the
+    /// replacement is itself a parameter. `Self::Item` under `Self := I` is
+    /// `I::Item`, not `Self::Item` — a trait signature instantiated for an
+    /// impl's receiver slot is the case that needs it.
+    #[test]
+    fn substitute_rewrites_projection_base_to_another_param() {
+        let mut table = TypeTable::new();
+        let self_param = table.make_type_param("Self".to_string(), 0);
+        let projection = make_projection(&mut table, self_param, "Item");
+
+        let receiver = table.make_type_param("I".to_string(), 1);
+        let substitution = IndexMap::from_iter([(0, receiver)]);
+        let substituted = table.substitute_type_params(projection, &substitution);
+
+        let ResolvedType::AssocTypeProjection {
+            param_id,
+            assoc_name,
+            ..
+        } = table.get(substituted).clone()
+        else {
+            panic!("expected a projection, got {:?}", table.get(substituted));
+        };
+        assert_eq!(param_id, receiver);
+        assert_eq!(assoc_name, "Item");
+    }
+
+    /// A frame is abstract over what `Self::X` means as well as over its
+    /// slots, and only the use site can say. Given the answer, the projection
+    /// is replaced by it rather than rebuilt over the substituted base.
+    #[test]
+    fn a_projection_answer_replaces_the_projection() {
+        let mut table = TypeTable::new();
+        let self_param = table.make_type_param("Self".to_string(), 0);
+        let projection = make_projection(&mut table, self_param, "Item");
+
+        let receiver = table.make_type_param("I".to_string(), 1);
+        let substituted = table.substitute_type_params_with(
+            projection,
+            &IndexMap::from_iter([(0, receiver)]),
+            &answer_item(DefId::for_test(0), TypeTable::U8),
+        );
+
+        assert_eq!(substituted, TypeTable::U8);
+    }
+
+    fn answer_item(trait_: DefId, answer: TypeId) -> SlotProjections {
+        SlotProjections::from_iter([(0, vec![(trait_, "Item".to_string(), answer)])])
+    }
+
+    /// An answer is for one trait's associated type: another trait declaring
+    /// the same name on the same slot is a different projection.
+    #[test]
+    fn an_answer_for_another_trait_leaves_the_projection() {
+        let mut table = TypeTable::new();
+        let self_param = table.make_type_param("Self".to_string(), 0);
+        let projection = make_projection(&mut table, self_param, "Item");
+
+        let receiver = table.make_type_param("I".to_string(), 1);
+        let substituted = table.substitute_type_params_with(
+            projection,
+            &IndexMap::from_iter([(0, receiver)]),
+            &answer_item(DefId::for_test(1), TypeTable::U8),
+        );
+
+        let ResolvedType::AssocTypeProjection { param_id, .. } = table.get(substituted).clone()
+        else {
+            panic!("expected a projection, got {:?}", table.get(substituted));
+        };
+        assert_eq!(param_id, receiver);
+    }
+
+    /// An unanswered name leaves the projection abstract over the substituted
+    /// base — the frame simply does not know, and inventing an answer would
+    /// be worse than deferring to monomorphization.
+    #[test]
+    fn an_unanswered_projection_stays_abstract() {
+        let mut table = TypeTable::new();
+        let self_param = table.make_type_param("Self".to_string(), 0);
+        let projection = make_projection(&mut table, self_param, "Iter");
+
+        let receiver = table.make_type_param("I".to_string(), 1);
+        let substituted = table.substitute_type_params_with(
+            projection,
+            &IndexMap::from_iter([(0, receiver)]),
+            &answer_item(DefId::for_test(0), TypeTable::U8),
+        );
+
+        let ResolvedType::AssocTypeProjection { param_id, .. } = table.get(substituted).clone()
+        else {
+            panic!("expected a projection");
+        };
+        assert_eq!(param_id, receiver);
+    }
+
+    /// A substitution that misses the base leaves the projection interned as
+    /// it was, so callers keeping `TypeId` identity are unaffected.
+    #[test]
+    fn substitute_leaves_unrelated_projection_untouched() {
+        let mut table = TypeTable::new();
+        let self_param = table.make_type_param("Self".to_string(), 0);
+        let projection = make_projection(&mut table, self_param, "Item");
+
+        let substitution = IndexMap::from_iter([(7, TypeTable::I32)]);
+        assert_eq!(
+            table.substitute_type_params(projection, &substitution),
+            projection
+        );
+    }
+
+    /// Records a block whose target is `whole`, naming a head with `args`, and
+    /// asks whether it covers every instance of that head.
+    fn covers(table: &mut TypeTable, whole: TypeId, args: Vec<TypeId>) -> bool {
+        let block = DefId::for_test(1);
+        table.record_impl_target(block, whole, args, vec![]);
+        table.impl_covers_every_instance(block)
+    }
+
+    #[test]
+    fn a_target_of_distinct_binders_covers_every_instance() {
+        let mut table = TypeTable::new();
+        let k = table.make_type_param("K".to_string(), 0);
+        let v = table.make_type_param("V".to_string(), 1);
+        let head = table.make_builtin_array(k);
+        assert!(covers(&mut table, head, vec![k, v]));
+    }
+
+    #[test]
+    fn a_target_writing_no_argument_covers_its_head() {
+        let mut table = TypeTable::new();
+        assert!(covers(&mut table, TypeTable::I32, vec![]));
+    }
+
+    #[test]
+    fn a_pack_binder_covers_every_arity() {
+        let mut table = TypeTable::new();
+        let t = table.make_type_param("T".to_string(), 0);
+        let rest = table.make_type_pack("Rest".to_string(), 1);
+        let head = table.make_builtin_array(t);
+        assert!(covers(&mut table, head, vec![t, rest]));
+    }
+
+    /// `impl<T> Tr for Pair<T, T>` reaches only the instances whose two
+    /// arguments agree.
+    #[test]
+    fn a_binder_written_twice_reaches_some_instances() {
+        let mut table = TypeTable::new();
+        let t = table.make_type_param("T".to_string(), 0);
+        let head = table.make_builtin_array(t);
+        assert!(!covers(&mut table, head, vec![t, t]));
+    }
+
+    #[test]
+    fn a_concrete_argument_reaches_some_instances() {
+        let mut table = TypeTable::new();
+        let t = table.make_type_param("T".to_string(), 0);
+        let head = table.make_builtin_array(t);
+        assert!(!covers(&mut table, head, vec![t, TypeTable::I32]));
+    }
+
+    /// `impl<T> Display for &Wrapper<T>` writes distinct binders for `Wrapper`,
+    /// but its head is `&`, of which it reaches one kind of referent.
+    #[test]
+    fn a_reference_target_reaches_some_instances() {
+        let mut table = TypeTable::new();
+        let t = table.make_type_param("T".to_string(), 0);
+        let wrapper = table.make_builtin_array(t);
+        let whole = table.make_ref(wrapper);
+        assert!(!covers(&mut table, whole, vec![t]));
+    }
+
+    #[test]
+    fn a_unit_target_reaches_some_instances() {
+        let mut table = TypeTable::new();
+        assert!(!covers(&mut table, TypeTable::UNIT, vec![]));
+    }
+
+    #[test]
+    #[should_panic(expected = "before its target is recorded")]
+    fn a_block_with_no_recorded_target_is_not_answered_for() {
+        let table = TypeTable::new();
+        let _ = table.impl_covers_every_instance(DefId::for_test(1));
+    }
+}

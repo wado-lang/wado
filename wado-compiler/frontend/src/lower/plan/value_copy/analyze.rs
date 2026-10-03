@@ -1,0 +1,563 @@
+//! The predicates the fold consults at each `$value_copy$T(...)` wrap site, and
+//! [`collect_seed_types`], which names the types those wraps can land on.
+
+use super::needs_value_copy;
+use super::ownership::OwnedCalls;
+use crate::flat_package::FlatPackage;
+use crate::hashmap::IndexSet;
+use crate::lower::plan::value_copy;
+use crate::lower::plan::value_copy::last_use::RefTargets;
+use crate::lower::plan::value_copy::{array_clone_element_type_arg, copy_value_type_arg};
+use crate::tir::{
+    BuiltinDeclarations, FunctionRef, LetStorage, ResolvedType, TirBlock, TirExpr, TirExprKind,
+    TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+};
+use crate::tir_visitor::TirRefVisitor;
+
+/// Every `TypeId` the fold may wrap in `$value_copy$T(...)`, and the element
+/// types of the `array_clone::<T>(...)` calls codegen routes through it.
+pub fn collect_seed_types(project: &FlatPackage) -> IndexSet<TypeId> {
+    let type_table = project.type_table.borrow();
+    let mut walker = SeedWalker {
+        type_table: &type_table,
+        out: IndexSet::default(),
+    };
+    for global in &project.globals {
+        walker.record(global.ty);
+    }
+    for func_rc in &project.functions {
+        let func = func_rc.borrow();
+        for param in &func.params {
+            walker.record(param.type_id);
+        }
+        walker.record(func.return_type);
+        for local in &func.locals {
+            walker.record(local.type_id);
+        }
+        if let Some(ref body) = func.body {
+            walker.visit_block(body);
+        }
+    }
+    walker.out
+}
+
+struct SeedWalker<'a> {
+    type_table: &'a TypeTable,
+    out: IndexSet<TypeId>,
+}
+
+impl SeedWalker<'_> {
+    /// Record `type_id` and its references peeled, the type a pattern temp lands
+    /// on: `let { x, y } = &p` writes a `Point` temp out of a `&Point`.
+    fn record(&mut self, type_id: TypeId) {
+        for candidate in [type_id, self.type_table.peel_refs(type_id)] {
+            if value_copy::needs_value_copy(candidate, self.type_table) {
+                self.out.insert(candidate);
+            }
+        }
+    }
+}
+
+impl TirRefVisitor for SeedWalker<'_> {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        self.record(expr.type_id);
+        // An `array_clone::<T>` element is copied through the same helper, and
+        // its type is the call's type argument rather than the call's own.
+        if let Some(element) = array_clone_element_type_arg(expr) {
+            self.record(element);
+        }
+        // A `copy_value::<T>` the source wrote is rewritten into the helper for
+        // `T` whatever `T` is, a scalar included, so the copy rules do not
+        // decide whether this one exists.
+        if let TirExprKind::Call { func, .. } = &expr.kind
+            && let Some(marked) = copy_value_type_arg(func)
+        {
+            self.out.insert(marked);
+        }
+        self.walk_expr(expr);
+    }
+}
+
+/// Shape predicate shared with the fold. Site-specific gating — `LetStorage`,
+/// an immutable `Let` source, an `Assign` whose target is a local — is the caller's.
+/// `fresh_locals` are the locals `expr` reads storage nothing else reaches from.
+pub fn should_wrap(
+    expr: &TirExpr,
+    fresh_locals: &IndexSet<u32>,
+    type_table: &TypeTable,
+    oracle: &OwnedCalls,
+) -> bool {
+    value_copy::needs_value_copy(expr.type_id, type_table)
+        && !is_copy_value_call(expr)
+        && !is_owned_value(expr, fresh_locals, oracle, type_table)
+}
+
+/// Avoid re-wrapping the `copy_value::<NestedT>(...)` markers
+/// `synthesize_helpers` plants inside helper bodies.
+fn is_copy_value_call(expr: &TirExpr) -> bool {
+    matches!(
+        &expr.kind,
+        TirExprKind::Call { func, .. } if func.is_builtin_named("copy_value")
+    )
+}
+
+/// Whether the callee is `builtin::select`, which hands back one of its two
+/// operands rather than calling anything: `wir_build` lowers it to
+/// `WirInstr::Select`. It is a merge wearing a call's spelling, so it is planned
+/// as one — no copy defends an operand, and the result is owned exactly when
+/// both are, the rule `If` and `Match` follow. [`builtin_projected_params`]
+/// says so for both readers: [`passes_through`] skips the copy at the
+/// operands, and [`OwnedCalls::projected_params`] moves it to the result.
+pub fn is_select(func: &FunctionRef) -> bool {
+    func.is_builtin_named("select")
+}
+
+/// The operand positions [`is_select`] merges. Position 0 is the condition.
+pub const SELECT_OPERANDS: [usize; 2] = [1, 2];
+
+/// Whether the builtin `func` hands parameter `pos` straight back instead of
+/// keeping it, so the copy that makes the result independent belongs at the
+/// result — where the freshness analysis puts one only if the caller can still
+/// reach the argument. Copying at the argument would pay unconditionally, and
+/// for `select` would pay for both operands where the equivalent `if` pays for
+/// one.
+///
+/// `#[result(part_of = p)]` states it for one parameter. `builtin::select`
+/// merges two, which that clause cannot name.
+pub fn passes_through(builtins: &BuiltinDeclarations, func: &FunctionRef, pos: usize) -> bool {
+    // A retained position outlives the call, so the caller's storage would be
+    // the callee's to keep and the result's copy comes too late to defend it.
+    builtin_projected_params(builtins, func).is_some_and(|ps| ps.contains(&pos))
+        && !builtins.retain_specs(func).any(|r| r.source == pos)
+}
+
+/// The parameters a builtin's result is a projection of: the one
+/// `#[result(part_of = p)]` names, or both operands of `builtin::select`.
+pub fn builtin_projected_params<'a>(
+    builtins: &'a BuiltinDeclarations,
+    func: &FunctionRef,
+) -> Option<&'a [usize]> {
+    if is_select(func) {
+        return Some(&SELECT_OPERANDS);
+    }
+    builtins.part_of_params(func)
+}
+
+/// What a `return` actually delivers. `return` is no wrap site, so
+/// `return place` hands a borrow out for the caller to materialize, and
+/// `hands_out_payload` ([`super::hands_out_payload`]) makes
+/// `return Some(place)` do the same.
+///
+/// Its three readers must agree, or the payload aliases undefended or copies
+/// twice: [`translate`](crate::lower::translate) skips the copy at the
+/// construction, and [`ownership`](super::ownership) judges the same payload for
+/// the return convention and for the receiver-alias set.
+pub fn returned_value<'a>(
+    expr: &'a TirExpr,
+    hands_out_payload: bool,
+    type_table: &TypeTable,
+) -> &'a TirExpr {
+    let mut expr = expr;
+    // Only a payload the copy rules defend is handed out: a scalar one is
+    // stored into the construct by value, which leaves a place of its own
+    // however the scalar was read.
+    while hands_out_payload
+        && let TirExprKind::VariantConstruct {
+            payload: Some(inner),
+            ..
+        } = &expr.kind
+        && needs_value_copy(inner.type_id, type_table)
+    {
+        expr = inner;
+    }
+    expr
+}
+
+/// Whether a returned value carries no storage at all — an empty variant case
+/// (`None`) or a null. Nothing can be read or written through one, so it neither
+/// confirms nor contradicts what the function's other returns name.
+pub fn carries_no_storage(expr: &TirExpr) -> bool {
+    matches!(
+        &expr.kind,
+        TirExprKind::Null
+            | TirExprKind::EnumConstruct { .. }
+            | TirExprKind::VariantConstruct { payload: None, .. }
+    )
+}
+
+/// Whether `expr` produces an *owned* value in the context of the owned locals
+/// in `fresh_locals` — a value that aliases nothing the caller can still reach,
+/// so consuming it into an owner is a move. A call is owned iff its callee
+/// returns owned (`oracle`), the caller-side, single-phase replacement for the
+/// old interprocedural escape recovery: the accessor `index_value(self: &List,
+/// i) -> T { return self.repr[i] }` returns a borrowed projection of `&self`
+/// (wado-lang/wado#1527), so it is *not* owned and its result is copied at a
+/// materialization — but never at a mutable-place use, which is not a
+/// materialization, so `arr[i].field.push(x)` keeps its element aliased.
+pub(crate) fn is_owned_value(
+    expr: &TirExpr,
+    fresh_locals: &IndexSet<u32>,
+    oracle: &OwnedCalls,
+    type_table: &TypeTable,
+) -> bool {
+    match &expr.kind {
+        // A string / bytes literal lowers to a fresh `StructLiteral` over a
+        // packed array (`translate::seq_literal`), so each evaluation
+        // materializes its own storage.
+        TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::StructLiteral { .. }
+        | TirExprKind::TupleLiteral { .. }
+        | TirExprKind::ArrayLiteral { .. }
+        | TirExprKind::TupleSpread { .. }
+        | TirExprKind::TupleZip { .. }
+        | TirExprKind::TupleLen { .. }
+        | TirExprKind::TypePackExpansion { .. }
+        | TirExprKind::Null => true,
+        // A call is owned iff its callee returns an owned value. A core builtin
+        // allocates or computes a fresh result — except `array_get_value`, the element
+        // read that aliases its container — handled inside `oracle.is_owned`. A
+        // raw CM call lifts a fresh value across the ABI boundary. A callee that
+        // instead returns a projection of arguments
+        // (`build(&self) -> List { return *self }`) yields a fresh value exactly
+        // when those arguments are themselves fresh, so `[1, 2, 3]`'s builder —
+        // a fresh block-local finalized by `.build()` — is not defensively
+        // copied.
+        TirExprKind::Call { func, args, .. } => {
+            oracle.is_owned(func)
+                || oracle.projected_args(func, args).is_some_and(|mut handed_back| {
+                    handed_back.all(|a| is_owned_value(a, fresh_locals, oracle, type_table))
+                })
+        }
+        TirExprKind::CmRawCall { .. } => true,
+        // Every callable value is a closure functor by lowering time, so an
+        // indirect call is owned when every `$call` of this return type is
+        // (`compute_indirect_owned_returns`). Without that verdict — inside the
+        // fixpoint the verdict is derived from — it stays borrowed.
+        TirExprKind::IndirectCall { .. } => oracle.indirect_is_owned(expr.type_id),
+        TirExprKind::VariantConstruct { .. } | TirExprKind::EnumConstruct { .. } => true,
+        TirExprKind::Local { index, .. } => fresh_locals.contains(index),
+        // A reference read out of storage names somebody else's, however
+        // fresh the storage holding it: `*c.r` leaves `c` entirely. Only a
+        // reference the fresh set names by itself is one to peel.
+        TirExprKind::Unary {
+            op: TirUnaryOp::Deref,
+            expr: inner,
+        } => {
+            matches!(inner.kind, TirExprKind::Local { .. })
+                && is_owned_value(inner, fresh_locals, oracle, type_table)
+        }
+        TirExprKind::LabeledBlock { label, block, .. } => {
+            block_breaks_are_fresh(label, block, fresh_locals, oracle, type_table)
+        }
+        // A block's value is its tail expression, and an `if`'s is the tail of
+        // whichever branch runs — owned exactly when those tails are, the same
+        // rule `Match` follows. `let resp = if let … { handler(…) } else { … }`
+        // is the shape that needs it: without this the binding is classified
+        // borrowed and every later field read is deep-copied.
+        TirExprKind::Block(block) => block_tail_is_owned(block, fresh_locals, oracle, type_table),
+        TirExprKind::If {
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            let Some(else_branch) = else_branch else {
+                return false;
+            };
+            block_tail_is_owned(then_branch, fresh_locals, oracle, type_table)
+                && block_tail_is_owned(else_branch, fresh_locals, oracle, type_table)
+        }
+        TirExprKind::Match { expr: scrut, arms } => {
+            match_result_is_fresh(scrut, arms, fresh_locals, oracle, type_table)
+        }
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. }
+        // A cast reinterprets a value without creating an alias, so it is owned
+        // exactly when its operand is (`[] as List<i32>`, a fresh literal cast).
+        | TirExprKind::Cast { expr: inner, .. } => {
+            is_owned_value(inner, fresh_locals, oracle, type_table)
+        }
+        _ => false,
+    }
+}
+
+/// A `match` yields an owned value when every value-producing arm yields one.
+/// Divergent arms (`Never`-typed body: `=> return …`, `=> panic()`) contribute
+/// no value and are skipped. When the scrutinee is owned, an arm's pattern
+/// bindings destructure unaliased data, so they are owned too — this is what
+/// makes `let x = f()?` (which desugars to `match f() { Ok(v) => v, Err(e) =>
+/// return Err(e) }`) copy-free when `f()` returns an owned value.
+fn match_result_is_fresh(
+    scrut: &TirExpr,
+    arms: &[TirMatchArm],
+    fresh_locals: &IndexSet<u32>,
+    oracle: &OwnedCalls,
+    type_table: &TypeTable,
+) -> bool {
+    let scrut_fresh = is_owned_value(scrut, fresh_locals, oracle, type_table);
+    let mut saw_value_arm = false;
+    for arm in arms {
+        if type_table.is_never(arm.body.type_id) {
+            continue;
+        }
+        saw_value_arm = true;
+        let mut arm_fresh = fresh_locals.clone();
+        if scrut_fresh {
+            collect_pattern_bindings(&arm.pattern, &mut arm_fresh);
+        }
+        if !is_owned_value(&arm.body, &arm_fresh, oracle, type_table) {
+            return false;
+        }
+    }
+    saw_value_arm
+}
+
+/// Collect every local a pattern binds, so a fresh scrutinee's destructured
+/// parts can be treated as fresh in the arm body.
+pub(crate) fn collect_pattern_bindings(pattern: &TirPattern, out: &mut IndexSet<u32>) {
+    for_each_pattern_binding(pattern, &mut |local_index, _| {
+        out.insert(local_index);
+    });
+}
+
+/// Visit every local a pattern binds, with the type it is bound at.
+pub(crate) fn for_each_pattern_binding(pattern: &TirPattern, visit: &mut impl FnMut(u32, TypeId)) {
+    match pattern {
+        TirPattern::Binding {
+            local_index,
+            type_id,
+            ..
+        }
+        | TirPattern::Narrow {
+            local_index,
+            type_id,
+            ..
+        } => visit(*local_index, *type_id),
+        TirPattern::Tuple(subs, _) | TirPattern::Variant { bindings: subs, .. } => {
+            for sub in subs {
+                for_each_pattern_binding(sub, visit);
+            }
+        }
+        TirPattern::Struct { fields, .. } => {
+            for field in fields {
+                for_each_pattern_binding(&field.pattern, visit);
+            }
+        }
+        TirPattern::Or(alts) => {
+            for alt in alts {
+                for_each_pattern_binding(alt, visit);
+            }
+        }
+        TirPattern::Wildcard
+        | TirPattern::Literal(_)
+        | TirPattern::Enum { .. }
+        | TirPattern::ConstantValue { .. }
+        | TirPattern::Range { .. }
+        | TirPattern::PerInstance { .. } => {}
+    }
+}
+
+/// Whether the value a block delivers by falling off its end is owned.
+///
+/// The value is the block's tail expression statement; `let`s ahead of it seed
+/// the fresh set exactly as they do inside a labeled block. A block that
+/// diverges instead (`return` / `break` as the last statement) delivers no
+/// value, so it cannot make the result borrowed — the caller's other branch, or
+/// the enclosing `Match` arm rule, decides.
+fn block_tail_is_owned(
+    block: &TirBlock,
+    parent_fresh: &IndexSet<u32>,
+    oracle: &OwnedCalls,
+    type_table: &TypeTable,
+) -> bool {
+    let mut fresh_locals = parent_fresh.clone();
+    let Some((last, init)) = block.stmts.split_last() else {
+        return false;
+    };
+    for stmt in init {
+        if let TirStmtKind::Let {
+            local_index, value, ..
+        } = &stmt.kind
+            && is_owned_value(value, &fresh_locals, oracle, type_table)
+        {
+            fresh_locals.insert(*local_index);
+        }
+    }
+    match &last.kind {
+        TirStmtKind::Expr(expr) => is_owned_value(expr, &fresh_locals, oracle, type_table),
+        TirStmtKind::Return { .. } | TirStmtKind::Break { .. } => true,
+        _ => false,
+    }
+}
+
+fn block_breaks_are_fresh(
+    label: &str,
+    block: &TirBlock,
+    parent_fresh: &IndexSet<u32>,
+    oracle: &OwnedCalls,
+    type_table: &TypeTable,
+) -> bool {
+    let mut found = false;
+    let mut fresh_locals = parent_fresh.clone();
+    if scan_block_for_breaks(
+        label,
+        block,
+        &mut found,
+        &mut fresh_locals,
+        oracle,
+        type_table,
+    ) {
+        found
+    } else {
+        false
+    }
+}
+
+fn scan_block_for_breaks(
+    label: &str,
+    block: &TirBlock,
+    found: &mut bool,
+    fresh_locals: &mut IndexSet<u32>,
+    oracle: &OwnedCalls,
+    type_table: &TypeTable,
+) -> bool {
+    for stmt in &block.stmts {
+        if !scan_stmt_for_breaks(label, stmt, found, fresh_locals, oracle, type_table) {
+            return false;
+        }
+    }
+    true
+}
+
+fn scan_stmt_for_breaks(
+    label: &str,
+    stmt: &TirStmt,
+    found: &mut bool,
+    fresh_locals: &mut IndexSet<u32>,
+    oracle: &OwnedCalls,
+    type_table: &TypeTable,
+) -> bool {
+    match &stmt.kind {
+        // A `Taken` binding owns the value whatever the source expression
+        // looks like.
+        TirStmtKind::Let {
+            local_index,
+            value,
+            storage,
+            ..
+        } => {
+            if *storage == LetStorage::Taken
+                || is_owned_value(value, fresh_locals, oracle, type_table)
+            {
+                fresh_locals.insert(*local_index);
+            }
+            true
+        }
+        TirStmtKind::Break {
+            label: Some(l),
+            value: Some(v),
+        } if l == label => {
+            *found = true;
+            is_owned_value(v, fresh_locals, oracle, type_table)
+        }
+        TirStmtKind::If {
+            then_block,
+            else_block,
+            ..
+        } => {
+            if !scan_block_for_breaks(label, then_block, found, fresh_locals, oracle, type_table) {
+                return false;
+            }
+            if let Some(eb) = else_block
+                && !scan_block_for_breaks(label, eb, found, fresh_locals, oracle, type_table)
+            {
+                return false;
+            }
+            true
+        }
+        TirStmtKind::Loop { body } => {
+            scan_block_for_breaks(label, body, found, fresh_locals, oracle, type_table)
+        }
+        TirStmtKind::Expr(expr) => {
+            scan_expr_for_breaks(label, expr, found, fresh_locals, oracle, type_table)
+        }
+        _ => true,
+    }
+}
+
+fn scan_expr_for_breaks(
+    label: &str,
+    expr: &TirExpr,
+    found: &mut bool,
+    fresh_locals: &mut IndexSet<u32>,
+    oracle: &OwnedCalls,
+    type_table: &TypeTable,
+) -> bool {
+    match &expr.kind {
+        TirExprKind::LabeledBlock { block, .. } | TirExprKind::Block(block) => {
+            scan_block_for_breaks(label, block, found, fresh_locals, oracle, type_table)
+        }
+        TirExprKind::If {
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            if !scan_block_for_breaks(label, then_branch, found, fresh_locals, oracle, type_table) {
+                return false;
+            }
+            if let Some(eb) = else_branch
+                && !scan_block_for_breaks(label, eb, found, fresh_locals, oracle, type_table)
+            {
+                return false;
+            }
+            true
+        }
+        _ => true,
+    }
+}
+
+/// An immutable destination binding can alias an immutable-rooted
+/// source without a defensive copy.
+///
+/// Immutability of the *binding* is not immutability of the storage, so the
+/// caller also checks the root against
+/// [`super::last_use::MoveEligible::roots`].
+pub fn is_source_immutable(
+    expr: &TirExpr,
+    immutable_locals: &IndexSet<u32>,
+    type_table: &TypeTable,
+    ref_targets: &RefTargets,
+) -> bool {
+    source_root(expr, type_table, ref_targets).is_some_and(|r| immutable_locals.contains(&r))
+}
+
+/// The local an immutable-source chain is rooted at, or `None` for a shape
+/// [`is_source_immutable`] does not accept.
+///
+/// A projection through a reference continues at the place it borrows: the root
+/// local's immutability binds the reference, not the storage behind it. An
+/// unresolvable one names storage this body does not own, and answers nothing.
+pub fn source_root(
+    expr: &TirExpr,
+    type_table: &TypeTable,
+    ref_targets: &RefTargets,
+) -> Option<u32> {
+    match &expr.kind {
+        TirExprKind::Local { index, .. } => Some(*index),
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        } => {
+            if matches!(
+                type_table.get(inner.type_id),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            ) {
+                return ref_targets.referent_root(inner);
+            }
+            source_root(inner, type_table, ref_targets)
+        }
+        _ => None,
+    }
+}

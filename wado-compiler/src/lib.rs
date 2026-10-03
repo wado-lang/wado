@@ -1,18 +1,15 @@
-// A hosted compiler (LSP, browser, Kiln generator) has no stream to write to,
-// and a `run` / `serve` driver has a user's program to keep quiet for. See
-// `AGENTS.md` for where each kind of message goes instead. Not in `Cargo.toml`:
-// cargo refuses a `[lints]` table that both inherits the workspace's and adds
-// to it.
+//! The compiler driver: runs the frontend and the backend as one pipeline, and
+//! re-exports both.
+
+// See the frontend's crate root for why these are denied here.
 #![deny(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)]
 
-pub use wado_compiler_core::*;
-
-pub mod codegen;
-pub mod optimize;
-pub mod remarks;
-pub mod wir_build;
-pub mod wir_optimize;
-pub mod wir_unparse;
+pub use wado_compiler_backend::{
+    InvalidArtifact, OptOverrides, ProviderComponent, Remark, codegen,
+    collect_const_region_remarks, collect_param_gate_remarks, collect_value_copy_remarks, optimize,
+    remarks, wir_build, wir_optimize, wir_unparse,
+};
+pub use wado_compiler_frontend::*;
 
 use crate::ast::UseDecl;
 use std::convert::Infallible;
@@ -28,13 +25,7 @@ use crate::name::entry_dir_of;
 use crate::wit_consume::module_host_leaf_imports;
 use crate::world_registry::WorldInfo;
 
-pub use codegen::InvalidArtifact;
-use literal_cast::literal_cast_diagnostics;
 use monomorphize::lower_instance_patterns;
-pub use optimize::optimize;
-pub use remarks::{
-    Remark, collect_const_region_remarks, collect_param_gate_remarks, collect_value_copy_remarks,
-};
 
 /// Build the diagnostic message for an unresolved `Type^Trait::method` call —
 /// `Type` does not implement `Trait` (see the WIR-build trait-bound check).
@@ -176,28 +167,6 @@ pub struct DumpResult {
     pub trivia: comment::TriviaMap,
 }
 
-/// A provider component supplied to satisfy a dependency's guest-effect import.
-/// Built with `--implement <import_fq>`, so it exports that interface; codegen
-/// wires `provider.export[import_fq] -> dependency.import[import_fq]`.
-#[derive(Debug, Clone)]
-pub struct ProviderComponent {
-    /// The provider as a diagnostic names it: its path as the source wrote it.
-    pub source: String,
-    /// The interface FQ the provider exports and the dependency imports.
-    pub import_fq: String,
-    /// The provider component bytes.
-    pub bytes: Vec<u8>,
-}
-
-/// What a caller may override in the optimizer, each `None` meaning "whatever
-/// the level decides".
-#[derive(Debug, Clone, Copy, Default)]
-pub struct OptOverrides {
-    pub inline_threshold: Option<usize>,
-    pub inline_growth: Option<u32>,
-    pub iterations: Option<u32>,
-}
-
 /// Compilation options for the compiler
 #[derive(Debug, Clone)]
 pub struct CompilerOptions {
@@ -311,172 +280,6 @@ pub async fn compile_with_host<H: CompilerHost>(
         ..CompilerOptions::default()
     };
     compile_with_options(source, host, filename, options).await
-}
-
-/// Build unused-item warnings from the liveness classification: `DeadFunction`
-/// / `DeadGlobal` (reached by neither production nor tests) and
-/// `TestOnlyFunction` / `TestOnlyGlobal` (reached only by `test` blocks).
-/// Pure over `Semantics`; `is_test_world` suppresses the `TestOnly*` warnings.
-fn unused_diagnostics(sem: &semantics::Semantics, is_test_world: bool) -> Vec<Diagnostic> {
-    use crate::ast::Item;
-    use crate::compiler_host::{Code, DiagnosticSpan};
-
-    let mut out = Vec::new();
-    let mut collect = |ids: &[AstId], fn_code: Code, global_code: Code, reason: &str| {
-        for id in ids {
-            let Some(owning) = sem.module_of_id(*id) else {
-                continue;
-            };
-            let Some(module) = sem.modules.get(owning) else {
-                continue;
-            };
-            let filename = owning.source_path();
-            for item in &module.items {
-                let (code, message, span) = match item {
-                    Item::Function(func) if func.id == *id => (
-                        fn_code,
-                        format!("function `{}` {reason}", func.name),
-                        &func.name_span,
-                    ),
-                    Item::Global(global) if global.id == *id => (
-                        global_code,
-                        format!("global `{}` {reason}", global.name),
-                        &global.name_span,
-                    ),
-                    _ => continue,
-                };
-                out.push(Diagnostic {
-                    severity: Severity::Warning,
-                    code,
-                    message,
-                    span: Some(DiagnosticSpan::from_span(span, Some(filename.as_str()))),
-                });
-            }
-        }
-    };
-
-    collect(
-        &sem.liveness.dead_items,
-        Code::DeadFunction,
-        Code::DeadGlobal,
-        "is never used",
-    );
-
-    // A test-only item is production dead code, but flagging it during a
-    // `wado test` run — where the `test` blocks that reach it are the whole
-    // point — would be noise. Report it only in non-test builds (`wado
-    // compile` / `wado check`).
-    if !is_test_world {
-        collect(
-            &sem.liveness.test_only_items,
-            Code::TestOnlyFunction,
-            Code::TestOnlyGlobal,
-            "is only used by tests",
-        );
-    }
-
-    out
-}
-
-/// Every source-level lint. `unused` gates the unused lints alone, as
-/// `--no-unused` names them alone; the rest are waived by `allow` instead.
-pub fn lint_diagnostics(
-    sem: &semantics::Semantics,
-    unused: bool,
-    is_test_world: bool,
-) -> Vec<Diagnostic> {
-    let mut lints = shadowing_diagnostics(sem);
-    lints.extend(undecided_effect_diagnostics(sem));
-    lints.extend(literal_cast_diagnostics(sem));
-    if unused {
-        lints.extend(unused_diagnostics(sem, is_test_world));
-    }
-    lints
-}
-
-/// Source-level `ShadowedName` warnings: every binder the resolution pass found
-/// taking a name that already reached a declaration or an enclosing binder.
-/// Stdlib modules are left alone, as the unused lints leave them.
-fn shadowing_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
-    use crate::compiler_host::{Code, DiagnosticSpan};
-    use crate::elaborator::liveness::is_user_authored;
-    use crate::resolve::Shadowed;
-
-    let Some(resolutions) = sem.resolutions() else {
-        return Vec::new();
-    };
-    let defs = resolutions.defs();
-    resolutions
-        .shadowings()
-        .iter()
-        .filter(|s| is_user_authored(&s.module))
-        .map(|shadowing| {
-            let what = match shadowing.shadowed {
-                Shadowed::Decl(def) => format!("the {} of the same name", defs.kind(def).label()),
-                Shadowed::Binder => "a binding of the same name".to_string(),
-            };
-            Diagnostic {
-                severity: Severity::Warning,
-                code: Code::ShadowedName,
-                message: format!(
-                    "`{}` shadows {what}; rename it, or mark the binder \
-                     `#[allow(shadowed_name)]` if that is deliberate",
-                    shadowing.name
-                ),
-                span: Some(DiagnosticSpan::from_span(
-                    &shadowing.span,
-                    Some(shadowing.module.source_path().as_str()),
-                )),
-            }
-        })
-        .collect()
-}
-
-/// Source-level `UndecidedEffects` diagnostics: every trait head that says
-/// nothing about the effects its impls may declare.
-fn undecided_effect_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
-    use crate::ast::{Item, attrs_allow, inner_attrs_allow, lint};
-    use crate::compiler_host::{Code, DiagnosticSpan};
-    use crate::elaborator::liveness::is_user_authored;
-
-    let mut out = Vec::new();
-    for (src, module) in &sem.modules {
-        if !is_user_authored(src)
-            || inner_attrs_allow(&module.inner_attributes, lint::UNDECIDED_EFFECTS)
-        {
-            continue;
-        }
-        for item in &module.items {
-            let Item::Trait(trait_decl) = item else {
-                continue;
-            };
-            if !matches!(trait_decl.head, ast::TraitHead::Undecided)
-                || attrs_allow(&trait_decl.attrs, lint::UNDECIDED_EFFECTS)
-            {
-                continue;
-            }
-            let (severity, code) = if trait_decl.visibility.is_public() {
-                (Severity::Warning, Code::UndecidedEffects)
-            } else {
-                (Severity::Info, Code::Remark)
-            };
-            out.push(Diagnostic {
-                severity,
-                code,
-                message: format!(
-                    "`{}` says nothing about the effects its impls may declare; \
-                     write `with ()` to forbid them, `with _` to leave them to the impl, \
-                     or `#[allow(undecided_effects)]` while deciding",
-                    trait_decl.name
-                ),
-                span: Some(DiagnosticSpan::from_span(
-                    &trait_decl.name_span,
-                    Some(src.source_path().as_str()),
-                )),
-            });
-        }
-    }
-    out
 }
 
 /// The interface FQ a `core:kiln/generator` component's synthesized world uses

@@ -1,0 +1,1307 @@
+//! Source-level liveness / dead-code analysis (WEP 2026-05-16, 2026-05-26):
+//! between `annotate_bodies` and `reify`, reachability from the
+//! package-external boundary over the two edges annotate records — the use→def
+//! edge of every name the source spells, and the dispatch decision at every
+//! site that spells none.
+//!
+//! Only free functions and globals are classified for diagnostics; a method
+//! counts as used so a function only it calls is not reported dead, but is
+//! emitted only when a call reaches it.
+
+use crate::ast::{
+    self, AstId, AstVisitor, Block, Expr, Function, Item, Module, for_each_pattern_binding,
+    type_head_name,
+};
+use crate::hashmap::{IndexMap, IndexSet};
+use crate::module_source::{CmNamespace, ModuleSource};
+use crate::token::Span;
+
+/// Result of the source-level liveness analysis. Two root sets run over one call
+/// graph: `E` reachable from production roots, `T` from `test` blocks. A
+/// user-authored free function or global is live in `E`, test-only in `T \ E`,
+/// dead in neither. The `E`/`T` split only picks which diagnostic is raised.
+#[derive(Default, Clone)]
+pub struct Liveness {
+    /// Reachable from the roots that survive into the emitted program ∪ tests,
+    /// which reify gates emission on. Narrower than `E ∪ T`: a method is a root
+    /// of `E` so that a free function only it calls is not reported dead, but
+    /// enters this set only when a call reaches it.
+    pub(crate) emit_live: IndexSet<AstId>,
+    /// Candidates reachable from neither production nor tests (`∉ E ∧ ∉ T`),
+    /// in source order. `DeadFunction` / `DeadGlobal`.
+    pub(crate) dead_items: Vec<AstId>,
+    /// Candidates reachable from tests but not production (`∈ T \ E`), in
+    /// source order. `TestOnlyFunction` / `TestOnlyGlobal`.
+    pub(crate) test_only_items: Vec<AstId>,
+    /// Local last-use liveness (WEP 2026-05-21, value-copy client). Each entry
+    /// is the `AstId` of an identifier *use* that is the final use, on every
+    /// path, of a move-eligible local binding. The canonical `AstId`-keyed
+    /// output — reusable by the LSP and the future affine-resource client.
+    /// Sound by construction: a use is recorded only when the analysis proves
+    /// the local dead afterward *and* the binding owns what it names, so an
+    /// unrecorded use always falls back to a copy.
+    pub(crate) last_uses: IndexSet<AstId>,
+    /// The same last-use facts projected to source spans, the form the
+    /// value-copy planner consumes in the `lower` phase — TIR carries a `Span`
+    /// but no `AstId`. One set over the program: a span names its own parse.
+    /// Threaded through `Package` → `FlatPackage` to the planner.
+    pub moved_spans: IndexSet<Span>,
+}
+
+/// Compute liveness over every loaded module.
+///
+/// `world_export_names` holds every export name across all registered worlds; a
+/// function whose name matches is a potential world entry point and is seeded
+/// as a root, so a misdeclared entry (`fn run()` without `export`) survives
+/// reify gating and still reaches the world-conformance check.
+pub(crate) fn compute(
+    modules: &IndexMap<ModuleSource, Module>,
+    references: &References<'_>,
+    world_export_names: &IndexSet<String>,
+    compiler_named: &CompilerNamed,
+    trait_method_impls: &IndexMap<AstId, IndexSet<AstId>>,
+) -> Liveness {
+    let mut graph = Graph::default();
+
+    // Which impl a call through a generic bound reaches is settled by
+    // monomorphization, which this graph does not run, so a trait method
+    // reaches every impl's. See the WEP's Liveness section for the two rules.
+    for (trait_method, impl_methods) in trait_method_impls {
+        graph
+            .edges
+            .entry(*trait_method)
+            .or_default()
+            .extend(impl_methods);
+    }
+
+    for (source, module) in modules {
+        // `#![generated]` modules are machine-emitted (e.g. Gale's parser
+        // output), not hand-edited source — linting them is pure noise, so they
+        // are never report candidates. They still seed exports / edges below, so
+        // they keep the items they call live.
+        let user = is_user_authored(source) && !module.has_generated();
+        // A file-level `#![allow(dead_code)]` waives the lint for every item in
+        // the module — the idiom for test-helper files whose functions exist
+        // only to back `test` blocks.
+        let module_allows_dead =
+            ast::inner_attrs_allow(&module.inner_attributes, ast::lint::DEAD_CODE);
+        for item in &module.items {
+            match item {
+                Item::Function(func) => {
+                    let key = func.id;
+                    graph.add_function_edges(func, references, &key);
+                    // `export` implies `Visibility::Public`, so this subsumes
+                    // `is_export`; the other two catch roots with no visibility
+                    // modifier (a misdeclared entry point, or a compiler item).
+                    if func.visibility.is_public()
+                        || world_export_names.contains(&func.name)
+                        || compiler_named.names_function(source, &func.name)
+                    {
+                        graph.seed_world(key);
+                    }
+                    // Bodyless functions are compiler builtins / imports, not
+                    // user-authored code that could be "dead". `#[allow(dead_code)]`
+                    // (item- or module-level) opts an item out of the lint while
+                    // leaving its call-graph edges intact.
+                    if user
+                        && func.body.is_some()
+                        && !module_allows_dead
+                        && !ast::attrs_allow(&func.attrs, ast::lint::DEAD_CODE)
+                    {
+                        graph.report_candidates.push(key);
+                    }
+                }
+                Item::Global(global) => {
+                    // Reify emits every global, read or not, so its
+                    // initializer is a call site whatever the visibility. Only
+                    // a `pub` one is a *use*, so an unread private global still
+                    // reports dead without masking its callees.
+                    let key = global.id;
+                    graph.add_expr_edges(&global.initializer, references, &key);
+                    if global.visibility.is_public() {
+                        graph.seed_world(key);
+                    } else {
+                        graph.seed_emit(key);
+                    }
+                    if user
+                        && !module_allows_dead
+                        && !ast::attrs_allow(&global.attributes, ast::lint::DEAD_CODE)
+                    {
+                        graph.report_candidates.push(key);
+                    }
+                }
+                Item::Struct(struct_decl) => {
+                    // A field default is materialized by reify wherever the
+                    // struct is built with the field omitted (and by the
+                    // auto-derived `Default::default`), so any function it
+                    // references must stay live. We cannot cheaply tell whether
+                    // the struct is ever constructed, so seed the struct as a
+                    // root and edge it to its field defaults — sound against
+                    // dropping a reachable callee. Structs are not report
+                    // candidates, so the extra live entry is harmless.
+                    let mut has_default = false;
+                    let key = struct_decl.id;
+                    for field in &struct_decl.fields {
+                        if let Some(default) = &field.default {
+                            graph.add_expr_edges(default, references, &key);
+                            has_default = true;
+                        }
+                    }
+                    if has_default {
+                        graph.seed_world(key);
+                    }
+                }
+                Item::Impl(impl_block) => {
+                    // A method rides the graph on the call that reaches it. It
+                    // is a root only where that call is minted after this pass:
+                    // by synthesis reading a format specifier, or by the
+                    // compiler naming an inherent method itself.
+                    let synthesis_dispatched = compiler_named
+                        .synthesis_dispatched_impls
+                        .contains(&impl_block.id);
+                    let self_name = type_head_name(&impl_block.ty);
+                    for method in &impl_block.methods {
+                        let key = method.id;
+                        graph.add_function_edges(method, references, &key);
+                        if synthesis_dispatched
+                            || compiler_named.names_method(self_name, &method.name)
+                        {
+                            graph.seed_world(key);
+                        } else {
+                            graph.seed_export(key);
+                        }
+                    }
+                    // A constant's body is materialized at every read, like a
+                    // struct field default above, and seeded a root for the same
+                    // reason: no module here knows whether it is read.
+                    for constant in &impl_block.constants {
+                        let key = constant.id;
+                        graph.add_expr_edges(&constant.value, references, &key);
+                        graph.seed_world(key);
+                    }
+                }
+                Item::Trait(trait_decl) => {
+                    seed_operations(&mut graph, &trait_decl.methods, references, Dispatch::Fact);
+                }
+                Item::Interface(interface_decl) => {
+                    seed_operations(
+                        &mut graph,
+                        &interface_decl.methods,
+                        references,
+                        Dispatch::MintedLater,
+                    );
+                }
+                Item::Resource(resource_decl) => {
+                    seed_operations(
+                        &mut graph,
+                        &resource_decl.methods,
+                        references,
+                        Dispatch::MintedLater,
+                    );
+                }
+                Item::Test(test) => {
+                    // Test blocks are roots of the `T` (test-reachable) closure
+                    // only — never the production `E` closure. A function reached
+                    // solely from a test is therefore classified `test-only`
+                    // rather than live, so genuinely dead production code is not
+                    // masked by a lingering test reference.
+                    let key = test.id;
+                    graph.add_block_edges(&test.body, references, &key);
+                    graph.seed_test(key);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let mut liveness = graph.finish();
+    compute_last_uses(
+        modules,
+        references.direct,
+        &mut liveness.last_uses,
+        &mut liveness.moved_spans,
+    );
+    liveness
+}
+
+/// Where a declared method's only call comes from.
+#[derive(PartialEq)]
+enum Dispatch {
+    /// A trait method: the call site records the fact that reaches the body.
+    Fact,
+    /// An `interface` or `resource` operation, whose wrapper
+    /// `synthesis::effect_dispatch` mints after this pass.
+    MintedLater,
+}
+
+/// Add the edges of every declared method carrying a body or a parameter
+/// default, and root the two kinds no dispatch fact names: an operation, and
+/// one with a parameter default that reify materializes at the call.
+fn seed_operations(
+    graph: &mut Graph,
+    methods: &[Function],
+    references: &References<'_>,
+    dispatch: Dispatch,
+) {
+    for method in methods {
+        let has_param_default = method.params.iter().any(|p| p.default.is_some());
+        if method.body.is_none() && !has_param_default {
+            continue;
+        }
+        let key = method.id;
+        graph.add_function_edges(method, references, &key);
+        if dispatch == Dispatch::MintedLater || has_param_default {
+            graph.seed_world(key);
+        }
+    }
+}
+
+/// The use→def edges liveness walks. A trait's default body is walked once per
+/// inheriting `impl`, so one use there has as many definitions as there are
+/// impls — `inherited` holds those sets, `direct` the single-definition edges
+/// every other body records.
+pub(crate) struct References<'a> {
+    pub(crate) direct: &'a IndexMap<AstId, AstId>,
+    pub(crate) inherited: &'a IndexMap<AstId, IndexSet<AstId>>,
+    /// Callees a dispatch fact names: an operator, a subscript, a `From`
+    /// conversion, a `for-of` iterator, a handler binding — and every method
+    /// call, since `direct` keeps one definition per node while a tuple
+    /// `for-of` resolves the same node once per element.
+    pub(crate) dispatch: &'a IndexMap<AstId, IndexSet<AstId>>,
+}
+
+/// Compute local last-use liveness over every function / method body in the
+/// program (WEP 2026-05-21). Fills `last_uses` (the `AstId`-keyed set) and
+/// `moved_spans` (the span projection). Analyzed over all modules —
+/// stdlib bodies benefit from copy elision too. Reads only the single-definition
+/// edges: a trait default body's locals are per-impl, so not decidable here.
+fn compute_last_uses(
+    modules: &IndexMap<ModuleSource, Module>,
+    references: &IndexMap<AstId, AstId>,
+    last_uses: &mut IndexSet<AstId>,
+    spans: &mut IndexSet<Span>,
+) {
+    for module in modules.values() {
+        for item in &module.items {
+            match item {
+                Item::Function(func) => analyze_body(func, references, last_uses, spans),
+                Item::Impl(impl_block) => {
+                    for method in &impl_block.methods {
+                        analyze_body(method, references, last_uses, spans);
+                    }
+                }
+                Item::Trait(trait_decl) => {
+                    for method in &trait_decl.methods {
+                        analyze_body(method, references, last_uses, spans);
+                    }
+                }
+                Item::Interface(interface_decl) => {
+                    for method in &interface_decl.methods {
+                        analyze_body(method, references, last_uses, spans);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+/// Run the eligibility pre-pass and the backward last-use pass over one
+/// function body, merging discovered last uses into `last_uses` (by use-site
+/// `AstId`) and `spans` (by source span, within the enclosing module).
+fn analyze_body(
+    func: &Function,
+    references: &IndexMap<AstId, AstId>,
+    last_uses: &mut IndexSet<AstId>,
+    spans: &mut IndexSet<Span>,
+) {
+    let Some(body) = &func.body else {
+        return;
+    };
+
+    let mut elig = EligibilityPass {
+        references,
+        bindings: IndexSet::default(),
+        excluded: IndexSet::default(),
+        closure_depth: 0,
+    };
+    // By-value parameters are move-eligible; borrow (`&T` / `&mut T`) and `self`
+    // receivers are not — they name the caller's storage and are never moved.
+    // The planner withdraws a parameter its callers pass uncopied, which only
+    // the whole program shows.
+    for param in &func.params {
+        if param.self_kind == ast::SelfKind::None
+            && !matches!(
+                &param.ty,
+                ast::Type::Reference(_) | ast::Type::MutReference(_)
+            )
+        {
+            elig.bindings.insert(param.id);
+        }
+    }
+    ast::walk_block(&mut elig, body);
+
+    let eligible: IndexSet<AstId> = elig
+        .bindings
+        .iter()
+        .copied()
+        .filter(|id| !elig.excluded.contains(id))
+        .collect();
+    if eligible.is_empty() {
+        return;
+    }
+
+    let mut analyzer = LastUseAnalyzer {
+        references,
+        eligible,
+        last_uses,
+        spans,
+        exits: Vec::new(),
+    };
+    let mut live = IndexSet::default();
+    analyzer.walk_block(body, &mut live, true);
+}
+
+/// Forward pass over a body collecting move-eligibility facts: every local
+/// binding site, and the locals that must be excluded from move eligibility
+/// because they are captured by a closure or name storage the scrutinee owns.
+/// Over-exclusion only costs an extra copy, so the pass errs toward marking a
+/// local ineligible whenever unsure. A borrowed local stays eligible: whether a
+/// borrow outlives its final read is the value-copy planner's pin analysis,
+/// which vetoes a final read a live borrow still reaches.
+struct EligibilityPass<'a> {
+    references: &'a IndexMap<AstId, AstId>,
+    bindings: IndexSet<AstId>,
+    excluded: IndexSet<AstId>,
+    closure_depth: u32,
+}
+
+impl EligibilityPass<'_> {
+    /// A match arm, `if let`, or `while let` binds a name to storage the
+    /// scrutinee still owns, so handing it to a new owner is a move out of the
+    /// scrutinee, which its own last use does not license. Whether the scrutinee
+    /// is dead there is an ownership question, answered by the value-copy
+    /// planner and out of reach of a pass that sees only names.
+    fn exclude_destructured(&mut self, pat: &ast::Pattern) {
+        for_each_pattern_binding(pat, &mut |id| {
+            self.excluded.insert(id);
+        });
+    }
+}
+
+impl AstVisitor for EligibilityPass<'_> {
+    fn visit_pattern(&mut self, pat: &ast::Pattern) {
+        if let ast::Pattern::Ident { id, .. } | ast::Pattern::MutIdent { id, .. } = pat {
+            self.bindings.insert(*id);
+        }
+        ast::walk_pattern(self, pat);
+    }
+
+    fn visit_match_expr(&mut self, m: &ast::MatchExpr) {
+        for arm in &m.arms {
+            self.exclude_destructured(&arm.pattern);
+        }
+        ast::walk_match_expr(self, m);
+    }
+
+    fn visit_stmt(&mut self, stmt: &ast::Stmt) {
+        // `let P = e else { … }` is a match on `e`, as `if let` is.
+        if let ast::Stmt::Let(l) = stmt
+            && l.else_block.is_some()
+        {
+            self.exclude_destructured(&l.pattern);
+        }
+        ast::walk_stmt(self, stmt);
+    }
+
+    fn visit_condition(&mut self, cond: &ast::Condition) {
+        if let ast::Condition::LetChain { elements, .. } = cond {
+            for element in elements {
+                if let ast::ConditionElement::Let { pattern, .. } = element {
+                    self.exclude_destructured(pattern);
+                }
+            }
+        }
+        ast::walk_condition(self, cond);
+    }
+
+    fn visit_expr(&mut self, expr: &Expr) {
+        match expr {
+            Expr::Closure(_) => {
+                self.closure_depth += 1;
+                ast::walk_expr(self, expr);
+                self.closure_depth -= 1;
+                return;
+            }
+            Expr::Ident(ident) if self.closure_depth > 0 => {
+                if let Some(def) = self.references.get(&ident.id) {
+                    self.excluded.insert(*def);
+                }
+            }
+            // `matches { P(v) if f(v) }` hands `v` to the guard, out of storage
+            // the scrutinee keeps.
+            Expr::Matches(m) => self.exclude_destructured(&m.pattern),
+            _ => {}
+        }
+        ast::walk_expr(self, expr);
+    }
+}
+
+/// Backward last-use liveness pass (WEP 2026-05-21). A structural walk over the
+/// typed AST — Wado has no `goto`, so `if` / `match` / loops / early `return`
+/// suffice and no explicit CFG is needed. The live set holds the eligible local
+/// def-ids that MAY be read on some path below the current point; a use is a
+/// final use iff its local is not live immediately afterward. Over-approximating
+/// liveness (treating more locals as live) only suppresses moves, so every
+/// imprecise arm stays sound.
+struct LastUseAnalyzer<'a> {
+    references: &'a IndexMap<AstId, AstId>,
+    eligible: IndexSet<AstId>,
+    last_uses: &'a mut IndexSet<AstId>,
+    /// Span projection for the enclosing module (see [`Liveness::moved_spans`]).
+    spans: &'a mut IndexSet<Span>,
+    /// Live-after set per enclosing `break` target: a loop (unlabeled) or a
+    /// labeled block.
+    exits: Vec<Exit>,
+}
+
+/// One `break` target and the live set where it resumes.
+struct Exit {
+    label: Option<String>,
+    live: IndexSet<AstId>,
+}
+
+impl LastUseAnalyzer<'_> {
+    /// Resolve an identifier use to its eligible local def, if any.
+    fn use_def(&self, use_id: AstId) -> Option<AstId> {
+        let def = *self.references.get(&use_id)?;
+        self.eligible.contains(&def).then_some(def)
+    }
+
+    /// Record a read of local `def` at identifier `ident`: if `def` is not live
+    /// afterward, this is its final use. Then mark `def` live above this point.
+    fn read(&mut self, ident: &ast::IdentExpr, live: &mut IndexSet<AstId>, record: bool) {
+        if let Some(def) = self.use_def(ident.id) {
+            if record && !live.contains(&def) {
+                self.last_uses.insert(ident.id);
+                self.spans.insert(ident.span);
+            }
+            live.insert(def);
+        }
+    }
+
+    fn push_exit(&mut self, label: Option<String>, live: IndexSet<AstId>) {
+        self.exits.push(Exit { label, live });
+    }
+
+    /// Live set where a `break` to `label` resumes. No entry for it → every
+    /// eligible local, the sound over-approximation.
+    fn exit_live(&self, label: Option<&str>) -> IndexSet<AstId> {
+        self.exits
+            .iter()
+            .rev()
+            .find(|e| e.label.as_deref() == label)
+            .map_or_else(|| self.eligible.clone(), |e| e.live.clone())
+    }
+
+    /// A labeled block, in statement or expression position: a `break LABEL`
+    /// inside resumes where the block ends.
+    fn walk_labeled_block(
+        &mut self,
+        label: &str,
+        block: &Block,
+        live: &mut IndexSet<AstId>,
+        record: bool,
+    ) {
+        self.push_exit(Some(label.to_string()), live.clone());
+        self.walk_block(block, live, record);
+        self.exits.pop();
+    }
+
+    fn kill_pattern(&mut self, pat: &ast::Pattern, live: &mut IndexSet<AstId>) {
+        for_each_pattern_binding(pat, &mut |id| {
+            live.swap_remove(&id);
+        });
+    }
+
+    fn walk_block(&mut self, block: &Block, live: &mut IndexSet<AstId>, record: bool) {
+        for stmt in block.stmts.iter().rev() {
+            self.walk_stmt(stmt, live, record);
+        }
+    }
+
+    fn walk_stmt(&mut self, stmt: &ast::Stmt, live: &mut IndexSet<AstId>, record: bool) {
+        match stmt {
+            ast::Stmt::Let(l) => {
+                self.kill_pattern(&l.pattern, live);
+                // The else block diverges: its live-in starts empty (nothing
+                // after it is live) and unions in the variables it uses.
+                if let Some(eb) = &l.else_block {
+                    let mut else_live = IndexSet::default();
+                    self.walk_block(eb, &mut else_live, record);
+                    *live = union(live, &else_live);
+                }
+                if let Some(value) = &l.value {
+                    self.walk_expr(value, live, record);
+                }
+            }
+            ast::Stmt::Expr(e) => self.walk_expr(&e.expr, live, record),
+            ast::Stmt::Return(r) => {
+                live.clear();
+                if let Some(value) = &r.value {
+                    self.walk_expr(value, live, record);
+                }
+            }
+            ast::Stmt::TaskReturn(t) => self.walk_expr(&t.value, live, record),
+            ast::Stmt::If(s) => {
+                self.walk_if(
+                    &s.condition,
+                    &s.then_block,
+                    s.else_block.as_ref(),
+                    live,
+                    record,
+                );
+            }
+            ast::Stmt::While(s) => self.walk_while(&s.condition, &s.body, live, record),
+            ast::Stmt::For(s) => self.walk_for(s, live, record),
+            ast::Stmt::ForOf(s) => self.walk_for_of(s, live, record),
+            ast::Stmt::Loop(s) => self.walk_loop(&s.body, live, record),
+            ast::Stmt::Match(m) => self.walk_match(m, live, record),
+            ast::Stmt::Break(b) => {
+                // The fall-through below a break is unreachable. No entry for the
+                // target → every eligible local stays live, the safe answer.
+                *live = self.exit_live(b.label.as_deref());
+                if let Some(value) = &b.value {
+                    self.walk_expr(value, live, record);
+                }
+            }
+            ast::Stmt::Continue(_) => {
+                // The value flowing to the loop head is whatever survives to the
+                // next iteration; without threading the head set, keep every
+                // eligible local live (sound over-approximation).
+                *live = self.eligible.clone();
+            }
+            ast::Stmt::Assert(a) => {
+                if let Some(msg) = &a.message {
+                    self.walk_expr(msg, live, record);
+                }
+                self.walk_expr(&a.condition, live, record);
+            }
+            ast::Stmt::LabeledBlock(lb) => {
+                self.walk_labeled_block(&lb.label, &lb.block, live, record);
+            }
+            // A local type/impl declaration's methods aren't closures, so
+            // they can't read/write the enclosing function's locals; nothing
+            // here affects variable liveness.
+            ast::Stmt::Item(_) => {}
+            ast::Stmt::Error(_) => {}
+        }
+    }
+
+    fn walk_if(
+        &mut self,
+        cond: &ast::Condition,
+        then_block: &Block,
+        else_block: Option<&Block>,
+        live: &mut IndexSet<AstId>,
+        record: bool,
+    ) {
+        let mut then_live = live.clone();
+        self.walk_block(then_block, &mut then_live, record);
+        let mut else_live = live.clone();
+        if let Some(eb) = else_block {
+            self.walk_block(eb, &mut else_live, record);
+        }
+        *live = union(&then_live, &else_live);
+        self.walk_condition(cond, live, record);
+    }
+
+    fn walk_while(
+        &mut self,
+        cond: &ast::Condition,
+        body: &Block,
+        live: &mut IndexSet<AstId>,
+        record: bool,
+    ) {
+        let exit_live = live.clone();
+        self.push_exit(None, exit_live.clone());
+        let mut head = exit_live.clone();
+        loop {
+            let mut work = head.clone();
+            self.walk_block(body, &mut work, false);
+            let mut candidate = union(&work, &exit_live);
+            self.walk_condition(cond, &mut candidate, false);
+            if candidate == head {
+                break;
+            }
+            head = candidate;
+        }
+        if record {
+            let mut work = head.clone();
+            self.walk_block(body, &mut work, true);
+            let mut candidate = union(&work, &exit_live);
+            self.walk_condition(cond, &mut candidate, true);
+            head = candidate;
+        }
+        self.exits.pop();
+        *live = head;
+    }
+
+    fn walk_loop(&mut self, body: &Block, live: &mut IndexSet<AstId>, record: bool) {
+        let exit_live = live.clone();
+        self.push_exit(None, exit_live.clone());
+        let mut head = exit_live;
+        loop {
+            let mut work = head.clone();
+            self.walk_block(body, &mut work, false);
+            if work == head {
+                break;
+            }
+            head = work;
+        }
+        if record {
+            let mut work = head.clone();
+            self.walk_block(body, &mut work, true);
+            head = work;
+        }
+        self.exits.pop();
+        *live = head;
+    }
+
+    fn walk_for(&mut self, s: &ast::ForStmt, live: &mut IndexSet<AstId>, record: bool) {
+        // `for (init; cond; update) body`: init runs once before the loop;
+        // cond/update/body iterate. Model update as part of the loop body tail.
+        let exit_live = live.clone();
+        self.push_exit(None, exit_live.clone());
+        let mut head = exit_live.clone();
+        loop {
+            let mut work = head.clone();
+            if let Some(update) = &s.update {
+                self.walk_expr(update, &mut work, false);
+            }
+            self.walk_block(&s.body, &mut work, false);
+            let mut candidate = union(&work, &exit_live);
+            if let Some(cond) = &s.condition {
+                self.walk_condition(cond, &mut candidate, false);
+            }
+            if candidate == head {
+                break;
+            }
+            head = candidate;
+        }
+        let mut live_after_init = if record {
+            let mut work = head;
+            if let Some(update) = &s.update {
+                self.walk_expr(update, &mut work, true);
+            }
+            self.walk_block(&s.body, &mut work, true);
+            let mut candidate = union(&work, &exit_live);
+            if let Some(cond) = &s.condition {
+                self.walk_condition(cond, &mut candidate, true);
+            }
+            candidate
+        } else {
+            head
+        };
+        self.exits.pop();
+        if let Some(init) = &s.init {
+            self.walk_stmt(init, &mut live_after_init, record);
+        }
+        *live = live_after_init;
+    }
+
+    fn walk_for_of(&mut self, s: &ast::ForOfStmt, live: &mut IndexSet<AstId>, record: bool) {
+        let exit_live = live.clone();
+        self.push_exit(None, exit_live.clone());
+        let mut head = exit_live.clone();
+        loop {
+            let mut work = head.clone();
+            self.kill_pattern(&s.binding, &mut work);
+            self.walk_block(&s.body, &mut work, false);
+            let candidate = union(&work, &exit_live);
+            if candidate == head {
+                break;
+            }
+            head = candidate;
+        }
+        if record {
+            let mut work = head.clone();
+            self.kill_pattern(&s.binding, &mut work);
+            self.walk_block(&s.body, &mut work, true);
+        }
+        self.exits.pop();
+        // The iterable is evaluated once, before the loop.
+        *live = union(&head, &exit_live);
+        self.walk_expr(&s.iterable, live, record);
+    }
+
+    /// `[for let v of t { body }]` unrolls the body once per element, so — like
+    /// a for-of — a local last-used inside it is live on every copy. Reach the
+    /// fixpoint before recording, or the first copy would take the last use and
+    /// the rest would alias a moved value.
+    fn walk_tuple_comprehension(
+        &mut self,
+        c: &ast::TupleComprehensionExpr,
+        live: &mut IndexSet<AstId>,
+        record: bool,
+    ) {
+        let exit_live = live.clone();
+        let mut head = exit_live.clone();
+        loop {
+            let mut work = head.clone();
+            self.kill_pattern(&c.binding, &mut work);
+            self.walk_expr(&c.body, &mut work, false);
+            let candidate = union(&work, &exit_live);
+            if candidate == head {
+                break;
+            }
+            head = candidate;
+        }
+        if record {
+            let mut work = head.clone();
+            self.kill_pattern(&c.binding, &mut work);
+            self.walk_expr(&c.body, &mut work, true);
+        }
+        // The iterable is evaluated once, before the unrolled bodies.
+        *live = union(&head, &exit_live);
+        self.walk_expr(&c.iterable, live, record);
+    }
+
+    fn walk_match(&mut self, m: &ast::MatchExpr, live: &mut IndexSet<AstId>, record: bool) {
+        let after = live.clone();
+        let mut merged = IndexSet::default();
+        for arm in &m.arms {
+            let mut arm_live = after.clone();
+            self.walk_expr(&arm.body, &mut arm_live, record);
+            if let Some(guard) = &arm.guard {
+                self.walk_expr(guard, &mut arm_live, record);
+            }
+            self.kill_pattern(&arm.pattern, &mut arm_live);
+            merged = union(&merged, &arm_live);
+        }
+        *live = merged;
+        self.walk_expr(&m.expr, live, record);
+    }
+
+    fn walk_condition(&mut self, cond: &ast::Condition, live: &mut IndexSet<AstId>, record: bool) {
+        match cond {
+            ast::Condition::Expr(e) => self.walk_expr(e, live, record),
+            ast::Condition::LetChain { elements, .. } => {
+                for element in elements.iter().rev() {
+                    match element {
+                        ast::ConditionElement::Let { pattern, expr, .. } => {
+                            self.kill_pattern(pattern, live);
+                            self.walk_expr(expr, live, record);
+                        }
+                        ast::ConditionElement::Expr(e) => self.walk_expr(e, live, record),
+                    }
+                }
+            }
+        }
+    }
+
+    /// Collect uses in an expression, processing sub-expressions in reverse
+    /// evaluation order so that among repeated uses of one local only the
+    /// textually-last is eligible to be the final use.
+    fn walk_expr(&mut self, expr: &Expr, live: &mut IndexSet<AstId>, record: bool) {
+        match expr {
+            Expr::Ident(ident) => self.read(ident, live, record),
+            Expr::Literal(_) | Expr::Error(_) => {}
+            Expr::Binary(e) => {
+                self.walk_expr(&e.right, live, record);
+                self.walk_expr(&e.left, live, record);
+            }
+            Expr::Unary(e) => self.walk_expr(&e.expr, live, record),
+            Expr::Assign(e) => {
+                // A whole-local rebind redefines the target: below the assign the
+                // new value is live, above it the old binding is dead. Kill the
+                // target local, then evaluate the RHS.
+                self.walk_assign_target(&e.target, live);
+                self.walk_expr(&e.value, live, record);
+            }
+            Expr::CompoundAssign(e) => {
+                // `x += v` reads and writes x, so x stays a use (not killed).
+                self.walk_expr(&e.value, live, record);
+                self.walk_expr(&e.target, live, record);
+            }
+            Expr::ComparisonChain(e) => {
+                for cmp in e.comparisons.iter().rev() {
+                    self.walk_expr(&cmp.right, live, record);
+                }
+                self.walk_expr(&e.first, live, record);
+            }
+            Expr::Call(e) => {
+                for arg in e.args.iter().rev() {
+                    self.walk_expr(arg, live, record);
+                }
+                self.walk_expr(&e.callee, live, record);
+            }
+            Expr::MethodCall(e) => {
+                for arg in e.args.iter().rev() {
+                    self.walk_expr(arg, live, record);
+                }
+                self.walk_expr(&e.receiver, live, record);
+            }
+            Expr::StaticMethodCall(e) => {
+                for arg in e.args.iter().rev() {
+                    self.walk_expr(arg, live, record);
+                }
+            }
+            Expr::FieldAccess(e) => self.walk_expr(&e.expr, live, record),
+            Expr::Index(e) => {
+                self.walk_expr(&e.index, live, record);
+                self.walk_expr(&e.expr, live, record);
+            }
+            Expr::Cast(e) => self.walk_expr(&e.expr, live, record),
+            Expr::TryOp(e) => self.walk_expr(&e.expr, live, record),
+            Expr::Spread(inner, _) => self.walk_expr(inner, live, record),
+            Expr::Range(e) => {
+                self.walk_expr(&e.end, live, record);
+                self.walk_expr(&e.start, live, record);
+            }
+            Expr::StructLiteral(e) => {
+                for field in e.fields.iter().rev() {
+                    self.walk_expr(&field.value, live, record);
+                }
+                for spread in e.spreads.iter().rev() {
+                    self.walk_expr(&spread.expr, live, record);
+                }
+            }
+            Expr::TupleLiteral(e) => {
+                for element in e.elements.iter().rev() {
+                    self.walk_expr(element, live, record);
+                }
+            }
+            Expr::TupleComprehension(e) => self.walk_tuple_comprehension(e, live, record),
+            Expr::TemplateString(e) => {
+                for part in e.parts.iter().rev() {
+                    if let ast::TemplatePart::Interpolation { expr, .. } = part {
+                        self.walk_expr(expr, live, record);
+                    }
+                }
+            }
+            Expr::TaggedTemplate(e) => {
+                for part in e.template.parts.iter().rev() {
+                    if let ast::TemplatePart::Interpolation { expr, .. } = part {
+                        self.walk_expr(expr, live, record);
+                    }
+                }
+                self.walk_expr(&e.tag, live, record);
+            }
+            Expr::Block(b) => self.walk_block(b, live, record),
+            Expr::LabeledBlock(b) => self.walk_labeled_block(&b.label, &b.block, live, record),
+            Expr::If(e) => self.walk_if(
+                &e.condition,
+                &e.then_block,
+                e.else_block.as_ref(),
+                live,
+                record,
+            ),
+            Expr::Match(m) => self.walk_match(m, live, record),
+            Expr::Matches(e) => {
+                if let Some(guard) = &e.guard {
+                    // A guard reads the pattern's bindings; kill them, then the
+                    // scrutinee is evaluated.
+                    self.walk_expr(guard, live, record);
+                    self.kill_pattern(&e.pattern, live);
+                }
+                self.walk_expr(&e.expr, live, record);
+            }
+            Expr::Closure(_) => {
+                // Captured locals were excluded from eligibility by the pre-pass;
+                // a closure body needs no last-use marking here.
+            }
+            Expr::WithHandler(e) => {
+                self.walk_block(&e.body, live, record);
+                for handler in e.handlers.iter().rev() {
+                    self.walk_expr(&handler.handler, live, record);
+                }
+            }
+            Expr::Resume(e) => self.walk_expr(&e.value, live, record),
+        }
+    }
+
+    /// An assignment target: a bare local is redefined (killed here); a
+    /// projection (`x.f = …`, `a[i] = …`) reads its root, so treat it as a use.
+    fn walk_assign_target(&mut self, target: &Expr, live: &mut IndexSet<AstId>) {
+        match target {
+            Expr::Ident(ident) => {
+                if let Some(def) = self.use_def(ident.id) {
+                    live.swap_remove(&def);
+                }
+            }
+            _ => self.walk_expr(target, live, false),
+        }
+    }
+}
+
+/// Set union without mutating either operand.
+fn union(a: &IndexSet<AstId>, b: &IndexSet<AstId>) -> IndexSet<AstId> {
+    let mut out = a.clone();
+    for id in b {
+        out.insert(*id);
+    }
+    out
+}
+
+/// Call graph plus the two root sets and report candidates, assembled in one
+/// walk.
+#[derive(Default)]
+struct Graph {
+    /// `owner -> called items`.
+    edges: IndexMap<AstId, Vec<AstId>>,
+    /// Production roots (world exports, `pub` / `export` items, methods,
+    /// struct-field defaults) — seeds of the `E` closure.
+    export_seeds: Vec<AstId>,
+    /// `test` block roots — seeds of the `T` closure.
+    test_seeds: Vec<AstId>,
+    /// Roots that survive into the emitted program — seeds of the set reify
+    /// gates on. Neither a subset nor a superset of [`Self::export_seeds`]: a
+    /// method enters only when called, an unread private global enters anyway.
+    emit_seeds: Vec<AstId>,
+    /// User-authored free functions / globals eligible for dead reporting,
+    /// in source order.
+    report_candidates: Vec<AstId>,
+}
+
+impl Graph {
+    fn seed_export(&mut self, key: AstId) {
+        self.export_seeds.push(key);
+    }
+
+    fn seed_test(&mut self, key: AstId) {
+        self.test_seeds.push(key);
+    }
+
+    /// Seed a root of the emitted program: reify emits it whether or not
+    /// anything reaches it. Not itself a use, so the `E` closure is unmoved.
+    fn seed_emit(&mut self, key: AstId) {
+        self.emit_seeds.push(key);
+    }
+
+    /// Seed a root of both closures: it is emitted, and so counts as used.
+    fn seed_world(&mut self, key: AstId) {
+        self.seed_export(key);
+        self.seed_emit(key);
+    }
+
+    fn add_function_edges(&mut self, func: &Function, references: &References<'_>, owner: &AstId) {
+        if let Some(body) = &func.body {
+            self.add_block_edges(body, references, owner);
+        }
+        // A parameter default is materialized by reify at every call site that
+        // omits the argument, so anything it references is reachable whenever
+        // the function itself is. Edge from the function (not a seed) keeps that
+        // precise: a dead function's defaults stay dead too.
+        for param in &func.params {
+            if let Some(default) = &param.default {
+                self.add_expr_edges(default, references, owner);
+            }
+        }
+    }
+
+    fn add_block_edges(&mut self, block: &Block, references: &References<'_>, owner: &AstId) {
+        let mut collector = IdCollector::default();
+        ast::walk_block(&mut collector, block);
+        self.link(&collector.ids, references, owner);
+    }
+
+    fn add_expr_edges(&mut self, expr: &Expr, references: &References<'_>, owner: &AstId) {
+        let mut collector = IdCollector::default();
+        ast::walk_expr(&mut collector, expr);
+        self.link(&collector.ids, references, owner);
+    }
+
+    /// For each id in the owner's body that resolves to a definition, add an
+    /// `owner -> def` edge.
+    fn link(&mut self, ids: &[AstId], references: &References<'_>, owner: &AstId) {
+        let edges = self.edges.entry(*owner).or_default();
+        for &id in ids {
+            edges.extend(references.direct.get(&id));
+            edges.extend(references.inherited.get(&id).into_iter().flatten());
+            edges.extend(references.dispatch.get(&id).into_iter().flatten());
+        }
+    }
+
+    /// Run both reachability closures and classify each report candidate.
+    fn finish(self) -> Liveness {
+        let production = self.closure(&self.export_seeds);
+        let tests = self.closure(&self.test_seeds);
+
+        let mut emit_live = self.closure(&self.emit_seeds);
+        for key in &tests {
+            emit_live.insert(*key);
+        }
+
+        let mut dead_items = Vec::new();
+        let mut test_only_items = Vec::new();
+        for key in &self.report_candidates {
+            if production.contains(key) {
+                continue;
+            }
+            if tests.contains(key) {
+                test_only_items.push(*key);
+            } else {
+                dead_items.push(*key);
+            }
+        }
+
+        Liveness {
+            emit_live,
+            dead_items,
+            test_only_items,
+            last_uses: IndexSet::default(),
+            moved_spans: IndexSet::default(),
+        }
+    }
+
+    /// BFS reachability from `seeds` over the call-graph edges.
+    fn closure(&self, seeds: &[AstId]) -> IndexSet<AstId> {
+        let mut reached: IndexSet<AstId> = IndexSet::default();
+        let mut work: Vec<AstId> = seeds.to_vec();
+        while let Some(key) = work.pop() {
+            if !reached.insert(key) {
+                continue;
+            }
+            if let Some(targets) = self.edges.get(&key) {
+                for target in targets {
+                    if !reached.contains(target) {
+                        work.push(*target);
+                    }
+                }
+            }
+        }
+        reached
+    }
+}
+
+/// Every [`AstId`] the walk announces: names, fields and method segments, plus
+/// each statement's and expression's own — the node a dispatch fact is keyed
+/// under.
+#[derive(Default)]
+struct IdCollector {
+    ids: Vec<AstId>,
+}
+
+impl AstVisitor for IdCollector {
+    fn visit_id(&mut self, id: AstId, _span: Span) {
+        self.ids.push(id);
+    }
+}
+
+/// User-authored modules are the entry point and what it transitively imports;
+/// they alone are candidates for the unused-item diagnostics. Stdlib is the
+/// `Core` / `Wasi` / `Wasm` variants plus the bundled `.wado` files the loader
+/// registers as `Local` with a scheme-prefixed path.
+pub(crate) fn is_user_authored(source: &ModuleSource) -> bool {
+    match source {
+        ModuleSource::EntryPoint { .. }
+        | ModuleSource::Remote { .. }
+        | ModuleSource::Dependency { .. }
+        | ModuleSource::Redirected { .. } => true,
+        ModuleSource::Local { path, .. } => {
+            let path = path.as_str();
+            !(path.starts_with("core:")
+                || path.starts_with("wasm:")
+                || CmNamespace::split_specifier(path).is_some())
+        }
+        _ => false,
+    }
+}
+
+/// What the compiler names by construction, so no edge in this graph reaches
+/// it. Each entry is one entity, not a whole type: registering a type would
+/// root every method on it.
+#[derive(Default)]
+pub(crate) struct CompilerNamed {
+    /// Inherent methods, by the type that declares them.
+    pub(crate) methods: IndexMap<String, IndexSet<String>>,
+    /// Free functions, by the module that declares them — the CM ABI helpers.
+    pub(crate) functions: IndexMap<ModuleSource, IndexSet<String>>,
+    /// `impl` blocks whose trait a synthesis pass dispatches — see
+    /// [`crate::compiler_item::CompilerItem::dispatched_by_synthesis`]. Their
+    /// methods are roots: no edge here can name a call minted after this pass.
+    pub(crate) synthesis_dispatched_impls: IndexSet<AstId>,
+}
+
+impl CompilerNamed {
+    fn names_method(&self, owner: Option<&str>, name: &str) -> bool {
+        owner.is_some_and(|owner| {
+            self.methods
+                .get(owner)
+                .is_some_and(|names| names.contains(name))
+        })
+    }
+
+    fn names_function(&self, source: &ModuleSource, name: &str) -> bool {
+        self.functions
+            .get(source)
+            .is_some_and(|names| names.contains(name))
+    }
+}
+
+#[cfg(test)]
+mod last_use_tests {
+    use crate::compiler_host::InMemoryCompilerHost;
+    use crate::semantics::semantics;
+
+    fn block_on<F: std::future::Future>(future: F) -> F::Output {
+        use std::future::Future;
+        use std::pin::Pin;
+        use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
+        fn raw() -> RawWaker {
+            fn no_op(_: *const ()) {}
+            fn clone(_: *const ()) -> RawWaker {
+                raw()
+            }
+            RawWaker::new(
+                std::ptr::null(),
+                &RawWakerVTable::new(clone, no_op, no_op, no_op),
+            )
+        }
+        let waker = unsafe { Waker::from_raw(raw()) };
+        let mut cx = Context::from_waker(&waker);
+        let mut fut = Box::pin(future);
+        loop {
+            if let Poll::Ready(v) = Pin::new(&mut fut).as_mut().poll(&mut cx) {
+                return v;
+            }
+        }
+    }
+
+    /// Return a sorted list of the identifier texts that the analysis marked as
+    /// final uses, one entry per marked use.
+    fn last_use_names(source: &str) -> Vec<String> {
+        let host = InMemoryCompilerHost::new();
+        let sem = block_on(semantics(source, &host, Some("entry.wado")));
+        let entry = sem.interner.borrow_mut().entry_point("entry.wado");
+        let mut names: Vec<String> = sem
+            .liveness
+            .last_uses
+            .iter()
+            .filter(|id| sem.module_of_id(**id) == Some(&entry))
+            .filter_map(|id| sem.span_of_id(*id))
+            .filter(|span| span.end <= source.len() && source.is_char_boundary(span.start))
+            .map(|span| source[span.start..span.end].to_string())
+            .collect();
+        names.sort();
+        names
+    }
+
+    fn count(source: &str, name: &str) -> usize {
+        last_use_names(source)
+            .iter()
+            .filter(|n| n.as_str() == name)
+            .count()
+    }
+
+    #[test]
+    fn single_use_param_is_a_last_use() {
+        let src = "export fn f(a: List<i32>) -> List<i32> { return a; }";
+        assert_eq!(count(src, "a"), 1);
+    }
+
+    #[test]
+    fn earlier_of_two_uses_is_not_a_last_use() {
+        let src = "export fn f(a: List<i32>) -> i32 { \
+                   let x = a.len(); let y = a.len(); return x + y; }";
+        // Only the second `a` is a final use; the first is live afterward.
+        assert_eq!(count(src, "a"), 1);
+    }
+
+    #[test]
+    fn a_borrowed_local_keeps_its_final_use() {
+        let src = "export fn f(a: List<i32>) -> i32 { \
+                   let n = (&a).len(); let b = a; return n + b.len(); }";
+        // The borrow ends before `let b = a`, which is `a`'s final read.
+        assert_eq!(count(src, "a"), 1);
+    }
+
+    #[test]
+    fn a_match_binding_is_not_move_eligible() {
+        let src = "variant P { A(List<i32>), B } \
+                   export fn f(p: P) -> i32 { \
+                     match p { \
+                       P::A(xs) => { let ys = xs; return ys.len(); } \
+                       P::B => { return 0; } \
+                     } \
+                   }";
+        // `xs` names the payload `p` still holds; the scrutinee itself is a
+        // by-value parameter read for the last time here.
+        assert_eq!(count(src, "xs"), 0);
+        assert_eq!(count(src, "p"), 1);
+    }
+
+    #[test]
+    fn a_break_to_a_labeled_block_resumes_where_it_ends() {
+        let src = "export fn f(a: List<i32>, c: bool) -> i32 { \
+                   let n = pick: { if c { break pick: 1; } 2 }; \
+                   return a.len() + n; }";
+        // `break pick:` leaves the labeled block, where only `a` is still read.
+        // Taking every local live there instead cost `a` its final use.
+        assert_eq!(count(src, "a"), 1);
+    }
+
+    #[test]
+    fn accumulator_element_is_moved_across_the_loop() {
+        let src = "export fn f(n: i32) -> List<i32> { \
+                   let mut items: List<i32> = []; \
+                   let mut i = 0; \
+                   while i < n { let v = i * 2; items.push(v); i = i + 1; } \
+                   return items; }";
+        // `v` is bound and consumed within one iteration → its push is a last use.
+        assert_eq!(count(src, "v"), 1);
+    }
+
+    #[test]
+    fn a_destructured_binding_is_left_to_the_planner() {
+        // Mirrors `impl Deserialize for List<T>` in lib/core/serde.wado: the
+        // accumulator loop pushes each `item` bound from `if let Some(item) =
+        // next_opt`, with the only loop exit a `return` in the else branch.
+        // `item` names storage `next_opt` owns, so whether the push may take it
+        // is an ownership question; the accumulator owns its own and is still
+        // answered here.
+        let src = "\
+            fn src(x: i32) -> Option<List<i32>> { if x > 0 { return Option::Some([x]); } return Option::None; } \
+            export fn f() -> List<List<i32>> { \
+              let mut items: List<List<i32>> = List::with_capacity(2); \
+              let mut i = 0; \
+              loop { \
+                let next_opt = src(i); \
+                if let Some(item) = next_opt { \
+                  items.push(item); \
+                } else { \
+                  return items; \
+                } \
+                i = i + 1; \
+              } \
+            }";
+        assert_eq!(count(src, "item"), 0);
+        assert_eq!(count(src, "items"), 1);
+    }
+
+    #[test]
+    fn an_iflet_scrutinee_in_a_loop_is_moved() {
+        let src = "export fn f(n: i32) -> List<List<i32>> { \
+                   let mut items: List<List<i32>> = []; \
+                   let mut i = 0; \
+                   loop { \
+                     let next_opt = if i < n { Option::Some([i, i]) } else { Option::None }; \
+                     if let Some(item) = next_opt { items.push(item); } else { break; } \
+                     i = i + 1; \
+                   } \
+                   return items; }";
+        // The scrutinee is read once per iteration and dead afterward, so the
+        // loop fixpoint still reaches its final use.
+        assert_eq!(count(src, "next_opt"), 1);
+    }
+
+    #[test]
+    fn value_live_after_branch_is_not_moved() {
+        let src = "export fn f(a: List<i32>, c: bool) -> i32 { \
+                   let n = if c { a.len() } else { a.len() }; return n; }";
+        // `a` is read on both branches but never after; each branch use is a
+        // per-path last use.
+        assert_eq!(count(src, "a"), 2);
+    }
+}

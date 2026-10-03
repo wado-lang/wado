@@ -6,8 +6,8 @@
 //! `ModuleSource → URI` helpers that read the compiler's per-module
 //! metadata.
 
-use wado_compiler::module_source::ModuleSource;
-use wado_compiler::symbol::Symbol;
+use wado_compiler_frontend::module_source::ModuleSource;
+use wado_compiler_frontend::symbol::Symbol;
 
 use crate::uri::{Uri, percent_encode_path};
 

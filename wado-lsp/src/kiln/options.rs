@@ -7,13 +7,13 @@
 
 use std::path::{Path, PathBuf};
 
-use wado_compiler::CompilerHost;
-use wado_compiler::hashmap::IndexMap;
-use wado_compiler::kiln::{
+use wado_compiler_frontend::CompilerHost;
+use wado_compiler_frontend::hashmap::IndexMap;
+use wado_compiler_frontend::kiln::{
     GENERATOR_WORLD_FQ, GeneratorModule, Invocation, InvocationIndex, OptionsAnchor,
     OptionsDescriptor, extract_options_descriptor, spec_key, validate_options,
 };
-use wado_compiler::semantics::semantics_for_world;
+use wado_compiler_frontend::semantics::semantics_for_world;
 use wado_manifest::DependencySource;
 
 use crate::DiagnosticCollector;

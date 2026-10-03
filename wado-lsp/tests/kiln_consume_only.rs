@@ -29,10 +29,10 @@
 
 use std::path::Path;
 
-use wado_compiler::kiln::metadata::{
+use wado_compiler_frontend::kiln::metadata::{
     FileHash, METADATA_VERSION, Metadata, OutputEntry, metadata_filename,
 };
-use wado_compiler::kiln::{content_hash, hex_digest};
+use wado_compiler_frontend::kiln::{content_hash, hex_digest};
 use wado_lsp::{Engine, FilesystemCompilerHost, Severity};
 
 const SCHEMA_BODY: &str = "// dummy calc grammar — body content is irrelevant\n";

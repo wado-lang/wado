@@ -9,7 +9,7 @@
 //! `CompilerHost::load_source`, so an in-memory `MapHost` serving the
 //! generated module at that path is enough to exercise it.
 
-use wado_compiler::kiln::InvocationIndex;
+use wado_compiler_frontend::kiln::InvocationIndex;
 use wado_lsp::test_support::MapHost;
 use wado_lsp::{Engine, Severity};
 

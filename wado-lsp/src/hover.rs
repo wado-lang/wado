@@ -1,17 +1,17 @@
-//! Hover information, powered by `wado_compiler::semantics`.
+//! Hover information, powered by `wado_compiler_frontend::semantics`.
 //!
 //! Rendering strategy: `Semantics::cursor_at` places a `Cursor` on the
 //! innermost AST node at the request position; `Cursor::def_symbol` chases
 //! the use→def edge and returns the binding's `Symbol` (or `None` if the
 //! cursor isn't on a recognised name). Locals render as `let` / param
 //! signatures (computed from the defining AST node); items delegate to
-//! `wado_compiler::unparse`.
+//! `wado_compiler_frontend::unparse`.
 
 use serde::{Deserialize, Serialize};
-use wado_compiler::ast::{self, AstId, AstVisitor, Expr, Item, Stmt};
-use wado_compiler::semantics::Semantics;
-use wado_compiler::symbol::{Symbol, SymbolKind};
-use wado_compiler::unparse;
+use wado_compiler_frontend::ast::{self, AstId, AstVisitor, Expr, Item, Stmt};
+use wado_compiler_frontend::semantics::Semantics;
+use wado_compiler_frontend::symbol::{Symbol, SymbolKind};
+use wado_compiler_frontend::unparse;
 
 use crate::ast_search::{self, FirstMatch};
 use crate::diagnostics::{Position, Range};

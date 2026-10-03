@@ -1,0 +1,904 @@
+//! Optimization passes for Wado NIR, rewriting the [`NirPackage`] in place. Each
+//! pass documents itself in its own module under `optimize/`; the sequence of
+//! `run_pass` calls below is the only statement of what runs in what order.
+//! `docs/optimizer.md` is the reader-facing inventory, and WEP 2026-06-05 covers
+//! the two-tier NIR, the rewrite engine, and the gate.
+
+mod aggregate_forward;
+mod alias;
+mod arena_query;
+mod bounds;
+mod census;
+mod clone_forward;
+mod closure_devirt;
+mod cold_outline;
+mod condition_implication;
+mod const_branch_prune;
+mod const_folding;
+mod const_object_globalization;
+mod container_sroa;
+mod copy_prop;
+mod dae;
+pub mod dce;
+mod drop_value;
+mod drve;
+mod elide_box_local;
+mod elide_local;
+mod extract;
+mod field_scalarize;
+mod gate;
+mod heap_effect;
+mod identity_cast;
+mod if_chain_to_match;
+mod inline;
+mod known_case;
+mod labeled_block_fusion;
+mod let_block_flatten;
+mod licm;
+mod loop_version_bce;
+mod match_to_bitset;
+mod match_to_switch;
+mod mod_ref;
+pub(crate) mod multi_value_param;
+pub(crate) mod multi_value_return;
+mod param_spec;
+mod peephole;
+mod ref_elim;
+mod scalar_forward;
+mod select_lowering;
+mod shared_escape;
+mod sroa;
+mod sroa_param;
+pub(crate) mod sroa_variant_return;
+mod store_load_forward;
+mod string_push;
+mod tmpl_hoist;
+mod tuple_projection;
+mod value_copy;
+mod value_copy_demote;
+
+// The promoted-read audit is the only reader, and it is debug-only.
+#[cfg(debug_assertions)]
+use crate::hashmap::IndexSet;
+#[cfg(debug_assertions)]
+use crate::nir_arena::{NodeRef, PatKind, StmtKind};
+#[cfg(debug_assertions)]
+use crate::trace::filter;
+
+use const_branch_prune::{prune_constant_branches, prune_template_block_wrappers};
+use const_folding::{fold_constants, fold_constants_all};
+use const_object_globalization::globalize_const_objects;
+use container_sroa::scalarize_containers;
+use copy_prop::propagate_copies;
+use dae::eliminate_dead_arguments;
+use dce::{
+    analyze_dce, filter_bytes_literals, filter_string_literals,
+    remove_unreachable_closure_functors, remove_unreachable_functions, remove_unreachable_globals,
+    remove_unreachable_types, unhoist_unobserved_globals,
+};
+use drve::eliminate_dead_return_values;
+use field_scalarize::scalarize_hot_fields;
+use inline::inline_functions;
+use licm::apply_licm;
+use match_to_switch::{match_to_switch_all, match_to_switch_globals};
+use mod_ref::summarize;
+use scalar_forward::forward_scalar_temps;
+use sroa::scalar_replace_aggregates;
+use sroa_param::sroa_single_field_parameters;
+use sroa_variant_return::scalarize_variant_returns;
+use store_load_forward::forward_stores_to_loads;
+use tmpl_hoist::hoist_template_buffers;
+use value_copy_demote::demote_value_copies;
+
+use extract::FreezePhase;
+use gate::{FunctionGate, GatedPass};
+use heap_effect::HeapEffectsCache;
+
+use crate::codegen_flags::OptLevel;
+use crate::compiler_host::SpanEmitter;
+use crate::compiler_trace;
+use crate::nir_package::NirPackage;
+
+/// What a caller may override in the optimizer, each `None` meaning "whatever
+/// the level decides".
+#[derive(Debug, Clone, Copy, Default)]
+pub struct OptOverrides {
+    pub inline_threshold: Option<usize>,
+    pub inline_growth: Option<u32>,
+    pub iterations: Option<u32>,
+}
+
+/// Configuration for optimization passes
+struct OptConfig {
+    /// Number of fixed-point iterations
+    iterations: u32,
+    /// What one copy of a callee may cost to run, for it to be worth splicing.
+    inline_threshold: usize,
+    /// Percent the inliner may grow the whole unit by, however many copies the
+    /// threshold would otherwise admit, or `None` to leave it unbounded. See
+    /// [`inline::InlineBudget`].
+    inline_growth: Option<u32>,
+    /// Whether exhausting `iterations` is a defect rather than a budget — true
+    /// for the caps `-O2`/`-Os` and `-O3` size so the loop converges under them.
+    cap_is_defect: bool,
+}
+
+/// Longest string literal materialized as a constant `array.new_fixed<u8>`
+/// rather than a passive data segment; above it the compact repr is kept and the
+/// global stays lazy. `-O3` trades code size for more eager string globals,
+/// while `-Os` and the rest stay conservative. A global hoisted by
+/// `const_object_globalization` overrides it via `prefer_fixed_string_repr`.
+fn string_inline_max_bytes(opt_level: OptLevel) -> usize {
+    match opt_level {
+        OptLevel::O3 => 8,
+        _ => NirPackage::DEFAULT_STRING_INLINE_MAX_BYTES,
+    }
+}
+
+/// The optimizer's entry point. Every level runs DCE, which cuts codegen work
+/// sharply; `O1` and above run it twice, before the fixed-point loop to shrink
+/// the working set and after it to sweep what the loop made dead. What runs in
+/// between is the pass sequence below, scaled by [`OptLevel`] and by whatever
+/// `opt` overrides of that level's defaults.
+pub fn optimize(
+    mut project: NirPackage,
+    opt_level: OptLevel,
+    opt: OptOverrides,
+    profiler: &dyn SpanEmitter,
+) -> NirPackage {
+    let OptOverrides {
+        inline_threshold,
+        inline_growth,
+        iterations: opt_iterations,
+    } = opt;
+    // Decide the short-string inline threshold once, from the opt level. Read
+    // by `wir_build` (`translate_packed_array` / `register_literal_data`) to
+    // pick a constant `array.new_fixed<u8>` repr for strings at or below it —
+    // which lets a constant string global promote to an eager Wasm constant.
+    project.string_inline_max_bytes = string_inline_max_bytes(opt_level);
+    census::report(&project, "post-lower");
+    // One table for the whole of optimization: a descriptor names a function and
+    // says nothing about its body, so clearing bodies leaves every entry current
+    // and only an appended function needs a new one.
+    let mut descriptors = dce::DescriptorCache::default();
+    match opt_level {
+        OptLevel::O0 => {
+            // No optimizations, but still run DCE to reduce codegen work
+            run_dce(&mut project, profiler, &mut descriptors);
+            // Dense-int / dense-enum `Match` → `Switch` is a codegen-
+            // friendly late lowering. The translator emits a canonical
+            // `Match` (see WEP 2026-05-11). Materialising `Switch` here
+            // — even at -O0 — keeps wir_build's `br_table` path live
+            // for dense matches when the optimizer loop is skipped.
+            // The synthesised default-arm call resolves to
+            // `builtin::unreachable`, which lowers to Wasm
+            // `unreachable` directly and is never DCE'd, so ordering
+            // around DCE is irrelevant.
+            run_pass("nir/match_to_switch", &mut project, profiler, |p| {
+                // O0 skips the loop/gate entirely; lower every function.
+                match_to_switch_all(p)
+            });
+        }
+        OptLevel::O1 => {
+            let config = OptConfig {
+                iterations: opt_iterations.unwrap_or(2),
+                inline_threshold: inline_threshold.unwrap_or(4),
+                inline_growth,
+                cap_is_defect: false,
+            };
+            // Early DCE: remove unreachable functions/types before optimization
+            // to reduce the working set for subsequent passes
+            run_dce(&mut project, profiler, &mut descriptors);
+            run_optimization_passes(&mut project, &config, profiler, &mut descriptors);
+            // Final DCE: clean up code made dead by optimizations
+            run_dce(&mut project, profiler, &mut descriptors);
+        }
+        OptLevel::O2 | OptLevel::Os => {
+            let config = OptConfig {
+                // Every source in the tree settles by 8, so 15 is slack.
+                iterations: opt_iterations.unwrap_or(15),
+                // Threshold 16, best of three alternating whole-suite runs
+                // against 13: the cbor serialize rows gain 11-13% and eight
+                // more 3-7%, against json-catalog ser at -3%. That row turns
+                // first as the threshold climbs — -8.2% at 20, -35.3% at 26 —
+                // so 16 costs it least while still buying the serde rows.
+                // Below 13 every row is worse.
+                //
+                // That sweep raised the threshold uniformly, so it does not
+                // describe this gate. `inline::net_cost` subtracts the call site
+                // a splice removes, making it `gross - (CALL + params) <= 16`,
+                // which admits a four-parameter callee at gross 22. A credit
+                // proportional to what calling costs is a different regime: it
+                // buys json-catalog ser 11.9% on release, where a uniform 20
+                // cost that row 8.2%. 16 is inherited from the sweep, not
+                // re-derived under it.
+                inline_threshold: inline_threshold.unwrap_or(16),
+                inline_growth,
+                cap_is_defect: opt_iterations.is_none(),
+            };
+            run_dce(&mut project, profiler, &mut descriptors);
+            run_optimization_passes(&mut project, &config, profiler, &mut descriptors);
+            run_dce(&mut project, profiler, &mut descriptors);
+            if opt_level == OptLevel::Os {
+                project.strip_names = true;
+            }
+        }
+        OptLevel::O3 => {
+            // The heaviest source in the tree — the Gale-generated SQLite parser
+            // in `benchmark/sqlite_parse` — converges in 6, so 20 is slack.
+            //
+            // Threshold 26 is the top of what shakes NIR into new shapes for
+            // its cost: on the Gale CSS3 parser 28, 30 and 32 all emit ~959KB
+            // in ~13.5s off the same candidate set, while 26 emits 719KB in
+            // 10.7s. The corpus barely reads the knob (24 → 32 moves its
+            // compile CPU 4.6%), so the cost is felt compiling one heavy file.
+            let config = OptConfig {
+                iterations: opt_iterations.unwrap_or(20),
+                inline_threshold: inline_threshold.unwrap_or(26),
+                inline_growth,
+                cap_is_defect: opt_iterations.is_none(),
+            };
+            run_dce(&mut project, profiler, &mut descriptors);
+            run_optimization_passes(&mut project, &config, profiler, &mut descriptors);
+            run_dce(&mut project, profiler, &mut descriptors);
+        }
+    }
+
+    // FieldAccess promotion: scalar fields over stable receivers freeze to
+    // operands (born-as-operands), so store-load forwarding / cse become
+    // operand reads. Runs after the optimization loop (so the struct shape is
+    // post-SROA) but BEFORE select_lowering / multi_value_return, which rewrite
+    // the body into WIR-shaped forms the value-graph build would misread. The
+    // two soundness gates (scalar-field + receiver-availability) and the WIR
+    // const-local propagation keep it default-safe.
+    if opt_level != OptLevel::O0 {
+        run_pass("nir/promote_fields", &mut project, profiler, |p| {
+            extract::freeze_pure_arith(p, /* include_fields */ true, FreezePhase::Terminal)
+        });
+        // Re-run the structural BCE matcher now that `promote_fields` froze
+        // invariant bounds (`arr.used`) into constant operands the in-loop
+        // cond-impl could not see; pair with `const_branch_prune` so the
+        // now-`false` checks' panic blocks are removed. Must precede
+        // `select_lowering`, which reshapes conditions out of matcher form.
+        run_bounded_fixpoint(
+            "nir/cond_impl_post_promote",
+            &mut project,
+            profiler,
+            |p, g| {
+                condition_implication::eliminate_post_promote(p, g) | prune_constant_branches(p, g)
+            },
+        );
+        // Loop-versioned BCE: a check whose bound is loop-invariant but not
+        // statically related to the loop guard (the relation lives at the
+        // call site) is deleted in a fast clone guarded by the runtime
+        // residual `H < B`; the original loop is kept as the slow arm. Runs
+        // after `cond_impl_post_promote` so only statically-unprovable
+        // checks are versioned, and before `select_lowering`, which
+        // reshapes conditions out of matcher form.
+        run_pass("nir/loop_version_bce", &mut project, profiler, |p| {
+            loop_version_bce::version_loops(p, &mut descriptors)
+        });
+    }
+
+    // Post-optimization rewrites: select lowering for branchless Wasm
+    run_pass("nir/select_lowering", &mut project, profiler, |p| {
+        select_lowering::select_lowering(p)
+    });
+
+    // The multi-value ABI, both sides. These run after every other
+    // transformation, so each sees the final NIR shape.
+    run_pass("nir/multi_value_return", &mut project, profiler, |p| {
+        multi_value_return::classify_multi_value_returns(p)
+    });
+
+    run_pass("nir/multi_value_param", &mut project, profiler, |p| {
+        multi_value_param::classify_multi_value_params(p)
+    });
+
+    // Freeze re-emittable pure arithmetic (constants / local reads composed by
+    // Binary/Unary/Cast) into operand values, materialised by the WIR
+    // extractor. Runs last so no binary-walking pass sees the promoted form;
+    // orphaned arith / local-read nodes become unreachable from the skeleton
+    // root and are simply not emitted. (Early arith promotion already ran before
+    // the loop; `FieldAccess` promotion ran above, after SROA.)
+    run_pass("nir/freeze_pure_arith", &mut project, profiler, |p| {
+        extract::freeze_pure_arith(p, /* include_fields */ false, FreezePhase::Terminal)
+    });
+
+    // The born-resolved invariant is now enforced by the type system: a call
+    // node's `func_id` is a non-optional `FuncId`, stamped at its synthesis site.
+
+    census::report(&project, "end-of-optimize");
+    #[cfg(debug_assertions)]
+    audit_promoted_reads(&project, "end-of-optimize");
+    project
+}
+
+fn run_dce(
+    project: &mut NirPackage,
+    profiler: &dyn SpanEmitter,
+    descriptors: &mut dce::DescriptorCache,
+) {
+    profiler.span_start("nir/dce");
+    // Removing callers exposes unobserved globals; removing their stores can
+    // empty an initializer and make its once guard unobserved in turn. Each
+    // round is a whole-module analysis, so it carries a span of its own.
+    let mut round = 0;
+    let analysis = loop {
+        let span = format!("nir/dce/round {round}");
+        profiler.span_start(&span);
+        let functions_before = live_bodies(project);
+        let globals_before = project.globals.len();
+        let mut summaries = summarize(project).0;
+        if unhoist_unobserved_globals(project, descriptors, &summaries) {
+            // A rewritten body only lost work, so its real summary shrank, and
+            // the stale table refuses deletions nothing has a reason to refuse.
+            summaries = summarize(project).0;
+        }
+        let analysis = analyze_dce(project, descriptors);
+        // Clearing an unreachable function's body leaves its entry describing
+        // the body it had, which no surviving body calls.
+        remove_unreachable_functions(project, &analysis.functions);
+        remove_unreachable_globals(project, &analysis.globals, &summaries);
+        let functions_after = live_bodies(project);
+        profiler.span_end(&span);
+        round += 1;
+        if functions_before == functions_after && globals_before == project.globals.len() {
+            break analysis;
+        }
+    };
+    filter_string_literals(project);
+    remove_unreachable_types(project, &analysis);
+    filter_bytes_literals(project);
+    remove_unreachable_closure_functors(project);
+    project.rebuild_variant_indices();
+    profiler.span_end("nir/dce");
+}
+
+/// How many functions still carry a body: what one DCE round is measured by,
+/// since removal clears the body and leaves the entry.
+fn live_bodies(project: &NirPackage) -> usize {
+    project
+        .functions
+        .iter()
+        .filter(|f| f.borrow().body.is_some())
+        .count()
+}
+
+/// Defensive iteration cap for the post-loop cleanup fixpoints
+/// (`cond_impl_post_promote`, `branch_prune_final`, `const_fold_post_global`).
+/// In practice these converge in a handful of rounds; the cap exists only so an
+/// oscillating rewrite pair cannot hang compilation, mirroring the bounded
+/// iteration count of the main fixed-point loop.
+const POST_LOOP_FIXPOINT_CAP: u32 = 100;
+
+/// Run `step` to a fixed point under [`run_pass`] instrumentation, bounded by
+/// [`POST_LOOP_FIXPOINT_CAP`]. Returns whether any round changed the IR; emits a
+/// debug diagnostic if the cap is reached (a sign of an oscillating rewrite).
+///
+/// `step` gets a gate of the fixpoint's own: round 0 processes every function,
+/// each later round processes what the one before rewrote and its neighbours.
+fn run_bounded_fixpoint(
+    name: &'static str,
+    project: &mut NirPackage,
+    profiler: &dyn SpanEmitter,
+    mut step: impl FnMut(&mut NirPackage, &mut FunctionGate) -> bool,
+) -> bool {
+    let mut gate = FunctionGate::new(project);
+    run_pass(name, project, profiler, |p| {
+        let mut changed = false;
+        for i in 0..POST_LOOP_FIXPOINT_CAP {
+            let round = format!("{name}/round {i}");
+            profiler.span_start(&round);
+            let stepped = step(p, &mut gate);
+            profiler.span_end(&round);
+            if !stepped {
+                break;
+            }
+            changed = true;
+            if i + 1 == POST_LOOP_FIXPOINT_CAP {
+                profiler.debug(&format!(
+                    "{name} hit the post-loop fixpoint cap ({POST_LOOP_FIXPOINT_CAP}); \
+                     stopping (possible oscillating rewrite)"
+                ));
+            }
+        }
+        changed
+    })
+}
+
+/// Run a single optimization pass with profiling, returning whether it changed anything.
+///
+/// Honours the `WADO_LIST_PASSES`, `WADO_DUMP_PASS_BEFORE`, and
+/// `WADO_DUMP_PASS_AFTER` developer-debug env vars (see `pass_dump`).
+fn run_pass(
+    name: &str,
+    project: &mut NirPackage,
+    profiler: &dyn SpanEmitter,
+    f: impl FnOnce(&mut NirPackage) -> bool,
+) -> bool {
+    pass_dump::list_pass(name);
+    if pass_dump::should_skip_pass(name) {
+        return false;
+    }
+    pass_dump::dump_nir(name, project, pass_dump::Phase::Before);
+    profiler.span_start(name);
+    let changed = f(project);
+    profiler.span_end(name);
+    pass_dump::dump_nir(name, project, pass_dump::Phase::After);
+    // Per pass this is a body walk per function, which doubles a debug compile.
+    // The always-on check runs once, at the end of `optimize`; this one earns
+    // its cost only when a developer wants the pass named.
+    #[cfg(debug_assertions)]
+    if filter().enabled(PROMOTED_READ_AUDIT) {
+        audit_promoted_reads(project, name);
+    }
+    changed
+}
+
+/// `WADO_TRACE` target that puts [`audit_promoted_reads`] at every pass
+/// boundary, so a break names the pass that caused it.
+#[cfg(debug_assertions)]
+const PROMOTED_READ_AUDIT: &str = "promoted_reads";
+
+/// Every local a promoted operand reads still has a definition. A pooled read
+/// is invisible to a skeleton walk, so a pass that drops the binding leaves the
+/// operand naming a slot that no longer exists, and the extractor emits a
+/// `local.get` of it.
+#[cfg(debug_assertions)]
+fn audit_promoted_reads(project: &NirPackage, pass: &str) {
+    for func in &project.functions {
+        let func = func.borrow();
+        let Some(body) = &func.body else {
+            continue;
+        };
+        let mut read: IndexSet<u32> = IndexSet::default();
+        body.promoted_local_reads(&mut read);
+        if read.is_empty() {
+            continue;
+        }
+        let mut bound: IndexSet<u32> = func.params.iter().map(|p| p.local_index).collect();
+        body.for_each_reachable_node(|node| match node {
+            NodeRef::Stmt(s) => {
+                if let StmtKind::Let { local_index, .. } = &body.stmts[s].kind {
+                    bound.insert(*local_index);
+                }
+            }
+            NodeRef::Pat(p) => {
+                if let PatKind::Binding { local_index, .. } = &body.pats[p].kind {
+                    bound.insert(*local_index);
+                }
+            }
+            NodeRef::Expr(_) | NodeRef::Block(_) => {}
+        });
+        for idx in &read {
+            assert!(
+                bound.contains(idx),
+                "[NIR] {pass}: a promoted operand of `{}` reads local {idx}, which has no \
+                 definition left",
+                func.name
+            );
+        }
+    }
+}
+
+pub mod pass_dump {
+    use std::sync::{Mutex, OnceLock};
+
+    use super::NirPackage;
+    use crate::hashmap::IndexMap;
+    use crate::nir_unparse::unparse_nir_package;
+    use crate::trace;
+    use crate::wir::WirPackage;
+    use crate::wir_unparse::unparse_wir;
+
+    #[derive(Copy, Clone)]
+    pub enum Phase {
+        Before,
+        After,
+    }
+
+    impl Phase {
+        fn env_var(self) -> &'static str {
+            match self {
+                Self::Before => "WADO_DUMP_PASS_BEFORE",
+                Self::After => "WADO_DUMP_PASS_AFTER",
+            }
+        }
+
+        fn label(self) -> &'static str {
+            match self {
+                Self::Before => "before",
+                Self::After => "after",
+            }
+        }
+    }
+
+    fn dump_before_list() -> &'static Vec<String> {
+        static LIST: OnceLock<Vec<String>> = OnceLock::new();
+        LIST.get_or_init(|| {
+            trace::parse_env_list(std::env::var(Phase::Before.env_var()).ok().as_deref())
+        })
+    }
+
+    fn dump_after_list() -> &'static Vec<String> {
+        static LIST: OnceLock<Vec<String>> = OnceLock::new();
+        LIST.get_or_init(|| {
+            trace::parse_env_list(std::env::var(Phase::After.env_var()).ok().as_deref())
+        })
+    }
+
+    fn list_passes_enabled() -> bool {
+        static FLAG: OnceLock<bool> = OnceLock::new();
+        *FLAG.get_or_init(|| std::env::var("WADO_LIST_PASSES").is_ok())
+    }
+
+    fn skip_list() -> &'static Vec<String> {
+        static LIST: OnceLock<Vec<String>> = OnceLock::new();
+        LIST.get_or_init(|| trace::parse_env_list(std::env::var("WADO_SKIP_PASS").ok().as_deref()))
+    }
+
+    /// Returns true if `name` matches one of the comma-separated entries in
+    /// the `WADO_SKIP_PASS` env var. Each entry is matched against the bare
+    /// pass name (e.g., `nir/ref_elim`) and against `<pass>@<n>` where `<n>`
+    /// is the 1-based occurrence number — letting bisection target a
+    /// specific iteration (e.g., `nir/ref_elim@2`).
+    pub fn should_skip_pass(name: &str) -> bool {
+        static COUNTS: OnceLock<Mutex<IndexMap<String, u32>>> = OnceLock::new();
+        let list = skip_list();
+        if list.is_empty() {
+            return false;
+        }
+        let mut counts = COUNTS
+            .get_or_init(|| Mutex::new(IndexMap::default()))
+            .lock()
+            .unwrap();
+        let n = counts.entry(name.to_string()).or_insert(0);
+        *n += 1;
+        let scoped = format!("{name}@{n}");
+        list.iter().any(|s| s == name || s == &scoped)
+    }
+
+    fn matches(name: &str, phase: Phase) -> bool {
+        let list = match phase {
+            Phase::Before => dump_before_list(),
+            Phase::After => dump_after_list(),
+        };
+        list.iter().any(|n| n == name)
+    }
+
+    pub fn list_pass(name: &str) {
+        if list_passes_enabled() {
+            trace::write(&format!("[pass] {name}"));
+        }
+    }
+
+    pub fn dump_nir(name: &str, project: &NirPackage, phase: Phase) {
+        if matches(name, phase) {
+            let label = phase.label();
+            trace::write(&format!("=== NIR {label} {name} ==="));
+            trace::write(&unparse_nir_package(project));
+            trace::write(&format!("=== end NIR {label} {name} ==="));
+        }
+    }
+
+    pub fn dump_wir(name: &str, module: &WirPackage, phase: Phase) {
+        if matches(name, phase) {
+            let label = phase.label();
+            trace::write(&format!("=== WIR {label} {name} ==="));
+            trace::write(&unparse_wir(module));
+            trace::write(&format!("=== end WIR {label} {name} ==="));
+        }
+    }
+}
+
+/// Run the NIR passes to a fixed point, exiting early once an iteration changes
+/// nothing. Each pass's position is justified in the comment beside its call.
+fn run_optimization_passes(
+    project: &mut NirPackage,
+    config: &OptConfig,
+    profiler: &dyn SpanEmitter,
+    descriptor_cache: &mut dce::DescriptorCache,
+) {
+    // Before anything prices a body, so `nir/inline`'s cold discount describes
+    // the function it copies. Ahead of the gate too, so the call graph is built
+    // over the split shape rather than growing into it.
+    run_pass("nir/cold_outline", project, profiler, |p| {
+        cold_outline::outline_cold_regions(p, descriptor_cache)
+    });
+    // Per-function dirty-set gate. Every loop pass is gate-aware:
+    // a per-function pass (`gated!`) skips functions unchanged since it last ran;
+    // an interprocedural pass scans all functions but reports exactly the ones
+    // it touched. Both go through `&mut gate`.
+    let mut gate = gate::FunctionGate::new(project);
+    // Keyed by `gate`'s edit counts, so each pass that reads heap effects
+    // re-solves only what the passes before it rewrote.
+    let mut heap_effects = HeapEffectsCache::default();
+    let mut param_spec_state = param_spec::ParamSpecState::default();
+    // Held across the loop: the budget anchors on the unit as the loop found it,
+    // so what the rounds add together stays bounded. See `InlineBudget`.
+    let mut inline_budget = inline::InlineBudget::new(config.inline_growth);
+    // Also held across the loop: released once the loop has converged with
+    // functions still held, which is when a hold can no longer pay.
+    let mut inline_holds = inline::InlineHolds::default();
+    // Dense `Match` → `Switch` in global initializer bodies. Functions are
+    // lowered by `MatchToSwitchRule` inside the unified peephole session; the
+    // function-level loop never mutates global initializer bodies, so a single
+    // pass over globals here is equivalent to running it each iteration.
+    run_pass("nir/match_to_switch_globals", project, profiler, |p| {
+        match_to_switch_globals(p)
+    });
+    // Operand-promotion keystone. Pure values are
+    // frozen into `Operand::Value` before the value passes, so the passes read
+    // operands (`engine.operand_value`) instead of rebuilding the value graph.
+    // Arith only here (before the loop); `FieldAccess` promotion runs late (after
+    // the SROA passes), since SROA scalarizes the structs a promoted `FieldAccess`
+    // would reference. See the late call in `optimize`.
+    run_pass("nir/promote_pure_values_early", project, profiler, |p| {
+        extract::freeze_pure_arith(p, /* include_fields */ false, FreezePhase::Early)
+    });
+    // What changed in the iteration just run, and so the convergence flag:
+    // empty ends the loop, non-empty after it names what held the loop open.
+    let mut iter_changed: Vec<&'static str> = Vec::new();
+    let mut i = 0;
+    // The cap sizes one convergence. Releasing the inline holds opens a second
+    // run, which gets the cap again: a program that takes most of it to
+    // converge once would otherwise hit it on the rounds the release adds.
+    let mut limit = config.iterations;
+    while i < limit {
+        i += 1;
+        profiler.span_start(&format!("nir/iteration {i}"));
+        iter_changed.clear();
+        macro_rules! record {
+            ($name:expr, $c:expr) => {{
+                if $c {
+                    iter_changed.push($name);
+                }
+            }};
+        }
+        // A gate-aware pass: receives `&mut gate`, skips functions it has
+        // already processed at their current revision, and reports its own
+        // per-function changes.
+        //
+        // A drained column skips the round at the schedule, not inside the
+        // pass. A pass builds its whole-program state before it reaches its
+        // first function, and a drained column means no function changed since
+        // it last ran, so that round would rebuild the state and rewrite
+        // nothing.
+        macro_rules! gated {
+            (@run $name:expr, $id:expr, $pass:expr) => {
+                run_pass($name, project, profiler, |p| {
+                    gate.any_pending($id, p.functions.len()) && $pass(p, &mut gate)
+                })
+            };
+            ($name:expr, $id:expr, $pass:expr) => {{
+                record!($name, gated!(@run $name, $id, $pass));
+            }};
+        }
+        // Reports changes to the gate but not to `iter_changed` — must never
+        // keep the loop alive on its own.
+        macro_rules! gate_only {
+            ($name:expr, $id:expr, $pass:expr) => {{
+                gated!(@run $name, $id, $pass);
+            }};
+        }
+        // Container SROA must run before inline in each iteration: inline
+        // expands `IndexValue::index_value` and friends into raw
+        // `builtin::array_get_value` + field-access pairs, after which the method-call
+        // shape this pass keys on is gone. Running early also catches the `[]`
+        // desugaring while its inner `Constructor` is still a plain `Call`.
+        gated!(
+            "nir/container_sroa",
+            GatedPass::ContainerSroa,
+            scalarize_containers
+        );
+        // Peephole engine, pre-inline run — several rules over one worklist; see
+        // `optimize/peephole.rs`. Before inline so `string_push` still sees the
+        // `buf.push_str("0.")` shape, which the inliner's expansion would erase.
+        // Hosts `MatchToSwitchRule` (`include_match = true`), so `inline` copies
+        // `Switch`-shaped bodies, and `const_branch_prune`.
+        gated!("nir/peephole", GatedPass::PeepholePre, |p, g| {
+            peephole::run_peephole(p, g, true, &mut heap_effects)
+        });
+        // Demote deep `$value_copy$T` copies of `List<E>` to shallow spine
+        // copies when the binding's elements are provably never mutated through
+        // it. Runs before `nir/inline`, where the `$value_copy$T(arg)` shape it
+        // matches disappears. (Copies are inserted precisely at the lower phase,
+        // so there is no elision pass to sequence against.)
+        gate_only!(
+            "nir/value_copy_demote",
+            GatedPass::ValueCopyDemote,
+            |p, g| demote_value_copies(p, g, descriptor_cache, &mut heap_effects)
+        );
+        // Single-field parameter SROA: rewrite functions whose parameter type
+        // is `&S` for a single-field struct (`Box<T>` being the canonical
+        // case) to take the inner scalar directly. Runs before `nir/inline`
+        // so the inliner sees post-SROA signatures and can propagate the
+        // scalar through call chains. NIR analog of WIR's `sroa_param`; see
+        // `optimize/sroa_param.rs`.
+        gated!(
+            "nir/sroa_param",
+            GatedPass::SroaParam,
+            sroa_single_field_parameters
+        );
+        // Variant returns become tuple returns: `Result<T, E>` -> `[tag, slots]`.
+        // Runs beside `sroa_param` and before `nir/inline` for the same reason —
+        // the inliner, and every value pass after it, then sees an integer tag
+        // and plain locals where a boxed variant used to be opaque. The Wasm ABI
+        // is left to `multi_value_return`, which already flattens a destructured
+        // tuple return.
+        gated!(
+            "nir/sroa_variant_return",
+            GatedPass::SroaVariantReturn,
+            scalarize_variant_returns
+        );
+        // `inline` self-reports the callers it modified to the gate (no
+        // `bump_all`); it only mutates caller bodies, so the gated passes need
+        // re-examine just those (and their neighbours).
+        gated!("nir/inline", GatedPass::Inline, |p, g| inline_functions(
+            p,
+            config.inline_threshold,
+            &mut inline_budget,
+            &mut inline_holds,
+            g,
+            descriptor_cache,
+        ));
+        // Peephole engine, post-inline run. `elide_local` runs again over
+        // inline's freshly dead bindings. No `MatchToSwitchRule` — the
+        // pre-inline run lowered every reachable `Match` already.
+        gated!("nir/peephole", GatedPass::PeepholePost, |p, g| {
+            peephole::run_peephole(p, g, false, &mut heap_effects)
+        });
+        // `labeled_block_fusion` moved into the post-inline `nir/peephole`
+        // session as `LabeledBlockFusionRule`; see `optimize/peephole.rs`.
+        gated!(
+            "nir/let_block_flatten",
+            GatedPass::LetBlockFlatten,
+            let_block_flatten::flatten_let_blocks
+        );
+        gated!("nir/sroa", GatedPass::Sroa, scalar_replace_aggregates);
+        gated!("nir/copy_prop", GatedPass::CopyProp, |p, g| {
+            propagate_copies(p, g, &mut heap_effects)
+        });
+        // DAE / DRVE after `copy_prop` shrinks signatures and discards unused
+        // let-bindings before `const_fold` revisits the simplified body.
+        // Running here (rather than at WIR level) lets `inline` see the slimmer
+        // signatures on the next iteration and lets `dce` clean up the freshly
+        // dead computation in the same fixed-point loop. (Write-only local
+        // elimination moved into the unified `nir/peephole` pass above.)
+        gated!("nir/dae", GatedPass::Dae, eliminate_dead_arguments);
+        gated!("nir/drve", GatedPass::Drve, eliminate_dead_return_values);
+        // The flow-sensitive half of constant folding — env-bound locals,
+        // forwarded struct fields, immutable-global reads, constant-branch
+        // collapse — where the env-free half runs in `nir/peephole`. It absorbs
+        // `field_forward`, which used to alternate one statement per round and
+        // left `-O3` non-convergent. No `cse` pass: hash-consing already shares.
+        gated!("nir/const_fold", GatedPass::ConstFold, fold_constants);
+        // Trivial-block / dead-statement pruning moved into the pre-inline
+        // `nir/peephole` run above; the post-loop `branch_prune_final` and the
+        // post-globalization `const_fold_post_global` keep their own engine
+        // sessions (`prune_template_block_wrappers` / `prune_constant_branches`).
+        // After `const_fold`, so a caller's config struct literal already holds
+        // folded constants; inside the loop, so a constant a later pass exposes
+        // is carried down its whole call chain too. Its column only skips a
+        // round no function changed before: a per-function skip would trust a
+        // summary taken before a callee gained a write, an unsound substitution
+        // (see its module doc).
+        gated!("nir/param_spec", GatedPass::ParamSpec, |p, g| {
+            param_spec::specialize_const_params(p, &mut param_spec_state, g, descriptor_cache)
+        });
+        gated!("nir/licm", GatedPass::Licm, |p, g| {
+            apply_licm(p, g, &mut heap_effects)
+        });
+        gated!("nir/tmpl_hoist", GatedPass::TmplHoist, |p, g| {
+            hoist_template_buffers(p, g, &mut heap_effects)
+        });
+        profiler.span_end(&format!("nir/iteration {i}"));
+        compiler_trace!(
+            "opt_loop",
+            "iter {i:>3}: changed_by = [{}]",
+            iter_changed.join(", ")
+        );
+        if iter_changed.is_empty() {
+            if inline_holds.release(&mut gate) {
+                compiler_trace!("opt_loop", "iter {i:>3}: inline holds released");
+                limit = i + config.iterations;
+                continue;
+            }
+            profiler.debug(&format!("NIR optimizer converged after {i} iteration(s)"));
+            break;
+        }
+    }
+    if let Some(report) = inline_budget.report() {
+        profiler.debug(&report);
+    }
+    if !iter_changed.is_empty() {
+        // A run that stopped before the release still holds its callees, and
+        // each kept every call it makes. Nothing downstream would say so.
+        let held = match inline_holds.still_held() {
+            0 => String::new(),
+            n => format!("; {n} function(s) still held by the inliner"),
+        };
+        let report = format!(
+            "NIR optimizer hit the {limit}-iteration cap without converging; \
+             still changing: [{}]{held}",
+            iter_changed.join(", "),
+        );
+        profiler.debug(&report);
+        // A pass reported a change it did not make, or is taking one step per
+        // round where one walk reaches its fixpoint. A release build pays it.
+        debug_assert!(!config.cap_is_defect, "{report}");
+    }
+    // Hot Field Scalarization runs once after the main loop converges.
+    // Running inside the loop would cause the write-back/re-read stmts it
+    // inserts to be counted as new field accesses on the next iteration,
+    // triggering spurious re-scalarization of the same fields.
+    run_pass("nir/field_scalarize", project, profiler, |p| {
+        scalarize_hot_fields(p, &mut gate, &mut heap_effects)
+    });
+    // Forward the scalarization shadow inits (`$hfs_x = obj.f`) to constants.
+    // `field_scalarize` runs after the fixed-point loop, so no in-loop
+    // `store_load_forward` sees its shadow reads; this once-over folds an
+    // `obj.f` whose field the ValueGraph still knows (`obj` built from a
+    // constant literal upstream) into the literal, before globalization. Runs
+    // before `const_object_globalization` so it never sees the nullable
+    // `GlobalVarGet`s globalization emits.
+    // Folding and pruning belong in the same loop: a forward decides a capacity
+    // guard, and it is *pruning* that guard which removes the call whose heap
+    // bump hides the next one. A run of appends folds one guard per pass
+    // otherwise, and its buffer's length stays unknown from the second on.
+    run_bounded_fixpoint(
+        "nir/store_load_forward_post_scalarize",
+        project,
+        profiler,
+        |p, g| {
+            forward_stores_to_loads(p, g) | fold_constants_all(p, g) | prune_constant_branches(p, g)
+        },
+    );
+    // Final cleanup: flatten any `$tmpl:` labeled blocks the fixpoint
+    // preserved as anchors for `tmpl_hoist`. `tmpl_hoist` has finished
+    // by now (it runs inside the fixpoint loop), so the wrappers are
+    // pure overhead — peel them so codegen emits the inner straight-line
+    // body directly. Iterate until convergence because one flatten can
+    // expose another (e.g. single-stmt Block collapse on a freshly
+    // produced `Block { Expr(tail) }`).
+    run_bounded_fixpoint("nir/branch_prune_final", project, profiler, |p, g| {
+        prune_template_block_wrappers(p, g)
+    });
+    // Body globalization: hoist constant, read-only aggregate `let` bindings
+    // into shared immutable module globals so they build once at instantiation
+    // (WEP-2026-05-31). Runs once after the fixpoint converges, on the stable
+    // post-optimization shape, so the read-only gate and the const-aggregate
+    // recognizer see fully-inlined / array-literal-materialized bindings. The
+    // inline `GlobalVarSet`s it emits are promoted to eager Wasm constants by
+    // `wir_optimize::const_global`; the final `run_dce` reclaims the dead
+    // binding locals.
+    run_pass("nir/const_object_globalization", project, profiler, |p| {
+        globalize_const_objects(p)
+    });
+    // Clean up after globalization: fold the `global:X.used` length reads it
+    // exposes (recovered via `const_folding`'s `GlobalFieldEnv`) and prune the
+    // now-constant bounds-check branches, so a hoisted constant-index array
+    // keeps the bounds-check elimination it had as a local. Only `const_fold` /
+    // `branch_prune` run here — re-entering the full loop is unsafe, since the
+    // nullable `GlobalVarGet`s globalization emits are not meant to flow back
+    // through `value_copy` / `sroa` (which is why globalization runs last).
+    run_bounded_fixpoint("nir/const_fold_post_global", project, profiler, |p, g| {
+        fold_constants_all(p, g) | prune_constant_branches(p, g)
+    });
+    // Forward the inliner's leftover single-use pure-scalar value-parameter
+    // temps into their uses. Runs last, after every scalarization / globalization
+    // recognizer has matched its shape, so it only strips dead-weight locals.
+    run_pass("nir/scalar_forward", project, profiler, |p| {
+        forward_scalar_temps(p, &mut gate)
+    });
+    // Forward read-only clones that inlining + const-object globalization leave
+    // behind (`array_clone(&array_clone(&$const_obj))` into a read-only
+    // binding). Runs last: `const_object_globalization` — which creates the
+    // const global the residual clone reads — is itself a post-loop pass, so the
+    // flat `let t = array_clone(&global.field)` shape only exists here, after the
+    // pre-inline value-copy elider that cannot reach it has long run.
+    run_pass("nir/clone_forward", project, profiler, |p| {
+        clone_forward::forward_redundant_clones(p, descriptor_cache)
+    });
+}

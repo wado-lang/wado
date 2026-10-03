@@ -1,4 +1,4 @@
-//! Go-to-definition, powered by `wado_compiler::semantics`.
+//! Go-to-definition, powered by `wado_compiler_frontend::semantics`.
 //!
 //! Resolution flow:
 //! 1. Reuse the engine's [`Semantics`] snapshot.
@@ -9,9 +9,9 @@
 //! 5. Translate the resulting `AstId` into a [`DefinitionResult`].
 
 use serde::{Deserialize, Serialize};
-use wado_compiler::ast::{self, AstVisitor, Item, Literal, Module, UseItem};
-use wado_compiler::name::resolve_import_with_entry;
-use wado_compiler::token::Span;
+use wado_compiler_frontend::ast::{self, AstVisitor, Item, Literal, Module, UseItem};
+use wado_compiler_frontend::name::resolve_import_with_entry;
+use wado_compiler_frontend::token::Span;
 
 use crate::ast_search::{self, FirstMatch};
 use crate::diagnostics::{Position, Range};

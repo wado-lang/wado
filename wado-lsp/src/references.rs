@@ -1,4 +1,4 @@
-//! Find-references, powered by `wado_compiler::semantics`.
+//! Find-references, powered by `wado_compiler_frontend::semantics`.
 //!
 //! Resolution flow mirrors `definition.rs`:
 //! 1. Run `semantics` to produce a fully-resolved snapshot.
@@ -46,7 +46,7 @@ pub(crate) fn find_references(
 #[must_use]
 pub(crate) fn references_for_def(
     ctx: &QueryContext,
-    def_key: wado_compiler::ast::AstId,
+    def_key: wado_compiler_frontend::ast::AstId,
     include_declaration: bool,
 ) -> Vec<ReferenceLocation> {
     let mut out = Vec::new();
@@ -71,7 +71,7 @@ pub(crate) fn references_for_def(
 
 pub(crate) fn declaration_location(
     ctx: &QueryContext,
-    def_id: wado_compiler::ast::AstId,
+    def_id: wado_compiler_frontend::ast::AstId,
 ) -> Option<ReferenceLocation> {
     let span = ctx.declaration_span(def_id)?;
     // Module-level symbols carry a symbol-table entry; methods / associated
@@ -89,7 +89,7 @@ pub(crate) fn declaration_location(
 
 pub(crate) fn use_site_location(
     ctx: &QueryContext,
-    use_id: wado_compiler::ast::AstId,
+    use_id: wado_compiler_frontend::ast::AstId,
 ) -> Option<ReferenceLocation> {
     let span = ctx.sem.span_of_id(use_id)?;
     let uri = module_uri(ctx.entry(), ctx.sem.module_of_id(use_id)?, ctx.uri)?;

@@ -2,7 +2,7 @@
 //! Wado symbol notation (`MODULE#SYMBOL`) to a definition location.
 
 use std::assert_matches;
-use wado_compiler::symbol_notation;
+use wado_compiler_frontend::symbol_notation;
 use wado_lsp::test_support::MapHost;
 use wado_lsp::{DefinitionResult, DocumentHighlight, Engine, ReferenceLocation, SymbolQueryError};
 

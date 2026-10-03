@@ -1,11 +1,11 @@
 use indexmap::{IndexMap, IndexSet};
-use wado_compiler::ast::{self, AstId, AstVisitor, Expr, Item, Type};
-use wado_compiler::lexer::{lex, lex_interpolation};
-use wado_compiler::module_source::ModuleSource;
-use wado_compiler::semantics::Semantics;
-use wado_compiler::symbol::{Symbol, SymbolKind};
-use wado_compiler::syntax::KeywordCategory;
-use wado_compiler::token::{Position, Span, TemplateTokenPart, Token, TokenKind};
+use wado_compiler_frontend::ast::{self, AstId, AstVisitor, Expr, Item, Type};
+use wado_compiler_frontend::lexer::{lex, lex_interpolation};
+use wado_compiler_frontend::module_source::ModuleSource;
+use wado_compiler_frontend::semantics::Semantics;
+use wado_compiler_frontend::symbol::{Symbol, SymbolKind};
+use wado_compiler_frontend::syntax::KeywordCategory;
+use wado_compiler_frontend::token::{Position, Span, TemplateTokenPart, Token, TokenKind};
 
 use crate::text::{LineIndex, PositionEncoding};
 
@@ -72,7 +72,7 @@ pub mod token_modifier {
 pub const TOKEN_MODIFIERS: &[&str] = &["declaration", "definition", "readonly", "defaultLibrary"];
 
 /// A language constant: `true` / `false` / `null` / `self`, the words
-/// `wado_compiler::syntax` files under [`KeywordCategory::Constant`].
+/// `wado_compiler_frontend::syntax` files under [`KeywordCategory::Constant`].
 ///
 /// LSP has no `constant` token type. `variable` + `readonly` +
 /// `defaultLibrary` is its standard spelling for one, and is what editors map
@@ -156,7 +156,9 @@ pub fn classify_all(source: &str, sem: Option<&Semantics>) -> Vec<ClassifiedToke
     // Reuse the snapshot's parse when there is one, so the common path does not
     // lex and parse the entry source twice.
     let snapshot_ast = sem.and_then(|s| s.modules.get(&s.entry_module_source));
-    let owned_parse = snapshot_ast.is_none().then(|| wado_compiler::parse(source));
+    let owned_parse = snapshot_ast
+        .is_none()
+        .then(|| wado_compiler_frontend::parse(source));
     let ast = snapshot_ast
         .or_else(|| owned_parse.as_ref().map(|p| &p.ast))
         .expect("snapshot AST or freshly parsed AST is present");
@@ -221,7 +223,7 @@ fn classify_into(
 ///
 /// Everything outside an interpolation is string, a `:spec` tail mutes as a
 /// comment, and the expression classifies like any other code:
-/// [`wado_compiler::lexer::lex_interpolation`] is the call the parser makes to
+/// [`wado_compiler_frontend::lexer::lex_interpolation`] is the call the parser makes to
 /// build the AST, so the spans already sit on the file and the symbol map,
 /// keyed by byte start, resolves them for free.
 fn expand_template(
@@ -835,7 +837,11 @@ mod tests {
     /// classification path can be exercised in unit tests.
     fn sem_of(source: &str) -> Semantics {
         let host = MapHost::single("/test.wado", source);
-        futures::executor::block_on(wado_compiler::semantics(source, &host, Some("/test.wado")))
+        futures::executor::block_on(wado_compiler_frontend::semantics(
+            source,
+            &host,
+            Some("/test.wado"),
+        ))
     }
 
     /// Every `token_type` constant indexes its own name in the legend.

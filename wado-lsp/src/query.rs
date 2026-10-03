@@ -14,11 +14,11 @@
 //! [`QueryContext`] bundles them so feature functions take a single
 //! argument instead of threading the tuple by hand at every call site.
 
-use wado_compiler::Cursor;
-use wado_compiler::ast::AstId;
-use wado_compiler::module_source::ModuleSource;
-use wado_compiler::semantics::Semantics;
-use wado_compiler::token::Span;
+use wado_compiler_frontend::Cursor;
+use wado_compiler_frontend::ast::AstId;
+use wado_compiler_frontend::module_source::ModuleSource;
+use wado_compiler_frontend::semantics::Semantics;
+use wado_compiler_frontend::token::Span;
 
 use crate::diagnostics::{Position, Range};
 use crate::text::{self, LineIndex, PositionEncoding, lsp_position_to_line_col};
@@ -151,7 +151,7 @@ pub(crate) mod test_ctx {
     ) -> R {
         let uri = format!("file://{PATH}");
         let host = MapHost::single(PATH, source);
-        let sem = wado_compiler::semantics(source, &host, Some(PATH)).await;
+        let sem = wado_compiler_frontend::semantics(source, &host, Some(PATH)).await;
         f(&QueryContext::new(&sem, source, &uri, encoding))
     }
 }

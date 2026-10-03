@@ -1,0 +1,1271 @@
+//! CM Binding Synthesis: TIR binding functions for Component Model boundary
+//! crossing, each lowering Wado values to the CM flat ABI and lifting flat
+//! results back. Runs after `effect_check` and before monomorphize, so the
+//! bindings go through monomorphization, lowering and optimization like any
+//! other function. Design: `docs/wep-2026-02-15-cm-binding-synthesis.md`.
+
+mod callback_export;
+mod cm_free;
+mod export_adapter;
+mod import_adapter;
+mod lift;
+mod lower;
+mod resource_rewrite;
+mod task_return;
+mod type_fixup;
+pub mod types;
+
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use crate::hashmap::{IndexMap, IndexSet};
+
+use crate::ast::Type;
+use crate::canonical::{CanonicalIntrinsic, CmPayloadType};
+use crate::compiler_item::CompilerItem;
+use crate::component_model::{
+    CmInterfaceRegistry, CmNameSink, CmTypeGen, cm_payload_type_from_type_id,
+    future_payload_rejection, is_cm_record_stream_element, stream_payload_rejection,
+};
+use crate::flat_package::FlatPackage;
+use crate::hashmap;
+use crate::module_source::ModuleSource;
+use crate::name::{
+    DeclPath, cm_export_func_name, cm_post_return_func_name, is_test_function, kebab_export_name,
+    to_kebab,
+};
+use crate::package::{Package, test_selected};
+use crate::tir::{
+    EffectRef, ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TypeId, TypeTable,
+};
+use crate::tir_visitor::TirRefVisitor;
+use crate::unparse::unparse_type_into;
+use crate::world_registry::{TEST_WORLD, WorldExportInfo, WorldInfo, fq_name_package};
+
+use callback_export::{Callbacks, synthesize_callback_exports};
+use export_adapter::{
+    ExportBindingEnv, ExportReturnStrategy, synthesize_export_binding, synthesize_post_return,
+};
+use import_adapter::synthesize_adapter;
+pub use lift::synthesize_lift;
+pub use lower::synthesize_lower;
+pub use resource_rewrite::rewrite_async_primitives_monomorphized;
+use task_return::{
+    assert_task_returns_eliminated, expand_task_returns_in_func, reduce_task_returns_in_func,
+    split_task_entry,
+};
+use type_fixup::{collect_effect_calls_in_block, rewrite_calls_in_block};
+use types::{Boundary, Slot, flat_types_from_type_id};
+pub use types::{
+    LiftContext, cm_discriminant_byte_size, cm_flags_byte_size, cm_type_to_type_id,
+    flatten_param_type,
+};
+
+/// Every effect and resource the TIR modules declare, as `(module, name)`: the
+/// candidates [`lookup_effect_owner`] picks a binding's owner from.
+fn effect_owner_module_sources(
+    modules: &IndexMap<ModuleSource, TirModule>,
+) -> IndexSet<(ModuleSource, String)> {
+    let mut out: IndexSet<(ModuleSource, String)> = IndexSet::default();
+    for (module_source, module) in modules {
+        for effect in &module.effects {
+            out.insert((module_source.clone(), effect.name.clone()));
+        }
+        for resource in &module.resources {
+            out.insert((module_source.clone(), resource.name.clone()));
+        }
+    }
+    out
+}
+
+/// The canonical owning module for an effect/resource named `name` whose
+/// binding targets CM `package`. A [`ModuleSource::Binding`] under
+/// `"{package}/"` wins; any other owner of the name is the fallback.
+fn lookup_effect_owner(
+    owners: &IndexSet<(ModuleSource, String)>,
+    name: &str,
+    package: &str,
+) -> Option<ModuleSource> {
+    let mut fallback: Option<ModuleSource> = None;
+    for (ms, n) in owners {
+        if n != name {
+            continue;
+        }
+        if let ModuleSource::Binding { interface, .. } = ms
+            && interface
+                .strip_prefix(package)
+                .is_some_and(|rest| rest.starts_with('/'))
+        {
+            return Some(ms.clone());
+        }
+        if fallback.is_none() {
+            fallback = Some(ms.clone());
+        }
+    }
+    fallback
+}
+
+use payload_validation::reject_unresolvable_record_payloads;
+pub use payload_validation::{PayloadsValidated, reject_unresolvable_payloads_monomorphized};
+
+/// The payload scans and their witness, together in one module so the witness's
+/// private field can only be minted by a scan.
+mod payload_validation {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    use crate::component_model::CmInterfaceRegistry;
+    use crate::flat_package::FlatPackage;
+    use crate::hashmap::IndexSet;
+    use crate::module_source::ModuleSource;
+    use crate::package::Package;
+    use crate::tir::{TirFunction, TypeTable};
+    use crate::tir_visitor::TirRefVisitor;
+
+    use super::{FunctionKey, NamedPayloadFinder};
+    use crate::synthesis::cm_binding::{
+        reachable_from_export_bindings, reachable_from_export_bindings_flat,
+    };
+
+    /// Witness that a scan ran while the TIR still carried the pristine
+    /// `future-new` / `stream-new` shape it matches. Each rewrite half consumes
+    /// one by value, so scanning after that half fails to compile. The private
+    /// field makes a scan the only place that can mint one.
+    pub struct PayloadsValidated(());
+
+    /// A user record used as a `future`/`stream` payload whose fields are not
+    /// registered in the CM interface registry: with no CM type to lower
+    /// against, the lower would mis-treat it as an i32 handle and emit an
+    /// invalid component. Records are registered only for `--lib` components,
+    /// so the reachable set scopes the check to the code the world keeps.
+    fn first_unresolvable<'a>(
+        tt: &TypeTable,
+        registry: &CmInterfaceRegistry,
+        functions: impl Iterator<Item = (ModuleSource, &'a Rc<RefCell<TirFunction>>)>,
+        reachable: &IndexSet<FunctionKey>,
+    ) -> Option<String> {
+        for (module_source, func_rc) in functions {
+            let func = func_rc.borrow();
+            let Some(body) = &func.body else { continue };
+            let mut finder = NamedPayloadFinder {
+                tt,
+                registry,
+                check_records: reachable.contains(&(module_source, func.name.clone())),
+                found: None,
+            };
+            finder.visit_block(body);
+            if finder.found.is_some() {
+                return finder.found;
+            }
+        }
+        None
+    }
+
+    /// Pre-monomorphize: every payload already concrete. Each module owns its
+    /// own type table, so the scan runs per module.
+    pub(in crate::synthesis::cm_binding) fn reject_unresolvable_record_payloads(
+        project: &Package,
+    ) -> Result<PayloadsValidated, String> {
+        let reachable = reachable_from_export_bindings(project);
+        for (module_source, module) in &project.tir_modules {
+            let tt = module.type_table.borrow();
+            let functions = module.functions.iter().map(|f| (module_source.clone(), f));
+            if let Some(reason) = first_unresolvable(
+                &tt,
+                project.cm_interface_registry.as_ref(),
+                functions,
+                &reachable,
+            ) {
+                return Err(reason);
+            }
+        }
+        Ok(PayloadsValidated(()))
+    }
+
+    /// Post-monomorphize: the sites the `is_concrete` guard deferred, judged now
+    /// that each instance names a concrete payload.
+    pub fn reject_unresolvable_payloads_monomorphized(
+        flat: &FlatPackage,
+    ) -> Result<PayloadsValidated, String> {
+        let reachable = reachable_from_export_bindings_flat(flat);
+        let tt = flat.type_table.borrow();
+        let functions = flat
+            .functions
+            .iter()
+            .map(|f| (f.borrow().module_source.clone(), f));
+        match first_unresolvable(&tt, &flat.cm_interface_registry, functions, &reachable) {
+            Some(reason) => Err(reason),
+            None => Ok(PayloadsValidated(())),
+        }
+    }
+}
+
+/// Module-qualified identity of a TIR function before link: the owning
+/// `TirModule`'s key in `tir_modules` paired with the function name. Call
+/// edges carry the same identity via `FunctionRef::module_source`, which the
+/// elaborator resolves to the callee's defining module, so same-named
+/// functions in different modules never conflate.
+type FunctionKey = (ModuleSource, String);
+
+/// Every function reachable from the active world's export bindings,
+/// following free-function and method `Call` edges by `(module, name)`. The
+/// roots are the synthesized export bindings in the entry module — one per
+/// function the world actually exports (world exports for CLI/HTTP/`--lib`,
+/// `test` functions for the test world), each calling its user function with
+/// a module-qualified `FunctionRef` — so any function the world drops is
+/// excluded.
+fn reachable_from_export_bindings(project: &Package) -> IndexSet<FunctionKey> {
+    let functions = project
+        .tir_modules
+        .iter()
+        .flat_map(|(module_source, module)| {
+            module
+                .functions
+                .iter()
+                .map(move |f| (module_source.clone(), f))
+        });
+    reachable_from(
+        functions,
+        &project.entry_module_source,
+        &project.export_binding_names,
+    )
+}
+
+/// The same walk over the flattened, monomorphized functions, where each
+/// carries its own module source.
+fn reachable_from_export_bindings_flat(flat: &FlatPackage) -> IndexSet<FunctionKey> {
+    let functions = flat
+        .functions
+        .iter()
+        .map(|f| (f.borrow().module_source.clone(), f));
+    reachable_from(
+        functions,
+        &flat.entry_module_source,
+        &flat.export_binding_names,
+    )
+}
+
+fn reachable_from<'a>(
+    functions: impl Iterator<Item = (ModuleSource, &'a Rc<RefCell<TirFunction>>)>,
+    entry_module_source: &ModuleSource,
+    export_binding_names: &IndexMap<String, String>,
+) -> IndexSet<FunctionKey> {
+    let mut by_key: IndexMap<FunctionKey, Vec<Rc<RefCell<TirFunction>>>> = IndexMap::default();
+    for (module_source, func_rc) in functions {
+        let key = (module_source, func_rc.borrow().name.clone());
+        by_key.entry(key).or_default().push(func_rc.clone());
+    }
+
+    let mut visited: IndexSet<FunctionKey> = IndexSet::default();
+    let mut work: Vec<FunctionKey> = export_binding_names
+        .values()
+        .map(|binding_name| (entry_module_source.clone(), binding_name.clone()))
+        .collect();
+    while let Some(key) = work.pop() {
+        if !visited.insert(key.clone()) {
+            continue;
+        }
+        let Some(funcs) = by_key.get(&key) else {
+            continue;
+        };
+        for func_rc in funcs {
+            let func = func_rc.borrow();
+            let Some(body) = &func.body else { continue };
+            let mut collector = CalleeCollector {
+                callees: Vec::new(),
+            };
+            collector.visit_block(body);
+            for callee in collector.callees {
+                if !visited.contains(&callee) {
+                    work.push(callee);
+                }
+            }
+        }
+    }
+    visited
+}
+
+struct CalleeCollector {
+    callees: Vec<FunctionKey>,
+}
+
+impl TirRefVisitor for CalleeCollector {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if let TirExprKind::Call { func, .. } = &expr.kind {
+            self.callees
+                .push((func.module_source.clone(), func.name.clone()));
+        }
+        self.walk_expr(expr);
+    }
+}
+
+struct NamedPayloadFinder<'a> {
+    tt: &'a TypeTable,
+    registry: &'a CmInterfaceRegistry,
+    /// Only where the world keeps the code: a record's resolvability depends on
+    /// the world, unlike classifiability, which is always checked.
+    check_records: bool,
+    found: Option<String>,
+}
+
+impl TirRefVisitor for NamedPayloadFinder<'_> {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if self.found.is_none() {
+            self.found = unresolvable_future_stream_payload(
+                self.tt,
+                self.registry,
+                expr,
+                self.check_records,
+            );
+        }
+        self.walk_expr(expr);
+    }
+}
+
+fn unresolvable_future_stream_payload(
+    tt: &TypeTable,
+    registry: &CmInterfaceRegistry,
+    expr: &TirExpr,
+    check_records: bool,
+) -> Option<String> {
+    let (payload, is_future) = future_stream_payload_site(tt, expr)?;
+    // A generic body names its payload with a type parameter; what it lowers to
+    // is decided per instance, so
+    // [`reject_unresolvable_payloads_monomorphized`] judges those.
+    if !tt.is_concrete(payload) {
+        return None;
+    }
+    if check_records && let Some(name) = unresolvable_record_in_payload(tt, registry, payload) {
+        return Some(format!(
+            "record type `{name}` is used as a `future` / `stream` payload, \
+             which is only supported in library (`--lib`) components"
+        ));
+    }
+    if is_future {
+        return future_payload_rejection(tt, payload);
+    }
+    if is_cm_record_stream_element(tt, payload) {
+        return None;
+    }
+    stream_payload_rejection(tt, payload)
+}
+
+/// Two shapes name a payload: a `new()` static call, and a CM method on a
+/// handle. The bool is whether it is a future's.
+fn future_stream_payload_site(tt: &TypeTable, expr: &TirExpr) -> Option<(TypeId, bool)> {
+    let TirExprKind::Call { func, .. } = &expr.kind else {
+        return None;
+    };
+    let cm = func
+        .method_info
+        .as_ref()
+        .and_then(|m| m.cm_name.as_deref())?;
+    if let Some(is_future) = match cm {
+        "future-new" => Some(true),
+        "stream-new" => Some(false),
+        _ => None,
+    } {
+        let payload = func
+            .monomorph_info
+            .as_ref()?
+            .impl_type_args
+            .first()
+            .copied()?;
+        return Some((payload, is_future));
+    }
+    let is_future = if cm.starts_with("future-") {
+        true
+    } else if cm.starts_with("stream-") {
+        false
+    } else {
+        return None;
+    };
+    // Every future / stream canonical but `new` operates on a handle.
+    let (receiver, _) = expr.kind.call_receiver()?;
+    let handle = tt.peel_refs(receiver.type_id);
+    Some((*tt.generic_type_args(handle)?.first()?, is_future))
+}
+
+/// Keyed on `module_source`, never the bare name: a homonym of an imported
+/// WASI or dependency declaration lives under a different source and carries a
+/// different shape.
+fn unresolvable_record_in_payload(
+    tt: &TypeTable,
+    registry: &CmInterfaceRegistry,
+    type_id: TypeId,
+) -> Option<String> {
+    if let Some((name, module_source)) = named_decl_of(tt, tt.get(type_id))
+        && matches!(
+            cm_payload_type_from_type_id(tt, type_id),
+            Some(CmPayloadType::Named(_))
+        )
+        && !registry.is_named_type_registered_from(module_source, name)
+    {
+        return Some(name.to_string());
+    }
+    // Codegen peels aliases, so check through them here too.
+    if let ResolvedType::Newtype { base_type, .. } = tt.get(type_id) {
+        return unresolvable_record_in_payload(tt, registry, *base_type);
+    }
+    if let Some(inner) = tt.as_option(type_id).or_else(|| tt.as_list(type_id)) {
+        return unresolvable_record_in_payload(tt, registry, inner);
+    }
+    if let Some(elems) = tt.as_tuple(type_id) {
+        return elems
+            .iter()
+            .find_map(|&e| unresolvable_record_in_payload(tt, registry, e));
+    }
+    if let ResolvedType::GenericInstance { type_args, .. } = tt.get(type_id)
+        && tt.is_result(type_id)
+    {
+        return type_args
+            .clone()
+            .iter()
+            .find_map(|&a| unresolvable_record_in_payload(tt, registry, a));
+    }
+    None
+}
+
+/// The declared name and module of a nominal type, or `None` for one that
+/// names no declaration.
+fn named_decl_of<'a>(tt: &'a TypeTable, ty: &ResolvedType) -> Option<(&'a str, &'a ModuleSource)> {
+    let def = match ty {
+        ResolvedType::Struct { def, .. } => def.decl()?,
+        ResolvedType::Enum { def }
+        | ResolvedType::Variant { def }
+        | ResolvedType::Flags { def } => *def,
+        _ => return None,
+    };
+    Some((tt.def_name(def), tt.def_module(def)))
+}
+
+/// Phase entry point: generate CM binding functions and rewrite call sites.
+///
+/// Ordered pipeline: import adapters, export adapters, the shared task-return
+/// signature, test-world bindings, payload validation (producing the
+/// `PayloadsValidated` witness), task-return reduction, and finally
+/// the async/resource primitive rewrites (consuming the witness).
+///
+/// Adapter functions flow through monomorphize → lower → optimize → codegen
+/// like any other function.
+pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
+    validate_imports_representable(&project)?;
+    let callbacks = generate_import_adapters(&mut project);
+    synthesize_callback_exports(&mut project, &callbacks);
+    synthesize_export_adapters(&mut project)?;
+    generate_test_world_bindings(&mut project);
+    let validated = reject_unresolvable_record_payloads(&project)?;
+    reduce_unexpanded_task_returns(&project);
+    resource_rewrite::rewrite_async_primitives(&mut project, validated);
+    assert_task_returns_eliminated(&project);
+    Ok(project)
+}
+
+/// The entry module's shared `TypeTable`. A missing entry module is an
+/// invariant violation.
+fn entry_type_table(project: &Package) -> Rc<RefCell<TypeTable>> {
+    project
+        .tir_modules
+        .get(&project.entry_module_source)
+        .expect("entry module should exist")
+        .type_table
+        .clone()
+}
+
+/// Synthesize a binding function for each used WASI effect call and resource
+/// method call, add them to the entry module, and rewrite effect-like call
+/// sites to target them. Answers the closure types those calls pass.
+fn generate_import_adapters(project: &mut Package) -> Callbacks {
+    let entry_source = project.entry_module_source.clone();
+
+    let mut seen_effects: IndexSet<DeclPath> = IndexSet::default();
+    for module in project.tir_modules.values() {
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
+            if let Some(body) = &func.body {
+                collect_effect_calls_in_block(
+                    body,
+                    &mut seen_effects,
+                    &project.cm_interface_registry,
+                    &module.type_table,
+                );
+            }
+        }
+    }
+    let mut callbacks = Callbacks::default();
+    if seen_effects.is_empty() {
+        return callbacks;
+    }
+
+    let entry_type_table = entry_type_table(project);
+    let owner_sources = effect_owner_module_sources(&project.tir_modules);
+    let mut adapters: IndexMap<DeclPath, Rc<RefCell<TirFunction>>> = IndexMap::default();
+    let mut auxiliary_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
+    for qualified_name in &seen_effects {
+        let registry = &project.cm_interface_registry;
+        let func_info = registry
+            .get_function(qualified_name)
+            .expect("the collector records only a registered CM function");
+        // An operation on `E`, effect or resource alike, requires `with E`; a
+        // world function belongs to no interface and requires nothing.
+        let effect = (!registry.is_world_import_function(qualified_name)).then(|| {
+            let module_source = lookup_effect_owner(
+                &owner_sources,
+                &func_info.interface_name,
+                &func_info.package,
+            )
+            .expect("an interface function's effect is declared");
+            EffectRef::Concrete {
+                name: func_info.interface_name.clone(),
+                module_source,
+            }
+        });
+        let produced = synthesize_adapter(
+            func_info,
+            registry,
+            &entry_type_table,
+            &project.interner,
+            effect,
+            &entry_source,
+        );
+        auxiliary_functions.extend(produced.auxiliary);
+        adapters.insert(qualified_name.clone(), produced.adapter);
+    }
+
+    let entry_module = project
+        .tir_modules
+        .get_mut(&entry_source)
+        .expect("entry module should exist");
+    for adapter_rc in adapters.values() {
+        entry_module.functions.push(adapter_rc.clone());
+    }
+    for aux in auxiliary_functions {
+        entry_module.functions.push(aux);
+    }
+
+    // Spans all modules, so call sites disagreeing on a shared adapter's
+    // return type are caught.
+    let mut applied_returns: IndexMap<usize, TypeId> = IndexMap::default();
+    for module in project.tir_modules.values() {
+        for func_rc in &module.functions {
+            let mut func = func_rc.borrow_mut();
+            if let Some(body) = &mut func.body {
+                rewrite_calls_in_block(
+                    body,
+                    &adapters,
+                    &entry_source,
+                    &project.cm_interface_registry,
+                    &entry_type_table,
+                    &mut applied_returns,
+                    &mut callbacks,
+                );
+            }
+        }
+    }
+    callbacks
+}
+
+/// Synthesize an export binding for each world export (signature-driven) and
+/// record it in `export_binding_names`. Prefers the synthesized library world
+/// (`--lib`) over the static registry.
+fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
+    let Some(world_info) = project.active_world_info().cloned() else {
+        return Ok(());
+    };
+    let entry_source = project.entry_module_source.clone();
+    // Library world exports use a synchronous lift (the core function returns
+    // the value directly), unlike the async/task-return WASI worlds.
+    let is_lib_world = project.is_lib_world();
+    // The kiln generator uses the lib path only for its typed params; its
+    // `generate` returns `Result<_, _>` over nested records/lists that the
+    // synchronous lower path cannot handle, so it routes through the async
+    // task-return result binding instead (see `sync_wasi_export_strategy`).
+    let is_kiln_generator = project
+        .world_registry
+        .is_generator_world(&project.target_world);
+    let entry_type_table = entry_type_table(project);
+    validate_exports_representable(project, &entry_type_table)?;
+
+    // Collect adapters in a read-only pass (synthesize_export_binding needs &tir_modules)
+    let mut export_adapters: Vec<(String, String, Rc<RefCell<TirFunction>>)> = Vec::new();
+    let mut post_returns: Vec<(String, String, Rc<RefCell<TirFunction>>)> = Vec::new();
+    let mut task_entries: Vec<(ModuleSource, Rc<RefCell<TirFunction>>)> = Vec::new();
+    {
+        let entry_module = project
+            .tir_modules
+            .get(&entry_source)
+            .expect("entry module should exist");
+
+        // Package hint for CM name resolution inside export adapters.
+        // For `wasi:http/service` this is `"http"`; for
+        // `core:kiln/generator` it is `"kiln"`. The hint biases bare-name
+        // resolution towards the binding's owning package (e.g.
+        // `ErrorCode` in `wasi:http` bindings) and feeds
+        // `resolve_cm_source_for` as a fallback anchor. Derived from
+        // the world's `fq_name` — the attribute-sourced identity is
+        // the single source of truth.
+        let binding_cm_package = world_info.package().to_string();
+
+        for export in &world_info.exports {
+            // A library spreads its `export fn`s across submodules; an
+            // export defined outside the entry module carries its origin
+            // module, and the adapter calls it there. The callee's module
+            // is the `tir_modules` key (a function's own `module_source` is
+            // not set until link, which runs after this synthesis).
+            let callee_module = export
+                .reexport_origin
+                .as_ref()
+                .map(|(m, _)| m.clone())
+                .unwrap_or_else(|| entry_source.clone());
+            let user_func_rc = find_export_user_func(&project.tir_modules, entry_module, export)?;
+            {
+                let user_func = user_func_rc.borrow();
+                let tt = entry_type_table.borrow();
+                validate_boundary_representable(
+                    &user_func,
+                    &export.name,
+                    &tt,
+                    &project.tir_modules,
+                )?;
+                validate_world_signature_compatibility(
+                    &user_func,
+                    export,
+                    &tt,
+                    &project.tir_modules,
+                    &project.cm_interface_registry,
+                )?;
+            }
+
+            let is_async_export = user_func_rc.borrow().is_async;
+            // The function the binding calls. An async export's delivery lives
+            // in a copy, so the user's own function stays callable from Wado.
+            let mut binding_callee = Rc::clone(&user_func_rc);
+            let strategy = if is_async_export {
+                // An export declaring no result still delivers; it has no slot
+                // to flatten.
+                let return_type = export.return_type.as_ref();
+                let flat_types = return_type
+                    .map_or_else(Vec::new, |ty| project.cm_interface_registry.cm_flatten(ty));
+                let task_return = CanonicalIntrinsic::TaskReturn(export.name.clone());
+                let task_entry = split_task_entry(&user_func_rc, &export.name);
+                expand_task_returns_in_func(
+                    &task_entry,
+                    return_type,
+                    &flat_types,
+                    &task_return,
+                    &project.tir_modules,
+                    &entry_type_table,
+                    &project.cm_interface_registry,
+                    &binding_cm_package,
+                    &project.interner,
+                );
+                binding_callee = Rc::clone(&task_entry);
+                // The binding calls it through `callee_module`, so that is where the
+                // copy has to live: a lib world spreads its exports across
+                // submodules.
+                task_entries.push((callee_module.clone(), task_entry));
+                ExportReturnStrategy::AsyncTaskReturn
+            } else if is_lib_world && !is_kiln_generator {
+                // Library exports: synchronous lift. The core function
+                // returns the lowered value directly.
+                ExportReturnStrategy::SyncReturn
+            } else {
+                sync_wasi_export_strategy(
+                    &user_func_rc.borrow(),
+                    export,
+                    &entry_type_table.borrow(),
+                )
+            };
+
+            let env = ExportBindingEnv {
+                tir_modules: &project.tir_modules,
+                type_table: &entry_type_table,
+                world_params: &export.params,
+                world_return: export.return_type.as_ref(),
+                cm_interface_registry: &project.cm_interface_registry,
+                cm_package: &binding_cm_package,
+                interner: &project.interner,
+            };
+            let adapter = synthesize_export_binding(
+                &export.name,
+                &binding_callee,
+                &callee_module,
+                &env,
+                strategy,
+            );
+            export_adapters.push((
+                export.name.clone(),
+                cm_export_func_name(&export.name),
+                adapter,
+            ));
+
+            // `post-return` is illegal alongside `async`, so only a synchronous
+            // lift can reclaim its return area this way.
+            if matches!(strategy, ExportReturnStrategy::SyncReturn)
+                && let Some(post_return) = synthesize_post_return(&export.name, &env)
+            {
+                post_returns.push((
+                    export.name.clone(),
+                    cm_post_return_func_name(&export.name),
+                    post_return,
+                ));
+            }
+        }
+    }
+
+    // Must follow the loop above: the name check walks signatures through the CM
+    // type engine, which recurses without a depth guard, so a recursive type has
+    // to be rejected by `validate_boundary_representable` first or it overflows
+    // the stack instead of getting that diagnostic.
+    if is_lib_world {
+        validate_lib_interface_names(&world_info, &project.cm_interface_registry)?;
+    }
+
+    let entry_module = project
+        .tir_modules
+        .get_mut(&entry_source)
+        .expect("entry module should exist");
+    for (export_name, binding_name, adapter) in export_adapters {
+        project
+            .export_binding_names
+            .insert(export_name, binding_name);
+        entry_module.functions.push(adapter);
+    }
+    for (export_name, func_name, post_return) in post_returns {
+        project
+            .post_return_binding_names
+            .insert(export_name, func_name);
+        entry_module.functions.push(post_return);
+    }
+    for (module_source, task_entry) in task_entries {
+        project
+            .tir_modules
+            .get_mut(&module_source)
+            .expect("the export's own module is the one the binding calls into")
+            .functions
+            .push(task_entry);
+    }
+    Ok(())
+}
+
+/// Reject a library whose exports would claim one interface name twice.
+///
+/// A Component Model interface has one namespace covering its types *and* its
+/// functions — "An interface has a single namespace which means that none of the
+/// defined names can collide" — with case-insensitive uniqueness (`WIT.md`).
+/// Wado keeps the two apart, so `variant Shape` beside `export fn shape` reads
+/// as unambiguous until both kebab-case to `shape`. Left to codegen it surfaces
+/// as a Wasm validation failure reported as a compiler bug, when it is the
+/// source that has to change.
+fn validate_lib_interface_names(
+    world_info: &WorldInfo,
+    cm_interface_registry: &CmInterfaceRegistry,
+) -> Result<(), String> {
+    let exported = exported_cm_type_names(world_info, cm_interface_registry);
+    let wado_names = wado_names_by_cm_name(world_info);
+    let describe = |cm_name: &str| match wado_names.get(cm_name).and_then(IndexSet::first) {
+        Some(wado) => format!("type `{wado}` (exported as `{cm_name}`)"),
+        None => format!("type `{cm_name}`"),
+    };
+
+    let mut claimed: IndexMap<String, String> = IndexMap::default();
+    for cm_name in &exported {
+        // Two Wado types kebab-casing onto one CM name never reach `exported`
+        // twice: `CmTypeGen` caches by CM name, so the second silently reuses
+        // the first one's type and the two merge. Catch it from the signatures,
+        // where both names are still distinct.
+        if let Some(wado) = wado_names.get(cm_name)
+            && wado.len() > 1
+        {
+            let names: Vec<String> = wado.iter().map(|n| format!("`{n}`")).collect();
+            return Err(format!(
+                "types {} share the Component Model name `{cm_name}` in this \
+                 library's interface, which can name each type only once. \
+                 Rename all but one of them.",
+                names.join(" and "),
+            ));
+        }
+        let key = cm_name.to_ascii_lowercase();
+        if let Some(previous) = claimed.get(&key) {
+            return Err(format!(
+                "{} and {} both claim the name `{cm_name}` in this library's \
+                 Component Model interface, where types and functions share one \
+                 namespace. Rename one of them.",
+                describe(cm_name),
+                previous,
+            ));
+        }
+        claimed.insert(key, describe(cm_name));
+    }
+    for export in &world_info.exports {
+        let cm_name = kebab_export_name(&export.name);
+        let key = cm_name.to_ascii_lowercase();
+        if let Some(previous) = claimed.get(&key) {
+            return Err(format!(
+                "export `{}` becomes `{cm_name}` in this library's Component \
+                 Model interface, where {} already claims that name — an \
+                 interface has a single namespace covering both types and \
+                 functions. Rename one of them.",
+                export.name, previous,
+            ));
+        }
+        claimed.insert(key, format!("function `{}`", export.name));
+    }
+    Ok(())
+}
+
+/// The CM type names the export signatures put into the interface, taken from
+/// the same walk codegen uses to emit them.
+fn exported_cm_type_names(
+    world_info: &WorldInfo,
+    cm_interface_registry: &CmInterfaceRegistry,
+) -> Vec<String> {
+    let mut type_gen = match world_info
+        .exports
+        .first()
+        .and_then(|e| e.from_interface_fq.as_deref())
+    {
+        Some(fq) => CmTypeGen::with_interface_hint(fq),
+        None => CmTypeGen::new(),
+    };
+    let mut sink = CmNameSink::default();
+    let no_resources = IndexMap::default();
+    for ty in export_signature_types(world_info) {
+        let resolved = cm_interface_registry.resolve_type_preserving_local_newtypes(ty);
+        type_gen.ast_type_to_cm(&mut sink, &resolved, cm_interface_registry, &no_resources);
+    }
+    sink.names().to_vec()
+}
+
+/// The Wado types behind each CM name the signatures mention. A user type's CM
+/// name is `to_kebab` of its Wado name, applied by the registry when it records
+/// the type, so this inverts that exactly.
+fn wado_names_by_cm_name(world_info: &WorldInfo) -> IndexMap<String, IndexSet<String>> {
+    let mut out = IndexMap::default();
+    for ty in export_signature_types(world_info) {
+        collect_named_types(ty, &mut out);
+    }
+    out
+}
+
+fn export_signature_types(world_info: &WorldInfo) -> impl Iterator<Item = &Type> {
+    world_info.exports.iter().flat_map(|export| {
+        export
+            .params
+            .iter()
+            .map(|(_, ty)| ty)
+            .chain(export.return_type.as_ref())
+    })
+}
+
+fn collect_named_types(ty: &Type, out: &mut IndexMap<String, IndexSet<String>>) {
+    match ty {
+        Type::Named(named) => {
+            out.entry(to_kebab(&named.name))
+                .or_default()
+                .insert(named.name.clone());
+        }
+        Type::Generic(generic) => {
+            for arg in &generic.args {
+                collect_named_types(arg, out);
+            }
+        }
+        Type::Tuple(elems) => {
+            for elem in elems {
+                collect_named_types(elem, out);
+            }
+        }
+        Type::NamespacedGeneric(generic) => {
+            for arg in &generic.args {
+                collect_named_types(arg, out);
+            }
+        }
+        Type::Reference(inner) | Type::MutReference(inner) => collect_named_types(inner, out),
+        // Not representable at the CM boundary; a signature carrying one is
+        // rejected by `validate_boundary_representable` before this runs.
+        Type::Function(_) | Type::TypePackSpread(_, _) | Type::Infer(_) | Type::Error(_) => {}
+    }
+}
+
+/// The user function backing a world export: the origin `pub fn` for an
+/// `export use` re-export, otherwise the `export fn` in the entry module.
+///
+/// A world export with no function at all is a missing entry point. The test
+/// world handles `test` blocks separately and never reaches this lookup, so
+/// in CLI / HTTP / other worlds the entry must be defined — never silently
+/// stubbed.
+fn find_export_user_func(
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    entry_module: &TirModule,
+    export: &WorldExportInfo,
+) -> Result<Rc<RefCell<TirFunction>>, String> {
+    if let Some((origin_module, origin_name)) = &export.reexport_origin {
+        return tir_modules
+            .get(origin_module)
+            .and_then(|m| {
+                m.functions
+                    .iter()
+                    .find(|f| f.borrow().name == *origin_name)
+                    .cloned()
+            })
+            .ok_or_else(|| {
+                format!(
+                    "re-exported function `{}` (origin `{}`) is not defined",
+                    export.name, origin_name
+                )
+            });
+    }
+
+    let mut found_exported = None;
+    let mut found_without_export = false;
+    for f in &entry_module.functions {
+        let func = f.borrow();
+        if func.name == export.name {
+            if func.is_export {
+                found_exported = Some(f.clone());
+            } else {
+                found_without_export = true;
+            }
+        }
+    }
+    match found_exported {
+        Some(f) => Ok(f),
+        None if found_without_export => Err(format!(
+            "function `{}` exists but is not marked with `export` keyword. \
+             Add `export` to make it a world entry point: `export fn {}(...)`",
+            export.name, export.name
+        )),
+        None => Err(format!(
+            "function `{}` is required as a world entry point but is not defined. \
+             Define it with: `export fn {}(...)`",
+            export.name, export.name
+        )),
+    }
+}
+
+/// Every `export fn` lands on the component's surface, not just the ones the
+/// world names, so each signature has to be representable there. Without this
+/// an extra export reaches WIT emit, which only warns and drops the section.
+fn validate_exports_representable(
+    project: &Package,
+    entry_type_table: &RefCell<TypeTable>,
+) -> Result<(), String> {
+    let tt = entry_type_table.borrow();
+    for (source, module) in &project.tir_modules {
+        if !source.is_program() {
+            continue;
+        }
+        for func in &module.functions {
+            let func = func.borrow();
+            if func.is_export {
+                validate_boundary_representable(&func, &func.name, &tt, &project.tir_modules)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// A `#[cm]` operation a user module declares crosses the boundary in the
+/// other direction, so its signature needs a representation as an export's does.
+fn validate_imports_representable(project: &Package) -> Result<(), String> {
+    let tt = entry_type_table(project);
+    let tt = tt.borrow();
+    for (source, module) in &project.tir_modules {
+        if !source.is_program() {
+            continue;
+        }
+        let operations = module.effects.iter().flat_map(|e| &e.operations).chain(
+            module
+                .resources
+                .iter()
+                .filter(|r| !r.is_generic)
+                .flat_map(|r| &r.operations),
+        );
+        for op in operations.filter(|op| op.cm_name.is_some()) {
+            let result = if op.is_async {
+                tt.as_async_call(op.return_type)
+                    .expect("an async operation returns an `AsyncCall`")
+            } else {
+                op.return_type
+            };
+            // A closure crosses as its callback key; the elaborator checked its shape.
+            let values = op
+                .params
+                .iter()
+                .map(|p| p.type_id)
+                .filter(|&ty| !matches!(tt.get(ty), ResolvedType::Function { .. }));
+            signature_representable(values, result, Boundary::Import, &tt, &project.tir_modules)
+                .map_err(|reason| format!("import function `{}`: {reason}", op.name))?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_boundary_representable(
+    user_func: &TirFunction,
+    export_name: &str,
+    tt: &TypeTable,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+) -> Result<(), String> {
+    signature_representable(
+        user_func.params.iter().map(|p| p.type_id),
+        user_func.return_type,
+        Boundary::Export,
+        tt,
+        tir_modules,
+    )
+    .map_err(|reason| format!("export function `{export_name}`: {reason}"))
+}
+
+/// Reject a param or return type with no Component Model value representation
+/// in any world: an empty record, a `()` param, or a 128-bit, `v128` or half scalar.
+fn signature_representable(
+    params: impl Iterator<Item = TypeId>,
+    result: TypeId,
+    boundary: Boundary,
+    tt: &TypeTable,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+) -> Result<(), String> {
+    params
+        .map(|tid| (tid, Slot::Value))
+        .chain(std::iter::once((result, Slot::Optional)))
+        .try_for_each(|(tid, slot)| {
+            types::check_cm_boundary_representable(
+                tid,
+                slot,
+                boundary,
+                tt,
+                tir_modules,
+                &mut Vec::new(),
+            )
+        })
+}
+
+/// The boundary carries what the world declares, so the export's signature has
+/// to agree with it: the same arity, and every type lowering to the same flat
+/// Component Model values. Anything else reaches the host as a value nothing
+/// named.
+fn validate_world_signature_compatibility(
+    user_func: &TirFunction,
+    export: &WorldExportInfo,
+    tt: &TypeTable,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    registry: &CmInterfaceRegistry,
+) -> Result<(), String> {
+    if user_func.params.len() != export.params.len() {
+        return Err(format!(
+            "export function `{}` has {} parameter(s), \
+             but the world expects {} parameter(s)",
+            export.name,
+            user_func.params.len(),
+            export.params.len()
+        ));
+    }
+    for (user_param, (world_name, world_ty)) in user_func.params.iter().zip(&export.params) {
+        validate_flat_shape_agrees(
+            &format!(
+                "parameter `{world_name}` of export function `{}`",
+                export.name
+            ),
+            user_param.type_id,
+            world_ty,
+            tt,
+            tir_modules,
+            registry,
+        )?;
+    }
+    let Some(world_return) = export.return_type.as_ref() else {
+        return Ok(());
+    };
+    validate_result_wrapper_agrees(user_func, export, world_return, tt)?;
+    if matches!(tt.get(user_func.return_type), ResolvedType::Unit) {
+        // The unit the wrapper check let through is delivered as the world's
+        // own `Ok(())`, so there is no user shape left to compare.
+        return Ok(());
+    }
+    validate_flat_shape_agrees(
+        &format!("the return type of export function `{}`", export.name),
+        user_func.return_type,
+        world_return,
+        tt,
+        tir_modules,
+        registry,
+    )
+}
+
+/// A `Result` world return needs a `Result` export, which flat shapes alone do
+/// not say: `i32` and `Result<(), ()>` both flatten to one `i32`. Unit stands in
+/// only for a `Result<(), _>`, which is all the synthesized `Ok(())` fills.
+fn validate_result_wrapper_agrees(
+    user_func: &TirFunction,
+    export: &WorldExportInfo,
+    world_return: &Type,
+    tt: &TypeTable,
+) -> Result<(), String> {
+    let result_name = tt.compiler_variant_name(CompilerItem::Result);
+    let Type::Generic(world) = world_return else {
+        return Ok(());
+    };
+    if world.name != result_name || tt.is_result(user_func.return_type) {
+        return Ok(());
+    }
+    let user_is_unit = matches!(tt.get(user_func.return_type), ResolvedType::Unit);
+    if user_is_unit && world.args.first().is_some_and(Type::is_unit) {
+        return Ok(());
+    }
+    let user_return_name = tt.type_name(user_func.return_type);
+    Err(format!(
+        "export function `{}` has return type `{user_return_name}`, \
+         but the world expects a `{result_name}<_, _>` (unit stands in only \
+         for a `{result_name}<(), _>`, which is all the `Ok(())` wrap fills). \
+         Change the signature to return the `{result_name}` the world declares.",
+        export.name
+    ))
+}
+
+/// Both sides name a type; they have to lower to the same flat CM values, or
+/// the adapter reads the boundary's words against a layout that is not theirs.
+fn validate_flat_shape_agrees(
+    site: &str,
+    user_type: TypeId,
+    world_type: &Type,
+    tt: &TypeTable,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    registry: &CmInterfaceRegistry,
+) -> Result<(), String> {
+    let user_flat = flat_types_from_type_id(user_type, tir_modules, tt);
+    let world_flat = registry.cm_flatten(world_type);
+    if user_flat == world_flat {
+        return Ok(());
+    }
+    let mut world_name = String::new();
+    unparse_type_into(world_type, &mut world_name);
+    Err(format!(
+        "{site} is `{}`, which lowers to different Component Model values than \
+         the world's `{world_name}`. Change the signature to the type the world \
+         declares.",
+        tt.type_name(user_type)
+    ))
+}
+
+/// Return strategy for a sync export in a task-return world, driven by the
+/// user function's actual return type (signature-driven).
+fn sync_wasi_export_strategy(
+    user_func: &TirFunction,
+    export: &WorldExportInfo,
+    tt: &TypeTable,
+) -> ExportReturnStrategy {
+    if tt.is_result(user_func.return_type) {
+        // Result<T, E> return: full lowering adapter
+        return ExportReturnStrategy::ResultTaskReturn;
+    }
+    // The simple void adapter applies only with no params AND unit return.
+    if export.params.is_empty() && matches!(tt.get(user_func.return_type), ResolvedType::Unit) {
+        return ExportReturnStrategy::VoidTaskReturn;
+    }
+    // Sync export returning a plain value (not a `Result`), e.g. a `--lib`
+    // export like `fn count() -> u32`. It uses the synchronous canon lift —
+    // the core function returns the flattened result directly (an
+    // out-pointer for multi-value results like a list). It must NOT go
+    // through task-return: the component declares the export sync
+    // (`.async_(false)`), so an async task-return lowering produces an
+    // invalid core module.
+    ExportReturnStrategy::SyncReturn
+}
+
+/// Synthesize export bindings for test functions (`$test_*`). Only when
+/// targeting the test world — in other worlds, tests are dead code.
+fn generate_test_world_bindings(project: &mut Package) {
+    if !project.is_test_world() {
+        return;
+    }
+    let entry_source = project.entry_module_source.clone();
+    let test_name_filters = project.test_name_filters.clone();
+    let entry_type_table = entry_type_table(project);
+
+    // Test functions have is_export=false (they're not world exports),
+    // but they need adapters for task-return when called via `wado test`.
+    // Only selected tests get an adapter: an unselected test then has no
+    // `is_cm_export` root, so early DCE drops its body — that is what makes
+    // `--test-name` speed up compilation.
+    let test_funcs: Vec<(String, Rc<RefCell<TirFunction>>)> = {
+        let entry_module = project
+            .tir_modules
+            .get(&entry_source)
+            .expect("entry module should exist");
+
+        // Map each test's mangled function name → its original (lossless)
+        // name so `--test-name` matches against what the user wrote, not
+        // the ASCII-folded export name.
+        let original_names: hashmap::IndexMap<&str, Option<&str>> = entry_module
+            .tests
+            .iter()
+            .map(|t| (t.function_name.as_str(), t.name.as_deref()))
+            .collect();
+
+        entry_module
+            .functions
+            .iter()
+            .filter(|f| {
+                let name = f.borrow().name.clone();
+                is_test_function(&name)
+                    && test_selected(
+                        original_names.get(name.as_str()).copied().flatten(),
+                        &test_name_filters,
+                    )
+            })
+            .map(|f| (f.borrow().name.clone(), f.clone()))
+            .collect()
+    };
+
+    // The test world is a bare-name world, so its CM package is empty
+    // (`fq_name_package`); test adapters take no params, so the package is
+    // never consulted.
+    let env = ExportBindingEnv {
+        tir_modules: &project.tir_modules,
+        type_table: &entry_type_table,
+        world_params: &[],
+        world_return: None,
+        cm_interface_registry: &project.cm_interface_registry,
+        cm_package: fq_name_package(TEST_WORLD),
+        interner: &project.interner,
+    };
+    let adapters: Vec<(String, String, Rc<RefCell<TirFunction>>)> = test_funcs
+        .into_iter()
+        .map(|(test_name, user_func_rc)| {
+            let binding_name = cm_export_func_name(&test_name);
+            let adapter = synthesize_export_binding(
+                &test_name,
+                &user_func_rc,
+                &entry_source,
+                &env,
+                ExportReturnStrategy::VoidTaskReturn,
+            );
+            (test_name, binding_name, adapter)
+        })
+        .collect();
+
+    let entry_module = project
+        .tir_modules
+        .get_mut(&entry_source)
+        .expect("entry module should exist");
+    for (test_name, binding_name, adapter) in adapters {
+        project.export_binding_names.insert(test_name, binding_name);
+        entry_module.functions.push(adapter);
+    }
+}
+
+/// Reduce every `TaskReturn` the export synthesis above did not expand, in any
+/// module. Such a function is an async fn the target world does not export, so
+/// there is no CM task to deliver to; its operand is still evaluated, and
+/// nothing reaches monomorphize. Idempotent: an expanded function has none left.
+fn reduce_unexpanded_task_returns(project: &Package) {
+    for module in project.tir_modules.values() {
+        for f in &module.functions {
+            let is_async = f.borrow().is_async;
+            if is_async {
+                reduce_task_returns_in_func(f, &module.type_table);
+            }
+        }
+    }
+}

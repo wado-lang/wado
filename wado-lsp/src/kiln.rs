@@ -11,13 +11,13 @@ mod options;
 
 use std::path::{Path, PathBuf};
 
-use wado_compiler::ast::{AstIdSpace, Item, Module};
-use wado_compiler::kiln::metadata::{METADATA_VERSION, Metadata, metadata_filename};
-use wado_compiler::kiln::{
+use wado_compiler_frontend::ast::{AstIdSpace, Item, Module};
+use wado_compiler_frontend::kiln::metadata::{METADATA_VERSION, Metadata, metadata_filename};
+use wado_compiler_frontend::kiln::{
     InvocationIndex, InvocationPath, collect_inline_invocations, harvest_module_graph,
     remap_decl_files,
 };
-use wado_compiler::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
+use wado_compiler_frontend::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 
 /// The redirect index the loader resolves `use … from "<schema>"` through,
 /// with every clause and its options checked along the way.
@@ -28,7 +28,7 @@ use wado_compiler::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 /// whoever produced the index.
 ///
 /// **Contract**: `entry_filename` and `entry_ast` must be the same filename and
-/// bytes the caller then passes to `wado_compiler::load` — otherwise the
+/// bytes the caller then passes to `wado_compiler_frontend::load` — otherwise the
 /// redirect lookup misses and the spans emitted here name nothing.
 pub async fn prepare_invocations<H: CompilerHost>(
     entry_filename: &str,
@@ -54,7 +54,7 @@ pub async fn prepare_invocations<H: CompilerHost>(
     )
     .await;
 
-    let descriptors = wado_compiler::hashmap::IndexMap::default();
+    let descriptors = wado_compiler_frontend::hashmap::IndexMap::default();
     let manifest_root_str = manifest_root.to_string_lossy();
     // Emitting the clause diagnostics here is what reaches the editor: no later
     // phase re-runs this collector, and each snapshot builds once.
@@ -132,7 +132,7 @@ fn use_decl_span_for(
 /// [`Code::KilnStaleCache`].
 async fn resolve_invocation<H: CompilerHost>(
     manifest_root: &Path,
-    invocation: &wado_compiler::kiln::Invocation,
+    invocation: &wado_compiler_frontend::kiln::Invocation,
     host: &H,
 ) -> Result<String, String> {
     let Some(output_dir_abs) = safe_join(manifest_root, invocation.output_dir.as_str()) else {
@@ -259,11 +259,11 @@ fn safe_join(manifest_root: &Path, rel: &str) -> Option<PathBuf> {
 
 /// Compose the `kiln:` redirect URI used by [`InvocationIndex`].
 ///
-/// Thin wrapper over [`wado_compiler::loader::path_to_kiln_uri`] (the single
+/// Thin wrapper over [`wado_compiler_frontend::loader::path_to_kiln_uri`] (the single
 /// producer shared with the CLI), so cache entries written by `wado compile`
 /// resolve identically in the LSP.
 fn path_to_kiln_uri(path: &Path) -> String {
-    wado_compiler::loader::path_to_kiln_uri(&path.display().to_string())
+    wado_compiler_frontend::loader::path_to_kiln_uri(&path.display().to_string())
 }
 
 fn emit_stale<H: CompilerHost>(host: &H, invocation_id: &str, reason: &str, span: DiagnosticSpan) {

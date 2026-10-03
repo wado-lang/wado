@@ -27,7 +27,7 @@
 use std::sync::Mutex;
 
 use indexmap::IndexMap;
-use wado_compiler::{CompilerHost, Diagnostic as CompilerDiagnostic, SourceError};
+use wado_compiler_frontend::{CompilerHost, Diagnostic as CompilerDiagnostic, SourceError};
 
 use crate::Engine;
 use crate::host::install_dev_stdlib;

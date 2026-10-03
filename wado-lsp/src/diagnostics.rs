@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
-use wado_compiler::{Code, Diagnostic as CompilerDiagnostic, Severity as CompilerSeverity};
+use wado_compiler_frontend::{
+    Code, Diagnostic as CompilerDiagnostic, Severity as CompilerSeverity,
+};
 
 use crate::macros::lsp_repr_u32_enum;
 use crate::text::{self, LineIndex, PositionEncoding};
@@ -79,12 +81,12 @@ const DOCUMENT_START: Range = Range {
     },
 };
 
-/// Convert a [`DiagnosticSpan`](wado_compiler::DiagnosticSpan) to an LSP
+/// Convert a [`DiagnosticSpan`](wado_compiler_frontend::DiagnosticSpan) to an LSP
 /// [`Range`], re-expressing the compiler's 1-based codepoint columns in
 /// `encoding`. `lines` indexes the text the span points into; `None` passes
 /// the codepoint columns through (correct for ASCII / UTF-32).
 fn span_to_range(
-    span: &wado_compiler::DiagnosticSpan,
+    span: &wado_compiler_frontend::DiagnosticSpan,
     lines: Option<&LineIndex>,
     encoding: PositionEncoding,
 ) -> Range {
@@ -157,8 +159,8 @@ pub(crate) fn from_compiler_diagnostic(
 
 #[cfg(test)]
 mod tests {
-    use wado_compiler::DiagnosticSpan;
-    use wado_compiler::ast::AstIdSpace;
+    use wado_compiler_frontend::DiagnosticSpan;
+    use wado_compiler_frontend::ast::AstIdSpace;
 
     use super::*;
 

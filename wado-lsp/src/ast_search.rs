@@ -2,7 +2,7 @@
 //!
 //! [`AstVisitor`] walks to completion, so a visitor after one node stops itself.
 
-use wado_compiler::ast::{AstVisitor, Module};
+use wado_compiler_frontend::ast::{AstVisitor, Module};
 
 /// A visitor that answers with the first node it matches.
 pub(crate) trait FirstMatch: AstVisitor {

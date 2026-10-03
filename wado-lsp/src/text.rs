@@ -14,7 +14,7 @@
 //! See LSP 3.18 §general.positionEncodings.
 
 use crate::diagnostics::{Position, Range};
-use wado_compiler::token::Span;
+use wado_compiler_frontend::token::Span;
 
 /// Position encoding negotiated with the LSP client.
 ///

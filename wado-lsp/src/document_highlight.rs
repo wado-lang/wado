@@ -1,4 +1,4 @@
-//! Document highlight, powered by `wado_compiler::semantics`.
+//! Document highlight, powered by `wado_compiler_frontend::semantics`.
 //!
 //! Returns every occurrence of the symbol named at the cursor that lives
 //! inside the requested document. References to the same symbol from other
@@ -14,8 +14,8 @@
 //! highlight pass therefore performs no AST walks of its own.
 
 use serde::{Deserialize, Serialize};
-use wado_compiler::ast::AstId;
-use wado_compiler::module_source::ModuleSource;
+use wado_compiler_frontend::ast::AstId;
+use wado_compiler_frontend::module_source::ModuleSource;
 
 use crate::diagnostics::{Position, Range};
 use crate::macros::lsp_repr_u32_enum;

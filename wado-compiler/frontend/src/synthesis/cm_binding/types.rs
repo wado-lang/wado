@@ -1,0 +1,1528 @@
+//! Type-level helpers for CM binding synthesis.
+//!
+//! Houses utilities that translate between AST `Type`, TIR `TypeId`, and
+//! Canonical ABI flat / size / alignment information. Shared by the lift,
+//! lower, and adapter synthesis paths.
+
+use std::cell::RefCell;
+
+use crate::ast::{AstId, GenericType, NamedType, Type};
+use crate::cm_abi;
+use crate::compiler_item::CompilerItem;
+use crate::component_model::{CmInterfaceRegistry, CmTypeKind, cm_layout_with_registry};
+use crate::hashmap::IndexMap;
+use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
+use crate::primitive::PrimitiveType;
+use crate::stdlib::is_wit_core_module;
+use crate::tir::{
+    ResolvedType, TemplateId, TirBinaryOp, TirExpr, TirExprKind, TirModule, TirParam, TirStruct,
+    TirVariantDecl, TypeId, TypeTable,
+};
+
+use crate::component_model::map_key_rejection;
+use crate::component_model::{future_payload_rejection, stream_payload_rejection};
+use crate::defs::DefId;
+use crate::name::{FqTraitName, FqTypeName, UNIT_TYPE_NAME};
+use crate::synthesis::common::{
+    binary, builtin_call, cast, f64_const, i32_const, i64_const, synth_span,
+};
+use crate::tir::StructDef;
+
+/// Snapshot of the stdlib type / variant names CM binding matches against,
+/// resolved once through the `CompilerItem` registry so a stdlib rename flows
+/// through every lift / lower / adapter site rather than through literals
+/// scattered across `synthesis::cm_binding`.
+#[derive(Clone, Debug)]
+#[allow(dead_code)]
+pub struct CmStdlibNames {
+    pub string: String,
+    pub array: String,
+    pub option: String,
+    pub result: String,
+    /// `Option::Some` case name + zero-based index.
+    pub some_name: String,
+    pub some_index: u32,
+    /// `Option::None` case name + zero-based index.
+    pub none_name: String,
+    pub none_index: u32,
+    /// `Result::Ok` case name + zero-based index.
+    pub ok_name: String,
+    pub ok_index: u32,
+    /// `Result::Err` case name + zero-based index.
+    pub err_name: String,
+    pub err_index: u32,
+    /// The `IndexValue` trait the list adapters call through, as the
+    /// declaration the registry records — never a spelling a user trait could
+    /// share.
+    pub index_value: FqTraitName,
+    /// `List`'s head, likewise the declaration the registry records.
+    pub array_fq: FqTypeName,
+    /// `List::len`, the declaration a list adapter's length call instantiates.
+    pub list_len: TemplateId,
+    /// `List`'s `index_value`, likewise for the element read.
+    pub list_index_value: TemplateId,
+    /// `TreeMap`'s name, or `None` where `core:collections` was never loaded.
+    pub tree_map: Option<String>,
+}
+
+impl CmStdlibNames {
+    /// Whether `generic` is a `TreeMap<K, V>`, the Wado spelling of CM `map<K, V>`.
+    pub fn is_tree_map(&self, generic: &GenericType) -> bool {
+        self.tree_map.as_deref() == Some(generic.name.as_str()) && generic.args.len() == 2
+    }
+
+    /// Look up every name through the [`CompilerItems`] registry.
+    /// Cheap (a handful of registry hits + clones). Each synthesis entry
+    /// point builds the snapshot once per binding — the lower side threads
+    /// it through [`LowerContext`] — mirroring the `from_compiler_items`
+    /// constructor shape used by the other synthesis passes
+    /// (`SerdeStdlibNames`, `FormatStdlibNames`, `TraitsStdlibNames`).
+    pub fn from_type_table(type_table: &TypeTable) -> Self {
+        let items = type_table.compiler_items();
+        let (_, _, some_name, some_index) = items.require_variant_case(CompilerItem::OptionSome);
+        let (_, _, none_name, none_index) = items.require_variant_case(CompilerItem::OptionNone);
+        let (_, _, ok_name, ok_index) = items.require_variant_case(CompilerItem::ResultOk);
+        let (_, _, err_name, err_index) = items.require_variant_case(CompilerItem::ResultErr);
+        Self {
+            string: items.struct_name(CompilerItem::String).to_string(),
+            array: items.struct_name(CompilerItem::List).to_string(),
+            option: items.variant_name(CompilerItem::Option).to_string(),
+            result: items.variant_name(CompilerItem::Result).to_string(),
+            some_name: some_name.to_string(),
+            some_index,
+            none_name: none_name.to_string(),
+            none_index,
+            ok_name: ok_name.to_string(),
+            ok_index,
+            err_name: err_name.to_string(),
+            err_index,
+            index_value: items.trait_fq(CompilerItem::IndexValue),
+            array_fq: type_table.compiler_struct_fq_name(CompilerItem::List),
+            list_len: items.require_template(CompilerItem::ListLen),
+            list_index_value: items.require_template(CompilerItem::ListIndexValue),
+            tree_map: items
+                .struct_name_opt(CompilerItem::TreeMap)
+                .map(str::to_string),
+        }
+    }
+}
+
+/// Context for lifting CM values to GC types, providing access to
+/// the WASI registry (for variant/enum case info) and type table (for `TypeIds`).
+///
+/// Shared between the memory-based lift in `lift.rs` and the
+/// flat-parameter lift in `export_adapter.rs`. Both paths recurse
+/// through helpers that take a `RefCell<TypeTable>` borrow, so this
+/// struct is `Copy` to make it cheap to pass by value across the
+/// recursion sites without propagating a borrow.
+#[derive(Clone, Copy)]
+pub struct LiftContext<'a> {
+    pub cm_interface_registry: &'a CmInterfaceRegistry,
+    pub type_table: &'a RefCell<TypeTable>,
+    /// CM package owning the binding being synthesized (e.g., `"http"`
+    /// for `wasi:http/*` bindings, `"kiln"` for `core:kiln/*` bindings).
+    /// Required: every CM binding is emitted inside a known package,
+    /// and named-type lookups are always scoped by `(name, package)` to
+    /// prevent collisions such as `wasi:cli/ErrorCode` vs.
+    /// `wasi:http/ErrorCode` — or, across schemes,
+    /// `wasi:http/types::Response` vs. `core:kiln/types::Response`.
+    pub cm_package: &'a str,
+    /// `ModuleSource` interner shared with the package, used to canonicalise a
+    /// synthesised type's module identity so it matches the elaborator's
+    /// registered `StructName`s pointer-equal. The lift chain may `borrow_mut`
+    /// it, so no caller may hold a `RefMut` across a call into `synthesize_lift`;
+    /// the lift path itself borrows only transiently.
+    pub interner: &'a RefCell<ModuleSourceInterner>,
+}
+
+impl LiftContext<'_> {
+    /// Resolve the `ModuleSource` for a CM named type declared by interface FQ
+    /// `source`. A lib-local interface returns its recorded entry source; a
+    /// WASI/core interface derives its source from the FQ by the canonical
+    /// naming convention. Provenance comes from the registry, not an FQ prefix
+    /// check, so the resulting struct/variant `TypeId` matches the
+    /// elaborator-registered one in every world.
+    pub(super) fn module_source_for(&self, source: &str) -> ModuleSource {
+        if let Some(entry) = self
+            .cm_interface_registry
+            .cm_interface_module_source_of(source)
+        {
+            return entry.clone();
+        }
+        module_source_for_cm_interface(&mut self.interner.borrow_mut(), source)
+    }
+
+    /// The declaration behind a CM named type — see
+    /// [`crate::tir::TypeTable::cm_decl_in`] for why the WIT boundary resolves
+    /// a name rather than following a reference site.
+    pub(super) fn cm_decl(&self, source: &str, name: &str) -> DefId {
+        let module_source = self.module_source_for(source);
+        let type_table = self.type_table.borrow();
+        type_table
+            .cm_decl_in(name, &module_source)
+            // A lib-local type defined in a submodule: the interface FQ maps to
+            // the entry module, so resolve via the type's own recorded module.
+            // One name reaches one declaration here, since a surface carrying
+            // the same public name twice is refused before synthesis.
+            .or_else(|| {
+                let own = self.cm_interface_registry.lib_local_type_source(name)?;
+                type_table.cm_decl_in(name, own)
+            })
+            .unwrap_or_else(|| panic!("CM type `{source}#{name}` names no declaration"))
+    }
+
+    /// Resolve a CM `Type` to its elaborator-registered `TypeId`, lib-aware:
+    /// unlike [`cm_type_to_type_id`], a lib-local named type resolves through its
+    /// recorded entry `ModuleSource` and yields the concrete GC id rather than
+    /// falling back to `i32`. Provenance comes from the registry, not an FQ
+    /// prefix check, and containers recurse. WASI and core types go by package.
+    pub(super) fn cm_type_id(&self, ty: &Type, tt: &mut TypeTable) -> TypeId {
+        match ty {
+            Type::Named(n) => {
+                if let Some(src) = self.cm_interface_registry.resolve_cm_source_for(n)
+                    && self
+                        .cm_interface_registry
+                        .cm_interface_module_source_of(&src)
+                        .is_some()
+                {
+                    if self
+                        .cm_interface_registry
+                        .get_struct_fields_by_source(&src, &n.name)
+                        .is_some()
+                    {
+                        let ms = self.module_source_for(&src);
+                        let def = tt
+                            .cm_decl_in(&n.name, &ms)
+                            .expect("the declaration this type names exists");
+                        return tt.make_struct(StructDef::Decl(def));
+                    }
+                    if self
+                        .cm_interface_registry
+                        .get_variant_cases_by_source(&src, &n.name)
+                        .is_some()
+                    {
+                        let ms = self.module_source_for(&src);
+                        let def = tt
+                            .cm_decl_in(&n.name, &ms)
+                            .expect("the declaration this type names exists");
+                        return tt.make_variant(def);
+                    }
+                }
+                cm_type_to_type_id(ty, tt, self.cm_interface_registry, self.cm_package)
+            }
+            Type::Tuple(elems) if !elems.is_empty() => {
+                let ids: Vec<TypeId> = elems.iter().map(|e| self.cm_held_type_id(e, tt)).collect();
+                tt.make_tuple(ids)
+            }
+            Type::Generic(g) => {
+                let (list_name, option_name, result_name) = {
+                    let items = tt.compiler_items();
+                    (
+                        items.struct_name(CompilerItem::List).to_string(),
+                        items.variant_name(CompilerItem::Option).to_string(),
+                        items.variant_name(CompilerItem::Result).to_string(),
+                    )
+                };
+                if g.name == list_name && g.args.len() == 1 {
+                    let elem = self.cm_held_type_id(&g.args[0], tt);
+                    return tt.make_list(elem);
+                }
+                if g.name == option_name && g.args.len() == 1 {
+                    let inner = self.cm_held_type_id(&g.args[0], tt);
+                    return tt.make_option(inner);
+                }
+                if g.name == result_name && g.args.len() == 2 {
+                    let ok = self.cm_held_type_id(&g.args[0], tt);
+                    let err = self.cm_held_type_id(&g.args[1], tt);
+                    return tt.make_result(ok, err);
+                }
+                cm_type_to_type_id(ty, tt, self.cm_interface_registry, self.cm_package)
+            }
+            _ => cm_type_to_type_id(ty, tt, self.cm_interface_registry, self.cm_package),
+        }
+    }
+
+    /// [`Self::cm_type_id`] for a type a container holds.
+    pub(super) fn cm_held_type_id(&self, ty: &Type, tt: &mut TypeTable) -> TypeId {
+        held_type(ty, tt, |t, tt| self.cm_type_id(t, tt))
+    }
+}
+
+/// Context for lowering GC values to CM representations, providing access
+/// to the WASI registry (for record/variant layout), the type table (for
+/// `TypeId`s), and the stdlib-name snapshot.
+///
+/// Mirror of [`LiftContext`] for the lower-side synthesis paths in
+/// `lower.rs`. Not `Copy`: it owns the [`CmStdlibNames`] snapshot, so it is
+/// passed by reference through the recursion sites.
+pub struct LowerContext<'a> {
+    pub cm_interface_registry: &'a CmInterfaceRegistry,
+    pub type_table: &'a RefCell<TypeTable>,
+    /// CM package owning the binding being synthesized (same semantics as
+    /// `LiftContext::cm_package`).
+    pub wasi_package: &'a str,
+    /// Stdlib-name snapshot; built once per binding instead of per call.
+    pub names: CmStdlibNames,
+}
+
+/// Convert a WASI AST `Type` to a `TypeId`. Every WASI binding is emitted inside
+/// a known package, so both the registry and the owner are required. A named
+/// type resolves by `(name, wasi_package)`, falling back to the registry's
+/// canonical owner of the bare name, since `http` bindings may reference an
+/// `ErrorCode` declared in `filesystem`.
+pub fn cm_type_to_type_id(
+    ty: &Type,
+    type_table: &mut TypeTable,
+    registry: &CmInterfaceRegistry,
+    wasi_package: &str,
+) -> TypeId {
+    let string_struct_name = type_table
+        .compiler_struct_name(CompilerItem::String)
+        .to_string();
+    match ty {
+        Type::Named(named) if named.name.as_str() == string_struct_name => {
+            type_table.make_compiler_struct(CompilerItem::String)
+        }
+        Type::Named(named) => match named.name.as_str() {
+            "i8" => TypeTable::I8,
+            "i16" => TypeTable::I16,
+            "i32" => TypeTable::I32,
+            "i64" => TypeTable::I64,
+            "u8" => TypeTable::U8,
+            "u16" => TypeTable::U16,
+            "u32" => TypeTable::U32,
+            "u64" => TypeTable::U64,
+            "f32" => TypeTable::F32,
+            "f64" => TypeTable::F64,
+            "bool" => TypeTable::BOOL,
+            "char" => TypeTable::CHAR,
+            UNIT_TYPE_NAME => TypeTable::UNIT,
+            // Resource/enum/variant types - look up the already-resolved TypeId.
+            //
+            // The type's own `source_interface` leads: a package holds several
+            // interfaces and two can declare the same name (`wasi:sockets/types`
+            // and `wasi:sockets/ip-name-lookup` both declare `ErrorCode`), so
+            // scoping by package alone returns whichever registered first. The
+            // package lookups behind it cover a type with no recorded interface;
+            // neither is ever a bare-name scan.
+            _ => registry
+                .source_interface(named)
+                .and_then(|fq| registry.cm_interface_module_source_of(&fq))
+                .and_then(|ms| type_table.find_named_type_by_source(&named.name, ms))
+                // A stdlib WASI interface has no recorded `ModuleSource`, so
+                // derive the module the FQ maps to and match it exactly.
+                .or_else(|| {
+                    registry
+                        .source_interface(named)
+                        .and_then(|fq| cm_interface_module(&fq))
+                        .and_then(|(ns, m)| {
+                            type_table.find_named_type_by_module_name(&named.name, &m, ns)
+                        })
+                })
+                // The binding's own package, whose namespace it does not carry.
+                .or_else(|| {
+                    type_table.find_named_type_by_cm_package(
+                        named.name.as_str(),
+                        wasi_package,
+                        None,
+                    )
+                })
+                .or_else(|| {
+                    canonical_cm_package(registry, named.name.as_str()).and_then(|(ns, pkg)| {
+                        type_table.find_named_type_by_cm_package(named.name.as_str(), pkg, Some(ns))
+                    })
+                })
+                // A lib-local type defined in a submodule: the interface FQ maps
+                // to the entry module, so resolve via the type's own recorded
+                // module instead.
+                .or_else(|| {
+                    registry
+                        .lib_local_type_source(&named.name)
+                        .and_then(|ms| type_table.find_named_type_by_source(&named.name, ms))
+                })
+                // Resources are bare i32 handles at the CM boundary and need no
+                // registered GC type. Anything else without a TypeId would
+                // miscompile (e.g. FieldAccess on an i32), so fail loudly.
+                .unwrap_or_else(|| {
+                    let is_resource = registry.resolve_cm_source_for(named).is_some_and(|s| {
+                        registry
+                            .get_resource_cm_name_by_source(&s, &named.name)
+                            .is_some()
+                    });
+                    if is_resource {
+                        TypeTable::I32
+                    } else {
+                        panic!(
+                            "CM type `{}` (package `{wasi_package}`) has no registered TypeId",
+                            named.name
+                        )
+                    }
+                }),
+        },
+        Type::Generic(g) => {
+            let list_name = type_table
+                .compiler_struct_name(CompilerItem::List)
+                .to_string();
+            if g.name.as_str() == list_name && g.args.len() == 1 {
+                let elem_type =
+                    cm_held_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                return type_table.make_list(elem_type);
+            }
+            // `core:collections` is not auto-imported, so a program that never
+            // names `TreeMap` has no registration to compare against.
+            let tree_map_name = type_table
+                .compiler_items()
+                .struct_name_opt(CompilerItem::TreeMap)
+                .map(str::to_string);
+            if tree_map_name.as_deref() == Some(g.name.as_str()) && g.args.len() == 2 {
+                let key = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                let value = cm_type_to_type_id(&g.args[1], type_table, registry, wasi_package);
+                return type_table.make_tree_map(key, value);
+            }
+            let option_name = type_table
+                .compiler_variant_name(CompilerItem::Option)
+                .to_string();
+            let result_name = type_table
+                .compiler_variant_name(CompilerItem::Result)
+                .to_string();
+            if g.name.as_str() == option_name && g.args.len() == 1 {
+                let inner_type =
+                    cm_held_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                return type_table.make_option(inner_type);
+            }
+            if g.name.as_str() == result_name && g.args.len() == 2 {
+                let ok_type =
+                    cm_held_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                let err_type =
+                    cm_held_type_to_type_id(&g.args[1], type_table, registry, wasi_package);
+                return type_table.make_result(ok_type, err_type);
+            }
+            match g.name.as_str() {
+                "Stream" if g.args.len() == 1 => {
+                    let inner = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                    type_table.make_stream(inner)
+                }
+                "Future" if g.args.len() == 1 => {
+                    let inner = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                    type_table.make_future(inner)
+                }
+                "AsyncCall" if g.args.len() == 1 => {
+                    let inner = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                    type_table.make_async_call(inner)
+                }
+                // Own/Borrow are handle types represented as i32
+                "Own" | "Borrow" => TypeTable::I32,
+                other => panic!("unsupported generic type at CM boundary: {other}"),
+            }
+        }
+        Type::Tuple(types) if types.is_empty() => TypeTable::UNIT,
+        Type::Tuple(types) => {
+            let resolved: Vec<TypeId> = types
+                .iter()
+                .map(|t| cm_held_type_to_type_id(t, type_table, registry, wasi_package))
+                .collect();
+            type_table.make_tuple(resolved)
+        }
+        Type::Reference(inner) | Type::MutReference(inner)
+            if registry.extern_handle(ty).is_some() =>
+        {
+            cm_type_to_type_id(inner, type_table, registry, wasi_package)
+        }
+        // Borrowed resource handles are i32 at the CM boundary.
+        Type::Reference(_) | Type::MutReference(_) => TypeTable::I32,
+        other => panic!("unsupported type at CM boundary: {other:?}"),
+    }
+}
+
+/// The same conversion for a type a container holds, where a `borrow<t>` is the
+/// `&T` the call site passes rather than the `i32` handle a bare one lowers to.
+pub fn cm_held_type_to_type_id(
+    ty: &Type,
+    type_table: &mut TypeTable,
+    registry: &CmInterfaceRegistry,
+    wasi_package: &str,
+) -> TypeId {
+    held_type(ty, type_table, |t, tt| {
+        cm_type_to_type_id(t, tt, registry, wasi_package)
+    })
+}
+
+/// A container's element type, resolved by `element`. Only a bare `borrow<t>`
+/// is the `i32` the boundary passes; held, it is the `&T` of the call site.
+fn held_type(
+    ty: &Type,
+    type_table: &mut TypeTable,
+    element: impl FnOnce(&Type, &mut TypeTable) -> TypeId,
+) -> TypeId {
+    match ty {
+        Type::Reference(inner) => {
+            let inner = element(inner, type_table);
+            type_table.make_ref(inner)
+        }
+        Type::MutReference(inner) => {
+            let inner = element(inner, type_table);
+            type_table.make_mut_ref(inner)
+        }
+        _ => element(ty, type_table),
+    }
+}
+
+/// The namespace and package a CM source names: `"wasi:filesystem/types@0.3.0"`
+/// → `(Wasi, "filesystem")`. A package is unique only inside its namespace, so
+/// the two answer together. `None` outside the bundled namespaces.
+pub(super) fn cm_package_from_source(source: &str) -> Option<(CmNamespace, &str)> {
+    let (namespace, rest) = CmNamespace::split_specifier(source)?;
+    let without_version = rest.split('@').next().unwrap_or(rest);
+    Some((namespace, without_version.split('/').next()?))
+}
+
+/// Given a bare type name, ask the registry for its canonical owner and return
+/// the namespace and package that own it (e.g. `(Wasi, "filesystem")`). Used to
+/// disambiguate name lookups for types whose canonical owner differs from the
+/// currently-processed package (e.g. `ErrorCode` is owned by `filesystem` but
+/// referenced from `http` bindings).
+pub(super) fn canonical_cm_package<'a>(
+    registry: &'a CmInterfaceRegistry,
+    name: &str,
+) -> Option<(CmNamespace, &'a str)> {
+    for kind in CmTypeKind::ALL {
+        if let Some(source) = registry.bare_name_owner(kind, name)
+            && let Some(found) = cm_package_from_source(source)
+        {
+            return Some(found);
+        }
+    }
+    None
+}
+
+/// Resolve a CM source interface (e.g. `wasi:filesystem/types@0.3.0`,
+/// `core:kiln/types@0.1.0`) to the `ModuleSource` the elaborator uses when
+/// registering its types. Keeps the lift path's fabricated `TypeId`s
+/// matching the `StructName`s under which the WIR types pass registered
+/// them (see `wir_build::types::register_struct`).
+pub(super) fn module_source_for_cm_interface(
+    interner: &mut ModuleSourceInterner,
+    source_interface: &str,
+) -> ModuleSource {
+    match cm_interface_module(source_interface) {
+        Some((Some(namespace), module)) => interner.binding(namespace, &module),
+        Some((None, module)) => interner.core(&module),
+        None => ModuleSource::default(),
+    }
+}
+
+/// The module a bundled CM interface FQ maps to, with its owning namespace —
+/// `None` for a `core:` module, which carries none.
+pub(crate) fn cm_interface_module(source_interface: &str) -> Option<(Option<CmNamespace>, String)> {
+    if let Some((namespace, rest)) = CmNamespace::split_specifier(source_interface) {
+        return Some((Some(namespace), interface_module_name(rest)));
+    }
+    source_interface
+        .strip_prefix("core:")
+        .map(|rest| (None, interface_module_name(rest)))
+}
+
+/// The `{package}/{interface}.wado` spelling of a version-stripped interface path.
+fn interface_module_name(without_namespace: &str) -> String {
+    let without_version = without_namespace
+        .split('@')
+        .next()
+        .unwrap_or(without_namespace);
+    match without_version.split_once('/') {
+        Some((pkg, iface)) => format!("{pkg}/{}.wado", iface.replace('-', "_")),
+        None => format!("{without_version}.wado"),
+    }
+}
+
+/// Create an i32 addition expression.
+pub(super) fn binary_add(left: TirExpr, right: TirExpr) -> TirExpr {
+    binary(TirBinaryOp::Add, left, right, TypeTable::I32)
+}
+
+pub(super) fn binary_ne(left: TirExpr, right: TirExpr) -> TirExpr {
+    binary(TirBinaryOp::NotEq, left, right, TypeTable::BOOL)
+}
+
+pub fn kebab_to_pascal(s: &str) -> String {
+    use heck::ToUpperCamelCase;
+    s.to_upper_camel_case()
+}
+
+pub(super) fn is_wasm_flat_type(type_id: TypeId) -> bool {
+    matches!(
+        type_id,
+        TypeTable::I32 | TypeTable::I64 | TypeTable::F32 | TypeTable::F64
+    )
+}
+
+/// Validate that `type_id` has a Component Model value representation, erroring
+/// for one that has none in any world — an empty record, which the CM binary
+/// format forbids, or a 128-bit / `v128` scalar — rather than emitting an
+/// invalid component. Recurses through containers, and rejects a type revisiting
+/// itself: WIT has no recursive types, and synthesis would inline one forever.
+pub(super) fn check_cm_boundary_representable(
+    type_id: TypeId,
+    slot: Slot,
+    boundary: Boundary,
+    type_table: &TypeTable,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    visited: &mut Vec<TypeId>,
+) -> Result<(), String> {
+    let names = CmStdlibNames::from_type_table(type_table);
+    check_cm_boundary_representable_inner(
+        type_id,
+        slot,
+        boundary,
+        type_table,
+        tir_modules,
+        &names,
+        visited,
+    )
+}
+
+/// Where a type sits: `()` fills only a slot the Component Model lets stay empty,
+/// a function result, a `result` arm or a case payload.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Slot {
+    Value,
+    Optional,
+}
+
+/// Which way a signature crosses: an import also carries a borrowed resource
+/// handle.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Boundary {
+    Export,
+    Import,
+}
+
+fn check_cm_boundary_representable_inner(
+    type_id: TypeId,
+    slot: Slot,
+    boundary: Boundary,
+    type_table: &TypeTable,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    names: &CmStdlibNames,
+    visited: &mut Vec<TypeId>,
+) -> Result<(), String> {
+    use crate::primitive::PrimitiveType;
+    use crate::tir::ResolvedType as R;
+
+    if visited.contains(&type_id) {
+        // `visited` is the recursion path (pushed on entry, popped on exit),
+        // so a revisit is a genuine cycle. WIT cannot express recursive
+        // types, so the type has no CM representation.
+        return Err(format!(
+            "recursive type `{}` cannot cross the Component Model boundary \
+             — WIT has no recursive types",
+            type_table.type_name(type_id)
+        ));
+    }
+    visited.push(type_id);
+
+    // Container shapes resolve through the type-table accessors regardless of
+    // their declaring module, keeping this free of source-prefix branching.
+    let recurse = |tid, slot, visited: &mut Vec<TypeId>| {
+        check_cm_boundary_representable_inner(
+            tid,
+            slot,
+            boundary,
+            type_table,
+            tir_modules,
+            names,
+            visited,
+        )
+    };
+    let result = (|visited: &mut Vec<TypeId>| {
+        if let Some(inner) = type_table.as_option(type_id) {
+            return recurse(inner, Slot::Value, visited);
+        }
+        if let Some(elem) = type_table.as_list(type_id) {
+            return recurse(elem, Slot::Value, visited);
+        }
+        if let Some(elems) = type_table.as_tuple(type_id) {
+            if elems.is_empty() {
+                return Err(
+                    "the empty tuple `[]` has no Component Model representation — a `tuple` \
+                     carries at least one type, and `()` is the type that carries none"
+                        .to_string(),
+                );
+            }
+            for e in elems {
+                recurse(e, Slot::Value, visited)?;
+            }
+            return Ok(());
+        }
+        // Exhaustive over `ResolvedType` on purpose — no wildcard. A wildcard
+        // would silently classify an unhandled (or future) variant as
+        // representable and let it fall through to the i32 lowering, which is
+        // exactly the bug this check exists to prevent. New variants must be
+        // classified explicitly.
+        match type_table.get(type_id) {
+            // No CM value representation in any world: `defvaltype` stops at
+            // `f32`, and a half lowered as its `u16` would read as an integer.
+            R::Primitive(PrimitiveType::V128 | PrimitiveType::F16 | PrimitiveType::Bf16) => {
+                Err(format!(
+                    "`{}` has no Component Model value representation",
+                    type_table.type_name(type_id)
+                ))
+            }
+            R::Unit if slot == Slot::Value => Err(
+                "`()` has no Component Model representation here — it stands only where a \
+                 type may be absent: a function result, a `Result` arm or a case payload"
+                    .to_string(),
+            ),
+            R::Enum { def } | R::Flags { def } | R::Variant { def }
+                if declares_no_case(*def, tir_modules) =>
+            {
+                Err(format!(
+                    "`{}` declares no case, and an empty enum, flags or variant has no \
+                     Component Model representation — add at least one",
+                    type_table.type_name(type_id)
+                ))
+            }
+            // Scalars, plain discriminants, bitflags, and plain resource
+            // handles lower to an i32 handle identically in every world.
+            R::Primitive(_) | R::Unit | R::Enum { .. } | R::Flags { .. } | R::Resource { .. } => {
+                Ok(())
+            }
+            // The handle is an i32, but its payload is lifted and lowered by
+            // value, so it must be classifiable too — `()` is representable
+            // yet has no payload type.
+            R::GenericResource { def, type_args } => {
+                let item = type_table.compiler_type_item(*def);
+                let args = type_args.clone();
+                for &a in &args {
+                    recurse(a, Slot::Optional, visited)?;
+                }
+                if let Some(&payload) = args.first()
+                    && let Some(reason) = match item {
+                        Some(CompilerItem::Future | CompilerItem::FutureWritable) => {
+                            future_payload_rejection(type_table, payload)
+                        }
+                        Some(CompilerItem::Stream | CompilerItem::StreamWritable) => {
+                            stream_payload_rejection(type_table, payload)
+                        }
+                        _ => None,
+                    }
+                {
+                    return Err(reason);
+                }
+                Ok(())
+            }
+            R::Struct { def, type_args } => {
+                if type_table.is_string(type_id) {
+                    return Ok(());
+                }
+                let name = type_table.struct_head_name(*def);
+                match struct_decl_of(*def, type_args, tir_modules) {
+                    Some(decl) if decl.fields.is_empty() => Err(format!(
+                        "record `{name}` has no fields; an empty record has no \
+                         Component Model representation — add at least one field"
+                    )),
+                    Some(decl) => {
+                        let field_tys: Vec<TypeId> =
+                            decl.fields.iter().map(|f| f.type_id).collect();
+                        for ft in field_tys {
+                            recurse(ft, Slot::Value, visited)?;
+                        }
+                        Ok(())
+                    }
+                    // A struct with no TIR decl is a registry-only record whose
+                    // fields are validated by the registry path; if such a type
+                    // ever reached flat lowering without a decl, that path
+                    // panics rather than silently mis-flattening it.
+                    None => Ok(()),
+                }
+            }
+            R::Variant { def } => match variant_decl_of(*def, tir_modules) {
+                Some(decl) => {
+                    let payloads: Vec<TypeId> = decl.cases.iter().map(|c| c.payload).collect();
+                    for p in payloads {
+                        recurse(p, Slot::Optional, visited)?;
+                    }
+                    Ok(())
+                }
+                None => Ok(()),
+            },
+            R::GenericInstance { def, type_args } => {
+                // Option/List/Tuple were handled above by the `as_*` accessors;
+                // `Result<T, E>` recurses into its arms. Any other generic
+                // instance has no concrete CM lowering at this boundary (it
+                // should have monomorphized to a named type), so reject it
+                // rather than lowering it as an opaque i32.
+                let item = type_table.compiler_type_item(*def);
+                if item == Some(CompilerItem::Result) {
+                    let args = type_args.clone();
+                    for a in args {
+                        recurse(a, Slot::Optional, visited)?;
+                    }
+                    Ok(())
+                } else if let Some((key, value)) = type_table.as_tree_map(type_id) {
+                    // `map<K, V>`: the key comes from the CM's `keytype`
+                    // subset, the value from any representable valtype.
+                    if let Some(reason) = map_key_rejection(type_table, key) {
+                        return Err(reason);
+                    }
+                    recurse(value, Slot::Value, visited)
+                } else {
+                    Err(format!(
+                        "generic type `{}` has no Component Model value representation",
+                        type_table.type_name(type_id)
+                    ))
+                }
+            }
+            R::Newtype { base_type, .. } => {
+                let base = *base_type;
+                recurse(base, slot, visited)
+            }
+            R::Ref(inner) | R::MutRef(inner) if boundary == Boundary::Import => {
+                let inner = *inner;
+                match type_table.get(type_table.representation_head(inner)) {
+                    R::Resource { .. } | R::GenericResource { .. } => {
+                        recurse(inner, Slot::Value, visited)
+                    }
+                    _ => Err(format!(
+                        "a reference crosses a Component Model import only as a borrowed \
+                         resource handle, and `{}` borrows no resource",
+                        type_table.type_name(type_id)
+                    )),
+                }
+            }
+            R::Never
+            | R::Ref(_)
+            | R::MutRef(_)
+            | R::Function { .. }
+            | R::Reactive(_)
+            | R::TypeParam { .. }
+            | R::TypePack { .. }
+            | R::InferVar(_)
+            | R::AssocTypeProjection { .. }
+            | R::BuiltinArray(_)
+            | R::Unknown
+            | R::Error => Err(format!(
+                "type `{}` has no Component Model value representation",
+                type_table.type_name(type_id)
+            )),
+        }
+    })(visited);
+
+    visited.pop();
+    result
+}
+
+/// Map a core-value `TypeId` (`i32`/`i64`/`f32`/`f64`) to its `CmValType`.
+/// Non-core `TypeIds` (which never appear as a flat slot) map to `I32`.
+pub(super) fn cm_val_type_from_type_id(tid: TypeId) -> cm_abi::CmValType {
+    if tid == TypeTable::I64 {
+        cm_abi::CmValType::I64
+    } else if tid == TypeTable::F32 {
+        cm_abi::CmValType::F32
+    } else if tid == TypeTable::F64 {
+        cm_abi::CmValType::F64
+    } else {
+        cm_abi::CmValType::I32
+    }
+}
+
+/// Byte size of a flat CM core value type.
+fn cmval_size(v: cm_abi::CmValType) -> u32 {
+    match v {
+        cm_abi::CmValType::I32 | cm_abi::CmValType::F32 => 4,
+        cm_abi::CmValType::I64 | cm_abi::CmValType::F64 => 8,
+    }
+}
+
+/// Reinterpret a flat value to the same-size integer (`i32`/`i64`), returning
+/// the new expression and its integer `CmValType`.
+fn flat_to_int_bits(value: TirExpr, ty: cm_abi::CmValType) -> (TirExpr, cm_abi::CmValType) {
+    match ty {
+        cm_abi::CmValType::I32 | cm_abi::CmValType::I64 => (value, ty),
+        cm_abi::CmValType::F32 => (
+            builtin_call("i32_reinterpret_f32", vec![value], TypeTable::I32),
+            cm_abi::CmValType::I32,
+        ),
+        cm_abi::CmValType::F64 => (
+            builtin_call("i64_reinterpret_f64", vec![value], TypeTable::I64),
+            cm_abi::CmValType::I64,
+        ),
+    }
+}
+
+/// Reinterpret a same-size integer flat value to the float class of `ty`
+/// (no-op when `ty` is already integral).
+fn flat_from_int_bits(value: TirExpr, ty: cm_abi::CmValType) -> TirExpr {
+    match ty {
+        cm_abi::CmValType::I32 | cm_abi::CmValType::I64 => value,
+        cm_abi::CmValType::F32 => builtin_call("f32_reinterpret_i32", vec![value], TypeTable::F32),
+        cm_abi::CmValType::F64 => builtin_call("f64_reinterpret_i64", vec![value], TypeTable::F64),
+    }
+}
+
+/// Bit-preserving coercion of a flat CM value from its declared joined slot
+/// type `have` to a case's natural type `want` — the Canonical ABI variant
+/// flat-join, lift direction. The join always widens, so `have` is at least as
+/// wide as `want`: a same-size/different-class pair reinterprets; a wider slot
+/// is narrowed by taking its low bits (`i64`→`i32` wrap) before reinterpreting.
+/// A *numeric* cast would corrupt `i32`↔`f32` / `i64`↔`f64` pairs.
+pub(super) fn coerce_flat_lift(
+    value: TirExpr,
+    have: cm_abi::CmValType,
+    want: cm_abi::CmValType,
+) -> TirExpr {
+    if have == want {
+        return value;
+    }
+    let (as_int, int_ty) = flat_to_int_bits(value, have);
+    let sized = if cmval_size(have) > cmval_size(want) {
+        cast(as_int, TypeTable::I32)
+    } else {
+        let _ = int_ty;
+        as_int
+    };
+    flat_from_int_bits(sized, want)
+}
+
+/// Lower direction: coerce a case's natural value `want` into its declared
+/// joined slot type `have`. Inverse of [`coerce_flat_lift`]: reinterpret to the
+/// integer class, zero-extend a narrower value into the wider slot, then
+/// reinterpret to the slot's class.
+pub(super) fn coerce_flat_lower(
+    value: TirExpr,
+    want: cm_abi::CmValType,
+    have: cm_abi::CmValType,
+) -> TirExpr {
+    if have == want {
+        return value;
+    }
+    let (as_int, _int_ty) = flat_to_int_bits(value, want);
+    let sized = if cmval_size(have) > cmval_size(want) {
+        cast(as_int, TypeTable::I64)
+    } else {
+        as_int
+    };
+    flat_from_int_bits(sized, have)
+}
+
+/// Compute the flat ABI parameter types for a CM function parameter.
+///
+/// Adapter mapping [`CmInterfaceRegistry::cm_flatten`] to `TypeId`s; the
+/// `names.string` guard handles a non-`"String"` prelude String name first.
+pub fn flatten_param_type(
+    ty: &Type,
+    cm_interface_registry: &CmInterfaceRegistry,
+    names: &CmStdlibNames,
+) -> Vec<TypeId> {
+    let resolved = cm_interface_registry.resolve_type(ty);
+    if matches!(&resolved, Type::Named(n) if n.name == names.string) {
+        return vec![TypeTable::I32, TypeTable::I32];
+    }
+    cm_interface_registry
+        .cm_flatten(&resolved)
+        .into_iter()
+        .map(cm_val_type_to_type_id)
+        .collect()
+}
+
+pub use crate::cm_abi::{OPTION_OR_RESULT_CASES, cm_discriminant_byte_size, cm_flags_byte_size};
+
+/// Core-wasm load op for a CM discriminant of the given byte size.
+/// Discriminants are unsigned, so 1/2-byte widths zero-extend.
+pub(super) fn disc_load_op(byte_size: u32) -> &'static str {
+    match byte_size {
+        1 => "i32_load8_u",
+        2 => "i32_load16_u",
+        4 => "i32_load",
+        other => panic!("invalid CM discriminant byte size: {other}"),
+    }
+}
+
+/// Core-wasm store op for a CM discriminant of the given byte size.
+pub(super) fn disc_store_op(byte_size: u32) -> &'static str {
+    match byte_size {
+        1 => "i32_store8",
+        2 => "i32_store16",
+        4 => "i32_store",
+        other => panic!("invalid CM discriminant byte size: {other}"),
+    }
+}
+
+/// The stores that write a string, list, or direct param's flat values into an
+/// async call's params buffer, at offsets from its slot.
+pub(super) fn cm_param_store_plan(
+    ty: &Type,
+    cm_interface_registry: &CmInterfaceRegistry,
+    names: &CmStdlibNames,
+) -> Vec<(u32, &'static str)> {
+    match ty {
+        Type::Named(named) if named.name == names.string => {
+            vec![(0, "i32_store"), (4, "i32_store")]
+        }
+        Type::Named(named) if named.name == "f32" => vec![(0, "f32_store")],
+        Type::Named(named) if named.name == "f64" => vec![(0, "f64_store")],
+        Type::Named(_) => vec![(0, scalar_store_op(ty, cm_interface_registry, names))],
+        Type::Generic(g) if g.name == names.array => vec![(0, "i32_store"), (4, "i32_store")],
+        _ => vec![(0, "i32_store")],
+    }
+}
+
+/// The CM size and alignment of `ty` as the i32 pair a `realloc` argument or a
+/// buffer stride takes.
+pub(super) fn cm_layout_i32(ty: &Type, registry: &CmInterfaceRegistry) -> (i32, i32) {
+    let (size, align) = cm_layout_with_registry(ty, registry);
+    (size as i32, align as i32)
+}
+
+/// The integer store for one flat value of `ty`, at the width its CM layout
+/// gives it. An unrestricted handle stores its `f64` bits as the `u64` it is.
+pub(super) fn scalar_store_op(
+    ty: &Type,
+    cm_interface_registry: &CmInterfaceRegistry,
+    names: &CmStdlibNames,
+) -> &'static str {
+    if cm_interface_registry.extern_handle(ty).is_some() {
+        return "i64_store";
+    }
+    match flatten_param_type(ty, cm_interface_registry, names)[..] {
+        [TypeTable::F64] => "f64_store",
+        [TypeTable::F32] => "f32_store",
+        [TypeTable::I64] => "i64_store",
+        [TypeTable::I32] => match cm_layout_with_registry(ty, cm_interface_registry).0 {
+            1 => "i32_store8",
+            2 => "i32_store16",
+            4 => "i32_store",
+            other => panic!("a one-`i32` CM type cannot be {other} bytes wide: {ty:?}"),
+        },
+        ref flat => panic!("`{ty:?}` flattens to {flat:?}, not one scalar"),
+    }
+}
+
+/// The load that reads back a one-value CM type with no sized declaration, and
+/// the type it yields. The inverse of [`scalar_store_op`].
+pub(super) fn handle_load_op(
+    ty: &Type,
+    cm_interface_registry: &CmInterfaceRegistry,
+) -> (&'static str, TypeId) {
+    if cm_interface_registry.extern_handle(ty).is_some() {
+        return ("i64_load", TypeTable::U64);
+    }
+    let [flat] = cm_interface_registry.cm_flatten(ty)[..] else {
+        panic!("a handle is one flat value: {ty:?}");
+    };
+    let load = match flat {
+        cm_abi::CmValType::I32 => "i32_load",
+        cm_abi::CmValType::I64 => "i64_load",
+        cm_abi::CmValType::F32 => "f32_load",
+        cm_abi::CmValType::F64 => "f64_load",
+    };
+    (load, cm_val_type_to_type_id(flat))
+}
+
+/// Check whether a return type needs lifting from a flat i32 discriminant to a GC struct.
+/// This is true for Result types where all payloads are empty (unit), so the raw call
+/// returns just a discriminant on the stack without an outptr.
+pub(super) fn needs_flat_result_lifting(ty: &Type, names: &CmStdlibNames) -> bool {
+    matches!(ty, Type::Generic(g) if g.name == names.result && g.args.len() == 2)
+}
+
+/// Flatten a variant type: discriminant + union of all case payloads.
+fn flatten_variant_type(
+    variant_decl: &TirVariantDecl,
+    out: &mut Vec<cm_abi::CmValType>,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    type_table: &TypeTable,
+    names: &CmStdlibNames,
+) {
+    out.push(cm_abi::CmValType::I32); // variant discriminant
+    let mut union: Vec<cm_abi::CmValType> = Vec::new();
+    for case in &variant_decl.cases {
+        let mut case_flat = Vec::new();
+        flat_types_from_type_id_inner(case.payload, &mut case_flat, tir_modules, type_table, names);
+        union = cm_abi::join_flat_unions(&union, &case_flat);
+    }
+    out.extend(union);
+}
+
+/// Flatten a struct type: concatenation of all field flat types.
+fn flatten_struct_type(
+    struct_decl: &TirStruct,
+    out: &mut Vec<cm_abi::CmValType>,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    type_table: &TypeTable,
+    names: &CmStdlibNames,
+) {
+    for field in &struct_decl.fields {
+        flat_types_from_type_id_inner(field.type_id, out, tir_modules, type_table, names);
+    }
+}
+
+/// Compute flat CM ABI types from a `TypeId`, resolving through the type table.
+pub(super) fn flat_types_from_type_id(
+    type_id: TypeId,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    type_table: &TypeTable,
+) -> Vec<cm_abi::CmValType> {
+    let mut out = Vec::new();
+    flat_types_from_type_id_into(type_id, &mut out, tir_modules, type_table);
+    out
+}
+
+/// Append flat CM ABI types from a `TypeId` to `out`.
+///
+/// Thin wrapper that builds the [`CmStdlibNames`] snapshot once and delegates
+/// to the recursive inner function, so recursion does not rebuild it per level.
+pub(super) fn flat_types_from_type_id_into(
+    type_id: TypeId,
+    out: &mut Vec<cm_abi::CmValType>,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    type_table: &TypeTable,
+) {
+    let names = CmStdlibNames::from_type_table(type_table);
+    flat_types_from_type_id_inner(type_id, out, tir_modules, type_table, &names);
+}
+
+fn flat_types_from_type_id_inner(
+    type_id: TypeId,
+    out: &mut Vec<cm_abi::CmValType>,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    type_table: &TypeTable,
+    names: &CmStdlibNames,
+) {
+    match type_table.get(type_id) {
+        ResolvedType::Primitive(p) => match p {
+            PrimitiveType::I8
+            | PrimitiveType::U8
+            | PrimitiveType::I16
+            | PrimitiveType::U16
+            | PrimitiveType::I32
+            | PrimitiveType::U32
+            | PrimitiveType::Bool
+            | PrimitiveType::Char => out.push(cm_abi::CmValType::I32),
+            PrimitiveType::I64 | PrimitiveType::U64 => out.push(cm_abi::CmValType::I64),
+            PrimitiveType::F32 => out.push(cm_abi::CmValType::F32),
+            PrimitiveType::F64 => out.push(cm_abi::CmValType::F64),
+            PrimitiveType::V128 | PrimitiveType::F16 | PrimitiveType::Bf16 => {
+                panic!("{} cannot appear at CM boundary", p.as_str())
+            }
+        },
+        ResolvedType::Unit => {} // no flat values
+        ResolvedType::Struct { def, type_args } => {
+            if type_table.is_string(type_id) {
+                out.push(cm_abi::CmValType::I32); // ptr
+                out.push(cm_abi::CmValType::I32); // len
+            } else if let Some(struct_decl) = struct_decl_of(*def, type_args, tir_modules) {
+                flatten_struct_type(&struct_decl, out, tir_modules, type_table, names);
+            } else {
+                // A record with no TIR declaration has no known field layout;
+                // flattening it as one i32 would emit a wrong-arity lowering for
+                // a multi-field record. Fail loudly rather than corrupt the
+                // component (the memory lowerer panics on the same condition).
+                panic!(
+                    "struct `{}` has no TIR declaration; cannot compute its flat CM types",
+                    type_table.struct_head_name(*def)
+                );
+            }
+        }
+        ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
+            out.push(if type_table.is_unrestricted_handle(type_id) {
+                cm_abi::CmValType::F64
+            } else {
+                cm_abi::CmValType::I32
+            });
+        }
+        ResolvedType::Enum { .. } => out.push(cm_abi::CmValType::I32),
+        ResolvedType::Variant { def } => {
+            if let Some(variant_decl) = variant_decl_of(*def, tir_modules) {
+                flatten_variant_type(&variant_decl, out, tir_modules, type_table, names);
+            } else {
+                out.push(cm_abi::CmValType::I32);
+            }
+        }
+        ResolvedType::GenericInstance { def, type_args } => {
+            if type_table.is_tuple_def(*def) {
+                for &elem in type_args {
+                    flat_types_from_type_id_inner(elem, out, tir_modules, type_table, names);
+                }
+                return;
+            }
+            match (type_table.compiler_type_item(*def), type_args.as_slice()) {
+                (Some(CompilerItem::Option), [inner]) => {
+                    out.push(cm_abi::CmValType::I32); // discriminant
+                    flat_types_from_type_id_inner(*inner, out, tir_modules, type_table, names);
+                }
+                (Some(CompilerItem::Result), [ok, err]) => {
+                    out.push(cm_abi::CmValType::I32); // discriminant
+                    let mut ok_flat = Vec::new();
+                    let mut err_flat = Vec::new();
+                    flat_types_from_type_id_inner(
+                        *ok,
+                        &mut ok_flat,
+                        tir_modules,
+                        type_table,
+                        names,
+                    );
+                    flat_types_from_type_id_inner(
+                        *err,
+                        &mut err_flat,
+                        tir_modules,
+                        type_table,
+                        names,
+                    );
+                    out.extend(cm_abi::join_flat_unions(&ok_flat, &err_flat));
+                }
+                // A `map<K, V>` despecializes to `list<tuple<K, V>>`, so it
+                // carries that type's pair.
+                (Some(CompilerItem::List | CompilerItem::TreeMap), _) => {
+                    out.push(cm_abi::CmValType::I32); // ptr
+                    out.push(cm_abi::CmValType::I32); // len
+                }
+                _ => out.push(cm_abi::CmValType::I32),
+            }
+        }
+        ResolvedType::Newtype { base_type, .. }
+        | ResolvedType::Ref(base_type)
+        | ResolvedType::MutRef(base_type) => {
+            flat_types_from_type_id_inner(*base_type, out, tir_modules, type_table, names);
+        }
+        ResolvedType::Flags { .. } => {
+            // Flags are u32 at the CM ABI level
+            out.push(cm_abi::CmValType::I32);
+        }
+        _ => {} // Never, Error, Unknown, etc.
+    }
+}
+
+/// The variant declaration `def` names. A resolved type carries its
+/// declaration, so the search is keyed by that: a same-named variant in
+/// another module answers for nothing (WEP 2026-08-12).
+pub(super) fn variant_decl_of(
+    def: DefId,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+) -> Option<TirVariantDecl> {
+    tir_modules
+        .values()
+        .flat_map(|module| &module.variants)
+        .find(|variant| variant.def == def)
+        .cloned()
+}
+
+/// Whether the enum, flags or variant `def` declares no case at all.
+fn declares_no_case(def: DefId, tir_modules: &IndexMap<ModuleSource, TirModule>) -> bool {
+    tir_modules.values().any(|module| {
+        module
+            .enums
+            .iter()
+            .any(|e| e.def == def && e.cases.is_empty())
+            || module
+                .flags
+                .iter()
+                .any(|f| f.def == def && f.members.is_empty())
+            || module
+                .variants
+                .iter()
+                .any(|v| v.def == def && v.cases.is_empty())
+    })
+}
+
+/// The struct declaration `def` names, at `type_args` where the module holds
+/// that instantiation and at the declaration otherwise. Keyed by identity, for
+/// the reason [`variant_decl_of`] is.
+pub(super) fn struct_decl_of(
+    def: StructDef,
+    type_args: &[TypeId],
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+) -> Option<TirStruct> {
+    let mut declaration = None;
+    for s in tir_modules.values().flat_map(|module| &module.structs) {
+        if s.def != def {
+            continue;
+        }
+        if s.type_args == type_args {
+            return Some(s.clone());
+        }
+        if s.type_args.is_empty() {
+            declaration.get_or_insert(s);
+        }
+    }
+    declaration.cloned()
+}
+
+/// Create a `VariantTag` TIR expression (extracts i32 discriminant).
+pub(super) fn variant_tag(expr: TirExpr) -> TirExpr {
+    let _ = expr.type_id;
+    TirExpr::new(
+        TirExprKind::VariantTag {
+            expr: Box::new(expr),
+        },
+        TypeTable::I32,
+        synth_span(),
+    )
+}
+
+/// Create a `VariantTest` TIR expression (tests if variant is a specific case).
+pub(super) fn variant_test(expr: TirExpr, case_index: u32, case_name: &str) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::VariantTest {
+            expr: Box::new(expr),
+            case_index,
+            case_name: case_name.to_string(),
+        },
+        TypeTable::BOOL,
+        synth_span(),
+    )
+}
+
+/// Create a `VariantPayload` TIR expression (extracts payload from a variant case).
+pub(super) fn variant_payload(expr: TirExpr, case_index: u32, payload_type: TypeId) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::VariantPayload {
+            expr: Box::new(expr),
+            case_index,
+            payload_type,
+        },
+        payload_type,
+        synth_span(),
+    )
+}
+
+/// Create a `FieldAccess` TIR expression (accesses a struct field).
+pub(super) fn field_access(
+    expr: TirExpr,
+    field_name: &str,
+    field_index: u32,
+    field_type: TypeId,
+) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::FieldAccess {
+            expr: Box::new(expr),
+            field_name: field_name.to_string(),
+            field_index,
+        },
+        field_type,
+        synth_span(),
+    )
+}
+
+pub(super) fn cm_val_type_to_type_id(vt: cm_abi::CmValType) -> TypeId {
+    match vt {
+        cm_abi::CmValType::I32 => TypeTable::I32,
+        cm_abi::CmValType::I64 => TypeTable::I64,
+        cm_abi::CmValType::F32 => TypeTable::F32,
+        cm_abi::CmValType::F64 => TypeTable::F64,
+    }
+}
+
+/// Create a zero constant for a given CM value type.
+pub(super) fn cm_zero(vt: cm_abi::CmValType) -> TirExpr {
+    match vt {
+        cm_abi::CmValType::I32 => i32_const(0),
+        cm_abi::CmValType::I64 => i64_const(0),
+        cm_abi::CmValType::F32 => TirExpr::new(
+            TirExprKind::FloatLiteral {
+                value: 0.0,
+                repr: "0.0".to_string(),
+            },
+            TypeTable::F32,
+            synth_span(),
+        ),
+        cm_abi::CmValType::F64 => f64_const(0.0),
+    }
+}
+
+/// Reconstruct a minimal AST `Type` from a TIR `TypeId`, for callers that need
+/// to re-enter the AST-shaped match arms. Only the top-level name and immediate
+/// type args are filled in; deeper structure is looked up lazily. A named type
+/// gets its `source_interface` where the registry knows it, since the lift /
+/// lower helpers key by `(source_interface, name)`.
+pub(super) fn type_id_to_ast_type(
+    type_id: TypeId,
+    type_table: &TypeTable,
+    cm_interface_registry: &CmInterfaceRegistry,
+) -> Type {
+    let span = synth_span();
+    let resolved = type_table.get(type_id);
+    let named_no_source =
+        |name: &str| Type::Named(NamedType::new(AstId::fresh(), name.to_string(), span));
+    // The declaring module answers first, so no by-name search can offer
+    // another module's `ErrorCode` and lift a record as its enum.
+    let cm_named = |name: &str, ms: &ModuleSource| {
+        let nt = NamedType::new(AstId::fresh(), name.to_string(), span);
+        let searchable = match ms {
+            ModuleSource::Binding { .. } => true,
+            ModuleSource::Core { name: core } => is_wit_core_module(core),
+            _ => false,
+        };
+        let source = cm_interface_registry
+            .interface_declaring(ms, name)
+            .map(str::to_string)
+            .or_else(|| {
+                searchable
+                    .then(|| cm_interface_registry.resolve_cm_source_for(&nt))
+                    .flatten()
+            });
+        if let Some(source) = source {
+            cm_interface_registry.set_source_interface(nt.id, source);
+        }
+        Type::Named(nt)
+    };
+    match resolved {
+        ResolvedType::Primitive(p) => named_no_source(p.as_str()),
+        ResolvedType::Unit => Type::unit(AstId::fresh(), span),
+        // `Flags` joins them: its own CM type, 1 byte at <=8 labels, not a
+        // four-byte `i32`.
+        ResolvedType::Struct { .. }
+        | ResolvedType::Variant { .. }
+        | ResolvedType::Enum { .. }
+        | ResolvedType::Flags { .. } => {
+            let (name, module_source) = type_table
+                .nominal_head(type_id)
+                .expect("a nominal type names a declaration");
+            cm_named(&name, &module_source)
+        }
+        ResolvedType::Resource { def } => {
+            cm_named(type_table.def_name(*def), type_table.def_module(*def))
+        }
+        ResolvedType::GenericInstance { def, type_args } => {
+            let name = &type_table.def_name(*def).to_string();
+
+            let args: Vec<Type> = type_args
+                .iter()
+                .map(|&tid| type_id_to_ast_type(tid, type_table, cm_interface_registry))
+                .collect();
+            // The tuple family is a `GenericInstance`, but its CM surface is a
+            // structural tuple — emit `Type::Tuple` so lift/lower dispatch on
+            // the tuple arm rather than the generic catch-all.
+            if type_table.is_tuple_def(*def) {
+                Type::Tuple(args)
+            } else {
+                Type::Generic(GenericType {
+                    id: AstId::fresh(),
+                    name: name.clone(),
+                    args,
+                    span,
+                })
+            }
+        }
+        ResolvedType::GenericResource { def, type_args } => {
+            let name = &type_table.def_name(*def).to_string();
+            let args: Vec<Type> = type_args
+                .iter()
+                .map(|&tid| type_id_to_ast_type(tid, type_table, cm_interface_registry))
+                .collect();
+            Type::Generic(GenericType {
+                id: AstId::fresh(),
+                name: name.clone(),
+                args,
+                span,
+            })
+        }
+        ResolvedType::Newtype { .. } => {
+            let (name, module_source) = type_table
+                .nominal_head(type_id)
+                .expect("a newtype names a declaration");
+            cm_named(&name, &module_source)
+        }
+        ResolvedType::Ref(inner) => Type::Reference(Box::new(type_id_to_ast_type(
+            *inner,
+            type_table,
+            cm_interface_registry,
+        ))),
+        ResolvedType::MutRef(inner) => Type::MutReference(Box::new(type_id_to_ast_type(
+            *inner,
+            type_table,
+            cm_interface_registry,
+        ))),
+        ResolvedType::Never
+        | ResolvedType::Function { .. }
+        | ResolvedType::Reactive(_)
+        | ResolvedType::BuiltinArray(_)
+        | ResolvedType::TypeParam { .. }
+        | ResolvedType::InferVar(_)
+        | ResolvedType::TypePack { .. }
+        | ResolvedType::AssocTypeProjection { .. }
+        | ResolvedType::Unknown
+        | ResolvedType::Error => {
+            panic!("type has no Component Model surface: {resolved:?}")
+        }
+    }
+}
+
+/// Whether a parameter needs CM flat-ABI lifting at the export boundary — that
+/// is, whether its flat representation is anything but a single-slot passthrough
+/// of the same Wasm value type. Handle-shaped types (resource, enum, flags) and
+/// every primitive but `bool` travel as one scalar at both layers and need none;
+/// `bool`, `Unit`, and everything else must be reconstructed Wado-side.
+pub(super) fn param_needs_lifting(type_id: TypeId, tt: &TypeTable) -> bool {
+    match tt.get(type_id) {
+        ResolvedType::Primitive(prim) => matches!(prim, PrimitiveType::Bool),
+        ResolvedType::Unit => true,
+        ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
+            tt.is_unrestricted_handle(type_id)
+        }
+        // One-scalar handle-shaped types flow through.
+        ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => false,
+        // `ResolvedType::Newtype` unwraps at the CM boundary, so recurse on
+        // the base type rather than treating the newtype itself as
+        // opaque.
+        ResolvedType::Newtype { base_type, .. } => param_needs_lifting(*base_type, tt),
+        // Everything else (Struct, Variant, tuples via GenericInstance,
+        // `List<T>`, `Option<T>`, `Result<T, E>`, references, etc.)
+        // either widens or splits at the flat ABI.
+        _ => true,
+    }
+}
+
+/// Check if any parameter of the user's exported function needs lifting.
+pub(super) fn export_needs_param_lifting(
+    user_params: &[TirParam],
+    type_table: &RefCell<TypeTable>,
+) -> bool {
+    let tt = type_table.borrow();
+    user_params
+        .iter()
+        .any(|p| param_needs_lifting(p.type_id, &tt))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The scope a record's stream-read lift reads nested field names under.
+    #[test]
+    fn a_cm_package_comes_from_the_source_in_every_bundled_namespace() {
+        assert_eq!(
+            cm_package_from_source("wasi:filesystem/types@0.3.0"),
+            Some((CmNamespace::Wasi, "filesystem"))
+        );
+        // `core:` is not a `CmNamespace`; the kiln lookups own those.
+        assert_eq!(cm_package_from_source("core:kiln/types@0.1.0"), None);
+        assert_eq!(cm_package_from_source("my:pkg/iface"), None);
+    }
+
+    #[test]
+    fn a_cm_interface_module_carries_the_namespace_that_owns_it() {
+        assert_eq!(
+            cm_interface_module("wasi:sockets/ip-name-lookup@0.3.0"),
+            Some((
+                Some(CmNamespace::Wasi),
+                "sockets/ip_name_lookup.wado".into()
+            ))
+        );
+        // A `core:` module carries no `CmNamespace`, and must not pair with one.
+        assert_eq!(
+            cm_interface_module("core:kiln/types@0.1.0"),
+            Some((None, "kiln/types.wado".into()))
+        );
+        assert_eq!(cm_interface_module("my:pkg/iface"), None);
+    }
+
+    /// The bridge back to the AST spells unit the way the parser does, since
+    /// [`Type::is_unit`] is what every AST-level predicate asks.
+    #[test]
+    fn the_unit_type_id_spells_the_unit_type() {
+        let (registry, _) = CmInterfaceRegistry::build_from_stdlib();
+        let type_table = TypeTable::new();
+        let unit = type_id_to_ast_type(TypeTable::UNIT, &type_table, &registry);
+        assert!(unit.is_unit(), "unit spelled as {unit:?}");
+    }
+}

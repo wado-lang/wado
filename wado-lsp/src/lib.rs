@@ -24,9 +24,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use indexmap::IndexMap;
-use wado_compiler::kiln::InvocationIndex;
-use wado_compiler::semantics::Semantics;
-use wado_compiler::{CompilerHost, Diagnostic as CompilerDiagnostic, LogLevel};
+use wado_compiler_frontend::kiln::InvocationIndex;
+use wado_compiler_frontend::semantics::Semantics;
+use wado_compiler_frontend::{CompilerHost, Diagnostic as CompilerDiagnostic, LogLevel};
 
 use crate::host::install_dev_stdlib;
 use crate::query::QueryContext;
@@ -80,8 +80,8 @@ impl std::error::Error for SymbolQueryError {}
 /// ## Snapshot cache
 ///
 /// Each open document keeps a lazily-computed [`Snapshot`] bundling the
-/// `Semantics` produced by composing `wado_compiler::parse` →
-/// `wado_compiler::load` → `wado_compiler::semantics_of` (see
+/// `Semantics` produced by composing `wado_compiler_frontend::parse` →
+/// `wado_compiler_frontend::load` → `wado_compiler_frontend::semantics_of` (see
 /// [`build_semantics`]) and the `CompilerDiagnostic`s emitted during
 /// that run. Every query —
 /// diagnostics included — consumes the cache, so one document version
@@ -129,8 +129,10 @@ impl Snapshot {
         if let Some(cached) = self.semantic.borrow().clone() {
             return cached;
         }
-        let checked =
-            wado_compiler::check_semantics(&self.sem, wado_compiler::hashmap::IndexSet::default());
+        let checked = wado_compiler_frontend::check_semantics(
+            &self.sem,
+            wado_compiler_frontend::hashmap::IndexSet::default(),
+        );
         let mut out: Vec<CompilerDiagnostic> = checked
             .effects
             .into_iter()
@@ -138,7 +140,7 @@ impl Snapshot {
             .chain(checked.purity.into_iter().map(Into::into))
             .collect();
         out.extend(
-            wado_compiler::check_resource_moves_semantic(&self.sem)
+            wado_compiler_frontend::check_resource_moves_semantic(&self.sem)
                 .into_iter()
                 .map(Into::into),
         );
@@ -311,7 +313,7 @@ impl Engine {
         // Three-stage composition: parse once, derive kiln invocations
         // from the parsed entry AST, then drive load + semantics_of with
         // the shared parse result. This avoids the second lex+parse of
-        // the entry source that the `wado_compiler::semantics`
+        // the entry source that the `wado_compiler_frontend::semantics`
         // convenience would otherwise do, and threads the
         // InvocationIndex through without the LSP having to know the
         // loader's source-based entry point.
@@ -363,7 +365,7 @@ impl Engine {
     }
 
     /// Snapshot `uri` and resolve a [symbol
-    /// notation](wado_compiler::symbol_notation) to its [`Definition`].
+    /// notation](wado_compiler_frontend::symbol_notation) to its [`Definition`].
     ///
     /// Shared by the name-based query methods. `uri` must be an open document
     /// that loads the notation's module (typically a synthetic entry that
@@ -374,11 +376,11 @@ impl Engine {
     async fn resolve_symbol_def<H: CompilerHost>(
         &self,
         uri: &str,
-        notation: &wado_compiler::symbol_notation::SymbolNotation,
+        notation: &wado_compiler_frontend::symbol_notation::SymbolNotation,
         public_only: bool,
         host: &H,
-    ) -> Result<(Rc<Snapshot>, wado_compiler::Definition), SymbolQueryError> {
-        use wado_compiler::SymbolResolveError;
+    ) -> Result<(Rc<Snapshot>, wado_compiler_frontend::Definition), SymbolQueryError> {
+        use wado_compiler_frontend::SymbolResolveError;
         let snapshot = self
             .snapshot(uri, host)
             .await
@@ -417,7 +419,7 @@ impl Engine {
     pub async fn definition_by_symbol<H: CompilerHost>(
         &self,
         uri: &str,
-        notation: &wado_compiler::symbol_notation::SymbolNotation,
+        notation: &wado_compiler_frontend::symbol_notation::SymbolNotation,
         public_only: bool,
         host: &H,
     ) -> Result<DefinitionResult, SymbolQueryError> {
@@ -446,7 +448,7 @@ impl Engine {
     pub async fn hover_by_symbol<H: CompilerHost>(
         &self,
         uri: &str,
-        notation: &wado_compiler::symbol_notation::SymbolNotation,
+        notation: &wado_compiler_frontend::symbol_notation::SymbolNotation,
         public_only: bool,
         host: &H,
     ) -> Result<HoverResult, SymbolQueryError> {
@@ -471,7 +473,7 @@ impl Engine {
     pub async fn references_by_symbol<H: CompilerHost>(
         &self,
         uri: &str,
-        notation: &wado_compiler::symbol_notation::SymbolNotation,
+        notation: &wado_compiler_frontend::symbol_notation::SymbolNotation,
         include_declaration: bool,
         public_only: bool,
         host: &H,
@@ -493,7 +495,7 @@ impl Engine {
     pub async fn document_highlight_by_symbol<H: CompilerHost>(
         &self,
         uri: &str,
-        notation: &wado_compiler::symbol_notation::SymbolNotation,
+        notation: &wado_compiler_frontend::symbol_notation::SymbolNotation,
         public_only: bool,
         host: &H,
     ) -> Result<(String, Vec<DocumentHighlight>), SymbolQueryError> {
@@ -606,8 +608,10 @@ impl Engine {
         // intermediate allocation; only the normalised form (`core:/cli`)
         // needs its slash stripped and the URI re-formed.
         match rest.strip_prefix('/') {
-            None => wado_compiler::stdlib::get_stdlib_module(uri),
-            Some(path) => wado_compiler::stdlib::get_stdlib_module(&format!("{scheme}:{path}")),
+            None => wado_compiler_frontend::stdlib::get_stdlib_module(uri),
+            Some(path) => {
+                wado_compiler_frontend::stdlib::get_stdlib_module(&format!("{scheme}:{path}"))
+            }
         }
     }
 
@@ -641,9 +645,9 @@ impl Engine {
         let Some(doc) = self.documents.get(uri) else {
             return Vec::new();
         };
-        let mut lexed = wado_compiler::lex(&doc.text);
+        let mut lexed = wado_compiler_frontend::lex(&doc.text);
         let lex_errors = std::mem::take(&mut lexed.errors);
-        let mut parser = wado_compiler::Parser::from_lex_no_trivia(lexed);
+        let mut parser = wado_compiler_frontend::Parser::from_lex_no_trivia(lexed);
         parser.parse();
         let lines = text::LineIndex::new(&doc.text);
         lex_errors
@@ -695,7 +699,8 @@ impl Engine {
             diagnostics::from_compiler_diagnostic(d, lines.as_ref(), encoding)
         };
         let semantic = snapshot.semantic_diagnostics();
-        let lints = wado_compiler::lint_diagnostics(&snapshot.sem, self.unused_diagnostics, false);
+        let lints =
+            wado_compiler_frontend::lint_diagnostics(&snapshot.sem, self.unused_diagnostics, false);
         snapshot
             .diagnostics
             .iter()
@@ -754,7 +759,10 @@ impl<'a, H> DiagnosticCollector<'a, H> {
 }
 
 impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
-    async fn load_source(&self, path: &str) -> Result<Vec<u8>, wado_compiler::SourceError> {
+    async fn load_source(
+        &self,
+        path: &str,
+    ) -> Result<Vec<u8>, wado_compiler_frontend::SourceError> {
         self.inner.load_source(path).await
     }
 
@@ -780,7 +788,7 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
     // collector only intercepts diagnostics. Falling back to the trait defaults
     // here would silently drop the host's dependency index (path *and* component
     // deps), so `use { … } from "<dep>"` would fail to resolve on the LSP path.
-    fn dependency_index(&self) -> wado_compiler::DependencyIndex {
+    fn dependency_index(&self) -> wado_compiler_frontend::DependencyIndex {
         self.inner.dependency_index()
     }
 
@@ -795,9 +803,12 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
     fn run_generator(
         &self,
         component_wasm: &[u8],
-        request: wado_compiler::GeneratorRequest,
+        request: wado_compiler_frontend::GeneratorRequest,
     ) -> impl std::future::Future<
-        Output = Result<wado_compiler::GeneratorResponse, wado_compiler::GeneratorRunnerError>,
+        Output = Result<
+            wado_compiler_frontend::GeneratorResponse,
+            wado_compiler_frontend::GeneratorRunnerError,
+        >,
     > + Send {
         self.inner.run_generator(component_wasm, request)
     }
@@ -823,7 +834,7 @@ async fn build_semantics<H: CompilerHost>(
     override_invocations: Option<InvocationIndex>,
     host: &H,
 ) -> Semantics {
-    let parsed = wado_compiler::parse(source);
+    let parsed = wado_compiler_frontend::parse(source);
     // Report each recovered lex/parse error, then continue with the partial
     // AST so position queries resolve in the regions outside the error. A
     // load/bind failure on the partial AST still degrades to
@@ -836,7 +847,7 @@ async fn build_semantics<H: CompilerHost>(
     }
     let invocations =
         kiln::prepare_invocations(filename, &parsed.ast, override_invocations, host).await;
-    match wado_compiler::load(
+    match wado_compiler_frontend::load(
         parsed,
         Some(filename),
         host,
@@ -846,7 +857,9 @@ async fn build_semantics<H: CompilerHost>(
     .await
     {
         // LSP engine: facts only, no TIR (queries never read `tir_modules`).
-        Ok(loaded) => wado_compiler::semantics_of(loaded, host, LogLevel::default(), false),
+        Ok(loaded) => {
+            wado_compiler_frontend::semantics_of(loaded, host, LogLevel::default(), false)
+        }
         Err(e) => {
             host.emit_diagnostic(e.into());
             Semantics::empty()

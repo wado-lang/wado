@@ -9,7 +9,7 @@
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use wado_compiler::{
+use wado_compiler_frontend::{
     CompilerHost, DependencyIndex, DependencyManifest, Diagnostic, Severity, SourceError,
 };
 
@@ -24,7 +24,7 @@ use discovery::{DependencyEntry, absolutize, normalize_path};
 /// built, [`crate::Engine::new`], and the `wado` binary before it dispatches.
 #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
 pub fn install_dev_stdlib() {
-    use wado_compiler::stdlib::{DEV_STDLIB_ROOT, dev_stdlib_files, install_dev_stdlib};
+    use wado_compiler_frontend::stdlib::{DEV_STDLIB_ROOT, dev_stdlib_files, install_dev_stdlib};
 
     let root = Path::new(DEV_STDLIB_ROOT);
     install_dev_stdlib(dev_stdlib_files().into_iter().map(|file| {
@@ -154,7 +154,7 @@ impl CompilerHost for FilesystemCompilerHost {
 /// as a stdlib test's directory does.
 #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
 fn is_in_dev_stdlib_core(dir: &Path) -> bool {
-    use wado_compiler::stdlib::DEV_STDLIB_ROOT;
+    use wado_compiler_frontend::stdlib::DEV_STDLIB_ROOT;
 
     let core = Path::new(DEV_STDLIB_ROOT).join("core");
     match (std::fs::canonicalize(dir), std::fs::canonicalize(core)) {

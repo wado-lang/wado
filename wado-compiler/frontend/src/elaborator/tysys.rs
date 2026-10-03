@@ -1,0 +1,552 @@
+//! [`TypeSystem`] — pipeline-wide type knowledge. Every field is `'static`,
+//! [`Arc`]- or [`Rc`]-wrapped, so a `Clone` is a shallow copy each per-module
+//! [`super::Elaborator`] holds. A field belongs here only if it fits the type
+//! system itself: per-call mutable state does not, even when cache-shaped, since
+//! sharing a recursion stack across module walks would leak frames between them.
+
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::sync::Arc;
+
+use crate::ast::{BinaryOp, Expr, Literal, RangeKind};
+use crate::builtin_registry::BuiltinRegistry;
+use crate::compiler_item::CompilerItem;
+use crate::component_model::CmInterfaceRegistry;
+use crate::hashmap::IndexMap;
+use crate::module_source::ModuleSource;
+use crate::resource_move_check::carries_affine_resource;
+use crate::tir::{ResolvedType, StructDef, TypeId, TypeTable, range_item};
+
+use super::sem::decls::ModuleDecls;
+use super::trait_env::{NamespaceImports, TraitEnv};
+use super::types::{DataDecls, TypeLookup};
+use super::util::bound_param_name;
+use crate::ast::{AstId, GenericParam};
+use crate::defs::DefId;
+use crate::elaborator::sig;
+use crate::elaborator::solver_bridge::SolverBridge;
+use crate::name::{FqTypeName, NEVER_TYPE_NAME, UNIT_TYPE_NAME};
+use crate::resolve::Resolutions;
+
+/// Pipeline-wide type knowledge — the type arena, the cross-module decl
+/// indices, the registries, and the read-only caches built once at
+/// `annotate_modules` time.
+///
+/// See the module-level documentation for the membership rule and the
+/// rationale for the `Elaborator` caches that were removed rather than
+/// migrated here.
+#[derive(Clone)]
+pub struct TypeSystem {
+    /// Shared type arena. Anonymous structs synthesised from struct
+    /// literals and monomorphised instances created during reify intern
+    /// through this same table; the `Rc<RefCell<…>>` is the one piece of
+    /// shared interior mutability the WEP explicitly preserves.
+    pub(crate) type_table: Rc<RefCell<TypeTable>>,
+
+    /// Every loaded module's data declarations. Built during the
+    /// annotate-decls pass; read-only afterwards.
+    pub(crate) data: Rc<DataDecls>,
+
+    /// What every type/trait reference site in the program refers to, resolved
+    /// once from the module that wrote it. The single producer of declaration
+    /// identity from written syntax (WEP 2026-08-12).
+    pub(crate) resolutions: Rc<Resolutions>,
+
+    /// Immutable trait knowledge base: impl indices, trait declarations,
+    /// and blanket impls. Built once by [`TraitEnv::build`] and shared
+    /// across every per-module elaborator via `Arc`.
+    pub trait_env: Arc<TraitEnv>,
+    /// The solver's view of the program, built once every declaration is
+    /// resolved and `None` until then. Selection asks it in every profile, so
+    /// that a debug and a release build cannot choose different impls
+    /// (WEP 2026-09-01).
+    pub(crate) solver: Option<Rc<SolverBridge>>,
+
+    /// Registries the elaborator queries. The Component-Model
+    /// `WorldRegistry` is built by the same `CmInterfaceRegistry::build_from_stdlib`
+    /// call but lives on [`super::orchestration::AnnotateState`] instead
+    /// of here — the elaborator never asks "what does world X export?",
+    /// only post-elaborator stages (link, synthesis, DCE) do.
+    pub cm_interface_registry: std::sync::Arc<CmInterfaceRegistry>,
+    pub builtin_registry: Rc<BuiltinRegistry>,
+
+    /// Pre-loaded file contents for `#include_str` / `#include_bytes`.
+    /// Key: `[module_source_display, raw_path]`, value: raw bytes.
+    pub(crate) included_files: Rc<IndexMap<[String; 2], Vec<u8>>>,
+
+    /// Per-module index from function name → position in `module.items`
+    /// for O(1) lookup. Built globally during annotate; read-only
+    /// afterwards.
+    pub(crate) loaded_module_func_indices: Rc<IndexMap<ModuleSource, IndexMap<String, usize>>>,
+
+    /// What a site naming an `#[unavailable]` declaration reports, by the
+    /// declaration. The sentence is rendered once here, where the declaring
+    /// `impl` or `trait` is in hand to qualify the name.
+    /// See [WEP: Declared Absence](../../../docs/wep-2026-09-13-declared-absence.md).
+    pub(crate) unavailable: Rc<IndexMap<DefId, String>>,
+
+    /// Every source declaration's decl-pass facts — signatures, globals,
+    /// associated constants, data sections. See [`super::sig::Signatures`]
+    /// for the membership rule.
+    pub(crate) signatures: Rc<sig::Signatures>,
+}
+
+impl TypeSystem {
+    /// A [`TypeLookup`] standing in `module`, reading `walk`'s additions ahead
+    /// of the program's declarations.
+    pub(crate) fn type_lookup<'s>(
+        &'s self,
+        module: &'s ModuleSource,
+        namespace_imports: &'s NamespaceImports,
+        walk: &'s ModuleDecls,
+    ) -> TypeLookup<'s> {
+        TypeLookup {
+            current_module_source: module,
+            resolutions: &self.resolutions,
+            namespace_imports,
+            program: &self.data,
+            walk,
+            decls: &self.trait_env,
+        }
+    }
+
+    /// The `TypeId` of each field of the struct `type_id` names, in declaration
+    /// order, or `None` if it names no registered struct. Keyed by the type
+    /// itself rather than a spelling of it, which is what every caller holds:
+    /// each reached one by destructuring a `ResolvedType`. Used by the resource
+    /// move check to decide whether an aggregate transitively owns a resource.
+    ///
+    /// An anonymous shape answers from its head: it has fields like any other
+    /// struct, and no declaration to reach them through.
+    pub(crate) fn struct_field_type_ids_of(&self, type_id: TypeId) -> Option<Vec<TypeId>> {
+        {
+            let table = self.type_table.borrow();
+            if let ResolvedType::Struct {
+                def: StructDef::Anon(shape),
+                ..
+            } = table.get(table.peel_refs(type_id))
+            {
+                return Some(
+                    table
+                        .anon_struct_fields(*shape)
+                        .iter()
+                        .map(|(_, ty)| *ty)
+                        .collect(),
+                );
+            }
+        }
+        let info = self.data.struct_fields.get(&self.type_def(type_id)?)?;
+        Some(info.fields.iter().map(|(_, tid, _)| *tid).collect())
+    }
+
+    /// Whether `type_id` is, or transitively carries, an affine resource.
+    /// Permits a by-value `self` receiver on an aggregate that owns a resource.
+    pub(crate) fn carries_resource(&self, type_id: TypeId) -> bool {
+        carries_affine_resource(
+            &self.type_table.borrow(),
+            &|id| self.struct_field_type_ids_of(id),
+            type_id,
+            &mut Vec::new(),
+        )
+    }
+
+    /// The `Type::Case` spelling of the case the resolve walk names at a bare
+    /// identifier site: the hint when no expected type supplies one.
+    pub(crate) fn bare_case_at(&self, site: AstId) -> Option<String> {
+        let case = self.resolutions.declared_if_walked(site)?;
+        let defs = self.resolutions.defs();
+        if !defs.kind(case).is_case() {
+            return None;
+        }
+        let owner = defs
+            .parent(case)
+            .expect("a case is a member of the type declaring it");
+        Some(self.qualified_case(owner, defs.name(case)))
+    }
+
+    /// `type_id` with each `TypeParam { index: i }` replaced by `type_args[i]`.
+    pub(crate) fn substitute_type_params(&self, type_id: TypeId, type_args: &[TypeId]) -> TypeId {
+        if type_args.is_empty() {
+            return type_id;
+        }
+        self.type_table
+            .borrow_mut()
+            .substitute_positional(type_id, type_args)
+    }
+
+    /// The `Type::Case` spelling of `case` under `owner`.
+    pub(crate) fn qualified_case(&self, owner: DefId, case: &str) -> String {
+        format!("{}::{case}", self.resolutions.defs().name(owner))
+    }
+
+    /// The method `name` that `owner` — an `impl` block or a `trait`
+    /// declaration — declares. Answered from the declaration table, so two
+    /// blocks on one type each declaring `name` stay distinct.
+    pub(crate) fn declared_method(&self, owner: DefId, name: &str) -> Option<DefId> {
+        let defs = self.resolutions.defs();
+        defs.members(owner)
+            .iter()
+            .copied()
+            .find(|&member| defs.name(member) == name)
+    }
+
+    /// Whether an impl target's generic argument names a type parameter of that
+    /// impl rather than a concrete type. The block's own declaration list is the
+    /// only way in and the whole of it: `String` in `impl Tr for Foo<String>`
+    /// fills an argument position and binds no slot, and a name the block does
+    /// declare is a slot however many modules name a type that.
+    pub(crate) fn is_impl_target_param(&self, declared: &[GenericParam], name: &str) -> bool {
+        declared.iter().any(|p| p.name == name)
+    }
+
+    /// Whether `expr` is the bare `null` literal. A bare `null` resolves to
+    /// `Option<!>` — a value of every `Option` and of nothing else — and
+    /// acquires its inner type from an expected-type context, so callers that
+    /// can supply one (e.g. binary operands) check this to route the type
+    /// through.
+    pub(crate) fn is_null_literal(expr: &Expr) -> bool {
+        matches!(expr, Expr::Literal(lit) if matches!(lit.value, Literal::Null))
+    }
+}
+
+/// The trait `op` dispatches through and the method it calls, or `None` for
+/// the short-circuit operators, which dispatch through no trait. `And` / `Or`
+/// are explicit arms, so a new [`BinaryOp`] variant fails the build here.
+pub(crate) fn operator_trait_method(op: &BinaryOp) -> Option<(CompilerItem, &'static str)> {
+    match op {
+        BinaryOp::Add => Some((CompilerItem::Add, "add")),
+        BinaryOp::Sub => Some((CompilerItem::Sub, "sub")),
+        BinaryOp::Mul => Some((CompilerItem::Mul, "mul")),
+        BinaryOp::Div => Some((CompilerItem::Div, "div")),
+        BinaryOp::Mod => Some((CompilerItem::Rem, "rem")),
+        BinaryOp::BitAnd => Some((CompilerItem::BitAnd, "bitand")),
+        BinaryOp::BitOr => Some((CompilerItem::BitOr, "bitor")),
+        BinaryOp::BitXor => Some((CompilerItem::BitXor, "bitxor")),
+        BinaryOp::Shl => Some((CompilerItem::Shl, "shl")),
+        BinaryOp::Shr => Some((CompilerItem::Shr, "shr")),
+        BinaryOp::Eq | BinaryOp::NotEq => Some((CompilerItem::Eq, "eq")),
+        BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => {
+            Some((CompilerItem::Ord, "cmp"))
+        }
+        BinaryOp::And | BinaryOp::Or => None,
+    }
+}
+
+/// The compiler item `op` dispatches through.
+pub(crate) fn operator_compiler_item(op: &BinaryOp) -> Option<CompilerItem> {
+    operator_trait_method(op).map(|(item, _)| item)
+}
+
+/// Pure type-shape helpers answerable from the type table alone (peel
+/// references, extract a declared type's name, newtype-base resolution, type
+/// stringification). They touch only `self.type_table`; the body walk and
+/// reify both reach them through `self.tysys`.
+impl TypeSystem {
+    /// Get the struct name from a type ID, if it's a struct, generic instance, newtype, or flags.
+    pub(crate) fn struct_name_for_type(&self, type_id: TypeId) -> Option<String> {
+        match self.type_table.borrow().get(type_id) {
+            ResolvedType::Struct { .. }
+            | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Newtype { .. }
+            | ResolvedType::Flags { .. } => self
+                .type_table
+                .borrow()
+                .nominal_head(type_id)
+                .map(|(n, _)| n),
+            // `Array<T>` is declared definitionless, so it has no nominal head
+            // to read; its declaration names it `Array` and carries its impls.
+            ResolvedType::BuiltinArray(_) => Some(TypeTable::ARRAY_TYPE_NAME.to_string()),
+            _ => None,
+        }
+    }
+
+    /// The fq receiver name of `type_id`'s head: the name a method defined on
+    /// this type is spelled with, module included and type arguments dropped
+    /// (`List<i32>` → `core:prelude/list.wado/List`). Reading the module off
+    /// the resolved type is what makes this exact — a written name would have
+    /// to be re-resolved in the current scope, which the type already did.
+    pub(crate) fn fq_receiver_head(&self, type_id: TypeId) -> FqTypeName {
+        self.type_table.borrow().fq_base_type_name(type_id)
+    }
+
+    /// How a method dispatched through `impl` spells its receiver: an impl at
+    /// one instantiation owns that instance's function, a parameterized one the
+    /// base's, specialized per instance by monomorphization.
+    pub fn fq_receiver_of_impl(&self, type_id: TypeId, at_one_instantiation: bool) -> FqTypeName {
+        let table = self.type_table.borrow();
+        if at_one_instantiation {
+            table.fq_type_name(type_id)
+        } else {
+            table.fq_base_type_name(type_id)
+        }
+    }
+
+    /// The first link at or below `type_id` — itself included — writing its own
+    /// impl of `trait_`, stopping above a scalar base: a primitive's operator
+    /// impl *is* the instruction, not one a newtype inherits.
+    pub(crate) fn own_impl_link(&self, type_id: TypeId, trait_: DefId) -> Option<TypeId> {
+        let mut tid = type_id;
+        loop {
+            let key = self.type_table.borrow().impl_receiver_key(tid);
+            if self
+                .trait_env
+                .has_any_methodful_impl_by_receiver(&key, trait_)
+            {
+                return Some(tid);
+            }
+            let base = self.type_table.borrow().get_newtype_base(tid)?;
+            if !matches!(
+                self.type_table.borrow().get(base),
+                ResolvedType::Newtype { .. }
+                    | ResolvedType::Struct { .. }
+                    | ResolvedType::GenericInstance { .. }
+                    | ResolvedType::Variant { .. }
+            ) {
+                return None;
+            }
+            tid = base;
+        }
+    }
+
+    /// The prelude struct a `kind` range literal builds: its name, and its
+    /// instance over `element`.
+    pub(crate) fn range_type(&self, kind: RangeKind, element: TypeId) -> (String, TypeId) {
+        let item = range_item(kind);
+        let mut type_table = self.type_table.borrow_mut();
+        let name = type_table.compiler_items().struct_name(item).to_string();
+        let def = type_table.require_compiler_item_def(item);
+        (name, type_table.make_generic_instance(def, vec![element]))
+    }
+
+    /// The name an operator impl on `ty` is indexed under. `None` for a type no
+    /// user impl can supply an operator for.
+    pub(crate) fn operator_receiver_name(&self, ty: TypeId) -> Option<String> {
+        let table = self.type_table.borrow();
+        matches!(
+            table.get(ty),
+            ResolvedType::Struct { .. }
+                | ResolvedType::GenericInstance { .. }
+                | ResolvedType::Newtype { .. }
+                | ResolvedType::Flags { .. }
+        )
+        .then(|| table.base_type_name(ty))
+    }
+
+    /// [`Self::newtype_base_lookup`] for a trait dispatch: an impl a link below
+    /// the receiver wrote still answers for it, so stop at that link rather
+    /// than one peel down, where a longer chain carries none.
+    pub(crate) fn trait_impl_base_lookup(
+        &self,
+        name: &str,
+        type_id: TypeId,
+        trait_: DefId,
+    ) -> (String, TypeId) {
+        match self.own_impl_link(type_id, trait_) {
+            Some(link) if link != type_id => (self.type_table.borrow().base_type_name(link), link),
+            _ => self.newtype_base_lookup(name, type_id),
+        }
+    }
+
+    /// A newtype's representation head, named for a trait-impl lookup fallback,
+    /// else the name and id given.
+    ///
+    /// A middle link writes no impl of its own, or [`Self::own_impl_link`] would
+    /// have stopped there.
+    pub(crate) fn newtype_base_lookup(&self, name: &str, type_id: TypeId) -> (String, TypeId) {
+        let tt = self.type_table.borrow();
+        if let Some(base_id) = tt.newtype_representation(type_id) {
+            let is_builtin_array = matches!(tt.get(base_id), ResolvedType::BuiltinArray(_));
+            drop(tt);
+            if is_builtin_array {
+                return (TypeTable::ARRAY_TYPE_NAME.to_string(), base_id);
+            }
+            if let Some(base_name) = self.struct_name_for_type(base_id) {
+                return (base_name, base_id);
+            }
+        }
+        (name.to_string(), type_id)
+    }
+
+    /// Peel a chain of trailing newtypes / generic instances down to the
+    /// ultimate base struct (or builtin) name that owns its methods.
+    pub(crate) fn get_ultimate_base_struct_name(&self, type_id: TypeId) -> String {
+        let mut current = type_id;
+        loop {
+            match self.type_table.borrow().get(current).clone() {
+                ResolvedType::Struct { def, .. } => {
+                    return self.type_table.borrow().struct_head_name(def);
+                }
+                ResolvedType::GenericInstance { def, .. } => {
+                    return self.type_table.borrow().def_name(def).to_string();
+                }
+                ResolvedType::Newtype { base_type, .. } => current = base_type,
+                ResolvedType::Flags { .. } => return TypeTable::FLAGS_BASE_NAME.to_string(),
+                // The raw GC array's base method-owner name is "Array"
+                // (its type args are carried separately), not the full
+                // `type_name` spelling `Array<T>`.
+                ResolvedType::BuiltinArray(_) => return TypeTable::ARRAY_TYPE_NAME.to_string(),
+                _ => return self.type_table.borrow().type_name(current),
+            }
+        }
+    }
+
+    /// Peel reference / mutable-reference wrappers to reach the underlying type.
+    pub(crate) fn get_base_type(&self, type_id: TypeId) -> TypeId {
+        self.type_table.borrow().peel_refs(type_id)
+    }
+
+    /// Whether `type_id` is a kind that participates in `Eq`/`Ord` auto-derive.
+    pub(crate) fn auto_derive_eligible_kind(&self, type_id: TypeId) -> bool {
+        matches!(
+            self.type_table.borrow().get(type_id),
+            ResolvedType::Struct { .. }
+                | ResolvedType::Variant { .. }
+                | ResolvedType::Enum { .. }
+                | ResolvedType::GenericInstance { .. }
+        )
+    }
+
+    /// Substitute every occurrence of `base_type` with `newtype` inside
+    /// `type_id`, recursing through references and generic-instance args.
+    /// Returns the original id unchanged when no occurrence is found.
+    pub(crate) fn substitute_newtype_in_type(
+        &self,
+        type_id: TypeId,
+        base_type: TypeId,
+        newtype: TypeId,
+    ) -> TypeId {
+        let ty = self.type_table.borrow().get(type_id).clone();
+        match ty {
+            // Direct match: base type -> newtype
+            _ if type_id == base_type => newtype,
+
+            // Reference: substitute the inner type
+            ResolvedType::Ref(inner) => {
+                let new_inner = self.substitute_newtype_in_type(inner, base_type, newtype);
+                if new_inner == inner {
+                    type_id
+                } else {
+                    self.type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::Ref(new_inner))
+                }
+            }
+            ResolvedType::MutRef(inner) => {
+                let new_inner = self.substitute_newtype_in_type(inner, base_type, newtype);
+                if new_inner == inner {
+                    type_id
+                } else {
+                    self.type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::MutRef(new_inner))
+                }
+            }
+
+            // Generic instance (e.g., Option<T>, List<T>): substitute in type args
+            ResolvedType::GenericInstance { def, type_args } => {
+                let new_args: Vec<TypeId> = type_args
+                    .iter()
+                    .map(|&arg| self.substitute_newtype_in_type(arg, base_type, newtype))
+                    .collect();
+                if new_args == type_args {
+                    type_id
+                } else {
+                    self.type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::GenericInstance {
+                            def,
+                            type_args: new_args,
+                        })
+                }
+            }
+
+            // Other types: no substitution
+            _ => type_id,
+        }
+    }
+
+    /// The name the type parameter or pack in this slot carries, `None` for a
+    /// slot holding anything else.
+    pub(crate) fn binder_name(&self, type_id: TypeId) -> Option<String> {
+        bound_param_name(self.type_table.borrow().get(type_id)).cloned()
+    }
+
+    /// Render a type as a user-facing Wado type string (used in diagnostics
+    /// and synthesized names). Recurses through references, generic args,
+    /// tuples, and function types.
+    pub(crate) fn type_id_to_string(&self, type_id: TypeId) -> String {
+        let resolved = self.type_table.borrow().get(type_id).clone();
+        match resolved {
+            ResolvedType::Primitive(prim) => format!("{prim:?}").to_lowercase(),
+            ResolvedType::Struct { def, .. } => self.type_table.borrow().struct_head_name(def),
+            ResolvedType::GenericInstance { def, type_args } => {
+                let name = self.type_table.borrow().def_name(def).to_string();
+                if self.type_table.borrow().is_tuple_def(def) {
+                    let parts: Vec<String> = type_args
+                        .iter()
+                        .map(|&t| self.type_id_to_string(t))
+                        .collect();
+                    format!("[{}]", parts.join(", "))
+                } else if type_args.is_empty() {
+                    name
+                } else {
+                    let args: Vec<String> = type_args
+                        .iter()
+                        .map(|&t| self.type_id_to_string(t))
+                        .collect();
+                    format!("{}<{}>", name, args.join(", "))
+                }
+            }
+            ResolvedType::BuiltinArray(elem) => {
+                format!("Array<{}>", self.type_id_to_string(elem))
+            }
+            ResolvedType::Ref(inner) => format!("&{}", self.type_id_to_string(inner)),
+            ResolvedType::MutRef(inner) => format!("&mut {}", self.type_id_to_string(inner)),
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                let param_strs: Vec<String> =
+                    params.iter().map(|&t| self.type_id_to_string(t)).collect();
+                let ret_str = self.type_id_to_string(return_type);
+                format!("fn({}) -> {}", param_strs.join(", "), ret_str)
+            }
+            ResolvedType::TypeParam { name, .. } => name,
+            ResolvedType::InferVar(var) => var.to_string(),
+            ResolvedType::Enum { def }
+            | ResolvedType::Resource { def }
+            | ResolvedType::Variant { def }
+            | ResolvedType::Newtype { def, .. }
+            | ResolvedType::Flags { def } => self.type_table.borrow().def_name(def).to_string(),
+            ResolvedType::GenericResource { def, type_args } => {
+                let args: Vec<String> = type_args
+                    .iter()
+                    .map(|&t| self.type_id_to_string(t))
+                    .collect();
+                let name = self.type_table.borrow().def_name(def).to_string();
+                format!("{}<{}>", name, args.join(", "))
+            }
+            ResolvedType::Reactive(inner) => {
+                format!("Reactive<{}>", self.type_id_to_string(inner))
+            }
+            ResolvedType::TypePack { name, .. } => format!("..{name}"),
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_name,
+                ..
+            } => format!("{}::{}", self.type_id_to_string(param_id), assoc_name),
+            ResolvedType::Unit => UNIT_TYPE_NAME.to_string(),
+            ResolvedType::Never => NEVER_TYPE_NAME.to_string(),
+            ResolvedType::Unknown => "<unknown>".to_string(),
+            ResolvedType::Error => "<error>".to_string(),
+        }
+    }
+
+    /// Whether `==` / `!=` compares these operands as unrestricted resource
+    /// handles, which the host interns, by their bits.
+    pub(super) fn compares_handles(&self, op: BinaryOp, left: TypeId, right: TypeId) -> bool {
+        matches!(op, BinaryOp::Eq | BinaryOp::NotEq)
+            && self.type_table.borrow().handles_compare(left, right)
+    }
+}
