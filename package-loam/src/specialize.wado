@@ -2,6 +2,7 @@
 //! symbolic dimensions, and the outputs `forward` returns.
 
 use { TreeMap, TreeSet } from "core:collections";
+use { spelled_poly } from "./extent.wado";
 use { Dim, Graph, Node, Rank, ValueInfo } from "./graph.wado";
 
 /// An invocation option the graph cannot take, and why.
@@ -19,7 +20,7 @@ impl Display for OptionConflict {
 impl Error for OptionConflict {
 }
 
-fn conflict(option: String, reason: String) -> Result<(), OptionConflict> {
+fn conflict<T>(option: String, reason: String) -> Result<T, OptionConflict> {
     return Result::Err(OptionConflict { option, reason });
 }
 
@@ -33,10 +34,10 @@ pub fn bind_dims(graph: &mut Graph, dims: &TreeMap<String, i32>) -> Result<(), O
     }
     let mut bound = TreeSet::<String>::new();
     for let vi of &mut graph.inputs {
-        bind(vi, dims, &mut bound);
+        bind(vi, dims, &mut bound)?;
     }
     for let vi of &mut graph.outputs {
-        bind(vi, dims, &mut bound);
+        bind(vi, dims, &mut bound)?;
     }
     for let [name, _] of dims.entries() {
         if !bound.contains(*name) {
@@ -46,20 +47,60 @@ pub fn bind_dims(graph: &mut Graph, dims: &TreeMap<String, i32>) -> Result<(), O
     return Result::Ok(());
 }
 
-fn bind(vi: &mut ValueInfo, dims: &TreeMap<String, i32>, bound: &mut TreeSet<String>) {
+fn bind(vi: &mut ValueInfo, dims: &TreeMap<String, i32>, bound: &mut TreeSet<String>) -> Result<(), OptionConflict> {
     let Dims(written) = vi.rank else {
-        return;
+        return Result::Ok(());
     };
     let mut fixed: List<Dim> = [];
     for let d of written {
-        if let Symbol(name) = d && let Some(extent) = dims.get(name) {
+        let Symbol(name) = d else {
+            fixed.push(d);
+            continue;
+        };
+        if let Some(extent) = dims.get(name) {
             bound.insert(name);
+            fixed.push(Dim::Static(extent));
+        } else if let Some(extent) = spelled_extent(&name, dims, bound)? {
             fixed.push(Dim::Static(extent));
         } else {
             fixed.push(d);
         }
     }
     vi.rank = Rank::Dims(fixed);
+    return Result::Ok(());
+}
+
+/// The extent a `dim_param` spelling arithmetic over names (`spelled_poly`)
+/// takes once `dims` fixes every name it reads, or `None` where it fixes none.
+fn spelled_extent(
+    name: &String,
+    dims: &TreeMap<String, i32>,
+    bound: &mut TreeSet<String>,
+) -> Result<Option<i32>, OptionConflict> {
+    let Some(free) = spelled_poly(name, &TreeMap::<String, i32>::new()) else {
+        return Result::Ok(null);
+    };
+    let read = free.symbols();
+    let fixing: List<String> = read.into_iter().filter(|s| dims.contains_key(s)).collect();
+    if fixing.is_empty() {
+        return Result::Ok(null);
+    }
+    let by = fixing.join(", ");
+    let value = spelled_poly(name, dims).unwrap();
+    let Some(n) = value.as_constant() else {
+        let open: List<String> = read.into_iter().filter(|s| !dims.contains_key(s)).collect();
+        return conflict("dims", `${by} fixes part of the dimension ${*name:?}, which also reads ${open.join(", ")}`);
+    };
+    if n < 0 {
+        return conflict("dims", `${by} makes the dimension ${*name:?} ${n}, and an extent is not negative`);
+    }
+    if n > i32::MAX as i64 {
+        return conflict("dims", `${by} makes the dimension ${*name:?} ${n}, which no list holds`);
+    }
+    for let s of fixing {
+        bound.insert(s);
+    }
+    return Result::Ok(Option::Some(n as i32));
 }
 
 /// The graph cut down to what the outputs `names` lists read, which it returns

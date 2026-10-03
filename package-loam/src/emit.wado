@@ -21,6 +21,7 @@ use { Expected } from "./runtime/checkpoint.wado";
 use { expected } from "./safetensors.wado";
 use {
     Checked,
+    concat_axis,
     conv_group,
     gather_axis,
     gemm_options,
@@ -55,8 +56,8 @@ pub variant EmitError {
     ReservedAxis(String),
     Dtype(UnmappedDtype),
     Collision(NameCollision),
-    /// A graph whose outputs `forward` cannot return: it delivers one value.
-    OutputCount(i32),
+    /// A graph with nothing for `forward` to return.
+    NoOutput,
     /// A symbol the run needs the value of, which no input's axis carries.
     Unbound(String),
     /// A value the run computes in `i64`, which some input carries past it.
@@ -83,7 +84,7 @@ impl Display for EmitError {
             },
             Dtype(e) => e.fmt(f),
             Collision(e) => e.fmt(f),
-            OutputCount(n) => f.write_str(`the graph has ${n} outputs and \`forward\` returns one`),
+            NoOutput => f.write_str("the graph declares no output for `forward` to return"),
             Unbound(symbol) => {
                 f.write_str(`${Poly::symbol(symbol)}: the run needs this length, and no input's axis gives it`);
             },
@@ -105,9 +106,9 @@ impl Error for EmitError {
 /// marker type, so two tensors sharing an axis share one type.
 pub fn emit(graph: &Graph, checked: &Checked) -> Result<String, EmitError> {
     let shapes = &checked.shapes;
-    if graph.outputs.len() != 1 {
+    if graph.outputs.is_empty() {
         builtin::cold_path();
-        return Result::Err(EmitError::OutputCount(graph.outputs.len()));
+        return Result::Err(EmitError::NoOutput);
     }
     let held = boundary_elements(graph)?;
 
@@ -292,6 +293,7 @@ fn module_idents() -> TreeSet<String> {
         }
     }
     reserved.insert("forward");
+    reserved.insert("Outputs");
     reserved.insert("weights");
     reserved.insert("Weights");
     return reserved;
@@ -544,14 +546,16 @@ fn symbol_key(symbol: &String) -> String {
     return `dim ${*symbol}`;
 }
 
-/// The symbol an input axis's extent is, as a `dim_param` or `?` makes it.
-/// An input's extent is never an expression of symbols.
+/// The symbol an input axis's extent is, where a `dim_param` or `?` makes it
+/// one, rather than a number or arithmetic over symbols.
 fn input_symbol(extent: &Extent) -> Option<String> {
     let Symbolic(p) = *extent else {
         return null;
     };
     let read = p.symbols();
-    assert read.len() == 1 && p == Poly::symbol(&read[0]);
+    if read.len() != 1 || p != Poly::symbol(&read[0]) {
+        return null;
+    }
     return Option::Some(read[0]);
 }
 
@@ -610,7 +614,6 @@ fn emit_forward(
         already_reference: TreeSet::<String>::new(),
         scalars,
     };
-    let result = graph.outputs[0].name;
     let mut forward = FnSpec::new("forward", Vis::Pub);
     let mut widened: List<String> = [];
     for let vi of &graph.inputs {
@@ -631,12 +634,17 @@ fn emit_forward(
             exprs.values[vi.name] = ident;
         }
     }
-    forward.add_param("weights", "&Weights").set_return_type(tensor_type(checked, held, &result));
+    let several = graph.outputs.len() > 1;
+    let returned_type = if several { "Outputs" } else { tensor_type(checked, held, &graph.outputs[0].name) };
+    forward.add_param("weights", "&Weights").set_return_type(returned_type);
 
+    if several {
+        emit_outputs(w, graph, checked, names, held);
+    }
     w.blank();
     w.line("/// The graph's forward pass, one kernel call per operator.");
     forward.emit_begin(w);
-    emit_input_checks(w, graph, shapes, names);
+    let spelled_axes = emit_input_checks(w, graph, shapes, names);
     for let line of widened {
         w.line(&line);
     }
@@ -676,6 +684,12 @@ fn emit_forward(
         }
     }
     let mut owed: List<String> = [];
+    for let spelled of spelled_axes {
+        let SpelledAxis { tensor, axis, extent, length } = spelled;
+        owed.push(
+            wado`refuse(extent_mismatch("${tensor}", "${axis}", ${extent}, "${length}", ${symbols.spell(&length)?}));`,
+        );
+    }
     for let c of &checked.owed {
         owed.push(wado`refuse(unmet(${symbols.spell(&c.slack)?}, "${c.reason}"));`);
     }
@@ -684,14 +698,36 @@ fn emit_forward(
             w.line(&line);
         }
     }
-    let returned = if converted(checked, held, &result) {
-        `narrow(${exprs.reference(&result)})`;
-    } else {
-        exprs.value(&result);
-    };
-    w.line(`return ${returned};`);
+    let mut fields: List<String> = [];
+    for let vi of &graph.outputs {
+        let value = if converted(checked, held, &vi.name) {
+            `narrow(${exprs.reference(&vi.name)})`;
+        } else {
+            exprs.value(&vi.name);
+        };
+        if !several {
+            w.line(`return ${value};`);
+            break;
+        }
+        let field = names.get(&vi.name);
+        fields.push(if value == field { value } else { `${field}: ${value}` });
+    }
+    if several {
+        w.line(`return Outputs { ${fields.join(", ")} };`);
+    }
     w.end();
     return Result::Ok(());
+}
+
+/// The struct `forward` returns a graph's several outputs in, one field each.
+fn emit_outputs(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Names, held: &TreeMap<String, String>) {
+    let mut outputs = StructSpec::new("Outputs", Vis::Pub);
+    for let vi of &graph.outputs {
+        outputs.add_pub_field(names.get(&vi.name), tensor_type(checked, held, &vi.name));
+    }
+    w.blank();
+    w.line("/// The graph's outputs, in the order it declares them.");
+    outputs.emit(w);
 }
 
 /// Every folded float of one element, as the literal a closure folds in.
@@ -747,7 +783,7 @@ fn literal_tensors(graph: &Graph, checked: &Checked, scalars: &TreeMap<String, S
 
 /// Whether a folded scalar is returned, or read where no closure folds it.
 fn read_as_tensor(graph: &Graph, checked: &Checked, scalars: &TreeMap<String, String>, scalar: &String) -> bool {
-    if graph.outputs[0].name == *scalar {
+    if graph.outputs.position(|vi| vi.name == *scalar) matches { Some(_) } {
         return true;
     }
     for let node of graph.nodes {
@@ -796,9 +832,26 @@ fn literal_tensor(checked: &Checked, tensor: &String, symbols: &mut Symbols) -> 
     );
 }
 
+/// An input axis whose length the graph spells as arithmetic over symbols,
+/// which `forward` checks once it has bound them.
+struct SpelledAxis {
+    tensor: String,
+    axis: String,
+    /// The axis's extent as `forward` reads it off the input.
+    extent: String,
+    length: Poly,
+}
+
 /// Checks at the top of `forward` that stop it naming the axis an input
-/// disagrees on, before any kernel reads the input.
-fn emit_input_checks(w: &mut CodeWriter, graph: &Graph, shapes: &TreeMap<String, Shape>, names: &Names) {
+/// disagrees on, before any kernel reads the input. An axis whose length is
+/// arithmetic over symbols is returned, for a check after they are bound.
+fn emit_input_checks(
+    w: &mut CodeWriter,
+    graph: &Graph,
+    shapes: &TreeMap<String, Shape>,
+    names: &Names,
+) -> List<SpelledAxis> {
+    let mut spelled: List<SpelledAxis> = [];
     let mut first_seen = TreeMap::<String, String>::new();
     let mut agreements: List<String> = [];
     for let vi of &graph.inputs {
@@ -808,12 +861,16 @@ fn emit_input_checks(w: &mut CodeWriter, graph: &Graph, shapes: &TreeMap<String,
         let mut stated: List<i32> = [];
         for let [i, axis] of shape.axes.into_iter().enumerate() {
             axes.push(wado`"${axis.name}"`);
-            let Some(symbol) = input_symbol(&axis.extent) else {
+            let extent = `${ident}.extents[${i}]`;
+            let Symbolic(length) = axis.extent else {
                 stated.push(axis.static_extent());
                 continue;
             };
             stated.push(-1);
-            let extent = `${ident}.extents[${i}]`;
+            let Some(symbol) = input_symbol(&axis.extent) else {
+                spelled.push(SpelledAxis { tensor: vi.name, axis: axis.name, extent, length });
+                continue;
+            };
             if let Some(first) = first_seen.get(symbol) {
                 agreements.push(
                     wado`refuse(axis_mismatch("${symbol}", "${vi.name}", "${axis.name}", ${extent}, ${first}));`,
@@ -827,6 +884,7 @@ fn emit_input_checks(w: &mut CodeWriter, graph: &Graph, shapes: &TreeMap<String,
     for let line of agreements {
         w.line(&line);
     }
+    return spelled;
 }
 
 /// Whether a boundary tensor is held in something other than what the kernels
@@ -963,6 +1021,9 @@ fn node_call(
     if is_reduction(&op) {
         return reduction_call(node, checked, exprs, symbols);
     }
+    if op == "Concat" {
+        return Result::Ok(concat_call(node, checked, exprs));
+    }
     if op == "Transpose" {
         let shape = shapes.get(node.inputs[0]).unwrap();
         let perm = settled(transpose_perm(node, shape.rank()));
@@ -1033,6 +1094,32 @@ fn slice_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Sy
         current.axes[a] = out.axes[a];
     }
     return Result::Ok(call);
+}
+
+/// A `Concat` as `concat` folded over its operands from the left, each partial
+/// join naming the joined axis as the output does.
+fn concat_call(node: &Node, checked: &Checked, exprs: &Operands) -> String {
+    let shapes = &checked.shapes;
+    let out = shapes.get(node.outputs[0]).unwrap();
+    let axis = settled(concat_axis(node, out.rank()));
+    let element = checked.primitives.get(node.outputs[0]).unwrap();
+    let [pre, post] = [
+        axis_run(&out, 0, axis),
+        axis_run(&out, axis + 1, out.rank()),
+    ];
+    let joined = out.axes[axis].name;
+    // A single operand is joined to nothing, and every result is bound as a value.
+    let mut call = exprs.value(&node.inputs[0]);
+    let mut left = exprs.reference(&node.inputs[0]);
+    let mut left_axis = shapes.get(node.inputs[0]).unwrap().axes[axis].name;
+    for let input of node.inputs[1..<node.inputs.len()].to_list() {
+        let right_axis = shapes.get(input).unwrap().axes[axis].name;
+        let turbofish = `::<${element}, [${pre}], ${left_axis}, ${right_axis}, ${joined}, [${post}]>`;
+        call = `concat${turbofish}(${left}, ${exprs.reference(&input)}, ${axis})`;
+        left = `&${call}`;
+        left_axis = joined;
+    }
+    return call;
 }
 
 /// `slice_axis` over `operand`, of axes `shape`, taking `range` (a start and a

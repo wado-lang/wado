@@ -5,10 +5,12 @@ use {
     axis_mismatch,
     ceil_div,
     checked_element_count,
+    concat,
     conv,
     conv_bias,
     conv_grouped,
     conv_grouped_bias,
+    extent_mismatch,
     floor_div,
     from_end,
     gather,
@@ -109,6 +111,11 @@ test "two inputs that disagree on one symbol name both" {
     assert axis_mismatch("N", "B", "Batch", 3, "A", 2) == Option::Some(
         "B: axis Batch is 3 in the tensor and 2 in A, and the graph makes both N",
     );
+}
+
+test "an input axis the graph spells over other inputs' lengths names both" {
+    assert extent_mismatch("mask", "Total", 4, "past + 1", 4) matches { None };
+    assert extent_mismatch("mask", "Total", 3, "past + 1", 4).unwrap() == "mask: axis Total is 3 in the tensor, and the graph makes it past + 1, which the inputs make 4";
 }
 
 test "a condition the build owed is met with slack to spare, and missed by how much" {
@@ -436,6 +443,26 @@ test "slice_axis steps over positions, backwards too" {
     // A backward cut of an empty axis starts before it and keeps nothing.
     let empty: Tensor<f32, [Row, Col]> = tensor([0, 2], []);
     assert slice_axis::<f32, [], Row, Inner, [Col]>(&empty, 0, -1, 0, -1).extents == [0, 2] as List<i32>;
+}
+
+test "concat puts the second operand's run after the first's at each position ahead of the axis" {
+    let past: Tensor<f32, [Batch, Row, Col]> = tensor([2, 2, 2], [0.0, 1.0, 10.0, 11.0, 100.0, 101.0, 110.0, 111.0]);
+    let next: Tensor<f32, [Batch, Inner, Col]> = tensor([2, 1, 2], [20.0, 21.0, 120.0, 121.0]);
+
+    let r = concat::<f32, [Batch], Row, Inner, Row, [Col]>(&past, &next, 1);
+    assert r.extents == [2, 3, 2] as List<i32>;
+    assert r.data == [0.0, 1.0, 10.0, 11.0, 20.0, 21.0, 100.0, 101.0, 110.0, 111.0, 120.0, 121.0] as List<f32>;
+}
+
+test "concat of an empty operand is the other" {
+    let empty: Tensor<f32, [Batch, Row, Col]> = tensor([1, 0, 2], []);
+    let next: Tensor<f32, [Batch, Inner, Col]> = tensor([1, 1, 2], [20.0, 21.0]);
+
+    let r = concat::<f32, [Batch], Row, Inner, Row, [Col]>(&empty, &next, 1);
+    assert r.extents == [1, 1, 2] as List<i32>;
+    assert r.data == [20.0, 21.0] as List<f32>;
+    let none: Tensor<f32, [Batch, Row, Col]> = tensor([0, 1, 2], []);
+    assert concat::<f32, [Batch], Row, Row, Row, [Col]>(&none, &none, 1).extents == [0, 2, 2] as List<i32>;
 }
 
 test "ceil_div and floor_div round a quotient, and from_end counts a negative index from the end" {

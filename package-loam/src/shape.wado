@@ -284,6 +284,18 @@ impl Shape {
                 continue;
             }
             let [l, r] = [left[li], right[ri]];
+            // A 1 meeting a length the run derives, which reads as 1, keeps the
+            // number, as a pair met through a reading does below.
+            if l.extent.is_one() && r.extent.is_derived() && let Some(c) = r.extent.oneness() {
+                owed.extend(&c);
+                axes.push(l);
+                continue;
+            }
+            if r.extent.is_one() && l.extent.is_derived() && let Some(c) = l.extent.oneness() {
+                owed.extend(&c);
+                axes.push(r);
+                continue;
+            }
             if l.extent.is_one() {
                 axes.push(r);
                 continue;

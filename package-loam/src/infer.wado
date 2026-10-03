@@ -8,6 +8,7 @@ use {
     SliceBounds,
     axes_of,
     axis_indices,
+    carried_axes,
     count_of,
     fill_of,
     fits,
@@ -449,6 +450,19 @@ fn produced_primitive(node: &Node, primitives: &TreeMap<String, String>) -> Resu
         }
         return Result::Ok(primitives.get(node.inputs[0]));
     }
+    if op == "Concat" {
+        let first = node.inputs[0];
+        let element = primitives.get(first);
+        for let input of node.inputs {
+            if let Some(a) = element && let Some(b) = primitives.get(input) && a != b {
+                return Result::Err(refusal(
+                    node,
+                    `operand ${input} is ${b} and ${first} is ${a}, and Concat joins one element`,
+                ));
+            }
+        }
+        return Result::Ok(element);
+    }
     if is_layout(&op) {
         return Result::Ok(primitives.get(node.inputs[0]));
     }
@@ -604,12 +618,13 @@ fn held(tensor: &String, shape: Shape) -> Result<Shape, InferError> {
     return Result::Ok(shape);
 }
 
-/// An ONNX `dim_value` is a static extent and a `dim_param` a symbolic one. A
-/// `?` has no symbol, so the axis's name stands for it, as one length.
+/// An ONNX `dim_value` is a static extent and a `dim_param` a symbolic one, or
+/// the arithmetic over symbols it spells. A `?` has no symbol, so the axis's
+/// name stands for it, as one length.
 fn extent_of(dim: &Dim, axis: &String) -> Extent {
     return match dim {
         Static(n) => Extent::Static(*n),
-        Symbol(s) => Extent::symbol(s),
+        Symbol(s) => Extent::param(s),
         Unknown => Extent::symbol(axis),
     };
 }
@@ -623,7 +638,28 @@ fn infer_node(
     owed: &mut List<Condition>,
 ) -> Result<Shape, InferError> {
     let op = node.op;
-    if op == "Reshape" || op == "Unsqueeze" || op == "Squeeze" {
+    if op == "Unsqueeze" || op == "Squeeze" {
+        let operand = operand_at(node, shapes, 0);
+        let input: List<Extent> = operand.axes.into_iter().map(|axis| axis.extent).collect();
+        let carried = carried_axes(node, known, &input).map_err(|reason| refusal(node, reason))?;
+        let mut axes: List<Axis> = [];
+        for let [i, from] of carried.into_iter().enumerate() {
+            axes.push(match from {
+                Some(a) => operand.axes[a],
+                None => output_layout_axis(
+                    node,
+                    &node.outputs[0],
+                    schema,
+                    i,
+                    carried.len(),
+                    Extent::Static(1),
+                    "is inserted",
+                )?,
+            });
+        }
+        return Result::Ok(Shape { axes });
+    }
+    if op == "Reshape" {
         let operand = operand_at(node, shapes, 0);
         let input = extents_of(node, &operand)?;
         let targets = regrouped_extents(node, known, &input, owed).map_err(|reason| refusal(node, reason))?;
@@ -708,6 +744,9 @@ fn infer_node(
         let perm = transpose_perm(node, shape.rank())?;
         return Result::Ok(shape.permute(&perm));
     }
+    if op == "Concat" {
+        return joined(node, shapes, schema, owed);
+    }
     if is_unary_elementwise(&op) {
         return Result::Ok(operand_at(node, shapes, 0));
     }
@@ -768,6 +807,63 @@ fn split(
         produced.push(Shape { axes });
     }
     return Result::Ok(produced);
+}
+
+/// A `Concat` the run computes, since some operand is only known then. The
+/// operands meet on every other axis, and the joined axis, as long as their
+/// parts together, is new, for the output's layout to name.
+fn joined(
+    node: &Node,
+    shapes: &TreeMap<String, Shape>,
+    schema: &Schema,
+    owed: &mut List<Condition>,
+) -> Result<Shape, InferError> {
+    let first = operand_at(node, shapes, 0);
+    let axis = concat_axis(node, first.rank())?;
+    let mut sum = Poly::constant(0);
+    for let index of 0..<node.inputs.len() {
+        let x = operand_at(node, shapes, index);
+        if x.rank() != first.rank() {
+            return Result::Err(operand_rank(node, index, x.rank(), first.rank()));
+        }
+        for let i of 0..<x.rank() {
+            if i == axis {
+                continue;
+            }
+            agree_at(node, &first.axes[i], &x.axes[i], owed)?;
+            // The joined tensor carries one name per axis, which both operands
+            // must already give it.
+            if x.axes[i].name != first.axes[i].name {
+                return Result::Err(
+                    refusal(
+                        node,
+                        `operand ${node.inputs[index]} names axis ${i} ${x.axes[i].name}, and ${node.inputs[0]} names it ${first.axes[i].name}`,
+                    ),
+                );
+            }
+        }
+        let part = extents_of(node, &x)?[axis].poly();
+        sum = sum.try_add(&part).ok_or(refusal(node, `${sum} + ${part} leaves i64`))?;
+    }
+    let mut axes = first.axes;
+    axes[axis] = output_layout_axis(
+        node,
+        &node.outputs[0],
+        schema,
+        axis,
+        first.rank(),
+        counted(node, sum)?,
+        "is a concatenation",
+    )?;
+    return Result::Ok(Shape { axes });
+}
+
+/// The axis `Concat` joins along, resolved against `rank`.
+pub fn concat_axis(node: &Node, rank: i32) -> Result<i32, InferError> {
+    if node.attr("axis") matches { None } {
+        return Result::Err(attribute_error(node, "axis", "is absent and the operator reads it"));
+    }
+    return axis_attr(node, 0, rank, rank - 1);
 }
 
 /// The axis `Split` cuts, resolved against `rank`.

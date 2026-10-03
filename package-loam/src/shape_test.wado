@@ -257,3 +257,24 @@ test "a clamp meets no length its operand is not" {
     let e = mask.elementwise(&other, "add", &mut []).unwrap_err();
     assert `${e}` == "add: axis Seq is min(N, 8) on the left and M on the right";
 }
+
+test "a 1 meeting a count that is 1 only where the inputs owe it keeps the 1" {
+    // What a causal mask's rows leave for one query past a cache of `N`.
+    let n = Poly::symbol(&"N");
+    let site = "M = Slice";
+    let end = Poly::min_of(&n.try_add(&Poly::constant(1)).unwrap(), &Poly::constant(512), &site);
+    let start = Poly::min_of(&n, &Poly::constant(512), &site);
+    let rows = shape([
+        Axis { name: "Seq", extent: Extent::of(end.try_sub(&start).unwrap()).unwrap() },
+    ]);
+    let query = shape([stat("Seq", 1)]);
+    for let [a, b] of [
+        [rows, query],
+        [query, rows],
+    ] {
+        let mut owed: List<Condition> = [];
+        let y = a.elementwise(&b, "add", &mut owed).unwrap();
+        assert y.axes[0].extent.agrees(&Extent::Static(1));
+        assert !owed.is_empty();
+    }
+}

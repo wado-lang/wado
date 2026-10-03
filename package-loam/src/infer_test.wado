@@ -224,6 +224,26 @@ test "Unsqueeze listing an axis twice stops the build rather than trapping" {
     assert y_axes(source, [rule("X", ["C"])]).unwrap_err() == "Y = Unsqueeze: axis 0 is listed twice";
 }
 
+test "the axis Unsqueeze inserts is new, even ahead of an operand axis of extent 1" {
+    let source = `g (float[1] X) => (float[1, 1] Y) {
+        A = Constant<value_ints = [0]>()
+        Y = Unsqueeze(X, A)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq"]),
+        rule("Y", ["Batch", "Other"]),
+    ];
+    assert y_axes(source, layout).unwrap() == "Batch=1,Seq=1";
+}
+
+test "Squeeze keeps the operand's axes it does not list, extent 1 or not" {
+    let source = `g (float[1, 1, 3] X) => (float[1, 3] Y) {
+        A = Constant<value_ints = [0]>()
+        Y = Squeeze(X, A)
+    }`;
+    assert y_axes(source, [rule("X", ["Batch", "Seq", "C"])]).unwrap() == "Seq=1,C=3";
+}
+
 test "Slice given more starts than axes stops the build rather than trapping" {
     let source = `g (float[2, 3] X) => (float[2, 3] Y) <int64[2] B = {0, 0}, int64[2] E = {1, 1}, int64[1] P = {0}> {
         S = Shape(X)
@@ -337,6 +357,73 @@ test "a Split size past the axis stops the build rather than wrapping into it" {
         Q, Y, V = Split<axis = 2>(X, S)
     }`;
     assert y_axes(source, qkv()).unwrap_err() == "Q = Split: a part is 4294967304, which must lie within axis 2's 24, and it is not";
+}
+
+fn cache() -> List<LayoutRule> {
+    return [
+        rule("P", ["Batch", "Past", "Dim"]),
+        rule("N", ["Batch", "Seq", "Dim"]),
+        rule("Y", ["Batch", "Total", "Dim"]),
+    ];
+}
+
+test "Concat sums the axis it joins, which the output's layout names" {
+    let source = `g (float[1, T, 8] P, float[1, 1, 8] N) => (float[1, T, 8] Y) {
+        Y = Concat<axis = -2>(P, N)
+    }`;
+    let graph = read(&source).unwrap();
+    let shapes = infer(&graph, &Schema { layout: cache() }).unwrap().shapes;
+    assert shapes["Y"].axes[1].name == "Total";
+    assert shapes["Y"].axes[1].extent.agrees(&Extent::Symbolic(Poly::symbol(&"T").try_add(&Poly::constant(1)).unwrap()));
+}
+
+test "Concat of operands that disagree on another axis stops the build" {
+    let source = `g (float[1, 3, 8] P, float[1, 1, 4] N) => (float[1, 4, 8] Y) {
+        Y = Concat<axis = 1>(P, N)
+    }`;
+    assert y_axes(source, cache()).unwrap_err() == "Y = Concat: axis Dim is 8 on the left and 4 on the right";
+}
+
+test "Concat of operands naming another axis apart stops the build" {
+    let source = `g (float[1, 3, 8] P, float[1, 1, 8] N) => (float[1, 4, 8] Y) {
+        Y = Concat<axis = 1>(P, N)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("P", ["Batch", "Past", "Dim"]),
+        rule("N", ["Batch", "Seq", "Embed"]),
+        rule("Y", ["Batch", "Total", "Dim"]),
+    ];
+    assert y_axes(source, layout).unwrap_err() == "Y = Concat: operand N names axis 2 Embed, and P names it Dim";
+}
+
+test "Concat of operands of different ranks stops the build" {
+    let source = `g (float[1, 3, 8] P, float[1, 8] N) => (float[1, 4, 8] Y) {
+        Y = Concat<axis = 1>(P, N)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("P", ["Batch", "Past", "Dim"]),
+        rule("N", ["Batch", "Dim"]),
+        rule("Y", ["Batch", "Total", "Dim"]),
+    ];
+    assert y_axes(source, layout).unwrap_err() == "Y = Concat: operand 1 has rank 2 and the operator reads rank 3";
+}
+
+test "Concat of operands held in different elements stops the build" {
+    let source = `g (float[1, 3, 8] P, int64[1, 1, 8] N) => (float[1, 4, 8] Y) {
+        Y = Concat<axis = 1>(P, N)
+    }`;
+    assert y_axes(source, cache()).unwrap_err() == "Y = Concat: operand N is i64 and P is f32, and Concat joins one element";
+}
+
+test "Concat with no layout for the axis it joins stops the build naming the output" {
+    let source = `g (float[1, 3, 8] P, float[1, 1, 8] N) => (float[1, 4, 8] Y) {
+        Y = Concat<axis = 1>(P, N)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("P", ["Batch", "Past", "Dim"]),
+        rule("N", ["Batch", "Seq", "Dim"]),
+    ];
+    assert y_axes(source, layout).unwrap_err() == "Y = Concat: axis 1 is a concatenation, so a layout pattern must name Y's";
 }
 
 test "a scalar operand to MatMul stops the build rather than trapping" {

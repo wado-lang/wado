@@ -91,3 +91,21 @@ test "an output the graph does not declare stops the build" {
     assert e.option == "outputs";
     assert `${e}` == "outputs: the graph declares no output S";
 }
+
+test "a bound dimension fixes the arithmetic a dim_param spells over it" {
+    let mut graph = read("g (float[N, 4] X) => (float[\"N + 1\", 4] Y) { Y = Relu(X) }").unwrap();
+    bind_dims(&mut graph, &({ N: 2 } as TreeMap<String, i32>)).unwrap();
+    assert dims_of(&graph, "Y") == "Rank::Dims([Dim::Static(3), Dim::Static(4)])";
+}
+
+test "binding one name of a dim_param's arithmetic but not another stops the build" {
+    let mut graph = read("g (float[N, M] X) => (float[\"N + M\", 4] Y) { Y = Relu(X) }").unwrap();
+    let e = bind_dims(&mut graph, &({ N: 2 } as TreeMap<String, i32>)).unwrap_err();
+    assert `${e}` == "dims: N fixes part of the dimension \"N + M\", which also reads M";
+}
+
+test "arithmetic a bound dimension makes negative stops the build" {
+    let mut graph = read("g (float[N, 4] X) => (float[\"N - 3\", 4] Y) { Y = Relu(X) }").unwrap();
+    let e = bind_dims(&mut graph, &({ N: 2 } as TreeMap<String, i32>)).unwrap_err();
+    assert `${e}` == "dims: N makes the dimension \"N - 3\" -1, and an extent is not negative";
+}

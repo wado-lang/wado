@@ -141,6 +141,55 @@ outer (float[S, 4] A, float[4, ${b_cols}] B) => (float[S, ${b_cols}] Y)
     assert !emitted(&same_name).contains("axis_mismatch(");
 }
 
+test "an input axis whose length the graph spells over a symbol is checked once the symbol is bound" {
+    let source = `
+cache (float[1, T, 8] P, float[1, 1, 8] N, int64[1, "T + 1"] M) => (float[1, U, 8] Y)
+{
+    Y = Concat<axis = 1>(P, N)
+}
+`;
+    let out = emitted(&generate(source, [
+        rule("P", ["Batch", "Past", "Dim"]),
+        rule("N", ["Batch", "Seq", "Dim"]),
+        rule("M", ["Batch", "Total"]),
+        rule("Y", ["Batch", "Total", "Dim"]),
+    ]).unwrap());
+
+    assert out.contains("refuse(input_mismatch(M, \"M\", [\"Batch\", \"Total\"], [1, -1]));");
+    let bound = out.find("let dim_T = P.extents[1] as i64;").unwrap();
+    let check = out.find("refuse(extent_mismatch(\"M\", \"Total\", M.extents[1], \"T + 1\", dim_T + 1));").unwrap();
+    assert bound < check && check < out.find("concat::<").unwrap();
+}
+
+test "a graph of several outputs returns each, in the order it declares them" {
+    let source = `
+pair (float[N, 2] A) => (float[N, 2] Z, float[N, 2] Y)
+{
+    Y = Relu(A)
+    Z = Neg(A)
+}
+`;
+    let out = emitted(&generate(source, [rule("*", ["Batch", "In"])]).unwrap());
+
+    assert out.contains(
+        "pub struct Outputs {\n    pub Z: Tensor<f32, [Batch, In]>,\n    pub Y: Tensor<f32, [Batch, In]>,\n}",
+    );
+    assert out.contains("pub fn forward(A: &Tensor<f32, [Batch, In]>, weights: &Weights) -> Outputs {");
+    assert out.contains("return Outputs { Z, Y };");
+}
+
+test "an output that is a graph input is copied into the outputs" {
+    let source = `
+pass (float[N, 2] A) => (float[N, 2] A, float[N, 2] Y)
+{
+    Y = Relu(A)
+}
+`;
+    let out = emitted(&generate(source, [rule("*", ["Batch", "In"])]).unwrap());
+
+    assert out.contains("return Outputs { A: *A, Y };");
+}
+
 test "the initializers become the weights struct" {
     let out = generate(MLP, mlp_layout()).unwrap();
 
@@ -623,6 +672,25 @@ g (float[1, 4, 24] X) => (float[1, 4, 8] K)
     assert out.contains("let Q = slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(X, 2, 0, 8, 1);");
     assert out.contains("let K = slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(X, 2, 8, 8, 1);");
     assert out.contains("let V = slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(X, 2, 16, 8, 1);");
+}
+
+test "Concat joins its operands pairwise, each join naming the output's axis" {
+    let source = `
+g (float[1, T, 8] P, float[1, 1, 8] N) => (float[1, U, 8] Y)
+{
+    Y = Concat<axis = 1>(P, N, N)
+}
+`;
+    let layout: List<LayoutRule> = [
+        rule("P", ["Batch", "Past", "Dim"]),
+        rule("N", ["Batch", "Seq", "Dim"]),
+        rule("Y", ["Batch", "Total", "Dim"]),
+    ];
+    let out = generate(source, layout).unwrap();
+
+    assert out.contains(
+        "let Y = concat::<f32, [Batch], Total, Seq, Total, [Dim]>(&concat::<f32, [Batch], Past, Seq, Total, [Dim]>(P, N, 1), N, 1);",
+    );
 }
 
 test "Softmax lowers to the kernel along its axis" {
