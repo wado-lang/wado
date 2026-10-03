@@ -814,8 +814,7 @@ as [Format Traits](./spec-traits.md#format-traits) states.
   `Display` only when every element does.
 - A range renders `start..<end` or `start..=end`, as written. A range has
   `Display` only when its bound type does.
-- A closure renders as its `Inspect` form, so `${f}` writes the signature and
-  `${f:#}` the source.
+- A closure or function value has no `Display`, as in Rust. `${f:?}` renders it.
 
 ### Inspect Output
 
