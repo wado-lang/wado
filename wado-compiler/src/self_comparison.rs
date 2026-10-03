@@ -2,6 +2,9 @@
 //! reflexivity answers the same way on every type. See
 //! `docs/wep-2026-09-23-comparison-traits.md`.
 
+use std::cell::OnceCell;
+use std::mem;
+
 use crate::ast::{
     AstVisitor, BinaryOp, Expr, Function, Item, SelfKind, UnaryOp, attrs_allow, inner_attrs_allow,
     lint, walk_expr, walk_function, walk_item,
@@ -11,6 +14,7 @@ use crate::effect_check::EffectProbe;
 use crate::elaborator::liveness::is_user_authored;
 use crate::module_source::ModuleSource;
 use crate::semantics::Semantics;
+use crate::tir::ResolvedType;
 use crate::token::Span;
 use crate::unparse::{binary_op_str, unparse_expr_source};
 
@@ -18,9 +22,7 @@ use crate::unparse::{binary_op_str, unparse_expr_source};
 /// pairs included, whose two operands are one expression that evaluates the
 /// same way twice.
 pub fn self_comparison_diagnostics(sem: &Semantics) -> Vec<Diagnostic> {
-    let Some(probe) = EffectProbe::new(sem) else {
-        return Vec::new();
-    };
+    let probe = OnceCell::new();
     let mut out = Vec::new();
     for (src, module) in &sem.modules {
         if !is_user_authored(src)
@@ -78,13 +80,20 @@ impl SelfComparison {
 /// The comparisons of one module outside the items that waive the lint.
 struct SelfComparisons<'a> {
     sem: &'a Semantics,
-    probe: &'a EffectProbe<'a>,
+    /// Built at the first candidate, since most programs have none. `None`
+    /// where the elaborator left no state to answer from.
+    probe: &'a OnceCell<Option<EffectProbe<'a>>>,
     module: &'a ModuleSource,
     found: Vec<SelfComparison>,
 }
 
 impl SelfComparisons<'_> {
     fn check(&mut self, left: &Expr, op: BinaryOp, right: &Expr) {
+        // Unparsing inverts the parse, so two operands of different kinds
+        // never unparse alike.
+        if mem::discriminant(left) != mem::discriminant(right) {
+            return;
+        }
         let operand = unparse_expr_source(left);
         if operand != unparse_expr_source(right) || self.may_differ(left) {
             return;
@@ -109,7 +118,12 @@ impl SelfComparisons<'_> {
             found: false,
         };
         writes.visit_expr(expr);
-        writes.found || self.probe.performs_effect(self.module, expr)
+        writes.found
+            || self
+                .probe
+                .get_or_init(|| EffectProbe::new(self.sem))
+                .as_ref()
+                .is_none_or(|probe| probe.performs_effect(self.module, expr))
     }
 }
 
@@ -145,11 +159,22 @@ impl AstVisitor for SelfComparisons<'_> {
 }
 
 /// Finds what may change state between two evaluations without performing an
-/// effect: an assignment, a `&mut` borrow, a method taking `&mut self`, and a
-/// call of anything but a declared function, such as a `fn mut` closure.
+/// effect: an assignment, a `&mut` borrow, a `&mut` argument, a method taking
+/// `&mut self`, and a call of anything but a declared function, such as a
+/// `fn mut` closure.
 struct Writes<'a> {
     sem: &'a Semantics,
     found: bool,
+}
+
+impl Writes<'_> {
+    fn any_mut_ref(&self, args: &[Expr]) -> bool {
+        args.iter().any(|arg| {
+            self.sem
+                .expression_type(arg.id())
+                .is_some_and(|ty| matches!(self.sem.types.get(ty), ResolvedType::MutRef(_)))
+        })
+    }
 }
 
 impl AstVisitor for Writes<'_> {
@@ -160,16 +185,20 @@ impl AstVisitor for Writes<'_> {
             Expr::MethodCall(call) => {
                 let mut dispatches = self.sem.method_dispatches_at(call.id).peekable();
                 dispatches.peek().is_none()
+                    || self.any_mut_ref(&call.args)
                     || dispatches.any(|dispatch| dispatch.self_kind == SelfKind::MutRef)
             }
-            Expr::Call(call) => match &call.callee {
-                Expr::Ident(ident) => self
-                    .sem
-                    .referenced_symbol(ident.id)
-                    .and_then(|def| self.sem.function_at(def))
-                    .is_none(),
-                _ => true,
-            },
+            Expr::Call(call) => {
+                self.any_mut_ref(&call.args)
+                    || match &call.callee {
+                        Expr::Ident(ident) => self
+                            .sem
+                            .referenced_symbol(ident.id)
+                            .and_then(|def| self.sem.function_at(def))
+                            .is_none(),
+                        _ => true,
+                    }
+            }
             _ => false,
         };
         walk_expr(self, expr);

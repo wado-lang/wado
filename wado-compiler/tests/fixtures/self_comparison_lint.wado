@@ -21,6 +21,10 @@ impl Counter {
     }
 }
 
+fn advance(c: &mut Counter) -> i32 {
+    return c.bump();
+}
+
 fn norm(p: &Point) -> i32 {
     return p.x * p.x + p.y * p.y;
 }
@@ -55,6 +59,8 @@ export fn run() with Stdout {
     assert tick() == tick();             // no warning: the call prints
     let mut c = Counter { n: 0 };
     assert c.bump() != c.bump();         // no warning: `bump` takes `&mut self`
+    let r = &mut c;
+    assert advance(r) != advance(r);     // no warning: `r` is a `&mut` argument
     let mut n = 0;
     let mut next = || {
         n += 1;
@@ -79,5 +85,5 @@ __DATA__
     "`b <= b` compares a value with itself, so it is always true;",
     "`norm(&p) == norm(&p)` compares a value with itself"
   ],
-  "warnings_not_contains": ["`0 <= b`", "tick()", "bump()", "next()", "w == w", "`a == a` compares a value with itself, so it is always true; test a NaN"]
+  "warnings_not_contains": ["`0 <= b`", "tick()", "bump()", "advance(r)", "next()", "w == w", "`a == a` compares a value with itself, so it is always true; test a NaN"]
 }
