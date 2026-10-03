@@ -614,6 +614,18 @@ fn left_corners_reach_self(ctx: &LeftCornerCtx, i: i32) -> bool {
     return edges_reach_self(&ctx.corners, i);
 }
 
+/// The element under any labels. A Repeat's body op was lowered from this:
+/// the Repeat supplies the `List<>` typing itself, so both label forms lose
+/// their wrapper on the op side. Every reader that pairs the body op with its
+/// surface element peels through this, or the two disagree about the shape.
+pub fn peel_labels(elem: &Element) -> &Element {
+    let mut cur = elem;
+    while let Label(lab) = cur {
+        cur = &lab.element;
+    }
+    return cur;
+}
+
 /// Whether node `i` reaches itself in one or more steps of `edges`.
 pub fn edges_reach_self(edges: &List<List<i32>>, i: i32) -> bool {
     let mut seen: List<bool> = [];

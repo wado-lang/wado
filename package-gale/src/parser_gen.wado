@@ -13,6 +13,7 @@ use {
     GroupElement,
     AltAction,
     ActionSource,
+    peel_labels,
 } from "./ir.wado";
 use {
     group_field_base_name,
@@ -202,13 +203,7 @@ use {
     expect_set_call,
     kind_bitset_words,
 } from "./kind_set_gen.wado";
-use {
-    group_alt_classes,
-    non_greedy_exit_by_atn,
-    non_greedy_static_undecided,
-    peel_repeat_body_label,
-    rebind_op_field,
-} from "./lower.wado";
+use { group_alt_classes, non_greedy_exit_by_atn, non_greedy_static_undecided, rebind_op_field } from "./lower.wado";
 
 /// Append the defaulted runtime FOLLOW-continuation argument to a
 /// parse/scan/LR function signature, BEFORE any `min_prec` so a
@@ -4812,14 +4807,7 @@ fn gen_op_optional(
         return;
     }
     if optional_probe_decides(r, ctx) {
-        if r.body matches { Group(_) } {
-            let verdict = gen_optional_probe_verdict(w, r, ctx, nc);
-            w.begin(`if ${verdict}`);
-            gen_op(w, &r.body, ctx, nc);
-            w.end();
-        } else {
-            gen_optional_probe_entry(w, r, ctx, nc);
-        }
+        gen_optional_probe_entry(w, r, ctx, nc);
         return;
     }
     if r.strategy matches { OptionalScanGuard } {
@@ -4976,7 +4964,7 @@ fn gen_op_inner_for_storable_repeat(
     let entry = open_group_entry(w, elem, ctx, entry);
     assert proven.is_empty() || entry matches { Guaranteed }, "only an entry that emits nothing keeps what its guard proved";
     let op = &rep_op.body;
-    let unwrapped_elem = peel_repeat_body_label(elem);
+    let unwrapped_elem = peel_labels(elem);
     return match rep_op.body_shape {
         LeafRuleCall | LeafOther => gen_op_leaf(w, op, ctx, name_counts, proven),
         StorableGroup => gen_op_storable_group_inner(
@@ -5491,7 +5479,7 @@ fn any_alt_gated(branches: &List<DecisionBranch>) -> bool {
 /// The alternatives of a repeat's group body, or `null` when the body is not a
 /// group (a leaf or a rule call has no per-alternative gate).
 fn repeat_body_group_alts(inner: &Element) -> Option<&List<Alternative>> {
-    if let Group(g) = peel_repeat_body_label(inner) {
+    if let Group(g) = peel_labels(inner) {
         return Option::Some(&g.alternatives);
     }
     return null;
@@ -6228,7 +6216,7 @@ fn gen_op_repeat_optional_group(
     } else {
         panic("gen_op_repeat_optional_group: lower marked a Group body_shape but body op is not Op::Group");
     };
-    let g_elem = if let Group(g) = peel_repeat_body_label(&rep.element) {
+    let g_elem = if let Group(g) = peel_labels(&rep.element) {
         g;
     } else {
         panic("gen_op_repeat_optional_group: surface element is not Element::Group");
@@ -6386,8 +6374,12 @@ fn probe_decides(continuation: &List<ScanElement>, continuation_scannable: bool,
 fn gen_optional_probe_entry(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
     let verdict = gen_optional_probe_verdict(w, r, ctx, nc);
     w.begin(`if ${verdict}`);
-    let mut body_nc: List<[String, i32]> = [];
-    gen_op_leaf(w, &r.body, ctx, &mut body_nc);
+    if r.body matches { Group(_) } {
+        gen_op(w, &r.body, ctx, nc);
+    } else {
+        let mut body_nc: List<[String, i32]> = [];
+        gen_op_leaf(w, &r.body, ctx, &mut body_nc);
+    }
     w.end();
 }
 

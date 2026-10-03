@@ -1,0 +1,1406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>microgpt &mdash; a tiny GPT in one page</title>
+  <link rel="stylesheet" href="/theme.css">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "microgpt",
+    "author": { "@type": "Person", "name": "Example Author" },
+    "keywords": ["gpt", "autograd", "transformer"],
+    "wordCount": 1024,
+    "isAccessibleForFree": true
+  }
+  </script>
+  <style>
+@charset "UTF-8";
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap");
+@import "print.css" print;
+
+/* ==========================================================================
+   Documentation site theme: tokens, layout, components, utilities.
+   ========================================================================== */
+
+@font-face {
+  font-family: "Source Code Pro";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/source-code-pro-400.woff2") format("woff2"),
+       url("/fonts/source-code-pro-400.woff") format("woff");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153;
+}
+
+@font-face {
+  font-family: "Source Code Pro";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/source-code-pro-400-italic.woff2") format("woff2");
+}
+
+:root {
+  --color-bg: #ffffff;
+  --color-fg: #1f2328;
+  --color-muted: #59636e;
+  --color-border: #d1d9e0;
+  --color-accent: #0969da;
+  --color-accent-hover: #0550ae;
+  --color-success: #1a7f37;
+  --color-warning: #9a6700;
+  --color-danger: #d1242f;
+  --color-code-bg: #f6f8fa;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 12px;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 1rem;
+  --space-4: 1.5rem;
+  --space-5: 2rem;
+  --font-sans: Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: "Source Code Pro", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --shadow-sm: 0 1px 0 rgba(31, 35, 40, 0.04);
+  --shadow-md: 0 3px 6px rgba(140, 149, 159, 0.15);
+  --shadow-lg: 0 8px 24px rgba(140, 149, 159, 0.2);
+  --sidebar-width: 280px;
+  --header-height: 64px;
+  --transition-fast: 120ms;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  scroll-padding-top: 80px;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--color-fg);
+  background-color: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+h1 { font-size: 2.25rem; letter-spacing: -0.02em; }
+h2 { font-size: 1.75rem; padding-bottom: 0.3em; border-bottom: 1px solid var(--color-border); }
+h3 { font-size: 1.375rem; }
+h4 { font-size: 1.125rem; }
+h5,
+h6 { font-size: 1rem; color: var(--color-muted); }
+
+p,
+ul,
+ol,
+dl,
+blockquote,
+table,
+pre {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+  transition: color 120ms ease-in-out;
+}
+
+a:hover,
+a:focus-visible {
+  color: var(--color-accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+a[href^="http"]:not([href*="example.org"])::after {
+  content: "\2197";
+  display: inline-block;
+  margin-left: 0.15em;
+  font-size: 0.8em;
+}
+
+a[target="_blank"] {
+  cursor: alias;
+}
+
+img,
+video,
+svg {
+  max-width: 100%;
+  height: auto;
+  vertical-align: middle;
+}
+
+hr {
+  height: 2px;
+  margin: 2rem 0;
+  padding: 0;
+  border: 0;
+  background-color: var(--color-border);
+}
+
+code,
+kbd,
+samp,
+pre {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+}
+
+code {
+  padding: 0.2em 0.4em;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-code-bg);
+}
+
+pre {
+  overflow: auto;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-code-bg);
+  line-height: 1.45;
+  tab-size: 4;
+}
+
+pre > code {
+  padding: 0;
+  background: transparent;
+  white-space: pre;
+}
+
+kbd {
+  display: inline-block;
+  padding: 3px 5px;
+  font-size: 0.75em;
+  line-height: 1;
+  border: 1px solid var(--color-border);
+  border-bottom-color: #afb8c1;
+  border-radius: 6px;
+  box-shadow: inset 0 -1px 0 #afb8c1;
+  background-color: #f6f8fa;
+}
+
+blockquote {
+  margin-left: 0;
+  padding: 0 1em;
+  color: var(--color-muted);
+  border-left: 0.25em solid var(--color-border);
+}
+
+table {
+  width: 100%;
+  border-spacing: 0;
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+}
+
+th,
+td {
+  padding: 6px 13px;
+  border: 1px solid var(--color-border);
+  text-align: left;
+}
+
+th {
+  font-weight: 600;
+  background-color: #f6f8fa;
+}
+
+tr:nth-child(2n) td {
+  background-color: #f6f8fa;
+}
+
+tbody tr:hover td {
+  background-color: #eaeef2;
+}
+
+td[align="right"],
+th[align="right"] {
+  text-align: right;
+}
+
+/* Layout ------------------------------------------------------------------ */
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  background-color: rgba(255, 255, 255, 0.92);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+  backdrop-filter: saturate(180%) blur(12px);
+}
+
+.site-header .logo {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--color-fg);
+}
+
+.site-header .logo img {
+  width: 32px;
+  height: 32px;
+}
+
+.site-header nav ul {
+  display: flex;
+  gap: 1.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.site-header nav a {
+  color: var(--color-muted);
+  font-weight: 500;
+}
+
+.site-header nav a[aria-current="page"],
+.site-header nav a:hover {
+  color: var(--color-fg);
+  text-decoration: none;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 220px;
+  grid-template-areas: "sidebar content toc";
+  gap: 2rem;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+.sidebar {
+  grid-area: sidebar;
+  position: sticky;
+  top: 64px;
+  height: calc(100vh - 64px);
+  overflow-y: auto;
+  padding: 1.5rem 0;
+  overscroll-behavior: contain;
+}
+
+.sidebar .section-title {
+  margin: 1rem 0 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.sidebar ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sidebar li > a {
+  display: block;
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-md);
+  color: var(--color-fg);
+}
+
+.sidebar li > a:hover {
+  background-color: #f3f4f6;
+  text-decoration: none;
+}
+
+.sidebar li > a.active {
+  font-weight: 600;
+  color: var(--color-accent);
+  background-color: #ddf4ff;
+}
+
+.sidebar li ul {
+  margin-left: 0.75rem;
+  padding-left: 0.5rem;
+  border-left: 1px solid var(--color-border);
+}
+
+.content {
+  grid-area: content;
+  min-width: 0;
+  padding: 2rem 0 4rem;
+}
+
+.content > :first-child {
+  margin-top: 0;
+}
+
+.toc {
+  grid-area: toc;
+  position: sticky;
+  top: 88px;
+  align-self: start;
+  max-height: calc(100vh - 112px);
+  overflow-y: auto;
+  font-size: 0.8125rem;
+}
+
+.toc a {
+  display: block;
+  padding: 2px 0;
+  color: var(--color-muted);
+}
+
+.toc a.is-active {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.toc .depth-3 {
+  padding-left: 0.75rem;
+}
+
+/* Components -------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 32px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+  border: 1px solid rgba(31, 35, 40, 0.15);
+  border-radius: var(--radius-md);
+  color: var(--color-fg);
+  background-color: #f6f8fa;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 80ms cubic-bezier(0.33, 1, 0.68, 1), border-color 80ms ease;
+}
+
+.btn:hover {
+  background-color: #eff2f5;
+  border-color: rgba(31, 35, 40, 0.15);
+}
+
+.btn:active {
+  background-color: #e6eaef;
+  transform: translateY(1px);
+}
+
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  color: #8c959f;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.btn-primary {
+  color: #ffffff;
+  border-color: rgba(31, 35, 40, 0.15);
+  background-color: #1f883d;
+  box-shadow: 0 1px 0 rgba(31, 35, 40, 0.1);
+}
+
+.btn-primary:hover {
+  background-color: #1a7f37;
+}
+
+.btn-danger {
+  color: var(--color-danger);
+}
+
+.btn-danger:hover {
+  color: #ffffff;
+  background-color: #a40e26;
+}
+
+.btn-lg {
+  height: 40px;
+  padding: 0 16px;
+  font-size: 1rem;
+}
+
+.btn .icon {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  padding: 1.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-bg);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 200ms ease, transform 200ms ease;
+}
+
+.card:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.card h3 {
+  margin-top: 0;
+  font-size: 1.0625rem;
+}
+
+.card p:last-child {
+  margin-bottom: 0;
+  color: var(--color-muted);
+}
+
+.callout {
+  position: relative;
+  margin: 1.5rem 0;
+  padding: 0.75rem 1rem 0.75rem 3rem;
+  border-left: 4px solid var(--color-accent);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  background-color: #ddf4ff;
+}
+
+.callout::before {
+  position: absolute;
+  top: 0.75rem;
+  left: 1rem;
+  font-weight: 700;
+  content: "i";
+}
+
+.callout.warning {
+  border-left-color: var(--color-warning);
+  background-color: #fff8c5;
+}
+
+.callout.warning::before {
+  content: "!";
+}
+
+.callout.danger {
+  border-left-color: var(--color-danger);
+  background-color: #ffebe9;
+}
+
+.callout > :last-child {
+  margin-bottom: 0;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0 7px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 18px;
+  border: 1px solid transparent;
+  border-radius: 2em;
+  vertical-align: middle;
+}
+
+.badge-new { color: #ffffff; background-color: #8250df; }
+.badge-beta { color: var(--color-warning); border-color: var(--color-warning); }
+.badge-deprecated { color: var(--color-danger); border-color: var(--color-danger); text-decoration: line-through; }
+
+/* Utilities --------------------------------------------------------------- */
+
+.mt-0 { margin-top: 0 !important; }
+.mb-0 { margin-bottom: 0 !important; }
+.text-center { text-align: center; }
+.text-muted { color: var(--color-muted); }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.visually-hidden:not(:focus):not(:active) { position: absolute; width: 1px; height: 1px; overflow: hidden; }
+.flow > * + * { margin-top: 1em; }
+.stack-sm > * ~ * { margin-top: 0.5rem; }
+
+/* Animations -------------------------------------------------------------- */
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.skeleton {
+  border-radius: var(--radius-sm);
+  background-color: #eaeef2;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.dropdown-menu {
+  animation: fade-in 120ms ease-out;
+}
+
+/* Responsive -------------------------------------------------------------- */
+
+@media screen and (max-width: 1200px) {
+  .layout {
+    grid-template-columns: 240px minmax(0, 1fr);
+    grid-template-areas: "sidebar content";
+  }
+
+  .toc {
+    display: none;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .layout {
+    display: block;
+    padding: 0 1rem;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 64px;
+    left: 0;
+    z-index: 90;
+    width: 85%;
+    max-width: 320px;
+    padding: 1rem;
+    background-color: var(--color-bg);
+    box-shadow: var(--shadow-lg);
+    transform: translateX(-100%);
+    transition: transform 200ms ease;
+  }
+
+  .sidebar.is-open {
+    transform: translateX(0);
+  }
+
+  .site-header nav {
+    display: none;
+  }
+
+  h1 { font-size: 1.75rem; }
+  h2 { font-size: 1.375rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0d1117;
+    --color-fg: #e6edf3;
+    --color-muted: #9198a1;
+    --color-border: #3d444d;
+    --color-accent: #4493f8;
+    --color-accent-hover: #79c0ff;
+    --color-code-bg: #151b23;
+  }
+
+  .site-header {
+    background-color: rgba(13, 17, 23, 0.9);
+  }
+
+  .btn {
+    color: #f0f6fc;
+    background-color: #212830;
+    border-color: #3d444d;
+  }
+
+  .sidebar li > a.active,
+  .callout {
+    background-color: rgba(56, 139, 253, 0.1);
+  }
+}
+
+@supports (display: grid) and (gap: 1rem) {
+  .card-grid {
+    display: grid;
+  }
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .site-header {
+    background-color: #ffffff;
+  }
+}
+
+@media print {
+  .site-header,
+  .sidebar,
+  .toc {
+    display: none !important;
+  }
+
+  .layout {
+    display: block;
+  }
+
+  a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.8em;
+  }
+
+  pre,
+  blockquote {
+    page-break-inside: avoid;
+  }
+}
+
+  </style>
+</head>
+<body class="docs" onload="init()">
+  <header class="site-header">
+    <nav aria-label="Primary">
+      <a href="/" class="logo">microgpt</a>
+      <a href="/docs/" class="active">Docs</a>
+      <a href="/blog/" style="font-weight: 600">Blog</a>
+    </nav>
+  </header>
+  <main id="content">
+    <table class="steps">
+      <thead><tr><th>Stage</th><th>Width</th><th></th></tr></thead>
+      <tbody>
+      <tr id="row-0" class="even" data-index="0">
+        <td><a href="#tokenizer" title="Jump to Tokenizer">Tokenizer</a></td>
+        <td style="text-align: right; font-variant-numeric: tabular-nums">128</td>
+        <td><button type="button" class="toggle" onclick="toggleRow(0, event); return false" aria-expanded="false">Details</button></td>
+      </tr>
+      <tr id="row-1" class="odd" data-index="1">
+        <td><a href="#embedding" title="Jump to Embedding">Embedding</a></td>
+        <td style="text-align: right; font-variant-numeric: tabular-nums">256</td>
+        <td><button type="button" class="toggle" onclick="toggleRow(1, event); return false" aria-expanded="false">Details</button></td>
+      </tr>
+      <tr id="row-2" class="even" data-index="2">
+        <td><a href="#attention" title="Jump to Attention">Attention</a></td>
+        <td style="text-align: right; font-variant-numeric: tabular-nums">384</td>
+        <td><button type="button" class="toggle" onclick="toggleRow(2, event); return false" aria-expanded="false">Details</button></td>
+      </tr>
+      <tr id="row-3" class="odd" data-index="3">
+        <td><a href="#mlp" title="Jump to MLP">MLP</a></td>
+        <td style="text-align: right; font-variant-numeric: tabular-nums">512</td>
+        <td><button type="button" class="toggle" onclick="toggleRow(3, event); return false" aria-expanded="false">Details</button></td>
+      </tr>
+      <tr id="row-4" class="even" data-index="4">
+        <td><a href="#layernorm" title="Jump to LayerNorm">LayerNorm</a></td>
+        <td style="text-align: right; font-variant-numeric: tabular-nums">640</td>
+        <td><button type="button" class="toggle" onclick="toggleRow(4, event); return false" aria-expanded="false">Details</button></td>
+      </tr>
+      <tr id="row-5" class="odd" data-index="5">
+        <td><a href="#softmax" title="Jump to Softmax">Softmax</a></td>
+        <td style="text-align: right; font-variant-numeric: tabular-nums">768</td>
+        <td><button type="button" class="toggle" onclick="toggleRow(5, event); return false" aria-expanded="false">Details</button></td>
+      </tr>
+      <tr id="row-6" class="even" data-index="6">
+        <td><a href="#sampler" title="Jump to Sampler">Sampler</a></td>
+        <td style="text-align: right; font-variant-numeric: tabular-nums">896</td>
+        <td><button type="button" class="toggle" onclick="toggleRow(6, event); return false" aria-expanded="false">Details</button></td>
+      </tr>
+      <tr id="row-7" class="odd" data-index="7">
+        <td><a href="#optimizer" title="Jump to Optimizer">Optimizer</a></td>
+        <td style="text-align: right; font-variant-numeric: tabular-nums">1024</td>
+        <td><button type="button" class="toggle" onclick="toggleRow(7, event); return false" aria-expanded="false">Details</button></td>
+      </tr>
+      </tbody>
+    </table>
+    <section id="tokenizer" class="card" style="margin: 1rem 0; border-left: 4px solid hsl(0, 60%, 50%)">
+      <h2>Tokenizer <small>&mdash; step 1</small></h2>
+      <!-- Tokenizer: what the step computes -->
+      <p>The <code>tokenizer</code> stage reads its input &amp; writes a <em>new</em> tensor.
+        See <a href="https://example.com/docs/tokenizer?v=0&amp;lang=en" target="_blank" rel="noopener">the reference</a>.</p>
+      <ul>
+        <li><label><input type="checkbox" name="opt-0" checked onchange="update('Tokenizer', this.checked)"> Enabled</label></li>
+        <li><label>Scale <input type="range" min="0" max="10" value="0" oninput="this.nextElementSibling.value = this.value"><output>0</output></label></li>
+      </ul>
+      <img src="/img/tokenizer.png" alt="Tokenizer diagram" width="320" height="180" loading="lazy">
+    </section>
+    <section id="embedding" class="card" style="margin: 1rem 0; border-left: 4px solid hsl(45, 60%, 50%)">
+      <h2>Embedding <small>&mdash; step 2</small></h2>
+      <!-- Embedding: what the step computes -->
+      <p>The <code>embedding</code> stage reads its input &amp; writes a <em>new</em> tensor.
+        See <a href="https://example.com/docs/embedding?v=1&amp;lang=en" target="_blank" rel="noopener">the reference</a>.</p>
+      <ul>
+        <li><label><input type="checkbox" name="opt-1" checked onchange="update('Embedding', this.checked)"> Enabled</label></li>
+        <li><label>Scale <input type="range" min="0" max="10" value="1" oninput="this.nextElementSibling.value = this.value"><output>1</output></label></li>
+      </ul>
+      <img src="/img/embedding.png" alt="Embedding diagram" width="320" height="180" loading="lazy">
+    </section>
+    <section id="attention" class="card" style="margin: 1rem 0; border-left: 4px solid hsl(90, 60%, 50%)">
+      <h2>Attention <small>&mdash; step 3</small></h2>
+      <!-- Attention: what the step computes -->
+      <p>The <code>attention</code> stage reads its input &amp; writes a <em>new</em> tensor.
+        See <a href="https://example.com/docs/attention?v=2&amp;lang=en" target="_blank" rel="noopener">the reference</a>.</p>
+      <ul>
+        <li><label><input type="checkbox" name="opt-2" checked onchange="update('Attention', this.checked)"> Enabled</label></li>
+        <li><label>Scale <input type="range" min="0" max="10" value="2" oninput="this.nextElementSibling.value = this.value"><output>2</output></label></li>
+      </ul>
+      <img src="/img/attention.png" alt="Attention diagram" width="320" height="180" loading="lazy">
+    </section>
+    <section id="mlp" class="card" style="margin: 1rem 0; border-left: 4px solid hsl(135, 60%, 50%)">
+      <h2>MLP <small>&mdash; step 4</small></h2>
+      <!-- MLP: what the step computes -->
+      <p>The <code>mlp</code> stage reads its input &amp; writes a <em>new</em> tensor.
+        See <a href="https://example.com/docs/mlp?v=3&amp;lang=en" target="_blank" rel="noopener">the reference</a>.</p>
+      <ul>
+        <li><label><input type="checkbox" name="opt-3" checked onchange="update('MLP', this.checked)"> Enabled</label></li>
+        <li><label>Scale <input type="range" min="0" max="10" value="3" oninput="this.nextElementSibling.value = this.value"><output>3</output></label></li>
+      </ul>
+      <img src="/img/mlp.png" alt="MLP diagram" width="320" height="180" loading="lazy">
+    </section>
+    <section id="layernorm" class="card" style="margin: 1rem 0; border-left: 4px solid hsl(180, 60%, 50%)">
+      <h2>LayerNorm <small>&mdash; step 5</small></h2>
+      <!-- LayerNorm: what the step computes -->
+      <p>The <code>layernorm</code> stage reads its input &amp; writes a <em>new</em> tensor.
+        See <a href="https://example.com/docs/layernorm?v=4&amp;lang=en" target="_blank" rel="noopener">the reference</a>.</p>
+      <ul>
+        <li><label><input type="checkbox" name="opt-4" checked onchange="update('LayerNorm', this.checked)"> Enabled</label></li>
+        <li><label>Scale <input type="range" min="0" max="10" value="4" oninput="this.nextElementSibling.value = this.value"><output>4</output></label></li>
+      </ul>
+      <img src="/img/layernorm.png" alt="LayerNorm diagram" width="320" height="180" loading="lazy">
+    </section>
+    <section id="softmax" class="card" style="margin: 1rem 0; border-left: 4px solid hsl(225, 60%, 50%)">
+      <h2>Softmax <small>&mdash; step 6</small></h2>
+      <!-- Softmax: what the step computes -->
+      <p>The <code>softmax</code> stage reads its input &amp; writes a <em>new</em> tensor.
+        See <a href="https://example.com/docs/softmax?v=5&amp;lang=en" target="_blank" rel="noopener">the reference</a>.</p>
+      <ul>
+        <li><label><input type="checkbox" name="opt-5" checked onchange="update('Softmax', this.checked)"> Enabled</label></li>
+        <li><label>Scale <input type="range" min="0" max="10" value="5" oninput="this.nextElementSibling.value = this.value"><output>5</output></label></li>
+      </ul>
+      <img src="/img/softmax.png" alt="Softmax diagram" width="320" height="180" loading="lazy">
+    </section>
+    <section id="sampler" class="card" style="margin: 1rem 0; border-left: 4px solid hsl(270, 60%, 50%)">
+      <h2>Sampler <small>&mdash; step 7</small></h2>
+      <!-- Sampler: what the step computes -->
+      <p>The <code>sampler</code> stage reads its input &amp; writes a <em>new</em> tensor.
+        See <a href="https://example.com/docs/sampler?v=6&amp;lang=en" target="_blank" rel="noopener">the reference</a>.</p>
+      <ul>
+        <li><label><input type="checkbox" name="opt-6" checked onchange="update('Sampler', this.checked)"> Enabled</label></li>
+        <li><label>Scale <input type="range" min="0" max="10" value="6" oninput="this.nextElementSibling.value = this.value"><output>6</output></label></li>
+      </ul>
+      <img src="/img/sampler.png" alt="Sampler diagram" width="320" height="180" loading="lazy">
+    </section>
+    <section id="optimizer" class="card" style="margin: 1rem 0; border-left: 4px solid hsl(315, 60%, 50%)">
+      <h2>Optimizer <small>&mdash; step 8</small></h2>
+      <!-- Optimizer: what the step computes -->
+      <p>The <code>optimizer</code> stage reads its input &amp; writes a <em>new</em> tensor.
+        See <a href="https://example.com/docs/optimizer?v=7&amp;lang=en" target="_blank" rel="noopener">the reference</a>.</p>
+      <ul>
+        <li><label><input type="checkbox" name="opt-7" checked onchange="update('Optimizer', this.checked)"> Enabled</label></li>
+        <li><label>Scale <input type="range" min="0" max="10" value="7" oninput="this.nextElementSibling.value = this.value"><output>7</output></label></li>
+      </ul>
+      <img src="/img/optimizer.png" alt="Optimizer diagram" width="320" height="180" loading="lazy">
+    </section>
+    <form action="/run" method="post" onsubmit="return validate(this)">
+      <label for="prompt">Prompt</label>
+      <textarea id="prompt" name="prompt" rows="4" cols="60" placeholder="Once upon a time&hellip;"></textarea>
+      <select name="temperature" onchange="setTemperature(parseFloat(this.value))">
+        <option value="0.5">0.5</option>
+        <option value="1.0" selected>1.0</option>
+      </select>
+      <button type="submit" class="primary" style="padding: 0.5em 1em; border-radius: 4px">Generate</button>
+    </form>
+  </main>
+  <footer><p>&copy; 2026 Example &middot; <a href="/license">MIT</a></p></footer>
+  <script>
+// microgpt training and inference benchmark for JavaScript.
+//
+// A port of Andrej Karpathy's dependency-free Python microgpt.
+// Copyright (c) Andrej Karpathy, MIT License.
+// https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95
+//
+// Python seeds Mersenne Twister, so the numbers here are not the original's.
+//
+// The same program as microgpt.wado: a scalar autograd graph where a node holds
+// its children directly, so both arms measure a GC'd language walking an object
+// graph. Both phases reseed, so the two print the same loss and the same sample
+// and can be checked against each other.
+//
+// How to run:
+//   node benchmark/microgpt/microgpt.js
+
+const ITERATIONS = 3;
+const WARMUP = 1;
+
+function printThroughput(label, workPerIter, n, elapsedNs, unit) {
+  const secs = elapsedNs / 1e9;
+  const rate = secs > 0 ? (workPerIter * n) / secs : 0;
+  const perMs = elapsedNs / n / 1e6;
+  let rbuf;
+  if (rate >= 1e9) rbuf = `${(rate / 1e9).toFixed(2)} G ${unit}/s`;
+  else if (rate >= 1e6) rbuf = `${(rate / 1e6).toFixed(2)} M ${unit}/s`;
+  else if (rate >= 1e3) rbuf = `${(rate / 1e3).toFixed(2)} k ${unit}/s`;
+  else rbuf = `${rate.toFixed(2)} ${unit}/s`;
+  console.log(`${label}: ${rbuf}   (${perMs.toFixed(3)} ms/iter, ${n} iter)`);
+}
+
+// One step per document, so a measured iteration is one pass over the corpus.
+const STEPS = 32;
+// Each sample runs the full attention window, deeper than any training step
+// reaches on this corpus.
+const SAMPLES = 24;
+const TEMPERATURE = 0.5;
+const SEED = 42n;
+
+// Let there be a deterministic source of chaos. This is `core:prng`'s, which the
+// Wado arm draws from: SplitMix64 expands the seed, then xoshiro256++ runs.
+const MASK64 = (1n << 64n) - 1n;
+
+function rotl(x, n) {
+  return ((x << n) | (x >> (64n - n))) & MASK64;
+}
+
+class Rng {
+  constructor(seed) {
+    let state = seed & MASK64;
+    const splitmix = () => {
+      state = (state + 0x9e3779b97f4a7c15n) & MASK64;
+      let z = state;
+      z = ((z ^ (z >> 30n)) * 0xbf58476d1ce4e5b9n) & MASK64;
+      z = ((z ^ (z >> 27n)) * 0x94d049bb133111ebn) & MASK64;
+      return (z ^ (z >> 31n)) & MASK64;
+    };
+    this.s = [splitmix(), splitmix(), splitmix(), splitmix()];
+  }
+
+  nextU64() {
+    const s = this.s;
+    const result = (rotl((s[0] + s[3]) & MASK64, 23n) + s[0]) & MASK64;
+    const t = (s[1] << 17n) & MASK64;
+    s[2] ^= s[0];
+    s[3] ^= s[1];
+    s[1] ^= s[2];
+    s[0] ^= s[3];
+    s[2] ^= t;
+    s[3] = rotl(s[3], 45n);
+    return result;
+  }
+
+  // 53 bits, the mantissa of a double, scaled into [0, 1).
+  random() {
+    return Number(this.nextU64() >> 11n) / 9007199254740992;
+  }
+
+  gauss(std) {
+    let u = this.random();
+    while (u <= 0) u = this.random();
+    const v = this.random();
+    return std * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
+
+  // `random.choices(range(n), weights)`: one draw against the cumulative sum.
+  choice(weights) {
+    let total = 0;
+    for (const w of weights) total += w;
+    let r = this.random() * total;
+    for (let i = 0; i < weights.length; i++) {
+      r -= weights[i];
+      if (r < 0) return i;
+    }
+    return weights.length - 1;
+  }
+}
+
+// Let there be Autograd to recursively apply the chain rule through a
+// computation graph. `Graph` is the heap those nodes live in; `id` is a node's
+// slot in it, which makes the `visited` set a dense array.
+class Value {
+  constructor(id, data, children, localGrads) {
+    this.id = id;
+    this.data = data;
+    this.grad = 0;
+    this.children = children;
+    this.localGrads = localGrads;
+  }
+}
+
+class Graph {
+  constructor() {
+    this.nodes = [];
+  }
+
+  len() {
+    return this.nodes.length;
+  }
+
+  value(data, children, localGrads) {
+    const v = new Value(this.nodes.length, data, children, localGrads);
+    this.nodes.push(v);
+    return v;
+  }
+
+  leaf(data) {
+    return this.value(data, [], []);
+  }
+
+  add(a, b) {
+    return this.value(a.data + b.data, [a, b], [1, 1]);
+  }
+
+  mul(a, b) {
+    return this.value(a.data * b.data, [a, b], [b.data, a.data]);
+  }
+
+  pow(a, p) {
+    return this.value(Math.pow(a.data, p), [a], [p * Math.pow(a.data, p - 1)]);
+  }
+
+  log(a) {
+    return this.value(Math.log(a.data), [a], [1 / a.data]);
+  }
+
+  exp(a) {
+    return this.value(Math.exp(a.data), [a], [Math.exp(a.data)]);
+  }
+
+  relu(a) {
+    return this.value(Math.max(0, a.data), [a], [a.data > 0 ? 1 : 0]);
+  }
+
+  // Python's operators wrap a bare number in a `Value` first, so the graph
+  // carries a leaf for every constant. These keep that shape.
+  addNum(a, c) {
+    return this.add(a, this.leaf(c));
+  }
+
+  mulNum(a, c) {
+    return this.mul(a, this.leaf(c));
+  }
+
+  subNum(a, c) {
+    return this.addNum(a, -c);
+  }
+
+  neg(a) {
+    return this.mulNum(a, -1);
+  }
+
+  // `a / b` is `a * b**-1`, as `__truediv__` has it.
+  div(a, b) {
+    return this.mul(a, this.pow(b, -1));
+  }
+
+  divNum(a, c) {
+    return this.mulNum(a, Math.pow(c, -1));
+  }
+
+  // `sum(xs)` starts at 0, so Python's graph carries that leaf too.
+  sum(xs) {
+    let acc = this.leaf(0);
+    for (let i = 0; i < xs.length; i++) acc = this.add(acc, xs[i]);
+    return acc;
+  }
+
+  // Everything above this length is one training step's graph, dropped whole.
+  rewind(len) {
+    this.nodes.length = len;
+  }
+}
+
+function buildTopo(v, visited, topo) {
+  if (visited[v.id]) return;
+  visited[v.id] = 1;
+  for (let i = 0; i < v.children.length; i++)
+    buildTopo(v.children[i], visited, topo);
+  topo.push(v);
+}
+
+function backward(root, nodeCount) {
+  const topo = [];
+  const visited = new Uint8Array(nodeCount);
+  buildTopo(root, visited, topo);
+
+  root.grad = 1;
+  for (let i = topo.length - 1; i >= 0; i--) {
+    const v = topo[i];
+    for (let j = 0; j < v.children.length; j++) {
+      v.children[j].grad += v.localGrads[j] * v.grad;
+    }
+  }
+}
+
+// Let there be a Tokenizer to translate strings to sequences of integers
+// ("tokens") and back.
+class Tokenizer {
+  constructor(docs) {
+    const seen = new Set();
+    for (const doc of docs) for (const c of doc) seen.add(c);
+    this.uchars = [...seen].sort();
+    this.bos = this.uchars.length;
+    this.vocabSize = this.bos + 1;
+  }
+
+  index(c) {
+    for (let i = 0; i < this.uchars.length; i++) {
+      if (this.uchars[i] === c) return i;
+    }
+    throw new Error(`no token for ${c}`);
+  }
+
+  // Surround the document with the BOS token on both sides.
+  encode(doc) {
+    const tokens = [this.bos];
+    for (const c of doc) tokens.push(this.index(c));
+    tokens.push(this.bos);
+    return tokens;
+  }
+}
+
+// Initialize the parameters, to store the knowledge of the model.
+const N_LAYER = 1;
+const N_EMBD = 16;
+const BLOCK_SIZE = 16;
+const N_HEAD = 4;
+const HEAD_DIM = N_EMBD / N_HEAD;
+
+function matrix(g, rng, nout, nin, std = 0.08) {
+  const rows = [];
+  for (let o = 0; o < nout; o++) {
+    const row = [];
+    for (let i = 0; i < nin; i++) row.push(g.leaf(rng.gauss(std)));
+    rows.push(row);
+  }
+  return rows;
+}
+
+function stateDict(g, rng, vocabSize) {
+  const state = {
+    wte: matrix(g, rng, vocabSize, N_EMBD),
+    wpe: matrix(g, rng, BLOCK_SIZE, N_EMBD),
+    lmHead: matrix(g, rng, vocabSize, N_EMBD),
+    layers: [],
+  };
+  for (let i = 0; i < N_LAYER; i++) {
+    state.layers.push({
+      attnWq: matrix(g, rng, N_EMBD, N_EMBD),
+      attnWk: matrix(g, rng, N_EMBD, N_EMBD),
+      attnWv: matrix(g, rng, N_EMBD, N_EMBD),
+      attnWo: matrix(g, rng, N_EMBD, N_EMBD),
+      mlpFc1: matrix(g, rng, 4 * N_EMBD, N_EMBD),
+      mlpFc2: matrix(g, rng, N_EMBD, 4 * N_EMBD),
+    });
+  }
+  return state;
+}
+
+// Flatten every matrix into a single list of parameters.
+function params(state) {
+  const out = [];
+  const flatten = (m) => {
+    for (const row of m) for (const p of row) out.push(p);
+  };
+  flatten(state.wte);
+  flatten(state.wpe);
+  flatten(state.lmHead);
+  for (const layer of state.layers) {
+    flatten(layer.attnWq);
+    flatten(layer.attnWk);
+    flatten(layer.attnWv);
+    flatten(layer.attnWo);
+    flatten(layer.mlpFc1);
+    flatten(layer.mlpFc2);
+  }
+  return out;
+}
+
+// Define the model architecture: a function mapping tokens and parameters to
+// logits over what comes next. Follow GPT-2, blessed among the GPTs, with minor
+// differences: layernorm -> rmsnorm, no biases, GeLU -> ReLU.
+function linear(g, x, w) {
+  const out = [];
+  for (const row of w) {
+    const terms = [];
+    for (let i = 0; i < row.length; i++) terms.push(g.mul(row[i], x[i]));
+    out.push(g.sum(terms));
+  }
+  return out;
+}
+
+function softmax(g, logits) {
+  let maxVal = -Infinity;
+  for (const val of logits) maxVal = Math.max(maxVal, val.data);
+  const exps = logits.map((l) => g.exp(g.subNum(l, maxVal)));
+  const total = g.sum(exps);
+  return exps.map((e) => g.div(e, total));
+}
+
+function rmsnorm(g, x) {
+  const squares = x.map((xi) => g.mul(xi, xi));
+  const ms = g.divNum(g.sum(squares), x.length);
+  const scale = g.pow(g.addNum(ms, 1e-5), -0.5);
+  return x.map((xi) => g.mul(xi, scale));
+}
+
+function addVec(g, a, b) {
+  return a.map((ai, i) => g.add(ai, b[i]));
+}
+
+function gpt(g, state, tokenId, posId, keys, values) {
+  let x = addVec(g, state.wte[tokenId], state.wpe[posId]);
+  // Not redundant: the backward pass reaches here via the residual connection.
+  x = rmsnorm(g, x);
+
+  for (let li = 0; li < N_LAYER; li++) {
+    const layer = state.layers[li];
+
+    // 1) Multi-head Attention block
+    const xResidual = x;
+    x = rmsnorm(g, x);
+    const q = linear(g, x, layer.attnWq);
+    keys[li].push(linear(g, x, layer.attnWk));
+    values[li].push(linear(g, x, layer.attnWv));
+
+    const xAttn = [];
+    for (let h = 0; h < N_HEAD; h++) {
+      const hs = h * HEAD_DIM;
+      const layerKeys = keys[li];
+      const layerValues = values[li];
+
+      const attnLogits = [];
+      for (let t = 0; t < layerKeys.length; t++) {
+        const kt = layerKeys[t];
+        const terms = [];
+        for (let j = 0; j < HEAD_DIM; j++)
+          terms.push(g.mul(q[hs + j], kt[hs + j]));
+        attnLogits.push(g.divNum(g.sum(terms), Math.pow(HEAD_DIM, 0.5)));
+      }
+      const attnWeights = softmax(g, attnLogits);
+
+      for (let j = 0; j < HEAD_DIM; j++) {
+        const terms = [];
+        for (let t = 0; t < layerValues.length; t++) {
+          terms.push(g.mul(attnWeights[t], layerValues[t][hs + j]));
+        }
+        xAttn.push(g.sum(terms));
+      }
+    }
+    x = addVec(g, linear(g, xAttn, layer.attnWo), xResidual);
+
+    // 2) MLP block
+    const mlpResidual = x;
+    x = rmsnorm(g, x);
+    x = linear(g, x, layer.mlpFc1);
+    x = linear(
+      g,
+      x.map((xi) => g.relu(xi)),
+      layer.mlpFc2,
+    );
+    x = addVec(g, x, mlpResidual);
+  }
+
+  return linear(g, x, state.lmHead);
+}
+
+function emptyCache() {
+  return Array.from({ length: N_LAYER }, () => []);
+}
+
+// Forward the token sequence through the model, building up the computation
+// graph all the way to the loss.
+function forwardLoss(g, state, tokens) {
+  const n = Math.min(BLOCK_SIZE, tokens.length - 1);
+  const keys = emptyCache();
+  const values = emptyCache();
+
+  const losses = [];
+  for (let posId = 0; posId < n; posId++) {
+    const logits = gpt(g, state, tokens[posId], posId, keys, values);
+    const probs = softmax(g, logits);
+    losses.push(g.neg(g.log(probs[tokens[posId + 1]])));
+  }
+  // The average loss over the document sequence. May yours be low.
+  return g.mulNum(g.sum(losses), 1 / n);
+}
+
+// Let there be Adam, the blessed optimizer and its buffers.
+const LEARNING_RATE = 0.01;
+const BETA1 = 0.85;
+const BETA2 = 0.99;
+const EPS_ADAM = 1e-8;
+
+class Adam {
+  constructor(nParams) {
+    this.m = new Float64Array(nParams);
+    this.v = new Float64Array(nParams);
+  }
+
+  step(ps, lr, step) {
+    const bias1 = 1 - Math.pow(BETA1, step + 1);
+    const bias2 = 1 - Math.pow(BETA2, step + 1);
+    for (let i = 0; i < ps.length; i++) {
+      const p = ps[i];
+      this.m[i] = BETA1 * this.m[i] + (1 - BETA1) * p.grad;
+      this.v[i] = BETA2 * this.v[i] + (1 - BETA2) * p.grad * p.grad;
+      const mHat = this.m[i] / bias1;
+      const vHat = this.v[i] / bias2;
+      p.data -= (lr * mHat) / (Math.sqrt(vHat) + EPS_ADAM);
+      p.grad = 0;
+    }
+  }
+}
+
+const DOCS = [
+  "emma", "mary", "ada", "madeleine", "katelyn", "karla", "jayde", "harleigh",
+  "paityn", "rosalina", "rita", "margaux", "mayra", "klara", "janiah", "coralie",
+  "blythe", "joana", "minerva", "jalani", "isra", "zariya", "rosanna", "loxley",
+  "emmanuelle", "renae", "eveline", "yazmine", "corinna", "makyla", "marilynn", "malea",
+];
+
+// One measured iteration: a fresh model, then `steps` of forward, backward, Adam.
+function train(steps) {
+  const rng = new Rng(SEED);
+  const tok = new Tokenizer(DOCS);
+  const g = new Graph();
+  const state = stateDict(g, rng, tok.vocabSize);
+  const nParams = g.len();
+  const ps = params(state);
+  const adam = new Adam(ps.length);
+
+  let lossValue = 0;
+  for (let step = 0; step < steps; step++) {
+    const tokens = tok.encode(DOCS[step % DOCS.length]);
+    const loss = forwardLoss(g, state, tokens);
+    backward(loss, g.len());
+    lossValue = loss.data;
+    adam.step(ps, LEARNING_RATE * (1 - step / steps), step);
+    g.rewind(nParams);
+  }
+  return lossValue;
+}
+
+// Unlike the example's `generate`, this never stops early on a BOS draw: the
+// position count has to be fixed for the throughput figure to mean anything.
+function generate(g, state, tok, rng) {
+  const nParams = g.len();
+  const keys = emptyCache();
+  const values = emptyCache();
+
+  let tokenId = tok.bos;
+  let sample = "";
+  for (let posId = 0; posId < BLOCK_SIZE; posId++) {
+    const logits = gpt(g, state, tokenId, posId, keys, values);
+    const scaled = logits.map((l) => g.divNum(l, TEMPERATURE));
+    const probs = softmax(g, scaled);
+    tokenId = rng.choice(probs.map((p) => p.data));
+    if (tokenId !== tok.bos) sample += tok.uchars[tokenId];
+  }
+  g.rewind(nParams);
+  return sample;
+}
+
+// Weights steer which token is drawn, never what a position costs, so an
+// untrained model times the same as a trained one and the phase stands alone.
+function infer(samples) {
+  const rng = new Rng(SEED);
+  const tok = new Tokenizer(DOCS);
+  const g = new Graph();
+  const state = stateDict(g, rng, tok.vocabSize);
+
+  let last = "";
+  for (let i = 0; i < samples; i++) last = generate(g, state, tok, rng);
+  return last;
+}
+
+// Next-token predictions per iteration, which is what the throughput counts.
+// A step count would move with the corpus's document lengths.
+function trainTokens(tok, steps) {
+  let total = 0;
+  for (let step = 0; step < steps; step++) {
+    total += Math.min(BLOCK_SIZE, tok.encode(DOCS[step % DOCS.length]).length - 1);
+  }
+  return total;
+}
+
+function measure(label, workPerIter, f) {
+  for (let w = 0; w < WARMUP; w++) f();
+  let result;
+  const start = process.hrtime.bigint();
+  for (let i = 0; i < ITERATIONS; i++) result = f();
+  printThroughput(
+    label,
+    workPerIter,
+    ITERATIONS,
+    Number(process.hrtime.bigint() - start),
+    "tokens",
+  );
+  return result;
+}
+
+console.log(
+  `microgpt ${STEPS} training steps, ${SAMPLES} samples: ${ITERATIONS} iter (warmup ${WARMUP})`,
+);
+
+const loss = measure("train", trainTokens(new Tokenizer(DOCS), STEPS), () =>
+  train(STEPS),
+);
+console.log(`final loss = ${loss.toFixed(6)}`);
+
+const sample = measure("infer", SAMPLES * BLOCK_SIZE, () => infer(SAMPLES));
+console.log(`last sample = ${sample}`);
+
+  </script>
+</body>
+</html>

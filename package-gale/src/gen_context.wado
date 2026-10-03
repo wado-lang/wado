@@ -7,6 +7,7 @@ use {
     ActionLanguage,
     compute_scan_cyclic,
     edges_reach_self,
+    peel_labels,
 } from "./ir.wado";
 use { SuperOp } from "./superclass.wado";
 use { LitToken } from "./lexer_gen.wado";
@@ -859,6 +860,7 @@ impl GenContext {
         self.rule_follow_exact = exact;
     }
 
+    /// Records the rules an `EOF` the grammar writes may follow.
     pub fn set_rules_before_eof_token(&mut self, rules: List<String>) {
         self.rules_before_eof_token = rules;
     }
@@ -3241,7 +3243,7 @@ pub fn close_over_callers(callees: &List<List<i32>>, marked: List<bool>) -> List
 /// call in the same alternative. `in_repeat` says `elements` lie in one.
 fn collect_late_failing_calls(elements: &List<Element>, in_repeat: bool, out: &mut List<String>) {
     for let i of 0..<elements.len() {
-        let elem = peel_label(&elements[i]);
+        let elem = peel_labels(&elements[i]);
         match elem {
             RuleRef(r) => if in_repeat && elements.iter_ref().skip(i + 1).any(|e| is_required(e)) {
                 out.push(r.name);
@@ -3262,15 +3264,7 @@ fn collect_late_failing_calls(elements: &List<Element>, in_repeat: bool, out: &m
 /// Whether an element must match something: anything but an optional or a
 /// star. A rule call counts, though its rule may be nullable.
 fn is_required(elem: &Element) -> bool {
-    return !peel_label(elem) matches { Repeat(rep) && !rep.kind matches { Plus } };
-}
-
-fn peel_label(elem: &Element) -> &Element {
-    let mut cur = elem;
-    while let Label(lab) = cur {
-        cur = &lab.element;
-    }
-    return cur;
+    return !peel_labels(elem) matches { Repeat(rep) && !rep.kind matches { Plus } };
 }
 
 /// Collect the parser-rule names an element sequence references for
