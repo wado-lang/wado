@@ -3,7 +3,7 @@
 
 use { TreeMap, TreeSet } from "core:collections";
 use { Extent } from "./extent.wado";
-use { Axis, ExtentConflict, Shape } from "./shape.wado";
+use { Axis, AxisConflict, Shape } from "./shape.wado";
 use {
     SliceBounds,
     axes_of,
@@ -56,7 +56,7 @@ pub struct AxisCountConflict {
 /// An operator's conditions failed, at the node its first output names.
 pub struct NodeConflict {
     pub node: String,
-    pub error: ExtentConflict,
+    pub error: AxisConflict,
 }
 
 /// A graph output whose declared rank is not the rank the nodes produced.
@@ -1468,7 +1468,7 @@ fn operand_at(node: &Node, shapes: &TreeMap<String, Shape>, index: i32) -> Shape
     return shapes.get(node.inputs[index]).unwrap();
 }
 
-fn at_node(node: &Node, result: Result<Shape, ExtentConflict>) -> Result<Shape, InferError> {
+fn at_node(node: &Node, result: Result<Shape, AxisConflict>) -> Result<Shape, InferError> {
     return match result {
         Ok(shape) => Result::Ok(shape),
         Err(error) => Result::Err(InferError::Node(NodeConflict {

@@ -84,7 +84,7 @@ pub struct Shape {
 
 /// Two axes an operation needs to be one axis are not: named apart, or not one
 /// length. Both sides are carried, so the diagnostic names each.
-pub struct ExtentConflict {
+pub struct AxisConflict {
     pub op: String,
     pub axis: String,
     pub right_axis: String,
@@ -92,7 +92,7 @@ pub struct ExtentConflict {
     pub right: Extent,
 }
 
-impl Display for ExtentConflict {
+impl Display for AxisConflict {
     fn fmt(&self, f: &mut Formatter) {
         if self.axis != self.right_axis {
             f.write_str(
@@ -106,7 +106,7 @@ impl Display for ExtentConflict {
     }
 }
 
-impl Error for ExtentConflict {
+impl Error for AxisConflict {
 }
 
 impl Shape {
@@ -233,7 +233,7 @@ impl Shape {
     /// Elementwise over two operands under ONNX's multidirectional
     /// broadcasting, which every unary operation is the one-operand case of.
     /// `owed` gains what the inputs owe for the operands' axes to meet.
-    pub fn elementwise(&self, other: &Shape, op: String, owed: &mut List<Condition>) -> Result<Shape, ExtentConflict> {
+    pub fn elementwise(&self, other: &Shape, op: String, owed: &mut List<Condition>) -> Result<Shape, AxisConflict> {
         let axes = Shape::broadcast(&self.axes, &other.axes, &op, owed)?;
         return Result::Ok(Shape { axes });
     }
@@ -241,7 +241,7 @@ impl Shape {
     /// `MatMul` as ONNX defines it, which is numpy's: the batch axes broadcast,
     /// and a rank-1 operand is a matrix whose missing axis the result drops.
     /// `owed` gains what the inputs owe for the operands' axes to meet.
-    pub fn matmul(&self, rhs: &Shape, op: String, owed: &mut List<Condition>) -> Result<Shape, ExtentConflict> {
+    pub fn matmul(&self, rhs: &Shape, op: String, owed: &mut List<Condition>) -> Result<Shape, AxisConflict> {
         assert self.rank() >= 1 && rhs.rank() >= 1;
 
         let right_k = if rhs.rank() == 1 { rhs.from_end(0) } else { rhs.from_end(1) };
@@ -276,7 +276,7 @@ impl Shape {
         right: &List<Axis>,
         op: &String,
         owed: &mut List<Condition>,
-    ) -> Result<List<Axis>, ExtentConflict> {
+    ) -> Result<List<Axis>, AxisConflict> {
         let rank = i32::max(left.len(), right.len());
         let mut axes: List<Axis> = [];
         for let mut i = 0; i < rank; i += 1 {
@@ -336,13 +336,13 @@ impl Shape {
     /// is an error, save what `Extent::agreement` owes, which `owed` gains.
     /// Lengths that agree do not make two names one, since the names are what
     /// the generated code types the axes by.
-    pub fn agree(left: &Axis, right: &Axis, op: &String, owed: &mut List<Condition>) -> Result<(), ExtentConflict> {
+    pub fn agree(left: &Axis, right: &Axis, op: &String, owed: &mut List<Condition>) -> Result<(), AxisConflict> {
         if left.name == right.name && let Some(c) = left.extent.agreement(&right.extent) {
             owed.extend(&c);
             return Result::Ok(());
         }
         builtin::cold_path();
-        return Result::Err(ExtentConflict {
+        return Result::Err(AxisConflict {
             op: *op,
             axis: left.name,
             right_axis: right.name,

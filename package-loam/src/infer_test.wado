@@ -22,7 +22,7 @@ use {
 use { read } from "./onnx_text.wado";
 use { Poly } from "./poly.wado";
 use { LayoutRule, Schema } from "./schema.wado";
-use { ExtentConflict } from "./shape.wado";
+use { AxisConflict } from "./shape.wado";
 
 fn is_error<E: Error>() {
 }
@@ -33,7 +33,7 @@ test "every error stage 0 reports is an Error" {
     is_error::<UnnamedTensor>();
     is_error::<AxisCountConflict>();
     is_error::<NodeConflict>();
-    is_error::<ExtentConflict>();
+    is_error::<AxisConflict>();
     is_error::<OperandCountConflict>();
     is_error::<OutputCountConflict>();
     is_error::<OperandRankConflict>();
