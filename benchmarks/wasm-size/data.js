@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790954931484,
+  "lastUpdate": 1790990613953,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -62933,6 +62933,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f022de7c0bd48d19d1a76f36c3286f0c8aa42e87"
         },
         "date": 1790954930731,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20617,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 279825,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e0053f7ccfe22f8eab725f6f546cecb120ef6cbf",
+          "message": "Merge pull request #2250 from wado-lang/ccr-5117b114-vbqsqr\n\ndocs(spec): settle import reading, traps, flags, and IEEE float names",
+          "timestamp": "2026-10-03T10:03:50+09:00",
+          "tree_id": "a3fc87b8cbde39805acc4f31db12e5de5961c691",
+          "url": "https://github.com/wado-lang/wado/commit/e0053f7ccfe22f8eab725f6f546cecb120ef6cbf"
+        },
+        "date": 1790990612936,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
