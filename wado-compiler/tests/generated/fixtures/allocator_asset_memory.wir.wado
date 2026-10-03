@@ -57,7 +57,7 @@ struct core:prelude//List<f32> {  // TypeId(13)
     mut used: i32,
 }
 
-type "functype//wasm:core:libm.wat/libm_expf" = fn(f32) -> f32;  // TypeId(14)
+type "functype//wasm:core:libm.wat/f32_exp" = fn(f32) -> f32;  // TypeId(14)
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(15)
 
@@ -169,7 +169,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(68)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(69)
 
-import fn wasm:core:libm.wat/libm_expf from "wasm:core:libm.wat/libm_expf";
+import fn wasm:core:libm.wat/f32_exp from "wasm:core:libm.wat/f32_exp";
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
 import fn wasi/waitable-join from "wasi/waitable-join";
@@ -267,7 +267,7 @@ fn "allocator_asset_memory.wado/run"() with Stdout {
                 $sroa_$iter_0_start_88 = current_67 + 1;
                 break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_spec0_0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_1;
             };
-            value_28 = "wasm:core:libm.wat/libm_expf"(base - (builtin::f32_convert_i32_s(current_67) * 0.25_f32));
+            value_28 = "wasm:core:libm.wat/f32_exp"(base - (builtin::f32_convert_i32_s(current_67) * 0.25_f32));
             if @unlikely(local.tee current_67(before.used) >= builtin::array_len(before.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<f32>::grow"(before);
@@ -308,7 +308,7 @@ fn "allocator_asset_memory.wado/run"() with Stdout {
                 unreachable;
             }
             $v4 = builtin::array_get_value<f32>(elements, current_77);
-            if @unlikely(((local.tee $v1_10("wasm:core:libm.wat/libm_expf"(value_28)) == $v4) | (($v1_10 != $v1_10) & ($v4 != $v4))) == 0) {
+            if @unlikely(((local.tee $v1_10("wasm:core:libm.wat/f32_exp"(value_28)) == $v4) | (($v1_10 != $v1_10) & ($v4 != $v4))) == 0) {
                 cold_path;
                 "core:rt/panic"(current_67 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_14("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(251)), 55); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_14.repr, current_67, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_14.repr, current_67 + 20, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 117, 110), used: 3 }, 3); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_14.repr, current_67 + 23, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 116, 32), used: 4 }, 4); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_14.repr, current_67 + 27, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("allocator_asset_memory.wado"), used: 27 }, 27); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_14.repr, current_67 + 54, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1); $local_15 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_14); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 17 }, $local_15); let $mv_arg_2: ref "core:prelude/string.wado//String"; $mv_arg_2 = global:allocator_asset_memory.wado::$const_obj_5; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_14, $mv_arg_2.repr, $mv_arg_2.used); $local_12 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(64); let $mv_arg_5: ref "core:prelude/string.wado//String"; $mv_arg_5 = global:allocator_asset_memory.wado::$const_obj_4; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_12, $mv_arg_5.repr, $mv_arg_5.used); $local_13 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_12); "core:prelude/primitive.wado/f32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<f32>" { value: value_28 }, $local_13); let $mv_arg_7: ref "core:prelude/string.wado//String"; $mv_arg_7 = global:allocator_asset_memory.wado::$const_obj_3; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_12, $mv_arg_7.repr, $mv_arg_7.used); $local_13 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_12); "core:prelude/primitive.wado/f32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<f32>" { value: "core:prelude/list.wado/core:prelude/list.wado/List<f32>^core:prelude/traits.wado/IndexValue<i32>::index_value"(before, current_77) }, $local_13); let $mv_arg_9: ref "core:prelude/string.wado//String"; $mv_arg_9 = global:allocator_asset_memory.wado::$const_obj_2; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_12, $mv_arg_9.repr, $mv_arg_9.used); $local_13 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_12); "core:prelude/primitive.wado/f32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<f32>" { value: "core:prelude/primitive.wado/f32::exp"(value_28) }, $local_13); "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_14, $local_12.repr, $local_12.used); $fuse_at_19 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_14, 40); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_14.repr, $fuse_at_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: f32::exp(x) == before[k]
@@ -1697,7 +1697,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::apply_padding_s
 }
 
 fn "core:prelude/primitive.wado/f32::exp"(x) {
-    return "wasm:core:libm.wat/libm_expf"(x);
+    return "wasm:core:libm.wat/f32_exp"(x);
 }
 
 fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(self, f) {

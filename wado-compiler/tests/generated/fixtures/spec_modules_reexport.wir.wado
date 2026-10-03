@@ -20,9 +20,9 @@ struct core:prelude//List<u64> {  // TypeId(5)
     mut used: i32,
 }
 
-type "functype//wasm:core:libm.wat/libm_cos" = fn(f64) -> f64;  // TypeId(6)
+type "functype//wasm:core:libm.wat/f64_cos" = fn(f64) -> f64;  // TypeId(6)
 
-type "functype//wasm:core:libm.wat/libm_sin" = fn(f64) -> f64;  // TypeId(7)
+type "functype//wasm:core:libm.wat/f64_sin" = fn(f64) -> f64;  // TypeId(7)
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(8)
 
@@ -82,8 +82,8 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(35)
 
 type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(36)
 
-import fn wasm:core:libm.wat/libm_cos from "wasm:core:libm.wat/libm_cos";
-import fn wasm:core:libm.wat/libm_sin from "wasm:core:libm.wat/libm_sin";
+import fn wasm:core:libm.wat/f64_cos from "wasm:core:libm.wat/f64_cos";
+import fn wasm:core:libm.wat/f64_sin from "wasm:core:libm.wat/f64_sin";
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
 import fn wasi/waitable-join from "wasi/waitable-join";
@@ -133,13 +133,13 @@ fn "spec_modules_reexport.wado/$cm_export__$test_0"() {
     let $v3_seen: bool;
     let $v4: bool;
     let $v4_seen: bool;
-    $v0 = "wasm:core:libm.wat/libm_sin"(1);
-    $v1 = "wasm:core:libm.wat/libm_sin"(1);
+    $v0 = "wasm:core:libm.wat/f64_sin"(1);
+    $v1 = "wasm:core:libm.wat/f64_sin"(1);
     $v2 = ($v0 == $v1) | (($v0 != $v0) & ($v1 != $v1));
     $v3_seen = 0;
     $v4_seen = 0;
     if @unlikely((if $v2 -> i32 {
-        $v4 = $v3 = "wasm:core:libm.wat/libm_cos"(0); $v3_seen = 1; $v3 == 1;
+        $v4 = $v3 = "wasm:core:libm.wat/f64_cos"(0); $v3_seen = 1; $v3 == 1;
         $v4_seen = 1;
         $v4;
     } else {

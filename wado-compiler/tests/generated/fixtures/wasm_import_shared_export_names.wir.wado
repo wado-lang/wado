@@ -20,9 +20,9 @@ struct core:prelude//List<u64> {  // TypeId(5)
     mut used: i32,
 }
 
-type "functype//wasm:core:libm.wat/libm_sin" = fn(f64) -> f64;  // TypeId(6)
+type "functype//wasm:core:libm.wat/f64_sin" = fn(f64) -> f64;  // TypeId(6)
 
-type "functype//wasm:./sub/wasm_import_shared_export_names.wat/libm_sin" = fn(f64) -> f64;  // TypeId(7)
+type "functype//wasm:./sub/wasm_import_shared_export_names.wat/f64_sin" = fn(f64) -> f64;  // TypeId(7)
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(8)
 
@@ -92,8 +92,8 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(40)
 
 type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(41)
 
-import fn wasm:core:libm.wat/libm_sin from "wasm:core:libm.wat/libm_sin";
-import fn wasm:./sub/wasm_import_shared_export_names.wat/libm_sin from "wasm:./sub/wasm_import_shared_export_names.wat/libm_sin";
+import fn wasm:core:libm.wat/f64_sin from "wasm:core:libm.wat/f64_sin";
+import fn wasm:./sub/wasm_import_shared_export_names.wat/f64_sin from "wasm:./sub/wasm_import_shared_export_names.wat/f64_sin";
 import fn mem/realloc from "mem/realloc";
 import fn wasm:./sub/wasm_import_shared_export_names.wat/realloc from "wasm:./sub/wasm_import_shared_export_names.wat/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -123,8 +123,8 @@ global global:wasm_import_shared_export_names.wado::$const_obj_27: ref Array<u8>
 global global:wasm_import_shared_export_names.wado::$const_obj_28: ref Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
 global global:wasm_import_shared_export_names.wado::$const_obj_30: ref Array<u8> = array.new_fixed<u8>(102, 54, 52, 58, 58, 115, 105, 110, 40, 48, 46, 48, 41, 58, 32);
 global global:wasm_import_shared_export_names.wado::$const_obj_31: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 102, 54, 52, 58, 58, 115, 105, 110, 40, 48, 46, 48, 41, 32, 61, 61, 32, 48, 46, 48, 10);
-global global:wasm_import_shared_export_names.wado::$const_obj_38: ref Array<u8> = array.new_fixed<u8>(108, 105, 98, 109, 95, 115, 105, 110, 40, 48, 46, 48, 41, 58, 32);
-global global:wasm_import_shared_export_names.wado::$const_obj_39: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 108, 105, 98, 109, 95, 115, 105, 110, 40, 48, 46, 48, 41, 32, 61, 61, 32, 52, 50, 46, 48, 10);
+global global:wasm_import_shared_export_names.wado::$const_obj_38: ref Array<u8> = array.new_fixed<u8>(102, 54, 52, 95, 115, 105, 110, 40, 48, 46, 48, 41, 58, 32);
+global global:wasm_import_shared_export_names.wado::$const_obj_39: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 102, 54, 52, 95, 115, 105, 110, 40, 48, 46, 48, 41, 32, 61, 61, 32, 52, 50, 46, 48, 10);
 global global:wasm_import_shared_export_names.wado::$const_obj_46: ref Array<u8> = array.new_fixed<u8>(114, 101, 97, 108, 108, 111, 99, 40, 48, 44, 32, 48, 44, 32, 49, 44, 32, 49, 41, 58, 32);
 global global:wasm_import_shared_export_names.wado::$const_obj_47: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 114, 101, 97, 108, 108, 111, 99, 40, 48, 44, 32, 48, 44, 32, 49, 44, 32, 49, 41, 32, 61, 61, 32, 55, 10);
 global global:core:prelude/list.wado::$const_obj_54: ref Array<u8> = array.new_fixed<u8>(115, 101, 108, 102, 46, 117, 115, 101, 100, 58, 32);
@@ -148,17 +148,17 @@ fn "wasm_import_shared_export_names.wado/$test_0_each_asset_keeps_its_own_export
         "wasm_import_shared_export_names.wado/$test_0_each_asset_keeps_its_own_export$cold3"($v0_0);
         unreachable;
     }
-    if @unlikely(local.tee $v0_2("wasm:./sub/wasm_import_shared_export_names.wat/libm_sin"(0)) != 42) {
+    if @unlikely(local.tee $v0_2("wasm:./sub/wasm_import_shared_export_names.wat/f64_sin"(0)) != 42) {
         cold_path;
         "wasm_import_shared_export_names.wado/$test_0_each_asset_keeps_its_own_export$cold2"($v0_2);
         unreachable;
     }
-    if @unlikely(local.tee $v0_2("wasm:core:libm.wat/libm_sin"(0)) != 0) {
+    if @unlikely(local.tee $v0_2("wasm:core:libm.wat/f64_sin"(0)) != 0) {
         cold_path;
         "wasm_import_shared_export_names.wado/$test_0_each_asset_keeps_its_own_export$cold1"($v0_2);
         unreachable;
     }
-    if @unlikely(local.tee $v0_0($local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; "core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar"("wasm:core:libm.wat/libm_sin"(0.5), $local_14); $local_14.used) <= 3) {
+    if @unlikely(local.tee $v0_0($local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; "core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar"("wasm:core:libm.wat/f64_sin"(0.5), $local_14); $local_14.used) <= 3) {
         cold_path;
         "wasm_import_shared_export_names.wado/$test_0_each_asset_keeps_its_own_export$cold0"($v0_0);
         unreachable;
@@ -268,7 +268,7 @@ fn "wasm_import_shared_export_names.wado/$test_0_each_asset_keeps_its_own_export
     let new_used_24: i32;
     let start_25: i32;
     let $sroa_$f_buf_105: ref "core:prelude/string.wado//String";
-    $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(139), used: 0 };
+    $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(137), used: 0 };
     if @unlikely(local.tee new_used_24(0 + 100) > builtin::array_len($local_10.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_10, new_used_24);
@@ -286,15 +286,15 @@ fn "wasm_import_shared_export_names.wado/$test_0_each_asset_keeps_its_own_export
     builtin::array_copy<u8>($load_2, start_25, global:wasm_import_shared_export_names.wado::$const_obj_24, 0, 1);
     $sroa_$f_buf_105 = $local_10;
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(7, $sroa_$f_buf_105);
-    if @unlikely(local.tee start_25($local_10.used + 49) > builtin::array_len($local_10.repr)) {
+    if @unlikely(local.tee start_25($local_10.used + 47) > builtin::array_len($local_10.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_10, start_25);
     }
     new_used_24 = $local_10.used;
     $local_10.used = start_25;
-    builtin::array_copy<u8>(local.tee $load_2($local_10.repr), new_used_24, global:wasm_import_shared_export_names.wado::$const_obj_39, 0, 34);
-    new_used_24 = new_used_24 + 34;
-    builtin::array_copy<u8>($load_2, new_used_24, global:wasm_import_shared_export_names.wado::$const_obj_38, 0, 15);
+    builtin::array_copy<u8>(local.tee $load_2($local_10.repr), new_used_24, global:wasm_import_shared_export_names.wado::$const_obj_39, 0, 33);
+    new_used_24 = new_used_24 + 33;
+    builtin::array_copy<u8>($load_2, new_used_24, global:wasm_import_shared_export_names.wado::$const_obj_38, 0, 14);
     $sroa_$f_buf_105 = $local_10;
     "core:prelude/primitive.wado/f64::inspect_into$scalar$spec0$scalar"($v0, $sroa_$f_buf_105);
     if @unlikely(local.tee new_used_24($local_10.used + 1) > builtin::array_len($local_10.repr)) {
