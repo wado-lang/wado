@@ -1,0 +1,24 @@
+// A newtype over a scalar inherits the trait methods its base writes, typed
+// at the newtype: `other: &Self` takes the newtype, not its base.
+
+type Meters = f64;
+type Kilometers = Meters;
+type Count = i32;
+
+test "eq and cmp take the newtype" {
+    let a: Meters = builtin::black_box(1.0);
+    let b: Meters = builtin::black_box(2.0);
+    assert a.eq(&a) && !a.eq(&b);
+    assert a.cmp(&b) == Ordering::Less;
+    let n: Count = builtin::black_box(3);
+    assert n.cmp(&n) == Ordering::Equal;
+}
+
+test "a chain inherits them too" {
+    let k: Kilometers = builtin::black_box(5.0);
+    let l: Kilometers = builtin::black_box(4.0);
+    assert k.cmp(&l) == Ordering::Greater && !k.eq(&l);
+}
+
+__DATA__
+{"test": {}}

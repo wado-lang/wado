@@ -535,7 +535,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // the signature re-types to the receiver the way an inherited
             // inherent method's does.
             if let Some(trait_def) = trait_name.as_ref().and_then(FqTraitName::canonical)
-                && let Some(link) = self.tysys.own_impl_link(base_type_id, trait_def)
+                && let Some(link) = self.tysys.impl_link(base_type_id, trait_def)
                 && link != base_type_id
                 && info.owner == MethodOwner::Receiver
             {

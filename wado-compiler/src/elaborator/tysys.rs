@@ -287,13 +287,12 @@ impl TypeSystem {
     }
 
     /// The first link at or below `type_id` — itself included — owning an impl
-    /// of `trait_`, stopping above a scalar base: a primitive's operator impl
-    /// *is* the instruction, not one a newtype inherits. A link owns what it
-    /// writes, and the `Eq` a `cmp` it writes alone gives it.
-    pub(crate) fn own_impl_link(&self, type_id: TypeId, trait_: DefId) -> Option<TypeId> {
+    /// of `trait_`. A link owns what it writes, and the `Eq` a `cmp` it writes
+    /// alone gives it.
+    pub(crate) fn impl_link(&self, type_id: TypeId, trait_: DefId) -> Option<TypeId> {
+        let tt = self.type_table.borrow();
         let mut tid = type_id;
         loop {
-            let tt = self.type_table.borrow();
             let key = tt.impl_receiver_key(tid);
             if self
                 .trait_env
@@ -302,18 +301,23 @@ impl TypeSystem {
             {
                 return Some(tid);
             }
-            let base = tt.get_newtype_base(tid)?;
-            if !matches!(
-                tt.get(base),
-                ResolvedType::Newtype { .. }
-                    | ResolvedType::Struct { .. }
-                    | ResolvedType::GenericInstance { .. }
-                    | ResolvedType::Variant { .. }
-            ) {
-                return None;
-            }
-            tid = base;
+            tid = tt.get_newtype_base(tid)?;
         }
+    }
+
+    /// [`Self::impl_link`], stopping above a scalar base: a primitive's
+    /// operator impl *is* the instruction, not one a newtype inherits.
+    pub(crate) fn own_impl_link(&self, type_id: TypeId, trait_: DefId) -> Option<TypeId> {
+        self.impl_link(type_id, trait_).filter(|&link| {
+            link == type_id
+                || matches!(
+                    self.type_table.borrow().get(link),
+                    ResolvedType::Newtype { .. }
+                        | ResolvedType::Struct { .. }
+                        | ResolvedType::GenericInstance { .. }
+                        | ResolvedType::Variant { .. }
+                )
+        })
     }
 
     /// The prelude struct a `kind` range literal builds: its name, and its
