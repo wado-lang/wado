@@ -643,3 +643,12 @@ test "an f32 inspects as the same value in f64 does" {
     let half: f32 = builtin::black_box(1.5);
     assert `${half:.2?}` == "1.50";
 }
+
+test "wrapping_neg negates an unsigned value modulo its width" {
+    assert builtin::black_box(1_u8).wrapping_neg() == u8::MAX;
+    assert builtin::black_box(0_u8).wrapping_neg() == 0;
+    assert builtin::black_box(2_u16).wrapping_neg() == u16::MAX - 1;
+    assert builtin::black_box(1_u32).wrapping_neg() == u32::MAX;
+    assert builtin::black_box(0x8000_0000_u32).wrapping_neg() == 0x8000_0000;
+    assert builtin::black_box(1_u64).wrapping_neg() == u64::MAX;
+}
