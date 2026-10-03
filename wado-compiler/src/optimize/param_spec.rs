@@ -30,11 +30,6 @@ use crate::module_source::ModuleSource;
 use crate::name::param_spec_name;
 use crate::nir::NirLocal;
 
-/// Cap on the number of distinct clones minted for one original callee. A
-/// config struct threaded from a handful of call sites specializes; a callee
-/// genuinely polymorphic in its configuration does not multiply.
-const MAX_SPECIALIZATIONS_PER_FUNCTION: usize = 2;
-
 /// Whole-module cap on synthesized clones, so a pathological program cannot
 /// trade unbounded code size for constant propagation.
 const MAX_TOTAL_SPECIALIZATIONS: usize = 128;
@@ -56,10 +51,6 @@ enum FieldConst {
 
 impl FieldConst {
     /// The scalar constant an operand holds, or `None` otherwise.
-    ///
-    /// A [`ValueKind::Const`] aggregate is deliberately not a specialization
-    /// key: cloning a function per distinct constant `String` trades code size
-    /// for folds the constant already enables in place.
     fn of_operand(body: &Body, op: Operand) -> Option<Self> {
         let value = op.as_value()?;
         match body.values.kind(value) {
@@ -1210,7 +1201,6 @@ fn plan_clones<'s>(
         let ordinal = state.per_callee.get(&site.callee).copied().unwrap_or(0);
         if site.cold
             || state.budget_exhausted()
-            || ordinal >= MAX_SPECIALIZATIONS_PER_FUNCTION
             || body_exprs(project, site.callee) > MAX_CLONE_EXPRS
         {
             continue;

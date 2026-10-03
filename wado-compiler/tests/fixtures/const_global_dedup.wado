@@ -10,8 +10,9 @@
 // fragments, built fresh at each `xs[i % 4]` / `ys[i % 4]`, and the by-value
 // boxed receivers those diagnostics format. `$const_obj_N` is numbered in
 // hoist order, so anything that changes *how many* aggregates the pass takes
-// shifts the index of the one this fixture cares about. Only the read-site
-// pattern names a number; the rest are index-free on purpose.
+// shifts the index of the one this fixture cares about, so no pattern names a
+// number. `licm` hoists each loop's read of the array into a local first, which
+// is why the read sites name that local rather than the global.
 
 use { println, Stdout } from "core:cli";
 
@@ -47,7 +48,8 @@ __DATA__
     "wir_expect:O2": [
         "global global:const_global_dedup.wado::$const_obj_",
         "array.new_fixed<i32>(10, 20, 30, 40)",
-        "builtin::array_get_value<i32>(global:const_global_dedup.wado::$const_obj_"
+        "$licm_repr_{} = global:const_global_dedup.wado::$const_obj_{}; b0: block",
+        "$licm_repr_{} = global:const_global_dedup.wado::$const_obj_{}; b4: block"
     ],
     "wir_not_expect:O2": [
         "global mut global:const_global_dedup.wado::$const_obj_"

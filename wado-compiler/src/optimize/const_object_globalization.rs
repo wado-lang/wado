@@ -2180,6 +2180,14 @@ fn block_readonly(body: &Body, block: BlockId, idx: u32, gate: &Gate<'_>) -> boo
 
 fn stmt_readonly(body: &Body, stmt: StmtId, idx: u32, gate: &Gate<'_>) -> bool {
     match &body.stmts[stmt].kind {
+        // A second name for the binding, not a copy of it (`licm` hoists a
+        // loop's read of it into one). What is done through that name is the
+        // alias walk's to judge, as for a projection bound out of it.
+        StmtKind::Let {
+            value,
+            skip_value_copy: true,
+            ..
+        } if value.as_expr().is_some_and(|e| is_local(body, e, idx)) => true,
         StmtKind::Let { value, .. } => expr_readonly_operand(body, *value, idx, gate),
         StmtKind::Expr(e) => e
             .as_expr()
