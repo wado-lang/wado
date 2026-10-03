@@ -1044,22 +1044,17 @@ impl SolverBridge {
             );
             true
         };
-        let (writes_eq, writes_ord) =
-            match (trait_of(CompilerItem::Eq), trait_of(CompilerItem::Ord)) {
-                (Some(eq), Some(ord)) => {
-                    let writes = |trait_| {
-                        written_at_self(program, trait_, |id, def| covers(&from_cmp, id, def))
-                    };
-                    (writes(eq), writes(ord))
-                }
-                _ => Default::default(),
-            };
-        if let Some(eq) = trait_of(CompilerItem::Eq) {
-            let ords = writes_ord
-                .iter()
-                .filter(|(head, _)| !writes_eq.contains_key(*head))
-                .map(|(_, &id)| id);
-            from_cmp = derive_eq_from_ord(program, eq, ords.collect::<Vec<_>>());
+        let mut writes_eq = IndexMap::default();
+        if let (Some(eq), Some(ord)) = (trait_of(CompilerItem::Eq), trait_of(CompilerItem::Ord)) {
+            let writes =
+                |trait_| written_at_self(program, trait_, |id, def| covers(&from_cmp, id, def));
+            writes_eq = writes(eq);
+            let ords: Vec<ImplId> = writes(ord)
+                .into_iter()
+                .filter(|(head, _)| !writes_eq.contains_key(head))
+                .map(|(_, id)| id)
+                .collect();
+            from_cmp = derive_eq_from_ord(program, eq, ords);
         }
         for &(item, trait_) in &traits {
             let eligible = match item {
@@ -1070,14 +1065,11 @@ impl SolverBridge {
                 }
                 other => unreachable!("{other:?} is not derived"),
             };
-            let eligible: Vec<Declaration> = match item {
-                CompilerItem::Ord => eligible
-                    .iter()
-                    .filter(|d| !writes_eq.contains_key(&d.id))
-                    .cloned()
-                    .collect(),
-                _ => eligible.to_vec(),
-            };
+            let eligible: Vec<Declaration> = eligible
+                .iter()
+                .filter(|d| item != CompilerItem::Ord || !writes_eq.contains_key(&d.id))
+                .cloned()
+                .collect();
             derive(program, trait_, &eligible, |id, def| {
                 covers(&from_cmp, id, def)
             });

@@ -931,19 +931,18 @@ impl TypeSystem {
         // Bounded, so a pathologically nested (or cyclic) type cannot produce
         // an unbounded chain.
         while chain.len() < 8 {
-            let written_alone = self.comparison_written_alone(type_id);
-            if tr == OnBoundTrait::Ord && written_alone == Some(OnBoundTrait::Eq) {
+            let written_instead = match (tr, self.comparison_written_alone(type_id)) {
+                (OnBoundTrait::Ord, Some(OnBoundTrait::Eq)) => {
+                    Some("writes `eq`, so no `Ord` is derived for it; write `cmp` beside it")
+                }
+                (OnBoundTrait::Eq, Some(OnBoundTrait::Ord)) => {
+                    Some("takes `Eq` from its written `cmp`, and does not implement `Ord`")
+                }
+                _ => None,
+            };
+            if let Some(why) = written_instead {
                 let owner = self.type_id_to_string(type_id);
-                chain.push(format!(
-                    "`{owner}` writes `eq`, so no `Ord` is derived for it; write `cmp` beside it"
-                ));
-                break;
-            }
-            if tr == OnBoundTrait::Eq && written_alone == Some(OnBoundTrait::Ord) {
-                let owner = self.type_id_to_string(type_id);
-                chain.push(format!(
-                    "`{owner}` takes `Eq` from its written `cmp`, and does not implement `Ord`"
-                ));
+                chain.push(format!("`{owner}` {why}"));
                 break;
             }
             let resolved = self.type_table.borrow().get(type_id).clone();
@@ -1422,13 +1421,12 @@ impl TypeSystem {
             }
             return holds;
         }
-        let ord_unwritten_beside_eq = written_alone == Some(OnBoundTrait::Eq);
         // A structural derivation writes no argument, so it answers the trait's
         // declared defaults. A bound writing one needs an impl that writes it.
         if let Some(tr) = on_bound
             && tr.is_field_recursive()
             && wanted.is_empty()
-            && !(tr == OnBoundTrait::Ord && ord_unwritten_beside_eq)
+            && !(tr == OnBoundTrait::Ord && written_alone == Some(OnBoundTrait::Eq))
             && let Some((_, module_source)) = nominal
         {
             let serde_blocked =
@@ -3109,11 +3107,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Single entry point for resolving a trait method a binary operator
-    /// dispatches to (Eq / Ord / Add / … / Shr), returning a fully-populated
-    /// [`ResolvedTraitMethod`] with `rhs_type` already substituted so no caller
-    /// can forget to wire it through. `struct_name` / `lookup_type_id` are the
-    /// impl-lookup key — for a newtype, possibly the ultimate base.
     /// Whether the right operand is a value of the receiver's own type, and no
     /// impl written for the receiver answers `trait_` at its defaults, so that
     /// only a derived impl can answer the pair.
@@ -3136,6 +3129,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .is_none()
     }
 
+    /// Single entry point for resolving a trait method a binary operator
+    /// dispatches to (Eq / Ord / Add / … / Shr), returning a fully-populated
+    /// [`ResolvedTraitMethod`] with `rhs_type` already substituted so no caller
+    /// can forget to wire it through. `struct_name` / `lookup_type_id` are the
+    /// impl-lookup key — for a newtype, possibly the ultimate base.
     pub(super) fn resolve_trait_method_for_op(
         &mut self,
         struct_name: &str,
