@@ -185,10 +185,10 @@ impl TypeSystem {
             | ResolvedType::GenericInstance { type_args, .. } => {
                 let mut reached = type_args;
                 reached.extend(self.struct_field_type_ids_of(type_id).unwrap_or_default());
-                reached.extend(self.variant_payloads_of(type_id));
+                reached.extend(self.case_payload_types(type_id).unwrap_or_default());
                 reached
             }
-            ResolvedType::Variant { .. } => self.variant_payloads_of(type_id),
+            ResolvedType::Variant { .. } => self.case_payload_types(type_id).unwrap_or_default(),
         };
         if !walked.insert(self.type_table.borrow().type_key(type_id)) {
             return false;
@@ -196,14 +196,6 @@ impl TypeSystem {
         reached
             .into_iter()
             .any(|member| self.reaches_mut_ref_from(member, walked))
-    }
-
-    /// The payload of each case of the variant `type_id` names, as declared.
-    fn variant_payloads_of(&self, type_id: TypeId) -> Vec<TypeId> {
-        self.type_def(type_id)
-            .and_then(|def| self.data.variant_cases.get(&def))
-            .map(|info| info.cases.iter().map(|case| case.payload).collect())
-            .unwrap_or_default()
     }
 
     /// The `Type::Case` spelling of the case the resolve walk names at a bare

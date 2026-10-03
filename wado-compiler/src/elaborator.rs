@@ -2306,6 +2306,23 @@ impl TypeSystem {
         self.data.variant_cases.get(&def)
     }
 
+    /// Each case's payload type of the variant `ty`, typed at this instance.
+    pub(super) fn case_payload_types(&self, ty: TypeId) -> Option<Vec<TypeId>> {
+        let variant_info = self.variant_of_type(ty)?;
+        let type_args = self
+            .type_table
+            .borrow()
+            .nominal_type_args(ty)
+            .unwrap_or_default();
+        Some(
+            variant_info
+                .cases
+                .iter()
+                .map(|c| self.substitute_type_params(c.payload, &type_args))
+                .collect(),
+        )
+    }
+
     /// The enum `type_id` is, or `None` when it is not one. Asks the type for
     /// its declaration, the way [`Self::variant_of_type`] does.
     pub(super) fn enum_of_type(&self, type_id: TypeId) -> Option<&EnumInfo> {

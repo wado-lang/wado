@@ -908,7 +908,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let (Some(variant), Some(payloads)) = (
             self.tysys.variant_of_type(head),
-            self.case_payload_types(head),
+            self.tysys.case_payload_types(head),
         ) else {
             return true;
         };
