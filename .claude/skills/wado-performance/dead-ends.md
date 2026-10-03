@@ -18,6 +18,26 @@ wado dump -O2 benchmark/json_catalog/json_catalog.wado    # before/after: diff t
 for i in 1 2 3; do mise run json-catalog; done           # before and after
 ```
 
+## Two inliner tweaks for the JSON writer's integer path (2026-10-03)
+
+`serialize_i64` is a forwarder to `write_json_i64`. Bottom-up, it receives
+that callee first and grows to 42 lines, so a site created in a later round
+keeps the call and the `JsonSerializer` it builds for the receiver. Two changes
+to `classify_callee` in `optimize/inline.rs`, against the same release base,
+alternating rounds:
+
+- **Holding a forwarder** (`net_cost == 0`) so it receives no splices. It
+  removed the `serialize_i64` hop, but json-twitter ser lost 3.7% (six rounds,
+  ranges apart). The hold also covered `push_str`, which splices into every
+  site, so `internal_push_string` lost its sole caller and stayed a call at 17
+  sites writing `"null"`. A sole callee is spliced only because its caller is
+  one function, and a hold breaks that.
+- **Counting safepoints per path** instead of `has_safepoint`'s any-call rule:
+  an allocation always adds one, a single call per path does not, since the call
+  it replaces already was one. json-catalog de +3.5%, but catalog ser −2.4%,
+  canada de −2.0% and twitter ser −1.3%; four rounds. `Formatter::pad` and
+  `prepare_int_write` doubled in size.
+
 ## SWAR blocks in the JSON reader's scans (2026-10-03)
 
 Testing four bytes packed into a `u32` with bit tricks pays in the writer's
