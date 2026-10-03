@@ -232,7 +232,7 @@ impl Known {
 }
 
 /// An attribute's values as written, each number or string as its text. A
-/// tensor has no text form and travels in `tensor`.
+/// tensor or a graph has no text form and travels in `tensor` or `graph`.
 pub struct Attr {
     pub name: String,
     pub values: List<String>,
@@ -241,6 +241,8 @@ pub struct Attr {
     /// alone does not tell where a string reads as `3` or `inf`.
     pub is_string: bool = false,
     pub tensor: Option<Known> = null,
+    /// A subgraph, as `If` carries its branches.
+    pub graph: Option<Graph> = null,
 }
 
 /// An attribute its operator cannot read as written, and why.
@@ -308,6 +310,9 @@ impl Attr {
     fn texts(&self, strings: bool, reads: String) -> Result<List<String>, AttrError> {
         if self.tensor matches { Some(_) } {
             return Result::Err(self.error(`holds a tensor, and the operator reads ${reads}`));
+        }
+        if self.graph matches { Some(_) } {
+            return Result::Err(self.error(`holds a graph, and the operator reads ${reads}`));
         }
         if !self.is_list && self.values.is_empty() {
             return Result::Err(self.error("holds no value the build reads"));
@@ -422,11 +427,12 @@ pub fn default_opset(imports: &List<[String, i64]>) -> Option<i64> {
 /// `nodes` as the current opset defines them, read from `opset`'s definitions.
 /// A graph naming no opset is read as the current one. Arithmetic keeps its
 /// `axis` only where it aligns B at it, as before opset 7 with `broadcast`,
-/// which no later opset spells.
+/// which no later opset spells. A subgraph is read at its model's opset.
 pub fn upgraded(nodes: List<Node>, opset: Option<i64>) -> Result<List<Node>, String> {
     let version = opset.unwrap_or(i64::MAX);
     let mut out: List<Node> = [];
-    for let node of nodes {
+    for let read of nodes {
+        let node = Node { ..read, attrs: upgraded_subgraphs(read.attrs, opset)? };
         if is_binary_elementwise(&node.op) && node.attr("axis") matches { Some(_) } {
             let aligns = version < 7 && node.int_attr("broadcast", 0).map_err(|e| `${node.site()}: ${e}`)? != 0;
             if !aligns {
@@ -445,6 +451,18 @@ pub fn upgraded(nodes: List<Node>, opset: Option<i64>) -> Result<List<Node>, Str
             continue;
         }
         out.push(node);
+    }
+    return Result::Ok(out);
+}
+
+fn upgraded_subgraphs(attrs: List<Attr>, opset: Option<i64>) -> Result<List<Attr>, String> {
+    let mut out: List<Attr> = [];
+    for let a of attrs {
+        let Some(g) = a.graph else {
+            out.push(a);
+            continue;
+        };
+        out.push(Attr { ..a, graph: Option::Some(Graph { ..g, nodes: upgraded(g.nodes, opset)?, opset }) });
     }
     return Result::Ok(out);
 }
