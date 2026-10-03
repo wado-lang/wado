@@ -15,6 +15,7 @@ use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::resource_move_check::carries_affine_resource;
+use crate::synthesis::template::eq_from_written_cmp;
 use crate::tir::{ResolvedType, StructDef, TypeId, TypeTable, range_item};
 
 use super::sem::decls::ModuleDecls;
@@ -285,19 +286,23 @@ impl TypeSystem {
         }
     }
 
-    /// The first link at or below `type_id` — itself included — writing its own
-    /// impl of `trait_`, stopping above a scalar base: a primitive's operator
-    /// impl *is* the instruction, not one a newtype inherits.
+    /// The first link at or below `type_id` — itself included — owning an impl
+    /// of `trait_`, stopping above a scalar base: a primitive's operator impl
+    /// *is* the instruction, not one a newtype inherits. A link owns what it
+    /// writes, and the `Eq` a `cmp` it writes alone gives it.
     pub(crate) fn own_impl_link(&self, type_id: TypeId, trait_: DefId) -> Option<TypeId> {
         let mut tid = type_id;
         loop {
-            let key = self.type_table.borrow().impl_receiver_key(tid);
+            let tt = self.type_table.borrow();
+            let key = tt.impl_receiver_key(tid);
             if self
                 .trait_env
                 .has_any_methodful_impl_by_receiver(&key, trait_)
+                || eq_from_written_cmp(&self.trait_env, trait_, &key, &tt)
             {
                 return Some(tid);
             }
+            drop(tt);
             let base = self.type_table.borrow().get_newtype_base(tid)?;
             if !matches!(
                 self.type_table.borrow().get(base),

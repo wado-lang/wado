@@ -125,6 +125,30 @@ fn reach(a: &Access) -> u32 {
     return (*a & (Access::Read | Access::Write)) as u32;
 }
 
+type ByHits = Entry;
+
+impl Ord for ByHits {
+    fn cmp(&self, other: &Self) -> Ordering {
+        return self.hits.cmp(&other.hits);
+    }
+}
+
+type Shortest<T> = List<T>;
+
+impl<T: Ord> Ord for Shortest<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        return self.len().cmp(&other.len());
+    }
+}
+
+type Rounded = f64;
+
+impl Ord for Rounded {
+    fn cmp(&self, other: &Self) -> Ordering {
+        return f64::round(*self as f64).cmp(&f64::round(*other as f64));
+    }
+}
+
 variant Reading {
     Exact(i32),
     Estimate(i32),
@@ -203,6 +227,23 @@ test "an enum takes == from cmp" {
 test "a flags type takes == from cmp" {
     let read = builtin::black_box(Access::Read);
     assert read == Access::Read | Access::Audit && read != Access::Write;
+}
+
+test "a newtype takes == from its own cmp, not its base's" {
+    let a = Entry { key: 1, hits: 5 } as ByHits;
+    let b = Entry { key: 2, hits: 5 } as ByHits;
+    let c = Entry { key: 1, hits: 9 } as ByHits;
+    assert a == b && same(&a, &b) && a != c && !same(&a, &c);
+    let x: Rounded = builtin::black_box(1.2);
+    let y: Rounded = builtin::black_box(0.9);
+    assert x == y && same(&x, &y) && x != 2.0;
+}
+
+test "a generic newtype takes == from its own cmp at every instance" {
+    let a = [1, 2] as Shortest<i32>;
+    let b = [3, 4] as Shortest<i32>;
+    assert a == b && same(&a, &b) && a != [1] as Shortest<i32>;
+    assert ["x"] as Shortest<String> == ["y"] as Shortest<String>;
 }
 
 test "a variant takes == from cmp" {
