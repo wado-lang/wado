@@ -1962,17 +1962,7 @@ impl<'a> EffectProbe<'a> {
     pub(crate) fn performs_effect(&self, module: &ModuleSource, expr: &Expr) -> bool {
         let index = self.data.index();
         let mut out = Vec::new();
-        let mut walker = PurityWalker {
-            sem: self.sem,
-            annotations: self.state.module_semantics.get(module).map(|m| &m.types),
-            index: &index,
-            module_source: module,
-            context: PureContext::DefaultValue,
-            granted: IndexSet::default(),
-            param_types: IndexMap::default(),
-            out: &mut out,
-        };
-        walker.visit_expr(expr);
+        PurityWalker::new(self.sem, self.state, &index, module, &mut out).visit_expr(expr);
         !out.is_empty()
     }
 }
@@ -1987,16 +1977,7 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityE
         if !is_effect_checked(src) {
             continue;
         }
-        let mut walker = PurityWalker {
-            sem,
-            annotations: state.module_semantics.get(src).map(|m| &m.types),
-            index,
-            module_source: src,
-            context: PureContext::DefaultValue,
-            granted: IndexSet::default(),
-            param_types: IndexMap::default(),
-            out: &mut *out,
-        };
+        let mut walker = PurityWalker::new(sem, state, index, src, out);
         for item in &module.items {
             match item {
                 Item::Function(func) => walker.check_defaults(&func.params),
@@ -2068,7 +2049,27 @@ struct PurityWalker<'a> {
     out: &'a mut Vec<PurityError>,
 }
 
-impl PurityWalker<'_> {
+impl<'a> PurityWalker<'a> {
+    /// A walker over `module_source`, outside any `with … do`.
+    fn new(
+        sem: &'a Semantics,
+        state: &'a AnnotateState,
+        index: &'a EffectIndex<'a>,
+        module_source: &'a ModuleSource,
+        out: &'a mut Vec<PurityError>,
+    ) -> Self {
+        Self {
+            sem,
+            annotations: state.module_semantics.get(module_source).map(|m| &m.types),
+            index,
+            module_source,
+            context: PureContext::DefaultValue,
+            granted: IndexSet::default(),
+            param_types: IndexMap::default(),
+            out,
+        }
+    }
+
     fn check(&mut self, context: PureContext, expr: &Expr) {
         self.context = context;
         self.visit_expr(expr);
