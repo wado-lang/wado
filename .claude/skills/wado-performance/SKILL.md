@@ -250,6 +250,11 @@ in that pass, per §2.
 
 ## 5. Measurement
 
+**Report an improvement as +%, a regression as −%.** Compute it as speedup,
+`base / head − 1` on ms/iter (or `head / base − 1` on throughput), so faster is
+always positive. A report that writes one faster row as "+5%" and another as
+"−5% ms" leaves the reader to work out which way each number points.
+
 Only relative numbers carry signal. **A/B both arms in the same session**, best of
 three or four, alternating and with the order swapped once — the first run of a
 session reads high, so a fixed order silently taxes whichever arm goes second.
