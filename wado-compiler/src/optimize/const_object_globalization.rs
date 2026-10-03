@@ -448,43 +448,15 @@ fn collect_candidates(
     );
 }
 
-/// `idx` and every local that names its whole value: one a `let` binds from a
-/// name already in the set without copying it (`licm` hoists a loop's read into
-/// one). A use of any of them is a use of the binding.
+/// `idx` and every local bound from one of these names whole (`licm` hoists a
+/// loop's read into one). A use of any of them is a use of the binding.
 fn binding_names(body: &Body, idx: u32) -> Vec<u32> {
-    let renames: Vec<(u32, u32)> = reachable_nodes(body)
-        .into_iter()
-        .filter_map(|node| {
-            let NodeRef::Stmt(s) = node else {
-                return None;
-            };
-            let StmtKind::Let {
-                local_index,
-                value,
-                skip_value_copy: true,
-                ..
-            } = &body.stmts[s].kind
-            else {
-                return None;
-            };
-            let ExprKind::Local { index, .. } = &body.exprs[value.as_expr()?].kind else {
-                return None;
-            };
-            Some((*index, *local_index))
+    let sites = alias_sites(body);
+    alias_closure(idx, &sites, |i, names| {
+        sites[i].value.as_expr().is_some_and(|e| {
+            matches!(body.exprs[e].kind, ExprKind::Local { index, .. } if names.contains(&index))
         })
-        .collect();
-    let mut names = vec![idx];
-    let mut i = 0;
-    while i < names.len() {
-        let from = names[i];
-        for &(source, name) in &renames {
-            if source == from && !names.contains(&name) {
-                names.push(name);
-            }
-        }
-        i += 1;
-    }
-    names
+    })
 }
 
 /// Whether the constant bound to `idx` is handed to a callee that delivers its
