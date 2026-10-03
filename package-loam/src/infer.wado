@@ -361,33 +361,27 @@ fn checked_graph(graph: &Graph, scope: &mut Checked, schema: &Schema) -> Result<
 
 /// Each input axis whose `dim_param` spells arithmetic over a name no input
 /// binds (`solved`) read again as one symbol of its own, which the run reads
-/// from that axis. Each one read so binds itself, so this repeats until none is left.
+/// from that axis.
 fn unspell_unbound(graph: &Graph, shapes: &mut TreeMap<String, Shape>) {
-    let mut changed = true;
-    while changed {
-        changed = false;
-        let mut extents: List<Extent> = [];
-        for let vi of &graph.inputs {
-            extents.extend(&shapes[vi.name].axes.into_iter().map(|a| a.extent).collect());
-        }
-        let bound: List<String> = solved(&extents).into_iter().map(|s| s.symbol).collect();
-        for let vi of &graph.inputs {
-            let Dims(dims) = vi.rank else {
+    let mut extents: List<Extent> = [];
+    for let vi of &graph.inputs {
+        extents.extend(&shapes[vi.name].axes.into_iter().map(|a| a.extent).collect());
+    }
+    let bound: List<String> = solved(&extents).into_iter().map(|s| s.symbol).collect();
+    for let vi of &graph.inputs {
+        let Dims(dims) = vi.rank else {
+            continue;
+        };
+        for let [i, d] of dims.into_iter().enumerate() {
+            let Symbol(text) = d else {
                 continue;
             };
-            for let [i, d] of dims.into_iter().enumerate() {
-                let Symbol(text) = d else {
-                    continue;
-                };
-                let axis = shapes[vi.name].axes[i];
-                let Symbolic(p) = axis.extent else {
-                    continue;
-                };
-                if p.symbols().into_iter().all(|s| bound.contains_str(s.as_str_slice())) {
-                    continue;
-                }
+            let axis = shapes[vi.name].axes[i];
+            let Symbolic(p) = axis.extent else {
+                continue;
+            };
+            if !p.symbols().into_iter().all(|s| bound.contains_str(s.as_str_slice())) {
                 shapes[vi.name].axes[i] = Axis { ..axis, extent: Extent::symbol(&text) };
-                changed = true;
             }
         }
     }
