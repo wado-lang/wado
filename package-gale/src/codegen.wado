@@ -289,11 +289,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         }
     }
     let emit_follow = ctx.emit_follow();
-    // A superClass grammar can't be highlighted: the `highlight` entry calls
-    // `tokenize` / `parse` (base effect) but can't install the handler. Skip it
-    // (warned below) instead of emitting uncompilable code.
-    let any_base = ctx.has_superclass() || ctx.has_parser_superclass();
-    let emit_highlight = options.highlight_query matches { Some(_) } && !any_base;
+    let emit_highlight = options.highlight_query matches { Some(_) };
     gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
     let has_members = members_present(&lexer_members);
     gen_lexer(
@@ -314,16 +310,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     warn_atn_class_lexer_predicates(grammar, &latn.atn_class_rules, &mut ctx);
     gen_string_tree_helper(&mut w, grammar, &lit_tokens);
     if let Some(query) = &options.highlight_query {
-        if any_base {
-            let base = if ctx.has_superclass() { *ctx.superclass_name() } else { *ctx.parser_superclass_name() };
-            ctx.warn(
-                &DiagnosticOwner::host("highlight"),
-                DiagnosticKind::UnsupportedAction,
-                `a highlight query with superClass '${base}' is not supported (the highlighter entry cannot install the base handler); skipping the highlighter`,
-            );
-        } else {
-            gen_highlight(&mut w, grammar, &lit_tokens, query, &mut ctx);
-        }
+        gen_highlight(&mut w, grammar, &lit_tokens, query, &mut ctx);
     }
     for let name of ctx.take_root_refs().iter_value() {
         w.note(&name);
@@ -436,6 +423,7 @@ fn wire_parser_superclass(grammar: &mut Grammar, ctx: &mut GenContext) {
         } else {
             ctx.set_parser_superclass(&sc, ops);
             rewrite_parser_superclass_calls(grammar, &sc);
+            ctx.adopt_rewritten_bodies(&grammar.parser_rules);
         }
     }
 }

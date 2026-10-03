@@ -1187,6 +1187,27 @@ impl GenContext {
         return !self.parser_superclass_name.is_empty();
     }
 
+    /// Take the parser rules again after their action bodies were rewritten in
+    /// place. Everything derived in `new` reads only the rules' shape, which a
+    /// body rewrite leaves alone.
+    pub fn adopt_rewritten_bodies(&mut self, parser_rules: &List<ParserRule>) {
+        assert parser_rules.len() == self.parser_rules.len(), "a body rewrite keeps the rules";
+        self.parser_rules = *parser_rules;
+    }
+
+    /// The base interfaces an entry that lexes or parses performs: the lexer's,
+    /// then the parser's.
+    pub fn base_effects(&self) -> List<String> {
+        let mut bases: List<String> = [];
+        if self.has_superclass() {
+            bases.push(self.superclass_name);
+        }
+        if self.has_parser_superclass() {
+            bases.push(self.parser_superclass_name);
+        }
+        return bases;
+    }
+
     pub fn parser_superclass_ops(&self) -> &List<SuperOp> {
         return &self.parser_superclass_ops;
     }

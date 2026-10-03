@@ -6853,7 +6853,13 @@ fn gen_rep_decline_stranded<S: AsStrSlice>(
     let dead_end = dedup_name("decline_dead", nc);
     w.begin(`if ${scan_pos} >= 0`);
     gen_kind_read(w, &cont_kind, "p.kinds", scan_pos);
-    let can_continue = decline_continue_check(body_admits, duties, &cont_kind, ctx);
+    let mut can_continue = decline_continue_check(body_admits, duties, &cont_kind, ctx);
+    // Every rule is a `parse_<rule>` entry, which the end of the input ends,
+    // though its FOLLOW holds EOF only for a rule no other rule calls. An empty
+    // mask is the one sign of an entry a rule can read.
+    if ctx.current_rule_reads_follow() {
+        can_continue = `${can_continue} || ${FOLLOW_PARAM} == 0 && ${cont_kind} == TK_EOF`;
+    }
     w.begin(`if !(${can_continue})`);
     w.line(`let mut ${dead_end}: bool = false;`);
     gen_viability_probe(

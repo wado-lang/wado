@@ -3508,15 +3508,88 @@ false => ID:ab KW:xy INT:11 ID:qz
 ", got;
 }
 
-test "a highlight query on a superClass grammar skips the highlighter and says why" {
-    let options = GenerateOptions { highlight_query: Option::Some(parse_highlight_query("(A) @keyword").unwrap()) };
+test "a greedy loop keeps a token its caller could also take, entered directly or not" {
+    // `;` follows `list` inside `s`, so it is in `list`'s FOLLOW, but the loop
+    // is greedy: the jar takes it into the loop whichever rule the parse
+    // entered, as css3's `declarationList` must for a `style` attribute.
+    let got = parses_each("grammar T;
+s : '{' (list | ';')* '}' ;
+list : X (';' X?)* ;
+X : 'x' ;
+WS : ' ' -> skip ;
+", [["list", "x;x"], ["list", "x;"], ["s", "{x;x}"], ["s", "{x;;x}"]]);
+    assert got == "x;x => (list x ; x)\nx; => (list x ;)\n{x;x} => (s { (list x ; x) })\n{x;;x} => (s { (list x ; ; x) })\n", got;
+}
+
+test "a parser base call gates alternatives whose first tokens tie" {
+    // Prediction cannot pick between `a` and `b` by tokens, so the predicate is
+    // a standalone fn; its body must be the rewritten base call, not `this`.
+    let got = printed("grammar T;
+options { superClass = PBase; }
+s : {this.ok()}? a | b ;
+a : X ;
+b : X ;
+X : 'x' ;
+", "show_with(true, \"x\");\nshow_with(false, \"x\");\n", SHOW_WITH_PBASE);
+    assert got == "true x => (s (a x))\nfalse x => (s (b x))\n", got;
+}
+
+test "a parser base decides the tree a superClass grammar's highlighter walks" {
+    let options = GenerateOptions { highlight_query: Option::Some(parse_highlight_query("(a (X) @keyword)\n(b (X) @string)").unwrap()) };
     let out = gen_with("grammar T;
 options { superClass = PBase; }
-s : {this.ok()}? A ;
-A : 'a' ;
+s : {this.ok()}? a | b ;
+a : X ;
+b : X ;
+X : 'x' ;
 ", &options);
-    assert diagnostics_saying(&out, "a highlight query with superClass 'PBase' is not supported") == 1, "the skipped highlighter must be reported";
-    assert !out.source.contains("pub fn highlight<"), "no highlighter is emitted for a base it cannot install";
+    let items = "struct Allow {
+    ok: bool,
+}
+
+impl PBase for Allow {
+    fn ok(&self, p: &Parser) -> bool {
+        resume self.ok;
+    }
+}
+
+fn highlight_with(ok: bool) with Stdout {
+    let mut base = Allow { ok };
+    with PBase => &mut base do {
+        println(highlight(\"x\"));
+    };
+}
+";
+    let got = run_beside(out.source, "highlight_with(true);\nhighlight_with(false);\n", items).stdout;
+    assert got == "<span class=\"keyword\">x</span>\n<span class=\"string\">x</span>\n", got;
+}
+
+test "a lexer base decides the tokens a lexer grammar's highlighter classifies" {
+    let options = GenerateOptions { highlight_query: Option::Some(parse_highlight_query("(KW) @keyword").unwrap()) };
+    let out = gen_with("lexer grammar L;
+options { superClass = B; }
+KW : {this.ok()}? 'ab' ;
+ID : [a-z]+ ;
+", &options);
+    let items = "struct Gate {
+    on: bool,
+}
+
+impl B for Gate {
+    fn ok(&self, view: LexerView) -> bool {
+        resume self.on;
+    }
+}
+
+fn highlight_with(on: bool) with Stdout {
+    let mut base = Gate { on };
+    with B => &mut base do {
+        println(highlight(\"ab\"));
+    };
+}
+";
+    let got = run_beside(out.source, "highlight_with(true);\nhighlight_with(false);\n", items).stdout;
+    assert got == "<span class=\"keyword\">ab</span>\nab\n", got;
 }
 
 test "a parser base call runs in a grammar whose action language has no translator" {
