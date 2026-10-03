@@ -14,7 +14,7 @@ use crate::package::Package;
 use crate::tir::{
     BuiltinDeclaration, BuiltinDeclarations, ResolvedType, RetainSpec, TirFunction, TypeTable,
 };
-use crate::wir_build::component_plan;
+use crate::component_plan;
 use crate::world_registry::TEST_WORLD;
 
 /// Snapshot what a `core:builtin` declared about storage, before

@@ -94,6 +94,7 @@ use extract::FreezePhase;
 use gate::{FunctionGate, GatedPass};
 use heap_effect::HeapEffectsCache;
 
+use crate::codegen_flags::OptLevel;
 use crate::compiler_host::SpanEmitter;
 use crate::nir_package::NirPackage;
 use crate::{OptOverrides, compiler_trace};
@@ -111,25 +112,6 @@ struct OptConfig {
     /// Whether exhausting `iterations` is a defect rather than a budget — true
     /// for the caps `-O2`/`-Os` and `-O3` size so the loop converges under them.
     cap_is_defect: bool,
-}
-
-/// Optimization level. Every level runs DCE and the post-loop rewrites the Wasm
-/// backend depends on; `optimize` below sets each one's loop and inline budget.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum OptLevel {
-    /// No optimization loop. DCE plus the always-on post-optimization
-    /// rewrites required by the Wasm backend.
-    O0,
-    /// Development optimizations. All passes with fast iteration count.
-    O1,
-    /// Production optimizations. All passes including DCE.
-    #[default]
-    O2,
-    /// Aggressive production optimizations. All passes including DCE.
-    O3,
-    /// Size optimizations. Same as O2 plus name section stripping.
-    /// Intended for frontend/browser deployment.
-    Os,
 }
 
 /// Longest string literal materialized as a constant `array.new_fixed<u8>`

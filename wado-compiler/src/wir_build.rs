@@ -45,7 +45,6 @@ pub(crate) fn packed_element_consts(data: &PackedData) -> impl Iterator<Item = W
 
 mod calls;
 pub mod component_imports;
-pub mod component_plan;
 mod context;
 mod functions;
 mod pattern_match;

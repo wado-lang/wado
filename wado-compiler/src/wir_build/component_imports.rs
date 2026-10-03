@@ -12,7 +12,7 @@ use crate::component_model::{
 use crate::hashmap::IndexSet;
 use crate::nir_package::NirPackage;
 use crate::wir::{ImportEntry, ImportKind};
-use crate::wir_build::component_plan::CmExportType;
+use crate::component_plan::CmExportType;
 
 /// Resolve the categorized import plan for `project` from `used_wasi_functions`,
 /// the registry, and the WIR-level canonical intrinsics. This is the decision
@@ -216,7 +216,7 @@ pub fn resolve_import_plan(
 /// resource-defining interface is imported when an export's signature needs its
 /// types even if no function of it is called.
 fn collect_export_interface_fqs(ty: &CmExportType, out: &mut IndexSet<String>) {
-    use crate::wir_build::component_plan::CmExportType;
+    use crate::component_plan::CmExportType;
     match ty {
         CmExportType::Unit => {}
         CmExportType::Primitive(_) => {}

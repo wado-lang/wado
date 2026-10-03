@@ -25,7 +25,7 @@ use crate::nir::{
     NirStruct, NirTest, NirVariantDecl,
 };
 use crate::tir::{BuiltinDeclarations, TypeId, TypeTable};
-use crate::wir_build::component_plan::ComponentPlan;
+use crate::component_plan::ComponentPlan;
 use crate::world_registry::{self, GENERATOR_HOST_INTERFACE, WorldRegistry};
 
 /// A linked Wado package ready for WIR building and code generation.

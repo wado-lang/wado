@@ -2,11 +2,28 @@
 //!
 //! These toggle individual codegen strategies without rebuilding the toolchain,
 //! primarily to A/B them under the benchmark suite. The CLI's `-f <flag>`
-//! forwards raw strings to [`CompilerOptions::codegen_flags`](crate::CompilerOptions),
-//! which [`CodegenFlags::parse`] reads into this struct. Each flag is a boolean,
-//! and a leading `no-` inverts it.
+//! forwards raw strings to `CompilerOptions::codegen_flags`, which
+//! [`CodegenFlags::parse`] reads into this struct. Each flag is a boolean, and
+//! a leading `no-` inverts it.
 
-use crate::OptLevel;
+/// Optimization level. Every level runs DCE and the post-loop rewrites the Wasm
+/// backend depends on; `optimize` sets each one's loop and inline budget.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum OptLevel {
+    /// No optimization loop. DCE plus the always-on post-optimization
+    /// rewrites required by the Wasm backend.
+    O0,
+    /// Development optimizations. All passes with fast iteration count.
+    O1,
+    /// Production optimizations. All passes including DCE.
+    #[default]
+    O2,
+    /// Aggressive production optimizations. All passes including DCE.
+    O3,
+    /// Size optimizations. Same as O2 plus name section stripping.
+    /// Intended for frontend/browser deployment.
+    Os,
+}
 
 /// Codegen feature flags toggled from the CLI via `-f <flag>`.
 ///
@@ -115,7 +132,6 @@ impl CodegenFlags {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::OptLevel;
 
     /// Parse at `-O2` (the level whose opt-level defaults equal
     /// [`CodegenFlags::default`]), so these cases isolate flag handling.

@@ -30,7 +30,7 @@ use crate::synthesis::cm_binding::types::kebab_to_pascal;
 use crate::test_names::{SECTION_NAME, encode};
 use crate::token::Span;
 use crate::wir::{ImportEntry, ImportKind, WirPackage};
-use crate::wir_build::component_plan::{CmExportType, ComponentPlan, WorldExportPlan};
+use crate::component_plan::{CmExportType, ComponentPlan, WorldExportPlan};
 use crate::world_registry::fq_name_package;
 use crate::{ProviderComponent, ast};
 use wasm_compose::graph::Component as GraphComponent;
