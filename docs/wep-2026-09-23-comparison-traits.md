@@ -354,7 +354,7 @@ overlap, which is what `benchmark/ab.ts` decides.
   through `f32::max`, and record it in [Cost](#cost).
 - [x] Rename `minimum` and `maximum` to `ieee754_min` and `ieee754_max`.
 - [x] Add the six `ieee754_*` comparison methods to `f16`, `bf16`, `f32` and
-  `f64`, each lowering to one Wasm instruction, with a fixture holding each
+  `f64`, each lowering to one Wasm instruction, with a stdlib test holding each
   method's answers on a NaN, `-0.0` and an ordinary pair.
 - [x] Report the `self_comparison` lint, with a fixture for each operator, the
   float hint, a chain, an operand that performs an effect, and `allow`.
