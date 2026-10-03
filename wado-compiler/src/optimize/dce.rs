@@ -2,6 +2,8 @@
 
 use std::ops::ControlFlow;
 
+use cranelift_entity::EntityRef;
+
 use super::arena_query::is_pure_nontrapping_operand_typed;
 use super::mod_ref::{CallFacts, FnSummaries};
 
@@ -163,8 +165,6 @@ pub(super) fn reachable_function_positions(
     cache: &mut DescriptorCache,
     cached: impl IntoIterator<Item = FuncId>,
 ) -> IndexSet<usize> {
-    use cranelift_entity::EntityRef;
-
     let descriptors = cache.descriptors(project);
     let mut graph = build_analysis_graph(project, descriptors);
     let mut reachable = compute_function_reachability(project, descriptors, &mut graph);
@@ -224,7 +224,6 @@ impl DescriptorCache {
 /// is total for every NIR call (born resolved): the field is a non-optional
 /// [`FuncId`].
 pub(super) fn callee_descriptor(descriptors: &[FunctionRef], func_id: FuncId) -> &FunctionRef {
-    use cranelift_entity::EntityRef;
     &descriptors[func_id.index()]
 }
 
@@ -378,7 +377,6 @@ fn extend_reachable_for_optimizer_passes(
                     continue;
                 }
                 if let Some(helper) = project.value_copy_helpers.get(type_id, &type_table) {
-                    use cranelift_entity::EntityRef;
                     let helper_id = &ids[helper.index()];
                     if !reachable.contains(helper_id) {
                         fresh.push(helper_id.clone());
