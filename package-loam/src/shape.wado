@@ -2,7 +2,7 @@
 //! operation owes before it can emit anything.
 
 use { Extent } from "./extent.wado";
-use { Condition, Poly } from "./poly.wado";
+use { Condition, Poly, owe } from "./poly.wado";
 
 /// Whether a regrouping that has consumed `consumed` elements per step must
 /// take another part to reach `produced`: fewer, where both are numbers, and a
@@ -333,11 +333,15 @@ impl Shape {
 
     /// Discharge the one condition an operation places on a pair of axes, that
     /// they are one axis: one name, and one length. What stage 0 cannot prove
-    /// is an error, save what `Extent::agreement` owes, which `owed` gains.
-    /// Lengths that agree do not make two names one, since the names are what
-    /// the generated code types the axes by.
+    /// is an error, save what `Extent::agreement` owes and the equality of two
+    /// symbolic lengths, which `owed` gains. Lengths that agree do not make two
+    /// names one, since the names are what the generated code types the axes by.
     pub fn agree(left: &Axis, right: &Axis, op: &String, owed: &mut List<Condition>) -> Result<(), AxisConflict> {
         if left.name == right.name && let Some(c) = left.extent.agreement(&right.extent) {
+            owed.extend(&c);
+            return Result::Ok(());
+        }
+        if left.name == right.name && let Some(c) = Shape::owed_equality(left, right, op) {
             owed.extend(&c);
             return Result::Ok(());
         }
@@ -349,5 +353,27 @@ impl Shape {
             left: left.extent,
             right: right.extent,
         });
+    }
+
+    /// What the inputs owe for two symbolic lengths of one axis to be one: their
+    /// difference, read as `Extent::agreement` reads it, neither above 0 nor
+    /// below. `None` where either length is a number, which `dims` binds at
+    /// build time instead, or where the difference is never 0.
+    fn owed_equality(left: &Axis, right: &Axis, op: &String) -> Option<List<Condition>> {
+        let Symbolic(l) = left.extent else {
+            return null;
+        };
+        let Symbolic(r) = right.extent else {
+            return null;
+        };
+        let mut conditions: List<Condition> = [];
+        let difference = l.try_sub(&r)?.presumed(&mut conditions)?;
+        let condition = `axis ${left.name} is ${l} on the left and ${r} on the right, and the two must be one length`;
+        for let slack of [difference, Poly::constant(0).try_sub(&difference)?] {
+            if owe(&mut conditions, op, &slack, condition).is_err() {
+                return null;
+            }
+        }
+        return Option::Some(conditions);
     }
 }

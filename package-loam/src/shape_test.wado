@@ -293,11 +293,36 @@ test "a count that is 1 only where the inputs owe it stretches" {
     assert owed.len() == 1 && owed[0].reason == "L = Slice: N - 1 must be at least 0";
 }
 
-test "a clamp meets no length its operand is not" {
+test "two symbols on one axis owe that they are one length" {
+    // A merged decoder's mask carries a symbol of its own where the scores
+    // carry the cache's length and the sequence's.
+    let mask = shape([sym("Total", "M")]);
+    let total = Poly::symbol(&"P").try_add(&Poly::symbol(&"S")).unwrap();
+    let scores = shape([Axis { name: "Total", extent: Extent::of(total).unwrap() }]);
+    let mut owed: List<Condition> = [];
+    let y = mask.elementwise(&scores, "add", &mut owed).unwrap();
+    assert y.axes[0].name == "Total";
+    let reasons: List<String> = owed.into_iter().map(|c| c.reason).collect();
+    assert reasons == [
+        "add: axis Total is M on the left and P + S on the right, and the two must be one length",
+        "add: axis Total is M on the left and P + S on the right, and the two must be one length",
+    ];
+}
+
+test "two symbols one length apart on one axis are a failure" {
+    let n = Poly::symbol(&"N");
+    let a = shape([sym("Seq", "N")]);
+    let b = shape([Axis { name: "Seq", extent: Extent::of(n.try_add(&Poly::constant(1)).unwrap()).unwrap() }]);
+    let e = a.elementwise(&b, "add", &mut []).unwrap_err();
+    assert `${e}` == "add: axis Seq is N on the left and N + 1 on the right";
+}
+
+test "a clamp meets another symbol where the inputs owe both readings" {
     let mask = shape([clamped("Seq", 8)]);
     let other = shape([sym("Seq", "M")]);
-    let e = mask.elementwise(&other, "add", &mut []).unwrap_err();
-    assert `${e}` == "add: axis Seq is min(N, 8) on the left and M on the right";
+    let mut owed: List<Condition> = [];
+    mask.elementwise(&other, "add", &mut owed).unwrap();
+    assert owed.len() == 3 && owed[0].reason == "M = Slice: N must be at most 8";
 }
 
 test "a 1 meeting a count that is 1 only where the inputs owe it keeps the 1" {
