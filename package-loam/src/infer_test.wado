@@ -1547,3 +1547,112 @@ test "a Reshape -1 the build cannot divide out rounds down, and owes that the re
     ] as List<String>;
     assert y_axes(source, layout).unwrap() == "Pair=floor(N / 2),Two=2";
 }
+
+/// Both branches of an `If` over `X`, each `then_body` / `else_body` producing
+/// its one output from the outer scope.
+fn branching(declared: String, cond: String, then_body: String, else_body: String) -> String {
+    return `g (${cond} C, float[N, 4] X, float[N, 4] Z) => (${declared} Y) {
+        Y = If <then_branch = t () => (${declared} A) { ${then_body} }, else_branch = e () => (${declared} B) { ${else_body} }> (C)
+    }`;
+}
+
+fn branch_layout() -> List<LayoutRule> {
+    return [rule("C", ["One"]), rule("X", ["Seq", "Embed"]), rule("Z", ["Seq", "Embed"])];
+}
+
+test "an If's output is its branches' shape where the two agree" {
+    let source = branching("float[N, 4]", "bool[1]", "A = Relu(X)", "B = Neg(Z)");
+    assert y_axes(source, branch_layout()).unwrap() == "Seq=N,Embed=4";
+}
+
+test "each branch keeps the tensors it computes, apart from the other's" {
+    let graph = read(&branching("float[N, 4]", "bool[1]", "H = Relu(X) A = Neg(H)", "H = Neg(Z) B = Relu(H)")).unwrap();
+    let checked = infer(&graph, &Schema { layout: branch_layout() }).unwrap();
+    let [then_branch, else_branch] = checked.branches["Y"];
+    assert then_branch.shapes.contains_key("H") && then_branch.shapes.contains_key("A");
+    assert else_branch.shapes.contains_key("B") && !else_branch.shapes.contains_key("A");
+    assert !checked.shapes.contains_key("H");
+}
+
+test "an If's output takes a fresh length where its branches' lengths differ" {
+    let source = `g (bool[1] C, float[N, 4] X, float[M, 4] P) => (float[?, 4] Y) {
+        Y = If <then_branch = t () => (float[?, 4] A) { A = Concat<axis = 0>(P, X) }, else_branch = e () => (float[N, 4] B) { B = Relu(X) }> (C)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("C", ["One"]),
+        rule("X", ["Seq", "Embed"]),
+        rule("P", ["Past", "Embed"]),
+        rule("A", ["Total", "Embed"]),
+        rule("Y", ["Total", "Embed"]),
+    ];
+    assert y_axes(source, layout).unwrap() == `Total="Y[0]",Embed=4`;
+}
+
+test "an If's output axis named apart in its branches is named by the output's layout" {
+    let layout: List<LayoutRule> = [rule("C", ["One"]), rule("X", ["Seq", "Embed"]), rule("Z", ["Other", "Embed"]), rule("Y", ["Either", "Embed"])];
+    let source = branching("float[N, 4]", "bool[1]", "A = Relu(X)", "B = Neg(Z)");
+    assert y_axes(source, layout).unwrap() == "Either=N,Embed=4";
+    let unnamed: List<LayoutRule> = [rule("C", ["One"]), rule("X", ["Seq", "Embed"]), rule("Z", ["Other", "Embed"])];
+    assert y_axes(source, unnamed).unwrap_err() == "Y = If: axis 0 is named apart in its branches, so a layout pattern must name Y's";
+}
+
+test "a layout rule naming a graph reaches only that graph's tensors" {
+    let with_shape = `g (bool[1] C, float[2, 3] X) => (float[3, 2] Y) <int64[2] S = {3, 2}> {
+        Y = If <then_branch = t () => (float[3, 2] A) { A = Reshape(X, S) }, else_branch = e () => (float[3, 2] B) { B = Reshape(X, S) }> (C)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("C", ["One"]),
+        rule("X", ["Row", "Col"]),
+        LayoutRule { pattern: "A", axes: ["Three", "Two"], graph: Option::Some("t") },
+        LayoutRule { pattern: "*", axes: ["Three", "Two"], graph: Option::Some("e") },
+    ];
+    assert y_axes(with_shape, layout).unwrap() == "Three=3,Two=2";
+    let top_only: List<LayoutRule> = [rule("C", ["One"]), rule("X", ["Row", "Col"]), LayoutRule { pattern: "*", axes: ["Three", "Two"], graph: Option::Some("g") }];
+    assert y_axes(with_shape, top_only).unwrap_err().ends_with("so a layout pattern must name A's");
+}
+
+test "what a branch owes is owed only where it runs" {
+    let source = `g (bool[1] C, float[N, 4] X, float[M, 4] Z) => (float[N, 4] Y) {
+        Y = If <then_branch = t () => (float[N, 4] A) { A = Add(X, Z) }, else_branch = e () => (float[N, 4] B) { B = Relu(X) }> (C)
+    }`;
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph, &Schema { layout: branch_layout() }).unwrap();
+    assert checked.owed.is_empty();
+    let [then_branch, else_branch] = checked.branches["Y"];
+    assert then_branch.owed.len() == 2;
+    assert else_branch.owed.is_empty();
+}
+
+test "an If's condition is one bool" {
+    let source = branching("float[N, 4]", "float[1]", "A = Relu(X)", "B = Neg(Z)");
+    assert y_axes(source, branch_layout()).unwrap_err() == "Y = If: operand C is f32, and If branches on bool";
+    let two = branching("float[N, 4]", "bool[2]", "A = Relu(X)", "B = Neg(Z)");
+    let mut layout: List<LayoutRule> = [rule("C", ["Two"])];
+    layout.extend(&branch_layout());
+    assert y_axes(two, layout).unwrap_err() == "Y = If: operand C holds 2 elements, and If branches on one";
+}
+
+test "an If's branches agree on each output's rank and element" {
+    let rank = `g (bool[1] C, float[N, 4] X) => (float[N, 4] Y) <int64[1] Axes = {1}> {
+        Y = If <then_branch = t () => (float[N, 4] A) { A = Relu(X) }, else_branch = e () => (float[N] B) { B = ReduceSum<keepdims = 0>(X, Axes) }> (C)
+    }`;
+    assert y_axes(rank, branch_layout()).unwrap_err() == "Y = If: output 0 has rank 2 in then_branch and 1 in else_branch";
+    let element = `g (bool[1] C, float[N, 4] X) => (float[N, 4] Y) {
+        Y = If <then_branch = t () => (float[N, 4] A) { A = Relu(X) }, else_branch = e () => (int64[N, 4] B) { B = Cast<to = 7>(X) }> (C)
+    }`;
+    assert y_axes(element, branch_layout()).unwrap_err() == "Y = If: output 0 is f32 in then_branch and i64 in else_branch";
+}
+
+test "an If's branches give as many outputs as it names" {
+    let source = `g (bool[1] C, float[N, 4] X) => (float[N, 4] Y) {
+        Y = If <then_branch = t () => (float[N, 4] A, float[N, 4] A2) { A = Relu(X) A2 = Neg(X) }, else_branch = e () => (float[N, 4] B) { B = Relu(X) }> (C)
+    }`;
+    assert y_axes(source, branch_layout()).unwrap_err() == "Y = If: then_branch gives 2 outputs, and the node names 1";
+}
+
+test "a branch that takes inputs is refused" {
+    let source = `g (bool[1] C, float[N, 4] X) => (float[N, 4] Y) {
+        Y = If <then_branch = t (float[N, 4] I) => (float[N, 4] A) { A = Relu(I) }, else_branch = e () => (float[N, 4] B) { B = Relu(X) }> (C)
+    }`;
+    assert y_axes(source, branch_layout()).unwrap_err() == "Y = If: then_branch declares inputs, and a branch reads only the scope around it";
+}

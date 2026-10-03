@@ -8,6 +8,9 @@ use { Deserialize } from "core:serde";
 pub struct LayoutRule {
     pub pattern: String,
     pub axes: List<String>,
+    /// The graph whose tensors the rule reaches, by name, since an `If`'s two
+    /// branches may name their tensors alike. `None` reaches every graph.
+    pub graph: Option<String> = null,
 }
 
 impl Deserialize for LayoutRule;
@@ -17,6 +20,15 @@ pub struct Schema {
 }
 
 impl Schema {
+    /// The rules that reach the tensors of the graph named `graph`.
+    pub fn within(&self, graph: &String) -> Schema {
+        let layout: List<LayoutRule> = self.layout.into_iter().filter(|r| match &r.graph {
+            Some(g) => *g == *graph,
+            None => true,
+        }).collect();
+        return Schema { layout };
+    }
+
     /// The axis names for a tensor, from the first rule whose pattern reaches
     /// it. `None` is a build error at the caller; there is no positional fallback.
     pub fn axes_for<S: AsStrSlice>(&self, tensor: S) -> Option<List<String>> {
