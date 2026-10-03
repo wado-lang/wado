@@ -180,11 +180,14 @@ paid on a benchmark `fts` never touched.
   across a call-heavy loop are forty spill slots reloaded at every call boundary,
   plus a `ref.null` init apiece at entry. "The allocation is gone" says nothing
   about which side won (`dead-ends.md`).
-- **`array.copy` is fast; leave it alone.** It has a fast path that does not call
-  out to the runtime, and it beats a hand-written loop from a couple of bytes on
-  — the loop pays the bounds check above on both the get and the set of every
-  byte. Neither hand-roll it nor contort an algorithm to avoid it
-  (`dead-ends.md`).
+- **`array.copy` is fast; leave it alone.** It beats a hand-written loop from a
+  couple of bytes on — the loop pays the bounds check above on both the get and
+  the set of every byte. Neither hand-roll it nor contort an algorithm to avoid
+  it (`dead-ends.md`). Its length decides the cost: a constant one compiles to
+  inline loads and stores, a run-time one calls `wasmtime_builtin_memory_copy`.
+  So a small copy repeated per item pays to reach the copy with a constant
+  length, which is what `param_spec` cloning on `name.used` gave the JSON key
+  writer.
 - **Constant `/` and `%` are cheap** (Cranelift magic-multiply, `x/k` and `x%k`
   fused) — don't trade a divide for extra multiplies.
 - **A short compare cascade is not a dispatch problem.** Cranelift lowers a short

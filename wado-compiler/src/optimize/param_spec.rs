@@ -126,7 +126,7 @@ struct SpecKey {
 pub(super) struct ParamSpecState {
     /// Minted clones by identity.
     clones: IndexMap<SpecKey, FuncId>,
-    /// Clones minted per original callee.
+    /// Clones minted per original callee, which numbers the next one's name.
     per_callee: IndexMap<FuncId, usize>,
     /// What each clone knows about its own parameters. Keyed by *name*, since
     /// `dae` renumbers local indices when it drops a parameter. Doubles as the
@@ -1424,7 +1424,7 @@ fn signatures_match(project: &NirPackage, original: FuncId, clone: FuncId) -> bo
 
 /// Replace every value-position read of a bound field with its constant.
 /// Matching nothing is normal: a pass-through callee reads none of them
-/// itself (see the module's Profitability note).
+/// itself, and its clone exists to seed the callee it forwards to.
 fn substitute_fields(
     body: &mut Body,
     locals: &mut Vec<NirLocal>,
