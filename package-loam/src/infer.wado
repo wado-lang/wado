@@ -700,7 +700,7 @@ fn infer_node(
         // `window_of` checks the weight's rank, which `conv_group` relies on.
         let window = window_of(node, &x, shapes, owed)?;
         let group = conv_group(node, &w)?;
-        agree_at(node, &x.axes[1], &grouped_inputs(node, &w.axes[1], group)?, owed)?;
+        agree_at(node, &x.axes[1], &grouped_inputs(node, &x.axes[1], &w.axes[1], group)?, owed)?;
         if has_bias(node) {
             let b = operand_at(node, shapes, 2);
             if b.rank() != 1 {
@@ -831,16 +831,6 @@ fn joined(
                 continue;
             }
             agree_at(node, &first.axes[i], &x.axes[i], owed)?;
-            // The joined tensor carries one name per axis, which both operands
-            // must already give it.
-            if x.axes[i].name != first.axes[i].name {
-                return Result::Err(
-                    refusal(
-                        node,
-                        `operand ${node.inputs[index]} names axis ${i} ${x.axes[i].name}, and ${node.inputs[0]} names it ${first.axes[i].name}`,
-                    ),
-                );
-            }
         }
         let part = extents_of(node, &x)?[axis].poly();
         sum = sum.try_add(&part).ok_or(refusal(node, `${sum} + ${part} leaves i64`))?;
@@ -1237,8 +1227,13 @@ pub fn conv_group(node: &Node, w: &Shape) -> Result<i32, InferError> {
 }
 
 /// The input channels a `Conv` of `group` groups reads, each group reading
-/// `per_group` of them, as an axis to hold the input's to.
-fn grouped_inputs(node: &Node, per_group: &Axis, group: i32) -> Result<Axis, InferError> {
+/// `per_group` of them, as an axis to hold the input's, `input`, to. One group
+/// reads the input's own axis. Over several, a group's share is an axis of its
+/// own, so only the lengths meet and the input's name stands for the whole.
+fn grouped_inputs(node: &Node, input: &Axis, per_group: &Axis, group: i32) -> Result<Axis, InferError> {
+    if group == 1 {
+        return Result::Ok(*per_group);
+    }
     let read = match per_group.extent.poly().try_mul(&Poly::constant(group as i64)) {
         Some(p) => Extent::of(p),
         None => null,
@@ -1250,7 +1245,7 @@ fn grouped_inputs(node: &Node, per_group: &Axis, group: i32) -> Result<Axis, Inf
             `is ${group}, and so many groups of ${per_group.extent} channels pass what an axis holds`,
         ));
     };
-    return Result::Ok(Axis { name: per_group.name, extent });
+    return Result::Ok(Axis { name: input.name, extent });
 }
 
 /// Whether a `Gemm` was given its `C` operand, or a `Conv` its `B`. ONNX

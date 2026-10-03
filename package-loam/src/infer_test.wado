@@ -393,7 +393,7 @@ test "Concat of operands naming another axis apart stops the build" {
         rule("N", ["Batch", "Seq", "Embed"]),
         rule("Y", ["Batch", "Total", "Dim"]),
     ];
-    assert y_axes(source, layout).unwrap_err() == "Y = Concat: operand N names axis 2 Embed, and P names it Dim";
+    assert y_axes(source, layout).unwrap_err() == "Y = Concat: axis Dim on the left meets Embed on the right, and only an axis of 1 takes another's name";
 }
 
 test "Concat of operands of different ranks stops the build" {
@@ -559,6 +559,23 @@ test "Gemm without its C operand is the product alone" {
     };
     let shapes = infer(&graph, &schema).unwrap().shapes;
     assert shapes["Y"].axes[1].extent.agrees(&Extent::Static(4));
+}
+
+test "Gemm refuses operands naming the contracted axis apart" {
+    let graph = read(
+        `agraph (float[2, 3] A, float[4, 3] B) => (float[2, 4] Y) {
+            Y = Gemm <transB = 1> (A, B)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [
+            rule("A", ["Batch", "Hidden"]),
+            rule("B", ["Out", "Inner"]),
+            rule("Y", ["Batch", "Out"]),
+        ],
+    };
+    let e = infer(&graph, &schema).unwrap_err();
+    assert `${e}` == "Y = Gemm: axis Hidden on the left meets Inner on the right, and only an axis of 1 takes another's name";
 }
 
 test "a Gemm operand that is not a matrix stops the build" {
@@ -1325,6 +1342,26 @@ test "Conv groups sharing out other than all the input channels stop the build" 
         Y = Conv <group = 2> (X, W)
     }`;
     assert y_axes(source, grouped()).unwrap_err() == "Y = Conv: axis Chan is 4 on the left and 2 on the right";
+}
+
+test "a Conv of one group refuses a weight naming the input channels apart" {
+    let source = `g (float[1, 4, 8, 8] X) => (float[1, 6, 6, 6] Y) <float[6, 4, 3, 3] W> {
+        Y = Conv (X, W)
+    }`;
+    assert y_axes(source, grouped()).unwrap_err() == "Y = Conv: axis Chan on the left meets Share on the right, and only an axis of 1 takes another's name";
+}
+
+test "a Conv refuses a bias naming the output channels apart" {
+    let source = `g (float[1, 4, 8, 8] X) => (float[1, 6, 6, 6] Y) <float[6, 4, 3, 3] W, float[6] B> {
+        Y = Conv (X, W, B)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Chan", "Row", "Col"]),
+        rule("W", ["Out", "Chan", "KRow", "KCol"]),
+        rule("B", ["Bias"]),
+        rule("Y", ["Batch", "Out", "Row", "Col"]),
+    ];
+    assert y_axes(source, layout).unwrap_err() == "Y = Conv: axis Out on the left meets Bias on the right, and only an axis of 1 takes another's name";
 }
 
 test "a grouped Conv over a scalar weight stops the build on the weight's rank" {

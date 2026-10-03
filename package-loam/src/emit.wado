@@ -1247,7 +1247,7 @@ fn window_call(
     let group = settled(conv_group(node, &w));
     // `conv` takes one type for the input's channels and the weight's; the
     // grouped kernel types each apart, a group's share of the input's.
-    let [kernel, biased, channels, grouping] = if group == 1 && same_axis(&x.axes[1], &w.axes[1]) {
+    let [kernel, biased, channels, grouping] = if group == 1 {
         ["conv", "conv_bias", x.axes[1].name, ""];
     } else {
         ["conv_grouped", "conv_grouped_bias", `${x.axes[1].name}, ${w.axes[1].name}`, `${group}, `];
@@ -1256,15 +1256,7 @@ fn window_call(
     let turbofish = `::<${x.axes[0].name}, ${channels}, ${w.axes[0].name}, ${spatial}>`;
     let weight = exprs.reference(&node.inputs[1]);
     if has_bias(node) {
-        let outputs = Shape {
-            axes: [w.axes[0]],
-        };
-        let bias = under_axes_of(
-            &exprs.reference(&node.inputs[2]),
-            &shapes.get(node.inputs[2]).unwrap(),
-            &outputs,
-            &KERNEL_ELEMENT,
-        );
+        let bias = exprs.reference(&node.inputs[2]);
         return Result::Ok(`${biased}${turbofish}(${input}, ${weight}, ${bias}, ${grouping}${geometry})`);
     }
     return Result::Ok(`${kernel}${turbofish}(${input}, ${weight}, ${grouping}${geometry})`);
@@ -1387,14 +1379,15 @@ fn transposed(operand: &String, shape: &Shape, flag: bool) -> [String, Shape] {
 
 /// A matrix product of `a`, of axes `left`, by `b`, of axes `right`, into
 /// `out`. `matmul` and `matmul_shared` take one type per axis the operands
-/// share, so they serve only operands that name each shared axis alike;
-/// `matmul_broadcast` spells each operand's axes and serves the rest.
+/// share, so they serve only matrices whose batch axes are one list;
+/// `matmul_broadcast` spells each operand's axes and serves a rank-1 operand
+/// and a batch axis of 1 named apart.
 fn product_call(a: &String, b: &String, left: &Shape, right: &Shape, out: &Shape) -> String {
-    let summed = left.rank() >= 2 && right.rank() >= 2 && same_axis(left.from_end(0), right.from_end(1));
-    if summed && left.rank() > 2 && right.rank() == 2 {
+    let matrices = left.rank() >= 2 && right.rank() >= 2;
+    if matrices && left.rank() > 2 && right.rank() == 2 {
         return `matmul_shared(${a}, ${b})`;
     }
-    if summed && left.rank() == right.rank() && batch_axes_agree(left, right) {
+    if matrices && left.rank() == right.rank() && batch_axes_agree(left, right) {
         return `matmul(${a}, ${b})`;
     }
     let turbofish = `::<[${axis_list(left)}], [${axis_list(right)}], [${axis_list(out)}]>`;

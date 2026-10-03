@@ -221,6 +221,48 @@ test "elementwise names the operation that disagreed" {
     assert `${e}` == "add: axis Out is 4 on the left and 7 on the right";
 }
 
+test "elementwise refuses two axes named apart, however their lengths agree" {
+    let a = shape([
+        stat("Batch", 2),
+        stat("Seq", 4),
+    ]);
+    let b = shape([
+        stat("Batch", 2),
+        stat("Total", 4),
+    ]);
+
+    let e = a.elementwise(&b, "add", &mut []).unwrap_err();
+    assert `${e}` == "add: axis Seq on the left meets Total on the right, and only an axis of 1 takes another's name";
+}
+
+test "elementwise stretches an axis of 1 named apart" {
+    let a = shape([
+        stat("Batch", 2),
+        stat("Seq", 4),
+    ]);
+    let b = shape([
+        stat("Batch", 2),
+        stat("One", 1),
+    ]);
+
+    let y = a.elementwise(&b, "add", &mut []).unwrap();
+    assert y.axes[1].name == "Seq";
+}
+
+test "a product refuses a contracted axis named apart" {
+    let x = shape([
+        stat("Seq", 3),
+        stat("Embed", 4),
+    ]);
+    let w = shape([
+        stat("Hidden", 4),
+        stat("Vocab", 5),
+    ]);
+
+    let e = x.matmul(&w, "MatMul", &mut []).unwrap_err();
+    assert `${e}` == "MatMul: axis Embed on the left meets Hidden on the right, and only an axis of 1 takes another's name";
+}
+
 /// An axis whose extent is `N` clamped to at most `bound`, as a `Slice` to `N` leaves it.
 fn clamped(name: String, bound: i64) -> Axis {
     let n = Poly::symbol(&"N");

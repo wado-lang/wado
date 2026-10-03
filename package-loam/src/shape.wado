@@ -82,17 +82,24 @@ pub struct Shape {
     pub axes: List<Axis>,
 }
 
-/// Two axes an operation needs to be one length are not. Both extents are
-/// carried, so the diagnostic names each.
+/// Two axes an operation needs to be one axis are not: named apart, or not one
+/// length. Both sides are carried, so the diagnostic names each.
 pub struct ExtentConflict {
     pub op: String,
     pub axis: String,
+    pub right_axis: String,
     pub left: Extent,
     pub right: Extent,
 }
 
 impl Display for ExtentConflict {
     fn fmt(&self, f: &mut Formatter) {
+        if self.axis != self.right_axis {
+            f.write_str(
+                `${self.op}: axis ${self.axis} on the left meets ${self.right_axis} on the right, and only an axis of 1 takes another's name`,
+            );
+            return;
+        }
         f.write_str(
             `${self.op}: axis ${self.axis} is ${self.left} on the left and ${self.right} on the right`,
         );
@@ -325,10 +332,12 @@ impl Shape {
     }
 
     /// Discharge the one condition an operation places on a pair of axes, that
-    /// they are one length. What stage 0 cannot prove is an error, save what
-    /// `Extent::agreement` owes, which `owed` gains.
+    /// they are one axis: one name, and one length. What stage 0 cannot prove
+    /// is an error, save what `Extent::agreement` owes, which `owed` gains.
+    /// Lengths that agree do not make two names one, since the names are what
+    /// the generated code types the axes by.
     pub fn agree(left: &Axis, right: &Axis, op: &String, owed: &mut List<Condition>) -> Result<(), ExtentConflict> {
-        if let Some(c) = left.extent.agreement(&right.extent) {
+        if left.name == right.name && let Some(c) = left.extent.agreement(&right.extent) {
             owed.extend(&c);
             return Result::Ok(());
         }
@@ -336,6 +345,7 @@ impl Shape {
         return Result::Err(ExtentConflict {
             op: *op,
             axis: left.name,
+            right_axis: right.name,
             left: left.extent,
             right: right.extent,
         });
