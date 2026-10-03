@@ -408,8 +408,9 @@ fn strs_empty() -> Strings {
 }
 
 fn strs_token(ids: &List<i32>) -> Strings {
+    assert !ids.is_empty(), "a token reference names a kind";
     let mut s = strs_none();
-    s.has[1] = !ids.is_empty();
+    s.has[1] = true;
     s.at[1][0] = bits_of(ids);
     return s;
 }
