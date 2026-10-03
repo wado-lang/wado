@@ -1027,8 +1027,8 @@ test "a default names a type parameter" {
 The same holds for an instance or static method, where the `impl` block's
 parameters come from the receiver, and for a struct field default, where they
 come from the type the literal is annotated with. A type parameter pack is named
-the same way (`t: [..T] = [..T::default()]`), and a call that omits the
-argument leaves the pack [empty](#variadic-type-packs).
+the same way (`t: [..T] = [..T::default()]`), and a call that names the pack
+nowhere gets the [empty pack](#variadic-type-packs).
 
 ### Where a Default Resolves
 
