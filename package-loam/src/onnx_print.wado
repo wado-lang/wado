@@ -28,6 +28,15 @@ pub fn print(graph: &Graph) -> Result<String, PrintError> {
     if let Some(version) = graph.opset {
         out.push_str(`<opset_import: ["" : ${version}]>\n`);
     }
+    out.push_str(&graph_text(graph, "")?);
+    out.push_str("\n");
+    return Result::Ok(out);
+}
+
+/// `graph` without the model around it, as a subgraph attribute spells one.
+/// Each line after the first starts with `indent`.
+fn graph_text(graph: &Graph, indent: String) -> Result<String, PrintError> {
+    let mut out = String::with_capacity(4096);
     out.push_str(`${name(&graph.name)?} (${value_infos(&graph.inputs)?}) => (${value_infos(&graph.outputs)?})\n`);
     let mut declared: List<String> = [];
     for let vi of &graph.initializers {
@@ -36,11 +45,11 @@ pub fn print(graph: &Graph) -> Result<String, PrintError> {
     for let [tensor, known] of graph.constants.entries() {
         declared.push(`${known_type(known)} ${name(tensor)?} = ${known_values(tensor, known)?}`);
     }
-    out.push_str(`<${declared.join(", ")}>\n{\n`);
+    out.push_str(`${indent}<${declared.join(", ")}>\n${indent}{\n`);
     for let node of &graph.nodes {
-        out.push_str(`    ${node_line(node)?}\n`);
+        out.push_str(`${indent}    ${node_line(node, `${indent}    `)?}\n`);
     }
-    out.push_str("}\n");
+    out.push_str(`${indent}}`);
     return Result::Ok(out);
 }
 
@@ -144,7 +153,8 @@ fn float_text(tensor: &String, v: f32) -> Result<String, PrintError> {
     return Result::Ok("nan");
 }
 
-fn node_line(node: &Node) -> Result<String, PrintError> {
+/// One node, a subgraph in its attributes indented past `indent`.
+fn node_line(node: &Node, indent: String) -> Result<String, PrintError> {
     let mut outputs: List<String> = [];
     for let output of node.outputs {
         outputs.push(name(&output)?);
@@ -155,16 +165,19 @@ fn node_line(node: &Node) -> Result<String, PrintError> {
     }
     let mut attrs: List<String> = [];
     for let a of node.attrs {
-        attrs.push(`${a.name} = ${attr_value(node, &a)?}`);
+        attrs.push(`${a.name} = ${attr_value(node, &a, &indent)?}`);
     }
     let spelled_attrs = if attrs.is_empty() { "" } else { ` <${attrs.join(", ")}>` };
     return Result::Ok(`${outputs.join(", ")} = ${node.op}${spelled_attrs} (${inputs.join(", ")})`);
 }
 
-fn attr_value(node: &Node, a: &Attr) -> Result<String, PrintError> {
+fn attr_value(node: &Node, a: &Attr, indent: &String) -> Result<String, PrintError> {
     let refused = |reason: String| PrintError { reason: `${Refusal::of(node, reason)}` };
     if let Some(known) = &a.tensor {
         return Result::Ok(`${known_type(known)} ${known_values(&a.name, known)?}`);
+    }
+    if let Some(graph) = &a.graph {
+        return graph_text(graph, `${*indent}    `);
     }
     let mut values: List<String> = [];
     for let v of a.values {

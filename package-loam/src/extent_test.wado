@@ -51,3 +51,24 @@ test "agreement owes only what the extents' difference reads" {
     assert owed.len() == 1;
     assert owed[0].reason == "Y = Slice: N must be at most 8";
 }
+
+test "a dim_param spelling arithmetic over names is that polynomial" {
+    let past = Poly::symbol(&"past_sequence_length");
+    let one_more = Extent::param(&"past_sequence_length + 1");
+    assert one_more.agrees(&Extent::Symbolic(past.try_add(&Poly::constant(1)).unwrap()));
+    let total = Extent::param(&"past_sequence_length + sequence_length");
+    assert total.agrees(&Extent::Symbolic(past.try_add(&Poly::symbol(&"sequence_length")).unwrap()));
+    let product = Extent::param(&"2 * heads - 1");
+    assert product.agrees(&Extent::Symbolic(Poly::symbol(&"heads").try_mul(&Poly::constant(2)).unwrap().try_sub(
+        &Poly::constant(1),
+    ).unwrap()));
+}
+
+test "any other dim_param is one symbol of its own" {
+    assert Extent::param(&"batch").agrees(&Extent::symbol(&"batch"));
+    // An operator is a word of its own, so a hyphen inside a name is the name's.
+    assert Extent::param(&"seq-len").agrees(&Extent::symbol(&"seq-len"));
+    assert Extent::param(&"past_sequence_length+1").agrees(&Extent::symbol(&"past_sequence_length+1"));
+    assert Extent::param(&"encoder_sequence_length / 2").agrees(&Extent::symbol(&"encoder_sequence_length / 2"));
+    assert Extent::param(&"n +").agrees(&Extent::symbol(&"n +"));
+}

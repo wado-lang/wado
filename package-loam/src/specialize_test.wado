@@ -91,3 +91,39 @@ test "an output the graph does not declare stops the build" {
     assert e.option == "outputs";
     assert `${e}` == "outputs: the graph declares no output S";
 }
+
+test "a bound dimension fixes the arithmetic a dim_param spells over it" {
+    let mut graph = read("g (float[N, 4] X) => (float[\"N + 1\", 4] Y) { Y = Relu(X) }").unwrap();
+    bind_dims(&mut graph, &({ N: 2 } as TreeMap<String, i32>)).unwrap();
+    assert dims_of(&graph, "Y") == "Rank::Dims([Dim::Static(3), Dim::Static(4)])";
+}
+
+test "binding one name of a dim_param's arithmetic but not another stops the build" {
+    let mut graph = read("g (float[N, M] X) => (float[\"N + M\", 4] Y) { Y = Relu(X) }").unwrap();
+    let e = bind_dims(&mut graph, &({ N: 2 } as TreeMap<String, i32>)).unwrap_err();
+    assert `${e}` == "dims: N fixes part of the dimension \"N + M\", which also reads M";
+}
+
+test "arithmetic a bound dimension makes negative stops the build" {
+    let mut graph = read("g (float[N, 4] X) => (float[\"N - 3\", 4] Y) { Y = Relu(X) }").unwrap();
+    let e = bind_dims(&mut graph, &({ N: 2 } as TreeMap<String, i32>)).unwrap_err();
+    assert `${e}` == "dims: N makes the dimension \"N - 3\" -1, and an extent is not negative";
+}
+
+test "arithmetic a bound dimension takes past i64 stops the build" {
+    let mut graph = read("g (float[N, 4] X) => (float[\"N * N * N\", 4] Y) { Y = Relu(X) }").unwrap();
+    let e = bind_dims(&mut graph, &({ N: i32::MAX } as TreeMap<String, i32>)).unwrap_err();
+    assert `${e}` == "dims: N makes the dimension \"N * N * N\" more than i64 holds";
+}
+
+test "keeping an If's output keeps what its branches read from around them" {
+    let mut graph = read(
+        `g (bool[1] C, float[4] X, float[4] U) => (float[4] Y, float[4] Z) <float[4] A> {
+            S = Add(X, A)
+            Z = Relu(U)
+            Y = If <then_branch = t () => (float[4] T) { T = Relu(S) }, else_branch = e () => (float[4] E) { E = Neg(X) }> (C)
+        }`,
+    ).unwrap();
+    keep_outputs(&mut graph, &["Y"]).unwrap();
+    assert names_of(&graph) == "C,X A S,Y Y";
+}

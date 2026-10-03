@@ -1,6 +1,7 @@
 //! An axis's length as stage 0 knows it, and the one question stage 0 asks of
 //! two of them.
 
+use { TreeMap, TreeSet } from "core:collections";
 use { Condition, Poly } from "./poly.wado";
 
 /// A length the graph states, one only the run knows, or none at all.
@@ -17,6 +18,27 @@ impl Extent {
     /// The length a `dim_param` names.
     pub fn symbol(name: &String) -> Extent {
         return Extent::Symbolic(Poly::symbol(name));
+    }
+
+    /// The length a `dim_param` names: the polynomial it spells where it is
+    /// arithmetic over names (`spelled_poly`), else one symbol of its own.
+    pub fn param(text: &String) -> Extent {
+        if let Some(p) = spelled_poly(text, &TreeMap::<String, i32>::new()) && let Some(e) = Extent::of(p) {
+            return e;
+        }
+        return Extent::symbol(text);
+    }
+
+    /// The symbol the length is, where it is one symbol and nothing more.
+    pub fn lone_symbol(&self) -> Option<String> {
+        let Symbolic(p) = *self else {
+            return null;
+        };
+        let read = p.symbols();
+        if read.len() != 1 || p != Poly::symbol(&read[0]) {
+            return null;
+        }
+        return Option::Some(read[0]);
     }
 
     /// `p` as an extent, or `None` where it is a constant no list can be long.
@@ -80,6 +102,97 @@ impl Extent {
     pub fn oneness(&self) -> Option<List<Condition>> {
         return self.agreement(&Extent::Static(1));
     }
+}
+
+/// A symbol the run reads back from the length at `at`, which is
+/// `coefficient * symbol + rest`, `rest` reading only symbols solved before.
+pub struct Solved {
+    pub symbol: String,
+    pub at: i32,
+    pub coefficient: i64,
+    pub rest: Poly,
+}
+
+/// The symbols the run can read back from `extents`, each from the first
+/// extent that is it alone, then each left from the first extent linear in it
+/// once those before it are solved, in the order the run solves them.
+pub fn solved(extents: &List<Extent>) -> List<Solved> {
+    let mut found: List<Solved> = [];
+    let mut known = TreeSet::<String>::new();
+    for let alone of [true, false] {
+        let mut more = true;
+        while more {
+            more = false;
+            for let [at, e] of extents.into_iter().enumerate() {
+                let Symbolic(p) = *e else {
+                    continue;
+                };
+                let open: List<String> = p.symbols().into_iter().filter(|s| !known.contains(s)).collect();
+                if open.len() != 1 || alone && e.lone_symbol() matches { None } {
+                    continue;
+                }
+                let Some([coefficient, rest]) = p.linear_in(&open[0]) else {
+                    continue;
+                };
+                known.insert(open[0]);
+                found.push(Solved { symbol: open[0], at, coefficient, rest });
+                more = true;
+            }
+        }
+    }
+    return found;
+}
+
+/// `text` as the polynomial it spells, where it splits at whitespace into names
+/// and integers alternating with `+`, `-` and `*`, as an exporter writes a
+/// cache's length `past_sequence_length + 1`. A name `fixed` holds is read as
+/// its value. `None` for any other text, a lone name included, and where no
+/// polynomial holds the value. An operator is a word of its own, so a hyphen
+/// inside a name stays the name's.
+pub fn spelled_poly(text: &String, fixed: &TreeMap<String, i32>) -> Option<Poly> {
+    let words: List<String> = text.split_whitespace().map(|w| w.to_string()).collect();
+    if words.len() < 3 || words.len() % 2 == 0 {
+        return null;
+    }
+    let mut sum = Poly::constant(0);
+    let mut sign = 1_i64;
+    let mut product = operand(&words[0], fixed)?;
+    for let i of (1..<words.len()).step_by(2) {
+        let next = operand(&words[i + 1], fixed)?;
+        let op = words[i];
+        if op == "*" {
+            product = product.try_mul(&next)?;
+            continue;
+        }
+        if op != "+" && op != "-" {
+            return null;
+        }
+        sum = sum.try_add(&product.try_mul(&Poly::constant(sign))?)?;
+        sign = if op == "+" { 1 } else { -1 };
+        product = next;
+    }
+    return sum.try_add(&product.try_mul(&Poly::constant(sign))?);
+}
+
+/// One operand of `spelled_poly`: an integer, or a name.
+fn operand(word: &String, fixed: &TreeMap<String, i32>) -> Option<Poly> {
+    if word.chars().all(|c| c.is_ascii_digit()) {
+        return match i64::from_str(word) {
+            Ok(n) => Option::Some(Poly::constant(n)),
+            Err(_) => null,
+        };
+    }
+    let mut chars = word.chars();
+    let Some(first) = chars.next() else {
+        return null;
+    };
+    if !(first.is_ascii_alphabetic() || first == '_') || !chars.all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        return null;
+    }
+    if let Some(value) = fixed.get(*word) {
+        return Option::Some(Poly::constant(value as i64));
+    }
+    return Option::Some(Poly::symbol(word));
 }
 
 impl Display for Extent {

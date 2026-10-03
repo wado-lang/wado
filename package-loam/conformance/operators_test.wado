@@ -249,20 +249,6 @@ test "MatMul broadcasts a batch axis of 1" {
     );
 }
 
-test "MatMul sums over an axis each operand names apart" {
-    assert_agrees(
-        #include_bytes("./operators/MatMulRenamedInner.onnx"),
-        #include_str("./operators/MatMulRenamedInner.txt"),
-    );
-}
-
-test "MatMul with one shared matrix sums over an axis each operand names apart" {
-    assert_agrees(
-        #include_bytes("./operators/MatMulSharedRenamedInner.onnx"),
-        #include_str("./operators/MatMulSharedRenamedInner.txt"),
-    );
-}
-
 test "Gemm adds a bias along the columns" {
     assert_agrees(#include_bytes("./operators/Gemm.onnx"), #include_str("./operators/Gemm.txt"));
 }
@@ -276,10 +262,6 @@ test "Gemm transposes both operands and scales by alpha and beta" {
 
 test "Gemm adds a scalar bias" {
     assert_agrees(#include_bytes("./operators/GemmScalarBias.onnx"), #include_str("./operators/GemmScalarBias.txt"));
-}
-
-test "Gemm sums over an axis each operand names apart" {
-    assert_agrees(#include_bytes("./operators/GemmRenamedInner.onnx"), #include_str("./operators/GemmRenamedInner.txt"));
 }
 
 test "Transpose without a perm reverses the axes" {
@@ -386,13 +368,6 @@ test "Conv in two groups" {
 
 test "Conv depthwise, one group per channel, with a bias" {
     assert_agrees(#include_bytes("./operators/ConvDepthwise.onnx"), #include_str("./operators/ConvDepthwise.txt"));
-}
-
-test "Conv whose weight and bias name their channel axes apart" {
-    assert_agrees(
-        #include_bytes("./operators/ConvRenamedChannels.onnx"),
-        #include_str("./operators/ConvRenamedChannels.txt"),
-    );
 }
 
 test "Softmax along the last axis" {

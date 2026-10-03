@@ -221,6 +221,48 @@ test "elementwise names the operation that disagreed" {
     assert `${e}` == "add: axis Out is 4 on the left and 7 on the right";
 }
 
+test "elementwise refuses two axes named apart, however their lengths agree" {
+    let a = shape([
+        stat("Batch", 2),
+        stat("Seq", 4),
+    ]);
+    let b = shape([
+        stat("Batch", 2),
+        stat("Total", 4),
+    ]);
+
+    let e = a.elementwise(&b, "add", &mut []).unwrap_err();
+    assert `${e}` == "add: axis Seq on the left meets Total on the right, and only an axis of 1 takes another's name";
+}
+
+test "elementwise stretches an axis of 1 named apart" {
+    let a = shape([
+        stat("Batch", 2),
+        stat("Seq", 4),
+    ]);
+    let b = shape([
+        stat("Batch", 2),
+        stat("One", 1),
+    ]);
+
+    let y = a.elementwise(&b, "add", &mut []).unwrap();
+    assert y.axes[1].name == "Seq";
+}
+
+test "a product refuses a contracted axis named apart" {
+    let x = shape([
+        stat("Seq", 3),
+        stat("Embed", 4),
+    ]);
+    let w = shape([
+        stat("Hidden", 4),
+        stat("Vocab", 5),
+    ]);
+
+    let e = x.matmul(&w, "MatMul", &mut []).unwrap_err();
+    assert `${e}` == "MatMul: axis Embed on the left meets Hidden on the right, and only an axis of 1 takes another's name";
+}
+
 /// An axis whose extent is `N` clamped to at most `bound`, as a `Slice` to `N` leaves it.
 fn clamped(name: String, bound: i64) -> Axis {
     let n = Poly::symbol(&"N");
@@ -251,9 +293,59 @@ test "a count that is 1 only where the inputs owe it stretches" {
     assert owed.len() == 1 && owed[0].reason == "L = Slice: N - 1 must be at least 0";
 }
 
-test "a clamp meets no length its operand is not" {
+test "two symbols on one axis owe that they are one length" {
+    // A merged decoder's mask carries a symbol of its own where the scores
+    // carry the cache's length and the sequence's.
+    let mask = shape([sym("Total", "M")]);
+    let total = Poly::symbol(&"P").try_add(&Poly::symbol(&"S")).unwrap();
+    let scores = shape([
+        Axis { name: "Total", extent: Extent::of(total).unwrap() },
+    ]);
+    let mut owed: List<Condition> = [];
+    let y = mask.elementwise(&scores, "add", &mut owed).unwrap();
+    assert y.axes[0].name == "Total";
+    let reasons: List<String> = owed.into_iter().map(|c| c.reason).collect();
+    assert reasons == [
+        "add: axis Total is M on the left and P + S on the right, and the two must be one length",
+        "add: axis Total is M on the left and P + S on the right, and the two must be one length",
+    ];
+}
+
+test "two symbols one length apart on one axis are a failure" {
+    let n = Poly::symbol(&"N");
+    let a = shape([sym("Seq", "N")]);
+    let b = shape([
+        Axis { name: "Seq", extent: Extent::of(n.try_add(&Poly::constant(1)).unwrap()).unwrap() },
+    ]);
+    let e = a.elementwise(&b, "add", &mut []).unwrap_err();
+    assert `${e}` == "add: axis Seq is N on the left and N + 1 on the right";
+}
+
+test "a clamp meets another symbol where the inputs owe both readings" {
     let mask = shape([clamped("Seq", 8)]);
     let other = shape([sym("Seq", "M")]);
-    let e = mask.elementwise(&other, "add", &mut []).unwrap_err();
-    assert `${e}` == "add: axis Seq is min(N, 8) on the left and M on the right";
+    let mut owed: List<Condition> = [];
+    mask.elementwise(&other, "add", &mut owed).unwrap();
+    assert owed.len() == 3 && owed[0].reason == "M = Slice: N must be at most 8";
+}
+
+test "a 1 meeting a count that is 1 only where the inputs owe it keeps the 1" {
+    // What a causal mask's rows leave for one query past a cache of `N`.
+    let n = Poly::symbol(&"N");
+    let site = "M = Slice";
+    let end = Poly::min_of(&n.try_add(&Poly::constant(1)).unwrap(), &Poly::constant(512), &site);
+    let start = Poly::min_of(&n, &Poly::constant(512), &site);
+    let rows = shape([
+        Axis { name: "Seq", extent: Extent::of(end.try_sub(&start).unwrap()).unwrap() },
+    ]);
+    let query = shape([stat("Seq", 1)]);
+    for let [a, b] of [
+        [rows, query],
+        [query, rows],
+    ] {
+        let mut owed: List<Condition> = [];
+        let y = a.elementwise(&b, "add", &mut owed).unwrap();
+        assert y.axes[0].extent.agrees(&Extent::Static(1));
+        assert !owed.is_empty();
+    }
 }
