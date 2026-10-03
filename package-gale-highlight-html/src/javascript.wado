@@ -153,8 +153,8 @@ impl JavaScriptLexerBase for JsLexerBase {
     }
 }
 
-/// Parses a JavaScript program with the base ports installed.
-pub fn parse_javascript<S: AsStrSlice>(source: S) -> js::ParseResult {
+/// Runs `recognize` with fresh base ports installed.
+pub fn with_javascript_bases<T>(recognize: fn() -> T with (JavaScriptLexerBase, JavaScriptParserBase)) -> T {
     let mut lexer_base = JsLexerBase {
         scope_strict_modes: [],
         strict: false,
@@ -164,8 +164,13 @@ pub fn parse_javascript<S: AsStrSlice>(source: S) -> js::ParseResult {
     };
     let mut parser_base = JsParserBase {};
     with JavaScriptLexerBase => &mut lexer_base, JavaScriptParserBase => &mut parser_base do {
-        return js::parse_program(source);
+        return recognize();
     };
+}
+
+/// Parses a JavaScript program with the base ports installed.
+pub fn parse_javascript<S: AsStrSlice>(source: S) -> js::ParseResult {
+    return with_javascript_bases(|| js::parse_program(source));
 }
 
 /// The highlight captures of a JavaScript program, in source order.

@@ -3526,6 +3526,75 @@ WS : ' ' -> skip ;
     assert got == "x;x => (list x ; x)\nx; => (list x ;)\n{x;x} => (s { (list x ; x) })\n{x;;x} => (s { (list x ; ; x) })\n", got;
 }
 
+test "an alternative that also matches EOF does not outrank an earlier one covering the same input" {
+    // JavaScript's `statement` shape: a declaration is also an expression
+    // statement, whose `eos` takes EOF. Both cover the whole input, so the jar
+    // takes the first.
+    let got = parses("grammar T;
+prog : stmt* EOF ;
+stmt : decl | exprStmt ;
+decl : 'function' ID '(' ')' block ;
+exprStmt : expr eos ;
+eos : ';' | EOF ;
+expr : fn | ID | expr '(' ')' ;
+fn : decl | 'function' '(' ')' block | ID '=>' expr ;
+block : '{' stmt* '}' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+", "prog", ["function f() {}", "function f() {} x;"]);
+    assert got == "function f() {} => (prog (stmt (decl function f ( ) (block { }))))\nfunction f() {} x; => (prog (stmt (decl function f ( ) (block { }))) (stmt (exprStmt (expr x) (eos ;))))\n", got;
+}
+
+test "unclosed elements scan in time linear in their number" {
+    // Each `<a>`'s optional scans the rest of the input as its content, and
+    // fails at the end; without a memo every element repeats that for each
+    // element after it, which doubles per element.
+    let mut input = "";
+    let mut tree = "(s (c";
+    for let _ of 0..<40 {
+        input.push_str("<a> x ");
+        tree.push_str(" (e < a >) x");
+    }
+    let got = parses("grammar T;
+s : c EOF ;
+c : (e | ID)* ;
+e : '<' ID '>' (c '<' '/' ID '>')? ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+", "s", [input]);
+    assert got == `${input} => ${tree}))\n`, got;
+}
+
+test "an optional group yields a token its continuation needs" {
+    let got = parses("grammar T;
+s : (S | ID)? m ;
+m : ID '(' ')' ;
+S : 'static' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+", "s", ["f()", "g f()", "static f()"]);
+    assert got == "f() => (s (m f ( )))\ng f() => (s g (m f ( )))\nstatic f() => (s static (m f ( )))\n", got;
+}
+
+test "a false predicate in an optional prefix skips the prefix rather than the alternative" {
+    // JavaScript's `classElement`: `static` is an identifier the predicate
+    // recognises by its text, so `f()` is a method with no prefix at all. The
+    // jar asks the predicate only where the tokens leave both paths open.
+    let got = printed(
+        "grammar T;
+options { superClass = PBase; }
+s : (S | {this.ok()}? ID)? m | ';' ;
+m : ID '(' ')' ;
+S : 'static' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+",
+        "show_with(false, \"f()\");\nshow_with(true, \"f()\");\nshow_with(true, \"g f()\");\nshow_with(false, \"g f()\");\n",
+        SHOW_WITH_PBASE,
+    );
+    assert got == "false f() => (s (m f ( )))\ntrue f() => (s (m f ( )))\ntrue g f() => (s g (m f ( )))\nfalse g f() => error\n", got;
+}
+
 test "a parser base call gates alternatives whose first tokens tie" {
     // Prediction cannot pick between `a` and `b` by tokens, so the predicate is
     // a standalone fn; its body must be the rewritten base call, not `this`.

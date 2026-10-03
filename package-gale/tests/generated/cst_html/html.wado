@@ -1068,6 +1068,52 @@ pub fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<
     }
     return alive && constrained;
 }
+pub struct ScanMemo<G> {
+    heads: Array<i32>,
+    entries: List<ScanMemoEntry<G>>,
+}
+
+struct ScanMemoEntry<G> {
+    next: i32,
+    rule: i32,
+    min_prec: i32,
+    follow: i64,
+    cont: i64,
+    gate_in: G,
+    end: i32,
+    gate_out: G,
+}
+
+impl<G: Eq> ScanMemo<G> {
+    pub fn new(positions: i32) -> ScanMemo<G> {
+        return ScanMemo { heads: Array::<i32>::filled(positions + 1, -1), entries: [] };
+    }
+
+    pub fn find(&self, rule: i32, pos: i32, min_prec: i32, follow: i64, cont: i64, gate: &G) -> i32 {
+        let mut at = self.heads[pos];
+        while at >= 0 {
+            let e = &self.entries[at];
+            if e.rule == rule && e.min_prec == min_prec && e.follow == follow && e.cont == cont && e.gate_in == *gate {
+                return at;
+            }
+            at = e.next;
+        }
+        return -1;
+    }
+
+    pub fn end_of(&self, entry: i32) -> i32 {
+        return self.entries[entry].end;
+    }
+
+    pub fn gate_of(&self, entry: i32) -> G {
+        return self.entries[entry].gate_out;
+    }
+
+    pub fn put(&mut self, rule: i32, pos: i32, min_prec: i32, follow: i64, cont: i64, gate_in: G, end: i32, gate_out: G) {
+        self.entries.push(ScanMemoEntry { next: self.heads[pos], rule, min_prec, follow, cont, gate_in, end, gate_out });
+        self.heads[pos] = self.entries.len() - 1;
+    }
+}
 pub global TK_HTML_COMMENT: i32 = 0;
 pub global TK_HTML_CONDITIONAL_COMMENT: i32 = 1;
 pub global TK_XML: i32 = 2;
@@ -2104,6 +2150,7 @@ struct Parser {
     recovered_failures: List<[NodeKind, List<i32>]>,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
+    memo: ScanMemo<()>,
 }
 
 fn kind_names(kinds: &List<i32>) -> List<String> {
@@ -2117,7 +2164,7 @@ fn kind_names(kinds: &List<i32>) -> List<String> {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], failed_expected: [], recovery_pos: -1, recovered_failures: [], b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], failed_expected: [], recovery_pos: -1, recovered_failures: [], b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], memo: ScanMemo::new(kinds.len()) };
     }
 
     fn supersedes_pending(&self, start: i32) -> bool {
@@ -2433,19 +2480,19 @@ impl Parser {
     }
 }
 
-fn scan_html_elements(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_html_elements(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && _kind_set_6(tokens[pos]) {
         let sp = pos;
-        pos = scan_html_misc(tokens, pos);
+        pos = scan_html_misc(tokens, pos, memo);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    pos = scan_html_element(tokens, pos, follow_open_with(follow, follow_open_set(FOLLOW_MASK_4)));
+    pos = scan_html_element(tokens, pos, memo, follow_open_with(follow, follow_open_set(FOLLOW_MASK_4)));
     if pos < 0 { return -1; }
     while pos < tokens.len() && _kind_set_6(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
-        pos = scan_html_misc(tokens, pos);
+        pos = scan_html_misc(tokens, pos, memo);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
         let dk_8 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -2464,7 +2511,7 @@ fn scan_html_elements(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return pos;
 }
 
-fn scan_html_element(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_html_element(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -2475,7 +2522,7 @@ fn scan_html_element(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             pos += 1;
             while pos < tokens.len() && tokens[pos] == TK_TAG_NAME {
                 let sp = pos;
-                pos = scan_html_attribute(tokens, pos, 0);
+                pos = scan_html_attribute(tokens, pos, memo, 0);
                 if pos < 0 { pos = sp; break; }
                 if pos == sp { break; }
             }
@@ -2488,7 +2535,7 @@ fn scan_html_element(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                         let sp = pos;
                         sg_3_done: {
                             sg_3: {
-                                pos = scan_html_content(tokens, pos, FOLLOW_MASK_6);
+                                pos = scan_html_content(tokens, pos, memo, FOLLOW_MASK_6);
                                 if pos < 0 { break sg_3; }
                                 if pos >= tokens.len() || tokens[pos] != TK_TAG_OPEN { break sg_3; }
                                 pos += 1;
@@ -2519,14 +2566,14 @@ fn scan_html_element(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         return pos;
     } else if kind == TK_SCRIPT_OPEN {
         try_2: {
-            pos = scan_script(tokens, pos);
+            pos = scan_script(tokens, pos, memo);
             if pos < 0 { break try_2; }
             return pos;
         }
         return -1;
     } else if kind == TK_STYLE_OPEN {
         try_3: {
-            pos = scan_style(tokens, pos);
+            pos = scan_style(tokens, pos, memo);
             if pos < 0 { break try_3; }
             return pos;
         }
@@ -2535,7 +2582,18 @@ fn scan_html_element(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return -1;
 }
 
-fn scan_html_content(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_html_content(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+    let memo_at = memo.find(4, pos, 0, follow, 0, &());
+    if memo_at >= 0 {
+        return memo.end_of(memo_at);
+    }
+    let memo_gate = ();
+    let memo_end = scan_html_content__walk(tokens, pos, memo, follow);
+    memo.put(4, pos, 0, follow, 0, memo_gate, memo_end, ());
+    return memo_end;
+}
+
+fn scan_html_content__walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _kind_set_7(tokens[pos]) {
         let sp = pos;
@@ -2553,7 +2611,7 @@ fn scan_html_content(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     let sgk_6 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                     if _kind_set_9(sgk_6) {
                         sg_6_0: {
-                            pos = scan_html_element(tokens, pos, follow_open_with(follow, follow_open_set(FOLLOW_MASK_8)));
+                            pos = scan_html_element(tokens, pos, memo, follow_open_with(follow, follow_open_set(FOLLOW_MASK_8)));
                             if pos < 0 { break sg_6_0; }
                             break sg_6_done;
                         }
@@ -2593,7 +2651,7 @@ fn scan_html_content(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return pos;
 }
 
-fn scan_html_attribute(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_html_attribute(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_TAG_NAME { return -1; }
     pos += 1;
@@ -2613,7 +2671,7 @@ fn scan_html_attribute(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return pos;
 }
 
-fn scan_html_misc(tokens: &Array<i32>, pos: i32) -> i32 {
+fn scan_html_misc(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -2624,7 +2682,7 @@ fn scan_html_misc(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn scan_script(tokens: &Array<i32>, pos: i32) -> i32 {
+fn scan_script(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_SCRIPT_OPEN { return -1; }
     pos += 1;
@@ -2633,7 +2691,7 @@ fn scan_script(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_style(tokens: &Array<i32>, pos: i32) -> i32 {
+fn scan_style(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_STYLE_OPEN { return -1; }
     pos += 1;
@@ -2657,7 +2715,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_1(decline_kind)) {
+            if !(_kind_set_1(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     let tokens = &p.kinds;
@@ -2682,7 +2740,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     while pos < tokens.len() && _kind_set_2(tokens[pos]) {
                         let sp = pos;
-                        pos = scan_html_elements(tokens, pos, 0);
+                        pos = scan_html_elements(tokens, pos, &mut p.memo, 0);
                         if pos < 0 { pos = sp; break; }
                         if pos == sp { break; }
                     }
@@ -2728,7 +2786,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if rep_scan_pos_2 >= 0 {
             let decline_kind_2 = if rep_scan_pos_2 < p.kinds.len() { p.kinds[rep_scan_pos_2] } else { TK_EOF };
-            if !(_kind_set_4(decline_kind_2)) {
+            if !(_kind_set_4(decline_kind_2) || follow == 0 && decline_kind_2 == TK_EOF) {
                 let mut decline_dead_2: bool = false;
                 decline_scan_2: {
                     let tokens = &p.kinds;
@@ -2744,7 +2802,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     while pos < tokens.len() && _kind_set_2(tokens[pos]) {
                         let sp = pos;
-                        pos = scan_html_elements(tokens, pos, 0);
+                        pos = scan_html_elements(tokens, pos, &mut p.memo, 0);
                         if pos < 0 { pos = sp; break; }
                         if pos == sp { break; }
                     }
@@ -2790,14 +2848,14 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if rep_scan_pos_3 >= 0 {
             let decline_kind_3 = if rep_scan_pos_3 < p.kinds.len() { p.kinds[rep_scan_pos_3] } else { TK_EOF };
-            if !(_kind_set_5(decline_kind_3)) {
+            if !(_kind_set_5(decline_kind_3) || follow == 0 && decline_kind_3 == TK_EOF) {
                 let mut decline_dead_3: bool = false;
                 decline_scan_3: {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
                     while pos < tokens.len() && _kind_set_2(tokens[pos]) {
                         let sp = pos;
-                        pos = scan_html_elements(tokens, pos, 0);
+                        pos = scan_html_elements(tokens, pos, &mut p.memo, 0);
                         if pos < 0 { pos = sp; break; }
                         if pos == sp { break; }
                     }
@@ -2879,7 +2937,7 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: i64 = 0) -> () {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_html_misc(tokens, pos);
+            pos = scan_html_misc(tokens, pos, &mut p.memo);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -2913,14 +2971,14 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: i64 = 0) -> () {
         rep_scan_2: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_html_misc(tokens, pos);
+            pos = scan_html_misc(tokens, pos, &mut p.memo);
             if pos < 0 { break rep_scan_2; }
             if pos <= p.pos { break rep_scan_2; }
             rep_scan_pos_2 = pos;
         }
         if rep_scan_pos_2 >= 0 {
             let decline_kind = if rep_scan_pos_2 < p.kinds.len() { p.kinds[rep_scan_pos_2] } else { TK_EOF };
-            if !(_kind_set_5(decline_kind)) {
+            if !(_kind_set_5(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     let tokens = &p.kinds;
@@ -2984,7 +3042,7 @@ fn _parse_html_element__inner(p: &mut Parser, follow: i64 = 0) -> () {
             opt_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                pos = scan_html_content(tokens, pos, FOLLOW_MASK_6);
+                pos = scan_html_content(tokens, pos, &mut p.memo, FOLLOW_MASK_6);
                 if pos < 0 { break opt_scan; }
                 if pos >= tokens.len() || tokens[pos] != TK_TAG_OPEN { break opt_scan; }
                 pos += 1;
@@ -3071,7 +3129,7 @@ fn _parse_html_content__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                         if _kind_set_9(sgk_1) {
                             sg_1_0: {
-                                pos = scan_html_element(tokens, pos, follow_open_with(follow, follow_open_set(FOLLOW_MASK_8)));
+                                pos = scan_html_element(tokens, pos, &mut p.memo, follow_open_with(follow, follow_open_set(FOLLOW_MASK_8)));
                                 if pos < 0 { break sg_1_0; }
                                 break sg_1_done;
                             }
@@ -3098,7 +3156,7 @@ fn _parse_html_content__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_8(decline_kind)) {
+            if !(_kind_set_8(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     let tokens = &p.kinds;

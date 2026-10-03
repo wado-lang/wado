@@ -611,11 +611,16 @@ fn build_left_corner_ctx(parser_rules: &List<ParserRule>, scan: bool) -> LeftCor
 /// Can rule `i` re-enter itself at the same input position through the
 /// precomputed left-corner graph?
 fn left_corners_reach_self(ctx: &LeftCornerCtx, i: i32) -> bool {
+    return edges_reach_self(&ctx.corners, i);
+}
+
+/// Whether node `i` reaches itself in one or more steps of `edges`.
+pub fn edges_reach_self(edges: &List<List<i32>>, i: i32) -> bool {
     let mut seen: List<bool> = [];
-    for let mut k = 0; k < ctx.corners.len(); k += 1 {
+    for let mut k = 0; k < edges.len(); k += 1 {
         seen.push(false);
     }
-    let mut stack: List<i32> = ctx.corners[i];
+    let mut stack: List<i32> = edges[i];
     while let Some(id) = stack.pop() {
         if id == i {
             return true;
@@ -624,7 +629,7 @@ fn left_corners_reach_self(ctx: &LeftCornerCtx, i: i32) -> bool {
             continue;
         }
         seen[id] = true;
-        for let c of &ctx.corners[id] {
+        for let c of &edges[id] {
             stack.push(*c);
         }
     }

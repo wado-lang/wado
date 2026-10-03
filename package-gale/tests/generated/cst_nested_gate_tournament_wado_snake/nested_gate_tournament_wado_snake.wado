@@ -1909,7 +1909,7 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
             }
             if rep_scan_pos >= 0 {
                 let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-                if !(_kind_set_0(decline_kind)) {
+                if !(_kind_set_0(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                     let mut decline_dead: bool = false;
                     decline_scan: {
                         p.scan_gate.no_brace = p.no_brace;

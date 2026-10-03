@@ -247,7 +247,11 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     let lowered = lower_for_analysis(grammar, &lit_tokens, &mut ctx);
     mark_at_end_conflicts_routed(grammar, &lowered, &mut ctx);
     ctx.close_simulator_reach();
-    ctx.set_scan_memo(!ctx.needs_lr_atn() && lowered.parser_rules.iter_ref().any(|r| r matches { LeftRecursive(_) }));
+    ctx.close_rule_rescans();
+    ctx.set_scan_memo(
+        !ctx.needs_lr_atn()
+            && (ctx.any_rule_rescanned() || lowered.parser_rules.iter_ref().any(|r| r matches { LeftRecursive(_) })),
+    );
     // Every grammar reads its recovery sets off the ATN; only the simulator's
     // grammars also embed it.
     let atn = build_atn_with(grammar, &lowered);
@@ -545,6 +549,15 @@ fn install_rule_follow(grammar: &Grammar, ctx: &mut GenContext) {
         follow_kinds[rule.name] = kinds;
     }
     ctx.set_rule_follow(follow_kinds, !grammar_has_open_first_element(&grammar.parser_rules));
+    // Unseeded, so EOF is in a rule's FOLLOW only where the grammar matches it.
+    let written = build_follow_env(&grammar.parser_rules, ctx, "");
+    let mut before_eof: List<String> = [];
+    for let rule of &grammar.parser_rules {
+        if written.rule_follow(&rule.name).kinds.contains("TK_EOF") {
+            before_eof.push(rule.name);
+        }
+    }
+    ctx.set_rules_before_eof_token(before_eof);
 }
 
 fn grammar_has_open_first_element(parser_rules: &List<ParserRule>) -> bool {
