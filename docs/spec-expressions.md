@@ -416,8 +416,9 @@ has no instruction for (`i8`, `i16`, `u8`, `u16`, `i128`, `u128`) behaves as
 that instruction would at its width. Arithmetic that behaves otherwise, such as
 checked or saturating arithmetic, is a method rather than an operator.
 
-So integer `+`, `-`, `*` and unary `-` wrap in two's complement at every width,
-signed and unsigned alike, and their overflow never traps. An integer `/` or `%`
+So integer `+`, `-` and `*` wrap in two's complement at every width, signed and
+unsigned alike, as does unary `-` on a signed integer, and their overflow never
+traps. An integer `/` or `%`
 whose divisor is zero traps. A signed `MIN / -1` traps, as `div_s` does, because
 the quotient is one past `MAX`. A signed `MIN % -1` is 0, as `rem_s` gives. A
 float operation follows IEEE 754: dividing by zero gives an infinity, or NaN for

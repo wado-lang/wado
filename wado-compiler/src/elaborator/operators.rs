@@ -19,6 +19,7 @@ use super::coercion::{
 use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::replace_on_assign_place;
 use super::scope::ScopedBound;
+use super::trait_query::primitive_has_operator;
 use super::types::{FunctionContext, MethodInfo, OperatorImpl, ResolvedTraitMethod, TypeError};
 use super::tysys::TypeSystem;
 use super::util::bound_param_name;
@@ -233,19 +234,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl TypeSystem {
-    /// Whether `-x` / `~x` on `type_id` needs a trait impl, because the WIR
-    /// unary lowering has no opcode for it (`primitive_ops::scalar_kind`).
+    /// Whether `-x` / `~x` on `type_id` needs a trait impl: the primitive it
+    /// bottoms out in, if any, carries no such operator.
     fn unary_operand_requires_trait(&self, op: UnaryOp, type_id: TypeId) -> bool {
+        let item = match op {
+            UnaryOp::Neg => CompilerItem::Neg,
+            UnaryOp::BitNot => CompilerItem::BitNot,
+            UnaryOp::Not | UnaryOp::Ref | UnaryOp::MutRef | UnaryOp::Deref => return false,
+        };
         let tt = self.type_table.borrow();
-        match op {
-            UnaryOp::Neg => !tt.is_scalar_primitive_like(type_id),
-            // `bool` complements through `i32.eqz`; a float has no complement.
-            UnaryOp::BitNot => {
-                tt.representation_head(type_id) != TypeTable::BOOL
-                    && (tt.is_float(type_id) || !tt.is_scalar_primitive_like(type_id))
-            }
-            UnaryOp::Not | UnaryOp::Ref | UnaryOp::MutRef | UnaryOp::Deref => false,
-        }
+        !matches!(
+            tt.primitive_head(type_id),
+            Some(prim) if tt.is_scalar_primitive_like(type_id)
+                && primitive_has_operator(prim.as_str(), item)
+        )
     }
 
     /// The primitive whose `core:prelude` impl answers an operator on `operand`

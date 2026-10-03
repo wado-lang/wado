@@ -1,0 +1,13 @@
+// `wrapping_neg` negates an unsigned value modulo its width: 0 stays 0, and
+// any other `x` becomes `MAX - x + 1`.
+
+test "wrapping_neg on each unsigned width" {
+    assert builtin::black_box(1_u8).wrapping_neg() == u8::MAX;
+    assert builtin::black_box(0_u8).wrapping_neg() == 0;
+    assert builtin::black_box(2_u16).wrapping_neg() == u16::MAX - 1;
+    assert builtin::black_box(1_u32).wrapping_neg() == u32::MAX;
+    assert builtin::black_box(0x8000_0000_u32).wrapping_neg() == 0x8000_0000;
+    assert builtin::black_box(1_u64).wrapping_neg() == u64::MAX;
+    assert builtin::black_box(1_u128).wrapping_neg() == u128::MAX;
+    assert builtin::black_box(0_u128).wrapping_neg() == 0;
+}
