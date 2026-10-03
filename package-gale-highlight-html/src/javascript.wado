@@ -162,7 +162,13 @@ impl JavaScriptLexerBase for JsLexerBase {
 
 /// Parses a JavaScript program with the base ports installed.
 pub fn parse_javascript<S: AsStrSlice>(source: S) -> js::ParseResult {
-    let mut lexer_base = JsLexerBase { scope_strict_modes: [], strict: false, depth: 0, template_depths: [], last_token: -1 };
+    let mut lexer_base = JsLexerBase {
+        scope_strict_modes: [],
+        strict: false,
+        depth: 0,
+        template_depths: [],
+        last_token: -1,
+    };
     let mut parser_base = JsParserBase {};
     with JavaScriptLexerBase => &mut lexer_base, JavaScriptParserBase => &mut parser_base do {
         return js::parse_program(source);

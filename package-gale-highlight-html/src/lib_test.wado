@@ -40,12 +40,20 @@ test "a script body is JavaScript and a style body is CSS" {
 
 test "a closing tag is markup again" {
     let html = highlighted("<script>f();</script>");
-    assert html.ends_with(`${span("punctuation bracket", "&lt;/")}${span("tag", "script")}${span("punctuation bracket", "&gt;")}`), html;
+    assert html.ends_with(`${span("punctuation bracket", "&lt;/")}${span("tag", "script")}${span(
+        "punctuation bracket",
+        "&gt;",
+    )}`), html;
 }
 
 test "an opening script or style tag carries ordinary attributes" {
     let html = highlighted("<style media=\"print\">p {}</style>");
-    assert html.starts_with(`${span("punctuation bracket", "&lt;")}${span("tag", "style")} ${span("attribute", "media")}${span("operator", "=")}${span("string", "&quot;print&quot;")}`), html;
+    assert html.starts_with(
+        `${span("punctuation bracket", "&lt;")}${span("tag", "style")} ${span("attribute", "media")}${span(
+            "operator",
+            "=",
+        )}${span("string", "&quot;print&quot;")}`,
+    ), html;
 }
 
 test "the script type picks the language" {

@@ -63,10 +63,16 @@ fn text_of(chars: &List<char>, start: i32, end: i32) -> String {
 fn attributes(tokens: &html::TokenStream, chars: &List<char>) -> List<Attribute> {
     let mut out: List<Attribute> = [];
     for let i of 2..<tokens.len() {
-        if tokens.kind_at(i - 2) == html::TK_TAG_NAME && tokens.kind_at(i - 1) == html::TK_TAG_EQUALS && tokens.kind_at(i) == html::TK_ATTVALUE_VALUE {
+        if tokens.kind_at(i - 2) == html::TK_TAG_NAME
+            && tokens.kind_at(i - 1) == html::TK_TAG_EQUALS
+            && tokens.kind_at(i) == html::TK_ATTVALUE_VALUE {
             let name = tokens.span_at(i - 2);
             let value = tokens.span_at(i);
-            out.push(Attribute { name: text_of(chars, name.start, name.end).to_ascii_lowercase(), start: value.start, end: value.end });
+            out.push(Attribute {
+                name: text_of(chars, name.start, name.end).to_ascii_lowercase(),
+                start: value.start,
+                end: value.end,
+            });
         }
     }
     return out;
@@ -103,7 +109,11 @@ fn script_language(chars: &List<char>, attrs: &List<Attribute>) -> Language {
         return match essence.as_str_slice() {
             "" | "module" | "text/javascript" | "application/javascript" | "text/ecmascript" | "application/ecmascript" | "application/x-javascript" | "application/x-ecmascript" | "text/jscript" | "text/livescript" | "text/x-javascript" | "text/x-ecmascript" => Language::JavaScript,
             "importmap" | "speculationrules" => Language::Json,
-            _ => if essence.ends_with("+json") || essence.ends_with("/json") { Language::Json } else { Language::Opaque },
+            _ => if essence.ends_with("+json") || essence.ends_with("/json") {
+                Language::Json;
+            } else {
+                Language::Opaque;
+            },
         };
     }
     return Language::JavaScript;
@@ -157,7 +167,9 @@ fn markup(source: &String, chars: &List<char>) -> [List<Highlight>, List<Attribu
     // A capture an embedded language replaces, by its start.
     let mut replaced: List<i32> = [];
     for let attr of &attrs {
-        let Some(language) = attribute_language(attr) else { continue; };
+        let Some(language) = attribute_language(attr) else {
+            continue;
+        };
         let [start, end] = unquoted(chars, attr);
         replaced.push(attr.start);
         if start > attr.start {
@@ -170,7 +182,11 @@ fn markup(source: &String, chars: &List<char>) -> [List<Highlight>, List<Attribu
     }
     for let c of &visitor.captures {
         if !replaced.contains(&c.start) {
-            out.push(Highlight { start: c.start, end: c.end, class: html::HIGHLIGHT_MAPPING.capture_classes[c.capture_id] });
+            out.push(Highlight {
+                start: c.start,
+                end: c.end,
+                class: html::HIGHLIGHT_MAPPING.capture_classes[c.capture_id],
+            });
         }
     }
     let mut body_language = Language::Opaque;

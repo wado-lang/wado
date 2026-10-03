@@ -3517,7 +3517,12 @@ s : '{' (list | ';')* '}' ;
 list : X (';' X?)* ;
 X : 'x' ;
 WS : ' ' -> skip ;
-", [["list", "x;x"], ["list", "x;"], ["s", "{x;x}"], ["s", "{x;;x}"]]);
+", [
+        ["list", "x;x"],
+        ["list", "x;"],
+        ["s", "{x;x}"],
+        ["s", "{x;;x}"],
+    ]);
     assert got == "x;x => (list x ; x)\nx; => (list x ;)\n{x;x} => (s { (list x ; x) })\n{x;;x} => (s { (list x ; ; x) })\n", got;
 }
 
@@ -3535,7 +3540,9 @@ X : 'x' ;
 }
 
 test "a parser base decides the tree a superClass grammar's highlighter walks" {
-    let options = GenerateOptions { highlight_query: Option::Some(parse_highlight_query("(a (X) @keyword)\n(b (X) @string)").unwrap()) };
+    let options = GenerateOptions { highlight_query: Option::Some(parse_highlight_query(
+        "(a (X) @keyword)\n(b (X) @string)",
+    ).unwrap()) };
     let out = gen_with("grammar T;
 options { superClass = PBase; }
 s : {this.ok()}? a | b ;
