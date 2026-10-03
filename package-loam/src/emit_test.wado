@@ -1314,6 +1314,39 @@ test "a constant both branches read is spelled once, around them" {
     assert body.find("let K = ").unwrap() < body.find("let Y = if C.data[0] {").unwrap();
 }
 
+test "a name only arithmetic spells is read back from its length, after the names that length reads" {
+    let source = `g (float["2 * m + n"] V, float["n + 1"] X) => (float["2 * m + n"] Z) { Z = Add(V, V) }`;
+    let layout: List<LayoutRule> = [
+        rule("V", ["Odd"]),
+        rule("X", ["Seq"]),
+    ];
+    let body = emitted(&generate(source, layout).unwrap());
+    let n = body.find("let dim_n = to_extent((X.extents[0] as i64 - (1))) as i64;").unwrap();
+    let m = body.find("let dim_m = to_extent((V.extents[0] as i64 - (dim_n)) / 2) as i64;").unwrap();
+    assert n < m;
+}
+
+test "a branch reads a constant around it under the axes the branch names" {
+    let source = `g (bool[1] C, float[2] X, float[2] H) => (float[2] W) {
+        K = Constant<value_floats = [1.0, 2.0]>()
+        Y = If <then_branch = t () => (float[2] A) { A = Add(X, K) }, else_branch = e () => (float[2] B) { Z = Mul(H, K) B = Neg(X) }> (C)
+        W = Add(Y, K)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("C", ["One"]),
+        rule("X", ["Embed"]),
+        rule("H", ["Hidden"]),
+        LayoutRule {
+            pattern: "K",
+            axes: ["Hidden"],
+            graph: Option::Some("e"),
+        },
+        rule("K", ["Embed"]),
+    ];
+    let body = emitted(&generate(source, layout).unwrap());
+    assert body.contains("let Z = zip(H, &lift::<f32, [Embed], [Hidden]>(&K, 1), |x, y| x * y);");
+}
+
 test "a constant one branch folds is spelled in that branch" {
     let source = `g (bool[1] C, float[2] X) => (float[2] Y) {
         Y = If <then_branch = t () => (float[2] A) { K = Constant<value_floats = [1.0, 2.0]>() A = Add(X, K) }, else_branch = e () => (float[2] B) { B = Neg(X) }> (C)

@@ -110,6 +110,12 @@ test "arithmetic a bound dimension makes negative stops the build" {
     assert `${e}` == "dims: N makes the dimension \"N - 3\" -1, and an extent is not negative";
 }
 
+test "arithmetic a bound dimension takes past i64 stops the build" {
+    let mut graph = read("g (float[N, 4] X) => (float[\"N * N * N\", 4] Y) { Y = Relu(X) }").unwrap();
+    let e = bind_dims(&mut graph, &({ N: i32::MAX } as TreeMap<String, i32>)).unwrap_err();
+    assert `${e}` == "dims: N makes the dimension \"N * N * N\" more than i64 holds";
+}
+
 test "keeping an If's output keeps what its branches read from around them" {
     let mut graph = read(
         `g (bool[1] C, float[4] X, float[4] U) => (float[4] Y, float[4] Z) <float[4] A> {

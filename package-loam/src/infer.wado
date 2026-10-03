@@ -969,6 +969,9 @@ fn joined(
 ) -> Result<Shape, InferError> {
     let first = operand_at(node, shapes, 0);
     let axis = concat_axis(node, first.rank())?;
+    if node.inputs.len() == 1 {
+        return Result::Ok(first);
+    }
     let mut sum = Poly::constant(0);
     for let index of 0..<node.inputs.len() {
         let x = operand_at(node, shapes, index);

@@ -27,6 +27,19 @@ test "a length taken from itself is zero, as a causal mask's offset is" {
     assert minus(seq, seq).as_constant() == Option::Some(0_i64);
 }
 
+test "a polynomial linear in a symbol splits into its coefficient and the rest" {
+    let [n, m] = [
+        s("n"),
+        s("m"),
+    ];
+    assert plus(times(c(2), n), minus(m, c(1))).linear_in(&"n") == Option::Some([2_i64, minus(m, c(1))]);
+    assert n.linear_in(&"n") == Option::Some([1_i64, c(0)]);
+    assert times(n, n).linear_in(&"n") matches { None };
+    assert times(n, m).linear_in(&"n") matches { None };
+    assert m.linear_in(&"n") matches { None };
+    assert Poly::min_of(&n, &c(8), &"Slice").linear_in(&"n") matches { None };
+}
+
 test "equal polynomials are equal however they were built" {
     let [a, b] = [
         s("a"),

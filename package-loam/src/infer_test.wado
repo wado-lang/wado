@@ -377,6 +377,13 @@ test "Concat sums the axis it joins, which the output's layout names" {
     assert shapes["Y"].axes[1].extent.agrees(&Extent::Symbolic(Poly::symbol(&"T").try_add(&Poly::constant(1)).unwrap()));
 }
 
+test "Concat of one operand is that operand, as a Split into one part is" {
+    let source = `g (float[1, T, 8] P) => (float[1, T, 8] Y) {
+        Y = Concat<axis = -2>(P)
+    }`;
+    assert y_axes(source, cache()).unwrap() == "Batch=1,Past=T,Dim=8";
+}
+
 test "Concat of operands that disagree on another axis stops the build" {
     let source = `g (float[1, 3, 8] P, float[1, 1, 4] N) => (float[1, 4, 8] Y) {
         Y = Concat<axis = 1>(P, N)

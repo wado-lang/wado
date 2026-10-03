@@ -86,7 +86,9 @@ fn spelled_extent(
         return Result::Ok(null);
     }
     let by = fixing.join(", ");
-    let value = spelled_poly(name, dims).unwrap();
+    let Some(value) = spelled_poly(name, dims) else {
+        return conflict("dims", `${by} makes the dimension ${*name:?} more than i64 holds`);
+    };
     let Some(n) = value.as_constant() else {
         let open: List<String> = read.into_iter().filter(|s| !dims.contains_key(s)).collect();
         return conflict("dims", `${by} fixes part of the dimension ${*name:?}, which also reads ${open.join(", ")}`);
