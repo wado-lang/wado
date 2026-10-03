@@ -16,6 +16,10 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
+  # The dev profile turns LTO off for a faster edit-rebuild, which CI never
+  # does, at 20-30% of compiler runtime that CI pays in every test job.
+  # `false` is rustc's default: thin LTO across a crate's codegen units.
+  CARGO_PROFILE_DEV_LTO: "false"
 
 jobs:
   # A change to Markdown no gate reads skips every test job below, and the
