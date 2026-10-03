@@ -931,8 +931,11 @@ impl TypeSystem {
         // Bounded, so a pathologically nested (or cyclic) type cannot produce
         // an unbounded chain.
         while chain.len() < 8 {
+            // A variant derives no `Ord` whatever it writes, so its `eq` is no cause.
+            let derives_ord = self.type_table.borrow().reflect_kind(type_id)
+                != Some(CompilerItem::ReflectVariant);
             let written_instead = match (tr, self.comparison_written_alone(type_id)) {
-                (OnBoundTrait::Ord, Some(OnBoundTrait::Eq)) => {
+                (OnBoundTrait::Ord, Some(OnBoundTrait::Eq)) if derives_ord => {
                     Some("writes `eq`, so no `Ord` is derived for it; write `cmp` beside it")
                 }
                 (OnBoundTrait::Eq, Some(OnBoundTrait::Ord)) => {
