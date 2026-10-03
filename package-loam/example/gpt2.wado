@@ -4,8 +4,9 @@
 //!
 //!     wado run package-loam/example/gpt2.wado -- "Hello, my name is"
 //!
-//! The graph leaves the sequence length to the run, so each step reads the
-//! tokens so far and nothing more.
+//! The prompt runs through the decoder that returns the keys and values it
+//! computed, and each token after it through the decoder that takes them back,
+//! so a step computes one position rather than every position so far.
 
 use { args, eprintln, println, Environment, Stderr, Stdout } from "core:cli";
 use { from_string } from "core:json";
@@ -16,8 +17,11 @@ use gpt2 from "../tests/models/tiny-gpt2/model.onnx"
             module: "../src/generator.wado",
             options: {
                 dims: { batch_size: 1 },
-                outputs: ["logits"],
                 layout: [
+                    {
+                        pattern: "present.*",
+                        axes: ["Batch", "Head", "Seq", "Dim"],
+                    },
                     {
                         pattern: "input_ids",
                         axes: ["Batch", "Seq"],
@@ -130,41 +134,260 @@ use gpt2 from "../tests/models/tiny-gpt2/model.onnx"
             },
         },
     };
+use step from "../tests/models/tiny-gpt2/with-past/model.onnx"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: {
+                dims: { batch_size: 1 },
+                layout: [
+                    {
+                        pattern: "input_ids",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "attention_mask",
+                        axes: ["Batch", "Total"],
+                    },
+                    {
+                        pattern: "past_key_values.*",
+                        axes: ["Batch", "Head", "Past", "Dim"],
+                    },
+                    {
+                        pattern: "present.*",
+                        axes: ["Batch", "Head", "Total", "Dim"],
+                    },
+                    {
+                        pattern: "transformer.wte.weight",
+                        axes: ["Vocab", "Embed"],
+                    },
+                    {
+                        pattern: "transformer.wpe.weight",
+                        axes: ["Pos", "Embed"],
+                    },
+                    {
+                        pattern: "*ln_1.*",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "*ln_2.*",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "*c_attn.weight",
+                        axes: ["Embed", "Qkv"],
+                    },
+                    {
+                        pattern: "*c_attn.bias",
+                        axes: ["Qkv"],
+                    },
+                    {
+                        pattern: "*attn.c_proj.weight",
+                        axes: ["(Head Dim)", "Embed"],
+                    },
+                    {
+                        pattern: "*mlp.c_fc.weight",
+                        axes: ["Embed", "Inner"],
+                    },
+                    {
+                        pattern: "*mlp.c_fc.bias",
+                        axes: ["Inner"],
+                    },
+                    {
+                        pattern: "*mlp.c_proj.weight",
+                        axes: ["Inner", "Embed"],
+                    },
+                    {
+                        pattern: "onnx::MatMul_1615",
+                        axes: ["Embed", "Vocab"],
+                    },
+                    {
+                        pattern: "/transformer/Range_output_0",
+                        axes: ["Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_2_output_0",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_4_output_0",
+                        axes: ["Batch", "Head", "Total"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_5_output_0",
+                        axes: ["Batch", "Head", "Seq", "Total"],
+                    },
+                    {
+                        pattern: "*/c_attn/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Qkv"],
+                    },
+                    {
+                        pattern: "*/c_proj/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Embed"],
+                    },
+                    {
+                        pattern: "*/c_fc/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Inner"],
+                    },
+                    {
+                        pattern: "*/attn/Split_output_*",
+                        axes: ["Batch", "Seq", "Embed"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_2_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    {
+                        pattern: "*attn.bias",
+                        axes: ["Batch", "Head", "Pos", "Pos"],
+                    },
+                    {
+                        pattern: "*/attn/Slice_3_output_0",
+                        axes: ["Batch", "Head", "Seq", "Pos"],
+                    },
+                    {
+                        pattern: "*/attn/Slice_4_output_0",
+                        axes: ["Batch", "Head", "Seq", "Total"],
+                    },
+                ],
+            },
+        },
+    };
 
 global STEPS: i32 = 8;
 
+/// Both decoders' weights, which are one model's.
+struct Weights {
+    prompt: gpt2::Weights,
+    step: step::Weights,
+}
+
+impl Weights {
+    fn embedded() -> Weights {
+        return Weights {
+            prompt: gpt2::Weights::embedded(),
+            step: step::Weights::embedded(),
+        };
+    }
+}
+
 /// How many tokens the model reads at most: one position per row of `wpe`.
-fn positions(weights: &gpt2::Weights) -> i32 {
-    return weights.transformer_wpe_weight.extents[0];
+fn positions(weights: &Weights) -> i32 {
+    return weights.prompt.transformer_wpe_weight.extents[0];
 }
 
 /// The longest prompt `greedy` extends by `steps`. The last token it picks is
 /// never read, so the model reads one fewer than it returns.
-fn longest_prompt(steps: i32, weights: &gpt2::Weights) -> i32 {
+fn longest_prompt(steps: i32, weights: &Weights) -> i32 {
     return positions(weights) - steps + 1;
 }
 
+/// The keys and values so far, one `[data, extents]` per layer's key and
+/// value in the order the graphs name them. Each decoder declares a tensor type
+/// of its own, so the cache crosses from one to the other as its elements.
+type Cache = List<[List<f32>, List<i32>]>;
+
+fn past(cache: &Cache, i: i32) -> step::Tensor<f32, [step::Batch, step::Head, step::Past, step::Dim]> {
+    let [data, extents] = cache[i];
+    return step::Tensor { data, extents };
+}
+
+/// The token the logits rank first at the last position.
+fn best(data: &List<f32>, extents: &List<i32>) -> i32 {
+    let vocab = extents[2];
+    let row = (extents[1] - 1) * vocab;
+    let mut top = 0;
+    for let v of 1..<vocab {
+        if data[row + v] > data[row + top] {
+            top = v;
+        }
+    }
+    return top;
+}
+
+/// The token `prompt` is followed by, and the keys and values it leaves.
+fn prefill(prompt: &List<i32>, weights: &gpt2::Weights) -> [i32, Cache] {
+    let ids: List<i64> = prompt.into_iter().map(|id| id as i64).collect();
+    let extents: List<i32> = [gpt2::Batch::EXTENT, prompt.len()];
+    let o = gpt2::forward(
+        &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: ids, extents },
+        &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: List::<i64>::filled(prompt.len(), 1), extents },
+        weights,
+    );
+    let cache: Cache = [
+        [o.present_0_key.data, o.present_0_key.extents],
+        [o.present_0_value.data, o.present_0_value.extents],
+        [o.present_1_key.data, o.present_1_key.extents],
+        [o.present_1_value.data, o.present_1_value.extents],
+        [o.present_2_key.data, o.present_2_key.extents],
+        [o.present_2_value.data, o.present_2_value.extents],
+        [o.present_3_key.data, o.present_3_key.extents],
+        [o.present_3_value.data, o.present_3_value.extents],
+        [o.present_4_key.data, o.present_4_key.extents],
+        [o.present_4_value.data, o.present_4_value.extents],
+    ];
+    return [best(&o.logits.data, &o.logits.extents), cache];
+}
+
+/// The token after `token` and the positions `cache` holds, and the cache
+/// grown by `token`'s position.
+fn decode(token: i32, cache: &Cache, weights: &step::Weights) -> [i32, Cache] {
+    let length = cache[0].1[2] + 1;
+    let o = step::forward(
+        &step::Tensor::<i64, [step::Batch, step::Seq]> {
+            data: [token as i64],
+            extents: [step::Batch::EXTENT, step::Seq::EXTENT],
+        },
+        &past(cache, 0),
+        &past(cache, 1),
+        &past(cache, 2),
+        &past(cache, 3),
+        &past(cache, 4),
+        &past(cache, 5),
+        &past(cache, 6),
+        &past(cache, 7),
+        &past(cache, 8),
+        &past(cache, 9),
+        &step::Tensor::<i64, [step::Batch, step::Total]> {
+            data: List::<i64>::filled(length, 1),
+            extents: [step::Batch::EXTENT, length],
+        },
+        weights,
+    );
+    let grown: Cache = [
+        [o.present_0_key.data, o.present_0_key.extents],
+        [o.present_0_value.data, o.present_0_value.extents],
+        [o.present_1_key.data, o.present_1_key.extents],
+        [o.present_1_value.data, o.present_1_value.extents],
+        [o.present_2_key.data, o.present_2_key.extents],
+        [o.present_2_value.data, o.present_2_value.extents],
+        [o.present_3_key.data, o.present_3_key.extents],
+        [o.present_3_value.data, o.present_3_value.extents],
+        [o.present_4_key.data, o.present_4_key.extents],
+        [o.present_4_value.data, o.present_4_value.extents],
+    ];
+    return [best(&o.logits.data, &o.logits.extents), grown];
+}
+
 /// `prompt` extended by `steps` tokens, each the one the model ranks first.
-fn greedy(prompt: &List<i32>, steps: i32, weights: &gpt2::Weights) -> List<i32> {
+fn greedy(prompt: &List<i32>, steps: i32, weights: &Weights) -> List<i32> {
     assert 1 <= prompt.len() <= longest_prompt(steps, weights);
     let mut ids = *prompt;
-    for let _ of 0..<steps {
-        let input: List<i64> = ids.into_iter().map(|id| id as i64).collect();
-        let extents: List<i32> = [gpt2::Batch::EXTENT, ids.len()];
-        let logits = gpt2::forward(
-            &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: input, extents },
-            &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: List::<i64>::filled(ids.len(), 1), extents },
-            weights,
-        );
-        let vocab = logits.extents[2];
-        let row = (ids.len() - 1) * vocab;
-        let mut best = 0;
-        for let v of 1..<vocab {
-            if logits.data[row + v] > logits.data[row + best] {
-                best = v;
-            }
-        }
-        ids.push(best);
+    let [first, prefilled] = prefill(prompt, &weights.prompt);
+    ids.push(first);
+    let mut cache = prefilled;
+    for let _ of 1..<steps {
+        let [next, grown] = decode(ids[ids.len() - 1], &cache, &weights.step);
+        ids.push(next);
+        cache = grown;
     }
     return ids;
 }
@@ -176,7 +399,7 @@ export fn run() with (Stdout, Stderr, Environment) {
     }
     let tokenizer = tiny();
     let ids = tokenizer.encode(&prompt);
-    let weights = gpt2::Weights::embedded();
+    let weights = Weights::embedded();
     let longest = longest_prompt(STEPS, &weights);
     if !(1 <= ids.len() <= longest) {
         eprintln(`the prompt is ${ids.len()} tokens, and must be 1 to ${longest}`);
@@ -199,7 +422,7 @@ struct Oracle {
 #[timeout_ms(30000)]
 test "each prompt continues with the tokens onnxruntime picks greedily" {
     let tokenizer = tiny();
-    let weights = gpt2::Weights::embedded();
+    let weights = Weights::embedded();
     let oracle = from_string::<Oracle>(#include_str("../tests/models/tiny-gpt2/generate.json")).unwrap();
     for let case of oracle.generate {
         assert tokenizer.encode(&case.prompt) == case.ids;
@@ -213,7 +436,7 @@ test "each prompt continues with the tokens onnxruntime picks greedily" {
 
 #[timeout_ms(30000)]
 test "the longest prompt fills every position the model reads" {
-    let weights = gpt2::Weights::embedded();
+    let weights = Weights::embedded();
     let prompt = List::<i32>::filled(longest_prompt(2, &weights), 0);
     assert greedy(&prompt, 2, &weights).len() == positions(&weights) + 1;
 }
