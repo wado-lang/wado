@@ -2496,7 +2496,7 @@ fn scan_html_elements(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, fo
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
         let dk_8 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !(_kind_set_5(dk_8)) {
+        if !(_kind_set_5(dk_8) || follow == 0 && dk_8 == TK_EOF && !(pos == sp + 1 && tokens[sp] == TK_SCRIPTLET)) {
             let dc_8 = pos;
             let mut dc_8_exit = false;
             pos = sp;
@@ -2636,7 +2636,7 @@ fn scan_html_content__walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
         let dk_7 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !(_kind_set_8(dk_7)) {
+        if !(_kind_set_8(dk_7) || follow == 0 && dk_7 == TK_EOF) {
             let dc_7 = pos;
             let mut dc_7_exit = false;
             pos = sp;
@@ -2978,7 +2978,7 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if rep_scan_pos_2 >= 0 {
             let decline_kind = if rep_scan_pos_2 < p.kinds.len() { p.kinds[rep_scan_pos_2] } else { TK_EOF };
-            if !(_kind_set_5(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
+            if !(_kind_set_5(decline_kind) || follow == 0 && decline_kind == TK_EOF && !(rep_scan_pos_2 == p.pos + 1 && p.kinds[p.pos] == TK_SCRIPTLET)) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     let tokens = &p.kinds;

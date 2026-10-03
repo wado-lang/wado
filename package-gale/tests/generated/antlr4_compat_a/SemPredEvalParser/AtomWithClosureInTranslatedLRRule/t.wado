@@ -1645,7 +1645,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
         let dk_3 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !(_kind_set_0(dk_3)) {
+        if !(_kind_set_0(dk_3) || follow == 0 && dk_3 == TK_EOF) {
             let dc_3 = pos;
             let mut dc_3_exit = false;
             pos = sp;

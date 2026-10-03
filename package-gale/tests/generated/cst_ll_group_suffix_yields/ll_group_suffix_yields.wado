@@ -1620,7 +1620,7 @@ fn scan_path(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
         let dk_4 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !(_kind_set_1(dk_4)) {
+        if !(_kind_set_1(dk_4) || follow == 0 && dk_4 == TK_EOF) {
             let dc_4 = pos;
             let mut dc_4_exit = false;
             pos = sp;

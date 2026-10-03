@@ -3539,7 +3539,7 @@ fn scan_id_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
         let dk_19 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !(_kind_set_4(dk_19)) {
+        if !(_kind_set_4(dk_19) || follow == 0 && dk_19 == TK_EOF && !(pos == sp + 1 && tokens[sp] == TK_RBRACE)) {
             let dc_19 = pos;
             let mut dc_19_exit = false;
             pos = sp;
@@ -5026,7 +5026,7 @@ fn _parse_id_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_4(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
+            if !(_kind_set_4(decline_kind) || follow == 0 && decline_kind == TK_EOF && !(rep_scan_pos == p.pos + 1 && p.kinds[p.pos] == TK_RBRACE)) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     let tokens = &p.kinds;

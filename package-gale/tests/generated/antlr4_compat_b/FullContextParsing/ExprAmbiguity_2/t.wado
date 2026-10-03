@@ -1688,7 +1688,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
         let dk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !(_kind_set_0(dk_1)) {
+        if !(_kind_set_0(dk_1) || follow == 0 && dk_1 == TK_EOF) {
             let dc_1 = pos;
             let mut dc_1_exit = false;
             pos = sp;
