@@ -13196,7 +13196,7 @@ fn _parse_token_tree__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
                 }
                 if rep_scan_pos >= 0 {
                     let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-                    if !(_kind_set_2(decline_kind)) {
+                    if !(_kind_set_2(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                         let mut decline_dead: bool = false;
                         decline_scan: {
                             p.scan_gate.no_struct = p.no_struct;
@@ -13595,7 +13595,7 @@ fn _parse_macro_rules__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_13(decline_kind)) {
+            if !(_kind_set_13(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     p.scan_gate.no_struct = p.no_struct;
@@ -13767,7 +13767,7 @@ fn _parse_macro_match__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
                 }
                 if rep_scan_pos >= 0 {
                     let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-                    if !(_kind_set_2(decline_kind)) {
+                    if !(_kind_set_2(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                         let mut decline_dead: bool = false;
                         decline_scan: {
                             p.scan_gate.no_struct = p.no_struct;
@@ -15125,7 +15125,7 @@ fn _parse_function_parameters__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> (
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_31(decline_kind)) {
+            if !(_kind_set_31(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     p.scan_gate.no_struct = p.no_struct;
@@ -15759,7 +15759,7 @@ fn _parse_struct_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_41(decline_kind)) {
+            if !(_kind_set_41(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     p.scan_gate.no_struct = p.no_struct;
@@ -15880,7 +15880,7 @@ fn _parse_tuple_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPa
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_31(decline_kind)) {
+            if !(_kind_set_31(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     p.scan_gate.no_struct = p.no_struct;
@@ -16033,7 +16033,7 @@ fn _parse_enum_items__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_41(decline_kind)) {
+            if !(_kind_set_41(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     p.scan_gate.no_struct = p.no_struct;
@@ -17350,7 +17350,7 @@ fn _parse_where_clause__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPa
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_51(decline_kind)) {
+            if !(_kind_set_51(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     p.scan_gate.no_struct = p.no_struct;
@@ -19673,7 +19673,7 @@ fn _parse_statements__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with Ru
             }
             if rep_scan_pos >= 0 {
                 let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-                if !(_kind_set_82(decline_kind)) {
+                if !(_kind_set_82(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                     let mut decline_dead: bool = false;
                     decline_scan: {
                         p.scan_gate.no_struct = p.no_struct;
@@ -19914,7 +19914,7 @@ fn _parse_array_elements__inner_alt_0(p: &mut Parser, follow: i64 = 0, vals: Arr
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_84(decline_kind)) {
+            if !(_kind_set_84(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     p.scan_gate.no_struct = p.no_struct;
@@ -20096,7 +20096,7 @@ fn _parse_tuple_elements__inner(p: &mut Parser, follow: i64 = 0) -> TupleElement
             }
             if rep_scan_pos >= 0 {
                 let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-                if !(_kind_set_85(decline_kind)) {
+                if !(_kind_set_85(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                     let mut decline_dead: bool = false;
                     decline_scan: {
                         p.scan_gate.no_struct = p.no_struct;
@@ -20380,7 +20380,7 @@ fn _parse_struct_expr_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with 
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_41(decline_kind)) {
+            if !(_kind_set_41(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     p.scan_gate.no_struct = p.no_struct;
@@ -20930,7 +20930,7 @@ fn _parse_enum_expr_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with Ru
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_41(decline_kind)) {
+            if !(_kind_set_41(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     p.scan_gate.no_struct = p.no_struct;
@@ -21187,7 +21187,7 @@ fn _parse_call_params__inner(p: &mut Parser, follow: i64 = 0) -> CallParamsVals 
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_31(decline_kind)) {
+            if !(_kind_set_31(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     p.scan_gate.no_struct = p.no_struct;
@@ -21319,7 +21319,7 @@ fn _parse_closure_parameters__inner(p: &mut Parser, follow: i64 = 0) -> () with 
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_90(decline_kind)) {
+            if !(_kind_set_90(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     p.scan_gate.no_struct = p.no_struct;
@@ -22334,7 +22334,7 @@ fn _parse_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserB
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_92(decline_kind)) {
+            if !(_kind_set_92(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     p.scan_gate.no_struct = p.no_struct;
@@ -23212,7 +23212,7 @@ fn _parse_struct_pattern_fields__inner(p: &mut Parser, follow: i64 = 0) -> () wi
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_41(decline_kind)) {
+            if !(_kind_set_41(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     p.scan_gate.no_struct = p.no_struct;
@@ -23451,7 +23451,7 @@ fn _parse_tuple_struct_items__inner(p: &mut Parser, follow: i64 = 0) -> () with 
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_31(decline_kind)) {
+            if !(_kind_set_31(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     p.scan_gate.no_struct = p.no_struct;
@@ -23562,7 +23562,7 @@ fn _parse_tuple_pattern_items__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> (
             }
             if rep_scan_pos >= 0 {
                 let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-                if !(_kind_set_31(decline_kind)) {
+                if !(_kind_set_31(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                     let mut decline_dead: bool = false;
                     decline_scan: {
                         p.scan_gate.no_struct = p.no_struct;
@@ -23795,7 +23795,7 @@ fn _parse_slice_pattern_items__inner(p: &mut Parser, follow: i64 = 0) -> () with
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_84(decline_kind)) {
+            if !(_kind_set_84(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     p.scan_gate.no_struct = p.no_struct;
@@ -24533,7 +24533,7 @@ fn _parse_maybe_named_function_parameters__inner(p: &mut Parser, follow: i64 = 0
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_31(decline_kind)) {
+            if !(_kind_set_31(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     p.scan_gate.no_struct = p.no_struct;
@@ -24841,7 +24841,7 @@ fn _parse_type_param_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with R
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_113(decline_kind)) {
+            if !(_kind_set_113(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     p.scan_gate.no_struct = p.no_struct;
@@ -25146,7 +25146,7 @@ fn _parse_lifetime_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_117(decline_kind)) {
+            if !(_kind_set_117(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     p.scan_gate.no_struct = p.no_struct;
@@ -25259,7 +25259,7 @@ fn _parse_simple_path__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_119(decline_kind)) {
+            if !(_kind_set_119(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     p.scan_gate.no_struct = p.no_struct;
@@ -25894,7 +25894,7 @@ fn _parse_generic_args_lifetimes__inner(p: &mut Parser, follow: i64 = 0) -> () w
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_126(decline_kind)) {
+            if !(_kind_set_126(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     p.scan_gate.no_struct = p.no_struct;
@@ -25951,7 +25951,7 @@ fn _parse_generic_args_types__inner(p: &mut Parser, follow: i64 = 0) -> () with 
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_126(decline_kind)) {
+            if !(_kind_set_126(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     p.scan_gate.no_struct = p.no_struct;
@@ -26008,7 +26008,7 @@ fn _parse_generic_args_bindings__inner(p: &mut Parser, follow: i64 = 0) -> () wi
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_126(decline_kind)) {
+            if !(_kind_set_126(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     p.scan_gate.no_struct = p.no_struct;
@@ -26141,7 +26141,7 @@ fn _parse_qualified_path_in_type__inner(p: &mut Parser, follow: i64 = 0) -> () w
             }
             if rep_scan_pos >= 0 {
                 let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-                if !(_kind_set_113(decline_kind)) {
+                if !(_kind_set_113(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                     let mut decline_dead: bool = false;
                     decline_scan: {
                         p.scan_gate.no_struct = p.no_struct;
@@ -26204,7 +26204,7 @@ fn _parse_type_path__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_113(decline_kind)) {
+            if !(_kind_set_113(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     p.scan_gate.no_struct = p.no_struct;
@@ -26346,7 +26346,7 @@ fn _parse_type_path_inputs__inner(p: &mut Parser, follow: i64 = 0) -> () with Ru
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_31(decline_kind)) {
+            if !(_kind_set_31(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     p.scan_gate.no_struct = p.no_struct;
