@@ -300,6 +300,7 @@ pub struct GenContext {
     rule_follow_kinds: GaleMap<String, List<String>>,
     rule_follow_exact: bool,
     rules_before_eof_token: List<String>,
+    rule_input_end: GaleMap<String, List<String>>,
     /// Per rule id: whether its scan is memoized (`close_rule_rescans`).
     rescanned_rules: List<bool>,
     /// Per rule, the labeled rule calls whose capture an action reads. Their
@@ -428,6 +429,7 @@ impl GenContext {
             rule_follow_kinds: GaleMap::new(),
             rule_follow_exact: false,
             rules_before_eof_token: [],
+            rule_input_end: GaleMap::<String, List<String>>::new(),
             rescanned_rules: [],
             rule_captures: GaleMap::new(),
             alt_bindings: [],
@@ -869,6 +871,16 @@ impl GenContext {
     /// FOLLOW above seeds the start rule with one the grammar need not write.
     pub fn current_rule_precedes_eof_token(&self) -> bool {
         return self.rules_before_eof_token.contains_str(self.current_rule().name);
+    }
+
+    /// Records, per rule, the kinds `t` for which `rule t EOF` can occur.
+    pub fn set_rule_input_end(&mut self, kinds: GaleMap<String, List<String>>) {
+        self.rule_input_end = kinds;
+    }
+
+    /// The kinds `t` for which `rule t EOF` can occur, for the current rule.
+    pub fn current_rule_input_end(&self) -> List<String> {
+        return self.rule_input_end[self.current_rule().name];
     }
 
     /// Whether the FOLLOW fixed point converged exactly, so a per-rule set is

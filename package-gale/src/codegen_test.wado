@@ -3526,6 +3526,40 @@ WS : ' ' -> skip ;
     assert got == "x;x => (list x ; x)\nx; => (list x ;)\n{x;x} => (s { (list x ; x) })\n{x;;x} => (s { (list x ; ; x) })\n", got;
 }
 
+test "a greedy loop leaves its last token to a caller that ends the input with it" {
+    // The twin of the test above: here `list ;` ends the input, so the jar
+    // exits the loop whether the parse entered `list` directly or called it
+    // with no continuation (`s`) or with one (`t`).
+    let got = parses_each("grammar T;
+s : (list) ';' EOF ;
+t : list ';' EOF ;
+list : X (';' X?)* ;
+X : 'x' ;
+WS : ' ' -> skip ;
+", [
+        ["s", "x;"],
+        ["t", "x;"],
+        ["list", "x;"],
+        ["s", "x;x;"],
+    ]);
+    assert got == "x; => (s (list x) ;)\nx; => (t (list x) ;)\nx; => (list x)\nx;x; => (s (list x ; x) ;)\n", got;
+}
+
+test "a single-token optional EOF does not outrank an earlier alternative" {
+    // The optional's step is the guard's, so it must leave EOF to `prog` as
+    // every other scanned EOF does.
+    let got = parses("grammar V;
+prog : stmt EOF ;
+stmt : decl | exprStmt ;
+decl : X Y ;
+exprStmt : X Y EOF? ;
+X : 'x' ;
+Y : 'y' ;
+WS : ' ' -> skip ;
+", "prog", ["x y"]);
+    assert got == "x y => (prog (stmt (decl x y)))\n", got;
+}
+
 test "an alternative that also matches EOF does not outrank an earlier one covering the same input" {
     // JavaScript's `statement` shape: a declaration is also an expression
     // statement, whose `eos` takes EOF. Both cover the whole input, so the jar

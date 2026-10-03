@@ -14,7 +14,7 @@
 
 use { ParserRule, Element } from "./ir.wado";
 use { GenContext } from "./gen_context.wado";
-use { bits_ids, bits_set, bits_union_into } from "./token_kinds.wado";
+use { bits_ids, bits_of, bits_set, bits_union_into } from "./token_kinds.wado";
 use { GaleMap, GaleSet } from "./gale_map.wado";
 
 /// FOLLOW set for a parser rule, in the classical ANTLR4 sense:
@@ -311,6 +311,233 @@ fn accumulate_first_bits(ctx: &mut GenContext, elem: &Element, bits: &mut List<u
     for let id of &ids {
         bits_set(bits, *id);
     }
+}
+
+/// For each rule `R`, the token kinds `t` for which `R t EOF` can occur: one
+/// token after the rule, then the end of the input. `follow` is the seeded
+/// FOLLOW, which says where a rule's end can be the input's.
+///
+/// An `EOF` a nested element itself matches after its one token is not
+/// counted, so the set can only miss a kind, never hold a wrong one.
+pub fn rule_input_end(
+    parser_rules: &List<ParserRule>,
+    ctx: &mut GenContext,
+    follow: &FollowEnv,
+) -> GaleMap<String, List<String>> {
+    let eof = ctx.eof_kind_id();
+    let one = single_token_kinds(parser_rules, ctx, eof);
+    let mut sites: List<EndSite> = [];
+    for let mut ri = 0; ri < parser_rules.len(); ri += 1 {
+        let rule = &parser_rules[ri];
+        let outer = EndAfter {
+            eof_next: follow.rule_follow(&rule.name).kinds.contains("TK_EOF"),
+            end1: [],
+            inherits: true,
+        };
+        for let alt of &rule.alternatives {
+            walk_end_sites(&alt.elements, &outer, ri, ctx, &one, eof, &mut sites);
+        }
+    }
+    let mut end: List<List<u64>> = [];
+    for let _ of parser_rules {
+        end.push([]);
+    }
+    for let site of &sites {
+        let _ = bits_union_into(&mut end[site.callee], &site.end1);
+    }
+    loop {
+        let mut changed = false;
+        for let site of &sites {
+            if site.inherits {
+                let caller_end = end[site.caller];
+                changed = bits_union_into(&mut end[site.callee], &caller_end) || changed;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    let mut result = GaleMap::<String, List<String>>::new();
+    for let mut ri = 0; ri < parser_rules.len(); ri += 1 {
+        let mut kinds: List<String> = [];
+        for let id of &bits_ids(&end[ri]) {
+            kinds.push(ctx.token_name(*id));
+        }
+        result[parser_rules[ri].name] = kinds;
+    }
+    return result;
+}
+
+/// What can come after a position, as `rule_input_end` needs it.
+struct EndAfter {
+    /// EOF can be the next token.
+    eof_next: bool,
+    /// Kinds `t` for which `t EOF` can come next, short of the rule's end.
+    end1: List<u64>,
+    /// The rule's end can come next, so the caller's `end1` applies too.
+    inherits: bool,
+}
+
+/// One `RuleRef` call site's contribution to its callee's `rule_input_end`.
+struct EndSite {
+    caller: i32,
+    callee: i32,
+    end1: List<u64>,
+    inherits: bool,
+}
+
+fn walk_end_sites(
+    elements: &List<Element>,
+    outer: &EndAfter,
+    caller: i32,
+    ctx: &mut GenContext,
+    one: &List<List<u64>>,
+    eof: i32,
+    sites: &mut List<EndSite>,
+) {
+    let mut after = *outer;
+    for let mut i = elements.len() - 1; i >= 0; i -= 1 {
+        walk_end_element(&elements[i], &after, caller, ctx, one, eof, sites);
+        after = end_after_element(&elements[i], &after, ctx, one, eof);
+    }
+}
+
+fn walk_end_element(
+    elem: &Element,
+    after: &EndAfter,
+    caller: i32,
+    ctx: &mut GenContext,
+    one: &List<List<u64>>,
+    eof: i32,
+    sites: &mut List<EndSite>,
+) {
+    match elem {
+        RuleRef(r) => {
+            let callee = ctx.rule_index_of(&r.name);
+            if callee >= 0 {
+                sites.push(EndSite { caller, callee, end1: after.end1, inherits: after.inherits });
+            }
+        },
+        Group(g) => {
+            for let alt of &g.alternatives {
+                walk_end_sites(&alt.elements, after, caller, ctx, one, eof, sites);
+            }
+        },
+        Repeat(rep) => {
+            if rep.kind matches { Optional } {
+                walk_end_element(&rep.element, after, caller, ctx, one, eof, sites);
+                return;
+            }
+            // Another iteration can follow one, and a single-token iteration
+            // can be the last token.
+            let mut first: List<String> = [];
+            let mut again = EndAfter {
+                eof_next: after.eof_next || ctx.first_ids_of_element(&rep.element, &mut first).contains(&eof),
+                end1: after.end1,
+                inherits: after.inherits,
+            };
+            if after.eof_next {
+                let _ = bits_union_into(&mut again.end1, &element_single_kinds(&rep.element, ctx, one, eof));
+            }
+            walk_end_element(&rep.element, &again, caller, ctx, one, eof, sites);
+        },
+        Label(lab) => walk_end_element(&lab.element, after, caller, ctx, one, eof, sites),
+        TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => {
+        },
+    }
+}
+
+/// What can come after the position before `elem`, given `after` follows it.
+fn end_after_element(
+    elem: &Element,
+    after: &EndAfter,
+    ctx: &mut GenContext,
+    one: &List<List<u64>>,
+    eof: i32,
+) -> EndAfter {
+    let mut nv: List<String> = [];
+    let nullable = ctx.element_is_nullable_deep(elem, &mut nv);
+    let mut fv: List<String> = [];
+    let mut end1: List<u64> = if nullable { after.end1 } else { [] };
+    if after.eof_next {
+        let _ = bits_union_into(&mut end1, &element_single_kinds(elem, ctx, one, eof));
+    }
+    return EndAfter {
+        eof_next: ctx.first_ids_of_element(elem, &mut fv).contains(&eof) || nullable && after.eof_next,
+        end1,
+        inherits: nullable && after.inherits,
+    };
+}
+
+/// Per rule, the kinds of the strings exactly one token long it derives.
+fn single_token_kinds(parser_rules: &List<ParserRule>, ctx: &mut GenContext, eof: i32) -> List<List<u64>> {
+    let mut one: List<List<u64>> = [];
+    for let _ of parser_rules {
+        one.push([]);
+    }
+    loop {
+        let mut changed = false;
+        for let mut ri = 0; ri < parser_rules.len(); ri += 1 {
+            let mut bits: List<u64> = [];
+            for let alt of &parser_rules[ri].alternatives {
+                let _ = bits_union_into(&mut bits, &sequence_single_kinds(&alt.elements, ctx, &one, eof));
+            }
+            changed = bits_union_into(&mut one[ri], &bits) || changed;
+        }
+        if !changed {
+            return one;
+        }
+    }
+}
+
+fn sequence_single_kinds(elements: &List<Element>, ctx: &mut GenContext, one: &List<List<u64>>, eof: i32) -> List<u64> {
+    let mut nullable: List<bool> = [];
+    for let e of elements {
+        let mut nv: List<String> = [];
+        nullable.push(ctx.element_is_nullable_deep(e, &mut nv));
+    }
+    let mut bits: List<u64> = [];
+    for let mut i = 0; i < elements.len(); i += 1 {
+        let mut others_vanish = true;
+        for let mut j = 0; j < elements.len(); j += 1 {
+            if j != i && !nullable[j] {
+                others_vanish = false;
+                break;
+            }
+        }
+        if others_vanish {
+            let _ = bits_union_into(&mut bits, &element_single_kinds(&elements[i], ctx, one, eof));
+        }
+    }
+    return bits;
+}
+
+fn element_single_kinds(elem: &Element, ctx: &mut GenContext, one: &List<List<u64>>, eof: i32) -> List<u64> {
+    return match elem {
+        TokenRef(_) | Literal(_) => {
+            let mut fv: List<String> = [];
+            let ids = ctx.first_ids_of_element(elem, &mut fv);
+            bits_of(&ids.into_iter().filter(|id| id != eof).collect());
+        },
+        RuleRef(r) => {
+            let idx = ctx.rule_index_of(&r.name);
+            if idx >= 0 {
+                one[idx];
+            } else {
+                [];
+            }
+        },
+        Group(g) => {
+            let mut bits: List<u64> = [];
+            for let alt of &g.alternatives {
+                let _ = bits_union_into(&mut bits, &sequence_single_kinds(&alt.elements, ctx, one, eof));
+            }
+            bits;
+        },
+        Repeat(rep) => element_single_kinds(&rep.element, ctx, one, eof),
+        Label(lab) => element_single_kinds(&lab.element, ctx, one, eof),
+        Wildcard(_) | Not(_) => [],
+    };
 }
 
 /// Materialise a bitset into the public `FollowSet` (a `GaleSet<String>`).

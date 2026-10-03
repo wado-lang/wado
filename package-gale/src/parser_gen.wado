@@ -2231,7 +2231,14 @@ fn gen_scan_iteration(w: &mut CodeWriter, re: &ScanRepeatElement, admits: &Admit
     // what let `A* A`'s scan eat both tokens and score -1 for input the parse
     // accepts, and the next duty added would repeat it.
     if repeat_body_implied_by_guard(&re.body, admits) && re.duties.is_empty() {
-        w.line("pos += 1;");
+        let advance = scan_advance(&admits_kinds(admits), ctx);
+        if looping && advance != "pos += 1;" {
+            // A step that stays on EOF would come round to it forever.
+            w.line("if tokens[pos] == TK_EOF { break; }");
+            w.line("pos += 1;");
+        } else if !advance.is_empty() {
+            w.line(advance);
+        }
         return;
     }
     gen_scan_mark(w, ctx, "sp");
@@ -2274,7 +2281,13 @@ fn gen_scan_decline_stranded(
     }
     let gc = ctx.next_scan_group();
     gen_kind_read(w, `dk_${gc}`, "tokens", "pos");
-    let can_continue = decline_continue_check(loop_first, duties, `dk_${gc}`, ctx);
+    let can_continue = `${decline_continue_check(loop_first, duties, `dk_${gc}`, ctx)} || ${decline_ends_input_check(
+        `dk_${gc}`,
+        "tokens",
+        "sp",
+        "pos",
+        ctx,
+    )}`;
     w.begin(`if !(${can_continue})`);
     gen_scan_mark(w, ctx, `dc_${gc}`);
     w.line(`let mut dc_${gc}_exit = false;`);
@@ -6911,13 +6924,13 @@ fn gen_rep_decline_stranded<S: AsStrSlice>(
     let dead_end = dedup_name("decline_dead", nc);
     w.begin(`if ${scan_pos} >= 0`);
     gen_kind_read(w, &cont_kind, "p.kinds", scan_pos);
-    let mut can_continue = decline_continue_check(body_admits, duties, &cont_kind, ctx);
-    // Every rule is a `parse_<rule>` entry, which the end of the input ends,
-    // though its FOLLOW holds EOF only for a rule no other rule calls. An empty
-    // mask is the one sign of an entry a rule can read.
-    if ctx.current_rule_reads_follow() {
-        can_continue = `${can_continue} || ${FOLLOW_PARAM} == 0 && ${cont_kind} == TK_EOF`;
-    }
+    let can_continue = `${decline_continue_check(body_admits, duties, &cont_kind, ctx)} || ${decline_ends_input_check(
+        &cont_kind,
+        "p.kinds",
+        "p.pos",
+        scan_pos,
+        ctx,
+    )}`;
     w.begin(`if !(${can_continue})`);
     w.line(`let mut ${dead_end}: bool = false;`);
     gen_viability_probe(
@@ -7161,6 +7174,28 @@ fn gen_kind_read<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(w: &mut CodeWrit
 /// The kind at `at` as an expression, EOF past the end.
 fn kind_at<S: AsStrSlice, S1: AsStrSlice>(stream: S, at: S1) -> String {
     return `if ${at} < ${stream}.len() { ${stream}[${at}] } else { TK_EOF }`;
+}
+
+/// Whether an iteration from `start` to `end` that ends the input is kept with
+/// no continuation from the caller to ask. Exiting instead is viable only where
+/// the iteration's tokens can follow the rule and end the input, as `;` can
+/// after `list` in `s : list ';' EOF`; the jar keeps every other such iteration.
+/// The grammar decides that statically for a single token
+/// (`current_rule_input_end`), and a longer iteration is kept.
+fn decline_ends_input_check<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3: AsStrSlice>(
+    end_kind: S,
+    stream: S1,
+    start: S2,
+    end: S3,
+    ctx: &mut GenContext,
+) -> String {
+    let unknown = if ctx.current_rule_reads_follow() { `${FOLLOW_PARAM} == 0 && ` } else { "" };
+    let ends_input = `${unknown}${end_kind} == TK_EOF`;
+    let exit_kinds = ctx.current_rule_input_end();
+    if exit_kinds.is_empty() {
+        return ends_input;
+    }
+    return `${ends_input} && !(${end} == ${start} + 1 && ${ctx.kind_check_str(&exit_kinds, `${stream}[${start}]`)})`;
 }
 
 /// Whether the token after an iteration lets the walk go on without declining:

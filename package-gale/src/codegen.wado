@@ -15,7 +15,7 @@ use {
     find_lexer_rule,
     ActionLanguage,
 } from "./ir.wado";
-use { build as build_follow_env } from "./follow_env.wado";
+use { build as build_follow_env, rule_input_end } from "./follow_env.wado";
 use { TokenKinds, resolve_kind_ids } from "./token_kinds.wado";
 use {
     LitToken,
@@ -549,6 +549,8 @@ fn install_rule_follow(grammar: &Grammar, ctx: &mut GenContext) {
         follow_kinds[rule.name] = kinds;
     }
     ctx.set_rule_follow(follow_kinds, !grammar_has_open_first_element(&grammar.parser_rules));
+    let input_end = rule_input_end(&grammar.parser_rules, ctx, &fenv);
+    ctx.set_rule_input_end(input_end);
     // Unseeded, so EOF is in a rule's FOLLOW only where the grammar matches it.
     let written = build_follow_env(&grammar.parser_rules, ctx, "");
     let mut before_eof: List<String> = [];
