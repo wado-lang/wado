@@ -839,23 +839,43 @@ fn test_test_failing() {
 }
 
 #[test]
-fn test_test_resolved_todo_says_what_the_mark_meant() {
+fn test_test_unexpectedly_passed_todo_says_what_the_mark_meant() {
     wado()
-        .args(["test", "wado-cli/tests/fixtures/test_todo_resolved.wado"])
+        .args([
+            "test",
+            "wado-cli/tests/fixtures/test_todo_unexpected_pass.wado",
+        ])
         .assert()
         .failure()
         .stdout(predicate::str::contains(
             "marked #[TODO] (expected to fail until the feature works), but it passed: \
              remove #[TODO] so it runs as a regular test",
-        ));
+        ))
+        .stdout(predicate::str::contains("unexpectedly passed"))
+        .stdout(predicate::str::contains("resolved").not());
 }
 
 #[test]
-fn test_test_resolved_todo_in_a_todo_module_points_at_the_module() {
+fn test_test_unexpectedly_passed_todo_in_tap() {
     wado()
         .args([
             "test",
-            "wado-cli/tests/fixtures/test_todo_module_resolved.wado",
+            "--format",
+            "tap",
+            "wado-cli/tests/fixtures/test_todo_unexpected_pass.wado",
+        ])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("# TODO unexpectedly passed"))
+        .stdout(predicate::str::contains("resolved").not());
+}
+
+#[test]
+fn test_test_unexpectedly_passed_todo_in_a_todo_module_points_at_the_module() {
+    wado()
+        .args([
+            "test",
+            "wado-cli/tests/fixtures/test_todo_module_unexpected_pass.wado",
         ])
         .assert()
         .failure()

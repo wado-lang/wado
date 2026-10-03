@@ -1949,7 +1949,7 @@ pub(crate) fn format_three_axis_lines(
     if todo_total > 0 {
         let mut todo_line = format!("todo:    {} pending", totals.todo_pending);
         if totals.todo_resolved > 0 {
-            todo_line.push_str(&format!(", {} resolved", totals.todo_resolved));
+            todo_line.push_str(&format!(", {} unexpectedly passed", totals.todo_resolved));
         }
         lines.push(todo_line);
     }
@@ -2101,7 +2101,7 @@ pub(crate) fn display_test_results(
                 }
                 TestOutcome::TodoResolved => {
                     println!(
-                        "  \x1b[36m✓\x1b[0m {} \x1b[36m# TODO resolved\x1b[0m ({cost})",
+                        "  \x1b[36m✓\x1b[0m {} \x1b[36m# TODO unexpectedly passed\x1b[0m ({cost})",
                         result.display_name
                     );
                     if let Some(ref error) = result.error {
@@ -2152,12 +2152,12 @@ pub(crate) fn print_todo_section(todo_entries: &[TodoEntry], todo_resolved: u32)
     for entry in todo_entries {
         if entry.resolved {
             println!(
-                "  \x1b[36m✓ resolved\x1b[0m  {} — {}",
+                "  \x1b[36m✓ unexpectedly passed\x1b[0m  {} — {}",
                 entry.file_path, entry.display_name
             );
         } else {
             println!(
-                "  \x1b[33m· pending\x1b[0m   {} — {}",
+                "  \x1b[33m· pending\x1b[0m              {} — {}",
                 entry.file_path, entry.display_name
             );
         }
