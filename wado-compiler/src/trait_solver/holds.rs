@@ -181,27 +181,16 @@ impl Query<'_> {
             .impls
             .iter()
             .find_map(|(&id, def)| {
-                // The bound's arguments are what the impl must answer at.
-                // Selection asks without this gate.
-                let implemented = def.trait_?;
-                if !program.bound_reaches(implemented, trait_) {
+                // Only an impl of `trait_` itself answers. One of a subtrait
+                // owes an impl of `trait_` beside it, and where that is missing
+                // the subtrait's impl is the error, not this answer.
+                if def.trait_ != Some(trait_) {
                     return None;
                 }
                 let answer = self.impl_answers(id, def, ty)?;
-                // The impl writes its arguments at the trait it names, so what
-                // the walk from there reaches at `trait_` is what the bound's
-                // arguments compare against.
-                let reached = program.args_reaching(
-                    &ParamBound {
-                        trait_: implemented,
-                        args: answer.trait_args.clone(),
-                    },
-                    trait_,
-                );
-                if !reached
-                    .iter()
-                    .any(|written| answers_args(program, def, ty, subject, written, args))
-                {
+                // The bound's arguments are what the impl must answer at.
+                // Selection asks without this gate.
+                if !answers_args(program, def, ty, subject, &answer.trait_args, args) {
                     return None;
                 }
                 Some(answer.holds)
@@ -595,18 +584,15 @@ mod tests {
         assert_eq!(holds(&p, &Env::default(), &decl(I32), ALPHA, HERE), None);
     }
 
-    /// A bound naming a subtrait answers for its supertraits: implementing
-    /// `Sub` is implementing `Base`.
+    /// An impl of `Sub` owes one of `Base` beside it, and does not stand in
+    /// for it: where that is missing, the `Sub` impl is the error.
     #[test]
-    fn an_impl_of_a_subtrait_answers_its_supertrait() {
+    fn an_impl_of_a_subtrait_does_not_answer_its_supertrait() {
         let p = Builder::default()
             .supertrait(SUB, BASE)
             .concrete(SUB, decl(POINT))
             .build();
-        assert_eq!(
-            holds(&p, &Env::default(), &decl(POINT), BASE, HERE),
-            Some(Holds::default())
-        );
+        assert_eq!(holds(&p, &Env::default(), &decl(POINT), BASE, HERE), None);
     }
 
     /// A generic body's parameter holds by its own signature, not by any impl.
@@ -1276,29 +1262,6 @@ mod tests {
         assert_eq!(
             holds(&p, &Env::default(), &decl(CM), PRODUCT, HERE),
             Some(Holds::default())
-        );
-    }
-
-    /// A derived `impl Sub for Point` answering `Point: Base` owes the `Sub`
-    /// body, so the request names the impl's trait rather than the bound's.
-    #[test]
-    fn a_request_names_the_answering_impl_s_trait() {
-        let p = Builder::default()
-            .supertrait(SUB, BASE)
-            .impl_(ImplDef {
-                origin: ImplOrigin::Derived,
-                ..concrete(SUB, decl(POINT))
-            })
-            .build();
-        assert_eq!(
-            holds(&p, &Env::default(), &decl(POINT), BASE, HERE),
-            Some(Holds {
-                requests: vec![DerivationRequest {
-                    ty: decl(POINT),
-                    trait_: SUB,
-                }],
-                ..Holds::default()
-            })
         );
     }
 
