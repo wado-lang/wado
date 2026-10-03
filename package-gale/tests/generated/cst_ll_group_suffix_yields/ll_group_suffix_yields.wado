@@ -1620,7 +1620,7 @@ fn scan_path(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
         let dk_4 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !(_kind_set_1(dk_4) || follow == 0 && dk_4 == TK_EOF) {
+        if !(_kind_set_1(dk_4) || follow == 0 && dk_4 == TK_EOF && !(pos == sp + 2 && tokens[sp] == TK_SEP && tokens[sp + 1] == TK_STAR || pos == sp + 4 && tokens[sp] == TK_SEP && tokens[sp + 1] == TK_LBRACE && tokens[sp + 2] == TK_ID && tokens[sp + 3] == TK_RBRACE)) {
             let dc_4 = pos;
             let mut dc_4_exit = false;
             pos = sp;
@@ -1780,7 +1780,7 @@ fn _parse_path__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_1(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
+            if !(_kind_set_1(decline_kind) || follow == 0 && decline_kind == TK_EOF && !(rep_scan_pos == p.pos + 2 && p.kinds[p.pos] == TK_SEP && p.kinds[p.pos + 1] == TK_STAR || rep_scan_pos == p.pos + 4 && p.kinds[p.pos] == TK_SEP && p.kinds[p.pos + 1] == TK_LBRACE && p.kinds[p.pos + 2] == TK_ID && p.kinds[p.pos + 3] == TK_RBRACE)) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     let tokens = &p.kinds;

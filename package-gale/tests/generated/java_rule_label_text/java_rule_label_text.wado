@@ -1726,7 +1726,7 @@ fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> AVals {
                 }
                 if rep_scan_pos >= 0 {
                     let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-                    if !(_kind_set_1(decline_kind) || follow == 0 && decline_kind == TK_EOF && !(rep_scan_pos == p.pos + 1 && p.kinds[p.pos] == TK_LIT_y)) {
+                    if !(_kind_set_1(decline_kind) || follow == 0 && decline_kind == TK_EOF && !(rep_scan_pos == p.pos + 1 && p.kinds[p.pos] == TK_LIT_y || rep_scan_pos == p.pos + 2 && p.kinds[p.pos] == TK_LIT_y && p.kinds[p.pos + 1] == TK_LIT_y || rep_scan_pos == p.pos + 3 && _kind_set_2(p.kinds[p.pos]) && _kind_set_3(p.kinds[p.pos + 1]) && _kind_set_4(p.kinds[p.pos + 2]) || rep_scan_pos == p.pos + 4 && _kind_set_0(p.kinds[p.pos]) && _kind_set_5(p.kinds[p.pos + 1]) && _kind_set_6(p.kinds[p.pos + 2]) && _kind_set_4(p.kinds[p.pos + 3]))) {
                         let mut decline_dead: bool = false;
                         decline_scan: {
                             let tokens = &p.kinds;
@@ -1849,6 +1849,26 @@ fn _kind_set_0(k: i32) -> bool {
 
 fn _kind_set_1(k: i32) -> bool {
     return k matches { TK_EOF | TK_LIT_g | TK_LIT_x | TK_LIT_y };
+}
+
+fn _kind_set_2(k: i32) -> bool {
+    return k matches { TK_LIT_g | TK_LIT_y };
+}
+
+fn _kind_set_3(k: i32) -> bool {
+    return k matches { TK_LIT_x | TK_LIT_y };
+}
+
+fn _kind_set_4(k: i32) -> bool {
+    return k matches { TK_LIT_y | TK_LIT_z };
+}
+
+fn _kind_set_5(k: i32) -> bool {
+    return k matches { TK_LIT_g | TK_LIT_x | TK_LIT_y | TK_LIT_z };
+}
+
+fn _kind_set_6(k: i32) -> bool {
+    return k matches { TK_LIT_x | TK_LIT_y | TK_LIT_z };
 }
 
 global EMPTY_SYNC: List<i32> = [];

@@ -1793,7 +1793,7 @@ fn _parse_order_by__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_0(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
+            if !(_kind_set_0(decline_kind) || follow == 0 && decline_kind == TK_EOF && !(rep_scan_pos == p.pos + 3 && p.kinds[p.pos] == TK_LIT_COMMA && p.kinds[p.pos + 1] == TK_KEY && p.kinds[p.pos + 2] == TK_DIRECTION)) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     let tokens = &p.kinds;
@@ -1830,7 +1830,7 @@ fn scan_order_by__alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
         let dk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !(_kind_set_0(dk_2) || follow == 0 && dk_2 == TK_EOF) {
+        if !(_kind_set_0(dk_2) || follow == 0 && dk_2 == TK_EOF && !(pos == sp + 3 && tokens[sp] == TK_LIT_COMMA && tokens[sp + 1] == TK_KEY && tokens[sp + 2] == TK_DIRECTION)) {
             let dc_2 = pos;
             let mut dc_2_exit = false;
             pos = sp;
