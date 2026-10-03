@@ -1665,10 +1665,13 @@ impl TypeSystem {
     /// The link of `type_id`'s newtype chain, itself included, that leaves it
     /// no `Ord`: the one its `Eq` comes from, where that link writes `eq`
     /// alone. No member derives an `Ord` then, and no base lends one
-    /// (spec-traits.md §Derivation Policy).
+    /// (spec-traits.md §Derivation Policy). A primitive's `Ord` is the
+    /// compiler's, so one writing `eq` (`v128`) still has it.
     pub(super) fn ord_withheld_by(&self, type_id: TypeId) -> Option<TypeId> {
         let link = self.impl_link(type_id, self.compiler_trait_def(CompilerItem::Eq)?)?;
-        (self.comparison_written_alone(link) == Some(OnBoundTrait::Eq)).then_some(link)
+        let is_primitive = matches!(self.type_table.borrow().get(link), ResolvedType::Primitive(_));
+        (!is_primitive && self.comparison_written_alone(link) == Some(OnBoundTrait::Eq))
+            .then_some(link)
     }
 
     /// Whether a bound writing `wanted` selects the header — see
