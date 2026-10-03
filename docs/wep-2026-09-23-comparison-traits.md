@@ -108,6 +108,11 @@ The first three rows cannot disagree. An order cannot be built from an equality,
 so the third row asks for `cmp` rather than deriving one that ignores the
 written `eq`.
 
+The second row's `==` holds where the written `cmp` does, under its bounds. A
+generic declaration derives one body for every instance (WEP 2026-06-25), so a
+`cmp` written for only some instances (`impl Ord for Ranked<i32>`) decides
+nothing, and `==` derives from the members.
+
 The last row exists for speed. `==` on a `String` or a `List` stops at a length
 mismatch, where `cmp` must walk the common prefix. C++20 kept the two apart for
 the same reason: a written `<=>` does not generate `==` (P1185, "`<=>` != `==`").
@@ -249,7 +254,9 @@ from another language, where it is now always false. The
 [`self_comparison` lint](./spec-expressions.md#the-self_comparison-lint) warns
 about all six operators, and on a float names `is_nan()`. It reports only an
 expression that performs no effect, since one that does may answer differently
-the second time. GCC's `-Wtautological-compare` and Clippy's `eq_op` warn on the
+the second time. For the same reason it skips one that writes: an assignment, a
+`&mut` borrow, a `&mut self` method such as an iterator's `next`, or a call of a
+closure, which may capture by `&mut`. GCC's `-Wtautological-compare` and Clippy's `eq_op` warn on the
 same shape.
 
 ### What follows
@@ -337,7 +344,7 @@ overlap, which is what `benchmark/ab.ts` decides.
   `half_ieee_compare.wado`, now `half_float_order.wado`) to pin these.
 - [x] Measure the cost on comparison-heavy code and sorting, and record it in
   [Cost](#cost).
-- [ ] Derive `Eq` from a written `cmp`, and reject a use of `Ord` on a type
+- [x] Derive `Eq` from a written `cmp`, and reject a use of `Ord` on a type
   whose `Eq` is written and whose `cmp` is not, a marker included. Each with a
   fixture.
 - [x] Make `f32::min`, `f64::min` and their `max` follow the order, add
@@ -349,7 +356,7 @@ overlap, which is what `benchmark/ab.ts` decides.
 - [x] Add the six `ieee754_*` comparison methods to `f16`, `bf16`, `f32` and
   `f64`, each lowering to one Wasm instruction, with a fixture holding each
   method's answers on a NaN, `-0.0` and an ordinary pair.
-- [ ] Report the `self_comparison` lint, with a fixture for each operator, the
+- [x] Report the `self_comparison` lint, with a fixture for each operator, the
   float hint, a chain, an operand that performs an effect, and `allow`.
 - [ ] Accept float range patterns, with fixtures for `-0.0`, a NaN scrutinee, a
   NaN bound, equal bounds, and a `match` that lacks `_`.
@@ -358,6 +365,9 @@ overlap, which is what `benchmark/ab.ts` decides.
   one.
 
 ## Known gaps
+
+A `cmp` written for only some instances of a generic head leaves `==` derived
+from the members there, so at those instances the two can disagree.
 
 The NaN test goes only where an operand is a constant. Nothing yet proves that a
 computed operand is not a NaN, so `a < b` between two variables pays the test

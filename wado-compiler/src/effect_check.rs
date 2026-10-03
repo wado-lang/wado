@@ -1942,6 +1942,41 @@ pub fn check_purity_semantic(sem: &Semantics) -> Vec<PurityError> {
     out
 }
 
+/// Answers whether an expression performs an effect, for a lint that reports
+/// only an expression that does not.
+pub(crate) struct EffectProbe<'a> {
+    sem: &'a Semantics,
+    state: &'a AnnotateState,
+    data: OwnedEffectData,
+}
+
+impl<'a> EffectProbe<'a> {
+    /// `None` where the elaborator left no state to answer from.
+    pub(crate) fn new(sem: &'a Semantics) -> Option<Self> {
+        let state = sem.state.as_ref()?;
+        let data = OwnedEffectData::build(sem, state, IndexSet::default());
+        Some(Self { sem, state, data })
+    }
+
+    /// Whether evaluating `expr`, written in `module`, performs an effect.
+    pub(crate) fn performs_effect(&self, module: &ModuleSource, expr: &Expr) -> bool {
+        let index = self.data.index();
+        let mut out = Vec::new();
+        let mut walker = PurityWalker {
+            sem: self.sem,
+            annotations: self.state.module_semantics.get(module).map(|m| &m.types),
+            index: &index,
+            module_source: module,
+            context: PureContext::DefaultValue,
+            granted: IndexSet::default(),
+            param_types: IndexMap::default(),
+            out: &mut out,
+        };
+        walker.visit_expr(expr);
+        !out.is_empty()
+    }
+}
+
 /// Walk every expression that must be pure, appending violations.
 /// Shared by [`check_purity_semantic`] and [`check_semantics`].
 fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityError>) {

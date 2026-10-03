@@ -1,0 +1,83 @@
+// A comparison of an expression with itself has one answer on every type, so
+// it warns: each operator, each adjacent pair of a chain, and on a float with
+// the NaN test named. An operand that may answer differently the second time,
+// and a waived item, do not.
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Counter {
+    n: i32,
+}
+
+impl Counter {
+    fn bump(&mut self) -> i32 {
+        self.n += 1;
+        return self.n;
+    }
+}
+
+fn norm(p: &Point) -> i32 {
+    return p.x * p.x + p.y * p.y;
+}
+
+fn tick() -> i32 with Stdout {
+    println("tick");
+    return 1;
+}
+
+#[allow(self_comparison)]
+fn waived(w: i32) -> bool {
+    return w == w;
+}
+
+export fn run() with Stdout {
+    let a = builtin::black_box(3);
+    let s: String = "s";
+    let p = Point { x: 1, y: 2 };
+    let x = builtin::black_box(1.5);
+    let h: f16 = 0.5;
+    assert a == a;                       // warns: always true
+    assert !(s != s);                    // warns: always false
+    assert !(p.x < p.x);                 // warns
+    assert a <= a;                       // warns
+    assert !(a > a);                     // warns
+    assert a >= a;                       // warns
+    assert !(x != x);                    // warns, naming is_nan()
+    assert h == h;                       // warns, naming is_nan()
+    let b = builtin::black_box(4);
+    assert 0 <= b <= b;                  // warns on `b <= b` alone
+    assert norm(&p) == norm(&p);         // warns: the call performs no effect
+    assert tick() == tick();             // no warning: the call prints
+    let mut c = Counter { n: 0 };
+    assert c.bump() != c.bump();         // no warning: `bump` takes `&mut self`
+    let mut n = 0;
+    let mut next = || {
+        n += 1;
+        return n;
+    };
+    assert next() != next();             // no warning: a closure may write
+    assert waived(a);
+}
+
+__DATA__
+{
+  "stdout": "tick\ntick\n",
+  "warnings_contains": [
+    "`a == a` compares a value with itself, so it is always true; `#[allow(self_comparison)]` waives this",
+    "`s != s` compares a value with itself, so it is always false;",
+    "`p.x < p.x` compares a value with itself, so it is always false;",
+    "`a <= a` compares a value with itself, so it is always true;",
+    "`a > a` compares a value with itself, so it is always false;",
+    "`a >= a` compares a value with itself, so it is always true;",
+    "`x != x` compares a value with itself, so it is always false; test a NaN with `is_nan()`;",
+    "`h == h` compares a value with itself, so it is always true; test a NaN with `is_nan()`;",
+    "`b <= b` compares a value with itself, so it is always true;",
+    "`norm(&p) == norm(&p)` compares a value with itself"
+  ],
+  "warnings_not_contains": ["`0 <= b`", "tick()", "bump()", "next()", "w == w", "`a == a` compares a value with itself, so it is always true; test a NaN"]
+}
