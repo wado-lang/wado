@@ -621,31 +621,26 @@ struct Carrier {
 fn symbol_carriers(graph: &Graph, shapes: &TreeMap<String, Shape>) -> List<Carrier> {
     let mut carriers: List<Carrier> = [];
     let mut carried = TreeSet::<String>::new();
-    for let vi of &graph.inputs {
-        for let [axis, a] of shapes.get(vi.name).unwrap().axes.into_iter().enumerate() {
-            if let Some(symbol) = input_symbol(&a.extent) && carried.insert(symbol) {
-                carriers.push(Carrier { symbol, input: vi.name, axis, coefficient: 1, rest: Poly::constant(0) });
-            }
-        }
-    }
-    let mut found = true;
-    while found {
-        found = false;
-        for let vi of &graph.inputs {
-            for let [axis, a] of shapes.get(vi.name).unwrap().axes.into_iter().enumerate() {
-                let Symbolic(p) = a.extent else {
-                    continue;
-                };
-                let open: List<String> = p.symbols().into_iter().filter(|s| !carried.contains(s)).collect();
-                if open.len() != 1 {
-                    continue;
+    for let alone of [true, false] {
+        let mut found = true;
+        while found {
+            found = false;
+            for let vi of &graph.inputs {
+                for let [axis, a] of shapes.get(vi.name).unwrap().axes.into_iter().enumerate() {
+                    let Symbolic(p) = a.extent else {
+                        continue;
+                    };
+                    let open: List<String> = p.symbols().into_iter().filter(|s| !carried.contains(s)).collect();
+                    if open.len() != 1 || alone && input_symbol(&a.extent) matches { None } {
+                        continue;
+                    }
+                    let Some([coefficient, rest]) = p.linear_in(&open[0]) else {
+                        continue;
+                    };
+                    carried.insert(open[0]);
+                    carriers.push(Carrier { symbol: open[0], input: vi.name, axis, coefficient, rest });
+                    found = true;
                 }
-                let Some([coefficient, rest]) = p.linear_in(&open[0]) else {
-                    continue;
-                };
-                carried.insert(open[0]);
-                carriers.push(Carrier { symbol: open[0], input: vi.name, axis, coefficient, rest });
-                found = true;
             }
         }
     }
@@ -860,7 +855,7 @@ fn branch_lines(
         already_reference: exprs.already_reference,
         scalars: scalar_literals(branch),
     };
-    for let [tensor, value] of exprs.values.entries() {
+    for let [tensor, _] of exprs.values.entries() {
         let [Some(from), Some(to)] = [
             around.shapes.get(*tensor),
             branch.shapes.get(*tensor),
