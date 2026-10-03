@@ -1692,3 +1692,68 @@ test "a branch that takes inputs is refused" {
     }`;
     assert y_axes(source, branch_layout()).unwrap_err() == "Y = If: then_branch declares inputs, and a branch reads only the scope around it";
 }
+
+test "a tensor defined twice in one scope is refused" {
+    let over_input = `g (float[N, 4] X) => (float[N, 4] X) {
+        X = Relu(X)
+    }`;
+    assert y_axes(over_input, branch_layout()).unwrap_err() == "X = Relu: X is already defined in its graph";
+    let twice = `g (float[N, 4] X) => (float[N, 4] Y) {
+        Y = Relu(X)
+        Y = Neg(X)
+    }`;
+    let mut layout = branch_layout();
+    layout.push(rule("Y", ["Seq", "Embed"]));
+    assert y_axes(twice, layout).unwrap_err() == "Y = Neg: Y is already defined in its graph";
+}
+
+test "two branches may name a tensor alike, and a branch may not redefine one around it" {
+    let alike = branching("float[N, 4]", "bool[1]", "T = Relu(X) A = Neg(T)", "T = Neg(Z) B = Relu(T)");
+    assert y_axes(alike, branch_layout()).unwrap() == "Seq=N,Embed=4";
+    let shadowing = branching("float[N, 4]", "bool[1]", "X = Relu(Z) A = Neg(X)", "B = Neg(Z)");
+    assert y_axes(shadowing, branch_layout()).unwrap_err() == "X = Relu: X is already defined in its graph";
+}
+
+test "a constant around the branches keeps the shape the layout around them gives it" {
+    let source = `g (bool[1] C, float[2] X, float[2] H) => (float[2] Y) {
+        K = Constant<value_floats = [1.0, 2.0]>()
+        V = If <then_branch = t () => (float[2] A) { A = Mul(H, K) }, else_branch = e () => (float[2] B) { B = Add(H, K) }> (C)
+        Y = Add(X, K)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("C", ["One"]),
+        rule("X", ["Embed"]),
+        rule("H", ["Hidden"]),
+        rule("V", ["Hidden"]),
+        LayoutRule {
+            pattern: "K",
+            axes: ["Hidden"],
+            graph: Option::Some("t"),
+        },
+        LayoutRule {
+            pattern: "K",
+            axes: ["Hidden"],
+            graph: Option::Some("e"),
+        },
+        rule("K", ["Embed"]),
+    ];
+    assert y_axes(source, layout).unwrap() == "Embed=2";
+}
+
+test "a spelled length over names no input binds alone is one symbol" {
+    let source = `g (float["batch * seq", 4] X) => (float["batch * seq", 4] Y) {
+        Y = Relu(X)
+    }`;
+    assert y_axes(source, [rule("X", ["Rows", "Embed"])]).unwrap() == "Rows=\"batch * seq\",Embed=4";
+}
+
+test "a spelled length over names the inputs bind stays arithmetic" {
+    let source = `g (float["n + 1", 4] X, float[n, 4] P) => (float["n + 1", 4] Y) {
+        Y = Relu(X)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq", "Embed"]),
+        rule("P", ["Past", "Embed"]),
+    ];
+    assert y_axes(source, layout).unwrap() == "Seq=n + 1,Embed=4";
+}

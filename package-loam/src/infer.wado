@@ -2,7 +2,7 @@
 //! then discharge each operator's extent conditions in order.
 
 use { TreeMap, TreeSet } from "core:collections";
-use { Extent } from "./extent.wado";
+use { Extent, solved } from "./extent.wado";
 use { Axis, AxisConflict, Shape } from "./shape.wado";
 use {
     SliceBounds,
@@ -335,6 +335,7 @@ fn checked_graph(graph: &Graph, scope: &mut Checked, schema: &Schema) -> Result<
             }
         }
     }
+    unspell_unbound(graph, &mut scope.shapes);
     for let node of &graph.nodes {
         checked_node(node, scope, schema, &local, graph.opset)?;
     }
@@ -358,6 +359,40 @@ fn checked_graph(graph: &Graph, scope: &mut Checked, schema: &Schema) -> Result<
     return Result::Ok(());
 }
 
+/// Each input axis whose `dim_param` spells arithmetic over a name no input
+/// binds (`solved`) read again as one symbol of its own, which the run reads
+/// from that axis. Each one read so binds itself, so this repeats until none is left.
+fn unspell_unbound(graph: &Graph, shapes: &mut TreeMap<String, Shape>) {
+    let mut changed = true;
+    while changed {
+        changed = false;
+        let mut extents: List<Extent> = [];
+        for let vi of &graph.inputs {
+            extents.extend(&shapes[vi.name].axes.into_iter().map(|a| a.extent).collect());
+        }
+        let bound: List<String> = solved(&extents).into_iter().map(|s| s.symbol).collect();
+        for let vi of &graph.inputs {
+            let Dims(dims) = vi.rank else {
+                continue;
+            };
+            for let [i, d] of dims.into_iter().enumerate() {
+                let Symbol(text) = d else {
+                    continue;
+                };
+                let axis = shapes[vi.name].axes[i];
+                let Symbolic(p) = axis.extent else {
+                    continue;
+                };
+                if p.symbols().into_iter().all(|s| bound.contains_str(s.as_str_slice())) {
+                    continue;
+                }
+                shapes[vi.name].axes[i] = Axis { ..axis, extent: Extent::symbol(&text) };
+                changed = true;
+            }
+        }
+    }
+}
+
 /// Check one node: `schema` is the whole schema, which a branch narrows to its
 /// own graph, and `local` the part that reaches this graph's tensors.
 fn checked_node(
@@ -374,6 +409,11 @@ fn checked_node(
             op: node.op,
             given: node.outputs.len(),
         }));
+    }
+    for let output of node.outputs {
+        if scope.shapes.contains_key(output) || scope.known.contains_key(output) {
+            return Result::Err(refusal(node, `${output} is already defined in its graph`));
+        }
     }
     operands_given(node, &scope.known, &scope.shapes)?;
     match fold(node, &scope.known, &scope.shapes) {
@@ -451,25 +491,24 @@ fn branched(node: &Node, scope: &mut Checked, schema: &Schema, local: &Schema) -
             scope.primitives[output] = p;
         }
     }
-    hoist_constants(scope, &then_scope, &else_scope);
-    hoist_constants(scope, &else_scope, &then_scope);
+    for let branch of [&then_scope, &else_scope] {
+        hoist_constants(scope, branch, local)?;
+    }
     scope.branches[node.outputs[0]] = [then_scope, else_scope];
     return Result::Ok(());
 }
 
-/// Give `scope` the shape `branch` read a constant of `scope` under, so the
-/// constant is spelled once around the branches rather than in each. One the
-/// other branch reads under other axes is left to each branch.
-fn hoist_constants(scope: &mut Checked, branch: &Checked, other: &Checked) {
-    for let [name, shape] of branch.shapes.entries() {
-        if !scope.known.contains_key(*name) || scope.shapes.contains_key(*name) {
-            continue;
+/// Give `scope` a shape, under its own layout, for each of its constants
+/// `branch` read, so the constant is spelled once around the branches and each
+/// branch relabels it to the axes it read it under. One the layout around the
+/// branches does not name is left to each branch.
+fn hoist_constants(scope: &mut Checked, branch: &Checked, local: &Schema) -> Result<(), InferError> {
+    for let [name, _] of branch.shapes.entries() {
+        if scope.known.contains_key(*name) && local.axes_for(name) matches { Some(_) } {
+            materialize(name, &scope.known, &mut scope.shapes, local)?;
         }
-        if let Some(theirs) = other.shapes.get(*name) && theirs != *shape {
-            continue;
-        }
-        scope.shapes[*name] = *shape;
     }
+    return Result::Ok(());
 }
 
 /// What a message calls a tensor's primitive, where it may have none.

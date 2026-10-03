@@ -1,7 +1,7 @@
 //! An axis's length as stage 0 knows it, and the one question stage 0 asks of
 //! two of them.
 
-use { TreeMap } from "core:collections";
+use { TreeMap, TreeSet } from "core:collections";
 use { Condition, Poly } from "./poly.wado";
 
 /// A length the graph states, one only the run knows, or none at all.
@@ -27,6 +27,18 @@ impl Extent {
             return e;
         }
         return Extent::symbol(text);
+    }
+
+    /// The symbol the length is, where it is one symbol and nothing more.
+    pub fn lone_symbol(&self) -> Option<String> {
+        let Symbolic(p) = *self else {
+            return null;
+        };
+        let read = p.symbols();
+        if read.len() != 1 || p != Poly::symbol(&read[0]) {
+            return null;
+        }
+        return Option::Some(read[0]);
     }
 
     /// `p` as an extent, or `None` where it is a constant no list can be long.
@@ -90,6 +102,45 @@ impl Extent {
     pub fn oneness(&self) -> Option<List<Condition>> {
         return self.agreement(&Extent::Static(1));
     }
+}
+
+/// A symbol the run reads back from the length at `at`, which is
+/// `coefficient * symbol + rest`, `rest` reading only symbols solved before.
+pub struct Solved {
+    pub symbol: String,
+    pub at: i32,
+    pub coefficient: i64,
+    pub rest: Poly,
+}
+
+/// The symbols the run can read back from `extents`, each from the first
+/// extent that is it alone, then each left from the first extent linear in it
+/// once those before it are solved, in the order the run solves them.
+pub fn solved(extents: &List<Extent>) -> List<Solved> {
+    let mut found: List<Solved> = [];
+    let mut known = TreeSet::<String>::new();
+    for let alone of [true, false] {
+        let mut more = true;
+        while more {
+            more = false;
+            for let [at, e] of extents.into_iter().enumerate() {
+                let Symbolic(p) = *e else {
+                    continue;
+                };
+                let open: List<String> = p.symbols().into_iter().filter(|s| !known.contains(s)).collect();
+                if open.len() != 1 || alone && e.lone_symbol() matches { None } {
+                    continue;
+                }
+                let Some([coefficient, rest]) = p.linear_in(&open[0]) else {
+                    continue;
+                };
+                known.insert(open[0]);
+                found.push(Solved { symbol: open[0], at, coefficient, rest });
+                more = true;
+            }
+        }
+    }
+    return found;
 }
 
 /// `text` as the polynomial it spells, where it splits at whitespace into names

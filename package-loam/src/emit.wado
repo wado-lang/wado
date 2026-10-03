@@ -3,7 +3,7 @@
 
 use { TreeMap, TreeSet } from "core:collections";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, is_reserved, wado } from "lib:wadopoet";
-use { Extent } from "./extent.wado";
+use { Extent, Solved, solved } from "./extent.wado";
 use { Poly } from "./poly.wado";
 use { Axis, Shape } from "./shape.wado";
 use {
@@ -224,7 +224,7 @@ impl Names {
         }
         names.take_scope(&mut taken, graph, checked, literals)?;
         for let c of carriers {
-            names.take(&mut taken, &symbol_key(&c.symbol))?;
+            names.take(&mut taken, &symbol_key(&c.solved.symbol))?;
         }
         return Result::Ok(names);
     }
@@ -510,19 +510,20 @@ impl Symbols {
             used: TreeSet::<String>::new(),
         };
         for let c of *carriers {
+            let Solved { symbol, coefficient, rest, .. } = c.solved;
             let extent = `${names.get(&c.input)}.extents[${c.axis}] as i64`;
-            let mut solved = if c.rest == Poly::constant(0) {
+            let mut solved = if rest == Poly::constant(0) {
                 extent;
             } else {
-                `(${extent} - (${c.rest.spelled(&symbols.idents)}))`;
+                `(${extent} - (${rest.spelled(&symbols.idents)}))`;
             };
-            if c.coefficient != 1 {
-                solved = `${solved} / ${c.coefficient}`;
+            if coefficient != 1 {
+                solved = `${solved} / ${coefficient}`;
             }
-            symbols.sources[c.symbol] = if solved == extent { extent } else { `to_extent(${solved}) as i64` };
-            symbols.idents[c.symbol] = names.get(&symbol_key(&c.symbol));
-            symbols.order.push(c.symbol);
-            symbols.requires[c.symbol] = c.rest.symbols();
+            symbols.sources[symbol] = if solved == extent { extent } else { `to_extent(${solved}) as i64` };
+            symbols.idents[symbol] = names.get(&symbol_key(&symbol));
+            symbols.order.push(symbol);
+            symbols.requires[symbol] = rest.symbols();
         }
         return symbols;
     }
@@ -593,58 +594,26 @@ fn symbol_key(symbol: &String) -> String {
     return `dim ${*symbol}`;
 }
 
-/// The symbol an input axis's extent is, where a `dim_param` or `?` makes it
-/// one, rather than a number or arithmetic over symbols.
-fn input_symbol(extent: &Extent) -> Option<String> {
-    let Symbolic(p) = *extent else {
-        return null;
-    };
-    let read = p.symbols();
-    if read.len() != 1 || p != Poly::symbol(&read[0]) {
-        return null;
-    }
-    return Option::Some(read[0]);
-}
-
-/// A symbol and the input axis `forward` reads it from: one whose length is
-/// `coefficient * symbol + rest`, where `rest` reads only symbols carried before.
+/// A symbol `forward` reads back from an input axis, as `solved` finds it.
 struct Carrier {
-    symbol: String,
+    solved: Solved,
     input: String,
     axis: i32,
-    coefficient: i64,
-    rest: Poly,
 }
 
-/// Each symbol from the first input axis that is that symbol alone, then each
-/// left from the first axis linear in it once those before it are bound.
 fn symbol_carriers(graph: &Graph, shapes: &TreeMap<String, Shape>) -> List<Carrier> {
-    let mut carriers: List<Carrier> = [];
-    let mut carried = TreeSet::<String>::new();
-    for let alone of [true, false] {
-        let mut found = true;
-        while found {
-            found = false;
-            for let vi of &graph.inputs {
-                for let [axis, a] of shapes.get(vi.name).unwrap().axes.into_iter().enumerate() {
-                    let Symbolic(p) = a.extent else {
-                        continue;
-                    };
-                    let open: List<String> = p.symbols().into_iter().filter(|s| !carried.contains(s)).collect();
-                    if open.len() != 1 || alone && input_symbol(&a.extent) matches { None } {
-                        continue;
-                    }
-                    let Some([coefficient, rest]) = p.linear_in(&open[0]) else {
-                        continue;
-                    };
-                    carried.insert(open[0]);
-                    carriers.push(Carrier { symbol: open[0], input: vi.name, axis, coefficient, rest });
-                    found = true;
-                }
-            }
+    let mut extents: List<Extent> = [];
+    let mut sites: List<[String, i32]> = [];
+    for let vi of &graph.inputs {
+        for let [axis, a] of shapes.get(vi.name).unwrap().axes.into_iter().enumerate() {
+            extents.push(a.extent);
+            sites.push([vi.name, axis]);
         }
     }
-    return carriers;
+    return solved(&extents).into_iter().map(|s| {
+        let [input, axis] = sites[s.at];
+        return Carrier { solved: s, input, axis };
+    }).collect();
 }
 
 impl Operands {
@@ -1041,7 +1010,7 @@ fn emit_input_checks(
                 continue;
             };
             stated.push(-1);
-            let Some(symbol) = input_symbol(&axis.extent) else {
+            let Some(symbol) = axis.extent.lone_symbol() else {
                 spelled.push(SpelledAxis { tensor: vi.name, axis: axis.name, extent, length });
                 continue;
             };
