@@ -3201,8 +3201,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             })
             .or_else(|| {
-                if self.only_derived_answers_at_self(rhs, lookup_type_id, trait_)
-                    && let Some((item, _)) = auto_derive
+                if let Some((item, _)) = auto_derive
+                    && self.only_derived_answers_at_self(rhs, lookup_type_id, trait_)
                     && let Some(derived) = self.tysys.compiler_trait(item)
                     && self.tysys.type_implements_trait(
                         &self.annotate_ctx,

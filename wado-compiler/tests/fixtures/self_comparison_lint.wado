@@ -29,6 +29,10 @@ fn norm(p: &Point) -> i32 {
     return p.x * p.x + p.y * p.y;
 }
 
+fn line_of(n: i32) -> i32 {
+    return n;
+}
+
 fn tick() -> i32 with Stdout {
     println("tick");
     return 1;
@@ -53,6 +57,10 @@ export fn run() with Stdout {
     assert a >= a;                       // warns
     assert !(x != x);                    // warns, naming is_nan()
     assert h == h;                       // warns, naming is_nan()
+    let rx = &x;
+    assert !(rx != rx);                  // warns, naming is_nan() through the `&`
+    assert line_of(#line)
+        != line_of(#line);               // no warning: each `#line` is its own line
     let b = builtin::black_box(4);
     assert 0 <= b <= b;                  // warns on `b <= b` alone
     assert norm(&p) == norm(&p);         // warns: the call performs no effect
@@ -82,8 +90,9 @@ __DATA__
     "`a >= a` compares a value with itself, so it is always true;",
     "`x != x` compares a value with itself, so it is always false; test a NaN with `is_nan()`;",
     "`h == h` compares a value with itself, so it is always true; test a NaN with `is_nan()`;",
+    "`rx != rx` compares a value with itself, so it is always false; test a NaN with `is_nan()`;",
     "`b <= b` compares a value with itself, so it is always true;",
     "`norm(&p) == norm(&p)` compares a value with itself"
   ],
-  "warnings_not_contains": ["`0 <= b`", "tick()", "bump()", "advance(r)", "next()", "w == w", "`a == a` compares a value with itself, so it is always true; test a NaN"]
+  "warnings_not_contains": ["`0 <= b`", "line_of(#line)", "tick()", "bump()", "advance(r)", "next()", "w == w", "`a == a` compares a value with itself, so it is always true; test a NaN"]
 }

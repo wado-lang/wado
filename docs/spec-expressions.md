@@ -749,7 +749,8 @@ no `&mut`, and calls only declared functions, and methods that do not take
 [`Eq`](./spec-standard-traits.md#eq---equality) and
 [`Ord`](./spec-standard-traits.md#ord---ordering) make both reflexive:
 `x == x`, `x <= x` and `x >= x` are true, and `x != x`, `x < x` and `x > x` are
-false. In a chain, each adjacent pair is one comparison.
+false. In a chain, each adjacent pair is one comparison. A `#line` is the line
+it is written on, so two on different lines are not the same expression.
 
 On a float the warning adds that a NaN is tested with `is_nan()`, since `x != x`
 is the NaN test other languages teach.

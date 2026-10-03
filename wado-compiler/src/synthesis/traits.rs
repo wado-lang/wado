@@ -3563,6 +3563,7 @@ struct WrittenCmp {
 /// Every written `cmp` in `project`, by the impl block declaring it.
 fn written_cmps(project: &Package) -> IndexMap<DefId, WrittenCmp> {
     let tt = shared_type_table(project).borrow();
+    let ord = tt.compiler_items().trait_def(CompilerItem::Ord);
     project
         .tir_modules
         .values()
@@ -3571,7 +3572,10 @@ fn written_cmps(project: &Package) -> IndexMap<DefId, WrittenCmp> {
             let func = func.borrow();
             let block = func.impl_origin?;
             let method = func.method_info.as_ref()?;
-            (method.trait_name.is_some() && method.method_name == "cmp").then(|| {
+            let of_ord = ord.is_some_and(|ord| {
+                method.trait_name.as_ref().and_then(FqTraitName::canonical) == Some(ord)
+            });
+            (of_ord && method.method_name == "cmp").then(|| {
                 let self_ref = func.params.first().expect("`cmp` takes `&self`").type_id;
                 (
                     block,

@@ -6,8 +6,8 @@ use std::cell::OnceCell;
 use std::mem;
 
 use crate::ast::{
-    AstVisitor, BinaryOp, Expr, Function, Item, SelfKind, UnaryOp, attrs_allow, inner_attrs_allow,
-    lint, walk_expr, walk_function, walk_item,
+    AstVisitor, BinaryOp, Expr, Function, Item, Literal, SelfKind, UnaryOp, attrs_allow,
+    inner_attrs_allow, lint, walk_expr, walk_function, walk_item,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::effect_check::EffectProbe;
@@ -95,13 +95,17 @@ impl SelfComparisons<'_> {
             return;
         }
         let operand = unparse_expr_source(left);
-        if operand != unparse_expr_source(right) || self.may_differ(left) {
+        // `#line` unparses alike wherever it is written, and is its own line.
+        if operand != unparse_expr_source(right)
+            || line_literals(left) != line_literals(right)
+            || self.may_differ(left)
+        {
             return;
         }
-        let is_float = self
-            .sem
-            .expression_type(left.id())
-            .is_some_and(|ty| self.sem.types.is_float(ty) || self.sem.types.is_half(ty));
+        let is_float = self.sem.expression_type(left.id()).is_some_and(|ty| {
+            let ty = self.sem.types.peel_refs(ty);
+            self.sem.types.is_float(ty) || self.sem.types.is_half(ty)
+        });
         self.found.push(SelfComparison {
             span: left.span().merge(&right.span()),
             operand,
@@ -156,6 +160,24 @@ impl AstVisitor for SelfComparisons<'_> {
         }
         walk_expr(self, expr);
     }
+}
+
+/// The line of each `#line` in `expr`, in source order.
+fn line_literals(expr: &Expr) -> Vec<usize> {
+    struct Lines(Vec<usize>);
+    impl AstVisitor for Lines {
+        fn visit_expr(&mut self, expr: &Expr) {
+            if let Expr::Literal(lit) = expr
+                && matches!(lit.value, Literal::LocationLine)
+            {
+                self.0.push(lit.span.line);
+            }
+            walk_expr(self, expr);
+        }
+    }
+    let mut lines = Lines(Vec::new());
+    lines.visit_expr(expr);
+    lines.0
 }
 
 /// Finds what may change state between two evaluations without performing an

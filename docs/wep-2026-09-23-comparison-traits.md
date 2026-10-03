@@ -387,8 +387,11 @@ order changes at random, `max` costs up to two and a half times `ieee754_max`,
 as
 [Cost](#cost) measures.
 
-The `self_comparison` lint warns about a call of a function that reads or
-writes a `global mut`, since such a function declares no effect yet
-([Global Variables](./spec-expressions.md#global-variables)). With
-`next_id()` incrementing a counter and returning it, `next_id() != next_id()`
-is true, and the lint says it is always false.
+The `self_comparison` lint warns about a call of a function that changes state
+without declaring an effect, and two calls of one can answer differently. One
+reads or writes a `global mut`, which declares no effect yet
+([Global Variables](./spec-expressions.md#global-variables)). With `next_id()`
+incrementing a counter and returning it, `next_id() != next_id()` is true, and
+the lint says it is always false. Another writes through a `&mut` its argument
+holds: `c.bump() != c.bump()`, where `bump(&self)` increments through a
+`&mut i32` field of `c`, gets the same warning.

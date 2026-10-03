@@ -285,31 +285,29 @@ pub(crate) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
             Some("i32_as_char") => CtfeBuiltin::I32AsChar,
             Some("f32_is_nan" | "f64_is_nan") => CtfeBuiltin::FloatIsNan,
             Some("heap_base") => CtfeBuiltin::HeapBase(project.heap_base()),
-            Some(name) => match ieee754_comparison(name) {
-                Some(op) => CtfeBuiltin::Ieee754Comparison(op),
-                None => continue,
-            },
-            None => continue,
+            Some("f32_ieee754_eq" | "f64_ieee754_eq") => {
+                CtfeBuiltin::Ieee754Comparison(NirBinaryOp::Eq)
+            }
+            Some("f32_ieee754_ne" | "f64_ieee754_ne") => {
+                CtfeBuiltin::Ieee754Comparison(NirBinaryOp::NotEq)
+            }
+            Some("f32_ieee754_lt" | "f64_ieee754_lt") => {
+                CtfeBuiltin::Ieee754Comparison(NirBinaryOp::Lt)
+            }
+            Some("f32_ieee754_le" | "f64_ieee754_le") => {
+                CtfeBuiltin::Ieee754Comparison(NirBinaryOp::LtEq)
+            }
+            Some("f32_ieee754_gt" | "f64_ieee754_gt") => {
+                CtfeBuiltin::Ieee754Comparison(NirBinaryOp::Gt)
+            }
+            Some("f32_ieee754_ge" | "f64_ieee754_ge") => {
+                CtfeBuiltin::Ieee754Comparison(NirBinaryOp::GtEq)
+            }
+            Some(_) | None => continue,
         };
         map.insert(id, builtin);
     }
     map
-}
-
-/// The comparison an `f32_ieee754_*` or `f64_ieee754_*` builtin names.
-fn ieee754_comparison(intrinsic: &str) -> Option<NirBinaryOp> {
-    let predicate = intrinsic
-        .strip_prefix("f32_ieee754_")
-        .or_else(|| intrinsic.strip_prefix("f64_ieee754_"))?;
-    Some(match predicate {
-        "eq" => NirBinaryOp::Eq,
-        "ne" => NirBinaryOp::NotEq,
-        "lt" => NirBinaryOp::Lt,
-        "le" => NirBinaryOp::LtEq,
-        "gt" => NirBinaryOp::Gt,
-        "ge" => NirBinaryOp::GtEq,
-        other => panic!("[niri] `{intrinsic}` names no IEEE comparison `{other}`"),
-    })
 }
 
 /// Whether a compile-time frame can run `func`'s body: pure, and concrete —
