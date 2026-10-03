@@ -18,6 +18,29 @@ wado dump -O2 benchmark/json_catalog/json_catalog.wado    # before/after: diff t
 for i in 1 2 3; do mise run json-catalog; done           # before and after
 ```
 
+## SWAR blocks in the JSON reader's scans (2026-10-03)
+
+Testing four bytes packed into a `u32` with bit tricks pays in the writer's
+escape scan: json-twitter ser +18.5%. There each byte took three compares,
+which cost twice the bounds-checked read. Two readers took the same shape and
+did not pay:
+
+- **`scan_string_run`**, a block of four plain-ASCII bytes per test, retried at
+  the top of each iteration so it resumes after a multibyte character.
+  json-twitter de −4%, json-catalog de −1.5%, three rotating rounds. The
+  plain-byte test there is already one subtract and compare. twitter's
+  Japanese text fails every block, and citm's strings are short, so the
+  partial block is wasted on nearly every token.
+- **`peek_after_whitespace_run`**, settling a block whose four bytes are all
+  `0x20` with one compare. json-catalog de between +1.7% and +5%, ranges
+  overlapping across sessions; json-twitter de flat. Indentation is spaces on
+  citm, but that is a property of the corpus, not of JSON, and the evidence did
+  not clear the noise.
+
+Generalizes: SWAR pays where the per-byte predicate is the cost, not the read.
+Read the loop's machine code before choosing: `wasmtime compile` with the
+features `wado` enables, then `wasmtime objdump --filter <name>`.
+
 ## Rejecting control bytes in `core:json` without paying per byte (2026-09-29)
 
 RFC 8259 forbids an unescaped byte below 0x20 in a string, so
