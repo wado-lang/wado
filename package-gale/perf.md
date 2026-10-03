@@ -172,11 +172,11 @@ memo.
 A failing optional or loop body repeats a scan too. HTML's `htmlElement` scans
 `(htmlContent '<' '/' TAG_NAME '>')?`, and an unclosed `<br>` scans every
 sibling after it as its content before the close fails. Each of those siblings
-does the same, so the time doubled with every two `<br>`s, and a 40 KB page
-took 157 s. The memo now also keeps the answer of a recursive rule that a repeat
-body calls with a required element after it (`close_rule_rescans`). Keeping
-every recursive rule instead cost the Rust parse a third of its speed: it
-memoized 145 rules, and most of them are never scanned twice.
+does the same, so without a memo the time doubles with every two `<br>`s, and a
+40 KB page takes 157 s. The memo also keeps the answer of a recursive rule that
+a repeat body calls with a required element after it (`close_rule_rescans`).
+Keeping every recursive rule costs the Rust parse a third of its speed: that
+memoizes 145 rules, and most of them are never scanned twice.
 
 Release host, `-O2`, one parse of Rust nested 14 deep:
 
