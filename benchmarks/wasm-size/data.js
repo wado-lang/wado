@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791011100211,
+  "lastUpdate": 1791021695004,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -63065,6 +63065,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1b70b7fe1b363e5d7c2a25b82f08b1204d019833"
         },
         "date": 1791011099110,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20617,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 279825,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "303a490fa17653f5ce0d8fce91b2615fbd369543",
+          "message": "Merge pull request #2253 from wado-lang/ccr-5117b114-vbqsqr\n\nfix: closures have no Display, and a closure local used as a method receiver no longer traps",
+          "timestamp": "2026-10-03T18:44:11+09:00",
+          "tree_id": "5423c307011cea3d7e46ee95e0afffe788f920e3",
+          "url": "https://github.com/wado-lang/wado/commit/303a490fa17653f5ce0d8fce91b2615fbd369543"
+        },
+        "date": 1791021694397,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
