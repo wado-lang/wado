@@ -1082,13 +1082,11 @@ pub(crate) fn trait_method_template(
 ) -> Option<TemplateId> {
     let trait_ = trait_name.called_decl();
     let key = tt.impl_receiver_key(receiver);
-    if let Some(template) = trait_env.answering_template(
-        &key,
-        Some(trait_),
-        trait_name.args(),
-        method,
-        |block| tt.impl_reaches_instance(block, receiver),
-    ) {
+    if let Some(template) =
+        trait_env.answering_template(&key, Some(trait_), trait_name.args(), method, |block| {
+            tt.impl_reaches_instance(block, receiver)
+        })
+    {
         return Some(template);
     }
     if eq_from_written_cmp(trait_env, trait_, &key, tt) {
@@ -1218,19 +1216,25 @@ fn written_default_impl(
         .find(|&block| tt.impl_covers_every_instance(block))
 }
 
-/// Which of `eq` and `ord` (the `Eq` and `Ord` traits) `receiver` writes at
-/// `Self` without the other, with the impl block writing it. That one decides
-/// how the other derives (spec-traits.md §Derivation Policy): a written `cmp`
-/// gives `==`, and a written `eq` gives no `Ord`. An impl reaching only some
-/// instances decides nothing, since one derived body serves them all.
+/// Which of `Eq` and `Ord` `receiver` writes at `Self` without the other, with
+/// the impl block writing it. That one decides how the other derives
+/// (spec-traits.md §Derivation Policy): a written `cmp` gives `==`, and a
+/// written `eq` gives no `Ord`. An impl reaching only some instances decides
+/// nothing, since one derived body serves them all.
 pub(crate) fn comparison_written_alone(
     trait_env: &TraitEnv,
-    [eq, ord]: [DefId; 2],
     receiver: &Receiver,
     tt: &TypeTable,
 ) -> Option<(CompilerItem, DefId)> {
-    let written = |trait_| written_default_impl(trait_env, trait_, receiver, tt);
-    match (written(eq), written(ord)) {
+    let written = |item| {
+        written_default_impl(
+            trait_env,
+            tt.compiler_items().trait_def(item)?,
+            receiver,
+            tt,
+        )
+    };
+    match (written(CompilerItem::Eq), written(CompilerItem::Ord)) {
         (Some(block), None) => Some((CompilerItem::Eq, block)),
         (None, Some(block)) => Some((CompilerItem::Ord, block)),
         _ => None,
@@ -1246,14 +1250,11 @@ pub(crate) fn eq_from_written_cmp(
     receiver: &Receiver,
     tt: &TypeTable,
 ) -> bool {
-    let items = tt.compiler_items();
-    items.trait_def(CompilerItem::Eq) == Some(trait_)
-        && items.trait_def(CompilerItem::Ord).is_some_and(|ord| {
-            matches!(
-                comparison_written_alone(trait_env, [trait_, ord], receiver, tt),
-                Some((CompilerItem::Ord, _))
-            )
-        })
+    tt.compiler_items().trait_def(CompilerItem::Eq) == Some(trait_)
+        && matches!(
+            comparison_written_alone(trait_env, receiver, tt),
+            Some((CompilerItem::Ord, _))
+        )
 }
 
 /// Whether `type_id` is one of the five reflection kinds, i.e. whether a

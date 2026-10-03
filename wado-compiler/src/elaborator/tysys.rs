@@ -302,10 +302,9 @@ impl TypeSystem {
             {
                 return Some(tid);
             }
-            drop(tt);
-            let base = self.type_table.borrow().get_newtype_base(tid)?;
+            let base = tt.get_newtype_base(tid)?;
             if !matches!(
-                self.type_table.borrow().get(base),
+                tt.get(base),
                 ResolvedType::Newtype { .. }
                     | ResolvedType::Struct { .. }
                     | ResolvedType::GenericInstance { .. }

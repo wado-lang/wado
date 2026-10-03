@@ -1646,11 +1646,9 @@ impl TypeSystem {
 
     /// [`comparison_written_alone`] for `type_id`.
     pub(super) fn comparison_written_alone(&self, type_id: TypeId) -> Option<OnBoundTrait> {
-        let eq = self.compiler_trait_def(CompilerItem::Eq)?;
-        let ord = self.compiler_trait_def(CompilerItem::Ord)?;
         let tt = self.type_table.borrow();
         let (written, _) =
-            comparison_written_alone(&self.trait_env, [eq, ord], &tt.impl_receiver_key(type_id), &tt)?;
+            comparison_written_alone(&self.trait_env, &tt.impl_receiver_key(type_id), &tt)?;
         OnBoundTrait::of_compiler_item(written)
     }
 

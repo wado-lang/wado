@@ -3615,10 +3615,6 @@ fn generate_eq_impls(
     let mut tt = module.type_table.borrow_mut();
     let eq_trait_name = tt.compiler_trait_fq(CompilerItem::Eq);
     let eq_key = eq_trait_name.canonical().expect(KEYED);
-    let ord_key = tt
-        .compiler_trait_fq(CompilerItem::Ord)
-        .canonical()
-        .expect(KEYED);
 
     let targets = eq_targets(module, &mut tt, |receiver| {
         ctx.should_synthesize(receiver, &eq_key)
@@ -3626,7 +3622,7 @@ fn generate_eq_impls(
     let mut generated = Vec::new();
     for target in targets {
         let receiver_key = Receiver::Type(target.receiver.clone());
-        let from_cmp = match comparison_written_alone(ctx.trait_env, [eq_key, ord_key], &receiver_key, &tt) {
+        let from_cmp = match comparison_written_alone(ctx.trait_env, &receiver_key, &tt) {
             Some((CompilerItem::Ord, block)) => Some(&written_cmps[&block]),
             _ => None,
         };
@@ -3643,7 +3639,14 @@ fn generate_eq_impls(
             ),
             (None, &EqMembers::Scalar(ty, read)) => {
                 let ref_type = tt.make_ref(ty);
-                generate_scalar_eq_fn(&target.receiver, ty, ref_type, &eq_trait_name, target.span, read)
+                generate_scalar_eq_fn(
+                    &target.receiver,
+                    ty,
+                    ref_type,
+                    &eq_trait_name,
+                    target.span,
+                    read,
+                )
             }
             (None, EqMembers::Fields(ty, fields)) => {
                 let ref_type = tt.make_ref(*ty);
@@ -3719,10 +3722,16 @@ fn eq_targets(
     }
     for (_name, type_params, fields, span, def) in collect_generic_struct_fields(module) {
         let receiver = FqTypeName::declared(tt.defs(), def);
-        targets.extend(eq_target(&requested, receiver, type_params.clone(), span, || {
-            let ids = make_type_param_ids(&type_params, tt);
-            EqMembers::Fields(tt.make_generic_instance(def, ids), fields)
-        }));
+        targets.extend(eq_target(
+            &requested,
+            receiver,
+            type_params.clone(),
+            span,
+            || {
+                let ids = make_type_param_ids(&type_params, tt);
+                EqMembers::Fields(tt.make_generic_instance(def, ids), fields)
+            },
+        ));
     }
     for (_name, cases, span, def) in collect_variant_cases(module) {
         let receiver = FqTypeName::declared(tt.defs(), def);
@@ -3732,16 +3741,26 @@ fn eq_targets(
     }
     for (_name, type_params, cases, span, def) in collect_generic_variant_cases(module) {
         let receiver = FqTypeName::declared(tt.defs(), def);
-        targets.extend(eq_target(&requested, receiver, type_params.clone(), span, || {
-            let ids = make_type_param_ids(&type_params, tt);
-            EqMembers::Cases(tt.make_generic_instance(def, ids), cases)
-        }));
+        targets.extend(eq_target(
+            &requested,
+            receiver,
+            type_params.clone(),
+            span,
+            || {
+                let ids = make_type_param_ids(&type_params, tt);
+                EqMembers::Cases(tt.make_generic_instance(def, ids), cases)
+            },
+        ));
     }
     for nt in &module.newtypes {
         let receiver = FqTypeName::declared(tt.defs(), nt.def);
-        targets.extend(eq_target(&requested, receiver, nt.type_params.clone(), nt.span, || {
-            EqMembers::Base
-        }));
+        targets.extend(eq_target(
+            &requested,
+            receiver,
+            nt.type_params.clone(),
+            nt.span,
+            || EqMembers::Base,
+        ));
     }
     targets
 }
