@@ -212,26 +212,63 @@ test "f32 wasm instruction math" {
     assert f32::copysign(-5.0, 1.0) == 5.0;
 }
 
-test "the ieee754 comparisons answer false on a NaN but ne" {
-    let one = 1.0;
-    assert one.ieee754_eq(1.0) && one.ieee754_ne(f64::NAN) && one.ieee754_lt(2.0);
-    assert one.ieee754_le(1.0) && one.ieee754_gt(0.0) && one.ieee754_ge(1.0);
-    assert !f64::NAN.ieee754_eq(f64::NAN) && !f64::NAN.ieee754_ge(one);
+test "f64 ieee754 comparisons are false against a NaN, but ne" {
+    let nan = f64::from_bits(builtin::black_box(0x7FF8_0000_0000_0000));
+    let one = builtin::black_box(1.0);
+    assert !nan.ieee754_eq(nan) && nan.ieee754_ne(nan);
+    assert !one.ieee754_eq(nan) && one.ieee754_ne(nan);
+    assert !one.ieee754_lt(nan) && !one.ieee754_le(nan);
+    assert !one.ieee754_gt(nan) && !one.ieee754_ge(nan);
+    assert !nan.ieee754_lt(one) && !nan.ieee754_le(one);
+    assert !nan.ieee754_gt(one) && !nan.ieee754_ge(one);
+}
 
-    let one32: f32 = 1.0;
-    assert one32.ieee754_eq(1.0) && one32.ieee754_ne(f32::NAN) && one32.ieee754_lt(2.0);
-    assert one32.ieee754_le(1.0) && one32.ieee754_gt(0.0) && one32.ieee754_ge(1.0);
-    assert !f32::NAN.ieee754_eq(f32::NAN) && !f32::NAN.ieee754_le(one32);
+test "f64 ieee754 comparisons on the two zeroes and an ordinary pair" {
+    let neg = builtin::black_box(-0.0);
+    let pos = builtin::black_box(0.0);
+    assert neg.ieee754_eq(pos) && !neg.ieee754_ne(pos);
+    assert !neg.ieee754_lt(pos) && neg.ieee754_le(pos) && neg.ieee754_ge(pos);
 
-    let half: f16 = 1.0;
-    assert half.ieee754_eq(1.0) && half.ieee754_ne(f16::NAN) && half.ieee754_lt(2.0);
-    assert half.ieee754_le(1.0) && half.ieee754_gt(0.0) && half.ieee754_ge(1.0);
-    assert !f16::NAN.ieee754_eq(f16::NAN);
+    let one = builtin::black_box(1.0);
+    let two = builtin::black_box(2.0);
+    assert one.ieee754_lt(two) && one.ieee754_le(two) && one.ieee754_ne(two);
+    assert !one.ieee754_gt(two) && !one.ieee754_ge(two) && !one.ieee754_eq(two);
+}
 
-    let brain: bf16 = 1.0;
-    assert brain.ieee754_eq(1.0) && brain.ieee754_ne(bf16::NAN) && brain.ieee754_lt(2.0);
-    assert brain.ieee754_le(1.0) && brain.ieee754_gt(0.0) && brain.ieee754_ge(1.0);
-    assert !bf16::NAN.ieee754_gt(brain);
+test "f32 ieee754 comparisons answer as f64's do" {
+    let nan = f32::from_bits(builtin::black_box(0x7FC0_0000));
+    let one: f32 = builtin::black_box(1.0);
+    let two: f32 = builtin::black_box(2.0);
+    assert !nan.ieee754_eq(nan) && nan.ieee754_ne(nan);
+    assert !one.ieee754_lt(nan) && !nan.ieee754_ge(one);
+    assert one.ieee754_lt(two) && two.ieee754_gt(one) && one.ieee754_le(one);
+    assert two.ieee754_ge(one) && one.ieee754_ge(one) && !one.ieee754_eq(two);
+    assert builtin::black_box(-0.0_f32).ieee754_eq(0.0);
+}
+
+test "f16 and bf16 ieee754 comparisons answer widened to f32" {
+    let nan = f16::NAN;
+    let one: f16 = builtin::black_box(1.0);
+    let two: f16 = builtin::black_box(2.0);
+    assert !nan.ieee754_eq(nan) && nan.ieee754_ne(nan) && !one.ieee754_le(nan);
+    assert one.ieee754_lt(two) && two.ieee754_ge(one) && !one.ieee754_gt(two);
+    assert one.ieee754_ne(two) && !one.ieee754_ne(one);
+    assert f16::from_bits(0x8000).ieee754_eq(f16::from_bits(0));
+
+    let bnan = bf16::NAN;
+    let bone: bf16 = builtin::black_box(1.0);
+    let btwo: bf16 = builtin::black_box(2.0);
+    assert !bnan.ieee754_eq(bnan) && bnan.ieee754_ne(bnan) && !bnan.ieee754_ge(bone);
+    assert bone.ieee754_le(btwo) && btwo.ieee754_gt(bone) && !bone.ieee754_eq(btwo);
+    assert bone.ieee754_lt(btwo) && !bone.ieee754_ne(bone);
+    assert bf16::from_bits(0x8000).ieee754_eq(bf16::from_bits(0));
+}
+
+test "ieee754 comparisons of constants fold as IEEE does" {
+    assert !f64::NAN.ieee754_eq(f64::NAN);
+    assert f64::NAN.ieee754_ne(f64::NAN);
+    assert !f32::NAN.ieee754_lt(f32::INFINITY);
+    assert (-0.0).ieee754_ge(0.0);
 }
 
 test "float min and max follow the order, where NaN is greatest" {
@@ -294,6 +331,7 @@ test "f32.is_nan and f32.is_finite" {
     assert !f32::NAN.is_finite();
 }
 
+#[allow(self_comparison)]
 test "f64::NAN and f32::NAN" {
     // Every NaN is one value, greater than every other.
     let nan = f64::NAN;
@@ -470,14 +508,14 @@ test "i64 decimal formatting at every digit-count boundary" {
         p *= 10;
         digits += 1;
     }
-    assert `${0 as i64}` == "0";
-    assert `${9 as i64}` == "9";
-    assert `${10 as i64}` == "10";
-    assert `${99 as i64}` == "99";
-    assert `${100 as i64}` == "100";
-    assert `${999999999 as i64}` == "999999999";
-    assert `${1000000000 as i64}` == "1000000000";
-    assert `${1728000000000 as i64}` == "1728000000000";
+    assert `${0_i64}` == "0";
+    assert `${9_i64}` == "9";
+    assert `${10_i64}` == "10";
+    assert `${99_i64}` == "99";
+    assert `${100_i64}` == "100";
+    assert `${999999999_i64}` == "999999999";
+    assert `${1000000000_i64}` == "1000000000";
+    assert `${1728000000000_i64}` == "1728000000000";
 }
 
 test "i64 decimal formatting at the type's extremes" {
@@ -490,11 +528,11 @@ test "i64 decimal formatting at the type's extremes" {
 }
 
 test "i64 negative decimal formatting keeps the sign out of the digit count" {
-    assert `${-1 as i64}` == "-1";
-    assert `${-9 as i64}` == "-9";
-    assert `${-10 as i64}` == "-10";
-    assert `${-100 as i64}` == "-100";
-    assert `${-1000000000000 as i64}` == "-1000000000000";
+    assert `${-1_i64}` == "-1";
+    assert `${-9_i64}` == "-9";
+    assert `${-10_i64}` == "-10";
+    assert `${-100_i64}` == "-100";
+    assert `${-1000000000000_i64}` == "-1000000000000";
 }
 
 test "i32 and u32 decimal formatting at their extremes" {
@@ -502,9 +540,9 @@ test "i32 and u32 decimal formatting at their extremes" {
     assert `${2147483647}` == "2147483647";
     let min: i32 = -2147483648;
     assert `${min}` == "-2147483648";
-    assert `${0 as u32}` == "0";
-    assert `${4294967295 as u32}` == "4294967295";
-    assert `${1000000 as u32}` == "1000000";
+    assert `${0_u32}` == "0";
+    assert `${4294967295_u32}` == "4294967295";
+    assert `${1000000_u32}` == "1000000";
 }
 
 test "integer clamp confines a value to the range" {
