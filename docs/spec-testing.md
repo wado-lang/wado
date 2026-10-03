@@ -157,8 +157,7 @@ The `#![TODO]` inner attribute applies TODO semantics to an entire module:
 
 - If the module fails to compile, it is reported as a single pending TODO entry.
 - If the module compiles, each test block is treated as `#[TODO]`, so every one
-  of them must trap. A single test that completes normally is resolved, which
-  fails the run.
+  of them must trap: a single test that completes normally is resolved.
 
 ### Run Result
 
