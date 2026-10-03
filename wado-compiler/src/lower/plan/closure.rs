@@ -1704,7 +1704,7 @@ impl ClosureCallSiteLowerer<'_> {
         );
         *func = FunctionRef {
             // Use the functor's *defining* module, not the surrounding
-            // body's module: the per-functor `$Closure_N^Inspect[Alt]`
+            // body's module: the per-functor `$Closure_N^Inspect`
             // impl was synthesised alongside the closure literal in
             // `lower::plan::closure::ClosureLowerer::lower_module`, so it
             // lives in `functor.module_source`. After cross-module
