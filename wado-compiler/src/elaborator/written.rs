@@ -10,7 +10,7 @@ use crate::ast;
 
 /// The type parameter `ty`'s head binds to, if the item declares one by that
 /// name.
-pub(crate) fn binder_of<'p>(
+pub fn binder_of<'p>(
     ty: &ast::Type,
     type_params: &'p [ast::GenericParam],
 ) -> Option<&'p ast::GenericParam> {

@@ -59,18 +59,18 @@ pub struct Semantics {
     /// Built once per [`Module`] in [`semantics_of`]. LSP queries (and
     /// the in-tree [`name_span_of`] / [`span_of_key`] helpers) consult this
     /// instead of re-walking the AST on every request.
-    pub(crate) ast_indices: IndexMap<ModuleSource, AstIndex>,
+    pub ast_indices: IndexMap<ModuleSource, AstIndex>,
     /// Shared elaborator state from [`Elaborator::annotate_modules`], paired with
     /// `is_complete` to distinguish three outcomes: `(None, false)` — analyze or
     /// resolve bailed, leaving only `symbols` + `ast_indices`; `(Some(_), false)`
     /// — annotate finished but `build_tir` bailed; `(Some(_), true)` — full
     /// success. Batch compilation rejects all but the last.
-    pub(crate) state: Option<AnnotateState>,
+    pub state: Option<AnnotateState>,
     /// `AstIdSpace → ModuleSource` registry over the loaded modules: which
     /// module's parse minted each id space. Lets bare-`AstId` facts be
     /// resolved back to their owning module (spans, URIs) without carrying a
     /// module in every key.
-    pub(crate) space_modules: IndexMap<AstIdSpace, ModuleSource>,
+    pub space_modules: IndexMap<AstIdSpace, ModuleSource>,
     /// The [`ModuleSemantics`] holding each fact the body walk recorded, as a
     /// position in [`AnnotateState::module_semantics`] — the routing every
     /// `AstId`-keyed query below reads through, in place of a second copy.
@@ -78,26 +78,26 @@ pub struct Semantics {
     /// Several walks can still hold one kind for one node — a callee's
     /// parameter default is typed once per call site — and the last module in
     /// [`AnnotateState::module_semantics`] order is the one routed to.
-    pub(crate) fact_home: IndexMap<(AstId, FactKind), u32>,
+    pub fact_home: IndexMap<(AstId, FactKind), u32>,
     /// TIR modules produced by [`crate::elaborator::Elaborator::build_tir_from_state`].
     /// The batch compiler consumes these directly; LSP queries ignore them.
     /// Empty when `build_tir` did not run or bailed.
-    pub(crate) tir_modules: IndexMap<ModuleSource, TirModule>,
+    pub tir_modules: IndexMap<ModuleSource, TirModule>,
     /// Source-level liveness produced between `annotate_bodies` and `reify`.
     /// `dead_items` feeds the unused-diagnostics emitter; `emit_live` is the
     /// set reify gates emission on. Empty when annotate did not complete.
-    pub(crate) liveness: Liveness,
+    pub liveness: Liveness,
     /// True when every analysis phase ran to completion without bailing.
     /// Batch compilation refuses to continue when this is false; LSP queries
     /// proceed with whatever partial state the phases managed to produce.
-    pub(crate) is_complete: bool,
+    pub is_complete: bool,
     /// Compiler-owned WIT emit facts (target world + default interface). Set by
     /// the CLI before WIT emission so `wado wit` and the `wado compile` embed
     /// path derive them identically. `None` until set.
-    pub(crate) wit_contract: Option<WitContract>,
+    pub wit_contract: Option<WitContract>,
     /// The coverage plan reify instrumented this compile with, under
     /// `wado test --coverage`.
-    pub(crate) coverage: Option<CoverageMap>,
+    pub coverage: Option<CoverageMap>,
 }
 
 /// A definition location, assembled from a symbol.
@@ -204,7 +204,7 @@ impl Semantics {
 
     /// Name resolution: which declaration a spelling in a module reaches.
     #[must_use]
-    pub(crate) fn resolutions(&self) -> Option<&Resolutions> {
+    pub fn resolutions(&self) -> Option<&Resolutions> {
         self.state.as_ref().map(|s| &*s.tysys.resolutions)
     }
 
@@ -425,7 +425,7 @@ impl Semantics {
     /// [`crate::elaborator::sem::types::MethodDispatch`] for the data
     /// shape.
     #[must_use]
-    pub(crate) fn method_dispatch_at(&self, id: AstId) -> Option<&MethodDispatch> {
+    pub fn method_dispatch_at(&self, id: AstId) -> Option<&MethodDispatch> {
         self.method_dispatches_at(id).next()
     }
 
@@ -434,7 +434,7 @@ impl Semantics {
     /// element's receiver may select a different method. A check that must
     /// hold for the call reads them all; [`Self::method_dispatch_at`] answers
     /// the first.
-    pub(crate) fn method_dispatches_at(&self, id: AstId) -> impl Iterator<Item = &MethodDispatch> {
+    pub fn method_dispatches_at(&self, id: AstId) -> impl Iterator<Item = &MethodDispatch> {
         self.facts_at(ModuleSemantics::METHOD_DISPATCH, id)
     }
 
@@ -461,7 +461,7 @@ impl Semantics {
     /// The `TypeId` of each field of the struct `type_id` names, in declaration
     /// order. `None` if it is not a registered struct or the annotate state is
     /// unavailable. Used by the resource move check's aggregate walk.
-    pub(crate) fn struct_field_type_ids_of(&self, type_id: TypeId) -> Option<Vec<TypeId>> {
+    pub fn struct_field_type_ids_of(&self, type_id: TypeId) -> Option<Vec<TypeId>> {
         self.state.as_ref()?.tysys.struct_field_type_ids_of(type_id)
     }
 
@@ -1056,7 +1056,7 @@ pub fn semantics_of<H: CompilerHost>(
 /// Logger-sharing variant. Internal: lets callers that already maintain a
 /// `Logger` for the full compile pipeline nest analyze/resolve trace
 /// spans under the same root.
-pub(crate) fn semantics_with_logger<H: CompilerHost>(
+pub fn semantics_with_logger<H: CompilerHost>(
     load_result: loader::LoadResult,
     logger: &Logger<'_, H>,
     build_tir: bool,
@@ -1296,7 +1296,7 @@ fn receiver_matches_impl(b: &ImplBlock, want_type: &str, want_trait: Option<&str
 /// Whether a type member is shown in the public-API view. Inherent-`impl`
 /// members need `pub`; trait-`impl` members are always shown (they are the
 /// trait's public surface). Shared with `unparse::unparse_impl_block_signature`.
-pub(crate) fn member_visible(public_only: bool, inherent: bool, visibility: Visibility) -> bool {
+pub fn member_visible(public_only: bool, inherent: bool, visibility: Visibility) -> bool {
     !public_only || !inherent || visibility.is_public()
 }
 

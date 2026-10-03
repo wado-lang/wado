@@ -121,7 +121,7 @@ pub(super) fn settles_literal_patterns(type_table: &TypeTable, scrutinee: TypeId
 }
 
 /// `pattern` on `scrutinee`, settled: an unsigned instance compares unsigned.
-pub(crate) fn lower_literal_pattern(
+pub fn lower_literal_pattern(
     pattern: &InstancePattern,
     scrutinee: TypeId,
     type_table: &TypeTable,
@@ -132,7 +132,7 @@ pub(crate) fn lower_literal_pattern(
 /// Why a literal pattern or range bound names no value of the settled
 /// `scrutinee`. A reference scrutinee is read through, as match ergonomics
 /// reads it: a literal under `&i32` names an `i32`.
-pub(crate) enum PatternLiteralError {
+pub enum PatternLiteralError {
     /// Of another kind: the type it demands.
     Mismatch(String),
     /// Out of the scrutinee's range.
@@ -141,7 +141,7 @@ pub(crate) enum PatternLiteralError {
 
 impl PatternLiteralError {
     /// This error at `span`, on a scrutinee of `scrutinee` type.
-    pub(crate) fn at(self, scrutinee: TypeId, span: Span, type_table: &TypeTable) -> TypeError {
+    pub fn at(self, scrutinee: TypeId, span: Span, type_table: &TypeTable) -> TypeError {
         match self {
             PatternLiteralError::Mismatch(expected) => TypeError::PatternTypeMismatch {
                 expected,
@@ -154,7 +154,7 @@ impl PatternLiteralError {
 }
 
 /// Why `lit` names no value of `scrutinee`.
-pub(crate) fn pattern_literal_error(
+pub fn pattern_literal_error(
     lit: &PatternLiteral,
     scrutinee: TypeId,
     type_table: &mut TypeTable,
@@ -211,7 +211,7 @@ pub(super) fn pattern_literal_mismatch(
 }
 
 /// Why the bounds of a range pattern name no values of `scrutinee`.
-pub(crate) fn range_bound_errors(
+pub fn range_bound_errors(
     start: &PatternLiteral,
     end: &PatternLiteral,
     scrutinee: TypeId,
@@ -279,7 +279,7 @@ pub(super) fn normalize_numeric_literal(repr: &str) -> String {
 
 /// Parse an unsigned integer literal into a u128 value.
 /// Supports decimal, hex, binary, octal, and scientific notation (e.g., "1e10").
-pub(crate) fn parse_u128_literal(repr: &str) -> Result<u128, String> {
+pub fn parse_u128_literal(repr: &str) -> Result<u128, String> {
     let clean = normalize_numeric_literal(repr);
 
     if let Some(hex) = clean.strip_prefix("0x") {
@@ -310,7 +310,7 @@ pub(crate) fn parse_u128_literal(repr: &str) -> Result<u128, String> {
 /// Parse a signed integer literal into an i128 value.
 /// Supports decimal, hex, binary, octal, and scientific notation.
 /// For non-negative values, delegates to `parse_u128_literal` with an i128 range check.
-pub(crate) fn parse_i128_literal(repr: &str) -> Result<i128, String> {
+pub fn parse_i128_literal(repr: &str) -> Result<i128, String> {
     let clean = normalize_numeric_literal(repr);
 
     if clean.starts_with('-') {
@@ -346,7 +346,7 @@ pub(super) fn integer_digits(repr: &str, suffix: Option<NumericSuffix>) -> Optio
 }
 
 /// Check if a number literal can only be a float (has decimal point or negative exponent).
-pub(crate) fn is_float_only_literal(repr: &str) -> bool {
+pub fn is_float_only_literal(repr: &str) -> bool {
     if repr.contains('.') {
         return true;
     }

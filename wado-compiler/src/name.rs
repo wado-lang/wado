@@ -1941,7 +1941,7 @@ impl DeclName {
     /// read off a declaration, an `impl` header, or an import scope. Restricted
     /// to this crate so the namespace has a bounded set of entry points.
     #[must_use]
-    pub(crate) fn new(name: impl Into<String>) -> Self {
+    pub fn new(name: impl Into<String>) -> Self {
         Self(name.into())
     }
 
@@ -1978,7 +1978,7 @@ impl MangledName {
     /// Mint from a spelling already in the mangled namespace — produced by
     /// [`FqTypeName::to_mangled`] or by a mangler that qualifies the same way.
     #[must_use]
-    pub(crate) fn new(name: impl Into<String>) -> Self {
+    pub fn new(name: impl Into<String>) -> Self {
         Self(name.into())
     }
 
@@ -2033,7 +2033,7 @@ impl DeclPath {
     /// A path already spelled in the declaration namespace — a WIT-derived
     /// `interface::function` key, or one read back out of the registry.
     #[must_use]
-    pub(crate) fn from_declared(path: impl Into<String>) -> Self {
+    pub fn from_declared(path: impl Into<String>) -> Self {
         Self(path.into())
     }
 

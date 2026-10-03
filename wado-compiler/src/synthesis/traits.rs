@@ -49,7 +49,7 @@ use crate::{hashmap, tir};
 /// as [`super::cm_binding::types::CmStdlibNames`] and
 /// [`super::template::FormatStdlibNames`].
 #[derive(Clone, Debug)]
-pub(crate) struct TraitsStdlibNames {
+pub struct TraitsStdlibNames {
     /// `Formatter::write_str`, the text a derived body writes through.
     pub write_str: FormatterWriteStr,
     /// The same traits as a mangled method name embeds them.
@@ -79,10 +79,10 @@ const KEYED: &str = "a compiler trait item names a declaration";
 /// that decide identity are identities: the receiver is its [`TypeHead`] —
 /// a declaration by its `DefId`, a shape no declaration names by its
 /// rendering — and the trait is its declaration.
-pub(crate) type SynthRequests = IndexSet<(TypeHead, ModuleSource, DefId)>;
+pub type SynthRequests = IndexSet<(TypeHead, ModuleSource, DefId)>;
 
 impl TraitsStdlibNames {
-    pub(crate) fn from_type_table(type_table: &TypeTable) -> Self {
+    pub fn from_type_table(type_table: &TypeTable) -> Self {
         let items = type_table.compiler_items();
         let (_, _, less_name, less_index) = items.require_enum_case(CompilerItem::OrderingLess);
         let (_, _, equal_name, equal_index) = items.require_enum_case(CompilerItem::OrderingEqual);
@@ -738,21 +738,21 @@ fn register_reflect_assoc_types(
 /// The member-tuple associated type, spelled `Members` on every reflect trait.
 /// Sealed and compiler-defined, so its spelling is fixed rather than
 /// registry-driven.
-pub(crate) const REFLECT_MEMBERS_ASSOC: &str = "Members";
+pub const REFLECT_MEMBERS_ASSOC: &str = "Members";
 
 /// `ReflectStruct`'s payload-pack associated type (`type FieldTypes`): the
 /// field types themselves, bound to place per-field trait bounds on a
 /// derivation.
-pub(crate) const REFLECT_FIELD_TYPES_ASSOC: &str = "FieldTypes";
+pub const REFLECT_FIELD_TYPES_ASSOC: &str = "FieldTypes";
 
 /// `ReflectStruct`'s slot associated type (`type FieldSlots`): the field types
 /// under `Option`, the shape `default_slot()` returns and a streaming build fills.
-pub(crate) const REFLECT_FIELD_SLOTS_ASSOC: &str = "FieldSlots";
+pub const REFLECT_FIELD_SLOTS_ASSOC: &str = "FieldSlots";
 
 /// `ReflectTemplate`'s payload-pack associated type (`type Holes`): the hole
 /// types themselves, bound to place per-hole trait bounds on a tag
 /// (WEP 2026-01-10).
-pub(crate) const REFLECT_HOLES_ASSOC: &str = "Holes";
+pub const REFLECT_HOLES_ASSOC: &str = "Holes";
 
 /// Module-level types and method names resolved once from the compiler-item
 /// registry and reused across every struct's `ReflectStruct` synthesis in that
@@ -1895,7 +1895,7 @@ impl ReflectVariantSynthEnv {
 /// `ReflectVariant`'s payload-pack associated type (`type CasePayloads`): the
 /// per-case payloads, with `()` for a unit case. Sealed and compiler-defined,
 /// like [`REFLECT_FIELD_TYPES_ASSOC`].
-pub(crate) const REFLECT_CASE_PAYLOADS_ASSOC: &str = "CasePayloads";
+pub const REFLECT_CASE_PAYLOADS_ASSOC: &str = "CasePayloads";
 
 /// Synthesize one variant's `type_name()`, `discriminant(&self)`, and `cases()`
 /// methods, plus the per-payload-type `Case` `extract` / `construct` helpers its
@@ -3373,40 +3373,40 @@ fn generate_flags_from_bits_fn(
 
 /// What the synthesis sub-passes know of trait impls: the project's, and the
 /// ones this pass has added so far.
-pub(crate) struct SynthesisCtx<'env, 'pend, 'req> {
-    pub(crate) trait_env: &'env TraitEnv,
+pub struct SynthesisCtx<'env, 'pend, 'req> {
+    pub trait_env: &'env TraitEnv,
     /// The `(head, module, trait)` impls this pass has added.
-    pub(crate) pending: &'pend mut SynthRequests,
+    pub pending: &'pend mut SynthRequests,
     /// The `(head, module, trait)` impls a bound or marker demanded, which gate
     /// the `Eq` / `Ord` derives.
-    pub(crate) requested: &'req SynthRequests,
+    pub requested: &'req SynthRequests,
     /// The module being synthesised, which the derived impls live in.
-    pub(crate) module: ModuleSource,
+    pub module: ModuleSource,
     /// Every `core:prelude/{traits,format}` symbol this pass touches, resolved
     /// once through the [`CompilerItem`] registry.
-    pub(crate) names: &'env TraitsStdlibNames,
+    pub names: &'env TraitsStdlibNames,
     /// The impl blocks reaching only some instances of their head, read once
     /// per pass before the table is borrowed for writing.
-    pub(crate) partial_impls: &'env IndexSet<DefId>,
+    pub partial_impls: &'env IndexSet<DefId>,
 }
 
 impl SynthesisCtx<'_, '_, '_> {
     /// Whether this pass added `<trait> for <head>` in the current module: the
     /// only record an instantiation has, since the impl indexes hold declarations.
-    pub(crate) fn pending_has(&self, head: &TypeHead, trait_key: &DefId) -> bool {
+    pub fn pending_has(&self, head: &TypeHead, trait_key: &DefId) -> bool {
         self.pending
             .contains(&(head.clone(), self.module.clone(), *trait_key))
     }
 
     /// Note that this pass added `impl <trait> for <receiver>` in the current module.
-    pub(crate) fn record_impl(&mut self, receiver: &FqTypeName, trait_key: &DefId) {
+    pub fn record_impl(&mut self, receiver: &FqTypeName, trait_key: &DefId) {
         self.pending
             .insert((receiver.head().clone(), self.module.clone(), *trait_key));
     }
 
     /// Whether a bound or marker demanded `impl <trait> for <receiver>` in the
     /// current module.
-    pub(crate) fn is_requested(&self, receiver: &FqTypeName, trait_key: &DefId) -> bool {
+    pub fn is_requested(&self, receiver: &FqTypeName, trait_key: &DefId) -> bool {
         self.requested
             .contains(&(receiver.head().clone(), self.module.clone(), *trait_key))
     }
@@ -3438,19 +3438,15 @@ impl SynthesisCtx<'_, '_, '_> {
 
     /// Module-scoped methodful check, for the `Eq` / `Ord` / `Default`
     /// sub-passes.
-    pub(crate) fn has_real_impl(&self, receiver: &FqTypeName, trait_key: &DefId) -> bool {
+    pub fn has_real_impl(&self, receiver: &FqTypeName, trait_key: &DefId) -> bool {
         self.has_methodful_impl(receiver, trait_key, ImplScope::CurrentModule)
     }
 
-    pub(crate) fn has_methodful_impl_anywhere(
-        &self,
-        receiver: &FqTypeName,
-        trait_key: &DefId,
-    ) -> bool {
+    pub fn has_methodful_impl_anywhere(&self, receiver: &FqTypeName, trait_key: &DefId) -> bool {
         self.has_methodful_impl(receiver, trait_key, ImplScope::AnyModule)
     }
 
-    pub(crate) fn should_synthesize(&self, receiver: &FqTypeName, trait_key: &DefId) -> bool {
+    pub fn should_synthesize(&self, receiver: &FqTypeName, trait_key: &DefId) -> bool {
         self.is_requested(receiver, trait_key) && !self.has_real_impl(receiver, trait_key)
     }
 }

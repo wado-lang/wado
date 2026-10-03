@@ -1046,7 +1046,7 @@ fn method_call_info_for_type(
 
 /// The name and instance of a call through the universal `&T` blanket, keyed
 /// by its pointee.
-pub(crate) fn ref_blanket_call(
+pub fn ref_blanket_call(
     ref_kind: RefKind,
     trait_name: &FqTraitName,
     method_name: &str,
@@ -1073,7 +1073,7 @@ pub(crate) fn ref_blanket_call(
 
 /// The template `receiver.method()` of `trait_` instantiates: a written block,
 /// a blanket, else a newtype's base's; `None` where a derived body answers.
-pub(crate) fn trait_method_template(
+pub fn trait_method_template(
     trait_env: &TraitEnv,
     trait_name: &FqTraitName,
     method: &str,
@@ -1126,7 +1126,7 @@ pub(crate) fn trait_method_template(
 
 /// The template a call of `info` on `receiver` instantiates, else the derived
 /// body in `home`; `None` while the receiver's head awaits substitution.
-pub(crate) fn trait_call_template(
+pub fn trait_call_template(
     trait_env: &TraitEnv,
     info: &LocalMethodName,
     receiver: TypeId,
@@ -1146,7 +1146,7 @@ pub(crate) fn trait_call_template(
 
 /// The template a call of `info` on the concrete `receiver` instantiates, or
 /// `None` where a derived body answers. Only a reference impl keeps the `&`.
-pub(crate) fn method_template_at(
+pub fn method_template_at(
     trait_env: &TraitEnv,
     info: &LocalMethodName,
     receiver: TypeId,
@@ -1190,7 +1190,7 @@ fn inherent_method_template(
 }
 
 /// Whether a written impl of `trait_` with methods reaches `receiver` itself.
-pub(crate) fn written_impl_reaches(
+pub fn written_impl_reaches(
     trait_env: &TraitEnv,
     trait_: DefId,
     receiver: TypeId,
@@ -1203,13 +1203,13 @@ pub(crate) fn written_impl_reaches(
 
 /// Whether `type_id` is one of the five reflection kinds, i.e. whether a
 /// `Reflect*`-bounded blanket can claim it.
-pub(crate) fn has_reflect_kind(type_id: TypeId, tt: &TypeTable) -> bool {
+pub fn has_reflect_kind(type_id: TypeId, tt: &TypeTable) -> bool {
     tt.reflect_kind(type_id).is_some()
 }
 
 /// The value blanket serving `receiver`, else one down its newtype chain until
 /// a link with its own impl, which outranks any blanket (WEP 2026-09-01).
-pub(crate) fn ranked_value_blanket<'a>(
+pub fn ranked_value_blanket<'a>(
     trait_env: &'a TraitEnv,
     trait_: DefId,
     type_module: Option<&ModuleSource>,
@@ -1248,7 +1248,7 @@ fn reflect_bound_item(bound: &BlanketBound, tt: &TypeTable) -> Option<CompilerIt
 
 /// Whether a blanket derives over reflection: one of its receiver-param bounds
 /// is a `Reflect*` trait.
-pub(crate) fn blanket_is_reflect_keyed(bounds: &[BlanketBound], tt: &TypeTable) -> bool {
+pub fn blanket_is_reflect_keyed(bounds: &[BlanketBound], tt: &TypeTable) -> bool {
     bounds
         .iter()
         .any(|bound| reflect_bound_item(bound, tt).is_some())
@@ -1256,7 +1256,7 @@ pub(crate) fn blanket_is_reflect_keyed(bounds: &[BlanketBound], tt: &TypeTable) 
 
 /// Whether `type_id` itself is the reflection kind a blanket's `bounds` ask for.
 /// Any other bound reads as held: only the elaborator's trait query decides one.
-pub(crate) fn receiver_satisfies_blanket_bounds(
+pub fn receiver_satisfies_blanket_bounds(
     type_id: TypeId,
     bounds: &[BlanketBound],
     tt: &TypeTable,
@@ -1287,7 +1287,7 @@ fn type_module_hint_tt(type_id: TypeId, tt: &TypeTable) -> Option<ModuleSource> 
 
 /// The blanket a `type_id.trait::method()` call dispatches to where no written
 /// impl reaches the receiver, with the blanket's module and method template.
-pub(crate) fn blanket_dispatch_for(
+pub fn blanket_dispatch_for(
     trait_env: &TraitEnv,
     type_id: TypeId,
     trait_name: &FqTraitName,
@@ -1333,7 +1333,7 @@ pub(crate) fn blanket_dispatch_for(
 
 /// The type args a value blanket's instance keys on for `receiver`, each projection
 /// recorded on it; `None` where one does not resolve, so the blanket does not apply.
-pub(crate) fn blanket_impl_args(
+pub fn blanket_impl_args(
     trait_env: &TraitEnv,
     blanket: &BlanketImpl,
     receiver: TypeId,

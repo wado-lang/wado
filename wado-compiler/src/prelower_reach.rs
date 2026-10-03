@@ -65,7 +65,7 @@ fn is_root(func: &TirFunction, flat: &FlatPackage, mintable: &IndexSet<DefId>) -
 }
 
 /// What [`reachable`] found, against the population it walked.
-pub(crate) struct Reached {
+pub struct Reached {
     /// Every function present at TIR, and how many of them `lower` translates.
     present: IndexSet<FunctionId>,
     bodied: usize,
@@ -126,7 +126,7 @@ fn reachable(flat: &FlatPackage) -> Reached {
 
 /// Report the functions `optimize` kept that [`before_lower`]'s walk never
 /// reached — the calls `lower` and `optimize` mint.
-pub(crate) fn audit(found: Option<&Reached>, package: &NirPackage) {
+pub fn audit(found: Option<&Reached>, package: &NirPackage) {
     let Some(found) = found else {
         return;
     };
@@ -172,7 +172,7 @@ pub(crate) fn audit(found: Option<&Reached>, package: &NirPackage) {
 ///
 /// `WADO_NO_PRELOWER_PRUNE` holds the prune back, so a missing root is a flag
 /// to flip rather than a compiler to rebuild.
-pub(crate) fn before_lower(flat: &mut FlatPackage) -> Option<Reached> {
+pub fn before_lower(flat: &mut FlatPackage) -> Option<Reached> {
     let found = enabled().then(|| reachable(flat));
     if std::env::var_os("WADO_NO_PRELOWER_PRUNE").is_none() {
         prune(flat);

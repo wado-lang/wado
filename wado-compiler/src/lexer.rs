@@ -208,7 +208,7 @@ impl Scan {
     }
 }
 
-pub(crate) struct Lexer<'a> {
+pub struct Lexer<'a> {
     input: &'a str,
     chars: std::iter::Peekable<std::str::CharIndices<'a>>,
     pos: usize,

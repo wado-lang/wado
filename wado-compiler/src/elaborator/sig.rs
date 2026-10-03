@@ -17,13 +17,13 @@ use crate::tir::SlotProjections;
 
 /// What an `impl` block's `const NAME: T = expr;` declares.
 #[derive(Debug, Clone)]
-pub(crate) struct AssocConstSig {
+pub struct AssocConstSig {
     /// The impl-declaring module; reify walks [`Self::value`] under it.
-    pub(crate) module: ModuleSource,
-    pub(crate) ty: TypeId,
-    pub(crate) value: Expr,
+    pub module: ModuleSource,
+    pub ty: TypeId,
+    pub value: Expr,
     /// The declared rung; `None` on a trait impl's constant.
-    pub(crate) inherent_visibility: Option<Visibility>,
+    pub inherent_visibility: Option<Visibility>,
 }
 
 /// Program-wide declaration facts, resolved once by the decl pass and read-only
@@ -32,105 +32,105 @@ pub(crate) struct AssocConstSig {
 /// entry only where the value is irreducibly AST — parameter defaults,
 /// associated-const values, `__DATA__`. Assembled from `ModuleDecls` digests.
 #[derive(Default, Clone)]
-pub(crate) struct Signatures {
+pub struct Signatures {
     /// Canonical free-function signatures, keyed by the declaration. The
     /// entries are shared with the per-module digests they are assembled from
     /// rather than copied — a signature carries its parameter defaults' AST.
-    pub(crate) function_sigs: IndexMap<DefId, Rc<FunctionSig>>,
+    pub function_sigs: IndexMap<DefId, Rc<FunctionSig>>,
 
     /// Canonical method signatures, keyed by the method's [`DefId`]
     /// — `impl`-block methods and `interface` / `resource` operations alike.
     /// Dispatch goes index → signature, never AST.
-    pub(crate) method_sigs: IndexMap<DefId, MethodSig>,
+    pub method_sigs: IndexMap<DefId, MethodSig>,
 
     /// The name-keyed index over [`Self::method_sigs`] for `interface` /
     /// `resource` operations, which callers reach by name, not by node.
-    pub(crate) resource_method_ids: IndexMap<(DefId, String), DefId>,
+    pub resource_method_ids: IndexMap<(DefId, String), DefId>,
 
     /// Per-`impl`-block facts shared by the block's methods, keyed by the
     /// block's [`DefId`].
-    pub(crate) impl_sigs: IndexMap<DefId, ImplSig>,
+    pub impl_sigs: IndexMap<DefId, ImplSig>,
 
     /// Per-`trait`-declaration facts, keyed by the declaration's
     /// [`DefId`], so a query reaches a trait's methods without
     /// loading the declaring module's AST.
-    pub(crate) trait_sigs: IndexMap<DefId, TraitSig>,
+    pub trait_sigs: IndexMap<DefId, TraitSig>,
 
     /// Global-variable declarations, declaring module → name →
     /// `(declared type, is_mut)`.
-    pub(crate) globals: IndexMap<ModuleSource, IndexMap<String, (TypeId, bool)>>,
+    pub globals: IndexMap<ModuleSource, IndexMap<String, (TypeId, bool)>>,
 
     /// Impl-associated constants, keyed by `(owning type declaration,
     /// constant name)`. The owner is an identity, so two modules' same-named
     /// types cannot share an entry.
-    pub(crate) associated_constants: IndexMap<(DefId, String), AssocConstSig>,
+    pub associated_constants: IndexMap<(DefId, String), AssocConstSig>,
 
     /// Per-module `__DATA__` section contents; modules without one have no
     /// entry.
-    pub(crate) data_sections: IndexMap<ModuleSource, String>,
+    pub data_sections: IndexMap<ModuleSource, String>,
 }
 
 impl Signatures {
     /// Canonical signature of the free function `def` declares.
-    pub(crate) fn function_sig(&self, def: DefId) -> Option<&FunctionSig> {
+    pub fn function_sig(&self, def: DefId) -> Option<&FunctionSig> {
         self.function_sigs.get(&def).map(Rc::as_ref)
     }
 
     /// Canonical signature of the method `def` declares.
-    pub(crate) fn method_sig(&self, def: DefId) -> Option<&MethodSig> {
+    pub fn method_sig(&self, def: DefId) -> Option<&MethodSig> {
         self.method_sigs.get(&def)
     }
 
     /// What a call of the written declaration `def` instantiates: a free
     /// function stands alone, a method sits in the block declaring it.
-    pub(crate) fn declared_template(&self, def: DefId) -> TemplateId {
+    pub fn declared_template(&self, def: DefId) -> TemplateId {
         let block = self.method_sig(def).and_then(|sig| sig.declaring_impl);
         TemplateId::Declared { def, block }
     }
 
     /// Canonical signature of the operation `name` on the `interface` /
     /// `resource` declaration `decl`.
-    pub(crate) fn resource_method_sig(&self, decl: DefId, name: &str) -> Option<&MethodSig> {
+    pub fn resource_method_sig(&self, decl: DefId, name: &str) -> Option<&MethodSig> {
         let method = self.resource_method_ids.get(&(decl, name.to_string()))?;
         self.method_sig(*method)
     }
 
     /// Declaration facts of the `impl` block `def`, which the decl pass records
     /// for every block.
-    pub(crate) fn impl_sig(&self, def: DefId) -> &ImplSig {
+    pub fn impl_sig(&self, def: DefId) -> &ImplSig {
         self.impl_sigs
             .get(&def)
             .unwrap_or_else(|| panic!("no declaration facts for the impl block {def:?}"))
     }
 
     /// Declaration facts of the `trait` `def` declares.
-    pub(crate) fn trait_sig(&self, def: DefId) -> Option<&TraitSig> {
+    pub fn trait_sig(&self, def: DefId) -> Option<&TraitSig> {
         self.trait_sigs.get(&def)
     }
 
     /// Declared type and mutability of the global `name` in `module`.
-    pub(crate) fn global(&self, module: &ModuleSource, name: &str) -> Option<(TypeId, bool)> {
+    pub fn global(&self, module: &ModuleSource, name: &str) -> Option<(TypeId, bool)> {
         self.globals.get(module)?.get(name).copied()
     }
 
     /// The constant `name` declared on the type `owner`.
-    pub(crate) fn associated_constant(&self, owner: DefId, name: &str) -> Option<&AssocConstSig> {
+    pub fn associated_constant(&self, owner: DefId, name: &str) -> Option<&AssocConstSig> {
         self.associated_constants.get(&(owner, name.to_string()))
     }
 
     /// The `__DATA__` section of `module`, if it declares one.
-    pub(crate) fn data_section(&self, module: &ModuleSource) -> Option<&str> {
+    pub fn data_section(&self, module: &ModuleSource) -> Option<&str> {
         self.data_sections.get(module).map(String::as_str)
     }
 
     /// Which trait this `impl` block implements, `None` for an inherent one.
-    pub(crate) fn impl_trait(&self, impl_def: DefId) -> Option<DefId> {
+    pub fn impl_trait(&self, impl_def: DefId) -> Option<DefId> {
         self.impl_sig(impl_def).trait_decl
     }
 
     /// Which trait declared `sig`'s method, where an `impl` block of one does.
     /// A default it wrote means that trait's `Self`, whatever frame calls it.
-    pub(crate) fn declaring_trait(&self, sig: &MethodSig) -> Option<DefId> {
+    pub fn declaring_trait(&self, sig: &MethodSig) -> Option<DefId> {
         self.impl_trait(sig.declaring_impl?)
     }
 
@@ -138,7 +138,7 @@ impl Signatures {
     /// value and type parameters alike, names included: only the trait may
     /// declare a default (WEP 2026-04-11), and a default names its neighbours
     /// as the trait called them. Not the decl pass: the trait may be elsewhere.
-    pub(crate) fn inherit_trait_param_defaults(&mut self, defs: &DefTable) {
+    pub fn inherit_trait_param_defaults(&mut self, defs: &DefTable) {
         let inherited: Vec<(DefId, ModuleSource, Vec<Param>, Vec<GenericParam>)> = self
             .method_sigs
             .values()
@@ -179,11 +179,11 @@ impl Signatures {
 /// `<F: fn(…)>` bounds are scope entries, not substitution targets, so the list
 /// stays dense. Read through [`Self::instantiate`] — except by inference.
 #[derive(Clone, Debug, Default)]
-pub(crate) struct DeclSig {
-    pub(crate) type_params: Vec<(String, TypeId)>,
-    pub(crate) param_types: Vec<TypeId>,
+pub struct DeclSig {
+    pub type_params: Vec<(String, TypeId)>,
+    pub param_types: Vec<TypeId>,
     /// `None` when the declaration declares no return type.
-    pub(crate) return_type: Option<TypeId>,
+    pub return_type: Option<TypeId>,
 }
 
 /// A method's canonical signature: the frame, plus what dispatch needs
@@ -194,33 +194,33 @@ pub(crate) struct DeclSig {
 /// the block's frame, and an `interface` / `resource` declaration's, in the
 /// declaration's — because dispatch asks them the same questions.
 #[derive(Clone, Debug)]
-pub(crate) struct MethodSig {
+pub struct MethodSig {
     /// The declaration — the key this signature is filed under, carried
     /// inside so a consumer holding the signature holds the identity too.
     /// A use→def edge is recorded from here, never from a name re-scan.
-    pub(crate) def: DefId,
-    pub(crate) decl: DeclSig,
-    pub(crate) self_kind: SelfKind,
+    pub def: DefId,
+    pub decl: DeclSig,
+    pub self_kind: SelfKind,
     /// The non-receiver parameters, in order. `decl.param_types` includes
     /// the receiver at index 0 when there is one, so these are offset by
     /// [`Self::first_value_param`].
-    pub(crate) params: Vec<Param>,
+    pub params: Vec<Param>,
     /// How many leading entries of `decl.type_params` the *declaration*
     /// contributes — the `impl` block's, or the `interface` / `resource`
     /// declaration's. The method's own follow. A call site numbers the two
     /// separately (`Type<A>::method<B>()`), so it needs the split; nothing
     /// else does, because a slot carries its own index.
-    pub(crate) declaring_slot_count: u32,
+    pub declaring_slot_count: u32,
     /// The index the method's own slots start at. Not the count above: a
     /// concrete head argument (`impl<A, B> Tr<B> for Pair<String, A>`) consumes
     /// no slot, so the block's numbering has a gap and its last slot sits past
     /// how many names it contributed. Read where an index is classified, as the
     /// count is read where a list is split.
-    pub(crate) method_slot_base: u32,
+    pub method_slot_base: u32,
     /// The `impl` block that declares this method, where one does. How a caller
     /// reaches [`ImplSig::spelled_slots`], which aligns a spelled turbofish
     /// with the block's slots.
-    pub(crate) declaring_impl: Option<DefId>,
+    pub declaring_impl: Option<DefId>,
     /// The method's own slots as its declaration wrote them, parallel to
     /// [`Self::own_type_params`] — on an impl of a trait, as the trait wrote
     /// them. Bounds and defaults are irreducibly AST and live nowhere else, and
@@ -229,45 +229,45 @@ pub(crate) struct MethodSig {
     /// Carried rather than re-found by name. A name scan cannot tell which
     /// declaration dispatch actually chose, so it could answer with an
     /// unrelated trait's same-named method — and did.
-    pub(crate) own_params: Vec<GenericParam>,
+    pub own_params: Vec<GenericParam>,
     /// Canonical name from `#[cm("…")]`, resolved at the declaration.
-    pub(crate) cm_name: Option<String>,
-    pub(crate) is_async: bool,
+    pub cm_name: Option<String>,
+    pub is_async: bool,
     /// Where this method's defaults were written, value and type parameters
     /// alike, when another declaration wrote them: the trait's module, for a
     /// method implementing one. A default resolves in the scope that wrote it,
     /// so a call site pads from here, not from the module it reached it through.
-    pub(crate) defaults_module: Option<ModuleSource>,
+    pub defaults_module: Option<ModuleSource>,
 }
 
 /// What a declaration says about one parameter beyond its type. One record
 /// per parameter rather than a vector per attribute: callers read them
 /// together, and parallel vectors can disagree in length or order.
 #[derive(Clone, Debug)]
-pub(crate) struct Param {
-    pub(crate) name: String,
-    pub(crate) is_mut: bool,
+pub struct Param {
+    pub name: String,
+    pub is_mut: bool,
     /// Irreducibly AST — re-resolved per call site under the callee's scope
     /// (WEP 2026-04-11). An impl of a trait declares none of its own:
     /// [`Signatures::inherit_trait_param_defaults`] fills in the trait's, in
     /// [`MethodSig::defaults_module`]'s scope.
-    pub(crate) default: Option<Expr>,
+    pub default: Option<Expr>,
 }
 
 impl Param {
-    pub(crate) fn defaults(params: &[Self]) -> Vec<Option<Expr>> {
+    pub fn defaults(params: &[Self]) -> Vec<Option<Expr>> {
         params.iter().map(|p| p.default.clone()).collect()
     }
 
-    pub(crate) fn names(params: &[Self]) -> Vec<String> {
+    pub fn names(params: &[Self]) -> Vec<String> {
         params.iter().map(|p| p.name.clone()).collect()
     }
 
-    pub(crate) fn is_mut_flags(params: &[Self]) -> Vec<bool> {
+    pub fn is_mut_flags(params: &[Self]) -> Vec<bool> {
         params.iter().map(|p| p.is_mut).collect()
     }
 
-    pub(crate) fn named_defaults(params: &[Self]) -> Vec<(String, Option<Expr>)> {
+    pub fn named_defaults(params: &[Self]) -> Vec<(String, Option<Expr>)> {
         params
             .iter()
             .map(|p| (p.name.clone(), p.default.clone()))
@@ -288,18 +288,18 @@ pub(super) fn own_params_of(type_params: &[GenericParam]) -> Vec<GenericParam> {
 
 impl MethodSig {
     /// Index of the first non-receiver parameter in `decl.param_types`.
-    pub(crate) fn first_value_param(&self) -> usize {
+    pub fn first_value_param(&self) -> usize {
         usize::from(self.self_kind != SelfKind::None)
     }
 
     /// The non-receiver parameter types, parallel to [`Self::params`].
-    pub(crate) fn value_param_types(&self) -> Vec<TypeId> {
+    pub fn value_param_types(&self) -> Vec<TypeId> {
         self.decl.param_types[self.first_value_param()..].to_vec()
     }
 
     /// Where `decl.type_params` splits: the declaring block's slots before
     /// this index, the method's own after it.
-    pub(crate) fn declaring_split(&self) -> usize {
+    pub fn declaring_split(&self) -> usize {
         let split = self.declaring_slot_count as usize;
         assert!(
             split <= self.decl.type_params.len(),
@@ -310,7 +310,7 @@ impl MethodSig {
     }
 
     /// The slots the declaring block contributes.
-    pub(crate) fn declaring_type_params(&self) -> &[(String, TypeId)] {
+    pub fn declaring_type_params(&self) -> &[(String, TypeId)] {
         &self.decl.type_params[..self.declaring_split()]
     }
 
@@ -319,12 +319,12 @@ impl MethodSig {
     /// Rebuilding these from a counted offset instead is what let
     /// `impl<T, ..F> Emit for T` number `emit<S>` at a slot its signature does
     /// not use.
-    pub(crate) fn own_type_params(&self) -> &[(String, TypeId)] {
+    pub fn own_type_params(&self) -> &[(String, TypeId)] {
         &self.decl.type_params[self.declaring_split()..]
     }
 
     /// [`Self::own_type_params`] as bare ids.
-    pub(crate) fn own_type_param_ids(&self) -> Vec<TypeId> {
+    pub fn own_type_param_ids(&self) -> Vec<TypeId> {
         self.own_type_params().iter().map(|(_, id)| *id).collect()
     }
 
@@ -336,7 +336,7 @@ impl MethodSig {
     /// list: a generic, `&`-target, blanket or variadic-tuple impl numbers
     /// its slots differently, and a partially-concrete target leaves gaps a
     /// positional list cannot express.
-    pub(crate) fn instantiate_call(
+    pub fn instantiate_call(
         &self,
         type_table: &RefCell<TypeTable>,
         declaring_args: &[TypeId],
@@ -353,7 +353,7 @@ impl MethodSig {
     /// position 0 is pinned and binds nothing — so [`ImplSig::spelled_slots`]
     /// reads them, and whatever it cannot align falls back to the positional
     /// zip, as does every non-impl declaration.
-    pub(crate) fn instantiate_call_with(
+    pub fn instantiate_call_with(
         &self,
         type_table: &RefCell<TypeTable>,
         declaring: Option<&ImplSig>,
@@ -365,7 +365,7 @@ impl MethodSig {
     }
 
     /// The slots [`Self::instantiate_call_with`] fills.
-    pub(crate) fn call_slots(
+    pub fn call_slots(
         &self,
         type_table: &RefCell<TypeTable>,
         declaring: Option<&ImplSig>,
@@ -402,43 +402,43 @@ impl MethodSig {
 /// from 1, so an `impl` reads a method back by supplying its target as slot
 /// 0 and its trait arguments after it.
 #[derive(Clone, Debug)]
-pub(crate) struct TraitSig {
+pub struct TraitSig {
     /// The declaring module, for the call sites that name the trait's owner.
-    pub(crate) module: ModuleSource,
+    pub module: ModuleSource,
     /// The trait's methods, in declaration order, by name.
-    pub(crate) methods: IndexMap<String, TraitMethod>,
+    pub methods: IndexMap<String, TraitMethod>,
 }
 
 /// One method of a `trait` declaration.
 #[derive(Clone, Debug)]
-pub(crate) struct TraitMethod {
+pub struct TraitMethod {
     /// The signature in the trait's frame — [`TraitSig::type_params`] are its
     /// leading slots, the method's own follow.
-    pub(crate) sig: MethodSig,
+    pub sig: MethodSig,
     /// Irreducibly AST: walked once per implementing block and reified per
     /// instantiation. `None` marks a required or reserved method.
-    pub(crate) default_body: Option<Rc<ast::Function>>,
+    pub default_body: Option<Rc<ast::Function>>,
     /// Declared `#[unavailable]`: a reserved name, owed by no impl.
-    pub(crate) is_reserved: bool,
+    pub is_reserved: bool,
 }
 
 impl TraitMethod {
     /// Whether an impl that writes no such method still answers to it: with the
     /// trait's default, or with the reason a reserved name carries.
-    pub(crate) fn is_inherited(&self) -> bool {
+    pub fn is_inherited(&self) -> bool {
         self.default_body.is_some() || self.is_reserved
     }
 }
 
 impl TraitSig {
     /// The method named `name`, if the trait declares one.
-    pub(crate) fn method(&self, name: &str) -> Option<&TraitMethod> {
+    pub fn method(&self, name: &str) -> Option<&TraitMethod> {
         self.methods.get(name)
     }
 
     /// The methods this trait provides a default body for, in declaration
     /// order.
-    pub(crate) fn default_methods(&self) -> impl Iterator<Item = (&str, &Rc<ast::Function>)> {
+    pub fn default_methods(&self) -> impl Iterator<Item = (&str, &Rc<ast::Function>)> {
         self.methods.iter().filter_map(|(name, method)| {
             method
                 .default_body
@@ -455,27 +455,27 @@ impl TraitSig {
 /// Not part of [`MethodSig`]: these are the *block's* facts, shared by every
 /// method it declares, and a use site reads them without naming a method.
 #[derive(Clone, Debug)]
-pub(crate) struct ImplSig {
+pub struct ImplSig {
     /// The block, whose target the [`TypeTable`] records.
-    pub(crate) def: DefId,
+    pub def: DefId,
     /// The trait reference's type arguments (`K` in `impl Index<K> for …`),
     /// resolved against the same slots. Empty for an inherent impl.
-    pub(crate) trait_type_args: Vec<TypeId>,
+    pub trait_type_args: Vec<TypeId>,
     /// The block's `type X = …;` bindings, resolved against the same slots.
-    pub(crate) associated_types: IndexMap<String, TypeId>,
+    pub associated_types: IndexMap<String, TypeId>,
     /// The target's fq name, qualified by the module that declares it — what
     /// the block's own imports make of the name it wrote. A blanket target
     /// (`impl<T> Trait for T`) is its own binder.
-    pub(crate) target_fq: FqTypeName,
+    pub target_fq: FqTypeName,
     /// Which trait declaration the block implements, answered by the header's
     /// own reference site. `None` for an inherent impl.
-    pub(crate) trait_decl: Option<DefId>,
+    pub trait_decl: Option<DefId>,
 }
 
 impl ImplSig {
     /// Fill the block's slots with a receiver's type arguments — the one way
     /// a use site reads an [`ImplSig`], mirroring [`DeclSig::instantiate`].
-    pub(crate) fn instantiate(
+    pub fn instantiate(
         &self,
         type_table: &RefCell<TypeTable>,
         receiver_args: &[TypeId],
@@ -489,7 +489,7 @@ impl ImplSig {
     /// [`Self::slots`] is the alignment a plain generic target implies; a
     /// blanket, `&`-target or variadic-tuple block binds its slots from the
     /// receiver differently, and that caller passes its own map here.
-    pub(crate) fn instantiate_slots(
+    pub fn instantiate_slots(
         &self,
         type_table: &RefCell<TypeTable>,
         slots: &IndexMap<u32, TypeId>,
@@ -513,7 +513,7 @@ impl ImplSig {
 
     /// [`TypeTable::impl_slots`] for a spelled list: the receiver's positions, then the
     /// slots past them by index. `None` where the list cannot fill the positions.
-    pub(crate) fn spelled_slots(
+    pub fn spelled_slots(
         &self,
         type_table: &RefCell<TypeTable>,
         receiver_args: &[TypeId],
@@ -533,21 +533,21 @@ impl ImplSig {
 
 /// An [`ImplSig`] with its slots filled by a receiver's type arguments.
 #[derive(Clone, Debug)]
-pub(crate) struct InstantiatedImplSig {
-    pub(crate) trait_type_args: Vec<TypeId>,
-    pub(crate) associated_types: IndexMap<String, TypeId>,
+pub struct InstantiatedImplSig {
+    pub trait_type_args: Vec<TypeId>,
+    pub associated_types: IndexMap<String, TypeId>,
 }
 
 /// A [`DeclSig`] with its slots filled by a use site's type arguments.
 #[derive(Clone, Debug)]
-pub(crate) struct InstantiatedSig {
-    pub(crate) param_types: Vec<TypeId>,
-    pub(crate) return_type: TypeId,
+pub struct InstantiatedSig {
+    pub param_types: Vec<TypeId>,
+    pub return_type: TypeId,
 }
 
 impl DeclSig {
     /// The slots, as bare ids.
-    pub(crate) fn type_param_ids(&self) -> Vec<TypeId> {
+    pub fn type_param_ids(&self) -> Vec<TypeId> {
         self.type_params.iter().map(|(_, id)| *id).collect()
     }
 
@@ -557,7 +557,7 @@ impl DeclSig {
     /// mismatch, and passing fewer arguments than slots is how a
     /// partially-inferred call site instantiates what it knows, leaving
     /// the trailing slots abstract. Passing none substitutes nothing.
-    pub(crate) fn instantiate(
+    pub fn instantiate(
         &self,
         type_table: &RefCell<TypeTable>,
         type_args: &[TypeId],
@@ -569,7 +569,7 @@ impl DeclSig {
     /// holds a slot map. Equivalent to [`Self::instantiate`] when the map is
     /// dense from zero; the two differ only when the caller knows a
     /// non-contiguous subset, which positional arguments cannot express.
-    pub(crate) fn instantiate_slots(
+    pub fn instantiate_slots(
         &self,
         type_table: &RefCell<TypeTable>,
         substitution: &IndexMap<u32, TypeId>,
@@ -580,7 +580,7 @@ impl DeclSig {
     /// [`Self::instantiate_slots`] for a use site that also knows what the
     /// projections rooted at a slot mean. A signature written against
     /// `Self::X` is abstract over that too, and only the use site can fill it.
-    pub(crate) fn instantiate_slots_with(
+    pub fn instantiate_slots_with(
         &self,
         type_table: &RefCell<TypeTable>,
         substitution: &IndexMap<u32, TypeId>,

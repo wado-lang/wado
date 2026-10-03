@@ -9,10 +9,10 @@ use crate::canonical::{CanonicalIntrinsic, CmDeclKind, CmFuturePayload};
 use crate::component_model::{
     CANONICAL_ERROR_CODE_INTERFACE, CmInterfaceRegistry, ERROR_CODE_WADO_NAME, cm_decl_in_interface,
 };
+use crate::component_plan::CmExportType;
 use crate::hashmap::IndexSet;
 use crate::nir_package::NirPackage;
 use crate::wir::{ImportEntry, ImportKind};
-use crate::component_plan::CmExportType;
 
 /// Resolve the categorized import plan for `project` from `used_wasi_functions`,
 /// the registry, and the WIR-level canonical intrinsics. This is the decision

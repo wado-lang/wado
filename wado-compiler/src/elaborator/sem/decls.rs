@@ -21,41 +21,41 @@ use crate::tir::{AnonStructId, EffectRef, TirEffectOp, TirStruct};
 /// registered as `TypeParam` slots. Use sites substitute into this frame;
 /// they never re-resolve the signature AST.
 #[derive(Clone)]
-pub(crate) struct FunctionSig {
+pub struct FunctionSig {
     /// The canonical frame: the positional slots, the parameter types, and
     /// the return type. Instantiated at a use site through
     /// [`DeclSig::instantiate`].
-    pub(crate) decl: DeclSig,
+    pub decl: DeclSig,
     /// Registered `(name, TypeId)` pairs, in registration order — real
     /// params as `TypeParam` slots, fn-bound params as their realised
     /// function type. Effect params are excluded; empty iff the function
     /// declares only effect params (or none). A superset of
     /// `decl.type_params`, which holds only the slot-consuming subset.
-    pub(crate) type_param_ids: Vec<(String, TypeId)>,
+    pub type_param_ids: Vec<(String, TypeId)>,
     /// The declared parameters, in order, parallel to `decl.param_types`.
-    pub(crate) params: Vec<sig::Param>,
+    pub params: Vec<sig::Param>,
     /// Declared `with` effects, resolved in the declaring perspective
     /// (effect parameters stay symbolic as `EffectRef::Param`).
-    pub(crate) effects: Vec<EffectRef>,
+    pub effects: Vec<EffectRef>,
 }
 
 /// Per-module declaration tables produced by elaboration.
 #[derive(Default, Clone)]
-pub(crate) struct ModuleDecls {
+pub struct ModuleDecls {
     /// Canonical signatures of this module's own free functions, behind `Rc`
     /// so the program-wide assembly shares each rather than deep-cloning it.
-    pub(crate) function_sigs: IndexMap<DefId, std::rc::Rc<FunctionSig>>,
+    pub function_sigs: IndexMap<DefId, std::rc::Rc<FunctionSig>>,
     /// `func_name → return TypeId` for functions defined in this module.
-    pub(crate) function_return_types: IndexMap<String, TypeId>,
+    pub function_return_types: IndexMap<String, TypeId>,
     /// Names visible via `use` declarations in this module (the union of
     /// imported function names, effect function names, and namespace-import
     /// members), used by call resolution to recognise non-local names.
-    pub(crate) imported_functions: IndexSet<String>,
+    pub imported_functions: IndexSet<String>,
     /// `name → (TypeId, is_mut)` for globals declared in this module.
-    pub(crate) current_module_globals: IndexMap<String, (TypeId, bool)>,
+    pub current_module_globals: IndexMap<String, (TypeId, bool)>,
     /// `local_name → (source, original_name, TypeId, is_mut)` for globals
     /// brought in by `use`.
-    pub(crate) imported_globals: IndexMap<String, (ModuleSource, String, TypeId, bool)>,
+    pub imported_globals: IndexMap<String, (ModuleSource, String, TypeId, bool)>,
     /// This module's own impl-associated constants, keyed by canonical
     /// identity `(type-declaring module, "Type::CONST")` — the impl
     /// target's prefix canonicalized in this module's scope. The value
@@ -63,7 +63,7 @@ pub(crate) struct ModuleDecls {
     /// that perspective), the const type, and the value expression.
     /// Canonical keys make cross-module collisions impossible, so the
     /// driver-merged view needs no shadowing rules.
-    pub(crate) associated_constants: IndexMap<(DefId, String), AssocConstSig>,
+    pub associated_constants: IndexMap<(DefId, String), AssocConstSig>,
     /// Canonical signatures of this module's method declarations, keyed by
     /// the method's declaration.
     ///
@@ -72,46 +72,46 @@ pub(crate) struct ModuleDecls {
     /// to the impl target. An `interface` / `resource` operation is resolved
     /// in the declaration's frame. Either way a use site instantiates
     /// instead of re-resolving the method AST.
-    pub(crate) method_sigs: IndexMap<DefId, MethodSig>,
+    pub method_sigs: IndexMap<DefId, MethodSig>,
     /// A declaration paired with an operation name → the operation, so a
     /// caller holding only a name reaches its `method_sigs` entry.
-    pub(crate) resource_method_ids: IndexMap<(DefId, String), DefId>,
+    pub resource_method_ids: IndexMap<(DefId, String), DefId>,
     /// Facts of this module's `impl` blocks that belong to the block rather
     /// than to one method — its target and trait type arguments and its
     /// associated-type bindings — resolved once in the block's own frame and
     /// keyed by the block's [`crate::defs::DefId`].
-    pub(crate) impl_sigs: IndexMap<DefId, ImplSig>,
+    pub impl_sigs: IndexMap<DefId, ImplSig>,
     /// Facts of this module's `trait` declarations, resolved once in each
     /// trait's own frame (`Self` at slot 0) and keyed by the declaration, so
     /// a use site instantiates instead of re-resolving the trait method AST.
-    pub(crate) trait_sigs: IndexMap<DefId, TraitSig>,
+    pub trait_sigs: IndexMap<DefId, TraitSig>,
     /// Resolved operation signatures of this module's `interface` and
     /// `resource` declarations, keyed by the declaration.
     ///
     /// Resolved in the declaration's own frame — type params registered and
     /// `Self` constructed — which is why the body pass reads these back
     /// instead of resolving the same methods a second time.
-    pub(crate) effect_ops: IndexMap<DefId, Vec<TirEffectOp>>,
+    pub effect_ops: IndexMap<DefId, Vec<TirEffectOp>>,
 
     /// `func_name → type_params` for generic functions in this module.
-    pub(crate) generic_function_params: IndexMap<String, Vec<(String, TypeId)>>,
+    pub generic_function_params: IndexMap<String, Vec<(String, TypeId)>>,
     /// `func_name → resolved param TypeIds` for generic functions. The
     /// `TypeIds` are resolved in the function's own type-param scope so
     /// `TypeParam` ids match.
-    pub(crate) generic_function_resolved_param_types: IndexMap<String, Vec<TypeId>>,
+    pub generic_function_resolved_param_types: IndexMap<String, Vec<TypeId>>,
     /// `func_name → resolved return TypeId` for generic functions. Used for
     /// expected-return back-inference.
-    pub(crate) generic_function_resolved_return_types: IndexMap<String, TypeId>,
+    pub generic_function_resolved_return_types: IndexMap<String, TypeId>,
     /// `mangled_name → type_params` for generic methods.
-    pub(crate) generic_method_params: IndexMap<String, Vec<(String, TypeId)>>,
+    pub generic_method_params: IndexMap<String, Vec<(String, TypeId)>>,
     /// `mangled_name → resolved param TypeIds` for generic methods. Resolved
     /// in the method's own type-param scope.
-    pub(crate) generic_method_resolved_param_types: IndexMap<String, Vec<TypeId>>,
+    pub generic_method_resolved_param_types: IndexMap<String, Vec<TypeId>>,
 
     /// Anonymous structs synthesised from struct literals during expression
     /// resolution. Reify reads them back into the [`crate::tir::TirModule`]
     /// in `reify_module`.
-    pub(crate) pending_anonymous_structs: Vec<TirStruct>,
+    pub pending_anonymous_structs: Vec<TirStruct>,
 
     /// Synthesis requests recorded by `impl Trait for Type;`.
     /// The elaborator pushes one per
@@ -119,20 +119,20 @@ pub(crate) struct ModuleDecls {
     /// this list and pushes each onto the emitted
     /// `TirModule::synthesis_requests`. Decouples annotate
     /// (which records) from reify (which emits).
-    pub(crate) pending_synthesis_requests: Vec<tir::SynthesisRequest>,
+    pub pending_synthesis_requests: Vec<tir::SynthesisRequest>,
 
     /// Additions to the data tables made during this module's walk, read by
     /// `TypeLookup` ahead of the program's. Keyed by declaration, never spelling.
-    pub(crate) local: DataDecls,
+    pub local: DataDecls,
 
     /// Fields of the anonymous struct shapes this walk interned. A shape names
     /// no declaration, so it is keyed by the shape's own id — the same head
     /// [`crate::tir::StructDef::Anon`] carries.
-    pub(crate) anon_struct_fields: IndexMap<AnonStructId, StructFieldInfo>,
+    pub anon_struct_fields: IndexMap<AnonStructId, StructFieldInfo>,
 
     /// The identities of the local items in scope at the walk's position, by the
     /// name written in source. Their contents come from the maps above.
-    pub(crate) fn_local_items: IndexMap<String, DefId>,
+    pub fn_local_items: IndexMap<String, DefId>,
 }
 
 impl ModuleDecls {
@@ -141,7 +141,7 @@ impl ModuleDecls {
     /// locally-declared global. Both the annotate and reify call-resolution
     /// paths route their global-callee lookup through here so the two never
     /// disagree on what a bare name binds to.
-    pub(crate) fn lookup_global(
+    pub fn lookup_global(
         &self,
         name: &str,
         current: &ModuleSource,
@@ -162,7 +162,7 @@ impl ModuleDecls {
     /// local item declared in one function body never leaks into the next
     /// one's resolution. A single shared call makes it impossible for a new
     /// entry point to forget this.
-    pub(crate) fn clear_fn_local_items(&mut self) {
+    pub fn clear_fn_local_items(&mut self) {
         self.fn_local_items.clear();
     }
 }

@@ -36,65 +36,65 @@ use crate::resolve::Resolutions;
 /// rationale for the `Elaborator` caches that were removed rather than
 /// migrated here.
 #[derive(Clone)]
-pub(crate) struct TypeSystem {
+pub struct TypeSystem {
     /// Shared type arena. Anonymous structs synthesised from struct
     /// literals and monomorphised instances created during reify intern
     /// through this same table; the `Rc<RefCell<…>>` is the one piece of
     /// shared interior mutability the WEP explicitly preserves.
-    pub(crate) type_table: Rc<RefCell<TypeTable>>,
+    pub type_table: Rc<RefCell<TypeTable>>,
 
     /// Every loaded module's data declarations. Built during the
     /// annotate-decls pass; read-only afterwards.
-    pub(crate) data: Rc<DataDecls>,
+    pub data: Rc<DataDecls>,
 
     /// What every type/trait reference site in the program refers to, resolved
     /// once from the module that wrote it. The single producer of declaration
     /// identity from written syntax (WEP 2026-08-12).
-    pub(crate) resolutions: Rc<Resolutions>,
+    pub resolutions: Rc<Resolutions>,
 
     /// Immutable trait knowledge base: impl indices, trait declarations,
     /// and blanket impls. Built once by [`TraitEnv::build`] and shared
     /// across every per-module elaborator via `Arc`.
-    pub(crate) trait_env: Arc<TraitEnv>,
+    pub trait_env: Arc<TraitEnv>,
     /// The solver's view of the program, built once every declaration is
     /// resolved and `None` until then. Selection asks it in every profile, so
     /// that a debug and a release build cannot choose different impls
     /// (WEP 2026-09-01).
-    pub(crate) solver: Option<Rc<SolverBridge>>,
+    pub solver: Option<Rc<SolverBridge>>,
 
     /// Registries the elaborator queries. The Component-Model
     /// `WorldRegistry` is built by the same `CmInterfaceRegistry::build_from_stdlib`
     /// call but lives on [`super::orchestration::AnnotateState`] instead
     /// of here — the elaborator never asks "what does world X export?",
     /// only post-elaborator stages (link, synthesis, DCE) do.
-    pub(crate) cm_interface_registry: std::sync::Arc<CmInterfaceRegistry>,
-    pub(crate) builtin_registry: Rc<BuiltinRegistry>,
+    pub cm_interface_registry: std::sync::Arc<CmInterfaceRegistry>,
+    pub builtin_registry: Rc<BuiltinRegistry>,
 
     /// Pre-loaded file contents for `#include_str` / `#include_bytes`.
     /// Key: `[module_source_display, raw_path]`, value: raw bytes.
-    pub(crate) included_files: Rc<IndexMap<[String; 2], Vec<u8>>>,
+    pub included_files: Rc<IndexMap<[String; 2], Vec<u8>>>,
 
     /// Per-module index from function name → position in `module.items`
     /// for O(1) lookup. Built globally during annotate; read-only
     /// afterwards.
-    pub(crate) loaded_module_func_indices: Rc<IndexMap<ModuleSource, IndexMap<String, usize>>>,
+    pub loaded_module_func_indices: Rc<IndexMap<ModuleSource, IndexMap<String, usize>>>,
 
     /// What a site naming an `#[unavailable]` declaration reports, by the
     /// declaration. The sentence is rendered once here, where the declaring
     /// `impl` or `trait` is in hand to qualify the name.
     /// See [WEP: Declared Absence](../../../docs/wep-2026-09-13-declared-absence.md).
-    pub(crate) unavailable: Rc<IndexMap<DefId, String>>,
+    pub unavailable: Rc<IndexMap<DefId, String>>,
 
     /// Every source declaration's decl-pass facts — signatures, globals,
     /// associated constants, data sections. See [`super::sig::Signatures`]
     /// for the membership rule.
-    pub(crate) signatures: Rc<sig::Signatures>,
+    pub signatures: Rc<sig::Signatures>,
 }
 
 impl TypeSystem {
     /// A [`TypeLookup`] standing in `module`, reading `walk`'s additions ahead
     /// of the program's declarations.
-    pub(crate) fn type_lookup<'s>(
+    pub fn type_lookup<'s>(
         &'s self,
         module: &'s ModuleSource,
         namespace_imports: &'s NamespaceImports,
@@ -118,7 +118,7 @@ impl TypeSystem {
     ///
     /// An anonymous shape answers from its head: it has fields like any other
     /// struct, and no declaration to reach them through.
-    pub(crate) fn struct_field_type_ids_of(&self, type_id: TypeId) -> Option<Vec<TypeId>> {
+    pub fn struct_field_type_ids_of(&self, type_id: TypeId) -> Option<Vec<TypeId>> {
         {
             let table = self.type_table.borrow();
             if let ResolvedType::Struct {
@@ -141,7 +141,7 @@ impl TypeSystem {
 
     /// Whether `type_id` is, or transitively carries, an affine resource.
     /// Permits a by-value `self` receiver on an aggregate that owns a resource.
-    pub(crate) fn carries_resource(&self, type_id: TypeId) -> bool {
+    pub fn carries_resource(&self, type_id: TypeId) -> bool {
         carries_affine_resource(
             &self.type_table.borrow(),
             &|id| self.struct_field_type_ids_of(id),
@@ -152,7 +152,7 @@ impl TypeSystem {
 
     /// The `Type::Case` spelling of the case the resolve walk names at a bare
     /// identifier site: the hint when no expected type supplies one.
-    pub(crate) fn bare_case_at(&self, site: AstId) -> Option<String> {
+    pub fn bare_case_at(&self, site: AstId) -> Option<String> {
         let case = self.resolutions.declared_if_walked(site)?;
         let defs = self.resolutions.defs();
         if !defs.kind(case).is_case() {
@@ -165,7 +165,7 @@ impl TypeSystem {
     }
 
     /// `type_id` with each `TypeParam { index: i }` replaced by `type_args[i]`.
-    pub(crate) fn substitute_type_params(&self, type_id: TypeId, type_args: &[TypeId]) -> TypeId {
+    pub fn substitute_type_params(&self, type_id: TypeId, type_args: &[TypeId]) -> TypeId {
         if type_args.is_empty() {
             return type_id;
         }
@@ -175,14 +175,14 @@ impl TypeSystem {
     }
 
     /// The `Type::Case` spelling of `case` under `owner`.
-    pub(crate) fn qualified_case(&self, owner: DefId, case: &str) -> String {
+    pub fn qualified_case(&self, owner: DefId, case: &str) -> String {
         format!("{}::{case}", self.resolutions.defs().name(owner))
     }
 
     /// The method `name` that `owner` — an `impl` block or a `trait`
     /// declaration — declares. Answered from the declaration table, so two
     /// blocks on one type each declaring `name` stay distinct.
-    pub(crate) fn declared_method(&self, owner: DefId, name: &str) -> Option<DefId> {
+    pub fn declared_method(&self, owner: DefId, name: &str) -> Option<DefId> {
         let defs = self.resolutions.defs();
         defs.members(owner)
             .iter()
@@ -195,7 +195,7 @@ impl TypeSystem {
     /// only way in and the whole of it: `String` in `impl Tr for Foo<String>`
     /// fills an argument position and binds no slot, and a name the block does
     /// declare is a slot however many modules name a type that.
-    pub(crate) fn is_impl_target_param(&self, declared: &[GenericParam], name: &str) -> bool {
+    pub fn is_impl_target_param(&self, declared: &[GenericParam], name: &str) -> bool {
         declared.iter().any(|p| p.name == name)
     }
 
@@ -204,7 +204,7 @@ impl TypeSystem {
     /// acquires its inner type from an expected-type context, so callers that
     /// can supply one (e.g. binary operands) check this to route the type
     /// through.
-    pub(crate) fn is_null_literal(expr: &Expr) -> bool {
+    pub fn is_null_literal(expr: &Expr) -> bool {
         matches!(expr, Expr::Literal(lit) if matches!(lit.value, Literal::Null))
     }
 }
@@ -212,7 +212,7 @@ impl TypeSystem {
 /// The trait `op` dispatches through and the method it calls, or `None` for
 /// the short-circuit operators, which dispatch through no trait. `And` / `Or`
 /// are explicit arms, so a new [`BinaryOp`] variant fails the build here.
-pub(crate) fn operator_trait_method(op: &BinaryOp) -> Option<(CompilerItem, &'static str)> {
+pub fn operator_trait_method(op: &BinaryOp) -> Option<(CompilerItem, &'static str)> {
     match op {
         BinaryOp::Add => Some((CompilerItem::Add, "add")),
         BinaryOp::Sub => Some((CompilerItem::Sub, "sub")),
@@ -233,7 +233,7 @@ pub(crate) fn operator_trait_method(op: &BinaryOp) -> Option<(CompilerItem, &'st
 }
 
 /// The compiler item `op` dispatches through.
-pub(crate) fn operator_compiler_item(op: &BinaryOp) -> Option<CompilerItem> {
+pub fn operator_compiler_item(op: &BinaryOp) -> Option<CompilerItem> {
     operator_trait_method(op).map(|(item, _)| item)
 }
 
@@ -243,7 +243,7 @@ pub(crate) fn operator_compiler_item(op: &BinaryOp) -> Option<CompilerItem> {
 /// reify both reach them through `self.tysys`.
 impl TypeSystem {
     /// Get the struct name from a type ID, if it's a struct, generic instance, newtype, or flags.
-    pub(crate) fn struct_name_for_type(&self, type_id: TypeId) -> Option<String> {
+    pub fn struct_name_for_type(&self, type_id: TypeId) -> Option<String> {
         match self.type_table.borrow().get(type_id) {
             ResolvedType::Struct { .. }
             | ResolvedType::GenericInstance { .. }
@@ -265,18 +265,14 @@ impl TypeSystem {
     /// (`List<i32>` → `core:prelude/list.wado/List`). Reading the module off
     /// the resolved type is what makes this exact — a written name would have
     /// to be re-resolved in the current scope, which the type already did.
-    pub(crate) fn fq_receiver_head(&self, type_id: TypeId) -> FqTypeName {
+    pub fn fq_receiver_head(&self, type_id: TypeId) -> FqTypeName {
         self.type_table.borrow().fq_base_type_name(type_id)
     }
 
     /// How a method dispatched through `impl` spells its receiver: an impl at
     /// one instantiation owns that instance's function, a parameterized one the
     /// base's, specialized per instance by monomorphization.
-    pub(crate) fn fq_receiver_of_impl(
-        &self,
-        type_id: TypeId,
-        at_one_instantiation: bool,
-    ) -> FqTypeName {
+    pub fn fq_receiver_of_impl(&self, type_id: TypeId, at_one_instantiation: bool) -> FqTypeName {
         let table = self.type_table.borrow();
         if at_one_instantiation {
             table.fq_type_name(type_id)
@@ -288,7 +284,7 @@ impl TypeSystem {
     /// The first link at or below `type_id` — itself included — writing its own
     /// impl of `trait_`, stopping above a scalar base: a primitive's operator
     /// impl *is* the instruction, not one a newtype inherits.
-    pub(crate) fn own_impl_link(&self, type_id: TypeId, trait_: DefId) -> Option<TypeId> {
+    pub fn own_impl_link(&self, type_id: TypeId, trait_: DefId) -> Option<TypeId> {
         let mut tid = type_id;
         loop {
             let key = self.type_table.borrow().impl_receiver_key(tid);
@@ -314,7 +310,7 @@ impl TypeSystem {
 
     /// The prelude struct a `kind` range literal builds: its name, and its
     /// instance over `element`.
-    pub(crate) fn range_type(&self, kind: RangeKind, element: TypeId) -> (String, TypeId) {
+    pub fn range_type(&self, kind: RangeKind, element: TypeId) -> (String, TypeId) {
         let item = range_item(kind);
         let mut type_table = self.type_table.borrow_mut();
         let name = type_table.compiler_items().struct_name(item).to_string();
@@ -324,7 +320,7 @@ impl TypeSystem {
 
     /// The name an operator impl on `ty` is indexed under. `None` for a type no
     /// user impl can supply an operator for.
-    pub(crate) fn operator_receiver_name(&self, ty: TypeId) -> Option<String> {
+    pub fn operator_receiver_name(&self, ty: TypeId) -> Option<String> {
         let table = self.type_table.borrow();
         matches!(
             table.get(ty),
@@ -339,7 +335,7 @@ impl TypeSystem {
     /// [`Self::newtype_base_lookup`] for a trait dispatch: an impl a link below
     /// the receiver wrote still answers for it, so stop at that link rather
     /// than one peel down, where a longer chain carries none.
-    pub(crate) fn trait_impl_base_lookup(
+    pub fn trait_impl_base_lookup(
         &self,
         name: &str,
         type_id: TypeId,
@@ -356,7 +352,7 @@ impl TypeSystem {
     ///
     /// A middle link writes no impl of its own, or [`Self::own_impl_link`] would
     /// have stopped there.
-    pub(crate) fn newtype_base_lookup(&self, name: &str, type_id: TypeId) -> (String, TypeId) {
+    pub fn newtype_base_lookup(&self, name: &str, type_id: TypeId) -> (String, TypeId) {
         let tt = self.type_table.borrow();
         if let Some(base_id) = tt.newtype_representation(type_id) {
             let is_builtin_array = matches!(tt.get(base_id), ResolvedType::BuiltinArray(_));
@@ -373,7 +369,7 @@ impl TypeSystem {
 
     /// Peel a chain of trailing newtypes / generic instances down to the
     /// ultimate base struct (or builtin) name that owns its methods.
-    pub(crate) fn get_ultimate_base_struct_name(&self, type_id: TypeId) -> String {
+    pub fn get_ultimate_base_struct_name(&self, type_id: TypeId) -> String {
         let mut current = type_id;
         loop {
             match self.type_table.borrow().get(current).clone() {
@@ -395,12 +391,12 @@ impl TypeSystem {
     }
 
     /// Peel reference / mutable-reference wrappers to reach the underlying type.
-    pub(crate) fn get_base_type(&self, type_id: TypeId) -> TypeId {
+    pub fn get_base_type(&self, type_id: TypeId) -> TypeId {
         self.type_table.borrow().peel_refs(type_id)
     }
 
     /// Whether `type_id` is a kind that participates in `Eq`/`Ord` auto-derive.
-    pub(crate) fn auto_derive_eligible_kind(&self, type_id: TypeId) -> bool {
+    pub fn auto_derive_eligible_kind(&self, type_id: TypeId) -> bool {
         matches!(
             self.type_table.borrow().get(type_id),
             ResolvedType::Struct { .. }
@@ -413,7 +409,7 @@ impl TypeSystem {
     /// Substitute every occurrence of `base_type` with `newtype` inside
     /// `type_id`, recursing through references and generic-instance args.
     /// Returns the original id unchanged when no occurrence is found.
-    pub(crate) fn substitute_newtype_in_type(
+    pub fn substitute_newtype_in_type(
         &self,
         type_id: TypeId,
         base_type: TypeId,
@@ -471,14 +467,14 @@ impl TypeSystem {
 
     /// The name the type parameter or pack in this slot carries, `None` for a
     /// slot holding anything else.
-    pub(crate) fn binder_name(&self, type_id: TypeId) -> Option<String> {
+    pub fn binder_name(&self, type_id: TypeId) -> Option<String> {
         bound_param_name(self.type_table.borrow().get(type_id)).cloned()
     }
 
     /// Render a type as a user-facing Wado type string (used in diagnostics
     /// and synthesized names). Recurses through references, generic args,
     /// tuples, and function types.
-    pub(crate) fn type_id_to_string(&self, type_id: TypeId) -> String {
+    pub fn type_id_to_string(&self, type_id: TypeId) -> String {
         let resolved = self.type_table.borrow().get(type_id).clone();
         match resolved {
             ResolvedType::Primitive(prim) => format!("{prim:?}").to_lowercase(),

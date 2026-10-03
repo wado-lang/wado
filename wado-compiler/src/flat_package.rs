@@ -11,6 +11,7 @@ use std::rc::Rc;
 use crate::builtin_registry::BuiltinRegistry;
 use crate::codegen_flags::CodegenFlags;
 use crate::component_model::CmInterfaceRegistry;
+use crate::component_plan::ComponentPlan;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader::WasmAsset;
@@ -24,7 +25,6 @@ use crate::tir::{
 };
 use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
-use crate::component_plan::ComponentPlan;
 use crate::world_registry::{self, GENERATOR_HOST_INTERFACE, WorldRegistry};
 
 /// A linked Wado package ready for WIR building and code generation.

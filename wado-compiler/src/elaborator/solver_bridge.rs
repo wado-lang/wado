@@ -616,7 +616,7 @@ fn newtype_decls<'a>(
 
 /// The solver's view of the whole program, and the differential that checks
 /// its answers against the path in use.
-pub(crate) struct SolverBridge {
+pub struct SolverBridge {
     program: Program,
     lowering: Lowering,
 }
@@ -676,7 +676,7 @@ impl SolverBridge {
             || Self::OPERATORS.contains(&item)
     }
 
-    pub(crate) fn build(tysys: &TypeSystem, modules: &[ModuleSource]) -> Self {
+    pub fn build(tysys: &TypeSystem, modules: &[ModuleSource]) -> Self {
         let mut lowering = Lowering::default();
         let mut program = Program::default();
         let table = tysys.type_table.borrow();

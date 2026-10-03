@@ -19,10 +19,10 @@ use crate::symbol::Symbol;
 /// [`super::super::Elaborator::with_module_perspective_for`]) names its node
 /// exactly, whichever module's `ModuleBindings` it lands in and stays in.
 #[derive(Default, Clone)]
-pub(crate) struct ModuleBindings {
+pub struct ModuleBindings {
     /// `IdentExpr.id → defining AstId`.
-    pub(crate) references: IndexMap<AstId, AstId>,
+    pub references: IndexMap<AstId, AstId>,
     /// Locally-defined [`Symbol`]s (let bindings, parameters, closure
     /// parameters) keyed by the binding's defining [`AstId`].
-    pub(crate) local_symbols: IndexMap<AstId, Symbol>,
+    pub local_symbols: IndexMap<AstId, Symbol>,
 }

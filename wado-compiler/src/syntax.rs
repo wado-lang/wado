@@ -52,7 +52,7 @@ macro_rules! keyword_registry {
             /// Map source text to its keyword token, if it is one. Used by the
             /// lexer's identifier/keyword disambiguation.
             #[must_use]
-            pub(crate) fn from_keyword(text: &str) -> Option<TokenKind> {
+            pub fn from_keyword(text: &str) -> Option<TokenKind> {
                 match text {
                     $( $text => Some(TokenKind::$variant), )+
                     _ => None,

@@ -27,7 +27,7 @@ pub struct InternedStr(Arc<str>);
 impl InternedStr {
     /// Build from a raw `Arc<str>`. Restricted to this crate so external
     /// callers cannot bypass the interner.
-    pub(crate) fn from_arc(arc: Arc<str>) -> Self {
+    pub fn from_arc(arc: Arc<str>) -> Self {
         Self(arc)
     }
 

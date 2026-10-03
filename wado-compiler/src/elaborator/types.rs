@@ -27,7 +27,7 @@ use crate::token::Span;
 
 /// Struct field info: module source and field definitions
 #[derive(Clone)]
-pub(crate) struct StructFieldInfo {
+pub struct StructFieldInfo {
     /// Canonical type name (original declaration name, not import alias).
     pub(super) name: String,
     pub(super) module_source: ModuleSource,
@@ -130,7 +130,7 @@ pub(super) fn newtype_member_owner(
 
 impl StructFieldInfo {
     /// `decl` with its fields resolved to `fields`, in declaration order.
-    pub(crate) fn of_decl(
+    pub fn of_decl(
         module_source: ModuleSource,
         decl: &ast::StructDecl,
         fields: Vec<(String, TypeId, Visibility)>,
@@ -172,18 +172,18 @@ impl StructFieldInfo {
 
 /// Variant case info: case name and payload type
 #[derive(Clone)]
-pub(crate) struct VariantCaseData {
+pub struct VariantCaseData {
     pub(super) name: String,
     /// Payload type for this case. Unit variants have `()` (unit type) payload.
-    pub(crate) payload: TypeId,
+    pub payload: TypeId,
     /// `AstId` of the case declaration (`VariantCase::id`) in the owning module.
-    pub(crate) ast_id: AstId,
+    pub ast_id: AstId,
 }
 
 impl VariantCaseData {
     /// `decl`'s cases, each payload resolved by `payload_of`; a case without
     /// one carries `()`.
-    pub(crate) fn collect(
+    pub fn collect(
         decl: &ast::VariantDecl,
         mut payload_of: impl FnMut(&ast::Type) -> TypeId,
     ) -> Vec<Self> {
@@ -208,13 +208,13 @@ impl VariantCaseData {
 
 /// Variant info: module source, type parameters, and cases
 #[derive(Clone)]
-pub(crate) struct VariantInfo {
+pub struct VariantInfo {
     /// Canonical type name (original declaration name, not import alias).
     /// `pub(crate)` alongside `module_source` so the Semantics-based effect
     /// checker can key its payload map by the declaration, now that the
     /// registry no longer spells one out in its key.
-    pub(crate) name: String,
-    pub(crate) module_source: ModuleSource,
+    pub name: String,
+    pub module_source: ModuleSource,
     /// `AstId` of the `variant` declaration (`VariantDecl::id`).
     pub(super) defined_at: AstId,
     /// The declaration's real type parameters, like
@@ -222,7 +222,7 @@ pub(crate) struct VariantInfo {
     pub(super) type_params: RealTypeParams,
     /// Per-case data. `pub(crate)` so the Semantics-based effect checker can
     /// follow resources nested in variant case payloads.
-    pub(crate) cases: Vec<VariantCaseData>,
+    pub cases: Vec<VariantCaseData>,
     /// `TypeIds` of the variant's own type parameters in declaration order.
     /// Used by `infer_variant_type_args` to fill type params from payload args
     /// and expected type context.
@@ -240,7 +240,7 @@ pub(super) struct EnumCaseData {
 
 /// Enum info: module source and cases (enums have no type parameters or payloads)
 #[derive(Clone)]
-pub(crate) struct EnumInfo {
+pub struct EnumInfo {
     pub(super) module_source: ModuleSource,
     /// `AstId` of the `enum` declaration (`EnumDecl::id`).
     pub(super) defined_at: AstId,
@@ -311,7 +311,7 @@ pub(super) struct FlagsMemberData {
 
 /// Flags type info: newtype `TypeId` and members
 #[derive(Clone)]
-pub(crate) struct FlagsInfo {
+pub struct FlagsInfo {
     pub(super) type_id: TypeId,
     pub(super) module_source: ModuleSource,
     pub(super) members: Vec<FlagsMemberData>,
@@ -350,7 +350,7 @@ impl FlagsInfo {
 
 /// A declared `resource`, by its declaration.
 #[derive(Clone)]
-pub(crate) struct ResourceInfo {
+pub struct ResourceInfo {
     /// Canonical type name (original declaration name, not import alias).
     pub(super) name: String,
     /// `AstId` of the `resource` declaration (`ResourceDecl::id`).
@@ -359,7 +359,7 @@ pub(crate) struct ResourceInfo {
 
 /// Generic newtype definition: `type Foo<T> = Bar<T>`
 #[derive(Clone)]
-pub(crate) struct GenericNewtypeInfo {
+pub struct GenericNewtypeInfo {
     /// The declaration's real type parameters, like
     /// [`StructFieldInfo::type_params`].
     pub(super) type_params: RealTypeParams,
@@ -367,7 +367,7 @@ pub(crate) struct GenericNewtypeInfo {
 }
 
 impl GenericNewtypeInfo {
-    pub(crate) fn of_decl(decl: &ast::Newtype) -> Self {
+    pub fn of_decl(decl: &ast::Newtype) -> Self {
         Self {
             type_params: RealTypeParams::of(&decl.type_params),
             base_type_ast: decl.ty.clone(),
@@ -3812,7 +3812,7 @@ impl From<&ast::GenericParam> for ParamSlot {
 /// A declaration's type parameters as the dense type-argument space holds
 /// them: a position here is the index an argument fills.
 #[derive(Clone, Default)]
-pub(crate) struct RealTypeParams(Vec<ast::GenericParam>);
+pub struct RealTypeParams(Vec<ast::GenericParam>);
 
 impl RealTypeParams {
     // An effect or `fn`-bound parameter holds no position in that space, so
@@ -3861,14 +3861,14 @@ impl ParamSlot {
 
 /// Every data declaration's resolved shape, keyed by declaration.
 #[derive(Default, Clone)]
-pub(crate) struct DataDecls {
-    pub(crate) newtypes: IndexMap<DefId, TypeId>,
-    pub(crate) generic_newtypes: IndexMap<DefId, GenericNewtypeInfo>,
-    pub(crate) struct_fields: IndexMap<DefId, StructFieldInfo>,
-    pub(crate) variant_cases: IndexMap<DefId, VariantInfo>,
-    pub(crate) enum_cases: IndexMap<DefId, EnumInfo>,
-    pub(crate) flags_cases: IndexMap<DefId, FlagsInfo>,
-    pub(crate) resource_types: IndexMap<DefId, ResourceInfo>,
+pub struct DataDecls {
+    pub newtypes: IndexMap<DefId, TypeId>,
+    pub generic_newtypes: IndexMap<DefId, GenericNewtypeInfo>,
+    pub struct_fields: IndexMap<DefId, StructFieldInfo>,
+    pub variant_cases: IndexMap<DefId, VariantInfo>,
+    pub enum_cases: IndexMap<DefId, EnumInfo>,
+    pub flags_cases: IndexMap<DefId, FlagsInfo>,
+    pub resource_types: IndexMap<DefId, ResourceInfo>,
 }
 
 impl DataDecls {
@@ -3890,7 +3890,7 @@ impl DataDecls {
     }
 
     /// Declare the concrete newtype `decl_id` over `base`, which is also a type name.
-    pub(crate) fn declare_newtype(
+    pub fn declare_newtype(
         &mut self,
         type_table: &RefCell<TypeTable>,
         def: DefId,
@@ -3905,14 +3905,14 @@ impl DataDecls {
     }
 
     /// Every declaration any table holds. A `flags` type is in two.
-    pub(crate) fn declarations(&self) -> impl Iterator<Item = DefId> + '_ {
+    pub fn declarations(&self) -> impl Iterator<Item = DefId> + '_ {
         self.known_types()
             .chain(self.resource_types.keys().copied())
     }
 
     /// [`Self::declarations`] less the resources, which impl-block inference
     /// must not read as a known type name (`impl Request { … }`).
-    pub(crate) fn known_types(&self) -> impl Iterator<Item = DefId> + '_ {
+    pub fn known_types(&self) -> impl Iterator<Item = DefId> + '_ {
         let Self {
             newtypes,
             generic_newtypes,
@@ -3938,22 +3938,22 @@ impl DataDecls {
 /// during resolution, the current module's own definitions, then its imports
 /// (with `use { Foo as Bar }` aliasing) — no global scan beyond that (#1416).
 /// All fields are borrowed, so a call site constructs one without allocating.
-pub(crate) struct TypeLookup<'a> {
-    pub(crate) current_module_source: &'a ModuleSource,
+pub struct TypeLookup<'a> {
+    pub current_module_source: &'a ModuleSource,
     /// What every name in the program resolves to, answered once by the resolve
     /// pass. The registries this view reads are keyed by declaration, so this is
     /// how a written name reaches one.
-    pub(crate) resolutions: &'a Resolutions,
+    pub resolutions: &'a Resolutions,
     /// Namespace-import aliases (`use ns from "..."`), by which a `ns::Type`
     /// reference canonicalizes to `ns$Type` (`sem::imports::canonical_ns_ref`).
-    pub(crate) namespace_imports: &'a IndexMap<String, ModuleSource>,
-    pub(crate) program: &'a DataDecls,
+    pub namespace_imports: &'a IndexMap<String, ModuleSource>,
+    pub program: &'a DataDecls,
     /// This walk's own additions, read ahead of `program`: its local data
     /// declarations, anonymous shapes and function-local items.
-    pub(crate) walk: &'a ModuleDecls,
+    pub walk: &'a ModuleDecls,
     /// The declaration indexes, for a caller holding a rendered head rather than
     /// its site. No import alias steers them; a name several modules declare misses.
-    pub(crate) decls: &'a TraitEnv,
+    pub decls: &'a TraitEnv,
 }
 
 impl<'a> TypeLookup<'a> {

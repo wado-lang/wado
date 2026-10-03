@@ -164,7 +164,7 @@ impl HeapState {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct HeapSnapshot {
+pub struct HeapSnapshot {
     per_slot: IndexMap<(u32, u32), HeapVersion>,
     per_local: IndexMap<u32, HeapVersion>,
     field_global: IndexMap<u32, HeapVersion>,
@@ -251,7 +251,7 @@ pub fn build(
 /// `scratch`, cloned from `body.values` with ids preserved, so the shared graph
 /// is not perturbed.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn build_scoped(
+pub fn build_scoped(
     body: &mut Body,
     block: BlockId,
     skip: usize,
@@ -301,7 +301,7 @@ pub(crate) fn build_scoped(
 /// scratch ids themselves mean nothing in the live pool (see
 /// `Engine::scoped_field_values`).
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn walk_scoped(
+pub fn walk_scoped(
     body: &Body,
     block: BlockId,
     skip: usize,
@@ -355,7 +355,7 @@ pub(crate) fn walk_scoped(
 
 /// What a [`walk_scoped`] pass observed: each expression's scratch value, and
 /// the version counter as each statement began.
-pub(crate) struct ScopedWalk {
+pub struct ScopedWalk {
     pub values: Vec<(ExprId, ValueId)>,
     pub stmt_entry_version: IndexMap<StmtId, HeapVersion>,
 }
@@ -364,7 +364,7 @@ pub(crate) struct ScopedWalk {
 /// operand at the early freeze (see `extract::freeze_pure_arith`'s constant-leaf
 /// promotion). Not every constant qualifies — see
 /// [`ValueKind::is_operand_constant`].
-pub(crate) fn is_const_value(pool: &ValuePool, id: ValueId) -> bool {
+pub fn is_const_value(pool: &ValuePool, id: ValueId) -> bool {
     pool.kind(id).is_operand_constant()
 }
 

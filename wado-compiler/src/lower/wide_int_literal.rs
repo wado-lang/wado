@@ -21,7 +21,7 @@ use crate::token::Span;
 
 /// The wide-int method `method` as a callee, named by the registry so that no
 /// producer spells it.
-pub(crate) fn method_ref(type_table: &TypeTable, method: CompilerItem) -> FunctionRef {
+pub fn method_ref(type_table: &TypeTable, method: CompilerItem) -> FunctionRef {
     let items = type_table.compiler_items();
     let (module_source, _, name) = items.require_method(method);
     let method_info = LocalMethodName::new(
@@ -62,7 +62,7 @@ fn ctor_call(
 /// [`create_literal`] or [`create_conversion`] emits from an integer, so a
 /// consumer reading a wide-int constant back cannot drift from the producers.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) enum WideIntCtor {
+pub enum WideIntCtor {
     /// `<i128|u128>::from_i64(v)` — sign-extends.
     FromI64,
     /// `<i128|u128>::from_u64(v)` — zero-extends.
@@ -99,7 +99,7 @@ impl WideIntCtor {
 
     /// The 128-bit pattern `args` denote, in the callee's parameter order and
     /// each read as the raw bits of its declared 64-bit parameter type.
-    pub(crate) fn compose(self, args: &[u64]) -> i128 {
+    pub fn compose(self, args: &[u64]) -> i128 {
         match (self, args) {
             (Self::FromI64, [value]) => i128::from(value.cast_signed()),
             (Self::FromU64, [value]) => i128::from(*value),
@@ -110,7 +110,7 @@ impl WideIntCtor {
 }
 
 /// The wide-int constructor `mangled` names, or `None` for any other callee.
-pub(crate) fn classify_ctor(type_table: &TypeTable, mangled: &str) -> Option<WideIntCtor> {
+pub fn classify_ctor(type_table: &TypeTable, mangled: &str) -> Option<WideIntCtor> {
     WideIntCtor::ALL.into_iter().find_map(|(owner, shape)| {
         (method_ref(type_table, shape.method(owner)).name == mangled).then_some(shape)
     })
@@ -121,7 +121,7 @@ pub(crate) fn classify_ctor(type_table: &TypeTable, mangled: &str) -> Option<Wid
 /// does: a float saturates, a signed integer sign-extends, and anything else
 /// that casts to an integer (unsigned, `bool`, `char`, flags)
 /// zero-extends.
-pub(crate) fn create_conversion(
+pub fn create_conversion(
     item: CompilerItem,
     operand: TirExpr,
     type_id: TypeId,
@@ -156,7 +156,7 @@ pub(crate) fn create_conversion(
 /// A value fitting 64 bits goes through `from_i64` / `from_u64`, anything wider
 /// through `from_pair(low, high)` — the elaborator's own split for source
 /// literals.
-pub(crate) fn create_literal(
+pub fn create_literal(
     item: CompilerItem,
     bits: i128,
     type_id: TypeId,
@@ -202,7 +202,7 @@ pub(crate) fn create_literal(
 /// [`TirExprKind::IntLiteral`]'s only operand wide enough to hold 128 bits.
 /// Producers spell one bit pattern either way, and a decimal falls in exactly
 /// one of the two ranges, so both readings are tried.
-pub(crate) fn literal_from_repr(
+pub fn literal_from_repr(
     item: CompilerItem,
     repr: &str,
     type_id: TypeId,
@@ -219,7 +219,7 @@ pub(crate) fn literal_from_repr(
 /// `left <op> right` for the wide-integer type `item`, as the call into its
 /// `Eq` / `Ord` impl that answers the same question. `None` for an operator
 /// neither trait covers.
-pub(crate) fn compare(
+pub fn compare(
     item: CompilerItem,
     op: TirBinaryOp,
     left: &TirExpr,

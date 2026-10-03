@@ -34,7 +34,7 @@ use crate::{hashmap, name};
 /// `ReflectNewtype`'s only associated type (`type Base`): what the newtype
 /// wraps. Sealed and compiler-defined, so its spelling is fixed rather than
 /// registry-driven.
-pub(crate) const REFLECT_NEWTYPE_BASE: &str = "Base";
+pub const REFLECT_NEWTYPE_BASE: &str = "Base";
 
 /// Identifies the scope where a type parameter is defined
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -578,7 +578,7 @@ pub enum ResolvedType {
 /// keeps the lone `TypeId`→`usize` conversion in one place. Erased entries are
 /// `None`: [`TypeMap::retain`] punches holes rather than renumbering.
 #[derive(Debug, Clone)]
-pub(crate) struct TypeMap<V> {
+pub struct TypeMap<V> {
     slots: Vec<Option<V>>,
 }
 
@@ -590,23 +590,23 @@ impl<V> Default for TypeMap<V> {
 
 impl<V> TypeMap<V> {
     /// The `TypeId` the next [`Self::push`] will occupy.
-    pub(crate) fn next_id(&self) -> TypeId {
+    pub fn next_id(&self) -> TypeId {
         TypeId(self.slots.len() as u32)
     }
 
     /// Live value at `id`, or `None` if absent, erased, or out of range.
-    pub(crate) fn get(&self, id: TypeId) -> Option<&V> {
+    pub fn get(&self, id: TypeId) -> Option<&V> {
         self.slots.get(id.0 as usize).and_then(Option::as_ref)
     }
 
     /// Append a value at the next dense `TypeId` (== [`Self::next_id`]).
-    pub(crate) fn push(&mut self, value: V) {
+    pub fn push(&mut self, value: V) {
         self.slots.push(Some(value));
     }
 
     /// Set `id`'s value, growing the backing storage with empty slots as
     /// needed. Used for sparse maps such as erasure redirects.
-    pub(crate) fn set_growing(&mut self, id: TypeId, value: V) {
+    pub fn set_growing(&mut self, id: TypeId, value: V) {
         let idx = id.0 as usize;
         if idx >= self.slots.len() {
             self.slots.resize_with(idx + 1, || None);
@@ -615,7 +615,7 @@ impl<V> TypeMap<V> {
     }
 
     /// Drop every live slot for which `keep(id, &value)` returns false.
-    pub(crate) fn retain(&mut self, mut keep: impl FnMut(TypeId, &V) -> bool) {
+    pub fn retain(&mut self, mut keep: impl FnMut(TypeId, &V) -> bool) {
         for (i, slot) in self.slots.iter_mut().enumerate() {
             if let Some(value) = slot
                 && !keep(TypeId(i as u32), value)
@@ -626,7 +626,7 @@ impl<V> TypeMap<V> {
     }
 
     /// Iterate live `(TypeId, &value)` pairs, skipping erased holes.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = (TypeId, &V)> {
+    pub fn iter(&self) -> impl Iterator<Item = (TypeId, &V)> {
         self.slots
             .iter()
             .enumerate()
@@ -634,7 +634,7 @@ impl<V> TypeMap<V> {
     }
 
     /// Iterate the `TypeId`s of every live slot.
-    pub(crate) fn ids(&self) -> impl Iterator<Item = TypeId> + '_ {
+    pub fn ids(&self) -> impl Iterator<Item = TypeId> + '_ {
         self.slots
             .iter()
             .enumerate()
@@ -647,7 +647,7 @@ impl<V> TypeMap<V> {
 /// graph costs a small `Vec<u64>` instead of a hash set that reallocates as it
 /// grows. Iteration yields ascending `TypeId` order, *not* insertion order.
 #[derive(Debug, Clone, Default)]
-pub(crate) struct TypeSet {
+pub struct TypeSet {
     words: Vec<u64>,
 }
 
@@ -657,7 +657,7 @@ impl TypeSet {
     }
 
     /// Insert `id`, returning `true` if it was not already present.
-    pub(crate) fn insert(&mut self, id: TypeId) -> bool {
+    pub fn insert(&mut self, id: TypeId) -> bool {
         let (word, mask) = Self::slot(id);
         if word >= self.words.len() {
             self.words.resize(word + 1, 0);
@@ -2758,7 +2758,7 @@ impl TypeTable {
     /// resolves through [`crate::resolve::Resolutions`] and a stdlib type
     /// through [`Self::compiler_item_def`].
     #[must_use]
-    pub(crate) fn cm_decl_in(&self, name: &str, module: &ModuleSource) -> Option<DefId> {
+    pub fn cm_decl_in(&self, name: &str, module: &ModuleSource) -> Option<DefId> {
         self.decl_index
             .get(&(name.to_string(), module.clone()))
             .copied()
@@ -5292,7 +5292,7 @@ impl TirExprKind {
     /// The receiver's `is_mut` is left `false`; `lower` fills the real value in
     /// from the callee's `self` parameter, which is where every consumer of it
     /// lives.
-    pub(crate) fn method_call(
+    pub fn method_call(
         receiver: Box<TirExpr>,
         func: FunctionRef,
         type_args: Vec<TypeId>,
@@ -6142,7 +6142,7 @@ pub fn block_result_type(tt: &TypeTable, block: &TirBlock) -> TypeId {
 /// equal types agree; a `Never` branch defers to the other; two
 /// `extends`-related resources agree on the ancestor; an outright
 /// mismatch yields `None` so the caller falls back to `Unit`.
-pub(crate) fn agree_branch_types(tt: &TypeTable, t: TypeId, e: TypeId) -> Option<TypeId> {
+pub fn agree_branch_types(tt: &TypeTable, t: TypeId, e: TypeId) -> Option<TypeId> {
     if t == e {
         Some(t)
     } else if t == TypeTable::NEVER {

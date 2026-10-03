@@ -7,7 +7,7 @@ use crate::hashmap::IndexMap;
 /// The `lib/` directory this crate was compiled from, where a dev build's host
 /// reads the stdlib.
 #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
-pub const DEV_STDLIB_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/lib");
+pub const DEV_STDLIB_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../lib");
 
 /// What the host handed over, keyed by the file's path under
 /// [`DEV_STDLIB_ROOT`].

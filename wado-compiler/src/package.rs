@@ -36,7 +36,7 @@ pub struct Package {
     /// Synthesis, monomorphize, and friends consult this instead of
     /// re-scanning all modules. Held by `Arc` because the elaborator also
     /// keeps a reference (LSP queries reuse the same indices).
-    pub(crate) trait_env: Arc<TraitEnv>,
+    pub trait_env: Arc<TraitEnv>,
     /// Implicitly imported modules (e.g., core:prelude)
     pub implicit_modules: IndexSet<ModuleSource>,
     /// Module name for the output (derived from filename)

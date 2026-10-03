@@ -366,7 +366,7 @@ impl Value {
 }
 
 /// Evaluate a binary op on two compile-time values.
-pub(crate) fn eval_binary(left: Value, op: NirBinaryOp, right: Value) -> Option<Value> {
+pub fn eval_binary(left: Value, op: NirBinaryOp, right: Value) -> Option<Value> {
     match (left, right) {
         (Value::Bool(l), Value::Bool(r)) => eval_bool_binary(l, op, r),
         (Value::Char(l), Value::Char(r)) => eval_char_binary(l, op, r),
@@ -382,7 +382,7 @@ pub(crate) fn eval_binary(left: Value, op: NirBinaryOp, right: Value) -> Option<
 }
 
 /// Evaluate a unary op on a compile-time value.
-pub(crate) fn eval_unary(op: NirUnaryOp, operand: Value) -> Option<Value> {
+pub fn eval_unary(op: NirUnaryOp, operand: Value) -> Option<Value> {
     match op {
         NirUnaryOp::Neg => match operand {
             Value::Int { value, prim } => {
@@ -423,7 +423,7 @@ pub(crate) fn eval_unary(op: NirUnaryOp, operand: Value) -> Option<Value> {
 /// elaborator permits in source; a float → int cast saturates, matching Wasm's
 /// `trunc_sat` and Rust's own `as`. `None` for an unsupported pair, including a
 /// 128-bit or SIMD target, leaving the caller to keep the runtime cast.
-pub(crate) fn eval_cast(source: Value, target: PrimitiveType) -> Option<Value> {
+pub fn eval_cast(source: Value, target: PrimitiveType) -> Option<Value> {
     let int_target = is_int_prim(target);
     let float_target = matches!(target, PrimitiveType::F32 | PrimitiveType::F64);
     match source {
@@ -468,7 +468,7 @@ pub(crate) fn eval_cast(source: Value, target: PrimitiveType) -> Option<Value> {
 /// True for the eight integer primitives the engine models. 128-bit
 /// (`I128`/`U128`) is intentionally excluded — those types lower to
 /// stdlib calls in source, not a `Cast` node niri can fold.
-pub(crate) fn is_int_prim(p: PrimitiveType) -> bool {
+pub fn is_int_prim(p: PrimitiveType) -> bool {
     matches!(
         p,
         PrimitiveType::I8
@@ -487,7 +487,7 @@ pub(crate) fn is_int_prim(p: PrimitiveType) -> bool {
 /// through `i64` so the negative range survives; unsigned widths use
 /// `u64` directly. F32 results are widened back to f64 so the engine's
 /// canonical [`Value::Float`] repr is preserved.
-pub(crate) fn int_to_float(value: u64, prim: PrimitiveType, target: PrimitiveType) -> Value {
+pub fn int_to_float(value: u64, prim: PrimitiveType, target: PrimitiveType) -> Value {
     let f = if is_signed_int(prim) {
         // `truncate_int` already sign-extended `value` into the i64 range
         // for I8/I16/I32, and an I64 value's u64 bits round-trip through
@@ -512,7 +512,7 @@ pub(crate) fn int_to_float(value: u64, prim: PrimitiveType, target: PrimitiveTyp
 /// stored f64 since every f32 is exactly representable; narrowing
 /// (f64 → f32) routes through `as f32` to apply the rounding step,
 /// then re-widens to f64 for storage. Same-width casts are the identity.
-pub(crate) fn float_to_float(value: f64, prim: PrimitiveType, target: PrimitiveType) -> Value {
+pub fn float_to_float(value: f64, prim: PrimitiveType, target: PrimitiveType) -> Value {
     let v = match (prim, target) {
         (PrimitiveType::F64, PrimitiveType::F32) => f64::from(value as f32),
         (PrimitiveType::F32 | PrimitiveType::F64, PrimitiveType::F64)
@@ -534,7 +534,7 @@ pub(crate) fn float_to_float(value: f64, prim: PrimitiveType, target: PrimitiveT
 ///
 /// An F32 source truncates at f32 precision to match the runtime cast; the
 /// stored f64 is bit-equivalent, so the f64 path is a no-op widening otherwise.
-pub(crate) fn float_to_int(value: f64, prim: PrimitiveType, target: PrimitiveType) -> Value {
+pub fn float_to_int(value: f64, prim: PrimitiveType, target: PrimitiveType) -> Value {
     let value = match prim {
         PrimitiveType::F32 => f64::from(value as f32),
         PrimitiveType::I8
@@ -577,7 +577,7 @@ pub(crate) fn float_to_int(value: f64, prim: PrimitiveType, target: PrimitiveTyp
 
 /// Equality between two single-inhabitant values: `null` with `null`, `()`
 /// with `()`. Every other operator is meaningless on them.
-pub(crate) fn eval_singleton_binary(op: NirBinaryOp) -> Option<Value> {
+pub fn eval_singleton_binary(op: NirBinaryOp) -> Option<Value> {
     match op {
         NirBinaryOp::Eq => Some(Value::Bool(true)),
         NirBinaryOp::NotEq => Some(Value::Bool(false)),
@@ -585,7 +585,7 @@ pub(crate) fn eval_singleton_binary(op: NirBinaryOp) -> Option<Value> {
     }
 }
 
-pub(crate) fn eval_bool_binary(l: bool, op: NirBinaryOp, r: bool) -> Option<Value> {
+pub fn eval_bool_binary(l: bool, op: NirBinaryOp, r: bool) -> Option<Value> {
     match op {
         NirBinaryOp::And => Some(Value::Bool(l && r)),
         NirBinaryOp::Or => Some(Value::Bool(l || r)),
@@ -599,11 +599,11 @@ pub(crate) fn eval_bool_binary(l: bool, op: NirBinaryOp, r: bool) -> Option<Valu
 
 /// `char` comparisons. char implements `Eq` and `Ord` (codepoint
 /// order); arithmetic / bitwise ops are not defined.
-pub(crate) fn eval_char_binary(l: char, op: NirBinaryOp, r: char) -> Option<Value> {
+pub fn eval_char_binary(l: char, op: NirBinaryOp, r: char) -> Option<Value> {
     op.holds_for(l.cmp(&r)).map(Value::Bool)
 }
 
-pub(crate) fn eval_int_binary(
+pub fn eval_int_binary(
     lval: u64,
     op: NirBinaryOp,
     rval: u64,
@@ -657,7 +657,7 @@ pub(crate) fn eval_int_binary(
     }
 }
 
-pub(crate) fn eval_int_cmp(lval: u64, op: NirBinaryOp, rval: u64, prim: PrimitiveType) -> bool {
+pub fn eval_int_cmp(lval: u64, op: NirBinaryOp, rval: u64, prim: PrimitiveType) -> bool {
     let ordering = if is_signed_int(prim) {
         (lval as i64).cmp(&(rval as i64))
     } else {
@@ -667,13 +667,13 @@ pub(crate) fn eval_int_cmp(lval: u64, op: NirBinaryOp, rval: u64, prim: Primitiv
         .unwrap_or_else(|| unreachable!("`{op:?}` is not a comparison"))
 }
 
-pub(crate) fn eval_int_shl(lval: u64, rval: u64, prim: PrimitiveType) -> u64 {
+pub fn eval_int_shl(lval: u64, rval: u64, prim: PrimitiveType) -> u64 {
     let bits = int_bit_width(prim);
     let shift = (rval as u32) & (bits - 1);
     truncate_int(lval.wrapping_shl(shift), prim)
 }
 
-pub(crate) fn eval_int_shr(lval: u64, rval: u64, prim: PrimitiveType) -> u64 {
+pub fn eval_int_shr(lval: u64, rval: u64, prim: PrimitiveType) -> u64 {
     let bits = int_bit_width(prim);
     let shift = (rval as u32) & (bits - 1);
     if is_signed_int(prim) {
@@ -686,7 +686,7 @@ pub(crate) fn eval_int_shr(lval: u64, rval: u64, prim: PrimitiveType) -> u64 {
 
 /// `None` where the division traps at runtime — a zero divisor, or a signed
 /// `MIN / -1` at any width — so the trap is left for the runtime to raise.
-pub(crate) fn eval_int_div(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
+pub fn eval_int_div(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
     let quotient = match prim {
         PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::U32 | PrimitiveType::U64 => {
             lval.checked_div(rval)?
@@ -702,7 +702,7 @@ pub(crate) fn eval_int_div(lval: u64, rval: u64, prim: PrimitiveType) -> Option<
 
 /// `None` for a zero divisor, which traps at runtime. A signed `MIN % -1` is 0
 /// at every width, as Wasm `rem_s` answers.
-pub(crate) fn eval_int_mod(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
+pub fn eval_int_mod(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
     if rval == 0 {
         return None;
     }
@@ -719,7 +719,7 @@ pub(crate) fn eval_int_mod(lval: u64, rval: u64, prim: PrimitiveType) -> Option<
     Some(truncate_int(remainder, prim))
 }
 
-pub(crate) fn eval_int_neg(value: u64, prim: PrimitiveType) -> Option<u64> {
+pub fn eval_int_neg(value: u64, prim: PrimitiveType) -> Option<u64> {
     match prim {
         PrimitiveType::I8 => {
             let result = (value as i8).wrapping_neg();
@@ -741,7 +741,7 @@ pub(crate) fn eval_int_neg(value: u64, prim: PrimitiveType) -> Option<u64> {
     }
 }
 
-pub(crate) fn eval_float_binary(
+pub fn eval_float_binary(
     lval: f64,
     op: NirBinaryOp,
     rval: f64,
@@ -768,7 +768,7 @@ pub(crate) fn eval_float_binary(
     }
 }
 
-pub(crate) fn eval_f64_binary(lval: f64, op: NirBinaryOp, rval: f64) -> Option<Value> {
+pub fn eval_f64_binary(lval: f64, op: NirBinaryOp, rval: f64) -> Option<Value> {
     match op {
         NirBinaryOp::Add => non_nan_float(lval + rval, PrimitiveType::F64),
         NirBinaryOp::Sub => non_nan_float(lval - rval, PrimitiveType::F64),
@@ -778,7 +778,7 @@ pub(crate) fn eval_f64_binary(lval: f64, op: NirBinaryOp, rval: f64) -> Option<V
     }
 }
 
-pub(crate) fn eval_f32_binary(lval: f64, op: NirBinaryOp, rval: f64) -> Option<Value> {
+pub fn eval_f32_binary(lval: f64, op: NirBinaryOp, rval: f64) -> Option<Value> {
     let l = lval as f32;
     let r = rval as f32;
     match op {
@@ -793,7 +793,7 @@ pub(crate) fn eval_f32_binary(lval: f64, op: NirBinaryOp, rval: f64) -> Option<V
 
 /// A comparison under the float order, where every NaN is one value greater
 /// than `+Inf` and `-0.0` equals `0.0`.
-pub(crate) fn eval_float_comparison(lval: f64, op: NirBinaryOp, rval: f64) -> Option<Value> {
+pub fn eval_float_comparison(lval: f64, op: NirBinaryOp, rval: f64) -> Option<Value> {
     let ordering = match (lval.is_nan(), rval.is_nan()) {
         (true, true) => Ordering::Equal,
         (true, false) => Ordering::Greater,
@@ -803,7 +803,7 @@ pub(crate) fn eval_float_comparison(lval: f64, op: NirBinaryOp, rval: f64) -> Op
     op.holds_for(ordering).map(Value::Bool)
 }
 
-pub(crate) fn non_nan_float(value: f64, prim: PrimitiveType) -> Option<Value> {
+pub fn non_nan_float(value: f64, prim: PrimitiveType) -> Option<Value> {
     if value.is_nan() {
         return None;
     }
@@ -814,14 +814,14 @@ pub(crate) fn non_nan_float(value: f64, prim: PrimitiveType) -> Option<Value> {
 // Type queries, truncation, formatting
 // ──────────────────────────────────────────────────────────────────────────────
 
-pub(crate) fn is_signed_int(prim: PrimitiveType) -> bool {
+pub fn is_signed_int(prim: PrimitiveType) -> bool {
     matches!(
         prim,
         PrimitiveType::I8 | PrimitiveType::I16 | PrimitiveType::I32 | PrimitiveType::I64
     )
 }
 
-pub(crate) fn int_bit_width(prim: PrimitiveType) -> u32 {
+pub fn int_bit_width(prim: PrimitiveType) -> u32 {
     match prim {
         PrimitiveType::I8 | PrimitiveType::U8 => 8,
         // A half is a `u16`, so its pattern is 16 bits wide.
@@ -836,7 +836,7 @@ pub(crate) fn int_bit_width(prim: PrimitiveType) -> u32 {
     }
 }
 
-pub(crate) fn is_f32_type(type_id: TypeId, type_table: &TypeTable) -> bool {
+pub fn is_f32_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     matches!(
         type_table.get(type_id),
         ResolvedType::Primitive(PrimitiveType::F32)
@@ -847,7 +847,7 @@ pub(crate) fn is_f32_type(type_id: TypeId, type_table: &TypeTable) -> bool {
 /// where the target may be int / float / bool / char (i128/u128/v128
 /// are returned but [`eval_cast`] declines to fold them) and by
 /// `IntLiteral` lattice resolution after a [`is_int_prim`] filter.
-pub(crate) fn prim_of(type_id: TypeId, type_table: &TypeTable) -> Option<PrimitiveType> {
+pub fn prim_of(type_id: TypeId, type_table: &TypeTable) -> Option<PrimitiveType> {
     match type_table.get(type_id) {
         ResolvedType::Primitive(p) => Some(*p),
         _ => None,
@@ -856,7 +856,7 @@ pub(crate) fn prim_of(type_id: TypeId, type_table: &TypeTable) -> Option<Primiti
 
 /// Truncate / sign-extend an integer bit pattern to fit the target prim.
 #[must_use]
-pub(crate) fn truncate_int(value: u64, prim: PrimitiveType) -> u64 {
+pub fn truncate_int(value: u64, prim: PrimitiveType) -> u64 {
     match prim {
         PrimitiveType::U8 => value & 0xFF,
         PrimitiveType::U16 => value & 0xFFFF,
@@ -879,7 +879,7 @@ pub(crate) fn truncate_int(value: u64, prim: PrimitiveType) -> u64 {
 /// Render an integer bit pattern as decimal text, signed when the prim
 /// is signed.
 #[must_use]
-pub(crate) fn format_int_repr(value: u64, prim: PrimitiveType) -> String {
+pub fn format_int_repr(value: u64, prim: PrimitiveType) -> String {
     if is_signed_int(prim) {
         (value as i64).to_string()
     } else {
@@ -891,7 +891,7 @@ pub(crate) fn format_int_repr(value: u64, prim: PrimitiveType) -> String {
 /// `'\u{1F600}'`, …). Used when re-emitting a folded `char` value as a
 /// `ExprKind::CharLiteral`.
 #[must_use]
-pub(crate) fn format_char_repr(c: char) -> String {
+pub fn format_char_repr(c: char) -> String {
     match c {
         '\\' => "'\\\\'".to_string(),
         '\'' => "'\\''".to_string(),
@@ -908,7 +908,7 @@ pub(crate) fn format_char_repr(c: char) -> String {
 /// `Infinity`, `-Infinity`, …). Trailing `.0` is appended to integral
 /// values so the result parses back as a float literal.
 #[must_use]
-pub(crate) fn format_float_repr(value: f64) -> String {
+pub fn format_float_repr(value: f64) -> String {
     if value.is_infinite() {
         return if value.is_sign_positive() {
             "Infinity".to_string()

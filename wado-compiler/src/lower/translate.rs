@@ -9,7 +9,7 @@
 //! See `docs/wep-2026-05-11-nir.md`.
 
 pub(super) mod pattern;
-mod wide_int;
+pub mod wide_int;
 
 use std::cell::RefCell;
 use std::rc::Rc;

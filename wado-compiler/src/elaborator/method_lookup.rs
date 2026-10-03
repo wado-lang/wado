@@ -275,7 +275,7 @@ fn target_arg_names(arg: &Type, name: &str) -> bool {
 
 impl TypeSystem {
     /// What a reference type refers to, `None` for anything else.
-    pub(crate) fn pointee_of(&self, id: TypeId) -> Option<TypeId> {
+    pub fn pointee_of(&self, id: TypeId) -> Option<TypeId> {
         match self.type_table.borrow().get(id) {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Some(*inner),
             _ => None,
@@ -283,13 +283,13 @@ impl TypeSystem {
     }
 
     /// `id` read through one reference, if it is one.
-    pub(crate) fn through_ref(&self, id: TypeId) -> TypeId {
+    pub fn through_ref(&self, id: TypeId) -> TypeId {
         self.pointee_of(id).unwrap_or(id)
     }
 
     /// What a receiver fills the positions [`impl_target_args`] reads, a
     /// reference read through to its pointee's (WEP 2026-08-12).
-    pub(crate) fn impl_position_args(&self, receiver: TypeId) -> Option<Vec<TypeId>> {
+    pub fn impl_position_args(&self, receiver: TypeId) -> Option<Vec<TypeId>> {
         let pointee = self.through_ref(receiver);
         let tt = self.type_table.borrow();
         tt.nominal_type_args(tt.representation_head(pointee))
@@ -300,7 +300,7 @@ impl TypeSystem {
     /// it: a receiver whose reference is a box cell is handed a copy, and the
     /// callee's write reaches the local only through the box the address-taken
     /// mark promotes it to.
-    pub(crate) fn mut_self_receiver_needs_box(&self, type_id: TypeId) -> bool {
+    pub fn mut_self_receiver_needs_box(&self, type_id: TypeId) -> bool {
         let table = self.type_table.borrow();
         !matches!(
             table.get(type_id),
@@ -310,7 +310,7 @@ impl TypeSystem {
 
     /// Whether the impl block `def` reaches a receiver with these type arguments,
     /// the one reach decision every lookup reads; bringing none constrains none.
-    pub(crate) fn impl_reaches(&self, def: DefId, receiver_args: Option<&[TypeId]>) -> bool {
+    pub fn impl_reaches(&self, def: DefId, receiver_args: Option<&[TypeId]>) -> bool {
         let Some(receiver_args) = receiver_args else {
             return true;
         };
@@ -322,7 +322,7 @@ impl TypeSystem {
 
     /// Whether every head inside the impl target argument `arg` names a
     /// declaration, so it stands for one type rather than whatever the receiver supplies.
-    pub(crate) fn arg_pins(&self, arg: &Type) -> bool {
+    pub fn arg_pins(&self, arg: &Type) -> bool {
         let nested_pin = |args: &[Type]| args.iter().all(|a| self.arg_pins(a));
         match arg {
             // A reference pins what it refers to; the kind is structural.

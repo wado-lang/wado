@@ -26,8 +26,8 @@ mod sroa_variant_return;
 mod util;
 
 use crate::codegen_flags::CodegenFlags;
-use crate::compiler_host::SpanEmitter;
 use crate::codegen_flags::OptLevel;
+use crate::compiler_host::SpanEmitter;
 use crate::wir::WirPackage;
 
 pub use dce::{compact_dead_items, dce_unreachable_types, mark_unreachable_defined_functions};

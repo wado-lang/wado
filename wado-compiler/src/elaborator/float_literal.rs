@@ -7,17 +7,17 @@ use crate::primitive::PrimitiveType;
 
 /// A binary interchange format a float literal is written into.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct FloatFormat {
+pub struct FloatFormat {
     exponent_bits: u32,
     mantissa_bits: u32,
     name: &'static str,
 }
 
 impl FloatFormat {
-    pub(crate) const F64: Self = Self::new(11, 52, "f64");
-    pub(crate) const F32: Self = Self::new(8, 23, "f32");
-    pub(crate) const F16: Self = Self::new(5, 10, "f16");
-    pub(crate) const BF16: Self = Self::new(8, 7, "bf16");
+    pub const F64: Self = Self::new(11, 52, "f64");
+    pub const F32: Self = Self::new(8, 23, "f32");
+    pub const F16: Self = Self::new(5, 10, "f16");
+    pub const BF16: Self = Self::new(8, 7, "bf16");
 
     const fn new(exponent_bits: u32, mantissa_bits: u32, name: &'static str) -> Self {
         Self {
@@ -28,7 +28,7 @@ impl FloatFormat {
     }
 
     /// The format `prim` stores, `None` for a primitive that is not a float.
-    pub(crate) fn of(prim: PrimitiveType) -> Option<Self> {
+    pub fn of(prim: PrimitiveType) -> Option<Self> {
         match prim {
             PrimitiveType::F64 => Some(Self::F64),
             PrimitiveType::F32 => Some(Self::F32),
@@ -49,7 +49,7 @@ impl FloatFormat {
     }
 
     /// The sign bit, which a negated literal sets.
-    pub(crate) fn sign_bit(self) -> u64 {
+    pub fn sign_bit(self) -> u64 {
         1 << (self.exponent_bits + self.mantissa_bits)
     }
 
@@ -58,7 +58,7 @@ impl FloatFormat {
     }
 
     /// The value `bits` hold in `f32` or `f64`, widened to `f64`.
-    pub(crate) fn value(self, bits: u64) -> f64 {
+    pub fn value(self, bits: u64) -> f64 {
         match self {
             Self::F64 => f64::from_bits(bits),
             Self::F32 => f64::from(f32::from_bits(
@@ -71,14 +71,14 @@ impl FloatFormat {
 
 /// Why a literal has no bits in a format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum FloatLiteralError {
+pub enum FloatLiteralError {
     Invalid,
     OutOfRange(FloatFormat),
 }
 
 impl FloatLiteralError {
     /// The report for `literal`, spelled as the source writes it, sign included.
-    pub(crate) fn message(self, literal: &str) -> String {
+    pub fn message(self, literal: &str) -> String {
         match self {
             Self::Invalid => format!("invalid float literal: {literal}"),
             Self::OutOfRange(format) => {
@@ -90,10 +90,7 @@ impl FloatLiteralError {
 
 /// The unsigned literal `repr` in `format`'s bits, rounded to nearest even from
 /// its exact value, which a radix prefix spells as an integer of any width.
-pub(crate) fn float_literal_bits(
-    repr: &str,
-    format: FloatFormat,
-) -> Result<u64, FloatLiteralError> {
+pub fn float_literal_bits(repr: &str, format: FloatFormat) -> Result<u64, FloatLiteralError> {
     let clean = normalize_numeric_literal(repr);
     let radix = [("0x", 16), ("0b", 2), ("0o", 8)]
         .into_iter()

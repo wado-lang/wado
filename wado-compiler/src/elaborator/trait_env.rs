@@ -22,7 +22,7 @@ use crate::unparse::unparse_type_into;
 
 /// Namespace-import alias (`use ns from "…"`) → the namespace's module.
 /// Drives `ns::Type` resolution (issue #1415).
-pub(crate) type NamespaceImports = IndexMap<String, ModuleSource>;
+pub type NamespaceImports = IndexMap<String, ModuleSource>;
 
 /// Which module each of `module`'s namespace aliases stands for.
 ///
@@ -93,7 +93,7 @@ fn pick_module_union<'a>(
 /// `&T` / `&mut T` target is universal and declares nothing, so it keys by
 /// reference kind alone.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub(crate) enum ImplTargetKey {
+pub enum ImplTargetKey {
     Decl(DefId),
     /// A head that reaches no declaration: an anonymous or synthetic struct
     /// shape, or a written name that resolves to nothing. Its rendering is all
@@ -116,7 +116,7 @@ pub(crate) enum ImplTargetKey {
 
 impl ImplTargetKey {
     /// The declaration the key names, if it names one.
-    pub(crate) fn decl(&self) -> Option<DefId> {
+    pub fn decl(&self) -> Option<DefId> {
         match self {
             ImplTargetKey::Decl(def) => Some(*def),
             _ => None,
@@ -125,7 +125,7 @@ impl ImplTargetKey {
 
     /// The key for a declaration already identified. A builtin shape drops its
     /// declaration, as in [`name::FqTypeName::of_head`].
-    pub(crate) fn of_decl(defs: &DefTable, def: DefId) -> Self {
+    pub fn of_decl(defs: &DefTable, def: DefId) -> Self {
         if name::is_builtin_shape_decl(defs, def) {
             return ImplTargetKey::Builtin(defs.name(def).to_string());
         }
@@ -134,7 +134,7 @@ impl ImplTargetKey {
 
     /// The key for a head that reaches no declaration: a builtin shape spelled
     /// bare, or a name that resolves to nothing.
-    pub(crate) fn of_undeclared(module: &ModuleSource, name: &str) -> Self {
+    pub fn of_undeclared(module: &ModuleSource, name: &str) -> Self {
         if name::is_builtin_shape_name(name) {
             return ImplTargetKey::Builtin(name.to_string());
         }
@@ -144,7 +144,7 @@ impl ImplTargetKey {
     /// The receiver this target indexes under. Built from the same declaration
     /// `TypeTable::impl_receiver_key` reads off a resolved type, so a
     /// definition and a lookup agree by construction.
-    pub(crate) fn receiver(&self, defs: &DefTable) -> name::Receiver {
+    pub fn receiver(&self, defs: &DefTable) -> name::Receiver {
         match self {
             ImplTargetKey::Decl(def) => name::Receiver::Type(name::FqTypeName::of_head(defs, *def)),
             ImplTargetKey::Undeclared(module, name) => {
@@ -160,7 +160,7 @@ impl ImplTargetKey {
         }
     }
 
-    pub(crate) fn type_name<'a>(&'a self, defs: &'a DefTable) -> Option<&'a str> {
+    pub fn type_name<'a>(&'a self, defs: &'a DefTable) -> Option<&'a str> {
         match self {
             ImplTargetKey::Decl(def) => Some(defs.name(*def)),
             ImplTargetKey::Undeclared(_, name)
@@ -172,7 +172,7 @@ impl ImplTargetKey {
 
     /// How to spell this target in a diagnostic — the declaration name, or the
     /// reference prefix for a `&T` / `&mut T` target.
-    pub(crate) fn display_name<'a>(&'a self, defs: &'a DefTable) -> &'a str {
+    pub fn display_name<'a>(&'a self, defs: &'a DefTable) -> &'a str {
         match self {
             ImplTargetKey::Decl(def) => defs.name(*def),
             ImplTargetKey::Undeclared(_, name)
@@ -183,7 +183,7 @@ impl ImplTargetKey {
     }
 
     /// The reference kind of a `&T` / `&mut T` target; `None` for any other.
-    pub(crate) fn ref_kind(&self) -> Option<name::RefKind> {
+    pub fn ref_kind(&self) -> Option<name::RefKind> {
         match self {
             ImplTargetKey::Ref(kind) => Some(*kind),
             ImplTargetKey::Decl(_)
@@ -199,7 +199,7 @@ impl ImplTargetKey {
 ///
 /// [`crate::tir::TypeTable::decl_render_name`] one layer down, for the callers
 /// that hold a [`crate::defs::DefTable`] and no type table.
-pub(crate) fn render_decl_name(defs: &DefTable, def: DefId) -> String {
+pub fn render_decl_name(defs: &DefTable, def: DefId) -> String {
     if defs.is_function_local(def) {
         return name::mangle_local_item_name(defs.name(def), defs.ast_id(def));
     }
@@ -347,7 +347,7 @@ impl ImplHeader {
 
 /// What fixes one of a blanket impl's type parameters.
 #[derive(Clone, Debug)]
-pub(crate) enum BlanketParamSource {
+pub enum BlanketParamSource {
     /// The impl's receiver, which the call site's receiver type fills.
     Receiver,
     /// A predicate on another parameter: `..F` in
@@ -468,7 +468,7 @@ fn method_headers(defs: &DefTable, methods: &[ast::Function]) -> Vec<ImplMethodH
 
 /// The receiver shape of a blanket impl.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) enum BlanketReceiver {
+pub enum BlanketReceiver {
     /// `impl<T: Bound> Trait for T` — applies to any value receiver.
     Value,
     /// `impl<T: Bound> Trait for &T` (`is_mut` selects `&mut T`) — applies to
@@ -478,20 +478,20 @@ pub(crate) enum BlanketReceiver {
 
 /// A bound written on a blanket impl's receiver parameter.
 #[derive(Clone, Debug)]
-pub(crate) struct BlanketBound {
+pub struct BlanketBound {
     /// The trait the bound's reference site names, with the arguments it
     /// writes for that trait's own parameters. `None` where the site reaches no
     /// declaration; no argument asks for the declared defaults.
-    pub(crate) trait_: Option<name::FqTraitName>,
+    pub trait_: Option<name::FqTraitName>,
     /// Associated types the bound pins to the receiver param itself (`Output`
     /// in `T: Mul<Output = T>`) — the only shape decidable against a candidate
     /// receiver; any other right-hand side is the instantiation's to answer.
-    pub(crate) pinned_to_receiver: Vec<String>,
+    pub pinned_to_receiver: Vec<String>,
 }
 
 impl BlanketBound {
     /// The declaration alone, for a question the trait's arguments do not enter.
-    pub(crate) fn decl(&self) -> Option<DefId> {
+    pub fn decl(&self) -> Option<DefId> {
         self.trait_.as_ref()?.canonical()
     }
 }
@@ -502,25 +502,25 @@ impl BlanketBound {
 /// that once re-derived it per call site are now selections over this
 /// descriptor.
 #[derive(Clone, Debug)]
-pub(crate) struct BlanketImpl {
-    pub(crate) module: ModuleSource,
+pub struct BlanketImpl {
+    pub module: ModuleSource,
     /// The impl block's identity, and the key into `impl_headers` for
     /// consumers needing the full header (associated types, bound constraints).
-    pub(crate) def: DefId,
-    pub(crate) receiver: BlanketReceiver,
+    pub def: DefId,
+    pub receiver: BlanketReceiver,
     /// Receiver param name (`T` in `impl<T: Bound> Trait for T`).
-    pub(crate) param: String,
+    pub param: String,
     /// Bound trait names on the receiver param, each with the declaration its
     /// own reference site resolves to. The spelling stays for the by-name
     /// queries that have not been flipped; the answer is what a bound check
     /// compares, so an aliased bound reaches the trait it aliases.
-    pub(crate) bounds: Vec<BlanketBound>,
+    pub bounds: Vec<BlanketBound>,
 }
 
 impl BlanketImpl {
     /// Where every template name for this blanket comes from — one built from
     /// the spelling alone looks up a *different* template, silently.
-    pub(crate) fn receiver_binder(&self, defs: &DefTable) -> name::FqTypeName {
+    pub fn receiver_binder(&self, defs: &DefTable) -> name::FqTypeName {
         name::FqTypeName::binder_of_impl(defs, self.def, &self.param)
     }
 }
@@ -678,7 +678,7 @@ pub(super) type ResourceStaticMethodIndex =
 
 /// `(receiver spelling, trait)` → the modules holding that `impl` block, one
 /// per module declaring a receiver under that spelling.
-pub(crate) type TraitImplModuleIndex = IndexMap<(String, DefId), Vec<ModuleSource>>;
+pub type TraitImplModuleIndex = IndexMap<(String, DefId), Vec<ModuleSource>>;
 
 /// Where each `impl <trait> for <type>` lives, keyed by the receiver's
 /// mangled head (`mod/Widget`), which picks out one declaration.
@@ -782,7 +782,7 @@ pub struct TraitEnv {
     /// Every declaration in the program. Held here so a query keyed by an
     /// identity can render one for a diagnostic without every caller threading
     /// the table.
-    pub(crate) defs: std::sync::Arc<DefTable>,
+    pub defs: std::sync::Arc<DefTable>,
     /// Digested headers for every indexed impl block, keyed by the block's
     /// [`DefId`]. Trait/method queries read this instead of re-fetching the
     /// impl block AST from `loaded_modules`. See [`ImplHeader`].
@@ -841,7 +841,7 @@ pub struct TraitEnv {
     /// runs (e.g. on the LSP path, which never reaches synthesis). Once
     /// populated, the field is itself immutable; later phases either query
     /// it or replace the whole `TraitEnv` with a further-extended copy.
-    pub(crate) synthesised: Option<SynthesisedImpls>,
+    pub synthesised: Option<SynthesisedImpls>,
 }
 
 /// Trait impls produced by the synthesis phase but not present in the AST.
@@ -1289,7 +1289,7 @@ impl TraitEnv {
     }
 
     /// Whether `key` names a trait declaration.
-    pub(crate) fn declares_trait(&self, key: &DefId) -> bool {
+    pub fn declares_trait(&self, key: &DefId) -> bool {
         self.trait_decl_headers.contains_key(key)
     }
 
@@ -1380,7 +1380,7 @@ impl TraitEnv {
 
     /// The trait arguments the impl on `receiver` answering a bound writing
     /// `wanted` names itself by, as it spells them.
-    pub(crate) fn impl_written_trait_args(
+    pub fn impl_written_trait_args(
         &self,
         receiver: &name::Receiver,
         trait_: DefId,
@@ -1421,7 +1421,7 @@ impl TraitEnv {
 
     /// The module defining `impl <trait_> for <receiver>`; `None` for a blanket
     /// impl and a receiver no concrete impl represents.
-    pub(crate) fn impl_module_for(
+    pub fn impl_module_for(
         &self,
         receiver: ImplReceiver<'_>,
         trait_: DefId,
@@ -1440,7 +1440,7 @@ impl TraitEnv {
     /// form for callers that cannot canonicalise — monomorphize and synthesis
     /// run after elaboration and hold a type's name without its import
     /// context. Prefer a keyed lookup wherever a module is known.
-    pub(crate) fn entries_by_receiver<'a>(
+    pub fn entries_by_receiver<'a>(
         &'a self,
         receiver: &'a name::Receiver,
     ) -> impl Iterator<Item = DefId> + 'a {
@@ -1452,12 +1452,12 @@ impl TraitEnv {
 
     /// Collected form of [`Self::entries_by_receiver`], for callers that need
     /// to iterate the widened match more than once.
-    pub(crate) fn entries_by_receiver_vec(&self, receiver: &name::Receiver) -> Vec<DefId> {
+    pub fn entries_by_receiver_vec(&self, receiver: &name::Receiver) -> Vec<DefId> {
         self.entries_by_receiver(receiver).collect()
     }
 
     /// Whether any impl on `receiver` implements `trait_` with methods.
-    pub(crate) fn has_any_methodful_impl_by_receiver(
+    pub fn has_any_methodful_impl_by_receiver(
         &self,
         receiver: &name::Receiver,
         trait_: DefId,
@@ -1468,7 +1468,7 @@ impl TraitEnv {
     }
 
     /// Every impl on `receiver` that implements `trait_` with methods.
-    pub(crate) fn methodful_impls_by_receiver<'a>(
+    pub fn methodful_impls_by_receiver<'a>(
         &'a self,
         receiver: &'a name::Receiver,
         trait_: DefId,
@@ -1479,19 +1479,19 @@ impl TraitEnv {
 
     /// `key` itself when it declares a trait, else `None` — the question the
     /// callers actually ask, phrased as the identity they then compare.
-    pub(crate) fn trait_def(&self, key: &DefId) -> Option<DefId> {
+    pub fn trait_def(&self, key: &DefId) -> Option<DefId> {
         self.declares_trait(key).then_some(*key)
     }
 
     /// The trait an [`crate::name::FqTraitName`] names, when it names a trait
     /// declaration.
-    pub(crate) fn trait_def_of_fq(&self, fq: &name::FqTraitName) -> Option<DefId> {
+    pub fn trait_def_of_fq(&self, fq: &name::FqTraitName) -> Option<DefId> {
         self.trait_def(&fq.canonical()?)
     }
 
     /// The template a call reaching `block` for `method` instantiates: the
     /// block's own method, or the trait default it inherits.
-    pub(crate) fn method_template(&self, block: DefId, method: &str) -> Option<TemplateId> {
+    pub fn method_template(&self, block: DefId, method: &str) -> Option<TemplateId> {
         let header = &self.impl_headers[&block];
         let def = if let Some(written) = header.methods.iter().find(|m| m.name == method) {
             written.def
@@ -1509,7 +1509,7 @@ impl TraitEnv {
     /// The block on `receiver` whose body answers `method` of `trait_<wanted>`
     /// where `reaches` admits, a concrete one before a generic one (coherence
     /// Rule 1). An inherent block answers with no `trait_` and no `wanted`.
-    pub(crate) fn answering_template(
+    pub fn answering_template(
         &self,
         receiver: &name::Receiver,
         trait_: Option<DefId>,
@@ -1540,7 +1540,7 @@ impl TraitEnv {
 
     /// [`Self::has_any_methodful_impl_by_receiver`] narrowed to impls `covers`
     /// admits and, where given, `module_source` writes.
-    pub(crate) fn has_covering_methodful_impl_by_receiver(
+    pub fn has_covering_methodful_impl_by_receiver(
         &self,
         receiver: &name::Receiver,
         trait_: DefId,
@@ -1555,7 +1555,7 @@ impl TraitEnv {
     }
 
     /// Whether an inherent `impl` on `receiver` declares `method_name`.
-    pub(crate) fn has_inherent_method_by_receiver(
+    pub fn has_inherent_method_by_receiver(
         &self,
         receiver: &name::Receiver,
         method_name: &str,
@@ -1580,7 +1580,7 @@ impl TraitEnv {
     /// reflection kinds each derive `Inspect` over their own `Reflect*` bound —
     /// so a receiver-blind first-wins selection would hand every receiver the
     /// first-registered kind and then reject it on the bound check.
-    pub(crate) fn value_blanket_for_receiver(
+    pub fn value_blanket_for_receiver(
         &self,
         trait_: DefId,
         type_module: Option<&ModuleSource>,
@@ -1602,7 +1602,7 @@ impl TraitEnv {
     /// The universal ref blanket (`impl<T> Trait for &T`) answering
     /// `trait_<wanted>`, the one writing the fewest open arguments first. `Eq`
     /// has two: `Eq for &T` and `Eq<String> for &T`.
-    pub(crate) fn universal_ref_blanket(
+    pub fn universal_ref_blanket(
         &self,
         trait_: DefId,
         ref_kind: name::RefKind,
@@ -1623,13 +1623,13 @@ impl TraitEnv {
     }
 
     /// The blanket impl block `def` declares, if it is one.
-    pub(crate) fn blanket_of_block(&self, def: DefId) -> Option<&BlanketImpl> {
+    pub fn blanket_of_block(&self, def: DefId) -> Option<&BlanketImpl> {
         self.blanket_impls.values().flatten().find(|b| b.def == def)
     }
 
     /// What determines each of a blanket impl's parameters, in declaration
     /// order — see [`blanket_param_sources`].
-    pub(crate) fn blanket_param_sources(&self, blanket: &BlanketImpl) -> Vec<BlanketParamSource> {
+    pub fn blanket_param_sources(&self, blanket: &BlanketImpl) -> Vec<BlanketParamSource> {
         self.blanket_param_sources
             .get(&blanket.def)
             .cloned()
@@ -1638,7 +1638,7 @@ impl TraitEnv {
 
     /// [`Self::impl_module_for`] restricted to fully concrete blocks: only
     /// their function lives in the block's module, a generic one's in the receiver's.
-    pub(crate) fn concrete_impl_module_for(
+    pub fn concrete_impl_module_for(
         &self,
         receiver: ImplReceiver<'_>,
         trait_: DefId,
@@ -1654,7 +1654,7 @@ impl TraitEnv {
 
     /// The module of the concrete impl behind `info`: keyed by its
     /// instantiation, then by the bare head an impl may be written on.
-    pub(crate) fn concrete_impl_module_of(
+    pub fn concrete_impl_module_of(
         &self,
         info: &name::LocalMethodName,
         type_module: Option<&ModuleSource>,
@@ -1663,7 +1663,7 @@ impl TraitEnv {
     }
 
     /// [`Self::concrete_impl_module_of`], generic impls included.
-    pub(crate) fn any_impl_module_of(
+    pub fn any_impl_module_of(
         &self,
         info: &name::LocalMethodName,
         type_module: Option<&ModuleSource>,
@@ -1798,7 +1798,7 @@ impl TraitEnv {
 /// The receiver an impl-module query asks about, in the mangled namespace that
 /// picks out one declaration (WEP 2026-08-12).
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum ImplReceiver<'a> {
+pub enum ImplReceiver<'a> {
     /// The receiver itself.
     Of(&'a name::Receiver),
     /// A receiver with its type arguments applied (`List<…/Token>`).

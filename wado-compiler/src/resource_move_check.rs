@@ -15,7 +15,7 @@ use crate::token::Span;
 /// `resource_cleanup::carries_resource`, so nothing is move-only that the
 /// cleanup pass would then leak. `struct_fields` answers a struct's field
 /// types, which the type table alone does not hold.
-pub(crate) fn carries_affine_resource(
+pub fn carries_affine_resource(
     types: &TypeTable,
     struct_fields: &impl Fn(TypeId) -> Option<Vec<TypeId>>,
     type_id: TypeId,

@@ -90,7 +90,7 @@ pub fn lower_comparisons_in_module(module: &mut TirModule, trait_env: &Arc<Trait
 /// Such a node sits in a caller that may declare no type parameter, which
 /// `instantiate_function` never visits. Runs before instantiation sites are
 /// collected, so the calls it produces are monomorphized like any other.
-pub fn expand_settled_packs_in_module(mono: &mut Monomorphizer, module: &mut TirModule) {
+pub(super) fn expand_settled_packs_in_module(mono: &mut Monomorphizer, module: &mut TirModule) {
     mono.current_param_substitution_key = IndexMap::default();
     mono.current_impl_type_param_count = 0;
     mono.current_impl_receiver = None;

@@ -319,9 +319,9 @@ fn unwrap_ref(type_id: TypeId, type_table: &TypeTable) -> (TypeId, bool) {
 /// [`TypeTable::type_name`] formatting that the original
 /// `TypeError::TypeMismatch` diagnostic used.
 #[derive(Debug, Clone)]
-pub(crate) struct TypeMismatchPayload {
-    pub(crate) expected: String,
-    pub(crate) found: String,
+pub struct TypeMismatchPayload {
+    pub expected: String,
+    pub found: String,
 }
 
 impl TypeSystem {
@@ -334,11 +334,7 @@ impl TypeSystem {
     /// This is layer 2 of [the typecheck stack](self): callers that
     /// want a diagnostic emitted should go through
     /// [`Elaborator::typecheck`].
-    pub(crate) fn typecheck(
-        &self,
-        actual: TypeId,
-        expected: TypeId,
-    ) -> Result<(), TypeMismatchPayload> {
+    pub fn typecheck(&self, actual: TypeId, expected: TypeId) -> Result<(), TypeMismatchPayload> {
         let type_table = self.type_table.borrow();
         match check_assignable(actual, expected, &type_table) {
             TypeCheckResult::Incompatible => {

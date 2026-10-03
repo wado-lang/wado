@@ -16,7 +16,7 @@ use crate::token::Span;
 /// `&Function` for a given declaring `AstId` in O(1) instead of
 /// rescanning every item.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum FunctionLocation {
+pub enum FunctionLocation {
     /// `module.items[item_idx]` is `Item::Function`.
     Free { item_idx: usize },
     /// `module.items[item_idx]` is `Item::Impl(b)` or `Item::Trait(t)`;
@@ -96,7 +96,7 @@ impl AstIndex {
     /// Address of the `Function` AST node whose declaring `AstId` is `id`,
     /// or `None` if `id` does not name an indexed function. Crate-private:
     /// `Semantics::function_at` is the entry point external consumers use.
-    pub(crate) fn function_location(&self, id: AstId) -> Option<FunctionLocation> {
+    pub fn function_location(&self, id: AstId) -> Option<FunctionLocation> {
         self.function_locations.get(&id).copied()
     }
 

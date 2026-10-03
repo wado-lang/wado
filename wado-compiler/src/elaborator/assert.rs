@@ -173,7 +173,7 @@ pub(super) fn render_local_name(cap_name: &str) -> String {
 pub(super) const NOT_EVALUATED: &str = "<not evaluated>";
 
 /// Render every recorded capture plan, for `wado dump --assert-plan`.
-pub(crate) fn render_plans(sem: &ModuleSemantics) -> String {
+pub fn render_plans(sem: &ModuleSemantics) -> String {
     let mut out = String::new();
     for info in sem.types.assert_captures.values() {
         out.push_str(&format!(

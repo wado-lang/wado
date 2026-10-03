@@ -347,7 +347,7 @@ pub fn join_flat_unions(a: &[CmValType], b: &[CmValType]) -> Vec<CmValType> {
 
 /// Helper: create a `Type::Named` with a dummy span. Useful for tests.
 #[cfg(test)]
-pub(crate) fn named_type(name: &str) -> Type {
+pub fn named_type(name: &str) -> Type {
     Type::Named(NamedType {
         id: AstId::fresh(),
         name: name.to_string(),
@@ -356,13 +356,13 @@ pub(crate) fn named_type(name: &str) -> Type {
 }
 
 #[cfg(test)]
-pub(crate) fn unit_type() -> Type {
+pub fn unit_type() -> Type {
     Type::unit(AstId::fresh(), Span::new(0, 0, 1, 1))
 }
 
 /// Helper: create a `Type::Generic` with a dummy span. Useful for tests.
 #[cfg(test)]
-pub(crate) fn generic_type(name: &str, args: Vec<Type>) -> Type {
+pub fn generic_type(name: &str, args: Vec<Type>) -> Type {
     Type::Generic(GenericType {
         id: AstId::fresh(),
         name: name.to_string(),

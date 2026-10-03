@@ -141,20 +141,20 @@ pub type GlobalFieldEnv = IndexMap<GlobalKey, IndexMap<String, Value>>;
 /// whether the next one folds.
 pub const DEFAULT_STEP_BUDGET: u32 = 10_000;
 
-mod callee;
-mod frame;
-mod lattice;
-mod pattern;
-mod place;
-mod region;
-mod rewrite;
-mod shapes;
-mod trackability;
+pub mod callee;
+pub mod frame;
+pub mod lattice;
+pub mod pattern;
+pub mod place;
+pub mod region;
+pub mod rewrite;
+pub mod shapes;
+pub mod trackability;
 
 pub use callee::{Callee, CalleeKey, CalleeMap};
 use pattern::PatternMatch;
 pub use region::RegionRefusal;
-pub(crate) use rewrite::guard_declares_locals;
+pub use rewrite::guard_declares_locals;
 pub use shapes::AggregateShapes;
 use trackability::Trackability;
 
@@ -244,7 +244,7 @@ impl EditSink for BodySink<'_> {
 /// The [`CalleeMap`] over every function in `project` a compile-time frame can
 /// run. Its handles alias `project.functions`, so rebuilding it every optimizer
 /// iteration costs only refcount bumps.
-pub(crate) fn build_callee_map(project: &NirPackage) -> CalleeMap {
+pub fn build_callee_map(project: &NirPackage) -> CalleeMap {
     let mut map = CalleeMap::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
@@ -261,7 +261,7 @@ pub(crate) fn build_callee_map(project: &NirPackage) -> CalleeMap {
 }
 
 /// Which callee ids are the builtins the engine evaluates.
-pub(crate) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
+pub fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
     let mut map = CtfeBuiltinMap::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
@@ -514,9 +514,9 @@ struct FrameState {
 /// `GlobalVarGet` so, and so on. The compiler runs the engine both with the
 /// program-wide view and with only what running a call needs.
 #[derive(Default, Clone, Copy)]
-pub(crate) struct ProgramFacts<'a> {
-    pub(crate) callees: Option<&'a CalleeMap>,
-    pub(crate) ctfe_builtins: Option<&'a CtfeBuiltinMap>,
+pub struct ProgramFacts<'a> {
+    pub callees: Option<&'a CalleeMap>,
+    pub ctfe_builtins: Option<&'a CtfeBuiltinMap>,
     globals: Option<&'a GlobalEnv>,
     global_fields: Option<&'a GlobalFieldEnv>,
     materializing: Option<&'a MaterializingGlobals>,
@@ -527,14 +527,14 @@ impl ProgramFacts<'_> {
     /// Whether a store to this global materializes a value for its own reader.
     /// Without the fact installed, no store does — absence costs folds, not
     /// correctness.
-    pub(crate) fn materializes(&self, key: &GlobalKey) -> bool {
+    pub fn materializes(&self, key: &GlobalKey) -> bool {
         self.materializing.is_some_and(|m| m.contains(key))
     }
 
     /// Whether this global holds one value the whole program through — declared
     /// immutable, and neither written nor handed to a writer. Without the fact
     /// installed, none does.
-    pub(crate) fn global_is_const(&self, key: &GlobalKey) -> bool {
+    pub fn global_is_const(&self, key: &GlobalKey) -> bool {
         self.globals
             .is_some_and(|g| matches!(g.get(key), Some(Lattice::Const(_))))
     }

@@ -513,7 +513,7 @@ pub(super) fn module_source_for_cm_interface(
 
 /// The module a bundled CM interface FQ maps to, with its owning namespace —
 /// `None` for a `core:` module, which carries none.
-pub(crate) fn cm_interface_module(source_interface: &str) -> Option<(Option<CmNamespace>, String)> {
+pub fn cm_interface_module(source_interface: &str) -> Option<(Option<CmNamespace>, String)> {
     if let Some((namespace, rest)) = CmNamespace::split_specifier(source_interface) {
         return Some((Some(namespace), interface_module_name(rest)));
     }
@@ -543,7 +543,7 @@ pub(super) fn binary_ne(left: TirExpr, right: TirExpr) -> TirExpr {
     binary(TirBinaryOp::NotEq, left, right, TypeTable::BOOL)
 }
 
-pub(crate) fn kebab_to_pascal(s: &str) -> String {
+pub fn kebab_to_pascal(s: &str) -> String {
     use heck::ToUpperCamelCase;
     s.to_upper_camel_case()
 }

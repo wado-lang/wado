@@ -381,7 +381,7 @@ fn reexport_widens_message(
     )
 }
 
-pub(crate) fn symbol_not_visible_message(
+pub fn symbol_not_visible_message(
     name: &str,
     module_source: &ModuleSource,
     visibility: Visibility,

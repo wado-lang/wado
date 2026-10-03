@@ -5,6 +5,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::component_plan;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 #[cfg(debug_assertions)]
@@ -14,7 +15,6 @@ use crate::package::Package;
 use crate::tir::{
     BuiltinDeclaration, BuiltinDeclarations, ResolvedType, RetainSpec, TirFunction, TypeTable,
 };
-use crate::component_plan;
 use crate::world_registry::TEST_WORLD;
 
 /// Snapshot what a `core:builtin` declared about storage, before
@@ -208,7 +208,7 @@ pub fn link(package: Package) -> FlatPackage {
 /// WIR build. Running it at each stage boundary names the stage at fault. Shape
 /// stubs and `core:builtin` / `core:rt` intrinsic pairs are not collisions.
 #[cfg(debug_assertions)]
-pub(crate) fn assert_no_stub_shadowing(functions: &[Rc<RefCell<TirFunction>>], stage: &str) {
+pub fn assert_no_stub_shadowing(functions: &[Rc<RefCell<TirFunction>>], stage: &str) {
     let mut bodied: IndexMap<String, ModuleSource> = IndexMap::default();
     for f in functions {
         let f = f.borrow();

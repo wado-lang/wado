@@ -41,7 +41,7 @@ use crate::primitive::PrimitiveType;
 use crate::{Span, token};
 
 /// The builtin that reads an `Array<T>` out of a byte literal.
-pub(crate) const ARRAY_NEW_DATA: &str = "array_new_data";
+pub const ARRAY_NEW_DATA: &str = "array_new_data";
 
 /// An expression as a byte literal.
 enum ByteLiteral {

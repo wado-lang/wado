@@ -5,7 +5,7 @@
 
 /// The source text a string literal needs between its quotes to denote `s`.
 /// The inverse of [`unescape_string`].
-pub(crate) fn escape_string(s: &str) -> String {
+pub fn escape_string(s: &str) -> String {
     let mut out = String::new();
     for c in s.chars() {
         push_escaped(&mut out, c, '"');
@@ -14,7 +14,7 @@ pub(crate) fn escape_string(s: &str) -> String {
 }
 
 /// The source text of a string literal denoting `s`, its quotes included.
-pub(crate) fn quoted(s: &str) -> String {
+pub fn quoted(s: &str) -> String {
     format!("\"{}\"", escape_string(s))
 }
 
@@ -27,7 +27,7 @@ fn escape_char(c: char) -> String {
 }
 
 /// The source text of a char literal denoting `c`, its quotes included.
-pub(crate) fn quoted_char(c: char) -> String {
+pub fn quoted_char(c: char) -> String {
     format!("'{}'", escape_char(c))
 }
 
@@ -49,13 +49,13 @@ fn push_escaped(out: &mut String, c: char, quote: char) {
 
 /// The `String` the raw content of a string literal denotes, or why it denotes
 /// none. Resolves every escape, surrogate pairs included.
-pub(crate) fn unescape_string(raw: &str) -> Result<String, String> {
+pub fn unescape_string(raw: &str) -> Result<String, String> {
     unescape_body(raw, |_| false)
 }
 
 /// The bytes the raw content of a `b"..."` literal denotes, or why it denotes
 /// none. A byte string is ASCII plus `\xNN`, so anything above U+007F is an error.
-pub(crate) fn unescape_bytes(raw: &str) -> Result<Vec<u8>, String> {
+pub fn unescape_bytes(raw: &str) -> Result<Vec<u8>, String> {
     let mut out = Vec::new();
     let mut chars = raw.chars().peekable();
     while let Some(ch) = chars.next() {
@@ -100,7 +100,7 @@ pub(crate) fn unescape_bytes(raw: &str) -> Result<Vec<u8>, String> {
 
 /// Decode a byte literal `b'x'` (raw content, without quotes) to its single
 /// byte via [`unescape_bytes`], requiring exactly one byte.
-pub(crate) fn unescape_byte(raw: &str) -> Result<u8, String> {
+pub fn unescape_byte(raw: &str) -> Result<u8, String> {
     match unescape_bytes(raw)?.as_slice() {
         [b] => Ok(*b),
         [] => Err("empty byte literal".to_string()),
@@ -109,7 +109,7 @@ pub(crate) fn unescape_byte(raw: &str) -> Result<u8, String> {
 }
 
 /// The `char` the raw content of a char literal denotes, or why it denotes none.
-pub(crate) fn unescape_char(raw: &str) -> Result<char, String> {
+pub fn unescape_char(raw: &str) -> Result<char, String> {
     let mut chars = raw.chars().peekable();
     let result = match chars.next() {
         Some('\\') => unescape_one(&mut chars)?.char()?,
@@ -124,13 +124,13 @@ pub(crate) fn unescape_char(raw: &str) -> Result<char, String> {
 
 /// [`unescape_template_string`] past the body walk, which is the phase that
 /// rejects a malformed escape; no later one has a diagnostic channel for it.
-pub(crate) fn unescape_template_segment(raw: &str) -> String {
+pub fn unescape_template_segment(raw: &str) -> String {
     unescape_template_string(raw).expect("the body walk rejects a malformed template escape")
 }
 
 /// [`unescape_string`] for a template's raw text, which also escapes the
 /// interpolation syntax (`\{`, `\}`, `\$`) and the delimiter (`` \` ``).
-pub(crate) fn unescape_template_string(raw: &str) -> Result<String, String> {
+pub fn unescape_template_string(raw: &str) -> Result<String, String> {
     unescape_body(raw, |c| matches!(c, '{' | '}' | '$' | '`'))
 }
 

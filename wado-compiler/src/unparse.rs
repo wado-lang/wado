@@ -3051,7 +3051,7 @@ fn is_inline_safe_expr(expr: &Expr) -> bool {
     )
 }
 
-pub(crate) fn binary_op_str(op: BinaryOp) -> &'static str {
+pub fn binary_op_str(op: BinaryOp) -> &'static str {
     match op {
         BinaryOp::Add => "+",
         BinaryOp::Sub => "-",
@@ -4314,7 +4314,7 @@ fn unparse_trait_bounds_into(bounds: &[TraitBound], o: &mut String) {
 
 /// `<String, Output = T>` — a bound's trait arguments then its associated type
 /// bindings, in the one `<…>` that carries both.
-pub(crate) fn unparse_bound_arguments_into(bound: &TraitBound, o: &mut String) {
+pub fn unparse_bound_arguments_into(bound: &TraitBound, o: &mut String) {
     if bound.type_args.is_empty() && bound.assoc_types.is_empty() {
         return;
     }
@@ -4393,7 +4393,7 @@ pub fn unparse_trait_head_into(head: &TraitHead, output: &mut String) {
 
 /// Emit a `with` row: one item goes bare, more than one is parenthesized.
 /// An empty row emits nothing.
-pub(crate) fn unparse_with_row_into<S: AsRef<str>>(items: &[S], output: &mut String) {
+pub fn unparse_with_row_into<S: AsRef<str>>(items: &[S], output: &mut String) {
     match items {
         [] => {}
         [only] => {

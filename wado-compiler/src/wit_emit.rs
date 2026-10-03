@@ -1049,7 +1049,7 @@ impl<'a> Emitter<'a> {
 /// for resolved types, `ast::Type` for CM-registry signatures) so the shared
 /// [`assemble`] rule can recurse back through the same mapper. `Leaf` covers
 /// primitives, named types, and handles — rendered by the front-end.
-pub(crate) enum CmShape<T> {
+pub enum CmShape<T> {
     Option(T),
     List(T),
     /// 🗺️ `map<K, V>` — the `list<tuple<K, V>>` bytes under their own

@@ -380,33 +380,33 @@ pub(super) struct ReifyAssertCaptureContext {
 /// Per-module reify pass: emits a [`TirModule`] from the AST plus the
 /// `ModuleSemantics` that `annotate` populated. One instance per module the
 /// batch driver emits TIR for; constructed via [`Reify::new`].
-pub(crate) struct Reify<'a, H: CompilerHost> {
+pub struct Reify<'a, H: CompilerHost> {
     /// Pipeline-wide type knowledge. `&mut` only because reify may
     /// intern new monomorphic instances; the trait/impl tables are
     /// treated as read-only per the WEP `Reify surface` contract.
-    pub(crate) tysys: TypeSystem,
+    pub tysys: TypeSystem,
     /// The module reify stands in: its declarations and imports, which name
     /// resolution reads. Read only — reify never mutates the recorded decisions.
-    pub(crate) sem: &'a ModuleSemantics,
+    pub sem: &'a ModuleSemantics,
     /// The per-node facts of the walk reify replays: `sem.types`, except
     /// inside a trait default method, where they are the impl's own record.
-    pub(crate) types: &'a TypeAnnotations,
+    pub types: &'a TypeAnnotations,
     /// All modules' semantics, keyed by source. Used to swap `sem` to a
     /// callee module when reifying a default-argument expression that
     /// resolves in the callee's lexical scope (it may reference items
     /// private to the callee module).
-    pub(crate) all_module_semantics: &'a IndexMap<ModuleSource, Rc<ModuleSemantics>>,
+    pub all_module_semantics: &'a IndexMap<ModuleSource, Rc<ModuleSemantics>>,
     /// Symbol table from analyzer (cross-module).
-    pub(crate) symbols: &'a SymbolTable,
+    pub symbols: &'a SymbolTable,
     /// All loaded modules. Used by cross-module lookups (e.g. resolving
     /// the AST of a function referenced by a `FunctionRef`).
-    pub(crate) loaded_modules: &'a IndexMap<ModuleSource, Module>,
+    pub loaded_modules: &'a IndexMap<ModuleSource, Module>,
     /// Diagnostics logger.
-    pub(crate) logger: &'a Logger<'a, H>,
+    pub logger: &'a Logger<'a, H>,
     /// Source module currently being reified.
-    pub(crate) current_module_source: ModuleSource,
+    pub current_module_source: ModuleSource,
     /// Items of the current module, set before per-Item dispatch.
-    pub(crate) current_module_items: &'a [Item],
+    pub current_module_items: &'a [Item],
 
     /// Active per-element annotation overlays for the tuple `for-of`(s)
     /// currently being unrolled, innermost last. While reifying element
@@ -416,31 +416,31 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// overlay above the outer one, so inner-body nodes shadow correctly while
     /// outer-body nodes fall through to the outer overlay. See
     /// [`Self::reify_tuple_for_of`].
-    pub(crate) tuple_overlay_stack: Vec<&'a BodyFacts>,
+    pub tuple_overlay_stack: Vec<&'a BodyFacts>,
     /// Per-`ForOfStmt` visit counter. Annotate records one overlay set per
     /// *instantiation* of a tuple for-of in walk order; reify increments
     /// this each time it reifies the same `for_of.id` so it consumes the
     /// matching instantiation (a nested inner for-of is instantiated once
     /// per outer element). See [`Self::reify_tuple_for_of`].
-    pub(crate) tuple_overlay_visits: IndexMap<AstId, usize>,
+    pub tuple_overlay_visits: IndexMap<AstId, usize>,
     /// Source-level emit set. When `Some`, reify skips a function or method
     /// whose `AstId` is absent — one the liveness pass found the emitted
     /// program cannot reach, which downstream phases would discard anyway.
     /// `None` reifies everything.
-    pub(crate) emit_live: Option<&'a IndexSet<AstId>>,
+    pub emit_live: Option<&'a IndexSet<AstId>>,
     /// Active `AstId` → already-reified-`Local` substitutions for the
     /// side-effecting sub-pieces of a compound-assign target, bound once to
     /// `let $caN` before the read/write. Reify returns the bound `Local` for
     /// those exact nodes so `arr[bump()] += 1` evaluates `bump()` once while
     /// the place skeleton (index calls, field / deref chain) stays inline and
     /// still writes back. Empty outside `reify_compound_assign`.
-    pub(crate) compound_overrides: IndexMap<AstId, TirExpr>,
+    pub compound_overrides: IndexMap<AstId, TirExpr>,
     /// Call site for location literals (`#file` / `#line` / `#function`) in a
     /// default-argument expression, which report the call site rather than the
     /// callee module reify swaps to for name resolution. Set only by the
     /// outermost default walk (nested defaulted calls inherit it); `None`
     /// elsewhere. See [`Self::reify_pad_args_with_defaults`].
-    pub(crate) call_site_location: Option<CallSiteLocation>,
+    pub call_site_location: Option<CallSiteLocation>,
     /// Local struct declarations (`Stmt::Item`) built while walking a
     /// function body's statements, flushed into the module's TIR at the
     /// same point `pending_anonymous_structs` is. Reify-owned (not on
@@ -450,27 +450,27 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// that discovers it. See `reify_local_item`. Keyed by declaration: a
     /// trait default body is reified once per impl inheriting it, yet each
     /// local item in it is declared once.
-    pub(crate) pending_local_structs: IndexMap<DefId, TirStruct>,
+    pub pending_local_structs: IndexMap<DefId, TirStruct>,
     /// Local newtype declarations (`Stmt::Item`) — same reasoning as
     /// `pending_local_structs`.
-    pub(crate) pending_local_newtypes: IndexMap<DefId, TirNewtype>,
+    pub pending_local_newtypes: IndexMap<DefId, TirNewtype>,
     /// The coverage plan whose probes reify puts in, under
     /// `wado test --coverage`. See `probe.rs`.
-    pub(crate) coverage: Option<&'a CoverageMap>,
+    pub coverage: Option<&'a CoverageMap>,
     /// The probe ids reify has put in so far.
-    pub(crate) probes_emitted: IndexSet<u32>,
+    pub probes_emitted: IndexSet<u32>,
     /// The probe ids of code reify emits no instance of: a tuple `for-of` body
     /// over no elements.
-    pub(crate) probes_without_instance: IndexSet<u32>,
+    pub probes_without_instance: IndexSet<u32>,
 }
 
 /// Call site captured for location literals in defaults.
 /// See [`Reify::call_site_location`].
 #[derive(Clone)]
-pub(crate) struct CallSiteLocation {
-    pub(crate) module: ModuleSource,
-    pub(crate) span: Span,
-    pub(crate) function_name: String,
+pub struct CallSiteLocation {
+    pub module: ModuleSource,
+    pub span: Span,
+    pub function_name: String,
 }
 
 impl<'a, H: CompilerHost> Reify<'a, H> {
@@ -493,7 +493,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// / `current_module_items` are placeholders here — [`Self::reify_module`]
     /// overwrites them; keeping them on the struct saves threading them through
     /// every method signature.
-    pub(crate) fn new(
+    pub fn new(
         tysys: TypeSystem,
         sem: &'a ModuleSemantics,
         all_module_semantics: &'a IndexMap<ModuleSource, Rc<ModuleSemantics>>,
@@ -683,7 +683,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.emit_live.is_some_and(|live| !live.contains(&id))
     }
 
-    pub(crate) fn reify_module(
+    pub fn reify_module(
         &mut self,
         module: &'a Module,
         module_source: ModuleSource,
@@ -10133,7 +10133,7 @@ fn handle_comparison(op: ast::BinaryOp, left: TirExpr, right: TirExpr, span: Spa
 /// `Ordering` variant against the one that makes the operator true:
 /// `<` → `cmp == Less`, `>` → `cmp == Greater`,
 /// `<=` → `cmp != Greater`, `>=` → `cmp != Less`.
-pub(crate) fn ord_bool_from_cmp(
+pub fn ord_bool_from_cmp(
     cmp_call: TirExpr,
     op: ast::BinaryOp,
     span: Span,
@@ -10466,7 +10466,7 @@ fn tir_block_return_type(body: &TirExpr) -> Option<tir::TypeId> {
 /// operation and a facade function that wraps it share a name by design
 /// (`core:log`'s `Log::event` and `event`), and every fact either pass records
 /// is keyed by the unchanged `AstId`, so resolve and reify still agree.
-pub(crate) fn default_impl_methods(decl: &InterfaceDecl) -> Vec<ast::Function> {
+pub fn default_impl_methods(decl: &InterfaceDecl) -> Vec<ast::Function> {
     decl.methods
         .iter()
         .filter(|method| method.body.is_some())

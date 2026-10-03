@@ -289,7 +289,7 @@ impl TypeSystem {
 /// holding the inputs rather than an `Elaborator` — reify's default-method
 /// pass. Reads the digest the decl pass recorded, never the declaring module's
 /// AST, and answers `None` for a declaration that is no trait.
-pub(crate) fn trait_sig_of_with<'a>(
+pub fn trait_sig_of_with<'a>(
     decl: DefId,
     trait_env: &TraitEnv,
     signatures: &'a sig::Signatures,
@@ -653,7 +653,7 @@ impl TypeSystem {
 
     /// The declaration `type_id` is an instance of. `None` where its head names
     /// none: a type parameter, a projection, an anonymous shape.
-    pub(crate) fn type_def(&self, type_id: TypeId) -> Option<DefId> {
+    pub fn type_def(&self, type_id: TypeId) -> Option<DefId> {
         let table = self.type_table.borrow();
         let peeled = table.peel_refs(type_id);
         if let Some(def) = table.nominal_def(peeled) {

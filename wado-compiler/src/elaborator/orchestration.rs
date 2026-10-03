@@ -371,11 +371,11 @@ fn reaches(links: &IndexMap<DefId, DefId>, from: DefId, target: DefId) -> bool {
 /// [`Elaborator::build_tir_from_state`]. The [`TypeSystem`] internals are
 /// reference-counted so per-module elaborators clone them cheaply, and the
 /// [`TypeTable`] stays behind `Rc<RefCell<…>>` because lowering interns into it.
-pub(crate) struct AnnotateState {
+pub struct AnnotateState {
     /// Pipeline-wide type knowledge: the type arena, decl-interned type
     /// tables, registries, included-files map, and read-only caches
     /// built once at annotate time. See [`TypeSystem`].
-    pub(crate) tysys: TypeSystem,
+    pub tysys: TypeSystem,
     /// Component-Model world specifications. Built by the same
     /// [`CmInterfaceRegistry::build_from_stdlib`] call that populates
     /// [`TypeSystem::cm_interface_registry`], but lives here rather than on
@@ -385,32 +385,32 @@ pub(crate) struct AnnotateState {
     /// the driver state respects the `TypeSystem` membership rule
     /// ("would this fit the type system itself?" — see
     /// [`super::tysys`] module docs).
-    pub(crate) world_registry: std::sync::Arc<WorldRegistry>,
+    pub world_registry: std::sync::Arc<WorldRegistry>,
     /// Topological order of modules; the per-module body walk in
     /// [`Elaborator::build_tir_from_state`] visits sources in this order
     /// so a `TirModule`'s position in the result map matches the
     /// dependency order downstream phases expect.
-    pub(crate) sorted_sources: Vec<ModuleSource>,
+    pub sorted_sources: Vec<ModuleSource>,
     /// Per-module semantic facts, one entry per loaded module: a stdlib module
     /// served from the snapshot shares the snapshot's, and the rest are filled
     /// by the passes in [`Elaborator::build_tir_from_state`]. A pass takes its
     /// module's entry out and owns it, so its `&mut` access stays disjoint and
     /// needs no shared-mutability plumbing.
-    pub(crate) module_semantics: IndexMap<ModuleSource, Rc<ModuleSemantics>>,
+    pub module_semantics: IndexMap<ModuleSource, Rc<ModuleSemantics>>,
     /// Kiln invocation redirects consulted by `resolve_import` call sites
     /// when walking `use` declarations. Populated from [`crate::loader::LoadResult`].
-    pub(crate) invocations: Rc<InvocationIndex>,
+    pub invocations: Rc<InvocationIndex>,
     /// `ModuleSource` interner shared across phases. `Rc<RefCell<>>` so
     /// `&self` elaborator methods can `borrow_mut()` it when constructing
     /// new module sources during name resolution.
-    pub(crate) interner: Rc<RefCell<ModuleSourceInterner>>,
+    pub interner: Rc<RefCell<ModuleSourceInterner>>,
     /// [`Elaborator::abstract_selections`] by default body. A selection is the
     /// body's own, so every module with an impl inheriting it shares one walk.
-    pub(crate) abstract_selections: Rc<RefCell<AbstractSelectionCache>>,
+    pub abstract_selections: Rc<RefCell<AbstractSelectionCache>>,
     /// Source-level liveness computed between `annotate_bodies` and `reify`
     /// in [`Self::build_tir_from_state`]. Empty until that runs; consumed by
     /// reify item gating and the unused-diagnostics emitter.
-    pub(crate) liveness: Liveness,
+    pub liveness: Liveness,
 }
 
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
@@ -418,7 +418,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// declaration in the shared [`TypeTable`]. Produces an [`AnnotateState`]
     /// that downstream phases (`build_tir`, LSP queries) consume read-mostly
     /// via `Rc`.
-    pub(crate) fn annotate_modules(
+    pub fn annotate_modules(
         symbols: &'a SymbolTable,
         modules: &'a IndexMap<ModuleSource, Module>,
         entry_module_source: &ModuleSource,
@@ -1213,7 +1213,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// [`TirModule`]. Errors collect in the logger; [`Bail`] if any module
     /// failed. The LSP path passes `false`, needing only the recorded facts, and
     /// gets an empty map back.
-    pub(crate) fn build_tir_from_state(
+    pub fn build_tir_from_state(
         state: &mut AnnotateState,
         symbols: &'a SymbolTable,
         modules: &'a IndexMap<ModuleSource, Module>,
@@ -2407,7 +2407,7 @@ fn trait_method_impls(tysys: &TypeSystem) -> IndexMap<ast::AstId, IndexSet<ast::
 /// `Interface::method` calls resolve their CM signatures. Component binding
 /// modules are loader-synthesized `ModuleSource::Wasm` modules; the `Wasm`-source
 /// guard excludes stdlib WASI. Shared by elaboration and the dump pipeline.
-pub(crate) fn fold_component_interfaces(
+pub fn fold_component_interfaces(
     registry: &mut Arc<CmInterfaceRegistry>,
     modules: &IndexMap<ModuleSource, Module>,
     stdlib_set: &IndexSet<ModuleSource>,

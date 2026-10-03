@@ -1047,7 +1047,7 @@ fn guard_bound_locals(body: &Body, guard: Operand) -> LocalIndexSet {
 }
 
 /// Whether `guard` is more than a test — see [`guard_bound_locals`].
-pub(crate) fn guard_declares_locals(body: &Body, guard: Operand) -> bool {
+pub fn guard_declares_locals(body: &Body, guard: Operand) -> bool {
     !guard_bound_locals(body, guard).is_empty()
 }
 

@@ -21,18 +21,18 @@ use crate::token::Span;
 /// user-authored free function or global is live in `E`, test-only in `T \ E`,
 /// dead in neither. The `E`/`T` split only picks which diagnostic is raised.
 #[derive(Default, Clone)]
-pub(crate) struct Liveness {
+pub struct Liveness {
     /// Reachable from the roots that survive into the emitted program ∪ tests,
     /// which reify gates emission on. Narrower than `E ∪ T`: a method is a root
     /// of `E` so that a free function only it calls is not reported dead, but
     /// enters this set only when a call reaches it.
-    pub(crate) emit_live: IndexSet<AstId>,
+    pub emit_live: IndexSet<AstId>,
     /// Candidates reachable from neither production nor tests (`∉ E ∧ ∉ T`),
     /// in source order. `DeadFunction` / `DeadGlobal`.
-    pub(crate) dead_items: Vec<AstId>,
+    pub dead_items: Vec<AstId>,
     /// Candidates reachable from tests but not production (`∈ T \ E`), in
     /// source order. `TestOnlyFunction` / `TestOnlyGlobal`.
-    pub(crate) test_only_items: Vec<AstId>,
+    pub test_only_items: Vec<AstId>,
     /// Local last-use liveness (WEP 2026-05-21, value-copy client). Each entry
     /// is the `AstId` of an identifier *use* that is the final use, on every
     /// path, of a move-eligible local binding. The canonical `AstId`-keyed
@@ -40,12 +40,12 @@ pub(crate) struct Liveness {
     /// Sound by construction: a use is recorded only when the analysis proves
     /// the local dead afterward *and* the binding owns what it names, so an
     /// unrecorded use always falls back to a copy.
-    pub(crate) last_uses: IndexSet<AstId>,
+    pub last_uses: IndexSet<AstId>,
     /// The same last-use facts projected to source spans, the form the
     /// value-copy planner consumes in the `lower` phase — TIR carries a `Span`
     /// but no `AstId`. One set over the program: a span names its own parse.
     /// Threaded through `Package` → `FlatPackage` to the planner.
-    pub(crate) moved_spans: IndexSet<Span>,
+    pub moved_spans: IndexSet<Span>,
 }
 
 /// Compute liveness over every loaded module.
@@ -54,7 +54,7 @@ pub(crate) struct Liveness {
 /// function whose name matches is a potential world entry point and is seeded
 /// as a root, so a misdeclared entry (`fn run()` without `export`) survives
 /// reify gating and still reaches the world-conformance check.
-pub(crate) fn compute(
+pub fn compute(
     modules: &IndexMap<ModuleSource, Module>,
     references: &References<'_>,
     world_export_names: &IndexSet<String>,
@@ -260,14 +260,14 @@ fn seed_operations(
 /// inheriting `impl`, so one use there has as many definitions as there are
 /// impls — `inherited` holds those sets, `direct` the single-definition edges
 /// every other body records.
-pub(crate) struct References<'a> {
-    pub(crate) direct: &'a IndexMap<AstId, AstId>,
-    pub(crate) inherited: &'a IndexMap<AstId, IndexSet<AstId>>,
+pub struct References<'a> {
+    pub direct: &'a IndexMap<AstId, AstId>,
+    pub inherited: &'a IndexMap<AstId, IndexSet<AstId>>,
     /// Callees a dispatch fact names: an operator, a subscript, a `From`
     /// conversion, a `for-of` iterator, a handler binding — and every method
     /// call, since `direct` keeps one definition per node while a tuple
     /// `for-of` resolves the same node once per element.
-    pub(crate) dispatch: &'a IndexMap<AstId, IndexSet<AstId>>,
+    pub dispatch: &'a IndexMap<AstId, IndexSet<AstId>>,
 }
 
 /// Compute local last-use liveness over every function / method body in the
@@ -1093,7 +1093,7 @@ impl AstVisitor for IdCollector {
 /// they alone are candidates for the unused-item diagnostics. Stdlib is the
 /// `Core` / `Wasi` / `Wasm` variants plus the bundled `.wado` files the loader
 /// registers as `Local` with a scheme-prefixed path.
-pub(crate) fn is_user_authored(source: &ModuleSource) -> bool {
+pub fn is_user_authored(source: &ModuleSource) -> bool {
     match source {
         ModuleSource::EntryPoint { .. }
         | ModuleSource::Remote { .. }
@@ -1113,15 +1113,15 @@ pub(crate) fn is_user_authored(source: &ModuleSource) -> bool {
 /// it. Each entry is one entity, not a whole type: registering a type would
 /// root every method on it.
 #[derive(Default)]
-pub(crate) struct CompilerNamed {
+pub struct CompilerNamed {
     /// Inherent methods, by the type that declares them.
-    pub(crate) methods: IndexMap<String, IndexSet<String>>,
+    pub methods: IndexMap<String, IndexSet<String>>,
     /// Free functions, by the module that declares them — the CM ABI helpers.
-    pub(crate) functions: IndexMap<ModuleSource, IndexSet<String>>,
+    pub functions: IndexMap<ModuleSource, IndexSet<String>>,
     /// `impl` blocks whose trait a synthesis pass dispatches — see
     /// [`crate::compiler_item::CompilerItem::dispatched_by_synthesis`]. Their
     /// methods are roots: no edge here can name a call minted after this pass.
-    pub(crate) synthesis_dispatched_impls: IndexSet<AstId>,
+    pub synthesis_dispatched_impls: IndexSet<AstId>,
 }
 
 impl CompilerNamed {

@@ -37,7 +37,7 @@ thread_local! {
 /// True while [`build_snapshot`] runs. The cache it produces is consumed by
 /// every later compile, so nothing built under it may be narrowed to what the
 /// synthetic empty entry happens to reach.
-pub(crate) fn is_building() -> bool {
+pub fn is_building() -> bool {
     BUILDING.with(Cell::get)
 }
 
@@ -49,7 +49,7 @@ pub(crate) fn is_building() -> bool {
 /// # Panics
 /// If the stdlib closure fails to load or analyze — a build-time inconsistency
 /// in the shipped stdlib, which is not recoverable.
-pub(crate) fn get_or_init_snapshot() -> Option<Rc<Semantics>> {
+pub fn get_or_init_snapshot() -> Option<Rc<Semantics>> {
     if is_building() {
         return None;
     }
@@ -165,7 +165,7 @@ fn poll_to_completion<F: Future>(fut: F) -> F::Output {
 /// stdlib modules served from `cached_stdlib_module()` plus the `core:libm.wat`
 /// Wasm asset module. Returns the subset of `snap.tir_modules` whose
 /// keys match.
-pub(crate) fn stdlib_sources(snap: &Semantics) -> IndexSet<ModuleSource> {
+pub fn stdlib_sources(snap: &Semantics) -> IndexSet<ModuleSource> {
     snap.tir_modules
         .keys()
         .filter(|ms| {
@@ -183,7 +183,7 @@ pub(crate) fn stdlib_sources(snap: &Semantics) -> IndexSet<ModuleSource> {
 /// The first module `snap` cached that `modules` carries as a different parse —
 /// the condition the snapshot may seed a compile under, its facts keying on
 /// `DefId`s only that parse mints (WEP 2026-08-12 §1).
-pub(crate) fn reparsed_snapshot_module<'a>(
+pub fn reparsed_snapshot_module<'a>(
     snap: &Semantics,
     modules: &'a IndexMap<ModuleSource, ast::Module>,
 ) -> Option<&'a ModuleSource> {
@@ -204,7 +204,7 @@ pub(crate) fn reparsed_snapshot_module<'a>(
 /// `live` stands in for the gating reify would have applied had the module been
 /// reified here: a cached function this program cannot reach is dropped, not
 /// cloned.
-pub(crate) fn rehydrate_tir_module(
+pub fn rehydrate_tir_module(
     snap_module: &TirModule,
     fresh_type_table: &Rc<RefCell<TypeTable>>,
     live: Option<&IndexSet<DefId>>,

@@ -4177,10 +4177,7 @@ impl CmTypeSink for InstanceSink<'_> {
 
 /// Write one [`CmDefined`] shape into a defined-type encoder. Shared by every
 /// [`CmTypeSink`] so the shape → wasm-encoder mapping lives in one place.
-pub(crate) fn emit_cm_defined(
-    enc: wasm_encoder::ComponentDefinedTypeEncoder<'_>,
-    defined: CmDefined<'_>,
-) {
+pub fn emit_cm_defined(enc: wasm_encoder::ComponentDefinedTypeEncoder<'_>, defined: CmDefined<'_>) {
     match defined {
         CmDefined::Record(fields) => enc.record(fields.iter().copied()),
         CmDefined::Variant(cases) => enc.variant(cases.iter().copied()),

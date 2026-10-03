@@ -2262,7 +2262,7 @@ fn capacity_observed_locals(body: &TirBlock, type_table: &TypeTable) -> IndexSet
     scan.found
 }
 
-pub(crate) fn alias_root(expr: &TirExpr) -> Option<u32> {
+pub fn alias_root(expr: &TirExpr) -> Option<u32> {
     match &expr.kind {
         TirExprKind::Local { index, .. } => Some(*index),
         TirExprKind::FieldAccess { expr: inner, .. }

@@ -3,47 +3,47 @@
 //! `TypeId` is the rule, and the resolutions it drops on the floor ran to
 //! record those facts.
 
-pub(crate) mod assert;
-mod call;
-mod callee;
-mod closure;
-mod coercion;
-mod control_flow;
-mod exhaustiveness;
-mod expr;
-pub(crate) mod float_literal;
-mod handlers;
-mod infer;
-mod infer_hole;
-mod instantiate;
-mod item;
-pub(crate) mod liveness;
-mod matches;
-mod method_call;
-mod method_lookup;
-mod module;
-mod operators;
-pub(crate) mod orchestration;
-mod probe;
-mod reflect;
-pub(crate) mod reify;
-mod scope;
-pub(crate) mod sem;
-pub(crate) mod sig;
-mod solver_bridge;
-mod static_call;
-mod stmt;
-mod synth;
-mod tagged_template;
-mod template;
-pub(crate) mod trait_env;
-mod trait_query;
-mod type_resolution;
-mod typecheck;
-pub(crate) mod types;
-mod tysys;
-pub(crate) mod util;
-mod written;
+pub mod assert;
+pub mod call;
+pub mod callee;
+pub mod closure;
+pub mod coercion;
+pub mod control_flow;
+pub mod exhaustiveness;
+pub mod expr;
+pub mod float_literal;
+pub mod handlers;
+pub mod infer;
+pub mod infer_hole;
+pub mod instantiate;
+pub mod item;
+pub mod liveness;
+pub mod matches;
+pub mod method_call;
+pub mod method_lookup;
+pub mod module;
+pub mod operators;
+pub mod orchestration;
+pub mod probe;
+pub mod reflect;
+pub mod reify;
+pub mod scope;
+pub mod sem;
+pub mod sig;
+pub mod solver_bridge;
+pub mod static_call;
+pub mod stmt;
+pub mod synth;
+pub mod tagged_template;
+pub mod template;
+pub mod trait_env;
+pub mod trait_query;
+pub mod type_resolution;
+pub mod typecheck;
+pub mod types;
+pub mod tysys;
+pub mod util;
+pub mod written;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -82,7 +82,7 @@ use crate::token::Span;
 /// [`tysys::TypeSystem::loaded_module_func_indices`]; the per-module
 /// body walk then consults that pre-built index instead of rebuilding
 /// here.
-pub(crate) fn build_func_index(items: &[Item]) -> IndexMap<String, usize> {
+pub fn build_func_index(items: &[Item]) -> IndexMap<String, usize> {
     let mut index = IndexMap::default();
     for (i, item) in items.iter().enumerate() {
         if let Item::Function(func) = item {
@@ -107,7 +107,7 @@ impl<H: CompilerHost> AstVisitor for ForwardDefaults<'_, '_, H> {
 
 /// The sentence every `#[unavailable]` declaration in the program reports,
 /// keyed by the declaration. Only its `impl` or `trait` can qualify the name.
-pub(crate) fn collect_unavailable(
+pub fn collect_unavailable(
     modules: &IndexMap<ModuleSource, Module>,
     defs: &DefTable,
 ) -> IndexMap<DefId, String> {
@@ -148,7 +148,7 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// Pipeline-wide type knowledge: type arena, decl-interned type
     /// tables, registries, included-files map, and the read-only caches
     /// built once during `annotate_modules`. See [`tysys::TypeSystem`].
-    pub(crate) tysys: TypeSystem,
+    pub tysys: TypeSystem,
     /// Per-module semantic facts (imports, decls, bindings, type
     /// annotations). The elaborator takes ownership of one
     /// [`sem::ModuleSemantics`] at the start of each per-module pass
@@ -156,7 +156,7 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// and the driver re-installs it into
     /// [`orchestration::AnnotateState::module_semantics`] afterwards. See
     /// the [`sem`] module-level documentation for the membership rules.
-    pub(crate) sem: sem::ModuleSemantics,
+    pub sem: sem::ModuleSemantics,
     /// Symbol table from analyzer
     symbols: &'a SymbolTable,
     /// Logger for emitting diagnostics
@@ -193,19 +193,19 @@ pub struct Elaborator<'a, H: CompilerHost> {
 
 /// What a default body's author selected at one call through a bound.
 #[derive(Clone, Copy)]
-pub(crate) struct AbstractSelection {
+pub struct AbstractSelection {
     /// The trait the bound names.
-    pub(crate) trait_decl: DefId,
+    pub trait_decl: DefId,
     /// The receiver was a reference to the bound's subject, so an impl for
     /// the reference answers no call the author wrote.
-    pub(crate) through_ref: bool,
+    pub through_ref: bool,
 }
 
 /// Each call's [`AbstractSelection`] in one default body, by the call's node.
-pub(crate) type AbstractSelections = hashmap::IndexMap<ast::AstId, AbstractSelection>;
+pub type AbstractSelections = hashmap::IndexMap<ast::AstId, AbstractSelection>;
 
 /// [`AbstractSelections`] keyed by the body.
-pub(crate) type AbstractSelectionCache = hashmap::IndexMap<ast::AstId, Rc<AbstractSelections>>;
+pub type AbstractSelectionCache = hashmap::IndexMap<ast::AstId, Rc<AbstractSelections>>;
 
 impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
     /// Bind an `impl` block's type parameters to the slots its methods resolve
@@ -258,7 +258,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// The symbol `name` reaches from `module`, for a caller whose reference site
     /// is not at hand — a mangled name, a synthesis target.
-    pub(crate) fn symbol_named(&self, module: &ModuleSource, name: &str) -> Option<&'a Symbol> {
+    pub fn symbol_named(&self, module: &ModuleSource, name: &str) -> Option<&'a Symbol> {
         let def = self.tysys.resolutions.resolve_in(module, name)?;
         self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
     }
@@ -273,7 +273,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// A [`TypeLookup`] standing in the frame the AST under resolution was written in.
-    pub(crate) fn type_lookup(&self) -> TypeLookup<'_> {
+    pub fn type_lookup(&self) -> TypeLookup<'_> {
         let frame = self.frame_module();
         let namespace_imports = self
             .namespace_imports_in(frame)
@@ -1133,21 +1133,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// The declaration `name` names where it is written: the walk's answer at
     /// `site`, or the frame's for a node no walk reached.
-    pub(crate) fn decl_key_at(&self, site: Option<AstId>, name: &str) -> Option<DefId> {
+    pub fn decl_key_at(&self, site: Option<AstId>, name: &str) -> Option<DefId> {
         self.tysys
             .resolutions
             .declared_or(site, || self.decl_key_or_local(name))
     }
 
     /// Whether `name` names a type declaration where it is written.
-    pub(crate) fn names_type_at(&self, site: Option<AstId>, name: &str) -> bool {
+    pub fn names_type_at(&self, site: Option<AstId>, name: &str) -> bool {
         self.decl_key_at(site, name)
             .is_some_and(|def| self.tysys.resolutions.defs().kind(def).is_type())
     }
 
     /// The declaration `name` reaches where the AST under resolution was written,
     /// for a caller with no reference site; one holding a site calls [`Self::decl_key_at`].
-    pub(crate) fn decl_key_or_local(&self, name: &str) -> Option<DefId> {
+    pub fn decl_key_or_local(&self, name: &str) -> Option<DefId> {
         // A binder shadows every declaration of its name and has no identity of
         // its own; the module scope cannot see binders and would answer `struct T`.
         if self.annotate_ctx.trait_ctx.type_params.contains_key(name) {
@@ -1462,17 +1462,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// The impl target a receiver spelling names in the current frame.
-    pub(crate) fn impl_target(&self, type_name: &str) -> trait_env::ImplTargetKey {
+    pub fn impl_target(&self, type_name: &str) -> trait_env::ImplTargetKey {
         self.impl_target_at(None, type_name)
     }
 
     /// [`Self::impl_target`] for a receiver written at `site`, keyed to what it
     /// names in the module that wrote it.
-    pub(crate) fn impl_target_at(
-        &self,
-        site: Option<AstId>,
-        type_name: &str,
-    ) -> trait_env::ImplTargetKey {
+    pub fn impl_target_at(&self, site: Option<AstId>, type_name: &str) -> trait_env::ImplTargetKey {
         self.decl_key_at(site, type_name).map_or_else(
             || trait_env::ImplTargetKey::of_undeclared(&self.current_module_source, type_name),
             |def| trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def),
@@ -1484,7 +1480,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// re-resolving the name from the caller's vantage — which cannot
     /// separate two modules' same-named types when the caller imports
     /// neither, and reaches the receiver only through a return type.
-    pub(crate) fn impl_target_of(
+    pub fn impl_target_of(
         &self,
         type_id: tir::TypeId,
         fallback_name: &DeclName,
@@ -1501,7 +1497,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ///
     /// For a generic instance it is the *base* type's declaration — type
     /// arguments are dropped, so it cannot tell `Foo<A>` from `Foo<B>`.
-    pub(crate) fn type_decl_key(&self, type_id: tir::TypeId) -> Option<DefId> {
+    pub fn type_decl_key(&self, type_id: tir::TypeId) -> Option<DefId> {
         // No vantage: an import aliasing a builtin's name never steers the type.
         if let Some(name) = self.tysys.builtin_type_name(type_id) {
             return self.tysys.resolutions.prelude_decl(&name);
@@ -1514,11 +1510,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// declares — the head when an impl is written on the newtype itself, a
     /// base when the newtype inherited it. `None` when no link carries that
     /// name, leaving the caller to fall back to a by-name lookup.
-    pub(crate) fn impl_target_decl_key(
-        &self,
-        type_id: tir::TypeId,
-        impl_name: &str,
-    ) -> Option<DefId> {
+    pub fn impl_target_decl_key(&self, type_id: tir::TypeId, impl_name: &str) -> Option<DefId> {
         use crate::tir::ResolvedType;
         let mut current = self.tysys.type_table.borrow().peel_refs(type_id);
         loop {
@@ -1546,7 +1538,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Resolve a `with` clause's effect names to TIR `EffectRef`s.
-    pub(crate) fn resolve_effects(&mut self, effects: &[ast::EffectName]) -> Vec<tir::EffectRef> {
+    pub fn resolve_effects(&mut self, effects: &[ast::EffectName]) -> Vec<tir::EffectRef> {
         effects
             .iter()
             .map(|effect| {
@@ -1560,7 +1552,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// The effect `name` names at `site`, its use recorded; one naming no
     /// effect is reported.
-    pub(crate) fn effect_named_at(
+    pub fn effect_named_at(
         &mut self,
         site: Option<AstId>,
         span: Span,
@@ -2261,7 +2253,7 @@ impl TypeSystem {
 
     /// Whether the receiver's own declaration of this name and kind shadows a
     /// trait impl's; every walk reaching both kinds asks here rather than reimplementing it.
-    pub(crate) fn inherent_shadows(
+    pub fn inherent_shadows(
         &self,
         receiver: &trait_env::ImplTargetKey,
         method_name: &str,

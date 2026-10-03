@@ -3,13 +3,13 @@
 //! generate a concrete definition per site, and rewrite types and calls onto the
 //! monomorphized names.
 
-mod call_instance;
-mod call_rewrite;
-mod func_inst;
-mod instance_patterns;
-mod state;
-mod struct_inst;
-mod substitute;
+pub mod call_instance;
+pub mod call_rewrite;
+pub mod func_inst;
+pub mod instance_patterns;
+pub mod state;
+pub mod struct_inst;
+pub mod substitute;
 
 pub use instance_patterns::lower_instance_patterns;
 
@@ -30,11 +30,7 @@ use state::Monomorphizer;
 
 /// The name an `InstantiationKey` carries: a method's own, a free function's
 /// qualified by its module, since no receiver namespaces it.
-pub(crate) fn generic_function_name(
-    is_method: bool,
-    module_source: &ModuleSource,
-    name: &str,
-) -> String {
+pub fn generic_function_name(is_method: bool, module_source: &ModuleSource, name: &str) -> String {
     if is_method {
         name.to_string()
     } else {
@@ -44,7 +40,7 @@ pub(crate) fn generic_function_name(
 
 /// Every generic function template, keyed by the declaration a call selected.
 #[derive(Default, Clone)]
-pub(crate) struct Templates {
+pub struct Templates {
     by_id: IndexMap<TemplateId, Rc<RefCell<TirFunction>>>,
 }
 

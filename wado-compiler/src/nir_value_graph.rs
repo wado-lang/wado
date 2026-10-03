@@ -21,7 +21,7 @@ use crate::tir::{TypeId, TypeTable};
 ///
 /// `prim` is the operand's resolved primitive type. A scalar yields `None`
 /// unless `prim` is a width the evaluator's arithmetic is defined at.
-pub(crate) fn value_kind_to_const(kind: &ValueKind, prim: Option<PrimitiveType>) -> Option<Value> {
+pub fn value_kind_to_const(kind: &ValueKind, prim: Option<PrimitiveType>) -> Option<Value> {
     use crate::const_eval::Value;
     Some(match kind {
         ValueKind::Int(value, _) => {

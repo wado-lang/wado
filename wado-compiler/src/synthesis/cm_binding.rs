@@ -4,16 +4,16 @@
 //! bindings go through monomorphization, lowering and optimization like any
 //! other function. Design: `docs/wep-2026-02-15-cm-binding-synthesis.md`.
 
-mod callback_export;
-mod cm_free;
-mod export_adapter;
-mod import_adapter;
-mod lift;
-mod lower;
-mod resource_rewrite;
-mod task_return;
-mod type_fixup;
-pub(crate) mod types;
+pub mod callback_export;
+pub mod cm_free;
+pub mod export_adapter;
+pub mod import_adapter;
+pub mod lift;
+pub mod lower;
+pub mod resource_rewrite;
+pub mod task_return;
+pub mod type_fixup;
+pub mod types;
 
 use std::cell::RefCell;
 use std::rc::Rc;

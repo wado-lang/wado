@@ -194,7 +194,7 @@ pub fn carries_no_storage(expr: &TirExpr) -> bool {
 /// (wado-lang/wado#1527), so it is *not* owned and its result is copied at a
 /// materialization — but never at a mutable-place use, which is not a
 /// materialization, so `arr[i].field.push(x)` keeps its element aliased.
-pub(crate) fn is_owned_value(
+pub fn is_owned_value(
     expr: &TirExpr,
     fresh_locals: &IndexSet<u32>,
     oracle: &OwnedCalls,
@@ -314,14 +314,14 @@ fn match_result_is_fresh(
 
 /// Collect every local a pattern binds, so a fresh scrutinee's destructured
 /// parts can be treated as fresh in the arm body.
-pub(crate) fn collect_pattern_bindings(pattern: &TirPattern, out: &mut IndexSet<u32>) {
+pub fn collect_pattern_bindings(pattern: &TirPattern, out: &mut IndexSet<u32>) {
     for_each_pattern_binding(pattern, &mut |local_index, _| {
         out.insert(local_index);
     });
 }
 
 /// Visit every local a pattern binds, with the type it is bound at.
-pub(crate) fn for_each_pattern_binding(pattern: &TirPattern, visit: &mut impl FnMut(u32, TypeId)) {
+pub fn for_each_pattern_binding(pattern: &TirPattern, visit: &mut impl FnMut(u32, TypeId)) {
     match pattern {
         TirPattern::Binding {
             local_index,

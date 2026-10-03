@@ -27,7 +27,7 @@ use crate::tir;
 
 /// Per-module registry of inference holes and their (eventual) solutions.
 #[derive(Default)]
-pub(crate) struct InferHoleTable {
+pub struct InferHoleTable {
     /// Hole `TypeId` → solution (`None` until solved).
     solutions: IndexMap<TypeId, Option<TypeId>>,
     /// Hole `TypeId` → what it says if it is never solved.
@@ -46,9 +46,9 @@ pub(crate) struct InferHoleTable {
 /// A trait bound a slot declared: the trait its reference site names, with the
 /// arguments it writes, and the spelling that site wrote.
 #[derive(Clone, Debug)]
-pub(crate) struct DeclaredBound {
-    pub(crate) trait_: FqTraitName,
-    pub(crate) written: String,
+pub struct DeclaredBound {
+    pub trait_: FqTraitName,
+    pub written: String,
 }
 
 /// What an unsolved variable reports.

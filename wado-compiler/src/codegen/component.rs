@@ -20,6 +20,7 @@ use crate::component_model::{
     cm_return_needs_outptr, emit_cm_defined, one_per_cm_name, parse_resource_func,
     wado_primitive_name_to_cm,
 };
+use crate::component_plan::{CmExportType, ComponentPlan, WorldExportPlan};
 use crate::coverage;
 use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -30,7 +31,6 @@ use crate::synthesis::cm_binding::types::kebab_to_pascal;
 use crate::test_names::{SECTION_NAME, encode};
 use crate::token::Span;
 use crate::wir::{ImportEntry, ImportKind, WirPackage};
-use crate::component_plan::{CmExportType, ComponentPlan, WorldExportPlan};
 use crate::world_registry::fq_name_package;
 use crate::{ProviderComponent, ast};
 use wasm_compose::graph::Component as GraphComponent;
