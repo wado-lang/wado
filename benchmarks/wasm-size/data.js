@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791036803257,
+  "lastUpdate": 1791069624609,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -63197,6 +63197,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/eb38d9c51881e0091082e57eb5d382fbf9f82f1f"
         },
         "date": 1791036802619,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20617,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 279825,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1a4af575a31064d3334a7e18c6987f94bf68ed6e",
+          "message": "Merge pull request #2258 from wado-lang/ccr-9020e29f-cf0gtt\n\nfeat(loam): GPT-2 decodes from one module, prompt in one pass and a key/value cache after",
+          "timestamp": "2026-10-04T08:00:04+09:00",
+          "tree_id": "934099b2f4001d1fdb21aa504ffcc113ce749a13",
+          "url": "https://github.com/wado-lang/wado/commit/1a4af575a31064d3334a7e18c6987f94bf68ed6e"
+        },
+        "date": 1791069623768,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
