@@ -330,8 +330,6 @@ pub fn synthesize_traits(project: Package) -> Package {
             names: &names,
             partial_impls: &partial_impls,
         };
-        // First, so the member-wise `Eq` derivations find the impl recorded.
-        generate_eq_from_cmp_impls(module, &mut ctx);
         generate_enum_trait_impls(module, &mut ctx);
         generate_flags_trait_impls(module, &mut ctx);
         generate_handle_eq_impls(module, &mut ctx);
@@ -3556,72 +3554,38 @@ fn collect_generic_variant_cases(
         .collect()
 }
 
-/// Generate `T^Eq::eq` for each requested type that writes `cmp` and no `eq`,
-/// which takes `==` from that order (spec-traits.md §Derivation Policy).
-fn generate_eq_from_cmp_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
-    let module_source = module.module_source.clone();
-    let mut tt = module.type_table.borrow_mut();
-    let eq_trait_name = tt.compiler_trait_fq(CompilerItem::Eq);
-    let eq_key = eq_trait_name.canonical().expect(KEYED);
-    let ord_key = tt
+/// The derived `T^Eq::eq` for `ty`: from its written `cmp` where it writes no
+/// `eq` (spec-traits.md §Derivation Policy), else from `members`.
+fn derived_eq_fn(
+    ctx: &SynthesisCtx<'_, '_, '_>,
+    receiver: &FqTypeName,
+    impl_type_params: &[TirTypeParam],
+    ty: TypeId,
+    module_source: &ModuleSource,
+    eq_trait_name: &FqTraitName,
+    tt: &mut TypeTable,
+    span: Span,
+    members: impl FnOnce(&mut TypeTable) -> TirFunction,
+) -> TirFunction {
+    let eq = eq_trait_name.canonical().expect(KEYED);
+    let ord = tt
         .compiler_trait_fq(CompilerItem::Ord)
         .canonical()
         .expect(KEYED);
-
-    let mut declarations: Vec<(FqTypeName, TypeId, Vec<TirTypeParam>, Span)> = Vec::new();
-    for s in module.structs.iter().filter(|s| s.monomorph_info.is_none()) {
-        let (receiver, ty) = if s.type_params.is_empty() {
-            (tt.fq_struct_head(s.def), tt.make_struct(s.def))
-        } else {
-            let def = s
-                .def
-                .decl()
-                .expect("a generic struct names its declaration");
-            let params = make_type_param_ids(&s.type_params, &mut tt);
-            let receiver = FqTypeName::declared(tt.defs(), def);
-            (receiver, tt.make_generic_instance(def, params))
-        };
-        declarations.push((receiver, ty, s.type_params.clone(), s.span));
+    if comparison_written_alone(ctx.trait_env, [eq, ord], ty, tt) != Some(CompilerItem::Ord) {
+        return members(tt);
     }
-    for e in &module.enums {
-        let receiver = FqTypeName::declared(tt.defs(), e.def);
-        declarations.push((receiver, tt.make_enum(e.def), Vec::new(), e.span));
-    }
-    for v in &module.variants {
-        let receiver = FqTypeName::declared(tt.defs(), v.def);
-        let ty = if v.type_params.is_empty() {
-            tt.make_variant(v.def)
-        } else {
-            let params = make_type_param_ids(&v.type_params, &mut tt);
-            tt.make_generic_instance(v.def, params)
-        };
-        declarations.push((receiver, ty, v.type_params.clone(), v.span));
-    }
-
-    let mut generated = Vec::new();
-    for (receiver, ty, type_params, span) in &declarations {
-        if !ctx.should_synthesize(receiver, &eq_key)
-            || comparison_written_alone(ctx.trait_env, [eq_key, ord_key], *ty, &tt)
-                != Some(CompilerItem::Ord)
-        {
-            continue;
-        }
-        let func = generate_eq_from_cmp_fn(
-            receiver,
-            type_params,
-            *ty,
-            ctx.trait_env,
-            &module_source,
-            &eq_trait_name,
-            &mut tt,
-            *span,
-            ctx.names,
-        );
-        generated.push(Rc::new(RefCell::new(func)));
-        ctx.record_impl(receiver, &eq_key);
-    }
-    drop(tt);
-    module.functions.extend(generated);
+    generate_eq_from_cmp_fn(
+        receiver,
+        impl_type_params,
+        ty,
+        ctx.trait_env,
+        module_source,
+        eq_trait_name,
+        tt,
+        span,
+        ctx.names,
+    )
 }
 
 /// Generate `T^Eq::eq(&self, &Self) -> bool` as `self.cmp(other) == Equal`.
@@ -3713,13 +3677,25 @@ fn generate_enum_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
         let ref_enum_type = type_table.make_ref(enum_type);
 
         if ctx.should_synthesize(receiver, &eq_trait_name.canonical().expect(KEYED)) {
-            let func = generate_scalar_eq_fn(
+            let func = derived_eq_fn(
+                ctx,
                 receiver,
+                &[],
                 enum_type,
-                ref_enum_type,
+                &module.module_source,
                 &eq_trait_name,
+                &mut type_table,
                 *span,
-                identity,
+                |_| {
+                    generate_scalar_eq_fn(
+                        receiver,
+                        enum_type,
+                        ref_enum_type,
+                        &eq_trait_name,
+                        *span,
+                        identity,
+                    )
+                },
             );
             generated_functions.push(Rc::new(RefCell::new(func)));
             ctx.record_impl(receiver, &eq_trait_name.canonical().expect(KEYED));
@@ -3776,13 +3752,25 @@ fn generate_flags_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         let ref_flags_type = type_table.make_ref(flags_type);
 
         if ctx.should_synthesize(receiver, &eq_trait_name.canonical().expect(KEYED)) {
-            let func = generate_scalar_eq_fn(
+            let func = derived_eq_fn(
+                ctx,
                 receiver,
+                &[],
                 flags_type,
-                ref_flags_type,
+                &module.module_source,
                 &eq_trait_name,
+                &mut type_table,
                 *span,
-                identity,
+                |_| {
+                    generate_scalar_eq_fn(
+                        receiver,
+                        flags_type,
+                        ref_flags_type,
+                        &eq_trait_name,
+                        *span,
+                        identity,
+                    )
+                },
             );
             generated_functions.push(Rc::new(RefCell::new(func)));
             ctx.record_impl(receiver, &eq_trait_name.canonical().expect(KEYED));
@@ -3828,13 +3816,25 @@ fn generate_handle_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '
         }
         let handle_type = type_table.make_resource(resource.def);
         let ref_handle_type = type_table.make_ref(handle_type);
-        let func = generate_scalar_eq_fn(
+        let func = derived_eq_fn(
+            ctx,
             receiver,
+            &[],
             handle_type,
-            ref_handle_type,
+            &module.module_source,
             &eq_trait_name,
+            &mut type_table,
             resource.span,
-            common::handle_bits,
+            |_| {
+                generate_scalar_eq_fn(
+                    receiver,
+                    handle_type,
+                    ref_handle_type,
+                    &eq_trait_name,
+                    resource.span,
+                    common::handle_bits,
+                )
+            },
         );
         generated_functions.push(Rc::new(RefCell::new(func)));
         ctx.record_impl(receiver, &eq_key);
@@ -3874,16 +3874,28 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
         let ref_struct_type = tt.make_ref(struct_type);
 
         if ctx.should_synthesize(receiver, &eq_trait_name.canonical().expect(KEYED)) {
-            let func = generate_struct_eq_fn(
+            let func = derived_eq_fn(
+                ctx,
                 receiver,
                 &[],
-                fields,
-                ref_struct_type,
-                ctx.trait_env,
+                struct_type,
                 &module_source,
                 &eq_trait_name,
                 &mut tt,
                 *span,
+                |tt| {
+                    generate_struct_eq_fn(
+                        receiver,
+                        &[],
+                        fields,
+                        ref_struct_type,
+                        ctx.trait_env,
+                        &module_source,
+                        &eq_trait_name,
+                        tt,
+                        *span,
+                    )
+                },
             );
             generated.push(Rc::new(RefCell::new(func)));
             ctx.record_impl(receiver, &eq_trait_name.canonical().expect(KEYED));
@@ -3917,16 +3929,28 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
         let ref_struct_type = tt.make_ref(struct_type);
 
         if ctx.should_synthesize(receiver, &eq_trait_name.canonical().expect(KEYED)) {
-            let func = generate_struct_eq_fn(
+            let func = derived_eq_fn(
+                ctx,
                 receiver,
                 type_params,
-                fields,
-                ref_struct_type,
-                ctx.trait_env,
+                struct_type,
                 &module_source,
                 &eq_trait_name,
                 &mut tt,
                 *span,
+                |tt| {
+                    generate_struct_eq_fn(
+                        receiver,
+                        type_params,
+                        fields,
+                        ref_struct_type,
+                        ctx.trait_env,
+                        &module_source,
+                        &eq_trait_name,
+                        tt,
+                        *span,
+                    )
+                },
             );
             generated.push(Rc::new(RefCell::new(func)));
             ctx.record_impl(receiver, &eq_trait_name.canonical().expect(KEYED));
@@ -4087,16 +4111,28 @@ fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
         }
         let variant_type = tt.make_variant(*def);
         let ref_variant_type = tt.make_ref(variant_type);
-        let func = generate_variant_eq_fn(
+        let func = derived_eq_fn(
+            ctx,
             receiver,
             &[],
-            cases,
             variant_type,
-            ref_variant_type,
-            ctx.trait_env,
             &module_source,
+            &eq_trait_name,
             &mut tt,
             *span,
+            |tt| {
+                generate_variant_eq_fn(
+                    receiver,
+                    &[],
+                    cases,
+                    variant_type,
+                    ref_variant_type,
+                    ctx.trait_env,
+                    &module_source,
+                    tt,
+                    *span,
+                )
+            },
         );
         generated.push(Rc::new(RefCell::new(func)));
         ctx.record_impl(receiver, &eq_trait_name.canonical().expect(KEYED));
@@ -4111,16 +4147,28 @@ fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
         let type_param_ids = make_type_param_ids(type_params, &mut tt);
         let variant_type = tt.make_generic_instance(*def, type_param_ids);
         let ref_variant_type = tt.make_ref(variant_type);
-        let func = generate_variant_eq_fn(
+        let func = derived_eq_fn(
+            ctx,
             receiver,
             type_params,
-            cases,
             variant_type,
-            ref_variant_type,
-            ctx.trait_env,
             &module_source,
+            &eq_trait_name,
             &mut tt,
             *span,
+            |tt| {
+                generate_variant_eq_fn(
+                    receiver,
+                    type_params,
+                    cases,
+                    variant_type,
+                    ref_variant_type,
+                    ctx.trait_env,
+                    &module_source,
+                    tt,
+                    *span,
+                )
+            },
         );
         generated.push(Rc::new(RefCell::new(func)));
         ctx.record_impl(receiver, &eq_trait_name.canonical().expect(KEYED));

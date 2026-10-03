@@ -108,6 +108,23 @@ fn rank(s: &Size) -> i32 {
     };
 }
 
+flags Access {
+    Read,
+    Write,
+    Audit,
+}
+
+impl Ord for Access {
+    fn cmp(&self, other: &Self) -> Ordering {
+        return reach(self).cmp(&reach(other));
+    }
+}
+
+/// Audit is bookkeeping, so the order ignores it.
+fn reach(a: &Access) -> u32 {
+    return (*a & (Access::Read | Access::Write)) as u32;
+}
+
 variant Reading {
     Exact(i32),
     Estimate(i32),
@@ -181,6 +198,11 @@ test "a marker takes == from cmp" {
 
 test "an enum takes == from cmp" {
     assert Size::Tiny == Size::Small && Size::Small != Size::Large;
+}
+
+test "a flags type takes == from cmp" {
+    let read = builtin::black_box(Access::Read);
+    assert read == Access::Read | Access::Audit && read != Access::Write;
 }
 
 test "a variant takes == from cmp" {
