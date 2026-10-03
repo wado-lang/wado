@@ -1669,7 +1669,10 @@ impl TypeSystem {
     /// compiler's, so one writing `eq` (`v128`) still has it.
     pub(super) fn ord_withheld_by(&self, type_id: TypeId) -> Option<TypeId> {
         let link = self.impl_link(type_id, self.compiler_trait_def(CompilerItem::Eq)?)?;
-        let is_primitive = matches!(self.type_table.borrow().get(link), ResolvedType::Primitive(_));
+        let is_primitive = matches!(
+            self.type_table.borrow().get(link),
+            ResolvedType::Primitive(_)
+        );
         (!is_primitive && self.comparison_written_alone(link) == Some(OnBoundTrait::Eq))
             .then_some(link)
     }
