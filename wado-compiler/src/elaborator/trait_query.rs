@@ -1154,9 +1154,13 @@ impl TypeSystem {
         if tr == OnBoundTrait::Default {
             return self.is_defaultable_struct(scope, type_id);
         }
-        match (tr, self.comparison_written_alone(type_id)) {
-            (OnBoundTrait::Eq, Some(OnBoundTrait::Ord)) => return true,
-            (OnBoundTrait::Ord, Some(OnBoundTrait::Eq)) => return false,
+        match tr {
+            OnBoundTrait::Eq
+                if self.comparison_written_alone(type_id) == Some(OnBoundTrait::Ord) =>
+            {
+                return true;
+            }
+            OnBoundTrait::Ord if self.ord_withheld_by(type_id).is_some() => return false,
             _ => {}
         }
         let resolved = self.type_table.borrow().get(type_id).clone();
@@ -1668,7 +1672,8 @@ impl TypeSystem {
                 return None;
             }
             let key = tt.impl_receiver_key(link);
-            if let Some((CompilerItem::Eq, _)) = comparison_written_alone(&self.trait_env, &key, &tt)
+            if let Some((CompilerItem::Eq, _)) =
+                comparison_written_alone(&self.trait_env, &key, &tt)
             {
                 return Some(link);
             }

@@ -186,7 +186,7 @@ fn derived_bounds(trait_: TraitDeclId, decl: &Declaration) -> Vec<Vec<TraitDeclI
 
 #[cfg(test)]
 mod tests {
-    use super::super::program::{ArgDefault, ModuleId};
+    use super::super::program::{ArgDefault, ModuleId, TypeDef};
     use super::super::testing::{Builder, bounded, concrete, decl};
     use super::*;
 
@@ -447,6 +447,31 @@ mod tests {
         );
     }
 
+    /// A newtype over a declaration writing `eq` alone withholds `Ord` too,
+    /// unless it writes `cmp` itself.
+    #[test]
+    fn a_newtype_withholds_what_its_base_does() {
+        const ALIAS: TypeDeclId = TypeDeclId(7);
+        const ORDERED: TypeDeclId = TypeDeclId(8);
+        let mut p = prelude();
+        for (head, base) in [(WRAPPER, POINT), (ALIAS, WRAPPER), (ORDERED, POINT)] {
+            p.types.insert(
+                head,
+                TypeDef {
+                    newtype_base: Some(decl(base)),
+                    ..TypeDef::default()
+                },
+            );
+        }
+        let writes_eq = [(POINT, ImplId(0))].into_iter().collect();
+        let writes_ord = [(ORDERED, ImplId(1))].into_iter().collect();
+        let withheld = withholding_ord(&p, &writes_eq, &writes_ord);
+        assert_eq!(
+            withheld.into_iter().collect::<Vec<_>>(),
+            vec![POINT, WRAPPER, ALIAS]
+        );
+    }
+
     /// `impl<T> Eq for Wrapper<T>;` beside `impl<T: Ord> Ord for Wrapper<T>`
     /// asks for the `==` that `cmp` gives, so it holds where the `Ord` does.
     #[test]
@@ -468,7 +493,10 @@ mod tests {
                 ..bounded(EQ, wrapper_of(SolverType::Param(0)), vec![ORD])
             }
         );
-        assert_eq!(holds(&p, &Env::default(), &wrapper_of(decl(OPAQUE)), EQ, HERE), None);
+        assert_eq!(
+            holds(&p, &Env::default(), &wrapper_of(decl(OPAQUE)), EQ, HERE),
+            None
+        );
     }
 
     /// A member that reaches a declaration through the marker's impl derives:
