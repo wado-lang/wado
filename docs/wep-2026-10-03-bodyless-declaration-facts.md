@@ -12,12 +12,12 @@ miscompiles.
 
 Each attribute read its absence its own way:
 
-| Attribute          | Absence read as                                    | Cost                                            |
-| ------------------ | -------------------------------------------------- | ----------------------------------------------- |
-| `#[result]`        | a new result that may hold what any argument holds | an error where a reference parameter could leak |
-| `#[retain]`        | keeps nothing                                      | a miscompile where the call does keep one       |
-| `#[trap]`          | may trap                                           | a lost optimization where it never does         |
-| `#[linear_memory]` | touches none                                       | a miscompile where the call does touch it       |
+| Attribute          | Absence read as                                    | Cost                                      |
+| ------------------ | -------------------------------------------------- | ----------------------------------------- |
+| `#[result]`        | a new result that may hold what any argument holds | a lost optimization where it holds less   |
+| `#[retain]`        | keeps nothing                                      | a miscompile where the call does keep one |
+| `#[trap]`          | may trap                                           | a lost optimization where it never does   |
+| `#[linear_memory]` | touches none                                       | a miscompile where the call does touch it |
 
 Of the 353 body-less `core:builtin` declarations, 60 state no `#[trap]`. Some of
 them, such as `copy_value`, `variant_tag` and `cold_path`, never trap. The
@@ -68,7 +68,7 @@ parameter, one name per attribute, as `#[retain]` and `#[trap]` do:
 pub fn select<T>(cond: bool, a: T, b: T) -> T;
 ```
 
-`fresh` stands alone. It cannot be combined with a `part_of`.
+`fresh` stands alone.
 
 A declaration owes one where its result type can carry storage and some
 parameter can carry storage, by value or by reference. Where either side
