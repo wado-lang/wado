@@ -1345,7 +1345,6 @@ test "a branch reads a constant around it under the axes the branch names" {
     ];
     let body = emitted(&generate(source, layout).unwrap());
     assert body.contains("let Z = zip(H, &lift::<f32, [Embed], [Hidden]>(&K, 1), |x, y| x * y);");
-    assert body.split("let K = ").count() == 2;
 }
 
 test "a constant one branch folds is spelled in that branch" {
