@@ -127,7 +127,7 @@ for a programmer to discharge.
 A body-less declaration is the exception: there is nothing to read, so it states
 its facts itself, as attributes.
 [WEP: Bodyless Declarations State Every Fact](./wep-2026-10-03-bodyless-declaration-facts.md)
-says which declarations owe which facts. Retention is two of them.
+proposes which declarations owe which facts. Retention is two of them.
 
 ```wado
 #[result(part_of = arr)]
@@ -137,7 +137,7 @@ pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
 pub fn array_set<T>(arr: &mut Array<T>, idx: i32, value: T);
 ```
 
-`#[result(fresh)]` and `#[result(part_of = p)]` state borrow-out.
+`#[result(owned)]` and `#[result(part_of = p)]` state borrow-out.
 `#[retain(...)]` states retain, naming one retained thing per attribute and
 repeating where there is more than one, so each carries its own destination
 without the attribute grammar growing a way to group them:
@@ -205,7 +205,7 @@ the compiler may stop doing to the argument:
   result would be a snapshot the next write leaves stale.
 
 What precision buys on today's corpus is nothing. The per-site row, the bounded
-destination, the element gate, a Component Model import's fresh result, the
+destination, the element gate, a Component Model import's owned result, the
 anchored-local reading and following a parameter by the type its body reads it
 at, all together, leave every benchmark and every size program byte-identical.
 

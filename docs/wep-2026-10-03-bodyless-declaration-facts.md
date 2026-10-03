@@ -63,9 +63,9 @@ says the result is `p`, or a part of it. The attribute repeats for a second
 parameter, one name per attribute, as `#[retain]` and `#[trap]` do:
 
 ```wado
-#[result(part_of = a)]
-#[result(part_of = b)]
-pub fn select<T>(cond: bool, a: T, b: T) -> T;
+#[result(part_of = if_true)]
+#[result(part_of = if_false)]
+pub fn select<T>(cond: bool, if_true: T, if_false: T) -> T;
 ```
 
 `fresh` stands alone.
