@@ -395,3 +395,12 @@ incrementing a counter and returning it, `next_id() != next_id()` is true, and
 the lint says it is always false. Another writes through a `&mut` its argument
 holds: `c.bump() != c.bump()`, where `bump(&self)` increments through a
 `&mut i32` field of `c`, gets the same warning.
+
+The compiler answers the table in [One source for `==` and `cmp`](#one-source-for--and-cmp)
+twice: the trait solver and the elaborator each read the written impls and
+decide, apart from each other, whether a type's `Eq` comes from `cmp` and
+whether it has an `Ord`. The elaborator decides at each place that asks: an
+operator, a bound, a method call, a marker, and synthesis. Nothing makes the
+two agree but the solver's differential check, which panics a debug build on
+the first case where they do not, and a release build compiles with the
+elaborator's answer.
