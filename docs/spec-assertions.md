@@ -5,14 +5,15 @@ other, so it works in ordinary code as well as in a `test` block.
 
 ## The `assert` Statement
 
-`assert` checks that a condition is true. If it is false, the program writes a
-message to standard error, showing the condition's source and the values of its
-operands as power-assert does, and then traps.
+`assert` checks that a condition is true. If it is false, the program traps.
+First it writes a message to standard error, showing the condition's source and
+the values of its operands as power-assert does, unless the build drops it (see
+[Assertions Are Never Removed](#assertions-are-never-removed)).
 
 <!-- {"fixture":"spec_testing_assert.wado"} -->
 
 ```wado
-// If x is not greater than 0, this prints x to standard error and traps.
+// Traps if x is not greater than 0.
 assert x > 0;
 
 // Also assert can take an optional message.

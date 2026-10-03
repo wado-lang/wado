@@ -6,9 +6,8 @@ an input file into Wado source, and then compiles that source like any
 hand-written module. A `use` names the input file, and its `with` clause names
 the generator ([Import Attributes](./spec-modules.md#import-attributes-with)).
 
-A `use` with a `generator` attribute goes through Kiln, whatever its path's
-extension ([How an Import Is Read](./spec-modules.md#how-an-import-is-read)).
-A `type` beside `generator` is passed to the generator.
+Which `use` goes through Kiln is stated in
+[How an Import Is Read](./spec-modules.md#how-an-import-is-read).
 
 <!-- {"source": "wado-cli/tests/fixtures/kiln_nested/src/main.wado"} -->
 

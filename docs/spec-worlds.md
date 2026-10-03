@@ -299,7 +299,9 @@ export fn run() with (Stdout, Stderr, Exit) {
 
 A failed `assert`, `panic` and `unreachable` all trap (see
 [Unrecoverable Errors](./spec-control-flow.md#unrecoverable-errors-traps)). A
-failed `assert` or a `panic` writes its message to standard error first. What
+`panic` writes its message to standard error first, and so does a failed
+`assert` unless the build drops its message
+([Assertions Are Never Removed](./spec-assertions.md#assertions-are-never-removed)). What
 the program wrote before the trap stays written.
 
 <!-- {"fixture":"spec_worlds_command_trap.wado"} -->
