@@ -18,6 +18,28 @@ wado dump -O2 benchmark/json_catalog/json_catalog.wado    # before/after: diff t
 for i in 1 2 3; do mise run json-catalog; done           # before and after
 ```
 
+## Fusing `write_plain_key`'s appends across the key name (2026-10-03)
+
+`nir/string_push` opens a new group at a run-time-length piece, because the
+source may be the buffer. So `,"` + `name` + `":` pays two capacity checks. The
+fusion was made alias-safe in one group: read the source's length up front and
+add the prefix's length when `ref_eq(source, buffer)`. Each key then paid one
+check. json-twitter ser −3.1%, json-catalog ser +1.6%, four rounds, ranges
+overlapping.
+
+The check was never the cost. Each key write is about 120 machine instructions
+and a `wasmtime_builtin_memory_copy` libcall, for the `array.copy` whose length
+is only known at run time. The 2-byte constant copies around it compile to a
+load and a store. What would pay is a constant name at the site, which a
+spliced or specialized key writer gets.
+
+Two costs came with it. The `ref_eq` blocks the half-price fold that splices a
+small helper on a constant string argument, so `dynamic` in
+`opt_string_append_fuse.wado` stays a call. And `const_object_globalization`
+refuses a literal handed to any instruction taking a struct, `ref_eq`
+included, so every key literal became an allocation per call: twitter ser
+−15.9% until its gate read `#[retain]` instead of the argument's type.
+
 ## Two inliner tweaks for the JSON writer's integer path (2026-10-03)
 
 `serialize_i64` is a forwarder to `write_json_i64`. Bottom-up, it receives
