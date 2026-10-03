@@ -428,17 +428,11 @@ fn walk_end_element(
                 walk_end_element(&rep.element, after, caller, ctx, one, eof, sites);
                 return;
             }
-            // Another iteration can follow one, and a single-token iteration
-            // can be the last token.
-            let mut first: List<String> = [];
-            let mut again = EndAfter {
-                eof_next: after.eof_next || ctx.first_ids_of_element(&rep.element, &mut first).contains(&eof),
-                end1: after.end1,
-                inherits: after.inherits,
-            };
-            if after.eof_next {
-                let _ = bits_union_into(&mut again.end1, &element_single_kinds(&rep.element, ctx, one, eof));
-            }
+            // An iteration is followed by the exit or by another iteration.
+            let mut again = end_after_element(&rep.element, after, ctx, one, eof);
+            again.eof_next = again.eof_next || after.eof_next;
+            let _ = bits_union_into(&mut again.end1, &after.end1);
+            again.inherits = after.inherits;
             walk_end_element(&rep.element, &again, caller, ctx, one, eof, sites);
         },
         Label(lab) => walk_end_element(&lab.element, after, caller, ctx, one, eof, sites),

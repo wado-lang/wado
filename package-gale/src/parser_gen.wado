@@ -2231,13 +2231,13 @@ fn gen_scan_iteration(w: &mut CodeWriter, re: &ScanRepeatElement, admits: &Admit
     // what let `A* A`'s scan eat both tokens and score -1 for input the parse
     // accepts, and the next duty added would repeat it.
     if repeat_body_implied_by_guard(&re.body, admits) && re.duties.is_empty() {
+        // The guard proved one kind, so the step either moves or stays on EOF,
+        // where a loop would come round to the same token forever.
         let advance = scan_advance(&admits_kinds(admits), ctx);
-        if looping && advance != "pos += 1;" {
-            // A step that stays on EOF would come round to it forever.
-            w.line("if tokens[pos] == TK_EOF { break; }");
-            w.line("pos += 1;");
-        } else if !advance.is_empty() {
+        if !advance.is_empty() {
             w.line(advance);
+        } else if looping {
+            w.line("break;");
         }
         return;
     }
