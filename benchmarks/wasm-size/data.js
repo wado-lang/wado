@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791002458136,
+  "lastUpdate": 1791011100211,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -63021,6 +63021,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b9f9cfb6e6202cc98d0db83408c8399b1d450dc8"
         },
         "date": 1791002457438,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20617,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 279825,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1b70b7fe1b363e5d7c2a25b82f08b1204d019833",
+          "message": "Merge pull request #2252 from wado-lang/gale-gen-id-sync-sets\n\nrefactor(optimize): tidy inline's body scan and dce's imports",
+          "timestamp": "2026-10-03T15:44:01+09:00",
+          "tree_id": "826ef499850480bc858e49dd51db8bc9a8357c1b",
+          "url": "https://github.com/wado-lang/wado/commit/1b70b7fe1b363e5d7c2a25b82f08b1204d019833"
+        },
+        "date": 1791011099110,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
