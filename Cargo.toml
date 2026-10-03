@@ -117,6 +117,11 @@ dprint-plugin-markdown = { version = "0.24" }
 # disk-full link failures the CI runners have been hitting on rebuild.
 debug = "line-tables-only"
 split-debuginfo = "unpacked"
+# Above opt-level 0 rustc runs thin LTO across a crate's codegen units unless
+# told not to, and that reaches most of `wado-compiler` from any one edit: a
+# one-line change in `parser.rs` re-ran 95 s of codegen, 22 s with this off.
+# The compiler runs 20-30% slower for it.
+lto = "off"
 
 # All third-party deps at opt-level 2, with debug-assertions/overflow-checks off.
 # The `"*"` glob skips workspace members (they keep their own opt-level). Deps are
@@ -131,10 +136,9 @@ debug-assertions = false
 overflow-checks = false
 
 # The compiler runs in every test and every `wado` invocation, so `2` buys about
-# a tenth off both. It costs nothing in the edit-test cycle: an incremental
-# rebuild is type-checking and test-binary linking, which measure the same at
-# `1` and `2`. The price is a from-scratch workspace build, about a third
-# slower. That is paid on `cargo clean` and a CI cache miss, never on an edit.
+# a tenth off both. Against `0` it runs the compiler three to four times faster,
+# for an edit-rebuild of 32 s instead of 17 s. A from-scratch workspace build is
+# about a third slower, paid on `cargo clean` and a CI cache miss.
 [profile.dev.package.wado-compiler]
 opt-level = 2
 
