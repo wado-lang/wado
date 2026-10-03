@@ -129,6 +129,14 @@ impl Query<'_> {
         if trait_def.is_some_and(|def| def.holds_for_all) {
             return Some(Holds::default());
         }
+        if let SolverType::Decl(head, _) = ty
+            && program
+                .types
+                .get(head)
+                .is_some_and(|def| def.withholds.contains(&trait_))
+        {
+            return None;
+        }
         let on_ref = trait_def.map_or(RefRule::default(), |def| def.on_ref);
         if matches!(ty, SolverType::Ref { .. }) && on_ref == RefRule::Always {
             return Some(Holds::default());
@@ -199,7 +207,7 @@ impl Query<'_> {
                 if self.at_itself.as_ref() == Some(ty) {
                     return None;
                 }
-                let base = inherited_base(program, ty, trait_)?;
+                let base = newtype_base(program, ty)?;
                 self.holds_at(&base, trait_, args, subject.or(Some(ty)))
             })
             .or_else(|| {
@@ -398,21 +406,6 @@ pub(super) fn newtype_base(program: &Program, ty: &SolverType) -> Option<SolverT
         base.map_params(&|i| args.get(i as usize).cloned())
             .unwrap_or_else(|| panic!("{base:?} mentions a parameter {ty:?} has no argument for")),
     )
-}
-
-/// [`newtype_base`], where the newtype inherits `trait_` from it.
-pub(super) fn inherited_base(
-    program: &Program,
-    ty: &SolverType,
-    trait_: TraitDeclId,
-) -> Option<SolverType> {
-    let SolverType::Decl(head, _) = ty else {
-        return None;
-    };
-    if program.types.get(head)?.withholds.contains(&trait_) {
-        return None;
-    }
-    newtype_base(program, ty)
 }
 
 /// Whether the impl answers a bound writing `args`: at every position each side
@@ -1029,6 +1022,20 @@ mod tests {
             holds(&p, &Env::default(), &decl(COARSE), BETA, HERE),
             Some(Holds::default())
         );
+    }
+
+    /// A declaration withholding a trait has none, a marker asking for one
+    /// included.
+    #[test]
+    fn a_marker_does_not_answer_what_the_declaration_withholds() {
+        let mut p = Builder::default().build();
+        p.push_impl(ImplDef {
+            origin: ImplOrigin::Marker,
+            ..concrete(ALPHA, decl(POINT))
+        });
+        assert!(holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE).is_some());
+        p.types.entry(POINT).or_default().withholds.push(ALPHA);
+        assert_eq!(holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE), None);
     }
 
     /// `type MyList<T> = List<T>` inherits at its own arguments.

@@ -17,6 +17,16 @@ impl Eq for Tagged {
 
 type Relabeled = Tagged;
 
+// An `Eq` at another `Rhs` is no `==` between two values, so `Coarse`'s `eq`
+// still decides.
+type Finer = Coarse;
+
+impl Eq<f64> for Finer {
+    fn eq(&self, other: &f64) -> bool {
+        return *self as Coarse as f64 == *other;
+    }
+}
+
 type Coarse = f64;
 
 impl Eq for Coarse {
@@ -39,17 +49,19 @@ test {
     let c: Coarse = builtin::black_box(1.2);
     let _ = c > 2.0;
     let _ = c.cmp(&c);
+    let f: Finer = builtin::black_box(1.2);
+    let _ = f < f;
 }
 
 __DATA__
 {
-    "compile_error": ":35:13: analysis error: operator `<` cannot be applied to type `Tagged`: type does not implement `Ord`",
+    "compile_error": ":45:13: analysis error: operator `<` cannot be applied to type `Tagged`: type does not implement `Ord`\n  note: `Tagged` writes `eq`, so no `Ord` is derived for it; write `cmp` beside it",
     "compile_errors_contains": [
-        "type 'Tagged' does not implement trait 'Ord' required by bound on 'T'",
-        "no method 'cmp' found on type 'Tagged'",
-        "type 'Relabeled' does not implement trait 'Ord' required by bound on 'T'",
-        "`Tagged` writes `eq`, so no `Ord` is derived for it; write `cmp` beside it",
-        "operator `>` cannot be applied to type `Coarse`: type does not implement `Ord`",
-        "no method 'cmp' found on type 'Coarse'"
+        "type 'Tagged' does not implement trait 'Ord' required by bound on 'T'\n  note: `Tagged` writes `eq`",
+        "no method 'cmp' found on type 'Tagged'; `Tagged` writes `eq`",
+        "type 'Relabeled' does not implement trait 'Ord' required by bound on 'T'\n  note: `Tagged` writes `eq`",
+        "operator `>` cannot be applied to type `Coarse`: type does not implement `Ord`\n  note: `Coarse` writes `eq`",
+        "no method 'cmp' found on type 'Coarse'; `Coarse` writes `eq`",
+        "operator `<` cannot be applied to type `Finer`: type does not implement `Ord`\n  note: `Coarse` writes `eq`"
     ]
 }

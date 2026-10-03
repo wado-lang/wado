@@ -1256,10 +1256,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return;
         }
         if on_bound == OnBoundTrait::Ord
-            && self.tysys.comparison_written_alone(target_type_id) == Some(OnBoundTrait::Eq)
+            && let Some(why) = self.tysys.ord_withheld_note(target_type_id)
         {
             let _ = self.emit(types::TypeError::OrdMarkerBesideWrittenEq {
                 type_name: target_type_name.to_string(),
+                why,
                 span,
             });
             return;

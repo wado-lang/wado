@@ -90,10 +90,16 @@ fn collect(
     declares: impl Fn(TraitDeclId, &[MethodId]) -> bool,
 ) -> Candidates {
     let mut found = Candidates::default();
-    // What a newtype withholds, no level below it lends.
+    // What a declaration withholds, no impl on it answers and no level below
+    // it lends.
     let mut withheld: Vec<TraitDeclId> = Vec::new();
     for (depth, ty) in chain(program, receiver).iter().enumerate() {
         let depth = u32::try_from(depth).expect("a chain shorter than 2^32");
+        if let SolverType::Decl(head, _) = ty
+            && let Some(def) = program.types.get(head)
+        {
+            withheld.extend(&def.withholds);
+        }
         for (&impl_, def) in &program.impls {
             let Some(trait_) = def.trait_ else {
                 continue;
@@ -121,11 +127,6 @@ fn collect(
             } else if !found.out_of_scope.iter().any(|c| c.impl_ == impl_) {
                 found.out_of_scope.push(candidate);
             }
-        }
-        if let SolverType::Decl(head, _) = ty
-            && let Some(newtype) = program.types.get(head)
-        {
-            withheld.extend(&newtype.withholds);
         }
     }
     if !found.in_scope.is_empty() {

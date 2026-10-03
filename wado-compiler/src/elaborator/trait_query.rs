@@ -931,29 +931,20 @@ impl TypeSystem {
         // Bounded, so a pathologically nested (or cyclic) type cannot produce
         // an unbounded chain.
         while chain.len() < 8 {
-            // A variant derives no `Ord` whatever it writes, so its `eq` is no cause.
-            let derives_ord = self.type_table.borrow().reflect_kind(type_id)
-                != Some(CompilerItem::ReflectVariant);
             let written_instead = match tr {
-                OnBoundTrait::Ord if derives_ord => self.ord_withheld_by(type_id).map(|link| {
-                    (
-                        link,
-                        "writes `eq`, so no `Ord` is derived for it; write `cmp` beside it",
-                    )
-                }),
+                OnBoundTrait::Ord => self.ord_withheld_note(type_id),
                 OnBoundTrait::Eq
                     if self.comparison_written_alone(type_id) == Some(OnBoundTrait::Ord) =>
                 {
-                    Some((
-                        type_id,
-                        "takes `Eq` from its written `cmp`, and does not implement `Ord`",
+                    Some(format!(
+                        "`{}` takes `Eq` from its written `cmp`, and does not implement `Ord`",
+                        self.type_id_to_string(type_id)
                     ))
                 }
                 _ => None,
             };
-            if let Some((link, why)) = written_instead {
-                let owner = self.type_id_to_string(link);
-                chain.push(format!("`{owner}` {why}"));
+            if let Some(why) = written_instead {
+                chain.push(why);
                 break;
             }
             let resolved = self.type_table.borrow().get(type_id).clone();
@@ -1663,18 +1654,43 @@ impl TypeSystem {
     }
 
     /// The link of `type_id`'s newtype chain, itself included, that leaves it
-    /// no `Ord`: the one its `Eq` comes from, where that link writes `eq`
-    /// alone. No member derives an `Ord` then, and no base lends one
-    /// (spec-traits.md §Derivation Policy). A primitive's `Ord` is the
-    /// compiler's, so one writing `eq` (`v128`) still has it.
+    /// no `Ord`: the first writing `eq` at `Self` alone, below every link
+    /// writing an `Ord`. No member derives an `Ord` then, and no base lends one
+    /// (spec-traits.md §Derivation Policy). An `Eq` at another `Rhs` is no
+    /// `==` between two values, so the walk passes it. A primitive's `Ord` is
+    /// the compiler's, so one writing `eq` (`v128`) still has it.
     pub(super) fn ord_withheld_by(&self, type_id: TypeId) -> Option<TypeId> {
-        let link = self.impl_link(type_id, self.compiler_trait_def(CompilerItem::Eq)?)?;
-        let is_primitive = matches!(
-            self.type_table.borrow().get(link),
-            ResolvedType::Primitive(_)
-        );
-        (!is_primitive && self.comparison_written_alone(link) == Some(OnBoundTrait::Eq))
-            .then_some(link)
+        let ord = self.compiler_trait_def(CompilerItem::Ord)?;
+        let tt = self.type_table.borrow();
+        let mut link = type_id;
+        loop {
+            if matches!(tt.get(link), ResolvedType::Primitive(_)) {
+                return None;
+            }
+            let key = tt.impl_receiver_key(link);
+            if let Some((CompilerItem::Eq, _)) = comparison_written_alone(&self.trait_env, &key, &tt)
+            {
+                return Some(link);
+            }
+            if self.trait_env.has_any_methodful_impl_by_receiver(&key, ord) {
+                return None;
+            }
+            link = tt.get_newtype_base(link)?;
+        }
+    }
+
+    /// Why `type_id` has no `Ord`, where a written `eq` is the cause. A variant
+    /// derives no `Ord` whatever it writes, so its `eq` is no cause.
+    pub(super) fn ord_withheld_note(&self, type_id: TypeId) -> Option<String> {
+        let link = self.ord_withheld_by(type_id)?;
+        let derives_ord =
+            self.type_table.borrow().reflect_kind(link) != Some(CompilerItem::ReflectVariant);
+        derives_ord.then(|| {
+            format!(
+                "`{}` writes `eq`, so no `Ord` is derived for it; write `cmp` beside it",
+                self.type_id_to_string(link)
+            )
+        })
     }
 
     /// Whether a bound writing `wanted` selects the header — see

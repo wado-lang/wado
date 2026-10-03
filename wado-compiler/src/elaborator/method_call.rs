@@ -605,10 +605,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             info
         } else {
             let type_name = self.tysys.type_table.borrow().type_name(base_type_id);
+            let ord = self.tysys.compiler_trait_def(CompilerItem::Ord);
+            let hint = if self.tysys.trait_declares_method(ord, method_name, |_| true) {
+                self.tysys.ord_withheld_note(base_type_id)
+            } else {
+                None
+            };
             let _ = self.emit(TypeError::MethodNotFound {
                 type_name,
                 method_name: method_name.to_string(),
-                hint: String::new(),
+                hint: hint.unwrap_or_default(),
                 span,
             });
             MethodInfo::undeclared(TypeTable::ERROR)

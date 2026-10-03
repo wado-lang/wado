@@ -20,7 +20,9 @@ use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::replace_on_assign_place;
 use super::scope::ScopedBound;
 use super::trait_query::primitive_has_operator;
-use super::types::{FunctionContext, MethodInfo, OperatorImpl, ResolvedTraitMethod, TypeError};
+use super::types::{
+    FunctionContext, MethodInfo, OperatorImpl, ResolvedTraitMethod, TypeError, append_reason_chain,
+};
 use super::tysys::TypeSystem;
 use super::util::bound_param_name;
 use crate::elaborator::reify::{CompoundHoist, collect_compound_hoists};
@@ -394,14 +396,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
             ) && self.tysys.ord_withheld_by(left).is_some()
             {
-                let type_name = self.tysys.type_table.borrow().type_name(left);
-                let _ = self.emit(TypeError::OperatorNotApplicable {
-                    op: binary_op_str(op).to_string(),
-                    operands: vec![type_name],
-                    note: Some("type does not implement `Ord`".to_string()),
-                    span,
-                });
-                return TypeTable::ERROR;
+                return self.comparison_not_implemented(op, left, CompilerItem::Ord, span);
             }
             // A type that erases to a scalar is still its own type, so an impl
             // it writes — or inherits from a link below — answers the
@@ -478,15 +473,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         lookup_type_id,
                         Some(&ArgClass::Exact(right)),
                     ) else {
-                        let type_name = self.tysys.type_table.borrow().type_name(left);
-                        let op_str = if op == BinaryOp::Eq { "==" } else { "!=" };
-                        let _ = self.emit(TypeError::OperatorNotApplicable {
-                            op: op_str.to_string(),
-                            operands: vec![type_name],
-                            note: Some("type does not implement `Eq`".to_string()),
-                            span,
-                        });
-                        return TypeTable::ERROR;
+                        return self.comparison_not_implemented(op, left, CompilerItem::Eq, span);
                     };
                     // Reify rebuilds the `!` wrapper for `!=`.
                     return self.dispatch_trait_op_method(
@@ -510,21 +497,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         lookup_type_id,
                         None,
                     ) else {
-                        let type_name = self.tysys.type_table.borrow().type_name(left);
-                        let op_str = match op {
-                            BinaryOp::Lt => "<",
-                            BinaryOp::Gt => ">",
-                            BinaryOp::LtEq => "<=",
-                            BinaryOp::GtEq => ">=",
-                            _ => unreachable!(),
-                        };
-                        let _ = self.emit(TypeError::OperatorNotApplicable {
-                            op: op_str.to_string(),
-                            operands: vec![type_name],
-                            note: Some("type does not implement `Ord`".to_string()),
-                            span,
-                        });
-                        return TypeTable::ERROR;
+                        return self.comparison_not_implemented(op, left, CompilerItem::Ord, span);
                     };
                     let call = self.dispatch_trait_op_method(
                         left,
@@ -1693,6 +1666,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or_else(|| {
                 self.make_frame_projection_of_trait(operand_type_id, &name, trait_, "Output")
             })
+    }
+
+    /// Report that `left` does not implement `item`, the trait `op` dispatches
+    /// to, with the reason chain saying why. Under `#![no_prelude]` the trait
+    /// is absent, and no chain explains its absence.
+    fn comparison_not_implemented(
+        &mut self,
+        op: BinaryOp,
+        left: TypeId,
+        item: CompilerItem,
+        span: Span,
+    ) -> TypeId {
+        let (trait_name, reason) = match self.tysys.compiler_trait_def(item) {
+            Some(trait_) => {
+                let name = self.tysys.resolutions.defs().name(trait_).to_string();
+                let reason = self.tysys.trait_unimpl_reason_chain(
+                    &self.annotate_ctx,
+                    &self.type_lookup(),
+                    left,
+                    trait_,
+                    &name,
+                );
+                (name, reason)
+            }
+            None => (format!("{item:?}"), Vec::new()),
+        };
+        let type_name = self.tysys.type_table.borrow().type_name(left);
+        let _ = self.emit(TypeError::OperatorNotApplicable {
+            op: binary_op_str(op).to_string(),
+            operands: vec![type_name],
+            note: Some(append_reason_chain(
+                format!("type does not implement `{trait_name}`"),
+                &reason,
+            )),
+            span,
+        });
+        TypeTable::ERROR
     }
 
     /// A comparison operator's trait method on `struct_name`, named through

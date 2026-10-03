@@ -274,7 +274,8 @@ pub struct TypeDef {
     /// For a newtype, the base it inherits impls from, spelled with the
     /// newtype's own parameters by position.
     pub newtype_base: Option<SolverType>,
-    /// The traits a newtype does not inherit from its base: `Ord`, where it
+    /// The traits the declaration has none of, whatever its impls, a marker or
+    /// its base would answer: `Ord`, where it or a base it inherits from
     /// writes `eq` alone.
     pub withholds: Vec<TraitDeclId>,
 }

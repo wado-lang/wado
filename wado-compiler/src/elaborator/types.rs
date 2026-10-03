@@ -681,11 +681,12 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// An `impl Ord for T;` marker beside a written `eq`, which leaves `Ord`
-    /// nothing to derive from: an order read from the members could disagree
-    /// with the written equality.
+    /// An `impl Ord for T;` marker where a written `eq` leaves `Ord` nothing to
+    /// derive from: an order read from the members could disagree with the
+    /// written equality. `why` names the link of the newtype chain writing it.
     OrdMarkerBesideWrittenEq {
         type_name: String,
+        why: String,
         span: Span,
     },
 
@@ -2174,9 +2175,13 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::OrdMarkerBesideWrittenEq { type_name, span } => (
+            TypeError::OrdMarkerBesideWrittenEq {
+                type_name,
+                why,
+                span,
+            } => (
                 Code::TraitDeclInvalid,
-                format!("cannot derive `Ord` for `{type_name}`: it writes `eq`, so write `cmp` beside it"),
+                format!("cannot derive `Ord` for `{type_name}`: {why}"),
                 *span,
             ),
             TypeError::InvalidPattern { message, span } => (

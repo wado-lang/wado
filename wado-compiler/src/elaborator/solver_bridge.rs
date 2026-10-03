@@ -13,7 +13,7 @@ use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
     ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, Selection, SolverType,
     TraitDeclId, TypeDeclId, TypeDef, bound_candidates, candidates, derive, derive_eq_from_ord,
-    holds_with_args, rank, written_at_self,
+    holds_with_args, rank, withholding_ord, written_at_self,
 };
 
 use super::trait_env::{BlanketReceiver, ImplHeader, ImplTargetKey, written_arg_nodes};
@@ -1051,13 +1051,8 @@ impl SolverBridge {
                 |trait_| written_at_self(program, trait_, |id, def| covers(&from_cmp, id, def));
             writes_eq = writes(eq);
             let writes_ord = writes(ord);
-            for head in writes_eq
-                .keys()
-                .filter(|head| !writes_ord.contains_key(*head))
-            {
-                if let Some(newtype) = program.types.get_mut(head) {
-                    newtype.withholds.push(ord);
-                }
+            for head in withholding_ord(program, &writes_eq, &writes_ord) {
+                program.types.entry(head).or_default().withholds.push(ord);
             }
             let ords: Vec<ImplId> = writes_ord
                 .into_iter()
