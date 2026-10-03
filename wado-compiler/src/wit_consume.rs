@@ -739,7 +739,11 @@ mod tests {
     use crate::component_model::CmInterfaceRegistry;
 
     fn decode_fixture() -> (Resolve, WorldId) {
-        let bytes = std::fs::read("tests/fixtures/sub/cm-catalog.wasm").unwrap();
+        let bytes = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../tests/fixtures/sub/cm-catalog.wasm"
+        ))
+        .unwrap();
         match wit_component::decode(&bytes).unwrap() {
             wit_component::DecodedWasm::Component(r, w) => (r, w),
             wit_component::DecodedWasm::WitPackage(..) => panic!("expected component"),
