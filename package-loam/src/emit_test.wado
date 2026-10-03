@@ -1304,7 +1304,11 @@ test "a constant both branches read is spelled once, around them" {
         K = Constant<value_floats = [1.0, 2.0]>()
         Y = If <then_branch = t () => (float[2] A) { A = Add(X, K) }, else_branch = e () => (float[2] B) { B = Sub(X, K) }> (C)
     }`;
-    let layout: List<LayoutRule> = [rule("C", ["One"]), rule("X", ["Embed"]), rule("K", ["Embed"])];
+    let layout: List<LayoutRule> = [
+        rule("C", ["One"]),
+        rule("X", ["Embed"]),
+        rule("K", ["Embed"]),
+    ];
     let body = emitted(&generate(source, layout).unwrap());
     assert body.split("let K = ").count() == 2;
     assert body.find("let K = ").unwrap() < body.find("let Y = if C.data[0] {").unwrap();
@@ -1314,7 +1318,11 @@ test "a constant one branch folds is spelled in that branch" {
     let source = `g (bool[1] C, float[2] X) => (float[2] Y) {
         Y = If <then_branch = t () => (float[2] A) { K = Constant<value_floats = [1.0, 2.0]>() A = Add(X, K) }, else_branch = e () => (float[2] B) { B = Neg(X) }> (C)
     }`;
-    let layout: List<LayoutRule> = [rule("C", ["One"]), rule("X", ["Embed"]), rule("K", ["Embed"])];
+    let layout: List<LayoutRule> = [
+        rule("C", ["One"]),
+        rule("X", ["Embed"]),
+        rule("K", ["Embed"]),
+    ];
     let body = emitted(&generate(source, layout).unwrap());
     assert body.find("let K = ").unwrap() > body.find("let Y = if C.data[0] {").unwrap();
     assert body.find("let K = ").unwrap() < body.find("} else {").unwrap();

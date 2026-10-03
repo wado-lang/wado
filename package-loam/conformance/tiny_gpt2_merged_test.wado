@@ -1,18 +1,10 @@
-//! Text in, text out: a tiny GPT-2 continues a prompt one greedy token at a
-//! time. Its weights are random, so the continuation is noise, but the same
-//! noise onnxruntime picks.
-//!
-//!     wado run package-loam/example/gpt2.wado -- "Hello, my name is"
-//!
-//! The decoder is one graph that branches on whether it is given a past. The
-//! prompt runs through the branch without one, all its positions at once, and
-//! each token after it through the branch with the keys and values computed so
-//! far, so a step computes one position rather than every position so far.
+//! A tiny GPT-2 exported as one graph that branches on whether it is given a
+//! past, so one module holds one set of weights. The prompt runs through the
+//! branch without a past, all its positions at once, and each step after it
+//! through the branch with one. Each reproduces the logits onnxruntime computes.
 
-use { args, eprintln, println, Environment, Stderr, Stdout } from "core:cli";
-use { from_string } from "core:json";
-use { tiny } from "./gpt2_tokenizer.wado";
-use gpt2 from "../tests/models/tiny-gpt2/merged/model.onnx"
+use { assert_close, ints_of, tensor_of } from "./oracle.wado";
+use merged from "../tests/models/tiny-gpt2/merged/model.onnx"
     with {
         generator: {
             module: "../src/generator.wado",
@@ -146,62 +138,25 @@ use gpt2 from "../tests/models/tiny-gpt2/merged/model.onnx"
         },
     };
 
-global STEPS: i32 = 8;
+type Cache = List<merged::Tensor<f32, [merged::Batch, merged::Head, merged::Past, merged::Dim]>>;
 
-/// How many tokens the model reads at most: one position per row of `wpe`.
-fn positions(weights: &gpt2::Weights) -> i32 {
-    return weights.transformer_wpe_weight_merged_0.extents[0];
-}
-
-/// The longest prompt `greedy` extends by `steps`. The last token it picks is
-/// never read, so the model reads one fewer than it returns.
-fn longest_prompt(steps: i32, weights: &gpt2::Weights) -> i32 {
-    return positions(weights) - steps + 1;
-}
-
-/// The keys and values so far, one per layer's key and value in the order the
-/// graph names them.
-type Cache = List<gpt2::Tensor<f32, [gpt2::Batch, gpt2::Head, gpt2::Past, gpt2::Dim]>>;
-
-/// No positions yet, which takes the branch without a past.
-fn empty_cache() -> Cache {
-    let mut cache: Cache = [];
-    for let _ of 0..<10 {
-        cache.push(gpt2::Tensor {
-            data: [],
-            extents: [gpt2::Batch::EXTENT, 4, 0, 8],
-        });
-    }
-    return cache;
-}
-
-/// The token the logits rank first at the last position.
-fn best(logits: &gpt2::Tensor<f32, [gpt2::Batch, gpt2::Seq, gpt2::Vocab]>) -> i32 {
-    let vocab = logits.extents[2];
-    let row = (logits.extents[1] - 1) * vocab;
-    let mut top = 0;
-    for let v of 1..<vocab {
-        if logits.data[row + v] > logits.data[row + top] {
-            top = v;
-        }
-    }
-    return top;
-}
-
-/// The token after `tokens` and the positions `cache` holds, and the cache
-/// grown by `tokens`' positions.
-fn decode(tokens: &List<i32>, cache: &Cache, weights: &gpt2::Weights) -> [i32, Cache] {
+/// The logits for `ids` after the positions `cache` holds, and the cache grown
+/// by theirs. An empty cache takes the branch without a past.
+fn run(
+    ids: List<i64>,
+    cache: &Cache,
+    weights: &merged::Weights,
+) -> [merged::Tensor<f32, [merged::Batch, merged::Seq, merged::Vocab]>, Cache] {
     let past = cache[0].extents[2];
-    let length = past + tokens.len();
-    let ids: List<i64> = tokens.into_iter().map(|id| id as i64).collect();
-    let o = gpt2::forward(
-        &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
+    let length = past + ids.len();
+    let o = merged::forward(
+        &merged::Tensor::<i64, [merged::Batch, merged::Seq]> {
             data: ids,
-            extents: [gpt2::Batch::EXTENT, tokens.len()],
+            extents: [1, ids.len()],
         },
-        &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
+        &merged::Tensor::<i64, [merged::Batch, merged::Seq]> {
             data: List::<i64>::filled(length, 1),
-            extents: [gpt2::Batch::EXTENT, length],
+            extents: [1, length],
         },
         &cache[0],
         &cache[1],
@@ -213,7 +168,7 @@ fn decode(tokens: &List<i32>, cache: &Cache, weights: &gpt2::Weights) -> [i32, C
         &cache[7],
         &cache[8],
         &cache[9],
-        &gpt2::Tensor::<bool, [gpt2::One]> {
+        &merged::Tensor::<bool, [merged::One]> {
             data: [past > 0],
             extents: [1],
         },
@@ -225,71 +180,82 @@ fn decode(tokens: &List<i32>, cache: &Cache, weights: &gpt2::Weights) -> [i32, C
     ];
     let mut grown: Cache = [];
     for let p of presents {
-        grown.push(gpt2::Tensor { data: p.data, extents: p.extents });
+        grown.push(merged::Tensor { data: p.data, extents: p.extents });
     }
-    return [best(&o.logits), grown];
+    return [o.logits, grown];
 }
 
-/// `prompt` extended by `steps` tokens, each the one the model ranks first.
-fn greedy(prompt: &List<i32>, steps: i32, weights: &gpt2::Weights) -> List<i32> {
-    assert 1 <= prompt.len() <= longest_prompt(steps, weights);
-    let mut ids = *prompt;
-    let [first, prefilled] = decode(prompt, &empty_cache(), weights);
-    ids.push(first);
-    let mut cache = prefilled;
-    for let _ of 1..<steps {
-        let [next, grown] = decode(&[ids[ids.len() - 1]], &cache, weights);
-        ids.push(next);
+fn empty_cache() -> Cache {
+    let mut cache: Cache = [];
+    for let _ of 0..<10 {
+        cache.push(merged::Tensor {
+            data: [],
+            extents: [1, 4, 0, 8],
+        });
+    }
+    return cache;
+}
+
+test "the prompt and each step after it reproduce onnxruntime's logits through one module" {
+    let weights = merged::Weights::embedded();
+    let data: List<[ByteList, ByteList]> = [
+        [
+            #include_bytes("../tests/models/tiny-gpt2/merged/test_data_set_0/input_0.pb"),
+            #include_bytes("../tests/models/tiny-gpt2/merged/test_data_set_0/output_0.pb"),
+        ],
+        [
+            #include_bytes("../tests/models/tiny-gpt2/merged/test_data_set_1/input_0.pb"),
+            #include_bytes("../tests/models/tiny-gpt2/merged/test_data_set_1/output_0.pb"),
+        ],
+        [
+            #include_bytes("../tests/models/tiny-gpt2/merged/test_data_set_2/input_0.pb"),
+            #include_bytes("../tests/models/tiny-gpt2/merged/test_data_set_2/output_0.pb"),
+        ],
+    ];
+    let mut cache = empty_cache();
+    let mut length = 0;
+    for let pair of data {
+        let [input, output] = pair;
+        let [ids, _] = ints_of(input);
+        let [want, want_extents] = tensor_of(output);
+        length += ids.len();
+        let [logits, grown] = run(ids, &cache, &weights);
+        assert logits.extents == want_extents;
+        assert_close(&logits.data, &want);
+        assert grown[0].extents == [1, 4, length, 8] as List<i32>;
         cache = grown;
     }
-    return ids;
 }
 
-export fn run() with (Stdout, Stderr, Environment) {
-    let mut prompt = args().join(" ");
-    if prompt.is_empty() {
-        prompt = "Hello, my name is";
-    }
-    let tokenizer = tiny();
-    let ids = tokenizer.encode(&prompt);
-    let weights = gpt2::Weights::embedded();
-    let longest = longest_prompt(STEPS, &weights);
-    if !(1 <= ids.len() <= longest) {
-        eprintln(`the prompt is ${ids.len()} tokens, and must be 1 to ${longest}`);
-        return;
-    }
-    println(tokenizer.decode(&greedy(&ids, STEPS, &weights)));
-}
-
-struct Generated {
-    prompt: String,
-    ids: List<i32>,
-    generated: List<i32>,
-    text: String,
-}
-
-struct Oracle {
-    generate: List<Generated>,
-}
-
-#[timeout_ms(30000)]
-test "each prompt continues with the tokens onnxruntime picks greedily" {
-    let tokenizer = tiny();
-    let weights = gpt2::Weights::embedded();
-    let oracle = from_string::<Oracle>(#include_str("../tests/models/tiny-gpt2/generate.json")).unwrap();
-    for let case of oracle.generate {
-        assert tokenizer.encode(&case.prompt) == case.ids;
-        let mut want = case.ids;
-        want.extend(&case.generated);
-        let got = greedy(&case.ids, case.generated.len(), &weights);
-        assert got == want;
-        assert tokenizer.decode(&got) == case.text;
-    }
-}
-
-#[timeout_ms(30000)]
-test "the longest prompt fills every position the model reads" {
-    let weights = gpt2::Weights::embedded();
-    let prompt = List::<i32>::filled(longest_prompt(2, &weights), 0);
-    assert greedy(&prompt, 2, &weights).len() == positions(&weights) + 1;
+// The branch with a past reads the mask against the past and the step
+// together; one only as long as the step stops it.
+#[expect_trap]
+test "a mask that is not as long as the past and the step stops the step" {
+    let weights = merged::Weights::embedded();
+    let [_, cache] = run([1, 5, 42, 7], &empty_cache(), &weights);
+    merged::forward(
+        &merged::Tensor::<i64, [merged::Batch, merged::Seq]> {
+            data: [11],
+            extents: [1, 1],
+        },
+        &merged::Tensor::<i64, [merged::Batch, merged::Seq]> {
+            data: [1],
+            extents: [1, 1],
+        },
+        &cache[0],
+        &cache[1],
+        &cache[2],
+        &cache[3],
+        &cache[4],
+        &cache[5],
+        &cache[6],
+        &cache[7],
+        &cache[8],
+        &cache[9],
+        &merged::Tensor::<bool, [merged::One]> {
+            data: [true],
+            extents: [1],
+        },
+        &weights,
+    );
 }

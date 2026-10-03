@@ -298,7 +298,9 @@ test "two symbols on one axis owe that they are one length" {
     // carry the cache's length and the sequence's.
     let mask = shape([sym("Total", "M")]);
     let total = Poly::symbol(&"P").try_add(&Poly::symbol(&"S")).unwrap();
-    let scores = shape([Axis { name: "Total", extent: Extent::of(total).unwrap() }]);
+    let scores = shape([
+        Axis { name: "Total", extent: Extent::of(total).unwrap() },
+    ]);
     let mut owed: List<Condition> = [];
     let y = mask.elementwise(&scores, "add", &mut owed).unwrap();
     assert y.axes[0].name == "Total";
@@ -312,7 +314,9 @@ test "two symbols on one axis owe that they are one length" {
 test "two symbols one length apart on one axis are a failure" {
     let n = Poly::symbol(&"N");
     let a = shape([sym("Seq", "N")]);
-    let b = shape([Axis { name: "Seq", extent: Extent::of(n.try_add(&Poly::constant(1)).unwrap()).unwrap() }]);
+    let b = shape([
+        Axis { name: "Seq", extent: Extent::of(n.try_add(&Poly::constant(1)).unwrap()).unwrap() },
+    ]);
     let e = a.elementwise(&b, "add", &mut []).unwrap_err();
     assert `${e}` == "add: axis Seq is N on the left and N + 1 on the right";
 }

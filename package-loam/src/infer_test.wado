@@ -1557,7 +1557,11 @@ fn branching(declared: String, cond: String, then_body: String, else_body: Strin
 }
 
 fn branch_layout() -> List<LayoutRule> {
-    return [rule("C", ["One"]), rule("X", ["Seq", "Embed"]), rule("Z", ["Seq", "Embed"])];
+    return [
+        rule("C", ["One"]),
+        rule("X", ["Seq", "Embed"]),
+        rule("Z", ["Seq", "Embed"]),
+    ];
 }
 
 test "an If's output is its branches' shape where the two agree" {
@@ -1589,10 +1593,19 @@ test "an If's output takes a fresh length where its branches' lengths differ" {
 }
 
 test "an If's output axis named apart in its branches is named by the output's layout" {
-    let layout: List<LayoutRule> = [rule("C", ["One"]), rule("X", ["Seq", "Embed"]), rule("Z", ["Other", "Embed"]), rule("Y", ["Either", "Embed"])];
+    let layout: List<LayoutRule> = [
+        rule("C", ["One"]),
+        rule("X", ["Seq", "Embed"]),
+        rule("Z", ["Other", "Embed"]),
+        rule("Y", ["Either", "Embed"]),
+    ];
     let source = branching("float[N, 4]", "bool[1]", "A = Relu(X)", "B = Neg(Z)");
     assert y_axes(source, layout).unwrap() == "Either=N,Embed=4";
-    let unnamed: List<LayoutRule> = [rule("C", ["One"]), rule("X", ["Seq", "Embed"]), rule("Z", ["Other", "Embed"])];
+    let unnamed: List<LayoutRule> = [
+        rule("C", ["One"]),
+        rule("X", ["Seq", "Embed"]),
+        rule("Z", ["Other", "Embed"]),
+    ];
     assert y_axes(source, unnamed).unwrap_err() == "Y = If: axis 0 is named apart in its branches, so a layout pattern must name Y's";
 }
 
@@ -1603,11 +1616,27 @@ test "a layout rule naming a graph reaches only that graph's tensors" {
     let layout: List<LayoutRule> = [
         rule("C", ["One"]),
         rule("X", ["Row", "Col"]),
-        LayoutRule { pattern: "A", axes: ["Three", "Two"], graph: Option::Some("t") },
-        LayoutRule { pattern: "*", axes: ["Three", "Two"], graph: Option::Some("e") },
+        LayoutRule {
+            pattern: "A",
+            axes: ["Three", "Two"],
+            graph: Option::Some("t"),
+        },
+        LayoutRule {
+            pattern: "*",
+            axes: ["Three", "Two"],
+            graph: Option::Some("e"),
+        },
     ];
     assert y_axes(with_shape, layout).unwrap() == "Three=3,Two=2";
-    let top_only: List<LayoutRule> = [rule("C", ["One"]), rule("X", ["Row", "Col"]), LayoutRule { pattern: "*", axes: ["Three", "Two"], graph: Option::Some("g") }];
+    let top_only: List<LayoutRule> = [
+        rule("C", ["One"]),
+        rule("X", ["Row", "Col"]),
+        LayoutRule {
+            pattern: "*",
+            axes: ["Three", "Two"],
+            graph: Option::Some("g"),
+        },
+    ];
     assert y_axes(with_shape, top_only).unwrap_err().ends_with("so a layout pattern must name A's");
 }
 

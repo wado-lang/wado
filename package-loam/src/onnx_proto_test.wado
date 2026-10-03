@@ -164,7 +164,11 @@ fn branch_attr(name: String, graph: String) -> onnx::AttributeProto {
         g: Option::Some(onnx::GraphProto {
             name: Option::Some(graph),
             node: [
-                onnx::NodeProto { op_type: Option::Some("Concat"), input: ["X", "X"], output: ["A"] },
+                onnx::NodeProto {
+                    op_type: Option::Some("Concat"),
+                    input: ["X", "X"],
+                    output: ["A"],
+                },
             ],
         }),
     };
@@ -172,7 +176,12 @@ fn branch_attr(name: String, graph: String) -> onnx::AttributeProto {
 
 test "a subgraph attribute is read as the graph it carries, at its model's opset" {
     let model = onnx::ModelProto {
-        opset_import: [onnx::OperatorSetIdProto { domain: Option::Some(""), version: Option::Some(3) }],
+        opset_import: [
+            onnx::OperatorSetIdProto {
+                domain: Option::Some(""),
+                version: Option::Some(3),
+            },
+        ],
         graph: Option::Some(onnx::GraphProto {
             name: Option::Some("branching"),
             node: [
@@ -180,7 +189,10 @@ test "a subgraph attribute is read as the graph it carries, at its model's opset
                     op_type: Option::Some("If"),
                     input: ["C"],
                     output: ["Y"],
-                    attribute: [branch_attr("then_branch", "t"), branch_attr("else_branch", "e")],
+                    attribute: [
+                        branch_attr("then_branch", "t"),
+                        branch_attr("else_branch", "e"),
+                    ],
                 },
             ],
         }),

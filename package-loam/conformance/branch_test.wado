@@ -46,15 +46,24 @@ use { Embed, One, Past, Seq, Tensor, Total, Weights, forward } from "./branch.on
     };
 
 fn cond(taken: bool) -> Tensor<bool, [One]> {
-    return Tensor { data: [taken], extents: [1] };
+    return Tensor {
+        data: [taken],
+        extents: [1],
+    };
 }
 
 fn x(data: List<f32>) -> Tensor<f32, [Seq, Embed]> {
-    return Tensor { data, extents: [data.len() / 2, 2] };
+    return Tensor {
+        data,
+        extents: [data.len() / 2, 2],
+    };
 }
 
 fn past(data: List<f32>) -> Tensor<f32, [Past, Embed]> {
-    return Tensor { data, extents: [data.len() / 2, 2] };
+    return Tensor {
+        data,
+        extents: [data.len() / 2, 2],
+    };
 }
 
 test "the then branch joins the past to the sequence" {

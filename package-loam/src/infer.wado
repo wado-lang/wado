@@ -415,12 +415,7 @@ fn checked_node(
 /// axes both branches give it. An axis the two name apart takes the name the
 /// output's layout gives, and one of two lengths a length of its own, which
 /// nothing after the node can spell.
-fn branched(
-    node: &Node,
-    scope: &mut Checked,
-    schema: &Schema,
-    local: &Schema,
-) -> Result<(), InferError> {
+fn branched(node: &Node, scope: &mut Checked, schema: &Schema, local: &Schema) -> Result<(), InferError> {
     branch_condition(node, scope)?;
     let [then_graph, then_scope] = checked_branch(node, "then_branch", scope, schema)?;
     let [else_graph, else_scope] = checked_branch(node, "else_branch", scope, schema)?;
@@ -495,7 +490,10 @@ fn branch_condition(node: &Node, scope: &Checked) -> Result<(), InferError> {
     let mut count: i64 = 1;
     for let axis of scope.shapes[cond].axes {
         let Static(n) = axis.extent else {
-            return Result::Err(refusal(node, `operand ${cond}'s axis ${axis.name} is ${axis.extent}, and If branches on one element`));
+            return Result::Err(refusal(
+                node,
+                `operand ${cond}'s axis ${axis.name} is ${axis.extent}, and If branches on one element`,
+            ));
         };
         count *= n as i64;
     }
@@ -507,12 +505,7 @@ fn branch_condition(node: &Node, scope: &Checked) -> Result<(), InferError> {
 
 /// The graph an `If` attribute holds, checked in a copy of `scope` that owes
 /// nothing yet.
-fn checked_branch(
-    node: &Node,
-    attr: String,
-    scope: &Checked,
-    schema: &Schema,
-) -> Result<[Graph, Checked], InferError> {
+fn checked_branch(node: &Node, attr: String, scope: &Checked, schema: &Schema) -> Result<[Graph, Checked], InferError> {
     let Some(a) = node.attr(attr) else {
         return Result::Err(attribute_error(node, attr, "is absent and the operator reads it"));
     };
