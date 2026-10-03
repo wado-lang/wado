@@ -2,6 +2,8 @@
 //!
 //! This crate compiles to Wasm P1 format for static linking with Wado-generated code.
 //! Uses libm for deterministic transcendental math functions.
+//! Each export carries the name `core:prelude` imports it by (`f64_ln`,
+//! `f32_mul_add`), so the import renames nothing.
 
 #![cfg_attr(target_arch = "wasm32", no_std)]
 
