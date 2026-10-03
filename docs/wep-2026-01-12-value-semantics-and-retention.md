@@ -125,9 +125,8 @@ for a programmer to discharge.
 ### A Declaration Only Where There Is No Body
 
 A body-less declaration is the exception: there is nothing to read, so it states
-its facts itself, as attributes.
-[WEP: Bodyless Declarations State Every Fact](./wep-2026-10-03-bodyless-declaration-facts.md)
-proposes which declarations owe which facts. Retention is two of them.
+its facts itself, as attributes. [WEP: Bodyless Declarations State Every Fact](./wep-2026-10-03-bodyless-declaration-facts.md)
+proposes changing which facts a declaration owes.
 
 ```wado
 #[result(part_of = arr)]
@@ -170,6 +169,45 @@ parameters — and that holds however the argument is spelled, whether as the
 parameter, a projection of it, or a local bound from one. Where a join meets
 both spellings of a position — a function value of one type minted from two
 declarations — the reference is the wider claim and wins.
+
+Silence is the safe reading for `#[retain]` and not for `#[result]`: a missing
+`#[result]` is taken for "allocates", which elides copies and is wrong for a
+declaration that does hand out an argument's storage. A declaration that owes
+one is reported at the declaration, wherever it lives.
+
+"Allocates" speaks of the result's storage, not of what the result holds. The
+rule covers only the reference parameters, so a silent declaration may still
+build its result from a by-value argument, as `builtin::select` returns one of
+its operands. Retention therefore reads silence as a result that may hold what
+any argument holds. `owned` is the stronger statement: the result holds nothing
+it was handed except what a `#[retain]` routes there. Before issue #2179, each
+reader took silence its own way. Retention read it as holding nothing,
+confinement as keeping every argument, and the shared-escape walk refused the
+call. The first of these was a miscompile.
+
+These two are not the whole family a body-less declaration carries.
+`#[immediate(p)]` sits beside them and answers a different question — how
+codegen lowers the call, not what the call keeps. See
+[the spec](./spec-attributes.md#immediate) for it.
+
+Where each is accepted:
+
+| Declaration                                        | `#[retain]` / `#[result]`    |
+| -------------------------------------------------- | ---------------------------- |
+| `core:builtin`, body-less                          | Yes                          |
+| CM component import, WASI, `.wasm` / `.wat` import | Yes                          |
+| `trait` / `interface` method requirement           | Error — the impl's body does |
+| Anything with a body                               | Error — the body states it   |
+
+A Component Model import declares no `#[result]` and owes none: the boundary
+copies ([Component Model Boundaries](#component-model-boundaries)), so its
+result is owned by construction. The answer is the same for every one of them,
+so it is read off the declaration rather than written on each.
+
+A trait method requirement has no body of its own, but every call to it is
+statically dispatched to an impl that has one, and monomorphization resolves
+that before the fixpoint runs. An attribute there would never be read, and one
+contradicting the impl would never be caught.
 
 A program has no body-less function of its own to put these on — the one it can
 write is a [declared absence](./wep-2026-09-13-declared-absence.md), which
@@ -333,8 +371,9 @@ boundary copies — `struct` to `record`, `List<T>` to `list<T>`, `String` to
 carries none of the caller's storage across. Whatever the other component keeps,
 it keeps its own copy.
 
-A CM import is still a body-less declaration, and the copy is what its facts are
-read off.
+A CM import is still a body-less declaration, so the attributes above belong on
+one; nothing needs them today, because the copy already answers. They are there
+for an import whose lowering does not copy.
 
 ### Retention Is Not an Effect
 
