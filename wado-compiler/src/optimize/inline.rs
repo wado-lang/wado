@@ -876,7 +876,6 @@ fn fold_drops_loop(body: &Body, view: &ConstView<'_>, walk: &CostWalk<'_>) -> bo
     false
 }
 
-/// Whether `body` runs a loop.
 /// Whether running `body` reaches a safepoint: a call, or an allocation, where
 /// the collector may run. A copying collector moves objects there, so every
 /// reference live across one is spilled and reloaded, and a loop holds more of
@@ -997,7 +996,7 @@ struct BodyScan {
     lets: Vec<(u32, Operand)>,
     /// Every call, with its by-value arguments keyed by position: an
     /// [`ArgSite`] before the callee's own writes rule any out.
-    by_value_sites: Vec<ArgSite>,
+    calls: Vec<ArgSite>,
     /// Whether the body holds a `loop`.
     loopy: bool,
 }
@@ -1050,7 +1049,7 @@ fn scan_body(func: &NirFunction) -> BodyScan {
                     .filter(|(_, a)| !a.is_mut)
                     .map(|(pos, a)| (pos as u32, a.expr))
                     .collect();
-                scan.by_value_sites.push((*func_id, by_value));
+                scan.calls.push((*func_id, by_value));
             }
             _ => {}
         },
@@ -1160,7 +1159,7 @@ fn argument_sites(scans: &[BodyScan]) -> Vec<Vec<ArgSite>> {
     scans
         .iter()
         .map(|scan| {
-            scan.by_value_sites
+            scan.calls
                 .iter()
                 .map(|(callee, args)| {
                     let callee_written = &scans[callee.index()].written;
@@ -1705,7 +1704,7 @@ fn collect_callees(body: &Body, callees: &mut IndexSet<usize>) {
 /// answer is a set because the recursion graph only asks whether an edge exists.
 fn call_site_counts(scans: &[BodyScan]) -> Vec<usize> {
     let mut counts = vec![0usize; scans.len()];
-    for (callee, _) in scans.iter().flat_map(|s| &s.by_value_sites) {
+    for (callee, _) in scans.iter().flat_map(|s| &s.calls) {
         counts[callee.index()] += 1;
     }
     counts
@@ -1960,7 +1959,7 @@ pub fn inline_functions(
         .collect();
     let call_graph: Vec<Vec<usize>> = scans
         .iter()
-        .map(|s| s.by_value_sites.iter().map(|(c, _)| c.index()).collect())
+        .map(|s| s.calls.iter().map(|(c, _)| c.index()).collect())
         .collect();
     let recursive_functions = recursive_functions(&call_graph);
 
