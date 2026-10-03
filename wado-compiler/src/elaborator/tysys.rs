@@ -12,11 +12,11 @@ use crate::ast::{BinaryOp, Expr, Literal, RangeKind};
 use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::resource_move_check::carries_affine_resource;
 use crate::synthesis::template::eq_from_written_cmp;
-use crate::tir::{ResolvedType, StructDef, TypeId, TypeTable, range_item};
+use crate::tir::{ResolvedType, StructDef, TypeId, TypeKey, TypeTable, range_item};
 
 use super::sem::decls::ModuleDecls;
 use super::trait_env::{NamespaceImports, TraitEnv};
@@ -149,6 +149,61 @@ impl TypeSystem {
             type_id,
             &mut Vec::new(),
         )
+    }
+
+    /// Whether a value of `type_id` reaches a `&mut`, through which a call
+    /// handed it may write: one it is or holds at any depth, or one behind a
+    /// function, resource or signal, whose captures and state no type shows.
+    pub(crate) fn reaches_mut_ref(&self, type_id: TypeId) -> bool {
+        self.reaches_mut_ref_from(type_id, &mut IndexSet::default())
+    }
+
+    fn reaches_mut_ref_from(&self, type_id: TypeId, walked: &mut IndexSet<TypeKey>) -> bool {
+        let resolved = self.type_table.borrow().get(type_id).clone();
+        let reached = match resolved {
+            ResolvedType::MutRef(_)
+            | ResolvedType::Function { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::GenericResource { .. }
+            | ResolvedType::Reactive(_) => return true,
+            // A parameter is answered where it is bound: an instance walks its
+            // arguments.
+            ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Never
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::TypeParam { .. }
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::AssocTypeProjection { .. }
+            | ResolvedType::InferVar(_)
+            | ResolvedType::Unknown
+            | ResolvedType::Error => return false,
+            ResolvedType::Ref(inner) | ResolvedType::BuiltinArray(inner) => vec![inner],
+            ResolvedType::Newtype { base_type, .. } => vec![base_type],
+            ResolvedType::Struct { type_args, .. }
+            | ResolvedType::GenericInstance { type_args, .. } => {
+                let mut reached = type_args;
+                reached.extend(self.struct_field_type_ids_of(type_id).unwrap_or_default());
+                reached.extend(self.variant_payloads_of(type_id));
+                reached
+            }
+            ResolvedType::Variant { .. } => self.variant_payloads_of(type_id),
+        };
+        if !walked.insert(self.type_table.borrow().type_key(type_id)) {
+            return false;
+        }
+        reached
+            .into_iter()
+            .any(|member| self.reaches_mut_ref_from(member, walked))
+    }
+
+    /// The payload of each case of the variant `type_id` names, as declared.
+    fn variant_payloads_of(&self, type_id: TypeId) -> Vec<TypeId> {
+        self.type_def(type_id)
+            .and_then(|def| self.data.variant_cases.get(&def))
+            .map(|info| info.cases.iter().map(|case| case.payload).collect())
+            .unwrap_or_default()
     }
 
     /// The `Type::Case` spelling of the case the resolve walk names at a bare

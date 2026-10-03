@@ -21,6 +21,21 @@ impl Counter {
     }
 }
 
+struct Tally {
+    n: &mut i32,
+}
+
+impl Tally {
+    fn bump(&self) -> i32 {
+        *self.n += 1;
+        return *self.n;
+    }
+}
+
+fn bump_first(ts: &List<Tally>) -> i32 {
+    return ts[0].bump();
+}
+
 fn advance(c: &mut Counter) -> i32 {
     return c.bump();
 }
@@ -69,6 +84,11 @@ export fn run() with Stdout {
     assert c.bump() != c.bump();         // no warning: `bump` takes `&mut self`
     let r = &mut c;
     assert advance(r) != advance(r);     // no warning: `r` is a `&mut` argument
+    let mut k = 0;
+    let t = Tally { n: &mut k };
+    assert t.bump() != t.bump();         // no warning: `t` holds a `&mut`
+    let ts: List<Tally> = [t];
+    assert bump_first(&ts) != bump_first(&ts); // no warning: an element holds one
     let mut n = 0;
     let mut next = || {
         n += 1;
@@ -94,5 +114,5 @@ __DATA__
     "`b <= b` compares a value with itself, so it is always true;",
     "`norm(&p) == norm(&p)` compares a value with itself"
   ],
-  "warnings_not_contains": ["`0 <= b`", "line_of(#line)", "tick()", "bump()", "advance(r)", "next()", "w == w", "`a == a` compares a value with itself, so it is always true; test a NaN"]
+  "warnings_not_contains": ["`0 <= b`", "line_of(#line)", "tick()", "bump()", "bump_first(", "advance(r)", "next()", "w == w", "`a == a` compares a value with itself, so it is always true; test a NaN"]
 }

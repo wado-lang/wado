@@ -260,8 +260,9 @@ from another language, where it is now always false. The
 about all six operators, and on a float names `is_nan()`. It reports only an
 expression that performs no effect, since one that does may answer differently
 the second time. For the same reason it skips one that writes: an assignment, a
-`&mut` borrow, a `&mut self` method such as an iterator's `next`, or a call of a
-closure, which may capture by `&mut`. GCC's `-Wtautological-compare` and
+`&mut` borrow, a `&mut self` method such as an iterator's `next`, a call of a
+closure, which may capture by `&mut`, and a call handed a value that holds a
+`&mut`, which the callee may write through. GCC's `-Wtautological-compare` and
 Clippy's `eq_op` warn on the same shape.
 
 ### What follows
@@ -387,14 +388,11 @@ order changes at random, `max` costs up to two and a half times `ieee754_max`,
 as
 [Cost](#cost) measures.
 
-The `self_comparison` lint warns about a call of a function that changes state
-without declaring an effect, and two calls of one can answer differently. One
-reads or writes a `global mut`, which declares no effect yet
+The `self_comparison` lint warns about a call of a function that reads or
+writes a `global mut`, since such a function declares no effect yet
 ([Global Variables](./spec-expressions.md#global-variables)). With `next_id()`
 incrementing a counter and returning it, `next_id() != next_id()` is true, and
-the lint says it is always false. Another writes through a `&mut` its argument
-holds: `c.bump() != c.bump()`, where `bump(&self)` increments through a
-`&mut i32` field of `c`, gets the same warning.
+the lint says it is always false.
 
 The compiler answers the table in [One source for `==` and `cmp`](#one-source-for--and-cmp)
 twice: the trait solver and the elaborator each read the written impls and

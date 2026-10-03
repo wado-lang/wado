@@ -14,7 +14,6 @@ use crate::effect_check::EffectProbe;
 use crate::elaborator::liveness::is_user_authored;
 use crate::module_source::ModuleSource;
 use crate::semantics::Semantics;
-use crate::tir::ResolvedType;
 use crate::token::Span;
 use crate::unparse::{binary_op_str, unparse_expr_source};
 
@@ -181,20 +180,20 @@ fn line_literals(expr: &Expr) -> Vec<usize> {
 }
 
 /// Finds what may change state between two evaluations without performing an
-/// effect: an assignment, a `&mut` borrow, a `&mut` argument, a method taking
-/// `&mut self`, and a call of anything but a declared function, such as a
-/// `fn mut` closure.
+/// effect: an assignment, a `&mut` borrow, a method taking `&mut self`, a call
+/// handed a value reaching a `&mut`, and a call of anything but a declared
+/// function, such as a `fn mut` closure.
 struct Writes<'a> {
     sem: &'a Semantics,
     found: bool,
 }
 
 impl Writes<'_> {
-    fn any_mut_ref(&self, args: &[Expr]) -> bool {
-        args.iter().any(|arg| {
+    fn reaches_mut_ref<'e>(&self, operands: impl IntoIterator<Item = &'e Expr>) -> bool {
+        operands.into_iter().any(|operand| {
             self.sem
-                .expression_type(arg.id())
-                .is_some_and(|ty| matches!(self.sem.types.get(ty), ResolvedType::MutRef(_)))
+                .expression_type(operand.id())
+                .is_none_or(|ty| self.sem.reaches_mut_ref(ty))
         })
     }
 }
@@ -207,11 +206,11 @@ impl AstVisitor for Writes<'_> {
             Expr::MethodCall(call) => {
                 let mut dispatches = self.sem.method_dispatches_at(call.id).peekable();
                 dispatches.peek().is_none()
-                    || self.any_mut_ref(&call.args)
+                    || self.reaches_mut_ref(std::iter::once(&call.receiver).chain(&call.args))
                     || dispatches.any(|dispatch| dispatch.self_kind == SelfKind::MutRef)
             }
             Expr::Call(call) => {
-                self.any_mut_ref(&call.args)
+                self.reaches_mut_ref(&call.args)
                     || match &call.callee {
                         Expr::Ident(ident) => self
                             .sem

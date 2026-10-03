@@ -745,7 +745,9 @@ The `self_comparison` lint warns about a comparison whose two operands are the
 same expression, where evaluating that expression twice cannot answer
 differently. It performs no effect and writes nothing: it assigns nothing, takes
 no `&mut`, and calls only declared functions, and methods that do not take
-`&mut self`. Such a comparison has one answer on every type, because the laws of
+`&mut self`. No call in it is handed a value reaching a `&mut`: one the value is
+or holds at any depth, or one a function, resource or signal it holds may
+capture. Such a comparison has one answer on every type, because the laws of
 [`Eq`](./spec-standard-traits.md#eq---equality) and
 [`Ord`](./spec-standard-traits.md#ord---ordering) make both reflexive:
 `x == x`, `x <= x` and `x >= x` are true, and `x != x`, `x < x` and `x > x` are
