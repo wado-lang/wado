@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790990613953,
+  "lastUpdate": 1791002458136,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -62977,6 +62977,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e0053f7ccfe22f8eab725f6f546cecb120ef6cbf"
         },
         "date": 1790990612936,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20617,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 279825,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b9f9cfb6e6202cc98d0db83408c8399b1d450dc8",
+          "message": "Merge pull request #2251 from wado-lang/ccr-5117b114-vbqsqr\n\nfeat!: unsigned integers have no unary minus, as in Rust",
+          "timestamp": "2026-10-03T13:20:38+09:00",
+          "tree_id": "f7cc128cd95113e3cd4370a5c0185ff9cc85db2d",
+          "url": "https://github.com/wado-lang/wado/commit/b9f9cfb6e6202cc98d0db83408c8399b1d450dc8"
+        },
+        "date": 1791002457438,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
