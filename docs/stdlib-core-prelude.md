@@ -2237,6 +2237,10 @@ Counts the number of set bits (population count).
 
 `value` confined to `low..=high`. Traps when `low > high`.
 
+#### `pub fn wrapping_neg(&self) -> u64`
+
+The negation modulo 2^64: `0` for `0`, `MAX - self + 1` otherwise.
+
 #### `pub fn to_string(&self) -> String`
 
 #### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u64, ParseIntError>`
@@ -2692,6 +2696,10 @@ Counts the number of set bits (population count).
 
 `value` confined to `low..=high`. Traps when `low > high`.
 
+#### `pub fn wrapping_neg(&self) -> u8`
+
+The negation modulo 2^8: `0` for `0`, `MAX - self + 1` otherwise.
+
 #### `pub fn is_ascii_digit(&self) -> bool`
 
 Returns true if the byte is an ASCII digit: 0-9.
@@ -2830,6 +2838,10 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 `value` confined to `low..=high`. Traps when `low > high`.
 
+#### `pub fn wrapping_neg(&self) -> u16`
+
+The negation modulo 2^16: `0` for `0`, `MAX - self + 1` otherwise.
+
 #### `pub fn to_string(&self) -> String`
 
 #### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u16, ParseIntError>`
@@ -2925,6 +2937,10 @@ Checks that two bytes are an ASCII case-insensitive match.
 #### `pub fn clamp(value: u32, low: u32, high: u32) -> u32`
 
 `value` confined to `low..=high`. Traps when `low > high`.
+
+#### `pub fn wrapping_neg(&self) -> u32`
+
+The negation modulo 2^32: `0` for `0`, `MAX - self + 1` otherwise.
 
 #### `pub fn to_string(&self) -> String`
 
@@ -3748,6 +3764,10 @@ The smaller of two values.
 #### `pub fn clamp(value: u128, low: u128, high: u128) -> u128`
 
 `value` confined to `low..=high`. Traps when `low > high`.
+
+#### `pub fn wrapping_neg(&self) -> u128`
+
+The negation modulo 2^128: `0` for `0`, `MAX - self + 1` otherwise.
 
 #### `pub fn low(&self) -> u64`
 
