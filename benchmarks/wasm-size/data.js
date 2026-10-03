@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791021695004,
+  "lastUpdate": 1791030546244,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -63109,6 +63109,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/303a490fa17653f5ce0d8fce91b2615fbd369543"
         },
         "date": 1791021694397,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20617,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 279825,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d6d9bcc8b8d061e39518d0d8f544a6898e7aad07",
+          "message": "Merge pull request #2255 from wado-lang/ccr-5117b114-vbqsqr\n\nfix(test): explain a TODO test that unexpectedly passed, for readers new to TODO tests",
+          "timestamp": "2026-10-03T21:08:38+09:00",
+          "tree_id": "d8216212fc89109f1586bf9c0cd9b0262b02a1e7",
+          "url": "https://github.com/wado-lang/wado/commit/d6d9bcc8b8d061e39518d0d8f544a6898e7aad07"
+        },
+        "date": 1791030545113,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
