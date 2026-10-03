@@ -41,7 +41,7 @@ let s = libm_sin(1.5);
 use _ from "./helpers.wasm" with { type: "wasm" };
 ```
 
-`with { type: "wat" }` and `with { type: "wasm" }` are the only forms recognised as wasm-asset imports. Without the `with` clause, `.wat` / `.wasm` paths fall through to the regular import resolution (which rejects non-`.wado` schemas via the existing Kiln-missing-with diagnostic).
+`with { type: "wat" }` and `with { type: "wasm" }` are the only forms recognised as wasm-asset imports. Without `type`, the extension decides nothing: the file is read by its generator, or as Wado source ([How an Import Is Read](./spec-modules.md#how-an-import-is-read)).
 
 ### Semantics
 

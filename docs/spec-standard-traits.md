@@ -426,16 +426,24 @@ The answers differ from IEEE's only when an operand is a NaN. `NaN == NaN` is
 true, `x < NaN` is true for any `x` that is not a NaN, and `NaN < x` stays
 false. `x != x` is always false, so a NaN is tested with `is_nan()`.
 
-An IEEE predicate is written with `is_nan()`:
+Each of the four float types carries IEEE 754's six comparisons as methods.
+They answer as IEEE does, so a NaN operand makes every one false except
+`ieee754_ne`:
 
-| IEEE predicate | Written in Wado          |
-| -------------- | ------------------------ |
-| `a == b`       | `a == b && !a.is_nan()`  |
-| `a != b`       | `a != b \|\| a.is_nan()` |
-| `a < b`        | `a < b && !b.is_nan()`   |
-| `a <= b`       | `a <= b && !b.is_nan()`  |
-| `a > b`        | `a > b && !a.is_nan()`   |
-| `a >= b`       | `a >= b && !a.is_nan()`  |
+| Method            | IEEE predicate | Same as                  |
+| ----------------- | -------------- | ------------------------ |
+| `a.ieee754_eq(b)` | `a == b`       | `a == b && !a.is_nan()`  |
+| `a.ieee754_ne(b)` | `a != b`       | `a != b \|\| a.is_nan()` |
+| `a.ieee754_lt(b)` | `a < b`        | `a < b && !b.is_nan()`   |
+| `a.ieee754_le(b)` | `a <= b`       | `a <= b && !b.is_nan()`  |
+| `a.ieee754_gt(b)` | `a > b`        | `a > b && !a.is_nan()`   |
+| `a.ieee754_ge(b)` | `a >= b`       | `a >= b && !a.is_nan()`  |
+
+On `f16` and `bf16` they compare the operands widened to `f32`. No method
+returns an IEEE three-way answer: IEEE's comparison is partial, and the order
+above is the one three-way comparison a float has.
+
+> Not yet implemented: the `ieee754_*` methods.
 
 `min` and `max` follow the order wherever they are called: `f32::min`,
 `f64::min`, `Iterator::min`, and every `min` over a `T: Ord`. NaN is greatest,
@@ -447,9 +455,9 @@ second. `Iterator::min` returns the first of its least elements and
 `[min(a, b), max(a, b)]` is then `[a, b]` sorted stably: `min(-0.0, 0.0)` is
 `-0.0` and `max(-0.0, 0.0)` is `0.0`.
 
-`f32::minimum`, `f32::maximum`, `f64::minimum` and `f64::maximum` are IEEE
-754-2019 `minimum` and `maximum`: a NaN argument gives NaN on both, and `-0.0`
-is less than `0.0`.
+`f32::ieee754_min`, `f32::ieee754_max`, `f64::ieee754_min` and
+`f64::ieee754_max` are IEEE 754-2019 `minimum` and `maximum`: a NaN argument
+gives NaN on both, and `-0.0` is less than `0.0`.
 
 `clamp(x, low, high)` on `f32` and `f64` first traps on a NaN bound or on
 `low > high`, whatever `x` is. It then confines `x` to `low..=high` by the

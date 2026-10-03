@@ -1,6 +1,7 @@
 // `min` and `max` follow the float order, where every NaN is one value greater
 // than `+Inf`, and of two equal arguments `min` returns the first and `max` the
-// second. `minimum` and `maximum` are IEEE 754-2019's, a NaN either way.
+// second. `ieee754_min` and `ieee754_max` are IEEE 754-2019's `minimum` and
+// `maximum`, a NaN either way.
 // `clamp` confines by the order but keeps a NaN `x`.
 
 fn bits(x: f64) -> u64 {
@@ -44,19 +45,19 @@ test "of two equal arguments min returns the first and max the second" {
 test "minimum and maximum are IEEE's" {
     let nan = f64::from_bits(builtin::black_box(0x7FF8_0000_0000_0000));
     let one = builtin::black_box(1.0);
-    assert f64::minimum(one, nan).is_nan() && f64::minimum(nan, one).is_nan();
-    assert f64::maximum(one, nan).is_nan() && f64::maximum(nan, one).is_nan();
-    assert f64::minimum(one, builtin::black_box(2.0)) == 1.0;
-    assert f64::maximum(one, builtin::black_box(2.0)) == 2.0;
+    assert f64::ieee754_min(one, nan).is_nan() && f64::ieee754_min(nan, one).is_nan();
+    assert f64::ieee754_max(one, nan).is_nan() && f64::ieee754_max(nan, one).is_nan();
+    assert f64::ieee754_min(one, builtin::black_box(2.0)) == 1.0;
+    assert f64::ieee754_max(one, builtin::black_box(2.0)) == 2.0;
     let neg = builtin::black_box(-0.0);
     let pos = builtin::black_box(0.0);
-    assert bits(f64::minimum(pos, neg)) == bits(-0.0);
-    assert bits(f64::maximum(neg, pos)) == bits(0.0);
+    assert bits(f64::ieee754_min(pos, neg)) == bits(-0.0);
+    assert bits(f64::ieee754_max(neg, pos)) == bits(0.0);
 
     let nan32 = f32::from_bits(builtin::black_box(0x7FC0_0000));
     let one32: f32 = builtin::black_box(1.0);
-    assert f32::minimum(one32, nan32).is_nan() && f32::maximum(nan32, one32).is_nan();
-    assert bits32(f32::minimum(builtin::black_box(0.0), builtin::black_box(-0.0))) == bits32(-0.0);
+    assert f32::ieee754_min(one32, nan32).is_nan() && f32::ieee754_max(nan32, one32).is_nan();
+    assert bits32(f32::ieee754_min(builtin::black_box(0.0), builtin::black_box(-0.0))) == bits32(-0.0);
 }
 
 test "clamp keeps a NaN x and an x already in range" {
@@ -88,8 +89,8 @@ test "a NaN low bound traps" {
 }
 
 test "minimum and maximum lower to one instruction" {
-    assert f64::maximum(builtin::black_box(1.0), 2.0) == 2.0;
-    assert f32::minimum(builtin::black_box(1.0), 2.0) == 1.0;
+    assert f64::ieee754_max(builtin::black_box(1.0), 2.0) == 2.0;
+    assert f32::ieee754_min(builtin::black_box(1.0), 2.0) == 1.0;
 }
 
 __DATA__

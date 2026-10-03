@@ -313,7 +313,7 @@ A `with { ... }` clause after the specifier gives an import its attributes.
 <!-- {"fixture":"spec_modules_type_attribute.wado"} -->
 
 ```wado
-// Type attribute (REQUIRED for non-.wado imports)
+// `type` alone reads the file as that type
 use {add_one, twice} from "./sub/wasm_import_user.wasm" with { type: "wasm" };
 
 test {
@@ -336,26 +336,24 @@ Any other key is an error, and so is a value of the wrong kind. Every key but
 use { println, Stdout } from "core:cli" with { tpye: "wasm", provider: 1 };
 ```
 
-### Type Attribute Requirement
+### How an Import Is Read
 
-| Import Source      | `type` Attribute | Notes                          |
-| ------------------ | ---------------- | ------------------------------ |
-| `.wado` files      | Optional         | Type inferred from Wado source |
-| `.wasm` files      | Required         | `type: "wasm"`                 |
-| `.wat` files       | Required         | `type: "wat"`                  |
-| `core:*`, `wasi:*` | Not applicable   | Bundled namespace handling     |
-| CM / `lib:` deps   | Optional         | Type inferred from package     |
+`type` is `"wasm"` or `"wat"`. A `use` never looks at its path's extension. Its
+attributes decide how the file is read:
 
-`"wasm"` and `"wat"` are the only values that make an import a Wasm asset. A
-`.wasm` or `.wat` path without one is read as a schema, which needs a
-generator.
+1. With `generator`, a [Kiln generator](./spec-kiln.md) reads it. A `type`
+   beside `generator` is passed to the generator.
+2. With `type` alone, the file is read as that type: `"wasm"` as a Wasm binary,
+   `"wat"` as Wasm text.
+3. Otherwise it is read as Wado source.
 
-Rationale: an explicit `type` keeps a Wasm import unambiguous and its
-dependency visible, as Wado's imports are explicit elsewhere.
+> Not yet implemented: the loader still decides by extension, and a generator
+> does not receive `type`. See
+> [WEP: Kiln](./wep-2026-04-12-kiln.md#known-gaps).
 
 ## Wasm Module and Component Imports
 
-A `.wasm` / `.wat` asset is imported directly with `with { type: "wasm" | "wat" }`. Whether the file is a core module or a Component Model component is detected from its content, not declared, and either may be written as `.wasm` or `.wat`. A single `use` may pull several names (functions from a core module, interfaces from a component). The path is a `./` or `../` path.
+A Wasm asset is imported directly with `with { type: "wasm" | "wat" }`. Whether the file is a core module or a Component Model component is detected from its content, not declared, and either may be written as `.wasm` or `.wat`. A single `use` may pull several names (functions from a core module, interfaces from a component). The path is a `./` or `../` path.
 
 | Imported file | Exposes as                                     | Call style                            |
 | ------------- | ---------------------------------------------- | ------------------------------------- |

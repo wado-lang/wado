@@ -602,6 +602,13 @@ An error either traps, which ends the program, or is a value the caller handles.
 
 ### Unrecoverable Errors (Traps)
 
+A trap ends the program on a fatal error. Nothing recovers from it.
+
+Two prelude functions trap on purpose:
+
+- `panic(message)` writes `message` to standard error, then traps.
+- `unreachable()` traps.
+
 <!-- {"fixture":"spec_control_flow_errors.wado"} -->
 
 ```wado
@@ -616,13 +623,11 @@ test "unreachable traps" {
 }
 
 #[expect_trap]
-test "assert panics when the condition is false" {
+test "a failed assert traps" {
     let condition = false;
     assert condition;
 }
 ```
-
-A trap cannot be caught in Wado.
 
 ### Recoverable Errors (Result Type)
 

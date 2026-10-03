@@ -38,7 +38,7 @@ impl geo::Show for Local { ... }    // and on either side of an impl head
 
 ### Generated Imports
 
-Any file that is neither `.wado` nor a Wasm asset (`.wasm` / `.wat`) is imported via a generator: `.g4`, `.proto`, a Wado dialect, and so on. Name the generator as a `[build-dependencies]` entry or as a relative path. See [the spec](./spec-kiln.md) for the mechanism, [WEP: Gale](./wep-2026-03-02-gale.md) for the real-world usage.
+A `use` never looks at the extension. With `generator`, a generator reads the file (`.g4`, `.proto`, a Wado dialect, and so on); with `type` alone, it is a Wasm asset; otherwise it is Wado source. Name the generator as a `[build-dependencies]` entry or as a relative path. See [the spec](./spec-kiln.md) for the mechanism, [WEP: Gale](./wep-2026-03-02-gale.md) for the real-world usage.
 
 ```wado
 use { Parser } from "./Calc.g4" with { // Gale parses ANTLR4 grammar files
@@ -1314,7 +1314,7 @@ f64::abs(x)    f64::ceil(x)   f64::floor(x)
 f64::pow(x, y) f64::ln(x)     f64::exp(x)
 f64::mul_add(x, y, z)
 f64::min(x, y)     f64::max(x, y)       // by the order: max(1.0, NaN) is NaN, min is 1.0
-f64::minimum(x, y) f64::maximum(x, y)   // IEEE's: NaN when either is, one instruction
+f64::ieee754_min(x, y) f64::ieee754_max(x, y)  // IEEE's: NaN when either is, one instruction
 f64::clamp(x, lo, hi)                   // a NaN x stays NaN; a NaN bound traps
 
 x.is_nan()     x.is_finite()    // where x is f64 or f32

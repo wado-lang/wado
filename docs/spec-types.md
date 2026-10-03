@@ -1459,9 +1459,10 @@ let w = Perms::Write;
 let bad = r + w;
 ```
 
-A flags type is a newtype over `u32`: an integer literal coerces to it, `as`
-converts to and from `u32`, and it inherits `u32`'s methods. A member may carry
-a `#[cm("...")]` attribute that names it at a component boundary:
+A flags type is its own kind of type, not a newtype: it has none of `u32`'s
+methods. Its bits are a `u32`, which `as` converts to and from, and an integer
+literal coerces to it. A member may carry a `#[cm("...")]` attribute that names
+it at a component boundary:
 
 <!-- {"fixture":"spec_types_flags.wado"} -->
 

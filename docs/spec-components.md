@@ -290,7 +290,7 @@ An owned resource that has not moved is dropped when its scope ends, on every pa
 
 A resource's `fn drop(self)` consumes its receiver, so the scope does not drop it again, and a use after it is a use after move.
 
-A panic does not unwind, so it runs no drops.
+A trap does not unwind, so it runs no drops.
 
 #### Handles at the Boundary
 
