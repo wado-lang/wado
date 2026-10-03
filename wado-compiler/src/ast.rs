@@ -1472,7 +1472,7 @@ impl TodoMark {
 }
 
 /// Test attributes resolved from a `TestDecl`'s `#[...]` annotations (plus the
-/// enclosing module's `#[TODO]`). Shared by the annotate and reify walks so the
+/// enclosing module's `#![TODO]`). Shared by the annotate and reify walks so the
 /// attribute semantics live in one place.
 #[derive(Debug, Clone, Copy)]
 pub struct TestMetadata {

@@ -661,8 +661,7 @@ struct TestJob {
 }
 
 /// Regular tests are Pass/Fail. TODO tests live on a separate axis:
-/// `TodoPending` trapped as expected, `TodoResolved` passed unexpectedly
-/// (its result carries the advice, `TodoMark::resolved_advice`).
+/// `TodoPending` trapped as expected, `TodoResolved` passed unexpectedly.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum TestOutcome {
     Pass,
