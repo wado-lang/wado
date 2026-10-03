@@ -261,8 +261,8 @@ about all six operators, and on a float names `is_nan()`. It reports only an
 expression that performs no effect, since one that does may answer differently
 the second time. For the same reason it skips one that writes: an assignment, a
 `&mut` borrow, a `&mut self` method such as an iterator's `next`, or a call of a
-closure, which may capture by `&mut`. GCC's `-Wtautological-compare` and Clippy's `eq_op` warn on the
-same shape.
+closure, which may capture by `&mut`. GCC's `-Wtautological-compare` and
+Clippy's `eq_op` warn on the same shape.
 
 ### What follows
 
@@ -386,3 +386,9 @@ A float `min` or `max` is a conditional branch under wasmtime on x86, where
 order changes at random, `max` costs up to two and a half times `ieee754_max`,
 as
 [Cost](#cost) measures.
+
+The `self_comparison` lint warns about a call of a function that reads or
+writes a `global mut`, since such a function declares no effect yet
+([Global Variables](./spec-expressions.md#global-variables)). With
+`next_id()` incrementing a counter and returning it, `next_id() != next_id()`
+is true, and the lint says it is always false.
