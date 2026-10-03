@@ -73,6 +73,14 @@ test "a style or event handler attribute holds its language" {
     assert html.contains(`${span("string", "'")}${span("keyword", "return")} f`), html;
 }
 
+test "a strict block leaves the file's mode as it was after its brace" {
+    // `interface` is a keyword only in strict code.
+    let inner = highlighted("<script>function f() { \"use strict\"; interface; }</script>");
+    assert inner.contains(span("keyword", "interface")), inner;
+    let after = highlighted("<script>function f() { \"use strict\"; } var interface = 1;</script>");
+    assert !after.contains(span("keyword", "interface")), after;
+}
+
 test "the lexer base tells a division from a regular expression" {
     let html = highlighted("<script>let q = a / b / c, r = /b+/g;</script>");
     assert html.contains(`a ${span("operator", "/")} b ${span("operator", "/")} c`), html;

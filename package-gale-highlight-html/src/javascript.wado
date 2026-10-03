@@ -71,7 +71,9 @@ impl JavaScriptParserBase for JsParserBase {
 }
 
 struct JsLexerBase {
-    /// The strictness each open brace restores when it closes.
+    /// The strictness each open brace restores when it closes: its enclosing
+    /// scope's. Upstream keeps the block's own, which a `"use strict"` block
+    /// would leak past its `}`.
     scope_strict_modes: List<bool>,
     strict: bool,
     /// Braces open, template interpolations included.
@@ -115,13 +117,13 @@ impl JavaScriptLexerBase for JsLexerBase {
 
     fn process_open_brace(&mut self, view: LexerView, lx: &mut Lexer) {
         self.depth += 1;
-        self.strict = self.scope_strict_modes.last() matches { Some(true) };
         self.scope_strict_modes.push(self.strict);
         resume ();
     }
 
     fn process_close_brace(&mut self, view: LexerView, lx: &mut Lexer) {
-        self.strict = self.scope_strict_modes.pop().unwrap_or(false);
+        // An unbalanced `}` closes nothing, so it leaves the mode alone.
+        self.strict = self.scope_strict_modes.pop().unwrap_or(self.strict);
         self.depth -= 1;
         resume ();
     }
@@ -144,9 +146,7 @@ impl JavaScriptLexerBase for JsLexerBase {
         if self.last_token < 0 || self.last_token == TK_OpenBrace {
             let text = view.text();
             if text == "'use strict'" || text == "\"use strict\"" {
-                self.scope_strict_modes.pop();
                 self.strict = true;
-                self.scope_strict_modes.push(true);
             }
         }
         resume ();

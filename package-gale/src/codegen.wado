@@ -549,7 +549,7 @@ fn install_rule_follow(grammar: &Grammar, ctx: &mut GenContext) {
         follow_kinds[rule.name] = kinds;
     }
     ctx.set_rule_follow(follow_kinds, !grammar_has_open_first_element(&grammar.parser_rules));
-    let input_end = rule_input_end(&grammar.parser_rules, ctx, &fenv);
+    let input_end = rule_input_end(&grammar.parser_rules, ctx);
     ctx.set_rule_input_end(input_end);
     // Unseeded, so EOF is in a rule's FOLLOW only where the grammar matches it.
     let written = build_follow_env(&grammar.parser_rules, ctx, "");

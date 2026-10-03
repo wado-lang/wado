@@ -3545,6 +3545,35 @@ WS : ' ' -> skip ;
     assert got == "x; => (s (list x) ;)\nx; => (t (list x) ;)\nx; => (list x)\nx;x; => (s (list x ; x) ;)\n", got;
 }
 
+test "a greedy loop leaves a longer last iteration to a caller that ends the input with it" {
+    // `x y` ends the input after `list` in `s` and `t` but not in `u`, so the
+    // jar exits the loop wherever those rules call `list`, and keeps the
+    // iteration where `u` alone does.
+    let ends = parses_each("grammar M;
+s : (list) X Y EOF ;
+t : list X Y EOF ;
+list : A (X Y)* ;
+A : 'a' ;
+X : 'x' ;
+Y : 'y' ;
+WS : ' ' -> skip ;
+", [
+        ["s", "a x y"],
+        ["t", "a x y"],
+        ["list", "a x y"],
+    ]);
+    assert ends == "a x y => (s (list a) x y)\na x y => (t (list a) x y)\na x y => (list a)\n", ends;
+    let goes_on = parses("grammar N;
+u : '{' (list | X Y)* '}' ;
+list : A (X Y)* ;
+A : 'a' ;
+X : 'x' ;
+Y : 'y' ;
+WS : ' ' -> skip ;
+", "list", ["a x y"]);
+    assert goes_on == "a x y => (list a x y)\n", goes_on;
+}
+
 test "a single-token optional EOF does not outrank an earlier alternative" {
     // The optional's step is the guard's, so it must leave EOF to `prog` as
     // every other scanned EOF does.

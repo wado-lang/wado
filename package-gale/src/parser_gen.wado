@@ -7180,7 +7180,7 @@ fn kind_at<S: AsStrSlice, S1: AsStrSlice>(stream: S, at: S1) -> String {
 /// no continuation from the caller to ask. Exiting instead is viable only where
 /// the iteration's tokens can follow the rule and end the input, as `;` can
 /// after `list` in `s : list ';' EOF`; the jar keeps every other such iteration.
-/// The grammar decides that statically for a single token
+/// The grammar answers that statically up to `INPUT_END_MAX_LEN` tokens
 /// (`current_rule_input_end`), and a longer iteration is kept.
 fn decline_ends_input_check<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3: AsStrSlice>(
     end_kind: S,
@@ -7191,11 +7191,24 @@ fn decline_ends_input_check<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3: A
 ) -> String {
     let unknown = if ctx.current_rule_reads_follow() { `${FOLLOW_PARAM} == 0 && ` } else { "" };
     let ends_input = `${unknown}${end_kind} == TK_EOF`;
-    let exit_kinds = ctx.current_rule_input_end();
-    if exit_kinds.is_empty() {
+    let mut exits: List<String> = [];
+    let by_len = ctx.current_rule_input_end();
+    for let n of 1..=by_len.len() {
+        let positions = &by_len[n - 1];
+        if positions.is_empty() {
+            continue;
+        }
+        let mut clause = `${end} == ${start} + ${n}`;
+        for let d of 0..<n {
+            let at = if d == 0 { `${stream}[${start}]` } else { `${stream}[${start} + ${d}]` };
+            clause.push_str(` && ${ctx.kind_check_str(&positions[d], &at)}`);
+        }
+        exits.push(clause);
+    }
+    if exits.is_empty() {
         return ends_input;
     }
-    return `${ends_input} && !(${end} == ${start} + 1 && ${ctx.kind_check_str(&exit_kinds, `${stream}[${start}]`)})`;
+    return `${ends_input} && !(${exits.join(" || ")})`;
 }
 
 /// Whether the token after an iteration lets the walk go on without declining:
