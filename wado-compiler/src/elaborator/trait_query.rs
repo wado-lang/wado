@@ -936,7 +936,10 @@ impl TypeSystem {
                 != Some(CompilerItem::ReflectVariant);
             let written_instead = match tr {
                 OnBoundTrait::Ord if derives_ord => self.ord_withheld_by(type_id).map(|link| {
-                    (link, "writes `eq`, so no `Ord` is derived for it; write `cmp` beside it")
+                    (
+                        link,
+                        "writes `eq`, so no `Ord` is derived for it; write `cmp` beside it",
+                    )
                 }),
                 OnBoundTrait::Eq
                     if self.comparison_written_alone(type_id) == Some(OnBoundTrait::Ord) =>
@@ -1394,14 +1397,10 @@ impl TypeSystem {
         // `let`-chain lives for the whole body, and the body borrows mutably
         // to record the synthesis request.
         let nominal = self.type_table.borrow().nominal_head(type_id);
-        // A written `cmp` gives `==` whatever the members are, and a written
-        // `eq` leaves `Ord` to be written beside it, whether the members or a
-        // newtype's base would supply one (spec-traits.md §Derivation Policy).
-        let written_alone = if is_eq_or_ord && wanted.is_empty() && nominal.is_some() {
-            self.comparison_written_alone(type_id)
-        } else {
-            None
-        };
+        // A written `eq` leaves `Ord` to be written beside it, whether the
+        // members or a newtype's base would supply one, and a written `cmp`
+        // gives `==` whatever the members are (spec-traits.md §Derivation
+        // Policy).
         if on_bound == Some(OnBoundTrait::Ord)
             && wanted.is_empty()
             && self.ord_withheld_by(type_id).is_some()
@@ -1409,8 +1408,9 @@ impl TypeSystem {
             return false;
         }
         if is_eq
-            && written_alone == Some(OnBoundTrait::Ord)
+            && wanted.is_empty()
             && let Some((_, module_source)) = &nominal
+            && self.comparison_written_alone(type_id) == Some(OnBoundTrait::Ord)
         {
             let ord = self
                 .compiler_trait_def(CompilerItem::Ord)

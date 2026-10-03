@@ -1051,7 +1051,10 @@ impl SolverBridge {
                 |trait_| written_at_self(program, trait_, |id, def| covers(&from_cmp, id, def));
             writes_eq = writes(eq);
             let writes_ord = writes(ord);
-            for head in writes_eq.keys().filter(|head| !writes_ord.contains_key(*head)) {
+            for head in writes_eq
+                .keys()
+                .filter(|head| !writes_ord.contains_key(*head))
+            {
                 if let Some(newtype) = program.types.get_mut(head) {
                     newtype.withholds.push(ord);
                 }
