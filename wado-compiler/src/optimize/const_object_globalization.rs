@@ -448,6 +448,45 @@ fn collect_candidates(
     );
 }
 
+/// `idx` and every local that names its whole value: one a `let` binds from a
+/// name already in the set without copying it (`licm` hoists a loop's read into
+/// one). A use of any of them is a use of the binding.
+fn binding_names(body: &Body, idx: u32) -> Vec<u32> {
+    let renames: Vec<(u32, u32)> = reachable_nodes(body)
+        .into_iter()
+        .filter_map(|node| {
+            let NodeRef::Stmt(s) = node else {
+                return None;
+            };
+            let StmtKind::Let {
+                local_index,
+                value,
+                skip_value_copy: true,
+                ..
+            } = &body.stmts[s].kind
+            else {
+                return None;
+            };
+            let ExprKind::Local { index, .. } = &body.exprs[value.as_expr()?].kind else {
+                return None;
+            };
+            Some((*index, *local_index))
+        })
+        .collect();
+    let mut names = vec![idx];
+    let mut i = 0;
+    while i < names.len() {
+        let from = names[i];
+        for &(source, name) in &renames {
+            if source == from && !names.contains(&name) {
+                names.push(name);
+            }
+        }
+        i += 1;
+    }
+    names
+}
+
 /// Whether the constant bound to `idx` is handed to a callee that delivers its
 /// referent's storage back out, or writes through it. [`is_readonly_body`] only
 /// sees the caller, where `$b."…build"()` reads.
@@ -906,7 +945,10 @@ fn let_stmt_qualifies(
     if let Some(why) = readonly_body_violation(body, local_index, gate) {
         return decline(why);
     }
-    if local_leaks_through_call(body, local_index, gate) {
+    if binding_names(body, local_index)
+        .into_iter()
+        .any(|name| local_leaks_through_call(body, name, gate))
+    {
         return decline("storage leaks through a call");
     }
     if storage_leaves_body(body, &delivered_alias_roots(body, local_index, gate), gate) {
@@ -1797,7 +1839,10 @@ fn is_readonly_body(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
 
 /// [`is_readonly_body`], naming the check that rejected `idx` for `WADO_TRACE`.
 fn readonly_body_violation(body: &Body, idx: u32, gate: &Gate<'_>) -> Option<&'static str> {
-    if !block_readonly(body, body.root, idx, gate) {
+    if !binding_names(body, idx)
+        .into_iter()
+        .all(|name| block_readonly(body, body.root, name, gate))
+    {
         return Some("written after the binding");
     }
     // The aliases answer a narrower question. `block_readonly` also rejects a
@@ -2180,9 +2225,8 @@ fn block_readonly(body: &Body, block: BlockId, idx: u32, gate: &Gate<'_>) -> boo
 
 fn stmt_readonly(body: &Body, stmt: StmtId, idx: u32, gate: &Gate<'_>) -> bool {
     match &body.stmts[stmt].kind {
-        // A second name for the binding, not a copy of it (`licm` hoists a
-        // loop's read of it into one). What is done through that name is the
-        // alias walk's to judge, as for a projection bound out of it.
+        // A second name for the binding, not a copy of it: `binding_names`
+        // judges what is done through it as it judges the binding.
         StmtKind::Let {
             value,
             skip_value_copy: true,
