@@ -1267,7 +1267,7 @@ middle([1, "mid", true]);                 // ERROR: cannot infer `Pre`, `K`, `Po
 split([]);                                // ERROR: cannot infer `A`, `B`
 ```
 
-A pack that only such a tuple names is reported at the use site as an
+A pack that only a two-pack tuple names is reported at the use site as an
 uninferred type parameter, even where the tuple is `[]`. To settle both packs
 from one value, give each a tuple of its own (`[[..A], [..B]]`).
 
