@@ -28,6 +28,7 @@ use wasmtime_wasi::WasiCtxBuilder;
 use wasmtime_wasi_http::p3::Request;
 use wasmtime_wasi_http::p3::bindings::Service;
 
+use wado_compiler::ast::TodoMark;
 use wado_compiler::coverage::{Branch, Coverage, CoverageScope, read_from_component, render_plan};
 use wado_compiler::{CompilerOptions, OptLevel};
 
@@ -809,7 +810,7 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
                 // `TodoResolved`. Re-raise it so the test framework reports the failure;
                 // everything else is treated as a still-pending TODO.
                 if let Some(resolved) = err.downcast_ref::<common::TodoResolved>() {
-                    panic!("{}", resolved.0);
+                    panic!("{}", resolved.report(TodoMark::Module));
                 }
                 let msg = common::panic_message(err.as_ref()).unwrap_or("(unknown panic)");
                 eprintln!("[{test_id}] #![TODO] module pending: {msg}");
@@ -818,8 +819,17 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
         }
     }
 
-    // Normal test (or resolved TODO module) - run without panic recovery
-    run_normal_test(fixture_path, source, opt_level, &spec, &test_id);
+    // Only the sentinel is caught: it would otherwise reach the test framework
+    // as an opaque `Box<dyn Any>`.
+    let test_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        run_normal_test(fixture_path, source, opt_level, &spec, &test_id);
+    }));
+    if let Err(err) = test_result {
+        if let Some(resolved) = err.downcast_ref::<common::TodoResolved>() {
+            panic!("{}", resolved.report(TodoMark::Test));
+        }
+        std::panic::resume_unwind(err);
+    }
 }
 
 /// Run a normal (non-TODO) test under each allocator the fixture names.
@@ -1372,11 +1382,11 @@ datatest_mini::harness! {
 }
 
 /// End-to-end check on the `#![TODO]` wrapper: a module-level `#![TODO]` whose
-/// test passes must still hard-fail. Before the sentinel fix the resolved
-/// panic was swallowed as "pending" because the outer `catch_unwind` could
-/// not distinguish it from a genuine still-pending TODO trap.
+/// test passes must still hard-fail, and point at the module's mark.
 #[test]
-#[should_panic(expected = "TODO test 'test-todo-0-passes-unexpectedly' resolved")]
+#[should_panic(
+    expected = "TODO test 'test-todo-0-passes-unexpectedly' passed: its module is #![TODO]"
+)]
 fn module_todo_with_passing_test_hard_fails() {
     let source = r#"#![TODO]
 test "passes unexpectedly" {
@@ -1428,8 +1438,8 @@ test "passes unexpectedly" {
         .downcast_ref::<common::TodoResolved>()
         .expect("panic payload should be TodoResolved");
     assert!(
-        resolved.0.contains("resolved"),
-        "message should mention `resolved`: {}",
+        resolved.report(TodoMark::Test).contains("remove #[TODO]"),
+        "the report should say what to do: {}",
         resolved.0,
     );
     assert!(

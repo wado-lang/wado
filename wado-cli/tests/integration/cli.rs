@@ -839,6 +839,54 @@ fn test_test_failing() {
 }
 
 #[test]
+fn test_test_unexpectedly_passed_todo_says_what_the_mark_meant() {
+    wado()
+        .args([
+            "test",
+            "wado-cli/tests/fixtures/test_todo_unexpected_pass.wado",
+        ])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains(
+            "marked #[TODO] (expected to fail until the feature works), but it passed: \
+             remove #[TODO] so it runs as a regular test",
+        ))
+        .stdout(predicate::str::contains("unexpectedly passed"))
+        .stdout(predicate::str::contains("resolved").not());
+}
+
+#[test]
+fn test_test_unexpectedly_passed_todo_in_tap() {
+    wado()
+        .args([
+            "test",
+            "--format",
+            "tap",
+            "wado-cli/tests/fixtures/test_todo_unexpected_pass.wado",
+        ])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("# TODO unexpectedly passed"))
+        .stdout(predicate::str::contains("resolved").not());
+}
+
+#[test]
+fn test_test_unexpectedly_passed_todo_in_a_todo_module_points_at_the_module() {
+    wado()
+        .args([
+            "test",
+            "wado-cli/tests/fixtures/test_todo_module_unexpected_pass.wado",
+        ])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains(
+            "its module is #![TODO] (every test expected to fail until the feature works), \
+             but this test passed: replace #![TODO] with #[TODO] on each test that still fails",
+        ))
+        .stdout(predicate::str::contains("remove #[TODO]").not());
+}
+
+#[test]
 fn test_test_trap_names_its_reason() {
     // The reason is the cause under wasmtime's backtrace context: a plain
     // `Display` leaves it out, and `Debug` adds the host's own backtrace.

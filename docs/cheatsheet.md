@@ -1575,7 +1575,7 @@ boundaries (each sub-package is run in its own context). Add
 `--filter <pattern>` is a path-based shell wildcard (`*`, `?`, `[...]`); it
 is _not_ a regex. To match anywhere in a path, wrap the term in `*`s, e.g.
 `'*foo*'`. The runner exits non-zero on any compile failure, test failure,
-or `#[TODO]` test that resolved unexpectedly.
+or `#[TODO]` test that unexpectedly passed.
 
 `--test-name <pattern>` selects individual `test "name"` blocks the way
 `cargo test <name>` does: a case-sensitive substring match against the test's
@@ -1598,7 +1598,7 @@ test "panics on invalid input" {
 }
 
 // TODO test: reported on a separate axis from pass/fail.
-// Pending (traps) = expected. Resolved (passes) = must remove #[TODO].
+// Pending (traps) = expected. Unexpectedly passed = must remove #[TODO].
 #[TODO]
 test "not yet implemented" {
     panic("TODO: implement this");
