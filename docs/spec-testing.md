@@ -156,8 +156,9 @@ TODO axis, not as a failure on the pass/fail axis.
 The `#![TODO]` inner attribute applies TODO semantics to an entire module:
 
 - If the module fails to compile, it is reported as a single pending TODO entry.
-- If the module compiles successfully, each test block is implicitly treated as `#[TODO]`.
-- If the module compiles and all tests pass (i.e., the feature is implemented), it is reported as resolved, which fails the run.
+- If the module compiles, each test block is treated as `#[TODO]`, so every one
+  of them must trap. A single test that completes normally is resolved, which
+  fails the run.
 
 ### Run Result
 
