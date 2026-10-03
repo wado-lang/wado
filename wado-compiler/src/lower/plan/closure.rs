@@ -378,6 +378,7 @@ impl ClosureLowerer {
 
         // Phase 2: analyse which closures are safe to specialise. Reads
         // `functor_id` directly off the Closure node — no counter.
+        let type_table = flat.type_table.borrow();
         for func_rc in &func_refs {
             let func = func_rc.borrow();
             if let Some(body) = &func.body {
@@ -385,11 +386,13 @@ impl ClosureLowerer {
                 ClosureSafetyAnalyzer {
                     local_to_closure: &mut self.local_to_closure,
                     specializable: &mut self.specializable,
+                    type_table: &type_table,
                     in_callee_position: false,
                 }
                 .visit_block(body);
             }
         }
+        drop(type_table);
 
         // Phase 2.5: Generate specialized functions for fn-param monomorphization.
         // For closures passed as fn-type arguments, generate specialized callees.
@@ -1408,15 +1411,16 @@ impl TirRefVisitor for LocalCollector<'_> {
 }
 
 /// Phase 2 visitor deciding which closures are safe to specialise: those whose
-/// value never escapes its declaring local, every use being a direct call or a
-/// redirect-eligible trait dispatch. Anything else must travel as a
-/// `CanonicalClosure_K`. Only a call's callee, receiver or func is a non-escape
-/// position; `Let { value: Closure }` is special-cased, the literal binding it.
+/// value never escapes its declaring local, every use being a direct call or an
+/// [`is_fn_inspect_call`] receiver. Anything else must travel as a
+/// `CanonicalClosure_K`. `Let { value: Closure }` is special-cased, the literal
+/// binding it.
 struct ClosureSafetyAnalyzer<'a> {
     local_to_closure: &'a mut IndexMap<u32, u32>,
     specializable: &'a mut IndexSet<u32>,
-    /// True only when the current expression is the callee of a call
-    /// (or receiver of a method call). Default false.
+    type_table: &'a TypeTable,
+    /// True only when the current expression is the callee of a call or the
+    /// receiver of an [`is_fn_inspect_call`]. Default false.
     in_callee_position: bool,
 }
 
@@ -1506,9 +1510,9 @@ impl TirRefVisitor for ClosureSafetyAnalyzer<'_> {
                 }
                 self.in_callee_position = prev;
             }
-            TirExprKind::Call { args, .. } if let (Some(receiver), rest) = args.split() => {
+            TirExprKind::Call { func, args, .. } if let (Some(receiver), rest) = args.split() => {
                 let prev = self.in_callee_position;
-                self.in_callee_position = true;
+                self.in_callee_position = is_fn_inspect_call(func, self.type_table);
                 self.visit_expr(&receiver.expr);
                 self.in_callee_position = false;
                 for arg in rest {
@@ -1647,24 +1651,13 @@ impl ClosureCallSiteLowerer<'_> {
     /// the Fn-keyed dispatch stub would `ref.cast` the devirtualised
     /// `&$Closure_N` receiver to the canonical inspectable base and trap.
     fn try_redirect_inspect_to_functor(&self, receiver: &mut TirExpr, func: &mut FunctionRef) {
-        let info = match &func.method_info {
-            Some(info) => info,
-            None => return,
-        };
-        if !is_fn_type_name(&info.base_struct_name()) {
+        if !is_fn_inspect_call(func, self.type_table) {
             return;
         }
-        let Some(trait_) = info.trait_decl() else {
-            return;
-        };
-        if self
-            .type_table
-            .compiler_items()
-            .trait_def(CompilerItem::Inspect)
-            != Some(trait_)
-        {
-            return;
-        }
+        let info = func
+            .method_info
+            .as_ref()
+            .expect("an Inspect call names its method");
 
         let local_idx = match peel_ref_to_local(receiver) {
             Some(idx) => idx,
@@ -1729,6 +1722,19 @@ impl ClosureCallSiteLowerer<'_> {
             method_info: Some(new_method_info),
         };
     }
+}
+
+/// Whether `func` is `Inspect::inspect` on a bare `fn(..)` type: the one method
+/// a specialised `&$Closure_N` receiver is redirected for. The safety analysis
+/// keeps a receiver specialised for this call and no other, since anything
+/// else would hand the callee a functor where it reads a canonical closure.
+fn is_fn_inspect_call(func: &FunctionRef, type_table: &TypeTable) -> bool {
+    let Some(info) = &func.method_info else {
+        return false;
+    };
+    is_fn_type_name(&info.base_struct_name())
+        && info.trait_decl().is_some()
+        && info.trait_decl() == type_table.compiler_items().trait_def(CompilerItem::Inspect)
 }
 
 /// Walk through `Ref` / `MutRef` wrappers to find an inner `Local` and
