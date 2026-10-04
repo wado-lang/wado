@@ -1526,7 +1526,22 @@ fn _parse_s__inner(p: &mut Parser) -> () {
     if kind == TK_LIT_k {
         p.take();
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
-        if true {
+        let mut opt_enter: bool = false;
+        if p.peek_kind() == TK_A {
+            opt_enter_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_x(tokens, pos, &mut p.memo);
+                if pos < 0 { break opt_enter_scan; }
+                if pos >= tokens.len() || tokens[pos] != TK_A { break opt_enter_scan; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_EOF { break opt_enter_scan; }
+                pos += 1;
+                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if probe_kind == TK_EOF { opt_enter = true; }
+            }
+        }
+        if opt_enter {
             p.site = 0;
             _parse_x(p);
         }
@@ -1589,15 +1604,19 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                 p.b.start_node_at(_cp, RK_E, _start);
                 p.take();
                 if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
-                let mut opt_scan_pos: i32 = -1;
-                opt_scan: {
-                    let tokens = &p.kinds;
-                    let mut pos: i32 = p.pos;
-                    pos = scan_x(tokens, pos, &mut p.memo);
-                    if pos < 0 { break opt_scan; }
-                    opt_scan_pos = pos;
+                let mut opt_enter: bool = false;
+                if p.peek_kind() == TK_A {
+                    opt_enter_scan: {
+                        let tokens = &p.kinds;
+                        let mut pos: i32 = p.pos;
+                        pos = scan_x(tokens, pos, &mut p.memo);
+                        if pos < 0 { break opt_enter_scan; }
+                        if pos >= tokens.len() || tokens[pos] != TK_A { break opt_enter_scan; }
+                        pos += 1;
+                        opt_enter = true;
+                    }
                 }
-                if opt_scan_pos >= 0 {
+                if opt_enter {
                     p.site = 3;
                     _parse_x(p);
                 }
