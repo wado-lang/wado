@@ -67,15 +67,20 @@ The bare identifiers are:
 | `trap`      | The call may trap                                                |
 | `read`      | The call reads linear memory                                     |
 | `write`     | The call writes linear memory                                    |
-| `host`      | The call reaches code the compiler cannot see                    |
+| `host`      | The call reaches code outside the module being optimized         |
 | `hint`      | The call computes nothing, but its position is what it means     |
 | `black_box` | The optimizer may assume nothing about the operand or the result |
 
 A write through a `&mut` parameter is not listed, since the type states it.
 
-Each identifier states one fact, and none implies another. `host` says only that
-the callee is out of sight. A call that also touches linear memory lists `read`
-or `write` beside it.
+`host` says the callee may read and write any state the program can reach
+other than linear memory: globals and shared GC objects. It may also never
+return. Linear memory is stated apart, so a host call that touches it lists
+`read` or `write` beside `host`.
+
+A fact the attribute leaves out is a fact the call does not have. A call with no
+`trap` never traps. A wrong attribute miscompiles as wrong code does, so
+validation checks the form of an attribute and never second-guesses its facts.
 
 `none` and `black_box` each stand alone. `black_box` exists for
 `builtin::black_box`, which a test or a benchmark uses to keep the work it
@@ -95,17 +100,17 @@ traps.
 | ---------- | -------- | ---------------------------------------------- |
 | `outside`  | `[a, …]` | The range does not lie within array `a`        |
 | `at`       | `[p, …]` | Paired with `outside`: the range starts at `p` |
-| `len`      | `p`      | Every range in `outside` has `p` elements      |
+| `count`    | `p`      | Every range in `outside` has `p` elements      |
 | `unset`    | `a`      | The element of `a` at its `at` holds no value  |
 | `negative` | `p`      | `p` is below zero                              |
 
 `outside` and `at` are arrays of the same length, and the i-th entries pair up.
-Without `at`, every range starts at 0. Without `len`, every range has 1
+Without `at`, every range starts at 0. Without `count`, every range has 1
 element. One key per condition and arrays for the ranges let `array_copy` state
 its two ranges without repeating a key. A single range is written as an array
 too, so a key has one form.
 
-A range lies within `a` only when its start and its length are both
+A range lies within `a` only when its start and its count are both
 non-negative and they end at or before `a`'s length, as the Wasm instructions
 read them unsigned.
 
@@ -122,11 +127,11 @@ pub fn array_new<T>(len: i32) -> Array<T>;
 pub fn array_get_value<T>(arr: &Array<T>, idx: i32) -> T;
 
 #[storage(stores_args)]
-#[side_effect(trap, outside = [dst, src], at = [dst_offset, src_offset], len = len)]
+#[side_effect(trap, outside = [dst, src], at = [dst_offset, src_offset], count = len)]
 pub fn array_copy<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_offset: i32, len: i32);
 
 #[storage(holds_args, len = len)]
-#[side_effect(trap, outside = [src], len = len)]
+#[side_effect(trap, outside = [src], count = len)]
 pub fn array_clone_prefix<T>(src: &Array<T>, len: i32) -> Array<T>;
 
 #[storage(none)]
@@ -152,8 +157,10 @@ since no other place holds its facts.
 A `#[canonical(...)]` builtin is a body-less `core:builtin` declaration like any
 other and carries both attributes. Its name says what it is imported as, not
 what the call does. A canonical that hands the host a buffer to fill later, as
-`stream_read` does, lists `write` beside `host`. `realloc` is an export of the
-`"mem"` core module, so it carries what a core Wasm import carries.
+`stream_read` does, lists `write` beside `host`. So does every canonical during
+which the host may fill such a buffer: `waitable_set_wait`, `waitable_set_poll`
+and the cancels. `realloc` is an export of the `"mem"` core module, outside
+the module being optimized, so it carries what a core Wasm import carries.
 
 ### Core Wasm Imports
 
@@ -191,12 +198,12 @@ fact.
 - A repeated key, or an unknown value, identifier or key.
 - `none` or `black_box` beside anything else in `#[side_effect]`.
 - A condition key without `trap`.
-- `at` or `len` in `#[side_effect]` without `outside`, or `outside` and `at`
+- `at` or `count` without `outside`, or `outside` and `at`
   arrays of different lengths.
 - A name in a key that is not a parameter of the declaration.
 - `unset` naming an array that is not in `outside`.
 - `outside` or `unset` naming a parameter that is not an array, or `negative`
-  or `len` naming one that is not an integer.
+  or `count` naming one that is not an integer.
 - `len` in `#[storage]` beside a value other than `fresh` or `holds_args`.
 - `stores_args` on a declaration without exactly one `&mut` parameter.
 - `fresh`, `part_of_args` or `holds_args` on a declaration that returns `()`.
@@ -227,5 +234,7 @@ declaration still to be written.
 
 ## Known Gaps
 
+- A `&mut` parameter always counts as a write, so `array_get_ref_mut`, which
+  only hands out a reference, invalidates what the optimizer knew of the array.
 - A bundled core Wasm asset such as the libm cannot state better than the worst
   case, so a call to it is never hoisted, merged or deleted.
