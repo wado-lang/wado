@@ -825,6 +825,24 @@ g (float[N, 2] weights, float[N, 2] map) => (float[N, 2] Tensor)
     assert out.contains("return Tensor_;");
 }
 
+test "a renamed tensor steps past a tensor already named as the renaming would" {
+    for let [first, second] of [
+        ["map", "map_"],
+        ["map_", "map"],
+    ] as List<[String, String]> {
+        let source = `
+g (float[N, 2] ${first}, float[N, 2] ${second}) => (float[N, 2] Y)
+<>
+{
+    Y = Add(map, map_)
+}
+`;
+        let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
+
+        assert out.contains("let Y = zip(map__, map_,");
+    }
+}
+
 test "a tensor named as an axis is renamed too" {
     let source = `
 g (float[N, 2] Batch) => (float[N, 2] Y)

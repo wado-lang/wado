@@ -257,6 +257,14 @@ test "Concat joins along its axis" {
     assert folded(node("Concat", ["A", "B"], [attr("axis", ["0"])]), k) == ints([3], [-1, 4, 8]);
 }
 
+test "Concat without an axis stops the build, as it does where the run joins" {
+    let k = knowns([
+        ["A", ints([1], [-1])],
+        ["B", ints([2], [4, 8])],
+    ]);
+    assert fold(&node("Concat", ["A", "B"], []), &k, &runtime([])).unwrap_err() == "attribute axis is absent and the operator reads it";
+}
+
 test "Slice clamps an end past the axis" {
     let k = knowns([
         ["S", ints([3], [1, 4, 32])],

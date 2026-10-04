@@ -1,0 +1,54 @@
+//! An operand's axis of 1 that broadcasting renames after the other operand's:
+//! the kernel must produce the output under the name stage 0 gave it.
+
+use { Tensor, Weights, forward } from "./renamed_unit.onnxtext"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: {
+                layout: [
+                    {
+                        pattern: "X",
+                        axes: ["Unit"],
+                    },
+                    {
+                        pattern: "C",
+                        axes: ["One"],
+                    },
+                    {
+                        pattern: "A",
+                        axes: ["Batch", "In"],
+                    },
+                    {
+                        pattern: "B",
+                        axes: ["In", "Out"],
+                    },
+                    {
+                        pattern: "Bias",
+                        axes: ["Row", "Out"],
+                    },
+                ],
+            },
+        },
+    };
+
+test "a folded scalar and a Gemm bias each name the axis of 1 they meet" {
+    let out = forward(
+        &Tensor {
+            data: [1.0],
+            extents: [1],
+        },
+        &Tensor {
+            data: [1.0, 2.0, 3.0],
+            extents: [1, 3],
+        },
+        &Tensor {
+            data: [1.0, 0.0, 0.0, 1.0, 1.0, 1.0],
+            extents: [3, 2],
+        },
+        &Weights::embedded(),
+    );
+
+    assert out.Y.data == [3.0] as List<f32>;
+    assert out.G.data == [4.5, 5.25] as List<f32>;
+}
