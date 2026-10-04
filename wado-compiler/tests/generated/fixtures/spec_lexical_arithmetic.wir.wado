@@ -39,7 +39,7 @@ type "functype//spec_lexical_arithmetic.wado/$cm_export__$test_5_float_division_
 
 type "functype//spec_lexical_arithmetic.wado/$test_5_float_division_by_zero_follows_ieee_754$cold0" = fn(bool);  // TypeId(16)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(17)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(17)
 
 type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(18)
 
@@ -49,15 +49,13 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(21)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(22)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(23)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(24)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(25)
-
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(26)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(25)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -72,14 +70,14 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
-global global:spec_lexical_arithmetic.wado::$const_obj_69: ref Array<u8> = array.new_fixed<u8>(10);
-global global:spec_lexical_arithmetic.wado::$const_obj_70: ref Array<u8> = array.new_fixed<u8>(40, 48, 46, 48, 32, 47, 32, 122, 101, 114, 111, 41, 46, 105, 115, 95, 110, 97, 110, 40, 41, 58, 32);
-global global:spec_lexical_arithmetic.wado::$const_obj_71: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 40, 48, 46, 48, 32, 47, 32, 122, 101, 114, 111, 41, 46, 105, 115, 95, 110, 97, 110, 40, 41, 10);
-global global:spec_lexical_arithmetic.wado::$const_obj_72: ref Array<u8> = array.new_fixed<u8>(58);
-global global:spec_lexical_arithmetic.wado::$const_obj_73: ref Array<u8> = array.new_fixed<u8>(115, 112, 101, 99, 95, 108, 101, 120, 105, 99, 97, 108, 95, 97, 114, 105, 116, 104, 109, 101, 116, 105, 99, 46, 119, 97, 100, 111);
-global global:spec_lexical_arithmetic.wado::$const_obj_74: ref Array<u8> = array.new_fixed<u8>(32, 97, 116, 32);
-global global:spec_lexical_arithmetic.wado::$const_obj_75: ref Array<u8> = array.new_fixed<u8>(36, 116, 101, 115, 116, 95, 53, 95, 102, 108, 111, 97, 116, 95, 100, 105, 118, 105, 115, 105, 111, 110, 95, 98, 121, 95, 122, 101, 114, 111, 95, 102, 111, 108, 108, 111, 119, 115, 95, 105, 101, 101, 101, 95, 55, 53, 52);
-global global:spec_lexical_arithmetic.wado::$const_obj_76: ref Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
+global global:spec_lexical_arithmetic.wado::$const_obj_78: ref Array<u8> = array.new_fixed<u8>(10);
+global global:spec_lexical_arithmetic.wado::$const_obj_79: ref Array<u8> = array.new_fixed<u8>(40, 48, 46, 48, 32, 47, 32, 122, 101, 114, 111, 41, 46, 105, 115, 95, 110, 97, 110, 40, 41, 58, 32);
+global global:spec_lexical_arithmetic.wado::$const_obj_80: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 40, 48, 46, 48, 32, 47, 32, 122, 101, 114, 111, 41, 46, 105, 115, 95, 110, 97, 110, 40, 41, 10);
+global global:spec_lexical_arithmetic.wado::$const_obj_81: ref Array<u8> = array.new_fixed<u8>(58);
+global global:spec_lexical_arithmetic.wado::$const_obj_82: ref Array<u8> = array.new_fixed<u8>(115, 112, 101, 99, 95, 108, 101, 120, 105, 99, 97, 108, 95, 97, 114, 105, 116, 104, 109, 101, 116, 105, 99, 46, 119, 97, 100, 111);
+global global:spec_lexical_arithmetic.wado::$const_obj_83: ref Array<u8> = array.new_fixed<u8>(32, 97, 116, 32);
+global global:spec_lexical_arithmetic.wado::$const_obj_84: ref Array<u8> = array.new_fixed<u8>(36, 116, 101, 115, 116, 95, 53, 95, 102, 108, 111, 97, 116, 95, 100, 105, 118, 105, 115, 105, 111, 110, 95, 98, 121, 95, 122, 101, 114, 111, 95, 102, 111, 108, 108, 111, 119, 115, 95, 105, 101, 101, 101, 95, 55, 53, 52);
+global global:spec_lexical_arithmetic.wado::$const_obj_85: ref Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
 
 fn "spec_lexical_arithmetic.wado/$cm_export__$test_0_integer_arithmetic_wraps"() {
     "wasi/task-return"(0);
@@ -120,8 +118,8 @@ fn "spec_lexical_arithmetic.wado/$test_5_float_division_by_zero_follows_ieee_754
     let $local_7: ref "core:prelude/string.wado//String";
     let new_used_15: i32;
     let start_16: i32;
-    let text: ref "core:prelude/string.wado//String";
-    let $sroa_$f_buf_299: ref "core:prelude/string.wado//String";
+    let self_50: ref "core:prelude/string.wado//String";
+    let $sroa_$f_buf_307: ref "core:prelude/string.wado//String";
     $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(147), used: 0 };
     if @unlikely(local.tee new_used_15(0 + 100) > builtin::array_len($local_7.repr)) {
         cold_path;
@@ -129,42 +127,42 @@ fn "spec_lexical_arithmetic.wado/$test_5_float_division_by_zero_follows_ieee_754
     }
     start_16 = $local_7.used;
     $local_7.used = new_used_15;
-    builtin::array_copy<u8>(local.tee $load_2($local_7.repr), start_16, global:spec_lexical_arithmetic.wado::$const_obj_76, 0, 20);
+    builtin::array_copy<u8>(local.tee $load_2($local_7.repr), start_16, global:spec_lexical_arithmetic.wado::$const_obj_85, 0, 20);
     new_used_15 = start_16 + 20;
-    builtin::array_copy<u8>($load_2, new_used_15, global:spec_lexical_arithmetic.wado::$const_obj_75, 0, 47);
+    builtin::array_copy<u8>($load_2, new_used_15, global:spec_lexical_arithmetic.wado::$const_obj_84, 0, 47);
     new_used_15 = start_16 + 67;
-    builtin::array_copy<u8>($load_2, new_used_15, global:spec_lexical_arithmetic.wado::$const_obj_74, 0, 4);
+    builtin::array_copy<u8>($load_2, new_used_15, global:spec_lexical_arithmetic.wado::$const_obj_83, 0, 4);
     new_used_15 = start_16 + 71;
-    builtin::array_copy<u8>($load_2, new_used_15, global:spec_lexical_arithmetic.wado::$const_obj_73, 0, 28);
+    builtin::array_copy<u8>($load_2, new_used_15, global:spec_lexical_arithmetic.wado::$const_obj_82, 0, 28);
     start_16 = start_16 + 99;
-    builtin::array_copy<u8>($load_2, start_16, global:spec_lexical_arithmetic.wado::$const_obj_72, 0, 1);
-    $sroa_$f_buf_299 = $local_7;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(39, $sroa_$f_buf_299);
+    builtin::array_copy<u8>($load_2, start_16, global:spec_lexical_arithmetic.wado::$const_obj_81, 0, 1);
+    start_16 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $sroa_$f_buf_307($local_7), 0, 2);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee self_50($sroa_$f_buf_307).repr, start_16, 39_i64, 2);
     if @unlikely(local.tee start_16($local_7.used + 57) > builtin::array_len($local_7.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7, start_16);
     }
     new_used_15 = $local_7.used;
     $local_7.used = start_16;
-    builtin::array_copy<u8>(local.tee $load_2($local_7.repr), new_used_15, global:spec_lexical_arithmetic.wado::$const_obj_71, 0, 34);
+    builtin::array_copy<u8>(local.tee $load_2($local_7.repr), new_used_15, global:spec_lexical_arithmetic.wado::$const_obj_80, 0, 34);
     new_used_15 = new_used_15 + 34;
-    builtin::array_copy<u8>($load_2, new_used_15, global:spec_lexical_arithmetic.wado::$const_obj_70, 0, 23);
-    $sroa_$f_buf_299 = $local_7;
-    text = (if $v0 -> ref "core:prelude/string.wado//String" {
+    builtin::array_copy<u8>($load_2, new_used_15, global:spec_lexical_arithmetic.wado::$const_obj_79, 0, 23);
+    $sroa_$f_buf_307 = $local_7;
+    self_50 = (if $v0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
     });
     $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_0: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-            break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee $v0(text.used) == 0;
-            if @unlikely(local.tee new_used_15($sroa_$f_buf_299.used + $v0) > builtin::array_len($sroa_$f_buf_299.repr)) {
+            break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee $v0(self_50.used) == 0;
+            if @unlikely(local.tee new_used_15($sroa_$f_buf_307.used + $v0) > builtin::array_len($sroa_$f_buf_307.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_299, new_used_15);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_307, new_used_15);
             }
-            start_16 = $sroa_$f_buf_299.used;
-            $sroa_$f_buf_299.used = new_used_15;
-            builtin::array_copy<u8>($sroa_$f_buf_299.repr, start_16, text.repr, 0, $v0);
+            start_16 = $sroa_$f_buf_307.used;
+            $sroa_$f_buf_307.used = new_used_15;
+            builtin::array_copy<u8>($sroa_$f_buf_307.repr, start_16, self_50.repr, 0, $v0);
         };
         break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_0;
     };
@@ -174,70 +172,31 @@ fn "spec_lexical_arithmetic.wado/$test_5_float_division_by_zero_follows_ieee_754
     }
     start_16 = $local_7.used;
     $local_7.used = $v0;
-    builtin::array_copy<u8>($local_7.repr, start_16, global:spec_lexical_arithmetic.wado::$const_obj_69, 0, 1);
+    builtin::array_copy<u8>($local_7.repr, start_16, global:spec_lexical_arithmetic.wado::$const_obj_78, 0, 1);
     "core:rt/panic"($local_7.repr, $local_7.used);
     unreachable;
 }
 
-fn "core:prelude/primitive.wado/count_digits_u64"(val) {
-    if val <u 100000_i64 {
-        if val <u 100_i64 {
-            if val <u 10_i64 {
-                return 1;
-            }
-            return 2;
-        }
-        if val <u 1000_i64 {
-            return 3;
-        }
-        if val <u 10000_i64 {
-            return 4;
-        }
-        return 5;
+fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
+    let q: u64;
+    let pair: i32;
+    let tens: i32;
+    digit_count = offset + digit_count;
+    b6: block {
+        l7: loop {
+            break_if b6 (digit_count - offset) < 2;
+            q = val /u 100_i64;
+            tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
+            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
+            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            digit_count = digit_count - 2;
+            val = q;
+            continue l7;
+        };
+    };
+    if digit_count > offset {
+        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
     }
-    if val <u 10000000000_i64 {
-        if val <u 10000000_i64 {
-            if val <u 1000000_i64 {
-                return 6;
-            }
-            return 7;
-        }
-        if val <u 100000000_i64 {
-            return 8;
-        }
-        if val <u 1000000000_i64 {
-            return 9;
-        }
-        return 10;
-    }
-    if val <u 1000000000000000_i64 {
-        if val <u 1000000000000_i64 {
-            if val <u 100000000000_i64 {
-                return 11;
-            }
-            return 12;
-        }
-        if val <u 10000000000000_i64 {
-            return 13;
-        }
-        if val <u 100000000000000_i64 {
-            return 14;
-        }
-        return 15;
-    }
-    if val <u 100000000000000000_i64 {
-        if val <u 10000000000000000_i64 {
-            return 16;
-        }
-        return 17;
-    }
-    if val <u 1000000000000000000_i64 {
-        return 18;
-    }
-    if val <u -8446744073709551616_i64 {
-        return 19;
-    }
-    return 20;
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -270,17 +229,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b27: block {
-        l28: loop {
-            break_if b27 i >= $mv$data$end;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b11: block {
+        l12: loop {
+            break_if b11 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l28;
+            continue l12;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l30: loop {
+        l14: loop {
             ptr_15 = ptr_13 + i;
             count_16 = $mv$data$end - i;
             if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
@@ -310,7 +269,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return count_16;
             }
-            continue l30;
+            continue l14;
         };
     };
 }
@@ -346,29 +305,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     start_26 = self.used;
     self.used = digit_count;
     return start_26;
-}
-
-fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
-    let is_negative: bool;
-    let x: i64;
-    let arr: ref Array<u8>;
-    let i: i32;
-    is_negative = self < 0;
-    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(f, is_negative, self);
-    arr = f.repr;
-    is_negative = is_negative + self;
-    i = 0;
-    b39: block {
-        l40: loop {
-            break_if b39 i >= self;
-            is_negative = is_negative - 1;
-            builtin::array_set_u8(arr, is_negative, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
-            x = x /u 10_i64;
-            i = i + 1;
-            continue l40;
-        };
-    };
 }
 
 export fn "spec_lexical_arithmetic.wado/$cm_export__$test_0_integer_arithmetic_wraps" as "$test_0_integer_arithmetic_wraps"

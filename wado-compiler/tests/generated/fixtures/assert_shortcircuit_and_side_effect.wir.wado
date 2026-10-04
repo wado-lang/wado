@@ -29,7 +29,7 @@ type "functype//assert_shortcircuit_and_side_effect.wado/$cm_export__run" = fn()
 
 type "functype//assert_shortcircuit_and_side_effect.wado/run$cold0" = fn();  // TypeId(11)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(12)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(12)
 
 type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(13)
 
@@ -39,17 +39,13 @@ type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(16)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(17)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(18)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(19)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(21)
-
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(22)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(20)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -64,20 +60,20 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
-global global:assert_shortcircuit_and_side_effect.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(10);
-global global:assert_shortcircuit_and_side_effect.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(98, 111, 111, 109, 40, 41, 32, 61, 61, 32, 50, 58, 32);
-global global:assert_shortcircuit_and_side_effect.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(98, 111, 111, 109, 40, 41, 58, 32);
-global global:assert_shortcircuit_and_side_effect.wado::$const_obj_7: ref Array<u8> = array.new_fixed<u8>(102, 97, 108, 115, 101);
-global global:assert_shortcircuit_and_side_effect.wado::$const_obj_8: ref Array<u8> = array.new_fixed<u8>(111, 107, 58, 32);
-global global:assert_shortcircuit_and_side_effect.wado::$const_obj_9: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 111, 107, 32, 38, 38, 32, 98, 111, 111, 109, 40, 41, 32, 61, 61, 32, 50, 10);
-global global:assert_shortcircuit_and_side_effect.wado::$const_obj_10: ref Array<u8> = array.new_fixed<u8>(103, 117, 97, 114, 100, 101, 100);
-global global:assert_shortcircuit_and_side_effect.wado::$const_obj_11: ref Array<u8> = array.new_fixed<u8>(58, 32);
-global global:assert_shortcircuit_and_side_effect.wado::$const_obj_12: ref Array<u8> = array.new_fixed<u8>(58);
-global global:assert_shortcircuit_and_side_effect.wado::$const_obj_13: ref Array<u8> = array.new_fixed<u8>(97, 115, 115, 101, 114, 116, 95, 115, 104, 111, 114, 116, 99, 105, 114, 99, 117, 105, 116, 95, 97, 110, 100, 95, 115, 105, 100, 101, 95, 101, 102, 102, 101, 99, 116, 46, 119, 97, 100, 111);
-global global:assert_shortcircuit_and_side_effect.wado::$const_obj_14: ref Array<u8> = array.new_fixed<u8>(32, 97, 116, 32);
-global global:assert_shortcircuit_and_side_effect.wado::$const_obj_15: ref Array<u8> = array.new_fixed<u8>(114, 117, 110);
-global global:assert_shortcircuit_and_side_effect.wado::$const_obj_16: ref Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
-global global:assert_shortcircuit_and_side_effect.wado::$const_obj_17: ref Array<u8> = array.new_fixed<u8>(60, 110, 111, 116, 32, 101, 118, 97, 108, 117, 97, 116, 101, 100, 62);
+global global:assert_shortcircuit_and_side_effect.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(10);
+global global:assert_shortcircuit_and_side_effect.wado::$const_obj_6: ref Array<u8> = array.new_fixed<u8>(98, 111, 111, 109, 40, 41, 32, 61, 61, 32, 50, 58, 32);
+global global:assert_shortcircuit_and_side_effect.wado::$const_obj_8: ref Array<u8> = array.new_fixed<u8>(98, 111, 111, 109, 40, 41, 58, 32);
+global global:assert_shortcircuit_and_side_effect.wado::$const_obj_10: ref Array<u8> = array.new_fixed<u8>(102, 97, 108, 115, 101);
+global global:assert_shortcircuit_and_side_effect.wado::$const_obj_11: ref Array<u8> = array.new_fixed<u8>(111, 107, 58, 32);
+global global:assert_shortcircuit_and_side_effect.wado::$const_obj_12: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 111, 107, 32, 38, 38, 32, 98, 111, 111, 109, 40, 41, 32, 61, 61, 32, 50, 10);
+global global:assert_shortcircuit_and_side_effect.wado::$const_obj_13: ref Array<u8> = array.new_fixed<u8>(103, 117, 97, 114, 100, 101, 100);
+global global:assert_shortcircuit_and_side_effect.wado::$const_obj_14: ref Array<u8> = array.new_fixed<u8>(58, 32);
+global global:assert_shortcircuit_and_side_effect.wado::$const_obj_15: ref Array<u8> = array.new_fixed<u8>(58);
+global global:assert_shortcircuit_and_side_effect.wado::$const_obj_16: ref Array<u8> = array.new_fixed<u8>(97, 115, 115, 101, 114, 116, 95, 115, 104, 111, 114, 116, 99, 105, 114, 99, 117, 105, 116, 95, 97, 110, 100, 95, 115, 105, 100, 101, 95, 101, 102, 102, 101, 99, 116, 46, 119, 97, 100, 111);
+global global:assert_shortcircuit_and_side_effect.wado::$const_obj_17: ref Array<u8> = array.new_fixed<u8>(32, 97, 116, 32);
+global global:assert_shortcircuit_and_side_effect.wado::$const_obj_18: ref Array<u8> = array.new_fixed<u8>(114, 117, 110);
+global global:assert_shortcircuit_and_side_effect.wado::$const_obj_19: ref Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
+global global:assert_shortcircuit_and_side_effect.wado::$const_obj_20: ref Array<u8> = array.new_fixed<u8>(60, 110, 111, 116, 32, 101, 118, 97, 108, 117, 97, 116, 101, 100, 62);
 
 fn "assert_shortcircuit_and_side_effect.wado/$cm_export__run"() {
     cold_path;
@@ -89,96 +85,60 @@ fn "assert_shortcircuit_and_side_effect.wado/$cm_export__run"() {
 fn "assert_shortcircuit_and_side_effect.wado/run$cold0"() with Stdout {
     let $load_2: ref Array<u8>;
     let $local_12: ref "core:prelude/string.wado//String";
-    let new_used_37: i32;
-    let start_38: i32;
-    let $sroa_$f_buf_195: ref "core:prelude/string.wado//String";
-    "core:rt/panic"($local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(197), used: 0 }; if @unlikely(local.tee new_used_37(0 + 68) > builtin::array_len($local_12.repr)) {
+    let new_used_45: i32;
+    let start_46: i32;
+    let $sroa_$f_buf_211: ref "core:prelude/string.wado//String";
+    "core:rt/panic"($local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(197), used: 0 }; if @unlikely(local.tee new_used_45(0 + 68) > builtin::array_len($local_12.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_12, new_used_37);
-    }; start_38 = $local_12.used; $local_12.used = new_used_37; builtin::array_copy<u8>(local.tee $load_2($local_12.repr), start_38, global:assert_shortcircuit_and_side_effect.wado::$const_obj_16, 0, 20); new_used_37 = start_38 + 20; builtin::array_copy<u8>($load_2, new_used_37, global:assert_shortcircuit_and_side_effect.wado::$const_obj_15, 0, 3); new_used_37 = start_38 + 23; builtin::array_copy<u8>($load_2, new_used_37, global:assert_shortcircuit_and_side_effect.wado::$const_obj_14, 0, 4); new_used_37 = start_38 + 27; builtin::array_copy<u8>($load_2, new_used_37, global:assert_shortcircuit_and_side_effect.wado::$const_obj_13, 0, 40); start_38 = start_38 + 67; builtin::array_copy<u8>($load_2, start_38, global:assert_shortcircuit_and_side_effect.wado::$const_obj_12, 0, 1); $sroa_$f_buf_195 = $local_12; "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(13, $sroa_$f_buf_195); if @unlikely(local.tee start_38($local_12.used + 43) > builtin::array_len($local_12.repr)) {
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_12, new_used_45);
+    }; start_46 = $local_12.used; $local_12.used = new_used_45; builtin::array_copy<u8>(local.tee $load_2($local_12.repr), start_46, global:assert_shortcircuit_and_side_effect.wado::$const_obj_19, 0, 20); new_used_45 = start_46 + 20; builtin::array_copy<u8>($load_2, new_used_45, global:assert_shortcircuit_and_side_effect.wado::$const_obj_18, 0, 3); new_used_45 = start_46 + 23; builtin::array_copy<u8>($load_2, new_used_45, global:assert_shortcircuit_and_side_effect.wado::$const_obj_17, 0, 4); new_used_45 = start_46 + 27; builtin::array_copy<u8>($load_2, new_used_45, global:assert_shortcircuit_and_side_effect.wado::$const_obj_16, 0, 40); start_46 = start_46 + 67; builtin::array_copy<u8>($load_2, start_46, global:assert_shortcircuit_and_side_effect.wado::$const_obj_15, 0, 1); if @unlikely(local.tee start_46(local.tee $sroa_$f_buf_211($local_12).used + 2) > builtin::array_len($sroa_$f_buf_211.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_12, start_38);
-    }; new_used_37 = $local_12.used; $local_12.used = start_38; builtin::array_copy<u8>(local.tee $load_2($local_12.repr), new_used_37, global:assert_shortcircuit_and_side_effect.wado::$const_obj_11, 0, 2); start_38 = new_used_37 + 2; builtin::array_copy<u8>($load_2, start_38, global:assert_shortcircuit_and_side_effect.wado::$const_obj_10, 0, 7); start_38 = new_used_37 + 9; builtin::array_copy<u8>($load_2, start_38, global:assert_shortcircuit_and_side_effect.wado::$const_obj_9, 0, 30); new_used_37 = new_used_37 + 39; builtin::array_copy<u8>($load_2, new_used_37, global:assert_shortcircuit_and_side_effect.wado::$const_obj_8, 0, 4); $sroa_$f_buf_195 = $local_12; $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_0: block {
-        if @unlikely(local.tee new_used_37($sroa_$f_buf_195.used + 5) > builtin::array_len($sroa_$f_buf_195.repr)) {
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_211, start_46);
+    }; new_used_45 = $sroa_$f_buf_211.used; $sroa_$f_buf_211.used = start_46; "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_211.repr, new_used_45, 13_i64, 2); if @unlikely(local.tee new_used_45($local_12.used + 43) > builtin::array_len($local_12.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_12, new_used_45);
+    }; start_46 = $local_12.used; $local_12.used = new_used_45; builtin::array_copy<u8>(local.tee $load_2($local_12.repr), start_46, global:assert_shortcircuit_and_side_effect.wado::$const_obj_14, 0, 2); new_used_45 = start_46 + 2; builtin::array_copy<u8>($load_2, new_used_45, global:assert_shortcircuit_and_side_effect.wado::$const_obj_13, 0, 7); new_used_45 = start_46 + 9; builtin::array_copy<u8>($load_2, new_used_45, global:assert_shortcircuit_and_side_effect.wado::$const_obj_12, 0, 30); start_46 = start_46 + 39; builtin::array_copy<u8>($load_2, start_46, global:assert_shortcircuit_and_side_effect.wado::$const_obj_11, 0, 4); $sroa_$f_buf_211 = $local_12; $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_1: block {
+        if @unlikely(local.tee start_46($sroa_$f_buf_211.used + 5) > builtin::array_len($sroa_$f_buf_211.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_195, new_used_37);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_211, start_46);
         }
-        start_38 = $sroa_$f_buf_195.used;
-        $sroa_$f_buf_195.used = new_used_37;
-        builtin::array_copy<u8>($sroa_$f_buf_195.repr, start_38, global:assert_shortcircuit_and_side_effect.wado::$const_obj_7, 0, 5);
-        break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_0;
-    }; if @unlikely(local.tee start_38($local_12.used + 9) > builtin::array_len($local_12.repr)) {
+        new_used_45 = $sroa_$f_buf_211.used;
+        $sroa_$f_buf_211.used = start_46;
+        builtin::array_copy<u8>($sroa_$f_buf_211.repr, new_used_45, global:assert_shortcircuit_and_side_effect.wado::$const_obj_10, 0, 5);
+        break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_1;
+    }; if @unlikely(local.tee new_used_45($local_12.used + 9) > builtin::array_len($local_12.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_12, start_38);
-    }; new_used_37 = $local_12.used; $local_12.used = start_38; builtin::array_copy<u8>(local.tee $load_2($local_12.repr), new_used_37, global:assert_shortcircuit_and_side_effect.wado::$const_obj_2, 0, 1); new_used_37 = new_used_37 + 1; builtin::array_copy<u8>($load_2, new_used_37, global:assert_shortcircuit_and_side_effect.wado::$const_obj_5, 0, 8); if @unlikely(local.tee new_used_37($local_12.used + 29) > builtin::array_len($load_2)) {
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_12, new_used_45);
+    }; start_46 = $local_12.used; $local_12.used = new_used_45; builtin::array_copy<u8>(local.tee $load_2($local_12.repr), start_46, global:assert_shortcircuit_and_side_effect.wado::$const_obj_5, 0, 1); start_46 = start_46 + 1; builtin::array_copy<u8>($load_2, start_46, global:assert_shortcircuit_and_side_effect.wado::$const_obj_8, 0, 8); if @unlikely(local.tee start_46($local_12.used + 29) > builtin::array_len($load_2)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_12, new_used_37);
-    }; start_38 = $local_12.used; $local_12.used = new_used_37; builtin::array_copy<u8>(local.tee $load_2($local_12.repr), start_38, global:assert_shortcircuit_and_side_effect.wado::$const_obj_17, 0, 15); new_used_37 = start_38 + 15; builtin::array_copy<u8>($load_2, new_used_37, global:assert_shortcircuit_and_side_effect.wado::$const_obj_2, 0, 1); start_38 = start_38 + 16; builtin::array_copy<u8>($load_2, start_38, global:assert_shortcircuit_and_side_effect.wado::$const_obj_3, 0, 13); if @unlikely(local.tee start_38($local_12.used + 16) > builtin::array_len($load_2)) {
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_12, start_46);
+    }; new_used_45 = $local_12.used; $local_12.used = start_46; builtin::array_copy<u8>(local.tee $load_2($local_12.repr), new_used_45, global:assert_shortcircuit_and_side_effect.wado::$const_obj_20, 0, 15); start_46 = new_used_45 + 15; builtin::array_copy<u8>($load_2, start_46, global:assert_shortcircuit_and_side_effect.wado::$const_obj_5, 0, 1); new_used_45 = new_used_45 + 16; builtin::array_copy<u8>($load_2, new_used_45, global:assert_shortcircuit_and_side_effect.wado::$const_obj_6, 0, 13); if @unlikely(local.tee new_used_45($local_12.used + 16) > builtin::array_len($load_2)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_12, start_38);
-    }; new_used_37 = $local_12.used; $local_12.used = start_38; builtin::array_copy<u8>(local.tee $load_2($local_12.repr), new_used_37, global:assert_shortcircuit_and_side_effect.wado::$const_obj_17, 0, 15); new_used_37 = new_used_37 + 15; builtin::array_copy<u8>($load_2, new_used_37, global:assert_shortcircuit_and_side_effect.wado::$const_obj_2, 0, 1); $local_12);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_12, new_used_45);
+    }; start_46 = $local_12.used; $local_12.used = new_used_45; builtin::array_copy<u8>(local.tee $load_2($local_12.repr), start_46, global:assert_shortcircuit_and_side_effect.wado::$const_obj_20, 0, 15); start_46 = start_46 + 15; builtin::array_copy<u8>($load_2, start_46, global:assert_shortcircuit_and_side_effect.wado::$const_obj_5, 0, 1); $local_12);
     unreachable;
 }
 
-fn "core:prelude/primitive.wado/count_digits_u64"(val) {
-    if val <u 100000_i64 {
-        if val <u 100_i64 {
-            if val <u 10_i64 {
-                return 1;
-            }
-            return 2;
-        }
-        if val <u 1000_i64 {
-            return 3;
-        }
-        if val <u 10000_i64 {
-            return 4;
-        }
-        return 5;
+fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
+    let q: u64;
+    let pair: i32;
+    let tens: i32;
+    digit_count = offset + digit_count;
+    b7: block {
+        l8: loop {
+            break_if b7 (digit_count - offset) < 2;
+            q = val /u 100_i64;
+            tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
+            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
+            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            digit_count = digit_count - 2;
+            val = q;
+            continue l8;
+        };
+    };
+    if digit_count > offset {
+        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
     }
-    if val <u 10000000000_i64 {
-        if val <u 10000000_i64 {
-            if val <u 1000000_i64 {
-                return 6;
-            }
-            return 7;
-        }
-        if val <u 100000000_i64 {
-            return 8;
-        }
-        if val <u 1000000000_i64 {
-            return 9;
-        }
-        return 10;
-    }
-    if val <u 1000000000000000_i64 {
-        if val <u 1000000000000_i64 {
-            if val <u 100000000000_i64 {
-                return 11;
-            }
-            return 12;
-        }
-        if val <u 10000000000000_i64 {
-            return 13;
-        }
-        if val <u 100000000000000_i64 {
-            return 14;
-        }
-        return 15;
-    }
-    if val <u 100000000000000000_i64 {
-        if val <u 10000000000000000_i64 {
-            return 16;
-        }
-        return 17;
-    }
-    if val <u 1000000000000000000_i64 {
-        return 18;
-    }
-    if val <u -8446744073709551616_i64 {
-        return 19;
-    }
-    return 20;
 }
 
 fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
@@ -215,17 +175,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b27: block {
-        l28: loop {
-            break_if b27 i >= $mv$data$end;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b12: block {
+        l13: loop {
+            break_if b12 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l28;
+            continue l13;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l30: loop {
+        l15: loop {
             ptr_15 = ptr_13 + i;
             count_16 = $mv$data$end - i;
             if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
@@ -255,7 +215,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return count_16;
             }
-            continue l30;
+            continue l15;
         };
     };
 }
@@ -270,50 +230,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     }
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8))), 0, $load_0, 0, self.used);
     self.repr = new_repr;
-}
-
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
-    let start_26: i32;
-    if is_negative {
-        if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
-        }
-        start_26 = self.used;
-        self.used = is_negative;
-        builtin::array_set_u8(self.repr, start_26, 45);
-    } else {
-    }
-    if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
-    }
-    start_26 = self.used;
-    self.used = digit_count;
-    return start_26;
-}
-
-fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
-    let is_negative: bool;
-    let x: i64;
-    let arr: ref Array<u8>;
-    let i: i32;
-    is_negative = self < 0;
-    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(f, is_negative, self);
-    arr = f.repr;
-    is_negative = is_negative + self;
-    i = 0;
-    b39: block {
-        l40: loop {
-            break_if b39 i >= self;
-            is_negative = is_negative - 1;
-            builtin::array_set_u8(arr, is_negative, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
-            x = x /u 10_i64;
-            i = i + 1;
-            continue l40;
-        };
-    };
 }
 
 export fn "assert_shortcircuit_and_side_effect.wado/$cm_export__run" as "run"

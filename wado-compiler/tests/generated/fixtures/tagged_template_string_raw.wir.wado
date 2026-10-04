@@ -88,9 +88,9 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:tagged_template_string_raw.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 32, 104, 111, 108, 101, 115, 92, 116), used: 10 };
-global global:core:prelude/string.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(46, 116, 120, 116, 92, 110);
-global global:core:prelude/string.wado::$const_obj_6: ref Array<u8> = array.new_fixed<u8>(100, 105, 114, 92, 116);
+global global:tagged_template_string_raw.wado::$const_obj_5: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 32, 104, 111, 108, 101, 115, 92, 116), used: 10 };
+global global:core:prelude/string.wado::$const_obj_8: ref Array<u8> = array.new_fixed<u8>(46, 116, 120, 116, 92, 110);
+global global:core:prelude/string.wado::$const_obj_9: ref Array<u8> = array.new_fixed<u8>(100, 105, 114, 92, 116);
 
 fn "tagged_template_string_raw.wado/run"() with Stdout {
     let name: ref "core:prelude/string.wado//String";
@@ -106,7 +106,7 @@ fn "tagged_template_string_raw.wado/run"() with Stdout {
     rx_17 = builtin::i32_wrap_i64(local.tee packed_16("wasi/stream-new"()));
     tx_18 = builtin::i32_wrap_i64(packed_16 >> 32_i64);
     rx_17 = "tagged_template_string_raw.wado/$cm_binding__Stdout_write_via_stream"(rx_17);
-    name = global:tagged_template_string_raw.wado::$const_obj_2;
+    name = global:tagged_template_string_raw.wado::$const_obj_5;
     "core:rt/write_string_to_stream"(tx_18, name.repr, name.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_17);
 }
@@ -256,7 +256,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::raw<tagged_templat
     }
     start_19 = out_1.used;
     out_1.used = 5;
-    builtin::array_copy<u8>(out_1.repr, start_19, global:core:prelude/string.wado::$const_obj_6, 0, 5);
+    builtin::array_copy<u8>(out_1.repr, start_19, global:core:prelude/string.wado::$const_obj_9, 0, 5);
     f_23 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_1 };
     t_25 = t.h0;
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__0: block {
@@ -269,7 +269,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::raw<tagged_templat
     }
     start_43 = out_1.used;
     out_1.used = start_19;
-    builtin::array_copy<u8>(out_1.repr, start_43, global:core:prelude/string.wado::$const_obj_5, 0, 6);
+    builtin::array_copy<u8>(out_1.repr, start_43, global:core:prelude/string.wado::$const_obj_8, 0, 6);
     return out_1;
 }
 

@@ -31,17 +31,17 @@ type "functype//if_chain_to_match_hoisted_let.wado/$cm_binding__Stdout_write_via
 
 type "functype//if_chain_to_match_hoisted_let.wado/$cm_export__run" = fn();  // TypeId(12)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(13)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(13)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(14)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(14)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(15)
+type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(15)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(16)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(16)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(17)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(17)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(18)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(18)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(19)
 
@@ -66,12 +66,12 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "if_chain_to_match_hoisted_let.wado/run"() with Stdout {
     let $local_0: ref "core:prelude/string.wado//String";
-    let packed_19: i64;
-    let x_88: i32;
-    let out_89: i32;
+    let x_25: i64;
+    let x_120: i32;
+    let out_121: i32;
     $local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    x_88 = black_box(0);
-    out_89 = -1;
+    x_120 = black_box(0);
+    out_121 = -1;
     b0: block {
         b1: block {
             b2: block {
@@ -86,54 +86,57 @@ fn "if_chain_to_match_hoisted_let.wado/run"() with Stdout {
                                                 b11: block {
                                                     b12: block {
                                                         b13: block {
-                                                            br_table x_88 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] default=0;
+                                                            br_table x_120 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] default=0;
                                                         };
                                                         break b0;
                                                     };
-                                                    out_89 = 0;
+                                                    out_121 = 0;
                                                     break b0;
                                                 };
-                                                out_89 = 10;
+                                                out_121 = 10;
                                                 break b0;
                                             };
-                                            out_89 = 20;
+                                            out_121 = 20;
                                             break b0;
                                         };
-                                        out_89 = 30;
+                                        out_121 = 30;
                                         break b0;
                                     };
-                                    out_89 = 40;
+                                    out_121 = 40;
                                     break b0;
                                 };
-                                out_89 = 50;
+                                out_121 = 50;
                                 break b0;
                             };
-                            out_89 = 60;
+                            out_121 = 60;
                             break b0;
                         };
-                        out_89 = 70;
+                        out_121 = 70;
                         break b0;
                     };
-                    out_89 = 80;
+                    out_121 = 80;
                     break b0;
                 };
-                out_89 = 90;
+                out_121 = 90;
                 break b0;
             };
-            out_89 = 100;
+            out_121 = 100;
             break b0;
         };
-        out_89 = 110;
+        out_121 = 110;
     };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(out_89, $local_0);
-    out_89 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
-    x_88 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
-    out_89 = "if_chain_to_match_hoisted_let.wado/$cm_binding__Stdout_write_via_stream"(out_89);
-    "core:rt/write_string_to_stream"(x_88, $local_0.repr, $local_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(out_89);
+    x_120 = out_121 < 0;
+    out_121 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_25(x_25 = builtin::i64_extend_i32_s(out_121); select i64(x_25 < 0_i64, 0_i64 - x_25, x_25)));
+    x_120 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_0, x_120, out_121);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, x_120, x_25, out_121);
+    out_121 = builtin::i32_wrap_i64(local.tee x_25("wasi/stream-new"()));
+    x_120 = builtin::i32_wrap_i64(x_25 >> 32_i64);
+    out_121 = "if_chain_to_match_hoisted_let.wado/$cm_binding__Stdout_write_via_stream"(out_121);
+    "core:rt/write_string_to_stream"(x_120, $local_0.repr, $local_0.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(out_121);
     $local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    out_89 = black_box(7);
-    x_88 = -1;
+    out_121 = black_box(7);
+    x_120 = -1;
     b14: block {
         b15: block {
             b16: block {
@@ -148,54 +151,57 @@ fn "if_chain_to_match_hoisted_let.wado/run"() with Stdout {
                                                 b25: block {
                                                     b26: block {
                                                         b27: block {
-                                                            br_table out_89 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] default=0;
+                                                            br_table out_121 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] default=0;
                                                         };
                                                         break b14;
                                                     };
-                                                    x_88 = 0;
+                                                    x_120 = 0;
                                                     break b14;
                                                 };
-                                                x_88 = 10;
+                                                x_120 = 10;
                                                 break b14;
                                             };
-                                            x_88 = 20;
+                                            x_120 = 20;
                                             break b14;
                                         };
-                                        x_88 = 30;
+                                        x_120 = 30;
                                         break b14;
                                     };
-                                    x_88 = 40;
+                                    x_120 = 40;
                                     break b14;
                                 };
-                                x_88 = 50;
+                                x_120 = 50;
                                 break b14;
                             };
-                            x_88 = 60;
+                            x_120 = 60;
                             break b14;
                         };
-                        x_88 = 70;
+                        x_120 = 70;
                         break b14;
                     };
-                    x_88 = 80;
+                    x_120 = 80;
                     break b14;
                 };
-                x_88 = 90;
+                x_120 = 90;
                 break b14;
             };
-            x_88 = 100;
+            x_120 = 100;
             break b14;
         };
-        x_88 = 110;
+        x_120 = 110;
     };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(x_88, $local_0);
-    x_88 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
-    out_89 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
-    x_88 = "if_chain_to_match_hoisted_let.wado/$cm_binding__Stdout_write_via_stream"(x_88);
-    "core:rt/write_string_to_stream"(out_89, $local_0.repr, $local_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(x_88);
+    out_121 = x_120 < 0;
+    x_120 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_25(x_25 = builtin::i64_extend_i32_s(x_120); select i64(x_25 < 0_i64, 0_i64 - x_25, x_25)));
+    out_121 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_0, out_121, x_120);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, out_121, x_25, x_120);
+    x_120 = builtin::i32_wrap_i64(local.tee x_25("wasi/stream-new"()));
+    out_121 = builtin::i32_wrap_i64(x_25 >> 32_i64);
+    x_120 = "if_chain_to_match_hoisted_let.wado/$cm_binding__Stdout_write_via_stream"(x_120);
+    "core:rt/write_string_to_stream"(out_121, $local_0.repr, $local_0.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(x_120);
     $local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    x_88 = black_box(11);
-    out_89 = -1;
+    x_120 = black_box(11);
+    out_121 = -1;
     b28: block {
         b29: block {
             b30: block {
@@ -210,54 +216,57 @@ fn "if_chain_to_match_hoisted_let.wado/run"() with Stdout {
                                                 b39: block {
                                                     b40: block {
                                                         b41: block {
-                                                            br_table x_88 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] default=0;
+                                                            br_table x_120 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] default=0;
                                                         };
                                                         break b28;
                                                     };
-                                                    out_89 = 0;
+                                                    out_121 = 0;
                                                     break b28;
                                                 };
-                                                out_89 = 10;
+                                                out_121 = 10;
                                                 break b28;
                                             };
-                                            out_89 = 20;
+                                            out_121 = 20;
                                             break b28;
                                         };
-                                        out_89 = 30;
+                                        out_121 = 30;
                                         break b28;
                                     };
-                                    out_89 = 40;
+                                    out_121 = 40;
                                     break b28;
                                 };
-                                out_89 = 50;
+                                out_121 = 50;
                                 break b28;
                             };
-                            out_89 = 60;
+                            out_121 = 60;
                             break b28;
                         };
-                        out_89 = 70;
+                        out_121 = 70;
                         break b28;
                     };
-                    out_89 = 80;
+                    out_121 = 80;
                     break b28;
                 };
-                out_89 = 90;
+                out_121 = 90;
                 break b28;
             };
-            out_89 = 100;
+            out_121 = 100;
             break b28;
         };
-        out_89 = 110;
+        out_121 = 110;
     };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(out_89, $local_0);
-    out_89 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
-    x_88 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
-    out_89 = "if_chain_to_match_hoisted_let.wado/$cm_binding__Stdout_write_via_stream"(out_89);
-    "core:rt/write_string_to_stream"(x_88, $local_0.repr, $local_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(out_89);
+    x_120 = out_121 < 0;
+    out_121 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_25(x_25 = builtin::i64_extend_i32_s(out_121); select i64(x_25 < 0_i64, 0_i64 - x_25, x_25)));
+    x_120 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_0, x_120, out_121);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, x_120, x_25, out_121);
+    out_121 = builtin::i32_wrap_i64(local.tee x_25("wasi/stream-new"()));
+    x_120 = builtin::i32_wrap_i64(x_25 >> 32_i64);
+    out_121 = "if_chain_to_match_hoisted_let.wado/$cm_binding__Stdout_write_via_stream"(out_121);
+    "core:rt/write_string_to_stream"(x_120, $local_0.repr, $local_0.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(out_121);
     $local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    out_89 = black_box(12);
-    x_88 = -1;
+    out_121 = black_box(12);
+    x_120 = -1;
     b42: block {
         b43: block {
             b44: block {
@@ -272,51 +281,54 @@ fn "if_chain_to_match_hoisted_let.wado/run"() with Stdout {
                                                 b53: block {
                                                     b54: block {
                                                         b55: block {
-                                                            br_table out_89 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] default=0;
+                                                            br_table out_121 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] default=0;
                                                         };
                                                         break b42;
                                                     };
-                                                    x_88 = 0;
+                                                    x_120 = 0;
                                                     break b42;
                                                 };
-                                                x_88 = 10;
+                                                x_120 = 10;
                                                 break b42;
                                             };
-                                            x_88 = 20;
+                                            x_120 = 20;
                                             break b42;
                                         };
-                                        x_88 = 30;
+                                        x_120 = 30;
                                         break b42;
                                     };
-                                    x_88 = 40;
+                                    x_120 = 40;
                                     break b42;
                                 };
-                                x_88 = 50;
+                                x_120 = 50;
                                 break b42;
                             };
-                            x_88 = 60;
+                            x_120 = 60;
                             break b42;
                         };
-                        x_88 = 70;
+                        x_120 = 70;
                         break b42;
                     };
-                    x_88 = 80;
+                    x_120 = 80;
                     break b42;
                 };
-                x_88 = 90;
+                x_120 = 90;
                 break b42;
             };
-            x_88 = 100;
+            x_120 = 100;
             break b42;
         };
-        x_88 = 110;
+        x_120 = 110;
     };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(x_88, $local_0);
-    x_88 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
-    out_89 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
-    x_88 = "if_chain_to_match_hoisted_let.wado/$cm_binding__Stdout_write_via_stream"(x_88);
-    "core:rt/write_string_to_stream"(out_89, $local_0.repr, $local_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(x_88);
+    out_121 = x_120 < 0;
+    x_120 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_25(x_25 = builtin::i64_extend_i32_s(x_120); select i64(x_25 < 0_i64, 0_i64 - x_25, x_25)));
+    out_121 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_0, out_121, x_120);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, out_121, x_25, x_120);
+    x_120 = builtin::i32_wrap_i64(local.tee x_25("wasi/stream-new"()));
+    out_121 = builtin::i32_wrap_i64(x_25 >> 32_i64);
+    x_120 = "if_chain_to_match_hoisted_let.wado/$cm_binding__Stdout_write_via_stream"(x_120);
+    "core:rt/write_string_to_stream"(out_121, $local_0.repr, $local_0.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(x_120);
 }
 
 fn "if_chain_to_match_hoisted_let.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -326,6 +338,28 @@ fn "if_chain_to_match_hoisted_let.wado/$cm_binding__Stdout_write_via_stream"(dat
 fn "if_chain_to_match_hoisted_let.wado/$cm_export__run"() {
     "if_chain_to_match_hoisted_let.wado/run"();
     "wasi/task-return"(0);
+}
+
+fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
+    let q: u64;
+    let pair: i32;
+    let tens: i32;
+    digit_count = offset + digit_count;
+    b56: block {
+        l57: loop {
+            break_if b56 (digit_count - offset) < 2;
+            q = val /u 100_i64;
+            tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
+            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
+            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            digit_count = digit_count - 2;
+            val = q;
+            continue l57;
+        };
+    };
+    if digit_count > offset {
+        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+    }
 }
 
 fn "core:prelude/primitive.wado/count_digits_u64"(val) {
@@ -410,17 +444,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b77: block {
-        l78: loop {
-            break_if b77 i >= $mv$data$end;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b80: block {
+        l81: loop {
+            break_if b80 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l78;
+            continue l81;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l80: loop {
+        l83: loop {
             ptr_15 = ptr_13 + i;
             count_16 = $mv$data$end - i;
             if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
@@ -450,7 +484,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return count_16;
             }
-            continue l80;
+            continue l83;
         };
     };
 }
@@ -486,29 +520,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     start_26 = self.used;
     self.used = digit_count;
     return start_26;
-}
-
-fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
-    let is_negative: bool;
-    let x: i64;
-    let arr: ref Array<u8>;
-    let i: i32;
-    is_negative = self < 0;
-    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(f, is_negative, self);
-    arr = f.repr;
-    is_negative = is_negative + self;
-    i = 0;
-    b89: block {
-        l90: loop {
-            break_if b89 i >= self;
-            is_negative = is_negative - 1;
-            builtin::array_set_u8(arr, is_negative, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
-            x = x /u 10_i64;
-            i = i + 1;
-            continue l90;
-        };
-    };
 }
 
 export fn "if_chain_to_match_hoisted_let.wado/$cm_export__run" as "run"

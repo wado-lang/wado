@@ -100,21 +100,21 @@ type "functype//core:rt/write_string_to_stream$spec0" = fn(i32, ref Array<u8>, i
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(34)
 
-type "functype//effect_interface_default_body.wado/effect_interface_default_body.wado/Collect^effect_interface_default_body.wado/Log::emit" = fn(ref "effect_interface_default_body.wado//Collect", ref Array<u8>, i32);  // TypeId(35)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(35)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(36)
+type "functype//effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_0::$call" = fn(ref "effect_interface_default_body.wado//$Closure_0") -> ref "core:prelude/string.wado//String";  // TypeId(36)
 
-type "functype//effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_0::$call" = fn(ref "effect_interface_default_body.wado//$Closure_0") -> ref "core:prelude/string.wado//String";  // TypeId(37)
+type "functype//effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_1::$call" = fn(ref "effect_interface_default_body.wado//$Closure_1", ref "core:prelude/string.wado//String");  // TypeId(37)
 
-type "functype//effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_1::$call" = fn(ref "effect_interface_default_body.wado//$Closure_1", ref "core:prelude/string.wado//String");  // TypeId(38)
+type "functype//effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_2::$call" = fn(i32) -> bool;  // TypeId(38)
 
-type "functype//effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_2::$call" = fn(i32) -> bool;  // TypeId(39)
+type "functype//effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_3::$call" = fn() -> ref "core:prelude/string.wado//String";  // TypeId(39)
 
-type "functype//effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_3::$call" = fn() -> ref "core:prelude/string.wado//String";  // TypeId(40)
+type "functype//effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_4::$call" = fn(ref "core:prelude/string.wado//String");  // TypeId(40)
 
-type "functype//effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_4::$call" = fn(ref "core:prelude/string.wado//String");  // TypeId(41)
+type "functype//effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_5::$call" = fn(i32) -> bool;  // TypeId(41)
 
-type "functype//effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_5::$call" = fn(i32) -> bool;  // TypeId(42)
+type "functype//effect_interface_default_body.wado/effect_interface_default_body.wado/Collect^effect_interface_default_body.wado/Log::emit$scalar" = fn(ref Array<u8>, i32, ref Array<u8>, i32);  // TypeId(42)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(43)
 
@@ -141,9 +141,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global mut global:effect_interface_default_body.wado::LINES: ref null "core:prelude//List<core:prelude/string.wado/String>" = ref.null none;
 global mut global:effect_interface_default_body.wado::$effect_Log: ref null "effect_interface_default_body.wado//$Dispatch_Log" = ref.null none;
 global mut global:effect_interface_default_body.wado::$modules_initialized: bool = 0;
-global global:effect_interface_default_body.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(58);
 global global:effect_interface_default_body.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(100, 101, 102, 97, 117, 108, 116, 58);
 global global:effect_interface_default_body.wado::$const_obj_5: ref "effect_interface_default_body.wado//Collect" = struct.new "effect_interface_default_body.wado//Collect" { tag: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 97, 110, 100, 108, 101, 114), used: 7 } };
+global global:effect_interface_default_body.wado::$const_obj_8: ref Array<u8> = array.new_fixed<u8>(58);
 
 fn "effect_interface_default_body.wado/run"() with Stdout, Log {
     let $h_Log: ref "effect_interface_default_body.wado//Collect";
@@ -528,46 +528,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "effect_interface_default_body.wado/effect_interface_default_body.wado/Collect^effect_interface_default_body.wado/Log::emit"(self, $mv$message$repr, $mv$message$used) {
-    let $load_3: ref Array<u8>;
-    let $local_2: ref "core:prelude/string.wado//String";
-    let self_5: ref "core:prelude//List<core:prelude/string.wado/String>";
-    let self_9: i32;
-    let new_used_12: i32;
-    let start_13: i32;
-    let s_17: ref "core:prelude/string.wado//String";
-    self_5 = global:effect_interface_default_body.wado::LINES;
-    $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
-    self_9 = self.tag.used;
-    if @unlikely(local.tee new_used_12(1 + self_9) > 33) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_12);
-    }
-    start_13 = $local_2.used;
-    $local_2.used = new_used_12;
-    $load_3 = $local_2.repr;
-    s_17 = self.tag;
-    builtin::array_copy<u8>($load_3, start_13, s_17.repr, 0, self_9);
-    self_9 = start_13 + self_9;
-    builtin::array_copy<u8>($load_3, self_9, global:effect_interface_default_body.wado::$const_obj_1, 0, 1);
-    $inline_core_prelude_string_wado_String__internal_push_string_9: block {
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_9 $mv$message$used == 0;
-        if @unlikely(local.tee self_9($local_2.used + $mv$message$used) > builtin::array_len($load_3)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, self_9);
-        }
-        start_13 = $local_2.used;
-        $local_2.used = self_9;
-        builtin::array_copy<u8>($local_2.repr, start_13, $mv$message$repr, 0, $mv$message$used);
-    };
-    if @unlikely(local.tee $mv$message$used(self_5.used) >= builtin::array_len(self_5.repr)) {
-        cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self_5);
-    }
-    builtin::array_set<ref "core:prelude/string.wado//String">(self_5.repr, $mv$message$used, $local_2);
-    self_5.used = $mv$message$used + 1;
-}
-
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self) {
     let $load_0: ref "Array<core:prelude/string.wado/String>";
     let new_repr: ref "Array<core:prelude/string.wado/String>";
@@ -581,7 +541,8 @@ fn "effect_interface_default_body.wado/effect_interface_default_body.wado/$Closu
 }
 
 fn "effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_1::$call"(self, message) {
-    "effect_interface_default_body.wado/effect_interface_default_body.wado/Collect^effect_interface_default_body.wado/Log::emit"(self.$capture_0, message.repr, message.used);
+    let $mv_arg_1: ref "core:prelude/string.wado//String";
+    "effect_interface_default_body.wado/effect_interface_default_body.wado/Collect^effect_interface_default_body.wado/Log::emit$scalar"(local.tee $mv_arg_1(self.$capture_0.tag).repr, $mv_arg_1.used, message.repr, message.used);
 }
 
 fn "effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_2::$call"(level) {
@@ -666,6 +627,41 @@ fn "effect_interface_default_body.wado/effect_interface_default_body.wado/$Closu
         }
         unreachable;
     };
+}
+
+fn "effect_interface_default_body.wado/effect_interface_default_body.wado/Collect^effect_interface_default_body.wado/Log::emit$scalar"($mv$self$repr, $mv$self$used, $mv$message$repr, $mv$message$used) {
+    let $load_1: ref Array<u8>;
+    let $local_2: ref "core:prelude/string.wado//String";
+    let self_5: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let new_used_12: i32;
+    let start_13: i32;
+    self_5 = global:effect_interface_default_body.wado::LINES;
+    $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
+    if @unlikely(local.tee new_used_12(1 + $mv$self$used) > 33) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_12);
+    }
+    start_13 = $local_2.used;
+    $local_2.used = new_used_12;
+    builtin::array_copy<u8>(local.tee $load_1($local_2.repr), start_13, $mv$self$repr, 0, $mv$self$used);
+    $mv$self$used = start_13 + $mv$self$used;
+    builtin::array_copy<u8>($load_1, $mv$self$used, global:effect_interface_default_body.wado::$const_obj_8, 0, 1);
+    $inline_core_prelude_string_wado_String__internal_push_string_9: block {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_9 $mv$message$used == 0;
+        if @unlikely(local.tee $mv$self$used($local_2.used + $mv$message$used) > builtin::array_len($load_1)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, $mv$self$used);
+        }
+        start_13 = $local_2.used;
+        $local_2.used = $mv$self$used;
+        builtin::array_copy<u8>($local_2.repr, start_13, $mv$message$repr, 0, $mv$message$used);
+    };
+    if @unlikely(local.tee $mv$message$used(self_5.used) >= builtin::array_len(self_5.repr)) {
+        cold_path;
+        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self_5);
+    }
+    builtin::array_set<ref "core:prelude/string.wado//String">(self_5.repr, $mv$message$used, $local_2);
+    self_5.used = $mv$message$used + 1;
 }
 
 fn "closure/effect_interface_default_body.wado/$closure_wrapper_0"($env) {

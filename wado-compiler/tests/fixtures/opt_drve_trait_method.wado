@@ -9,7 +9,9 @@
 //
 // Voiding it kills the body — the `Pair` it built was the return value — so both
 // parameters are unread and DAE takes them too: the method ends up `fn()`. The
-// global it bumps keeps the call from being deleted outright.
+// global it bumps keeps the call from being deleted outright. `sroa_param` has
+// already cloned the method by then, for the unread `self`, so the voided
+// return is the clone's.
 
 use { println, Stdout } from "core:cli";
 
@@ -45,6 +47,6 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "done 1\n",
-    "wir_expect:O2": ["Maker::make\" = fn();"],
+    "wir_expect:O2": ["Maker::make$scalar\" = fn();"],
     "wir_not_expect:O2": ["Maker::make\" = fn(ref \"opt_drve_trait_method.wado//Factory\", i32) -> ref"]
 }
