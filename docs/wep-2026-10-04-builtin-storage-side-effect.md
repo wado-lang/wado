@@ -131,7 +131,7 @@ facts where no reader of the declaration sees them.
 A function imported from a core `.wasm` / `.wat` asset is opaque: the compiler
 sees none of its body. The declaration the compiler writes for it carries both
 attributes, with values that assume the worst: `#[storage(none)]` and
-`#[side_effect(read, write, trap)]`.
+`#[side_effect(read, write, trap, host)]`.
 
 ### Component Model Imports
 
@@ -171,7 +171,3 @@ Each of these is an error:
 - [ ] Write both attributes on the declaration of every core Wasm import.
 - [ ] Derive both from `#[cm(...)]` for every Component Model import.
 - [ ] Move the rules into `spec-attributes.md`, replacing the four sections.
-
-## Known Gaps
-
-- Whether a core Wasm import also carries `host` is not decided.
