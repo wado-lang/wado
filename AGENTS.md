@@ -54,8 +54,8 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 
 ## Tooling
 
-- Make every edit with the editing tools. They refuse a match that is not unique and a file the session has not read, and the harness tracks what they wrote, so each edit is checkable.
-- Run a long job (`mise run test`, `test-wado`, `update-golden-fixtures`) in the background, one per invocation: the harness announces the end of a job it owns. Run one heavy job at a time; two starve each other.
+- Make every edit with the editing tools, never a shell rewrite (`sed`, `awk`, a script), however bulk the change.
+- Run a long job (`mise run test`, `test-wado`, `update-golden-fixtures`) in the background, one per invocation. Run one heavy job at a time; two starve each other.
 - `test`, `test-wado`, `test-stdlib` and `test-gale-o2` refuse to start while another of the same is running, naming the holder's pid — where `flock` exists; `scripts/exclusive.sh` says so on stderr and runs unlocked where it does not. Abandoning a job does not stop it, so restarting after an edit means killing that pid first.
 - Redirect a job's output to a file and read the file, so what you did not anticipate is still there. Scratch files go in `scratchpad/`: it is git-ignored, so `git add -A` leaves them out, and per worktree, so concurrent sessions do not overwrite each other's. A fixed path under `/tmp` is shared by every session.
 - On an internal pull request, CI's `tidy` job regenerates the generated files, applies clippy and format, and pushes `chore: tidy` onto the branch. Pull before pushing.
@@ -71,7 +71,7 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
   - Markdown: the `markdown` skill holds the rules. Read it before writing or editing any `.md` file.
   - Issue references: an issue or pull request in another repository is written fully qualified, `org/repo#num` (`antlr/antlr4#4911`). A bare `#num` means this repository.
   - Timings: no wall-clock seconds in comments or docs. This machine is the fastest one, so write the ratio.
-- Commit and push each self-contained unit without asking, never onto `main`. Open a pull request only when the user asks: auto-merge lets an unrequested one land itself.
+- Commit and push each self-contained unit without asking, never onto `main`.
 - Read the whole diff before committing. A trimmed comment or doc keeps every clause that names a pass, a type, a literal, a condition, or the bug behind the code.
 - A defect found mid-task is fixed on the branch in hand, never on a side branch or worktree.
 - Delete the local branches `git branch --merged main` lists without asking, except `main` and a branch with no commits of its own yet. Never one `--no-merged` lists.
