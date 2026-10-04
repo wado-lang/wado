@@ -69,22 +69,20 @@ The bare identifiers are:
 | `trap`      | The call may trap                                                |
 | `read`      | The call reads linear memory                                     |
 | `write`     | The call writes linear memory                                    |
-| `host`      | The call may reach the program's state outside linear memory     |
+| `host`      | The call reaches code the compiler cannot see                    |
 | `hint`      | The call computes nothing, but its position is what it means     |
 | `black_box` | The optimizer may assume nothing about the operand or the result |
 
 A write through a `&mut` parameter is not listed, since the type states it.
 
-`host` says the callee may read and write any state the program can reach
-other than linear memory: globals and shared GC objects. It may also never
-return. Linear memory is stated apart, so a host call that touches it lists
-`read` or `write` beside `host`.
+`host` lists nothing of what the callee does. The optimizer assumes nothing
+about it, so whatever the callee turns out to do, the attribute stays true.
 
 A fact the attribute leaves out is a fact the call does not have. A call with no
 `trap` never traps. A wrong attribute miscompiles as wrong code does, so
 validation checks the form of an attribute and never second-guesses its facts.
 
-`none` and `black_box` each stand alone. `black_box` exists for
+`none`, `host` and `black_box` each stand alone. `black_box` exists for
 `builtin::black_box`, which a test or a benchmark uses to keep the work it
 measures from being folded away. The optimizer never deletes, moves or merges
 such a call, and never computes its result from the operand. Its storage is
@@ -169,18 +167,15 @@ since no other place holds its facts.
 
 A `#[canonical(...)]` builtin is a body-less `core:builtin` declaration like any
 other and carries both attributes. Its name says what it is imported as, not
-what the call does. A canonical during which the host may read or write a
-buffer in linear memory lists `read` or `write` beside `host`, whether the
-buffer was handed over by this call or an earlier one.
+what the call does.
 
 ### Core Wasm Imports
 
 A function imported from a core `.wasm` / `.wat` asset is opaque: the compiler
-sees none of its body. It exchanges only scalars, so it cannot reach the
-program's globals or GC objects. The declaration the compiler writes for it
-carries both attributes, with values that assume the worst of what it can
-reach: `#[storage(none)]` and `#[side_effect(read, write, trap)]`. `realloc`,
-an export of the `"mem"` core module, carries the same.
+sees none of its body. The declaration the compiler writes for it carries both
+attributes: `#[storage(none)]`, since it exchanges only scalars, and
+`#[side_effect(host)]`. `realloc`, an export of the `"mem"` core module,
+carries the same.
 
 ### Component Model Imports
 
@@ -194,10 +189,9 @@ when one is installed, and the handler's own body states what it does.
 
 - The adapter lowers every argument to flat scalars and linear memory, and
   lifts the result back. The raw call shares no storage: `#[storage(none)]`.
-- The adapter stores the arguments before the raw call and loads the result
-  after it. A program cannot observe that traffic, but the optimizer sees
-  both sides of the call, so the call reads and writes linear memory. The
-  callee is opaque and may trap: `#[side_effect(read, write, trap, host)]`.
+- The callee is opaque: `#[side_effect(host)]`. That covers the adapter's
+  stores before the raw call and loads after it, which the optimizer sees on
+  both sides.
 
 ### Validation
 
@@ -209,7 +203,7 @@ fact.
   method requirement, or on a declaration carrying `#[cm(...)]`.
 - A second `#[storage]` or `#[side_effect]` on one declaration.
 - A repeated key, or an unknown value, identifier or key.
-- `none` or `black_box` beside anything else in `#[side_effect]`.
+- `none`, `host` or `black_box` beside anything else in `#[side_effect]`.
 - A condition key without `trap`.
 - `at` or `count` without `outside`, or `outside` and `at`
   arrays of different lengths.
@@ -264,5 +258,5 @@ declaration still to be written.
   `#[storage(none)]` for every import, which is then false.
 - A `&mut` parameter always counts as a write, so `array_get_ref_mut`, which
   only hands out a reference, invalidates what the optimizer knew of the array.
-- A bundled core Wasm asset such as the libm cannot state better than the worst
-  case, so a call to it is never hoisted, merged or deleted.
+- A bundled core Wasm asset such as the libm is declared `host`, so a call to it
+  is never hoisted, merged or deleted.
