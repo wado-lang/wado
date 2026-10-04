@@ -143,7 +143,8 @@ present. Traps on a value that is not finite or is outside the range.
 
 #### `pub fn now() -> Instant with SystemClock`
 
-The current reading of the system clock (`Temporal.Now.instant`). The
+The current reading of the system clock (`Temporal.Now.instant`),
+clamped to the range as `HostSystemUTCEpochNanoseconds` requires. The
 effect row is what keeps the clock off callers that never ask the time.
 
 #### `pub fn epoch_milliseconds(&self) -> i64`
@@ -467,7 +468,8 @@ than one scalar. Corresponds to `Temporal.Duration`.
 
 Temporal's invariants hold: every non-zero component has one sign, a year,
 month, or week count is below 2^32, and the days and time components
-together are below 2^53 seconds. A struct literal can break them, so every
+together are below 2^53 seconds. So that negation stays exact, no component
+is `i64::MIN`. A struct literal can break them, so every
 operation checks its receiver and traps on one that does. The date
 components (`years`, `months`, `weeks`) have no fixed length, so a duration
 carrying one applies only to a receiver that knows a calendar position.
