@@ -522,7 +522,9 @@ grammar alternative — ANTLR4's ambiguity resolution (SQLite's single-table
 `FROM` picks `table_or_subquery (',' table_or_subquery)*` over the
 `join_clause` catch-all). This is not first-success-wins — that is unsound
 when alts share a prefix and tie on static length (`'mut'? IDENT` vs
-`path '(' … ')'` on `N(n)`). An alt whose suffix is unscannable at a
+`path '(' … ')'` on `N(n)`). An `EOF` the alt matches counts toward its length
+only where the grammar writes no `EOF` after the rule. In a start rule `s : u | t ; t : A EOF ;`, `t` matches what `u` cannot and wins. Under `prog : stmt* EOF`, a `stmt` ending in `EOF` ties with one ending just before it, and the
+first wins. An alt whose suffix is unscannable at a
 tournament site is a codegen-time panic; the fix is to file an issue, never
 to add backtracking.
 

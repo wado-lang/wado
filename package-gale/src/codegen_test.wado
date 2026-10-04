@@ -3508,15 +3508,227 @@ false => ID:ab KW:xy INT:11 ID:qz
 ", got;
 }
 
-test "a highlight query on a superClass grammar skips the highlighter and says why" {
-    let options = GenerateOptions { highlight_query: Option::Some(parse_highlight_query("(A) @keyword").unwrap()) };
+test "a greedy loop keeps a token its caller could also take, entered directly or not" {
+    // `;` follows `list` inside `s`, so it is in `list`'s FOLLOW, but the loop
+    // is greedy: the jar takes it into the loop whichever rule the parse
+    // entered, as css3's `declarationList` must for a `style` attribute.
+    let got = parses_each("grammar T;
+s : '{' (list | ';')* '}' ;
+list : X (';' X?)* ;
+X : 'x' ;
+WS : ' ' -> skip ;
+", [
+        ["list", "x;x"],
+        ["list", "x;"],
+        ["s", "{x;x}"],
+        ["s", "{x;;x}"],
+    ]);
+    assert got == "x;x => (list x ; x)\nx; => (list x ;)\n{x;x} => (s { (list x ; x) })\n{x;;x} => (s { (list x ; ; x) })\n", got;
+}
+
+test "a greedy loop leaves its last token to a caller that ends the input with it" {
+    // The twin of the test above: here `list ;` ends the input, so the jar
+    // exits the loop whether the parse entered `list` directly or called it
+    // with no continuation (`s`) or with one (`t`).
+    let got = parses_each("grammar T;
+s : (list) ';' EOF ;
+t : list ';' EOF ;
+list : X (';' X?)* ;
+X : 'x' ;
+WS : ' ' -> skip ;
+", [
+        ["s", "x;"],
+        ["t", "x;"],
+        ["list", "x;"],
+        ["s", "x;x;"],
+    ]);
+    assert got == "x; => (s (list x) ;)\nx; => (t (list x) ;)\nx; => (list x)\nx;x; => (s (list x ; x) ;)\n", got;
+}
+
+test "a greedy loop leaves a longer last iteration to a caller that ends the input with it" {
+    // `x y` ends the input after `list` in `s` and `t` but not in `u`, so the
+    // jar exits the loop wherever those rules call `list`, and keeps the
+    // iteration where `u` alone does.
+    let ends = parses_each("grammar M;
+s : (list) X Y EOF ;
+t : list X Y EOF ;
+list : A (X Y)* ;
+A : 'a' ;
+X : 'x' ;
+Y : 'y' ;
+WS : ' ' -> skip ;
+", [
+        ["s", "a x y"],
+        ["t", "a x y"],
+        ["list", "a x y"],
+    ]);
+    assert ends == "a x y => (s (list a) x y)\na x y => (t (list a) x y)\na x y => (list a)\n", ends;
+    let goes_on = parses("grammar N;
+u : '{' (list | X Y)* '}' ;
+list : A (X Y)* ;
+A : 'a' ;
+X : 'x' ;
+Y : 'y' ;
+WS : ' ' -> skip ;
+", "list", ["a x y"]);
+    assert goes_on == "a x y => (list a x y)\n", goes_on;
+}
+
+test "a single-token optional EOF does not outrank an earlier alternative" {
+    // The optional's step is the guard's, so it must leave EOF to `prog` as
+    // every other scanned EOF does.
+    let got = parses("grammar V;
+prog : stmt EOF ;
+stmt : decl | exprStmt ;
+decl : X Y ;
+exprStmt : X Y EOF? ;
+X : 'x' ;
+Y : 'y' ;
+WS : ' ' -> skip ;
+", "prog", ["x y"]);
+    assert got == "x y => (prog (stmt (decl x y)))\n", got;
+}
+
+test "an alternative that also matches EOF does not outrank an earlier one covering the same input" {
+    // JavaScript's `statement` shape: a declaration is also an expression
+    // statement, whose `eos` takes EOF. Both cover the whole input, so the jar
+    // takes the first.
+    let got = parses("grammar T;
+prog : stmt* EOF ;
+stmt : decl | exprStmt ;
+decl : 'function' ID '(' ')' block ;
+exprStmt : expr eos ;
+eos : ';' | EOF ;
+expr : fn | ID | expr '(' ')' ;
+fn : decl | 'function' '(' ')' block | ID '=>' expr ;
+block : '{' stmt* '}' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+", "prog", ["function f() {}", "function f() {} x;"]);
+    assert got == "function f() {} => (prog (stmt (decl function f ( ) (block { }))))\nfunction f() {} x; => (prog (stmt (decl function f ( ) (block { }))) (stmt (exprStmt (expr x) (eos ;))))\n", got;
+}
+
+test "unclosed elements scan in time linear in their number" {
+    // Each `<a>`'s optional scans the rest of the input as its content, and
+    // fails at the end; without a memo every element repeats that for each
+    // element after it, which doubles per element.
+    let mut input = "";
+    let mut tree = "(s (c";
+    for let _ of 0..<40 {
+        input.push_str("<a> x ");
+        tree.push_str(" (e < a >) x");
+    }
+    let got = parses("grammar T;
+s : c EOF ;
+c : (e | ID)* ;
+e : '<' ID '>' (c '<' '/' ID '>')? ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+", "s", [input]);
+    assert got == `${input} => ${tree}))\n`, got;
+}
+
+test "an optional group yields a token its continuation needs" {
+    let got = parses("grammar T;
+s : (S | ID)? m ;
+m : ID '(' ')' ;
+S : 'static' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+", "s", ["f()", "g f()", "static f()"]);
+    assert got == "f() => (s (m f ( )))\ng f() => (s g (m f ( )))\nstatic f() => (s static (m f ( )))\n", got;
+}
+
+test "a false predicate in an optional prefix skips the prefix rather than the alternative" {
+    // JavaScript's `classElement`: `static` is an identifier the predicate
+    // recognises by its text, so `f()` is a method with no prefix at all. The
+    // jar asks the predicate only where the tokens leave both paths open.
+    let got = printed(
+        "grammar T;
+options { superClass = PBase; }
+s : (S | {this.ok()}? ID)? m | ';' ;
+m : ID '(' ')' ;
+S : 'static' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+",
+        "show_with(false, \"f()\");\nshow_with(true, \"f()\");\nshow_with(true, \"g f()\");\nshow_with(false, \"g f()\");\n",
+        SHOW_WITH_PBASE,
+    );
+    assert got == "false f() => (s (m f ( )))\ntrue f() => (s (m f ( )))\ntrue g f() => (s g (m f ( )))\nfalse g f() => error\n", got;
+}
+
+test "a parser base call gates alternatives whose first tokens tie" {
+    // Prediction cannot pick between `a` and `b` by tokens, so the predicate is
+    // a standalone fn; its body must be the rewritten base call, not `this`.
+    let got = printed("grammar T;
+options { superClass = PBase; }
+s : {this.ok()}? a | b ;
+a : X ;
+b : X ;
+X : 'x' ;
+", "show_with(true, \"x\");\nshow_with(false, \"x\");\n", SHOW_WITH_PBASE);
+    assert got == "true x => (s (a x))\nfalse x => (s (b x))\n", got;
+}
+
+test "a parser base decides the tree a superClass grammar's highlighter walks" {
+    let options = GenerateOptions { highlight_query: Option::Some(parse_highlight_query(
+        "(a (X) @keyword)\n(b (X) @string)",
+    ).unwrap()) };
     let out = gen_with("grammar T;
 options { superClass = PBase; }
-s : {this.ok()}? A ;
-A : 'a' ;
+s : {this.ok()}? a | b ;
+a : X ;
+b : X ;
+X : 'x' ;
 ", &options);
-    assert diagnostics_saying(&out, "a highlight query with superClass 'PBase' is not supported") == 1, "the skipped highlighter must be reported";
-    assert !out.source.contains("pub fn highlight<"), "no highlighter is emitted for a base it cannot install";
+    let items = "struct Allow {
+    ok: bool,
+}
+
+impl PBase for Allow {
+    fn ok(&self, p: &Parser) -> bool {
+        resume self.ok;
+    }
+}
+
+fn highlight_with(ok: bool) with Stdout {
+    let mut base = Allow { ok };
+    with PBase => &mut base do {
+        println(highlight(\"x\"));
+    };
+}
+";
+    let got = run_beside(out.source, "highlight_with(true);\nhighlight_with(false);\n", items).stdout;
+    assert got == "<span class=\"keyword\">x</span>\n<span class=\"string\">x</span>\n", got;
+}
+
+test "a lexer base decides the tokens a lexer grammar's highlighter classifies" {
+    let options = GenerateOptions { highlight_query: Option::Some(parse_highlight_query("(KW) @keyword").unwrap()) };
+    let out = gen_with("lexer grammar L;
+options { superClass = B; }
+KW : {this.ok()}? 'ab' ;
+ID : [a-z]+ ;
+", &options);
+    let items = "struct Gate {
+    on: bool,
+}
+
+impl B for Gate {
+    fn ok(&self, view: LexerView) -> bool {
+        resume self.on;
+    }
+}
+
+fn highlight_with(on: bool) with Stdout {
+    let mut base = Gate { on };
+    with B => &mut base do {
+        println(highlight(\"ab\"));
+    };
+}
+";
+    let got = run_beside(out.source, "highlight_with(true);\nhighlight_with(false);\n", items).stdout;
+    assert got == "<span class=\"keyword\">ab</span>\nab\n", got;
 }
 
 test "a parser base call runs in a grammar whose action language has no translator" {

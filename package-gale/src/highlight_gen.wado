@@ -10,7 +10,9 @@ use { GaleMap } from "./gale_map.wado";
 /// `highlight`: the query compiled into the `HIGHLIGHT_MAPPING` global, then
 /// `highlight_walk` over the CST with `hl_cover_unvisited` for what the tree
 /// left out. `parse` always returns a tree, partial on broken input, so there
-/// is no tokenize-only fallback.
+/// is no tokenize-only fallback. Under a `superClass`, `highlight` performs the
+/// bases `parse` does and the caller installs them; `highlight_result` reads a
+/// finished parse and performs none.
 pub fn gen_highlight(
     w: &mut CodeWriter,
     grammar: &Grammar,
@@ -40,20 +42,14 @@ pub fn gen_highlight(
         w.end();
         w.blank();
 
-        let mut f = FnSpec::new("highlight", Vis::Pub);
-        f.add_generic("S: AsStrSlice");
-        f.add_param("input", "S");
-        f.set_return_type("String");
+        let mut f = highlight_entry(ctx);
         f.emit_begin(w);
         w.line("let result = parse(input);");
         w.line("return highlight_result(&result, input);");
         w.end();
     } else {
         // Lexer-only grammar: no `parse` / tree, so highlight the raw stream.
-        let mut f = FnSpec::new("highlight", Vis::Pub);
-        f.add_generic("S: AsStrSlice");
-        f.add_param("input", "S");
-        f.set_return_type("String");
+        let mut f = highlight_entry(ctx);
         f.emit_begin(w);
         w.line("let mut visitor = HighlightVisitor::new(&HIGHLIGHT_MAPPING);");
         w.line("let tokens = tokenize(input);");
@@ -64,6 +60,19 @@ pub fn gen_highlight(
         w.end();
     }
     w.blank();
+}
+
+/// The `highlight(input) -> String` signature, performing what lexing and
+/// parsing it does.
+fn highlight_entry(ctx: &GenContext) -> FnSpec {
+    let mut f = FnSpec::new("highlight", Vis::Pub);
+    f.add_generic("S: AsStrSlice");
+    f.add_param("input", "S");
+    f.set_return_type("String");
+    for let base of &ctx.base_effects() {
+        f.add_effect(base);
+    }
+    return f;
 }
 
 /// Token kind resolution built once per grammar: token kind ids are the index

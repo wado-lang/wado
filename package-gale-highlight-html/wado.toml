@@ -1,0 +1,21 @@
+[package]
+name = "gale-highlight-html"
+description = "Syntax highlighter for HTML with embedded CSS and JavaScript, built on Gale"
+repository-directory = "package-gale-highlight-html"
+lib = "src/lib.wado"
+# version / repository / namespace / license / authors inherited from [workspace.package]
+
+[world]
+"wasi:cli/command" = "src/main.wado"
+
+# gale is used in two roles: the Kiln generator that turns the bundled grammars
+# into parsers at build time, and the `gale-highlight` runtime lib (`run_cli`).
+[build-dependencies]
+"lib:gale" = { path = "../package-gale", package = "wado-lang:gale", version = "^0.0.19" }
+
+[dependencies]
+"lib:gale" = { path = "../package-gale", package = "wado-lang:gale", version = "^0.0.19" }
+
+[test]
+# `build/` holds Kiln intermediates; not source (see package-gale's note).
+exclude = ["build/**"]

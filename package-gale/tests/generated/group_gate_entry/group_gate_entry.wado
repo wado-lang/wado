@@ -1510,33 +1510,27 @@ impl Parser {
 
 fn _parse_opt__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
-    let mut gd_winner: i32 = -1;
-    let mut gd_best: i32 = -1;
-    let gd_kind = p.peek_kind();
-    if gd_kind == TK_A && (pred_0(p)) {
-        gd_winner = 0;
-        gd_scan: {
+    let mut opt_enter: bool = false;
+    if _kind_set_0(p.peek_kind()) {
+        opt_enter_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            if pos >= tokens.len() || tokens[pos] != TK_A { break gd_scan; }
+            if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { break opt_enter_scan; }
             pos += 1;
-            gd_best = pos;
-        }
-    } else if gd_kind == TK_B {
-        gd_winner = 1;
-        gd_scan_2: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            if pos >= tokens.len() || tokens[pos] != TK_B { break gd_scan_2; }
+            if pos >= tokens.len() || tokens[pos] != TK_A { break opt_enter_scan; }
             pos += 1;
-            gd_best = pos;
+            let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            if probe_kind == TK_EOF { opt_enter = true; }
         }
     }
-    if gd_best >= 0 {
-        if gd_winner == 0 {
+    if opt_enter && ((p.peek_kind() == TK_A && (pred_0(p))) || (p.peek_kind() == TK_B)) {
+        let grp_kind = p.peek_kind();
+        if grp_kind == TK_A && (pred_0(p)) {
             p.expect(TK_A, &SYNC_1, false);
+        } else if grp_kind == TK_B {
+            p.take();
         } else {
-            p.expect(TK_B, &SYNC_1, false);
+            p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_0);
         }
     }
     p.expect(TK_A, &EMPTY_SYNC, true);
@@ -1795,7 +1789,19 @@ fn _parse_solo_star(p: &mut Parser) -> () {
 
 fn _parse_solo_opt__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
-    if p.peek_kind() == TK_A && ((p.peek_kind() == TK_A && (pred_6(p)))) {
+    let mut opt_enter: bool = false;
+    if p.peek_kind() == TK_A {
+        opt_enter_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos] != TK_A { break opt_enter_scan; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos] != TK_A { break opt_enter_scan; }
+            pos += 1;
+            opt_enter = true;
+        }
+    }
+    if opt_enter && ((p.peek_kind() == TK_A && (pred_6(p)))) {
         p.expect(TK_A, &SYNC_1, false);
     }
     p.expect(TK_A, &EMPTY_SYNC, true);
