@@ -407,9 +407,14 @@ impl Lowering {
             ResolvedType::AssocTypeProjection {
                 param_id,
                 assoc_name,
+                args,
                 owning_trait,
                 ..
             } => {
+                // The solver's projection names no arguments of its own.
+                if !args.is_empty() {
+                    return None;
+                }
                 let trait_ = self.known_trait(*owning_trait)?;
                 Some(SolverType::Projection {
                     base: Box::new(self.type_id(table, *param_id, param)?),
@@ -418,6 +423,7 @@ impl Lowering {
                 })
             }
             ResolvedType::Reactive(_)
+            | ResolvedType::AssocParam { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::Unknown
             | ResolvedType::Error => None,
@@ -519,7 +525,13 @@ pub(super) fn lower_impls<'a>(
                 .map(|m| lowering.method(&m.name))
                 .collect();
             program.impl_methods.insert(id, own);
-            for binding in &header.associated_types {
+            // A generic associated type binds a family, which the solver's
+            // projection, naming no arguments, cannot ask for.
+            for binding in header
+                .associated_types
+                .iter()
+                .filter(|binding| binding.type_params.is_empty())
+            {
                 let Some(ty) = lowering.ast_type(&binding.ty, &param, resolutions, Some(&target))
                 else {
                     continue;

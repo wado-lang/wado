@@ -1,0 +1,25 @@
+// An impl binds a generic associated type with the parameters its trait
+// declares: as many, each bounded as the trait bounds it. The names are the
+// impl's own.
+
+trait Elem with () {}
+
+trait Store with () {
+    type Buf<E: Elem>;
+    type Pair<A, B>;
+}
+
+struct Lists {}
+
+impl Store for Lists {
+    type Buf<T> = List<T>;
+    type Pair<A> = List<A>;
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":15:5: analysis error: trait 'Store' declares `type Buf<E: Elem>`, but the impl binds `type Buf<T>`",
+  "compile_errors_contains": ["trait 'Store' declares `type Pair<A, B>`, but the impl binds `type Pair<A>`"]
+}

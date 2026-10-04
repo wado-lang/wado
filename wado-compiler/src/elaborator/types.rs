@@ -1139,6 +1139,25 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An `impl` binds a generic associated type with parameters other than
+    /// the trait declares: another count, or another bound at a position.
+    ImplAssocTypeParamsMismatch {
+        trait_name: String,
+        assoc_name: String,
+        /// The parameter lists as written, `<E: Elem>` or nothing.
+        declared: String,
+        written: String,
+        span: Span,
+    },
+
+    /// A generic associated type declares a parameter that is not a plain
+    /// type parameter: a pack, an effect, or one with a default.
+    UnsupportedAssocTypeParam {
+        assoc_name: String,
+        param_name: String,
+        span: Span,
+    },
+
     /// An `impl` leaves a method its trait requires undefined. A trait method
     /// written with a body is a default and is not required.
     ImplMissingMethod {
@@ -2415,6 +2434,30 @@ impl TypeError {
             } => (
                 Code::TraitDeclInvalid,
                 format!("trait '{trait_name}' declares no associated type '{assoc_name}'"),
+                *span,
+            ),
+            TypeError::ImplAssocTypeParamsMismatch {
+                trait_name,
+                assoc_name,
+                declared,
+                written,
+                span,
+            } => (
+                Code::TraitDeclInvalid,
+                format!(
+                    "trait '{trait_name}' declares `type {assoc_name}{declared}`, but the impl binds `type {assoc_name}{written}`"
+                ),
+                *span,
+            ),
+            TypeError::UnsupportedAssocTypeParam {
+                assoc_name,
+                param_name,
+                span,
+            } => (
+                Code::TraitDeclInvalid,
+                format!(
+                    "associated type `{assoc_name}` takes only plain type parameters, which `{param_name}` is not"
+                ),
                 *span,
             ),
             TypeError::ImplMissingMethod {

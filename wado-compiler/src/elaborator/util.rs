@@ -830,7 +830,9 @@ pub(crate) fn is_float_only_literal(repr: &str) -> bool {
 /// (WEP 2026-03-14), and `type_param_bounds` keys both the same way.
 pub(super) fn bound_param_name(resolved: &ResolvedType) -> Option<&String> {
     match resolved {
-        ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } => Some(name),
+        ResolvedType::TypeParam { name, .. }
+        | ResolvedType::TypePack { name, .. }
+        | ResolvedType::AssocParam { name, .. } => Some(name),
         _ => None,
     }
 }

@@ -901,6 +901,9 @@ impl<'a> WirContext<'a> {
             ResolvedType::TypeParam { name, index } => {
                 panic!("unsubstituted TypeParam `{name}` (index {index}) reached codegen")
             }
+            ResolvedType::AssocParam { name, index } => {
+                panic!("uninstantiated AssocParam `{name}` (index {index}) reached codegen")
+            }
             ResolvedType::TypePack { name, index, .. } => {
                 panic!("unsubstituted TypePack `..{name}` (index {index}) reached codegen")
             }

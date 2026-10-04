@@ -204,6 +204,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         namespaced: &NamespacedGenericType,
     ) -> TypeId {
+        let names_assoc_type = namespaced.namespace == "Self"
+            || self
+                .annotate_ctx
+                .trait_ctx
+                .type_params
+                .contains_key(&namespaced.namespace);
+        if !names_assoc_type {
+            return self.resolve_namespace_member(namespaced);
+        }
+        let family = self.assoc_family(namespaced);
+        self.apply_assoc_args(family, namespaced)
+    }
+
+    /// The associated type `namespaced` names off `Self` or a type parameter,
+    /// its own parameters still open.
+    fn assoc_family(&mut self, namespaced: &NamespacedGenericType) -> TypeId {
         // Handle Self::AssociatedType
         if namespaced.namespace == "Self" {
             // Look up the associated type binding
@@ -280,7 +296,73 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let base_name = namespaced.namespace.clone();
             return self.project_off(param_type_id, &base_name, namespaced);
         }
+        unreachable!(
+            "`{}` names neither `Self` nor a type parameter",
+            namespaced.namespace
+        )
+    }
 
+    /// The trait declaring the associated type `namespaced` names, as
+    /// [`Self::assoc_family`] reads it.
+    fn assoc_owner(&self, namespaced: &NamespacedGenericType) -> Option<DefId> {
+        if namespaced.namespace == "Self" {
+            return self.self_trait_declaring_assoc_type(&namespaced.name);
+        }
+        self.bound_declaring_assoc_type(&namespaced.namespace, &namespaced.name)
+    }
+
+    /// `family` at the arguments `namespaced` writes, which must be as many as
+    /// the declaration takes and meet its bounds.
+    fn apply_assoc_args(&mut self, family: TypeId, namespaced: &NamespacedGenericType) -> TypeId {
+        if family == TypeTable::ERROR {
+            return family;
+        }
+        let owner = match self.tysys.type_table.borrow().get(family) {
+            ResolvedType::AssocTypeProjection { owning_trait, .. } => Some(*owning_trait),
+            _ => None,
+        }
+        .or_else(|| self.assoc_owner(namespaced));
+        let params = owner
+            .and_then(|owner| {
+                self.tysys
+                    .trait_env
+                    .assoc_type_decl(&owner, &namespaced.name)
+            })
+            .map(|decl| decl.type_params.clone())
+            .unwrap_or_default();
+        if params.len() != namespaced.args.len() {
+            let _ = self.emit(TypeError::TypeArgumentCount {
+                name: format!("{}::{}", namespaced.namespace, namespaced.name),
+                expected: params.len(),
+                found: namespaced.args.len(),
+                span: namespaced.span,
+            });
+            return TypeTable::ERROR;
+        }
+        if params.is_empty() {
+            return family;
+        }
+        let args = self.resolve_turbofish_args(&namespaced.args);
+        for ((param, &arg), written) in params.iter().zip(&args).zip(&namespaced.args) {
+            for bound in param.real_bounds() {
+                let (bound_name, bound_trait) = self.tysys.bound_named_written(&bound);
+                self.enforce_single_bound_args(
+                    arg,
+                    &bound_name,
+                    bound_trait.as_ref(),
+                    &param.name,
+                    written.span(),
+                );
+            }
+        }
+        self.tysys
+            .type_table
+            .borrow_mut()
+            .with_projection_args(family, &args)
+    }
+
+    /// `ns::Type` / `ns::Type<args>`, where `ns` is a namespace import.
+    fn resolve_namespace_member(&mut self, namespaced: &NamespacedGenericType) -> TypeId {
         // The alias belongs to whichever module wrote this node, so a type a
         // travelled expression spells `ns::Type` reads its author's `use ns`.
         if self
@@ -1064,17 +1146,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         owning_trait: DefId,
         assoc: &str,
     ) -> TypeId {
-        let assoc_bounds = self
+        let (assoc_params, assoc_bounds) = self
             .tysys
             .trait_env
             .assoc_type_decl(&owning_trait, assoc)
-            .map_or_else(Vec::new, |decl| decl.bounds.clone());
+            .map_or_else(Default::default, |decl| {
+                (decl.type_params.clone(), decl.bounds.clone())
+            });
         let bound_names: Vec<FqTraitName> = assoc_bounds
             .iter()
             .map(|b| self.fq_trait_name_of(b))
             .collect();
-        let assoc_type_bindings =
-            self.frame_assoc_bindings(base, base_name, owning_trait, assoc, &assoc_bounds);
+        // A bound may name the associated type's own parameters, which the
+        // projection's arguments fill once it has them.
+        let assoc_type_bindings = self.with_assoc_params(&assoc_params, |e| {
+            e.frame_assoc_bindings(base, base_name, owning_trait, assoc, &assoc_bounds)
+        });
         self.tysys
             .type_table
             .borrow_mut()
@@ -1082,6 +1169,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 base,
                 owning_trait,
                 assoc.to_string(),
+                vec![],
                 bound_names,
                 assoc_type_bindings,
             )

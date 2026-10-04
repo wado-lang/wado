@@ -7,6 +7,7 @@ use std::cell::RefCell;
 use std::fmt::Write;
 use std::rc::Rc;
 
+use rustc_hash::FxBuildHasher;
 use sha2::Digest;
 
 use crate::call_args::CallArgs;
@@ -167,34 +168,18 @@ impl SubstitutionContext {
             ResolvedType::AssocTypeProjection {
                 param_id,
                 assoc_name,
+                args,
                 owning_trait,
                 bounds,
                 assoc_type_bindings,
             } => {
                 let concrete_id = self.substitute(param_id, type_table);
-                // A projection that knows its trait is answered by identity:
-                // the entry is keyed by the declaring `DefId`, so two traits
-                // declaring the same associated-type name on one implementor
-                // stay apart (WEP-2026-08-12). The name-keyed chain below gives
-                // up on exactly that case, so it must not be reached first.
-                if let Some(resolved) = type_table.resolve_trait_assoc_type_of_instance(
-                    concrete_id,
-                    &owning_trait,
-                    &assoc_name,
-                ) {
-                    return resolved;
-                }
+                let new_args: Vec<TypeId> = args
+                    .iter()
+                    .map(|&a| self.substitute(a, type_table))
+                    .collect();
                 if let Some(resolved) =
-                    type_table.resolve_assoc_type_qualified(concrete_id, &owning_trait, &assoc_name)
-                {
-                    return resolved;
-                }
-                // GenericInstance fallback: e.g. ListIter<i32>::Item -> i32.
-                // Use the monomorphizing variant so a reference / nested
-                // associated type (`&T`, `I::Item`) is substituted with the
-                // instance's type args instead of returned verbatim.
-                if let Some(resolved) =
-                    type_table.resolve_generic_assoc_type_mono(concrete_id, &assoc_name)
+                    type_table.answer_projection(concrete_id, &owning_trait, &assoc_name, &new_args)
                 {
                     return resolved;
                 }
@@ -204,16 +189,17 @@ impl SubstitutionContext {
                 // Preserve the projection over the substituted parameter
                 // rather than collapsing to the bare parameter, so later
                 // monomorphization can resolve `concrete::assoc_name`.
-                if concrete_id == param_id {
+                if concrete_id == param_id && new_args == args {
                     type_id
                 } else {
-                    type_table.intern(ResolvedType::AssocTypeProjection {
-                        param_id: concrete_id,
-                        assoc_name,
+                    type_table.make_assoc_type_projection(
+                        concrete_id,
                         owning_trait,
+                        assoc_name,
+                        new_args,
                         bounds,
                         assoc_type_bindings,
-                    })
+                    )
                 }
             }
             ResolvedType::BuiltinArray(elem) => {
@@ -517,6 +503,17 @@ pub enum ResolvedType {
         index: u32,
         mapped_elem: Option<TypeId>,
     },
+    /// A generic associated type's own parameter (`E` in `type Buf<E> =
+    /// List<E>;`), standing in a binding for the argument a projection supplies.
+    ///
+    /// Apart from [`ResolvedType::TypeParam`] because the two are filled at
+    /// different times: an impl's parameters by the receiver, this by each
+    /// projection's arguments, which [`TypeTable::instantiate_family`] fills.
+    /// So a binding holding only these is as concrete as its impl.
+    AssocParam {
+        name: String,
+        index: u32,
+    },
     /// Generic struct instantiation (e.g., `Box<i32>`)
     /// Used to track instantiation sites before monomorphization
     GenericInstance {
@@ -532,6 +529,9 @@ pub enum ResolvedType {
         param_id: TypeId,
         /// Name of the associated type (e.g., `"Value"` in `T::Value`)
         assoc_name: String,
+        /// The associated type's own arguments (`i32` in `T::Buf<i32>`), empty
+        /// for one that declares no parameters.
+        args: Vec<TypeId>,
         /// The trait declaring `assoc_name`: `Self::Err` inside `trait FromStr`
         /// is `<Self as FromStr>::Err`.
         // Part of the identity, so a projection built under one module's
@@ -1488,6 +1488,7 @@ impl TypeTable {
             | ResolvedType::Function { .. }
             | ResolvedType::Reactive(_)
             | ResolvedType::TypeParam { .. }
+            | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::BuiltinArray(_)
@@ -1996,10 +1997,12 @@ impl TypeTable {
                     }
                     ResolvedType::AssocTypeProjection {
                         param_id,
+                        args,
                         assoc_type_bindings,
                         ..
                     } => {
                         components.push(*param_id);
+                        components.extend(args.iter().copied());
                         components.extend(assoc_type_bindings.iter().map(|(_, t)| *t));
                     }
                     ResolvedType::Primitive(_)
@@ -2010,6 +2013,7 @@ impl TypeTable {
                     | ResolvedType::Variant { .. }
                     | ResolvedType::Flags { .. }
                     | ResolvedType::TypeParam { .. }
+                    | ResolvedType::AssocParam { .. }
                     | ResolvedType::InferVar(_)
                     | ResolvedType::Unknown
                     | ResolvedType::Error => {}
@@ -3098,6 +3102,11 @@ impl TypeTable {
         self.intern(ResolvedType::TypeParam { name, index })
     }
 
+    /// A generic associated type's own parameter (`E` in `type Buf<E>`).
+    pub fn make_assoc_param(&mut self, name: String, index: u32) -> TypeId {
+        self.intern(ResolvedType::AssocParam { name, index })
+    }
+
     /// The id a declaration's parameter at `index` interns to. A pack holds a
     /// tuple in its one slot, so it is a `TypePack` and not a `TypeParam`.
     pub fn make_declared_param(&mut self, name: String, index: u32, is_pack: bool) -> TypeId {
@@ -3152,23 +3161,112 @@ impl TypeTable {
         })
     }
 
-    /// Create an associated type projection `<T as Trait>::X`. The declaring
-    /// trait is required: without it the projection has no identity to compare.
+    /// Create an associated type projection `<T as Trait>::X<args>`. The
+    /// declaring trait is required: without it the projection has no identity
+    /// to compare.
     pub fn make_assoc_type_projection(
         &mut self,
         param_id: TypeId,
         owning_trait: DefId,
         assoc_name: String,
+        args: Vec<TypeId>,
         bounds: Vec<FqTraitName>,
         assoc_type_bindings: Vec<(String, TypeId)>,
     ) -> TypeId {
         self.intern(ResolvedType::AssocTypeProjection {
             param_id,
             assoc_name,
+            args,
             owning_trait,
             bounds,
             assoc_type_bindings,
         })
+    }
+
+    /// `family` at a projection's `args`: a projection still awaiting them
+    /// carries them, and a binding is instantiated at them.
+    pub fn with_projection_args(&mut self, family: TypeId, args: &[TypeId]) -> TypeId {
+        let ResolvedType::AssocTypeProjection {
+            param_id,
+            assoc_name,
+            args: own,
+            owning_trait,
+            bounds,
+            assoc_type_bindings,
+        } = self.get(family).clone()
+        else {
+            return self.instantiate_family(family, args);
+        };
+        // One that has its own is a binding naming another family, as
+        // `type Buf<E> = I::Buf<E>` does, and is instantiated like any other.
+        if !own.is_empty() || args.is_empty() {
+            return self.instantiate_family(family, args);
+        }
+        let assoc_type_bindings = assoc_type_bindings
+            .into_iter()
+            .map(|(name, bound)| (name, self.instantiate_family(bound, args)))
+            .collect();
+        self.make_assoc_type_projection(
+            param_id,
+            owning_trait,
+            assoc_name,
+            args.to_vec(),
+            bounds,
+            assoc_type_bindings,
+        )
+    }
+
+    /// What `<base as owning_trait>::assoc_name<args>` is, for a `base` that
+    /// carries no type parameter, or `None` where nothing binds it.
+    pub fn answer_projection(
+        &mut self,
+        base: TypeId,
+        owning_trait: &DefId,
+        assoc_name: &str,
+        args: &[TypeId],
+    ) -> Option<TypeId> {
+        let family = self.projection_family(base, owning_trait, assoc_name)?;
+        Some(self.instantiate_family(family, args))
+    }
+
+    /// The binding [`Self::answer_projection`] instantiates, its own
+    /// parameters still open.
+    fn projection_family(
+        &mut self,
+        base: TypeId,
+        owning_trait: &DefId,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
+        // An impl on the reference answers first, then the referent's, as
+        // method-call auto-deref does: `&mut MyDe` projects `MyDe`'s.
+        let concrete = self.peel_refs(base);
+        if concrete != base
+            && let Some(resolved) = self.resolve_assoc_type_of_trait(base, owning_trait, assoc_name)
+        {
+            return Some(resolved);
+        }
+        // Identity before spelling: a projection that names its trait is
+        // answered exactly, so two traits declaring the same associated-type
+        // name on one implementor stay apart (WEP-2026-08-12). The name-keyed
+        // forms below give up on that case rather than choosing.
+        if let Some(resolved) =
+            self.resolve_trait_assoc_type_of_instance(concrete, owning_trait, assoc_name)
+        {
+            return Some(resolved);
+        }
+        if let Some(resolved) =
+            self.resolve_assoc_type_qualified(concrete, owning_trait, assoc_name)
+        {
+            return Some(resolved);
+        }
+        if let Some(resolved) = self.resolve_generic_assoc_type_mono(concrete, assoc_name) {
+            return Some(resolved);
+        }
+        // A scalar primitive's arithmetic is compiler-supplied, so nothing
+        // registered its `Output`: it is the receiver itself, a newtype over
+        // one included. `v128` is not one — only a lane type's own impl names
+        // its output.
+        (assoc_name == "Output" && self.is_scalar_primitive_like(concrete)).then_some(concrete)
     }
 
     /// Register `<concrete_id as trait_ref>::assoc_name` → `resolved_id`: for
@@ -3392,7 +3490,7 @@ impl TypeTable {
             .collect();
         for (trait_ref, assoc_name, def_id) in defs {
             let resolved = self.substitute_type_params(def_id, substitution);
-            if !self.contains_type_param(resolved) {
+            if self.binding_is_concrete(resolved) {
                 self.register_assoc_type_resolution(concrete_id, trait_ref, assoc_name, resolved);
             }
         }
@@ -3588,7 +3686,14 @@ impl TypeTable {
         substitution: &IndexMap<u32, TypeId>,
         projections: &SlotProjections,
     ) -> TypeId {
-        self.subst_rec(type_id, substitution, &IndexMap::default(), projections)
+        self.subst_rec(
+            type_id,
+            &Leaves {
+                params: substitution,
+                projections,
+                ..Leaves::NONE
+            },
+        )
     }
 
     /// Substitute solved inference variables into `type_id`.
@@ -3604,31 +3709,43 @@ impl TypeTable {
     ) -> TypeId {
         self.subst_rec(
             type_id,
-            &IndexMap::default(),
-            solutions,
-            &SlotProjections::default(),
+            &Leaves {
+                vars: solutions,
+                ..Leaves::NONE
+            },
         )
     }
 
-    /// The shared traversal behind [`Self::substitute_type_params_with`] and
-    /// [`Self::substitute_infer_vars`].
-    fn subst_rec(
-        &mut self,
-        type_id: TypeId,
-        substitution: &IndexMap<u32, TypeId>,
-        vars: &IndexMap<InferVarId, TypeId>,
-        projections: &SlotProjections,
-    ) -> TypeId {
-        if substitution.is_empty() && vars.is_empty() && projections.is_empty() {
+    /// A generic associated type's binding `family` at a projection's `args`:
+    /// each [`ResolvedType::AssocParam`] replaced by the argument at its index.
+    pub fn instantiate_family(&mut self, family: TypeId, args: &[TypeId]) -> TypeId {
+        self.subst_rec(
+            family,
+            &Leaves {
+                family: args,
+                ..Leaves::NONE
+            },
+        )
+    }
+
+    /// The shared traversal behind [`Self::substitute_type_params_with`],
+    /// [`Self::substitute_infer_vars`] and [`Self::instantiate_family`].
+    fn subst_rec(&mut self, type_id: TypeId, leaves: &Leaves<'_>) -> TypeId {
+        if leaves.is_empty() {
             return type_id;
         }
         match self.get(type_id).clone() {
             ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
-                substitution.get(&index).copied().unwrap_or(type_id)
+                leaves.params.get(&index).copied().unwrap_or(type_id)
             }
-            ResolvedType::InferVar(var) => vars.get(&var).copied().unwrap_or(type_id),
+            ResolvedType::AssocParam { index, .. } => leaves
+                .family
+                .get(index as usize)
+                .copied()
+                .unwrap_or(type_id),
+            ResolvedType::InferVar(var) => leaves.vars.get(&var).copied().unwrap_or(type_id),
             ResolvedType::BuiltinArray(elem) => {
-                let new_elem = self.subst_rec(elem, substitution, vars, projections);
+                let new_elem = self.subst_rec(elem, leaves);
                 if new_elem == elem {
                     type_id
                 } else {
@@ -3636,7 +3753,7 @@ impl TypeTable {
                 }
             }
             ResolvedType::Ref(inner) => {
-                let new_inner = self.subst_rec(inner, substitution, vars, projections);
+                let new_inner = self.subst_rec(inner, leaves);
                 if new_inner == inner {
                     type_id
                 } else {
@@ -3644,7 +3761,7 @@ impl TypeTable {
                 }
             }
             ResolvedType::MutRef(inner) => {
-                let new_inner = self.subst_rec(inner, substitution, vars, projections);
+                let new_inner = self.subst_rec(inner, leaves);
                 if new_inner == inner {
                     type_id
                 } else {
@@ -3657,11 +3774,9 @@ impl TypeTable {
                 return_type,
                 effects,
             } => {
-                let new_params: Vec<TypeId> = params
-                    .iter()
-                    .map(|&p| self.subst_rec(p, substitution, vars, projections))
-                    .collect();
-                let new_return_type = self.subst_rec(return_type, substitution, vars, projections);
+                let new_params: Vec<TypeId> =
+                    params.iter().map(|&p| self.subst_rec(p, leaves)).collect();
+                let new_return_type = self.subst_rec(return_type, leaves);
                 if new_params == params && new_return_type == return_type {
                     type_id
                 } else {
@@ -3671,7 +3786,7 @@ impl TypeTable {
             ResolvedType::GenericResource { def, type_args } => {
                 let new_args: Vec<TypeId> = type_args
                     .iter()
-                    .map(|&a| self.subst_rec(a, substitution, vars, projections))
+                    .map(|&a| self.subst_rec(a, leaves))
                     .collect();
                 if new_args == type_args {
                     type_id
@@ -3692,7 +3807,7 @@ impl TypeTable {
                             ResolvedType::TypePack {
                                 index, mapped_elem, ..
                             } => {
-                                if let Some(&pack_type) = substitution.get(&index) {
+                                if let Some(&pack_type) = leaves.params.get(&index) {
                                     match mapped_elem {
                                         // Mapped pack: substitute the element
                                         // once per source pack element, binding
@@ -3704,13 +3819,14 @@ impl TypeTable {
                                         Some(elem) => {
                                             let pack_elems = self.elem_types_or_self(pack_type);
                                             for pe in pack_elems {
-                                                let mut elem_substitution = substitution.clone();
+                                                let mut elem_substitution = leaves.params.clone();
                                                 elem_substitution.insert(index, pe);
                                                 new_elems.push(self.subst_rec(
                                                     elem,
-                                                    &elem_substitution,
-                                                    vars,
-                                                    projections,
+                                                    &Leaves {
+                                                        params: &elem_substitution,
+                                                        ..*leaves
+                                                    },
                                                 ));
                                             }
                                         }
@@ -3723,7 +3839,7 @@ impl TypeTable {
                                 }
                             }
                             _ => {
-                                new_elems.push(self.subst_rec(e, substitution, vars, projections));
+                                new_elems.push(self.subst_rec(e, leaves));
                             }
                         }
                     }
@@ -3735,7 +3851,7 @@ impl TypeTable {
                 } else {
                     let new_args: Vec<TypeId> = type_args
                         .iter()
-                        .map(|&a| self.subst_rec(a, substitution, vars, projections))
+                        .map(|&a| self.subst_rec(a, leaves))
                         .collect();
                     if new_args == type_args {
                         type_id
@@ -3747,14 +3863,17 @@ impl TypeTable {
             ResolvedType::AssocTypeProjection {
                 param_id,
                 assoc_name,
+                args,
                 owning_trait,
                 bounds,
                 assoc_type_bindings,
             } => {
+                let new_args: Vec<TypeId> =
+                    args.iter().map(|&a| self.subst_rec(a, leaves)).collect();
                 // The use site's answer wins: a rebuilt projection cannot
                 // re-derive what `Self::X` means there.
                 if let Some(slot) = self.param_slot(param_id)
-                    && let Some(answer) = projections.get(&slot).and_then(|answers| {
+                    && let Some(answer) = leaves.projections.get(&slot).and_then(|answers| {
                         answers
                             .iter()
                             .find(|(trait_, name, _)| {
@@ -3763,11 +3882,11 @@ impl TypeTable {
                             .map(|(_, _, type_id)| *type_id)
                     })
                 {
-                    return answer;
+                    return self.with_projection_args(answer, &new_args);
                 }
                 // Substitute the parameter first; only attempt projection
                 // resolution once the underlying type is fully concrete.
-                let substituted_base = self.subst_rec(param_id, substitution, vars, projections);
+                let substituted_base = self.subst_rec(param_id, leaves);
                 // A projection over a projection is answered by what the base
                 // carries: `IntoIterator::Iter: Iterator<Item = Self::Item>`
                 // makes `C::Iter::Item` the `C::Item` the frame already named.
@@ -3778,66 +3897,38 @@ impl TypeTable {
                     && let Some((_, answer)) =
                         base_bindings.iter().find(|(name, _)| *name == assoc_name)
                 {
-                    return *answer;
+                    let answer = *answer;
+                    return self.with_projection_args(answer, &new_args);
                 }
-                if !self.contains_type_param(substituted_base) {
-                    // An impl on the reference answers first, then the referent's,
-                    // as method-call auto-deref does: `&mut MyDe` projects `MyDe`'s.
-                    let concrete = self.peel_refs(substituted_base);
-                    if concrete != substituted_base
-                        && let Some(resolved) = self.resolve_assoc_type_of_trait(
-                            substituted_base,
-                            &owning_trait,
-                            &assoc_name,
-                        )
-                    {
-                        return resolved;
-                    }
-                    // Identity before spelling: a projection that names its
-                    // trait is answered exactly, so two traits declaring the
-                    // same associated-type name on one implementor stay apart
-                    // (WEP-2026-08-12). The name-keyed forms below give up on
-                    // that case rather than choosing.
-                    if let Some(resolved) = self.resolve_trait_assoc_type_of_instance(
-                        concrete,
+                if !self.contains_type_param(substituted_base)
+                    && let Some(resolved) = self.answer_projection(
+                        substituted_base,
                         &owning_trait,
                         &assoc_name,
-                    ) {
-                        return resolved;
-                    }
-                    if let Some(resolved) =
-                        self.resolve_assoc_type_qualified(concrete, &owning_trait, &assoc_name)
-                    {
-                        return resolved;
-                    }
-                    if let Some(resolved) =
-                        self.resolve_generic_assoc_type_mono(concrete, &assoc_name)
-                    {
-                        return resolved;
-                    }
-                    // A scalar primitive's arithmetic is compiler-supplied, so
-                    // nothing registered its `Output`: it is the receiver
-                    // itself, a newtype over one included. `v128` is not one —
-                    // only a lane type's own impl names its output.
-                    if assoc_name == "Output" && self.is_scalar_primitive_like(concrete) {
-                        return concrete;
-                    }
+                        &new_args,
+                    )
+                {
+                    return resolved;
                 }
                 // Bindings are resolved in the same frame as the rest of the
                 // signature, so they carry its slots too.
                 let mut new_bindings: Vec<(String, TypeId)> =
                     Vec::with_capacity(assoc_type_bindings.len());
                 for (name, bound) in &assoc_type_bindings {
-                    let substituted = self.subst_rec(*bound, substitution, vars, projections);
+                    let substituted = self.subst_rec(*bound, leaves);
                     new_bindings.push((name.clone(), substituted));
                 }
-                if substituted_base == param_id && new_bindings == assoc_type_bindings {
+                if substituted_base == param_id
+                    && new_args == args
+                    && new_bindings == assoc_type_bindings
+                {
                     type_id
                 } else {
                     self.make_assoc_type_projection(
                         substituted_base,
                         owning_trait,
                         assoc_name,
+                        new_args,
                         bounds,
                         new_bindings,
                     )
@@ -3848,7 +3939,7 @@ impl TypeTable {
             // type today, so the wrapper never reaches monomorphize — but the
             // contract is "rewrite every embedded parameter", and it embeds one.
             ResolvedType::Reactive(inner) => {
-                let new_inner = self.subst_rec(inner, substitution, vars, projections);
+                let new_inner = self.subst_rec(inner, leaves);
                 if new_inner == inner {
                     type_id
                 } else {
@@ -3862,12 +3953,12 @@ impl TypeTable {
             } => {
                 let new_args: Vec<TypeId> = type_args
                     .iter()
-                    .map(|&a| self.subst_rec(a, substitution, vars, projections))
+                    .map(|&a| self.subst_rec(a, leaves))
                     .collect();
                 if new_args == type_args {
                     type_id
                 } else {
-                    let new_base = self.subst_rec(base_type, substitution, vars, projections);
+                    let new_base = self.subst_rec(base_type, leaves);
                     self.make_newtype_instance(def, new_args, new_base)
                 }
             }
@@ -4345,6 +4436,18 @@ impl TypeTable {
 
     /// Check if a type is or contains type parameters or unresolved types (Unknown/Error)
     pub fn contains_type_param(&self, id: TypeId) -> bool {
+        self.contains_open(id, true)
+    }
+
+    /// Whether an impl's associated-type binding `id` is concrete for every
+    /// argument its own parameters take: open in nothing else.
+    pub fn binding_is_concrete(&self, id: TypeId) -> bool {
+        !self.contains_open(id, false)
+    }
+
+    /// [`Self::contains_type_param`], counting a generic associated type's own
+    /// parameters as open only where `family_is_open`.
+    fn contains_open(&self, id: TypeId, family_is_open: bool) -> bool {
         match self.get(id) {
             ResolvedType::TypeParam { .. }
             | ResolvedType::TypePack { .. }
@@ -4352,7 +4455,8 @@ impl TypeTable {
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => true,
-            _ => self.any_constituent(id, &mut |t| self.contains_type_param(t)),
+            ResolvedType::AssocParam { .. } => family_is_open,
+            _ => self.any_constituent(id, &mut |t| self.contains_open(t, family_is_open)),
         }
     }
 
@@ -4374,9 +4478,14 @@ impl TypeTable {
             | ResolvedType::Newtype { type_args, .. } => type_args.iter().any(|&t| f(t)),
             ResolvedType::AssocTypeProjection {
                 param_id,
+                args,
                 assoc_type_bindings,
                 ..
-            } => f(*param_id) || assoc_type_bindings.iter().any(|(_, t)| f(*t)),
+            } => {
+                f(*param_id)
+                    || args.iter().any(|&t| f(t))
+                    || assoc_type_bindings.iter().any(|(_, t)| f(*t))
+            }
             _ => false,
         }
     }
@@ -4495,8 +4604,9 @@ impl TypeTable {
     fn any_infer_var(&self, id: TypeId, pred: &mut impl FnMut(TypeId) -> bool) -> bool {
         match self.get(id) {
             ResolvedType::InferVar(_) => pred(id),
-            ResolvedType::AssocTypeProjection { param_id, .. } => {
+            ResolvedType::AssocTypeProjection { param_id, args, .. } => {
                 self.any_infer_var(*param_id, pred)
+                    || args.iter().any(|&arg| self.any_infer_var(arg, pred))
             }
             _ => self.any_constituent(id, &mut |t| self.any_infer_var(t, pred)),
         }
@@ -4631,22 +4741,31 @@ impl TypeTable {
                 )
             }
             ResolvedType::Reactive(inner) => format!("Reactive<{}>", type_name(*inner)),
-            ResolvedType::TypeParam { name, .. } => name.clone(),
+            ResolvedType::TypeParam { name, .. } | ResolvedType::AssocParam { name, .. } => {
+                name.clone()
+            }
             ResolvedType::InferVar(var) => self.infer_var_name(*var),
             ResolvedType::AssocTypeProjection {
                 param_id,
                 assoc_name,
+                args,
                 owning_trait,
                 ..
             } => {
                 let base = type_name(*param_id);
+                let args = if args.is_empty() {
+                    String::new()
+                } else {
+                    let names: Vec<String> = args.iter().map(|a| type_name(*a)).collect();
+                    format!("<{}>", names.join(", "))
+                };
                 // The owning trait is part of a projection's identity, so two
                 // that differ only there render the same without it.
                 if qualified {
                     let owner = self.head_name(*owning_trait, true);
-                    format!("<{base} as {owner}>::{assoc_name}")
+                    format!("<{base} as {owner}>::{assoc_name}{args}")
                 } else {
-                    format!("{base}::{assoc_name}")
+                    format!("{base}::{assoc_name}{args}")
                 }
             }
             ResolvedType::GenericInstance { def, type_args } => {
@@ -5043,7 +5162,9 @@ impl TypeTable {
             ResolvedType::Newtype { def, type_args, .. } => {
                 FqTypeName::declared(&self.defs, *def).with_args(args_of(type_args))
             }
-            ResolvedType::TypeParam { name, .. } => FqTypeName::binder(name),
+            ResolvedType::TypeParam { name, .. } | ResolvedType::AssocParam { name, .. } => {
+                FqTypeName::binder(name)
+            }
             ResolvedType::GenericInstance { def, type_args } => {
                 let args = args_of(type_args);
                 if self.is_tuple_def(*def) {
@@ -5068,6 +5189,7 @@ impl TypeTable {
             ResolvedType::AssocTypeProjection {
                 param_id,
                 assoc_name,
+                args,
                 owning_trait,
                 ..
             } => FqTypeName::projection(
@@ -5075,7 +5197,8 @@ impl TypeTable {
                 assoc_name,
                 &self.defs,
                 *owning_trait,
-            ),
+            )
+            .with_args(args_of(args)),
             // Shapes that name no declaration — packs, `Unknown`. They carry no
             // module, so the rendered spelling is already their whole identity.
             _ => FqTypeName::builtin(&self.mangle_type_name(id)),
@@ -5106,7 +5229,9 @@ impl TypeTable {
                 TypeNameInfo::Named(format!("{}/{}", self.def_module(*def), self.def_name(*def)))
             }
             // A type parameter is a template's own binder, not a declaration.
-            ResolvedType::TypeParam { name, .. } => TypeNameInfo::Named(name.clone()),
+            ResolvedType::TypeParam { name, .. } | ResolvedType::AssocParam { name, .. } => {
+                TypeNameInfo::Named(name.clone())
+            }
             // A mangled name is an identity, so two unsolved slots sharing a
             // spelling must not collapse. The slot's name is for reading.
             ResolvedType::InferVar(var) => TypeNameInfo::Named(var.to_string()),
@@ -5151,12 +5276,22 @@ impl TypeTable {
             ResolvedType::AssocTypeProjection {
                 param_id,
                 assoc_name,
+                args,
                 ..
-            } => TypeNameInfo::Named(format!(
-                "{}::{}",
-                self.mangle_type_name(*param_id),
-                assoc_name
-            )),
+            } => {
+                let base = format!("{}::{}", self.mangle_type_name(*param_id), assoc_name);
+                if args.is_empty() {
+                    TypeNameInfo::Named(base)
+                } else {
+                    TypeNameInfo::Generic {
+                        name: base,
+                        args: args
+                            .iter()
+                            .map(|t| self.mangle_type_arg_for_generic(*t))
+                            .collect(),
+                    }
+                }
+            }
             ResolvedType::TypePack { name, .. } => TypeNameInfo::Named(format!("..{name}")),
             ResolvedType::Never => TypeNameInfo::Named(NEVER_TYPE_NAME.to_string()),
             ResolvedType::Unknown | ResolvedType::Error => TypeNameInfo::Unknown,
@@ -6310,6 +6445,39 @@ pub struct TirTypeParam {
 /// stands for is written at the use site (`I: IntoIterator<Item = u8>`).
 pub type SlotProjections = IndexMap<u32, Vec<(DefId, String, TypeId)>>;
 
+static NO_PARAMS: IndexMap<u32, TypeId> = IndexMap::with_hasher(FxBuildHasher);
+static NO_VARS: IndexMap<InferVarId, TypeId> = IndexMap::with_hasher(FxBuildHasher);
+static NO_PROJECTIONS: SlotProjections = IndexMap::with_hasher(FxBuildHasher);
+
+/// What one substitution replaces, leaf by leaf: a declaration's slots, solved
+/// inference variables, a generic associated type's own parameters, and the
+/// projections a use site answers.
+#[derive(Clone, Copy)]
+struct Leaves<'s> {
+    params: &'s IndexMap<u32, TypeId>,
+    vars: &'s IndexMap<InferVarId, TypeId>,
+    family: &'s [TypeId],
+    projections: &'s SlotProjections,
+}
+
+impl Leaves<'static> {
+    const NONE: Self = Self {
+        params: &NO_PARAMS,
+        vars: &NO_VARS,
+        family: &[],
+        projections: &NO_PROJECTIONS,
+    };
+}
+
+impl Leaves<'_> {
+    fn is_empty(&self) -> bool {
+        self.params.is_empty()
+            && self.vars.is_empty()
+            && self.family.is_empty()
+            && self.projections.is_empty()
+    }
+}
+
 /// Substitution-key base for method-level type params: past the highest
 /// impl-param *index*, not the count. A concrete type in a receiver slot
 /// (`String` in `impl<V> ... for TreeMap<String, V>`) is not a param, so a later
@@ -6794,6 +6962,7 @@ impl TypeTable {
             | ResolvedType::GenericResource { .. }
             | ResolvedType::Reactive(_)
             | ResolvedType::TypeParam { .. }
+            | ResolvedType::AssocParam { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::TypePack { .. }
             | ResolvedType::AssocTypeProjection { .. }
@@ -8475,7 +8644,36 @@ mod tests {
             assoc.to_string(),
             vec![],
             vec![],
+            vec![],
         )
+    }
+
+    /// A use site's answer for a generic associated type is the binding, its
+    /// own parameters open, so the projection's arguments fill them; the
+    /// arguments themselves take the substitution first.
+    #[test]
+    fn a_family_answer_is_instantiated_at_the_projection_arguments() {
+        let mut table = TypeTable::new();
+        let self_param = table.make_type_param("Self".to_string(), 0);
+        let method_param = table.make_type_param("E".to_string(), 1);
+        let projection = table.make_assoc_type_projection(
+            self_param,
+            DefId::for_test(0),
+            "Item".to_string(),
+            vec![method_param],
+            vec![],
+            vec![],
+        );
+        let open = table.make_assoc_param("E".to_string(), 0);
+        let family = table.make_builtin_array(open);
+
+        let substituted = table.substitute_type_params_with(
+            projection,
+            &IndexMap::from_iter([(1, TypeTable::U8)]),
+            &answer_item(DefId::for_test(0), family),
+        );
+
+        assert_eq!(substituted, table.make_builtin_array(TypeTable::U8));
     }
 
     /// Substituting a projection's base rewrites the projection even when the

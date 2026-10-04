@@ -908,9 +908,9 @@ impl RefCarrying<'_> {
         match self.type_table.get(type_id) {
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => (true, false),
             // What a type parameter stands for is not known here.
-            ResolvedType::TypeParam { .. } | ResolvedType::AssocTypeProjection { .. } => {
-                (true, false)
-            }
+            ResolvedType::TypeParam { .. }
+            | ResolvedType::AssocParam { .. }
+            | ResolvedType::AssocTypeProjection { .. } => (true, false),
             ResolvedType::Reactive(inner) | ResolvedType::BuiltinArray(inner) => {
                 let inner = *inner;
                 self.walk(inner, open)

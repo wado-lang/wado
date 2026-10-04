@@ -830,6 +830,43 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ScopedBound::pin_declared(param, self_binding)
     }
 
+    /// Run `body` with a generic associated type's own parameters in scope over
+    /// this frame, each as the `ResolvedType::AssocParam` a projection's
+    /// argument fills, with the bounds it declares.
+    pub(super) fn with_assoc_params<R>(
+        &mut self,
+        params: &[ast::GenericParam],
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        if params.is_empty() {
+            return body(self);
+        }
+        let mut scope = self.enter_inherited_type_param_scope();
+        let base = scope.annotate_ctx.trait_ctx.type_params.len() as u32;
+        for (index, param) in params.iter().enumerate() {
+            let type_id = scope
+                .tysys
+                .type_table
+                .borrow_mut()
+                .make_assoc_param(param.name.clone(), index as u32);
+            let bounds = scope.scoped_bounds(param);
+            scope.bind_param(
+                &param.name,
+                BinderInScope::declared(base + index as u32, type_id, param.id),
+                bounds,
+            );
+        }
+        body(&mut scope)
+    }
+
+    /// What an impl's `binding` binds, its own parameters left open as
+    /// `ResolvedType::AssocParam`s.
+    pub(super) fn resolve_assoc_binding(&mut self, binding: &ast::AssociatedTypeBinding) -> TypeId {
+        self.with_assoc_params(&binding.type_params, |scope| {
+            scope.resolve_type(&binding.ty)
+        })
+    }
+
     /// Reject a bound writing `Self` where the frame binds none. `Self::Assoc`
     /// on a free function's parameter would go unchecked rather than mean what
     /// the parameter's own name already says.

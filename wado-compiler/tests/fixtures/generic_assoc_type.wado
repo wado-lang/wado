@@ -1,0 +1,71 @@
+// An associated type takes parameters of its own, and an impl binds it with
+// them in scope. A projection supplies them, so one associated type stands for
+// a family of types: `Self::Buf<E>` for every element `E`.
+
+trait Store with () {
+    type Buf<E>;
+
+    fn filled<E>(&self, n: i32, value: E) -> Self::Buf<E>;
+    fn count<E>(&self, buf: &Self::Buf<E>) -> i32;
+}
+
+struct Lists {}
+
+impl Store for Lists {
+    type Buf<E> = List<E>;
+
+    fn filled<E>(&self, n: i32, value: E) -> List<E> {
+        return List::<E>::filled(n, value);
+    }
+
+    fn count<E>(&self, buf: &List<E>) -> i32 {
+        return buf.len();
+    }
+}
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+struct Pairs {}
+
+impl Store for Pairs {
+    type Buf<E> = Pair<E, i32>;
+
+    fn filled<E>(&self, n: i32, value: E) -> Pair<E, i32> {
+        return Pair { a: value, b: n };
+    }
+
+    fn count<E>(&self, buf: &Pair<E, i32>) -> i32 {
+        return buf.b;
+    }
+}
+
+// Two instantiations of one family in one signature, through a bound.
+fn both<S: Store>(s: &S) -> [S::Buf<i32>, S::Buf<String>] {
+    return [s.filled(2, 7), s.filled(3, "x")];
+}
+
+fn total<S: Store>(s: &S) -> i32 {
+    let [ints, strs] = both(s);
+    return s.count(&ints) + s.count(&strs);
+}
+
+test "a projection's arguments pick the member of the family" {
+    let l = Lists {};
+    let [ints, strs] = both(&l);
+    assert ints == [7, 7] as List<i32>;
+    assert strs == ["x", "x", "x"] as List<String>;
+}
+
+test "a generic body reaches each impl's family through the bound" {
+    assert total(&Lists {}) == 5;
+    assert total(&Pairs {}) == 5;
+}
+
+test "a concrete impl's projection is the type it binds" {
+    let p = Pairs {};
+    let b: Pair<String, i32> = p.filled(4, "y");
+    assert b.a == "y";
+}

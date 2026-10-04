@@ -396,12 +396,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         };
         for binding in &impl_block.associated_types {
-            let bounds: Vec<(String, Option<FqTraitName>)> = self
+            let Some(decl) = self
                 .tysys
                 .trait_env
                 .assoc_type_decl(&trait_decl, &binding.name)
-                .into_iter()
-                .flat_map(|decl| &decl.bounds)
+                .cloned()
+            else {
+                continue;
+            };
+            let bounds: Vec<(String, Option<FqTraitName>)> = decl
+                .bounds
+                .iter()
                 .filter(|bound| bound.names_a_trait())
                 .map(|bound| self.tysys.bound_named_written(bound))
                 .collect();
@@ -414,19 +419,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .assoc_type_bindings
                 .get(&binding.name)
                 .copied()
-                .unwrap_or_else(|| self.resolve_type(&binding.ty));
-            if self.tysys.type_table.borrow().contains_type_param(type_id) {
+                .unwrap_or_else(|| self.resolve_assoc_binding(binding));
+            if !self.tysys.type_table.borrow().binding_is_concrete(type_id) {
                 continue;
             }
-            for (bound_name, bound_trait) in &bounds {
-                self.enforce_single_bound_args(
-                    type_id,
-                    bound_name,
-                    bound_trait.as_ref(),
-                    &binding.name,
-                    binding.span,
-                );
-            }
+            // The binding answers for every argument the declaration admits,
+            // so it is checked under the declaration's own parameter bounds.
+            self.with_assoc_params(&decl.type_params, |scope| {
+                for (bound_name, bound_trait) in &bounds {
+                    scope.enforce_single_bound_args(
+                        type_id,
+                        bound_name,
+                        bound_trait.as_ref(),
+                        &binding.name,
+                        binding.span,
+                    );
+                }
+            });
         }
     }
 
@@ -1226,6 +1235,7 @@ impl TypeSystem {
             | ResolvedType::Unknown
             | ResolvedType::Error
             | ResolvedType::TypeParam { .. }
+            | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::AssocTypeProjection { .. } => false,
@@ -1590,6 +1600,7 @@ impl TypeSystem {
             | ResolvedType::Function { .. }
             | ResolvedType::Reactive(_)
             | ResolvedType::TypeParam { .. }
+            | ResolvedType::AssocParam { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::TypePack { .. }
             | ResolvedType::Unknown
@@ -3138,9 +3149,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         bindings: &[ast::AssociatedTypeBinding],
     ) {
         for binding in bindings {
-            let resolved_id = self.resolve_type(&binding.ty);
+            let resolved_id = self.resolve_assoc_binding(binding);
             let mut table = self.tysys.type_table.borrow_mut();
-            if !table.contains_type_param(resolved_id) {
+            if table.binding_is_concrete(resolved_id) {
                 table.register_assoc_type_resolution(
                     concrete,
                     trait_ref.clone(),

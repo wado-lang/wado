@@ -903,6 +903,7 @@ fn slot_shape(payload: TypeId, type_table: &TypeTable) -> Option<SlotShape> {
         ResolvedType::Function { .. }
         | ResolvedType::Never
         | ResolvedType::TypeParam { .. }
+        | ResolvedType::AssocParam { .. }
         | ResolvedType::TypePack { .. }
         | ResolvedType::AssocTypeProjection { .. }
         | ResolvedType::Reactive(_)
@@ -931,6 +932,7 @@ fn is_gc_ref(type_id: TypeId, type_table: &TypeTable) -> bool {
         | ResolvedType::Unit
         | ResolvedType::Never
         | ResolvedType::TypeParam { .. }
+        | ResolvedType::AssocParam { .. }
         | ResolvedType::TypePack { .. }
         | ResolvedType::AssocTypeProjection { .. }
         | ResolvedType::Reactive(_)

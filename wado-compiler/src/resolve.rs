@@ -948,6 +948,15 @@ impl AstVisitor for Resolver<'_> {
         self.in_scope(params, self_binder, |s| ast::walk_item(s, item));
     }
 
+    /// A parameter's bounds read the names around the associated type, and
+    /// what the parameters scope over reads them too.
+    fn visit_assoc_type_params(&mut self, params: &[GenericParam], body: impl FnOnce(&mut Self)) {
+        self.in_scope(params, None, |s| {
+            s.visit_generic_params(params);
+            body(s);
+        });
+    }
+
     /// The parameters and the body's own bindings share one scope, so a `let`
     /// taking a parameter's name redeclares it.
     fn visit_function(&mut self, func: &ast::Function) {

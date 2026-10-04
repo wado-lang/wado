@@ -67,7 +67,7 @@ use crate::stdlib_snapshot::{is_building, rehydrate_tir_module, stdlib_sources};
 use crate::symbol::SymbolKind;
 use crate::tir::{StructDef, TirFunction, TraitRef};
 use crate::token::Span;
-use crate::unparse::unparse_type_into;
+use crate::unparse::{unparse_generic_params_into, unparse_type_into};
 use crate::wit_consume::module_host_leaf_imports;
 
 /// One `resource Child extends Parent` clause, held until every resource has
@@ -905,6 +905,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         //
         // The trait is the one the impl's header resolved to, so a module
         // implementing its own `Encode` is never checked against another's.
+        let params_as_written = |params: &[GenericParam]| {
+            let mut written = String::new();
+            unparse_generic_params_into(params, &mut written);
+            written
+        };
         for header in trait_env.impl_headers.values() {
             if !is_user_local(&header.module) {
                 continue;
@@ -941,12 +946,44 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // `T: Super`, so binding it here would record it where no
             // projection reads it (WEP 2026-07-27).
             for binding in &header.associated_types {
-                if !trait_env.declares_assoc_type(&decl_key, &binding.name) {
+                let Some(declared) = trait_env.assoc_type_decl(&decl_key, &binding.name) else {
                     let _ = logger.error_in(
                         &header.module,
                         TypeError::ImplAssocTypeNotInTrait {
                             trait_name: decl.name.clone(),
                             assoc_name: binding.name.clone(),
+                            span: binding.span,
+                        },
+                    );
+                    continue;
+                };
+                // The binding answers every projection the declaration admits,
+                // so it takes exactly the parameters the trait declares, under
+                // names of its own.
+                let bound_decls = |param: &ast::GenericParam| -> Vec<Option<DefId>> {
+                    param
+                        .bounds
+                        .iter()
+                        .map(|bound| resolutions.bound_decl(bound))
+                        .collect()
+                };
+                let agrees = declared.type_params.len() == binding.type_params.len()
+                    && declared
+                        .type_params
+                        .iter()
+                        .zip(&binding.type_params)
+                        .all(|(d, w)| {
+                            let (d, w) = (bound_decls(d), bound_decls(w));
+                            d.len() == w.len() && d.iter().all(|bound| w.contains(bound))
+                        });
+                if !agrees {
+                    let _ = logger.error_in(
+                        &header.module,
+                        TypeError::ImplAssocTypeParamsMismatch {
+                            trait_name: decl.name.clone(),
+                            assoc_name: binding.name.clone(),
+                            declared: params_as_written(&declared.type_params),
+                            written: params_as_written(&binding.type_params),
                             span: binding.span,
                         },
                     );
@@ -2045,10 +2082,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     };
                     let param_id =
                         type_table.make_type_param(namespaced.namespace.clone(), index as u32);
+                    let args = namespaced
+                        .args
+                        .iter()
+                        .map(|arg| {
+                            Self::resolve_type_static_with_params(
+                                arg,
+                                type_table,
+                                lookup,
+                                type_params,
+                            )
+                        })
+                        .collect();
                     return type_table.make_assoc_type_projection(
                         param_id,
                         owning_trait,
                         namespaced.name.clone(),
+                        args,
                         vec![],
                         vec![],
                     );
@@ -2176,7 +2226,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Some((slots.of_name(name)?, param))
                 };
 
-                for binding in &impl_block.associated_types {
+                // A generic associated type's binding names parameters of its
+                // own, which only the frame resolver brings into scope.
+                for binding in impl_block
+                    .associated_types
+                    .iter()
+                    .filter(|binding| binding.type_params.is_empty())
+                {
                     let type_param_id = match &binding.ty {
                         // Simple case: `type Item = T` — T is a type param
                         Type::Named(named) => {
@@ -2206,6 +2262,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 inner_param_id,
                                 owning_trait,
                                 ns.name.clone(),
+                                vec![],
                                 vec![],
                                 vec![],
                             )

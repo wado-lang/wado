@@ -761,7 +761,8 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 
         let mut associated_types = hashmap::IndexMap::default();
         for binding in &impl_block.associated_types {
-            let type_id = scope.resolve_type(&binding.ty);
+            scope.reject_unsupported_assoc_params(&binding.name, &binding.type_params);
+            let type_id = scope.resolve_assoc_binding(binding);
             scope
                 .annotate_ctx
                 .trait_ctx
@@ -968,6 +969,25 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     }
 }
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
+    /// Report each of a generic associated type's `params` that is not a plain
+    /// type parameter. A projection supplies one type per parameter, so a pack,
+    /// an effect or a default has nothing to take.
+    pub(super) fn reject_unsupported_assoc_params(
+        &mut self,
+        assoc_name: &str,
+        params: &[ast::GenericParam],
+    ) {
+        for param in params {
+            if param.is_pack || !param.is_real_type_param() || param.default.is_some() {
+                let _ = self.emit(TypeError::UnsupportedAssocTypeParam {
+                    assoc_name: assoc_name.to_string(),
+                    param_name: param.name.clone(),
+                    span: param.span,
+                });
+            }
+        }
+    }
+
     /// Substitute a signature's own defaulted type parameters into `ty`.
     ///
     /// A parameter without a default is left alone: it is opaque, and the
@@ -1162,7 +1182,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .assoc_type_bindings
                 .clear();
             for binding in &impl_block.associated_types {
-                let type_id = frame_scope.resolve_type(&binding.ty);
+                let type_id = frame_scope.resolve_assoc_binding(binding);
                 frame_scope
                     .annotate_ctx
                     .trait_ctx
@@ -1640,6 +1660,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// — the same instantiation every other declaration uses, instead of
     /// re-resolving the trait's method AST in the impl's perspective.
     pub(super) fn resolve_trait_decl(&mut self, trait_decl: &ast::TraitDecl) {
+        for assoc in &trait_decl.associated_types {
+            self.reject_unsupported_assoc_params(&assoc.name, &assoc.type_params);
+        }
         let (mut scope, self_slot, next_slot) = self.enter_trait_scope(trait_decl);
 
         let decl_slots: Vec<(String, TypeId)> = std::iter::once(("Self".to_string(), self_slot))

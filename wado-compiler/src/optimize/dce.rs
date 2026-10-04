@@ -1761,6 +1761,7 @@ fn collect_type_dependencies(
         | ResolvedType::Variant { .. }
         | ResolvedType::Resource { .. }
         | ResolvedType::TypeParam { .. }
+        | ResolvedType::AssocParam { .. }
         | ResolvedType::TypePack { .. } => {}
         ResolvedType::InferVar(var) => panic!("{var} reached DCE"),
 

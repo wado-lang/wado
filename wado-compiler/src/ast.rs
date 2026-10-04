@@ -460,6 +460,14 @@ pub trait AstVisitor: Sized {
         walk_trait_bounds(self, bounds);
     }
 
+    /// A generic associated type's own parameters, and `body` written where
+    /// they are in scope. Overridable because a scope-aware visitor binds them
+    /// for `body` alone.
+    fn visit_assoc_type_params(&mut self, params: &[GenericParam], body: impl FnOnce(&mut Self)) {
+        self.visit_generic_params(params);
+        body(self);
+    }
+
     fn visit_type(&mut self, ty: &Type) {
         walk_type(self, ty);
     }
@@ -656,7 +664,7 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
             v.visit_type(&i.ty);
             for binding in &i.associated_types {
                 v.visit_id(binding.id, binding.span);
-                v.visit_type(&binding.ty);
+                v.visit_assoc_type_params(&binding.type_params, |v| v.visit_type(&binding.ty));
             }
             for c in &i.constants {
                 v.visit_id(c.id, c.span);
@@ -676,7 +684,9 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
             }
             for assoc in &t.associated_types {
                 v.visit_id(assoc.id, assoc.span);
-                v.visit_trait_bounds(&assoc.bounds);
+                v.visit_assoc_type_params(&assoc.type_params, |v| {
+                    v.visit_trait_bounds(&assoc.bounds);
+                });
             }
             for m in &t.methods {
                 v.visit_function(m);
@@ -4433,6 +4443,9 @@ pub struct BuiltinTypeDecl {
 pub struct AssociatedTypeDecl {
     pub id: AstId,
     pub name: String,
+    /// The associated type's own parameters (`E` in `type Buf<E>;`), which a
+    /// projection supplies.
+    pub type_params: Vec<GenericParam>,
     /// Trait bounds on this associated type (e.g., `SerializeSeq` in `type SeqSerializer: SerializeSeq;`
     /// or `Iterator<Item = Self::Item>` in `type Iter: Iterator<Item = Self::Item>;`)
     pub bounds: Vec<TraitBound>,
@@ -4445,6 +4458,8 @@ pub struct AssociatedTypeBinding {
     pub id: AstId,
     pub attrs: Vec<Attribute>,
     pub name: String,
+    /// The parameters the trait declares the associated type with, in scope in `ty`.
+    pub type_params: Vec<GenericParam>,
     pub ty: Type,
     pub span: Span,
 }

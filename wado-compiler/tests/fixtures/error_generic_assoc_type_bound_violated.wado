@@ -1,0 +1,28 @@
+// A generic associated type's own bound is owed by the binding at every
+// argument the declaration admits.
+
+trait Len with () {
+    fn len(&self) -> i32;
+}
+
+struct Bag<E> {
+    items: List<E>,
+}
+
+trait Store with () {
+    type Buf<E>: Len;
+}
+
+struct Bags {}
+
+impl Store for Bags {
+    type Buf<E> = Bag<E>;
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":19:5: analysis error: type 'Bag<E>' does not implement trait 'Len' required by bound on 'Buf'",
+  "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
+}

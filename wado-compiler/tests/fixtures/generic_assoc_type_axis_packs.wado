@@ -1,0 +1,87 @@
+// A backend owns its tensor's representation as a family over the element
+// and the axis list, and a kernel's signature reads it through packs: the
+// axes a contraction meets must agree for the call to compile, whichever
+// backend answers.
+
+trait Element with () {}
+
+impl Element for f32 {}
+
+struct Host<E, Axes> {
+    data: List<E>,
+    extents: List<i32>,
+}
+
+trait Backend with () {
+    type Tensor<E: Element, Axes>;
+
+    fn upload<E: Element, Axes>(&mut self, t: Host<E, Axes>) -> Self::Tensor<E, Axes>;
+    fn download<E: Element, Axes>(&mut self, t: &Self::Tensor<E, Axes>) -> Host<E, Axes>;
+    fn matmul<..Bs, M, K, N>(
+        &mut self,
+        a: &Self::Tensor<f32, [..Bs, M, K]>,
+        b: &Self::Tensor<f32, [..Bs, K, N]>,
+    ) -> Self::Tensor<f32, [..Bs, M, N]>;
+}
+
+struct Cpu {
+    calls: i32,
+}
+
+impl Backend for Cpu {
+    type Tensor<E: Element, Axes> = Host<E, Axes>;
+
+    fn upload<E: Element, Axes>(&mut self, t: Host<E, Axes>) -> Host<E, Axes> {
+        return t;
+    }
+
+    fn download<E: Element, Axes>(&mut self, t: &Host<E, Axes>) -> Host<E, Axes> {
+        return *t;
+    }
+
+    fn matmul<..Bs, M, K, N>(
+        &mut self,
+        a: &Host<f32, [..Bs, M, K]>,
+        b: &Host<f32, [..Bs, K, N]>,
+    ) -> Host<f32, [..Bs, M, N]> {
+        self.calls += 1;
+        let rows = a.extents[0];
+        let inner = a.extents[1];
+        let cols = b.extents[1];
+        let mut data: List<f32> = [];
+        for let r of 0..<rows {
+            for let c of 0..<cols {
+                let mut sum = 0.0_f32;
+                for let k of 0..<inner {
+                    sum += a.data[r * inner + k] * b.data[k * cols + c];
+                }
+                data.push(sum);
+            }
+        }
+        return Host { data, extents: [rows, cols] };
+    }
+}
+
+struct Batch {}
+struct In {}
+struct Out {}
+
+fn forward<B: Backend>(
+    backend: &mut B,
+    x: Host<f32, [Batch, In]>,
+    w: Host<f32, [In, Out]>,
+) -> Host<f32, [Batch, Out]> {
+    let x = backend.upload(x);
+    let w = backend.upload(w);
+    let y = backend.matmul(&x, &w);
+    return backend.download(&y);
+}
+
+test "a kernel reads the backend's tensor through its axis packs" {
+    let mut cpu = Cpu { calls: 0 };
+    let x = Host::<f32, [Batch, In]> { data: [1.0, 2.0], extents: [1, 2] };
+    let w = Host::<f32, [In, Out]> { data: [3.0, 4.0], extents: [2, 1] };
+    let y = forward(&mut cpu, x, w);
+    assert y.data == [11.0] as List<f32>;
+    assert cpu.calls == 1;
+}

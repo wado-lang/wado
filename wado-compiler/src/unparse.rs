@@ -1110,6 +1110,7 @@ impl<'a> Unparser<'a> {
                 this.emit_member(assoc.id, assoc.span, &assoc.attrs, |this| {
                     this.output.push_str("type ");
                     this.output.push_str(&assoc.name);
+                    this.unparse_generic_params(&assoc.type_params);
                     this.output.push_str(" = ");
                     this.unparse_type(&assoc.ty);
                     this.output.push(';');
@@ -1184,6 +1185,7 @@ impl<'a> Unparser<'a> {
                 this.emit_member(assoc.id, assoc.span, &[], |this| {
                     this.output.push_str("type ");
                     this.output.push_str(&assoc.name);
+                    this.unparse_generic_params(&assoc.type_params);
                     if !assoc.bounds.is_empty() {
                         this.output.push_str(": ");
                         this.unparse_trait_bounds(&assoc.bounds);
