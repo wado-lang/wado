@@ -31,21 +31,35 @@ export function titleTypes(skill: string): string[] {
 /** A title the call sets, or why the hook cannot tell which one it sets. */
 type Title = { title: string } | { problem: string };
 
-const ONE_TITLE = "Spell the title as one `--title <value>`, the only form this hook reads.";
+const ONE_TITLE = "Spell the title as one `--title <value>` of fixed text, the only form this hook reads.";
+
+const SETS_TITLE = ["create", "new", "edit"];
 
 /** What `gh pr create|new|edit` sets as its title, or null when it sets none.
  * gh's flag grammar (short clusters, `=` forms, the last repeat winning) is not
- * modelled: any spelling but one `--title <value>` is refused instead. */
+ * modelled: any spelling but one `--title <value>` written as fixed text, after
+ * `gh pr [--repo <repo>]`, is refused instead. */
 function ghTitle({ name, args }: Command): Title | null {
-  const words = args.map((a) => a.value);
-  const sub = words[1];
-  if (name !== "gh" || words[0] !== "pr" || !["create", "new", "edit"].includes(sub)) return null;
-  const rest = words.slice(2);
-  const other = rest.some((w) => w.startsWith("--title=") || /^-[A-Za-z]*t/.test(w));
-  const at = rest.flatMap((w, i) => (w === "--title" ? [i] : []));
+  if (name !== "gh" || args[0]?.value !== "pr") return null;
+  let s = 1;
+  while (args[s]?.value === "-R" || args[s]?.value === "--repo") s += 2;
+  const sub = args[s]?.value ?? "";
+  if (!SETS_TITLE.includes(sub)) {
+    // A flag where the subcommand belongs leaves which one it is unknown.
+    const unknown = sub.startsWith("-") && args.some((a) => SETS_TITLE.includes(a.value));
+    return unknown ? { problem: ONE_TITLE } : null;
+  }
+  const rest = args.slice(s + 1);
+  const other = rest.some(({ value }) => value.startsWith("--title=") || /^-[A-Za-z]*t/.test(value));
+  const at = rest.flatMap((a, i) => (a.value === "--title" ? [i] : []));
   if (other || at.length > 1) return { problem: ONE_TITLE };
-  if (at.length === 1) return { title: rest[at[0] + 1] ?? "" };
-  return sub === "edit" ? null : { problem: `\`gh pr ${sub}\` without --title. ${ONE_TITLE}` };
+  if (at.length === 0) {
+    return sub === "edit" ? null : { problem: `\`gh pr ${sub}\` without --title. ${ONE_TITLE}` };
+  }
+  const value = rest[at[0] + 1];
+  // A title the shell expands is not known until it runs.
+  if (value && /[$`]/.test(value.raw) && !/^'[^']*'$/.test(value.raw)) return { problem: ONE_TITLE };
+  return { title: value?.value ?? "" };
 }
 
 /** Every title the tool call would set. */
@@ -67,7 +81,8 @@ export function decide(set: Title[], skill: string): Decision {
   if (types.length === 0) {
     return { allow: false, reason: `pr-conventions.mts parsed no title types from ${SKILL}; fix the hook or the skill's list.` };
   }
-  const pattern = new RegExp(`^(${types.join("|")})(\\([^)]+\\))?!?: [^\\n]+$`);
+  // The value excludes every JavaScript line terminator, so a title is one line.
+  const pattern = new RegExp(`^(${types.join("|")})(\\([^)]+\\))?!?: [^\\r\\n\\u2028\\u2029]+$`);
   for (const t of set) {
     if ("problem" in t) return { allow: false, reason: `${t.problem}\n\n${conventions(skill)}` };
     if (!pattern.test(t.title)) {

@@ -36,6 +36,8 @@ for (const input of [
   bash('gh pr new --title "perf: z"'),
   bash('gh pr edit 12 --title "refactor: z"'),
   bash("gh pr create --body \"$(cat <<'EOF'\nit's done\nEOF\n)\" --title \"feat: x\""),
+  bash('gh pr -R owner/repo create --title "fix: z"'),
+  bash("gh pr create --title 'feat: costs $5'"),
 ]) {
   test(`allows ${input}`, () => assert.equal(verdict(input), true));
 }
@@ -54,6 +56,12 @@ for (const input of [
   bash('gh pr create -t "feat: x"'),
   bash('gh pr create -dt "feat: x"'),
   bash("gh pr create --title=feat:\\ x"),
+  bash("gh pr create --title \"feat: x$(printf '\\nsecond')\""),
+  bash("gh pr create --title \"feat: $T\""),
+  bash('gh pr -R owner/repo create --title "wip"'),
+  bash('gh pr --unknown create --title "feat: x"'),
+  create("feat: x\ry"),
+  create("feat: x\u2028y"),
 ]) {
   test(`denies ${input}`, () => assert.equal(verdict(input), false));
 }
@@ -61,6 +69,7 @@ for (const input of [
 for (const input of [
   update({ pullNumber: 1, body: "b" }),
   bash("gh pr view 12"),
+  bash("gh pr list --search create"),
   bash("gh pr edit 12 --body b"),
   bash("git log"),
 ]) {

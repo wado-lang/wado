@@ -41,6 +41,7 @@ const DENIED = [
   "echo \"$(cat <<'EOF'\nit's\nEOF\n)\"; sed -i x f",
   "echo \"$(cat <<EOF\n) it's\nEOF\n)\"; sed -i x f",
   "echo $(true # it's\n); sed -i x f",
+  "echo $(true;# )\n); sed -i x f",
   "case $x in *) sed -i s/a/b/ f;; esac",
   "bash -lc 'sed -i x f'",
   "sh -ec 'awk 1 f'",

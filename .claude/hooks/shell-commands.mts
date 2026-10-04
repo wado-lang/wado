@@ -69,7 +69,7 @@ function balanced(src: string, start: number, open: string, close: string): [str
     } else if (c === "\n" && heredocs.length > 0) {
       i++;
       for (const heredoc of heredocs.splice(0)) i = readHeredoc(src, i, heredoc)[1];
-    } else if (script && c === "#" && (i === start || " \t\n".includes(src[i - 1]))) {
+    } else if (script && c === "#" && (i === start || BREAKS_WORD.includes(src[i - 1]))) {
       const newline = src.indexOf("\n", i);
       i = newline < 0 ? src.length : newline;
     } else if (script && opensHeredoc(src, i)) {

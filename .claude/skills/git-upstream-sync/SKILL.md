@@ -13,7 +13,8 @@ merge conflicts: a clean merge still ends with the sanity check.
 ### 1. Fetch and merge with zdiff3
 
 If the branch is on `origin`, pull it first: CI's `tidy` job may have pushed
-`chore: tidy` onto it. Then move the checked-out submodules to the pointers the
+`chore: tidy` onto it. If that pull conflicts, take it through steps 2 and 3,
+then start again here, so `origin/main` is merged too. Then move the checked-out submodules to the pointers the
 merge recorded, so the next `git add -A` does not stage a stale checkout.
 
 ```sh
