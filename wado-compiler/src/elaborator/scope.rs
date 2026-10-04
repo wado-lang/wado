@@ -126,6 +126,8 @@ impl AssocBindings {
 /// An impl's associated-type bindings and where they are read; see
 /// [`AssocBindings::pending`].
 pub(super) struct ImplBindings {
+    /// The impl block they are written in.
+    pub(super) impl_id: ast::AstId,
     pub(super) site: Option<(DefId, FamilySite)>,
     /// The impl's frame, its bindings left out, which each binding is
     /// resolved in.
@@ -358,7 +360,7 @@ pub(super) struct Scope {
     pub(super) assoc_sig_stack: IndexSet<(DefId, String)>,
     /// The impl bindings being resolved right now, since two may name each
     /// other.
-    pub(super) impl_binding_stack: IndexSet<String>,
+    pub(super) impl_binding_stack: IndexSet<(ast::AstId, String)>,
     /// The binders whose bound closure is being built right now, since
     /// `T: Uses<T::Item>` asks for it again while it is built.
     pub(super) bound_closure_stack: IndexSet<TypeId>,
@@ -770,6 +772,29 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .collect()
     }
 
+    /// Bind each of `params` written `<F: fn(...)>` that the frame does not
+    /// bind yet to that function type, as [`Self::register_generic_params`]
+    /// does: such a parameter is the signature, filling no slot, so its index
+    /// is never read. An impl's placed nowhere in its target is bound by
+    /// nothing else.
+    pub(super) fn bind_fn_bound_params(&mut self, params: &[ast::GenericParam]) {
+        for param in params.iter().filter(|p| !p.is_pack && !p.is_effect) {
+            let index = self.annotate_ctx.trait_ctx.type_params.len() as u32;
+            let Some(sig) = param.bounds.iter().find_map(|b| b.fn_signature.as_ref()) else {
+                continue;
+            };
+            if self.annotate_ctx.trait_ctx.type_params.contains_key(&param.name) {
+                continue;
+            }
+            let type_id = self.resolve_type(&ast::Type::Function(sig.clone()));
+            self.bind_param(
+                &param.name,
+                BinderInScope::declared(index, type_id, param.id),
+                Vec::new(),
+            );
+        }
+    }
+
     /// Register a list of generic parameters as `TypeParam` / `TypePack` ids
     /// in the current `trait_ctx`, starting from `offset`. Skips effect params.
     /// Returns the next free index (i.e. `offset + non_effect_count`).
@@ -1059,6 +1084,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.annotate_ctx.trait_ctx.assoc_type_bindings = AssocBindings {
             resolved: IndexMap::default(),
             pending: Some(Rc::new(ImplBindings {
+                impl_id: impl_block.id,
                 site,
                 frame,
                 bindings: impl_block.associated_types.clone(),
@@ -1092,11 +1118,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let type_id = if let Some(type_id) = known {
             type_id
         } else {
-            if !self
-                .annotate_ctx
-                .impl_binding_stack
-                .insert(name.to_string())
-            {
+            let walk = (pending.impl_id, name.to_string());
+            if !self.annotate_ctx.impl_binding_stack.insert(walk.clone()) {
                 return None;
             }
             // In the impl's frame, whoever names it: an asking binding's own
@@ -1110,7 +1133,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 };
                 impl_frame.resolve_assoc_binding(pending.site.as_ref(), binding)
             };
-            self.annotate_ctx.impl_binding_stack.shift_remove(name);
+            self.annotate_ctx.impl_binding_stack.shift_remove(&walk);
             pending
                 .resolved
                 .borrow_mut()

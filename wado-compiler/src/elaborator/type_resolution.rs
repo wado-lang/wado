@@ -995,6 +995,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
+    /// What the projection `base` carries `assoc` bound to (`S::SeqSerializer`
+    /// knowing its `Ok`), `None` for any other base.
+    pub(super) fn carried_binding(&self, base: TypeId, assoc: &str) -> Option<TypeId> {
+        let table = self.tysys.type_table.borrow();
+        let ResolvedType::AssocTypeProjection {
+            assoc_type_bindings,
+            ..
+        } = table.get(base)
+        else {
+            return None;
+        };
+        assoc_type_bindings
+            .iter()
+            .find(|(name, _)| name == assoc)
+            .map(|(_, type_id)| *type_id)
+    }
+
     /// What this frame knows the projection `base::assoc` to be, where
     /// `base_name` is the name the frame files `base`'s bounds under.
     ///
@@ -1007,21 +1024,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         base_name: &str,
         assoc: &str,
     ) -> Option<TypeId> {
-        let carried = {
-            let table = self.tysys.type_table.borrow();
-            match table.get(base) {
-                ResolvedType::AssocTypeProjection {
-                    assoc_type_bindings,
-                    ..
-                } => assoc_type_bindings
-                    .iter()
-                    .find(|(name, _)| name == assoc)
-                    .map(|(_, type_id)| *type_id),
-                _ => None,
-            }
-        };
-        if carried.is_some() {
-            return carried;
+        if let Some(carried) = self.carried_binding(base, assoc) {
+            return Some(carried);
         }
         let resolved = self.frame_assoc_bindings_of(base_name, assoc);
         // Two bounds binding it differently is the coin toss the caller's
@@ -1349,7 +1353,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The arguments the bound `owner` on `base`, written in `space`, reaches
     /// its trait at, defaults filled. `None` where one names no type.
-    fn bound_trait_args(
+    pub(super) fn bound_trait_args(
         &mut self,
         base: TypeId,
         bound: &ScopedBound,
@@ -1439,13 +1443,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .get(base_name)?
             .type_id;
         for (bound, space) in self.bound_closure_of(base_name)? {
-            if self.trait_decl_of(&bound) != Some(trait_) {
+            let Some(decl) = self.trait_decl_of(&bound) else {
+                continue;
+            };
+            // A bound on a subtrait binds what its supertraits declare too
+            // (`T: Stacked<Load = Box>` with `Load` from `Base`), at whatever
+            // arguments the subtrait reaches them.
+            let inherits = decl != trait_
+                && self
+                    .tysys
+                    .trait_env
+                    .supertrait_closure_declared(&decl)
+                    .1
+                    .iter()
+                    .any(|inherited| inherited.decl == trait_);
+            if decl != trait_ && !inherits {
                 continue;
             }
             let Some(binding) = bound.assoc_types.iter().find(|b| b.name == assoc).cloned() else {
                 continue;
             };
-            if let Some(wanted) = trait_args {
+            if let Some(wanted) = trait_args
+                && !inherits
+            {
                 let at = self.bound_trait_args(base, &bound, &space, trait_);
                 if !at.is_some_and(|at| self.tysys.type_table.borrow().same_types(&at, wanted)) {
                     continue;

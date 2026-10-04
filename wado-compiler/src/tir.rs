@@ -2098,7 +2098,8 @@ impl TypeTable {
     /// `get(id)` must not panic for a surviving id, so `keep` is implicitly
     /// closed under `redirects` and stale redirect entries are dropped.
     pub fn retain(&mut self, keep: &IndexSet<TypeId>) {
-        let registered = self.registered_answers();
+        // Built where a family's projection first needs it.
+        let mut registered: Option<IndexMap<(DefId, String), Vec<TypeId>>> = None;
         // Implicit closure under `redirects`: every kept id whose `get`
         // result lives at a different id must keep that target alive too.
         let mut effective_keep: IndexSet<TypeId> = keep.clone();
@@ -2168,8 +2169,9 @@ impl TypeTable {
                         // projection with: the binding over the family's own
                         // parameters, which no instantiated type reaches.
                         if !args.is_empty()
-                            && let Some(answers) =
-                                registered.get(&(*owning_trait, assoc_name.clone()))
+                            && let Some(answers) = registered
+                                .get_or_insert_with(|| self.registered_answers())
+                                .get(&(*owning_trait, assoc_name.clone()))
                         {
                             components.extend(answers.iter().copied());
                         }
@@ -3410,7 +3412,7 @@ impl TypeTable {
         let frame = self.frame_slots(&sig.frame, base, trait_args.unwrap_or_default());
         let said: Vec<&TraitRef> = refs
             .iter()
-            .filter(|written| trait_args.is_some() || !self.reads_trait_params(sig, written))
+            .filter(|written| self.says_at(sig, written, trait_args.is_some()))
             .collect();
         said.into_iter()
             .map(|written| {
@@ -3425,6 +3427,14 @@ impl TypeTable {
                 TraitRef::new(written.decl, at_site)
             })
             .collect()
+    }
+
+    /// Whether `written`, one of `sig`'s refs, says anything at a site that
+    /// knows the trait's arguments where `trait_args_known`: one reading them
+    /// says nothing where they are not known. The one rule both readings of a
+    /// projection's bounds apply.
+    pub fn says_at(&self, sig: &AssocTypeSig, written: &TraitRef, trait_args_known: bool) -> bool {
+        trait_args_known || !self.reads_trait_params(sig, written)
     }
 
     /// Whether `written`, one of `sig`'s refs, reads a parameter of the trait
@@ -4985,11 +4995,31 @@ impl TypeTable {
             ResolvedType::TypeParam { .. }
             | ResolvedType::TypePack { .. }
             | ResolvedType::InferVar(_)
-            | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => true,
             ResolvedType::AssocParam { .. } => family_is_open,
+            // One off a family's parameter (`E::Inner`) is as settled as the
+            // parameter: the projection's arguments fill it, as they fill `E`.
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                args,
+                trait_args,
+                ..
+            } => {
+                family_is_open
+                    || !self.rooted_in_family(*param_id)
+                    || projection_arguments(args, trait_args).any(|arg| self.contains_open(arg, false))
+            }
             _ => self.any_constituent(id, &mut |t| self.contains_open(t, family_is_open)),
+        }
+    }
+
+    /// Whether `id` is a family's parameter, or a projection chain off one.
+    fn rooted_in_family(&self, id: TypeId) -> bool {
+        match self.get(id) {
+            ResolvedType::AssocParam { .. } => true,
+            ResolvedType::AssocTypeProjection { param_id, .. } => self.rooted_in_family(*param_id),
+            _ => false,
         }
     }
 

@@ -2235,24 +2235,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         assoc_types: &[DeclaredAssocType],
         self_type_id: TypeId,
-        bound: DefId,
-        slots: &IndexMap<u32, TypeId>,
+        candidate: &BoundCandidate,
     ) -> Vec<ProjectionAnswer> {
         let self_name = self.tysys.binder_name(self_type_id).unwrap_or_default();
-        let bound_args = self.trait_args_of_slots(bound, slots);
+        let read_as = ScopedBound::new(
+            candidate.bound.clone(),
+            candidate.written_self.at(self_type_id, candidate.decl),
+        );
+        let bound_args =
+            self.bound_trait_args(self_type_id, &read_as, &candidate.space, candidate.decl);
         let mut answers = Vec::with_capacity(assoc_types.len());
         for (declaring, decl) in assoc_types {
-            let trait_args = if *declaring == bound {
+            let at_bound = *declaring == candidate.decl;
+            let trait_args = if at_bound {
                 bound_args.clone()
             } else {
                 self.trait_args_for(self_type_id, &self_name, *declaring)
             };
-            let known = trait_args
-                .as_deref()
-                .and_then(|args| {
-                    self.frame_projection_of_trait(&self_name, *declaring, Some(args), &decl.name)
-                })
-                .or_else(|| self.frame_projection(self_type_id, &self_name, &decl.name));
+            // Reached at the bound's own arguments, only what that bound binds
+            // answers: another bound on the trait is another instantiation.
+            let known = match (at_bound, trait_args.as_deref()) {
+                (true, Some(args)) => self
+                    .frame_projection_of_trait(&self_name, *declaring, Some(args), &decl.name)
+                    .or_else(|| self.carried_binding(self_type_id, &decl.name)),
+                _ => self.frame_projection(self_type_id, &self_name, &decl.name),
+            };
             let answer = known.unwrap_or_else(|| {
                 let open = self.family_params(*declaring, &decl.name);
                 let site = FamilySite {
@@ -2268,26 +2275,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ));
         }
         answers
-    }
-
-    /// The arguments `slots`, a bound's instantiation of the trait `decl`,
-    /// give its parameters in order. `None` where one takes no slot (an
-    /// effect) or the bound left it unfilled.
-    fn trait_args_of_slots(
-        &self,
-        decl: DefId,
-        slots: &IndexMap<u32, TypeId>,
-    ) -> Option<Vec<TypeId>> {
-        let params = self.tysys.trait_decl_type_params_of(&decl)?;
-        trait_params_from_impl::<ast::Type>(&params, &[], None)
-            .into_iter()
-            .map(|supplied| {
-                supplied
-                    .takes_a_slot
-                    .then(|| slots.get(&supplied.slot).copied())
-                    .flatten()
-            })
-            .collect()
     }
 
     /// The space `elaborated`'s written types are read in: empty for a bound the
@@ -2434,7 +2421,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let decl = candidate.decl;
         let (sig, trait_assoc_types) = self.trait_method_of(&decl, method_name)?;
         let slots = self.bound_slots_in_space(candidate, self_type_id);
-        let answers = self.trait_assoc_answers(&trait_assoc_types, self_type_id, decl, &slots);
+        let answers = self.trait_assoc_answers(&trait_assoc_types, self_type_id, candidate);
         let instantiated = sig.decl.instantiate_slots_with(
             &self.tysys.type_table,
             &slots,
@@ -2542,6 +2529,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
         let (candidate, (sig, trait_assoc_types)) = resolved?;
+        let answers = self.trait_assoc_answers(&trait_assoc_types, self_type_id, &candidate);
         let BoundCandidate {
             bound,
             space,
@@ -2578,7 +2566,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let slots = self.in_space(&space, |e| {
             e.bound_slots(&bound, decl, self_type_id, written_self)
         });
-        let answers = self.trait_assoc_answers(&trait_assoc_types, self_type_id, decl, &slots);
         let fq_trait_name = self
             .tysys
             .trait_named_from_slots(fq_trait_name, &bound, &slots);

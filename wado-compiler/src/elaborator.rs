@@ -238,6 +238,7 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
                 Vec::new(),
             );
         }
+        self.bind_fn_bound_params(&impl_block.type_params);
         // Between the names and their bounds: the target is resolved from the
         // names, and a bound's `Self::Assoc` projects off the target.
         let implementing = self.impl_self_binding(&impl_block.ty, impl_block.trait_type.as_ref());

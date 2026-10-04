@@ -716,6 +716,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                 Some(param.id),
             ));
         }
+        self.bind_fn_bound_params(impl_declared_params);
 
         // After the impl's own parameters, which `Maker<Container<U>>` names,
         // and before the trait's, whose bounds pin the `Self` they mean.

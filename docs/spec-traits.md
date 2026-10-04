@@ -579,6 +579,11 @@ means the argument the trait is reached at. Under `S: Store<i32>`,
 `type Out: Into<X>` gives `H::Out` the methods of `Into<i32>`. A projection of
 `Holder<i32>`'s `Out` and one of `Holder<String>`'s are two types.
 
+A bound that writes no argument for a parameter without a default
+(`H: Holder`) leaves that parameter unknown. A bound or binding of the
+associated type that reads it, directly or through another of the trait's
+associated types, says nothing there: `H::Out` has no methods from `Into<X>`.
+
 ### Blanket Implementations
 
 A blanket impl provides a trait implementation for all types that satisfy a given bound:

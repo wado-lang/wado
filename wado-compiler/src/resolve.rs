@@ -102,6 +102,8 @@ pub struct Resolutions {
     redeclarations: Vec<Redeclaration>,
     /// The binders declared `effect`, the only ones that stand for an effect.
     effect_binders: hashmap::IndexSet<AstId>,
+    /// The binders written `<F: fn(...)>`, each the signature it names.
+    fn_bound_binders: IndexMap<AstId, ast::FunctionType>,
 }
 
 /// What every module can see, by layer.
@@ -274,6 +276,7 @@ impl Resolutions {
         let mut shadowings = Vec::new();
         let mut redeclarations = Vec::new();
         let mut effect_binders = hashmap::IndexSet::default();
+        let mut fn_bound_binders = IndexMap::default();
         for (module_source, module) in modules {
             let mut resolver = Resolver {
                 module: module_source,
@@ -287,6 +290,7 @@ impl Resolutions {
                 shadowings: &mut shadowings,
                 redeclarations: &mut redeclarations,
                 effect_binders: &mut effect_binders,
+                fn_bound_binders: &mut fn_bound_binders,
                 pending_binder: None,
                 pattern_site: PatternSite::Test,
                 pattern_names: None,
@@ -305,7 +309,15 @@ impl Resolutions {
             shadowings,
             redeclarations,
             effect_binders,
+            fn_bound_binders,
         }
+    }
+
+    /// The signature the binder `binder` is, where it is written
+    /// `<F: fn(...)>`: such a parameter is that function type.
+    #[must_use]
+    pub fn fn_bound_signature(&self, binder: AstId) -> Option<&ast::FunctionType> {
+        self.fn_bound_binders.get(&binder)
     }
 
     /// Every binder that took a name already in scope.
@@ -578,6 +590,7 @@ struct Resolver<'a> {
     /// item's parameter and no module scope is consulted for it.
     binders: Vec<IndexMap<String, AstId>>,
     effect_binders: &'a mut hashmap::IndexSet<AstId>,
+    fn_bound_binders: &'a mut IndexMap<AstId, ast::FunctionType>,
     /// Items declared inside the function body being walked, innermost block
     /// last. Filled as the walk passes each declaration, because a local item
     /// is visible only after it — like a `let`, and unlike a module-level
@@ -666,6 +679,11 @@ impl Resolver<'_> {
             scope.insert(p.name.clone(), p.id);
             if p.is_effect {
                 self.effect_binders.insert(p.id);
+            }
+            if let Some(sig) = p.bounds.iter().find_map(|b| b.fn_signature.as_ref())
+                && !p.is_pack
+            {
+                self.fn_bound_binders.insert(p.id, (**sig).clone());
             }
         }
         self.binders.push(scope);

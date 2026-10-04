@@ -1,7 +1,7 @@
 //! The lowering from the compiler's tables into the solver's [`Program`], and
 //! the differential checking the solver's answers against the compiler's own.
 
-use crate::ast::Type;
+use crate::ast::{FunctionType, Type};
 use crate::compiler_item::CompilerItem;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::hashmap::{IndexMap, IndexSet};
@@ -42,10 +42,12 @@ enum DeclKey {
 }
 
 /// How an impl's parameter is spelled where a type mentions it.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 enum ParamKind {
     Type(u32),
     Pack(u32),
+    /// `<F: fn(...)>`: the parameter is that signature, a type and no slot.
+    Signature(Box<FunctionType>),
 }
 
 /// The interning both directions share, so an impl lowered from its header
@@ -230,6 +232,9 @@ impl Lowering {
             Type::Named(named) => match param(&named.name) {
                 Some(ParamKind::Type(index)) => Some(SolverType::Param(index)),
                 Some(ParamKind::Pack(index)) => Some(SolverType::Pack(index)),
+                Some(ParamKind::Signature(sig)) => {
+                    self.ast_type(&Type::Function(sig), param, resolutions, self_type)
+                }
                 None => resolutions
                     .declared(named.id)
                     .map(|def| SolverType::Decl(self.head_of(resolutions.defs(), def), Vec::new())),
@@ -250,6 +255,7 @@ impl Lowering {
                 .map(SolverType::Tuple),
             Type::TypePackSpread(name, _) => match param(name)? {
                 ParamKind::Pack(index) | ParamKind::Type(index) => Some(SolverType::Pack(index)),
+                ParamKind::Signature(_) => None,
             },
             Type::Reference(inner) | Type::MutReference(inner) => Some(SolverType::Ref {
                 is_mut: matches!(ty, Type::MutReference(_)),
@@ -446,10 +452,14 @@ pub(super) fn lower_impls<'a>(
             let index =
                 |i: usize| u32::try_from(i).expect("an impl declares fewer than 2^32 params");
             let i = header.type_params.iter().position(|p| p.name == name)?;
-            Some(if header.type_params[i].is_pack {
-                ParamKind::Pack(index(i))
-            } else {
-                ParamKind::Type(index(i))
+            let declared = &header.type_params[i];
+            let signature = (!declared.is_pack)
+                .then(|| declared.bounds.iter().find_map(|b| b.fn_signature.as_ref()))
+                .flatten();
+            Some(match signature {
+                Some(sig) => ParamKind::Signature(sig.clone()),
+                None if declared.is_pack => ParamKind::Pack(index(i)),
+                None => ParamKind::Type(index(i)),
             })
         };
         let Some(target) = lowering.ast_type(&header.ty, &param, resolutions, None) else {

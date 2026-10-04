@@ -209,9 +209,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///
     /// A projection's are the declaration's own, read in its trait's frame
     /// at the projection: `Self` its base, the trait's parameters the
-    /// arguments it was reached at, the family's parameters its arguments. A
-    /// bound, or a binding, reading a trait parameter the projection does not
-    /// know is left out, as [`TypeTable::instantiate_trait_refs`] leaves it.
+    /// arguments it was reached at, the family's parameters its arguments.
+    /// Which of them it carries is the signature's to say
+    /// ([`TypeTable::says_at`]), here as in [`TypeTable::projection_bounds`];
+    /// the declaration only spells them. A binding reading a trait parameter
+    /// the projection does not know is left out.
     pub(super) fn carried_bounds(&self, ty: TypeId) -> Vec<ScopedBound> {
         if let Some(name) = self.tysys.binder_name(ty) {
             return self
@@ -251,43 +253,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|param| param.name.clone())
                 .zip(args.iter().copied()),
         );
-        let carried: Vec<ScopedBound> = decl
+        let sig = tt
+            .assoc_type_sig(*owning_trait, assoc_name)
+            .expect("a projection's signature is built before a method is looked up on it");
+        // `sig.bounds` was read off these, one per bound naming a trait.
+        let written: Vec<&ast::TraitBound> = decl
             .bounds
             .iter()
             .filter(|bound| {
-                bound.names_a_trait()
-                    && self.tysys.resolutions.bound_decl(bound).is_some()
-                    && !bound.type_args.iter().any(|ty| declaring.reads_unknown(ty))
+                bound.names_a_trait() && self.tysys.resolutions.bound_decl(bound).is_some()
             })
-            .map(|bound| {
+            .collect();
+        assert_eq!(
+            written.len(),
+            sig.bounds.len(),
+            "a signature's bounds are its declaration's naming a trait"
+        );
+        written
+            .into_iter()
+            .zip(&sig.bounds)
+            .filter(|(_, typed)| tt.says_at(sig, typed, trait_args.is_some()))
+            .map(|(bound, _)| {
                 let mut bound = bound.clone();
                 bound
                     .assoc_types
                     .retain(|binding| !declaring.reads_unknown(&binding.ty));
                 ScopedBound::new(bound, written_self).in_space(space.clone())
             })
-            .collect();
-        drop(tt);
-        // The bounds the signature reads in the trait's own frame are these,
-        // which a method's lookup reads as written: both say one set of traits.
-        let read: Vec<Option<DefId>> = carried
-            .iter()
-            .map(|scoped| self.tysys.resolutions.bound_decl(&scoped.bound))
-            .collect();
-        let derived: Vec<Option<DefId>> = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .projection_bounds(ty)
-            .expect("a projection's signature is built before a method is looked up on it")
-            .iter()
-            .map(|bound| Some(bound.decl))
-            .collect();
-        assert_eq!(
-            read, derived,
-            "a projection's bounds read alike as written and as typed"
-        );
-        carried
+            .collect()
     }
 
     /// What the call `call` selected through a declared bound, where the walk
