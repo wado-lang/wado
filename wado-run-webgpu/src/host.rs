@@ -93,10 +93,13 @@ fn core_options(options: &GpuRequestAdapterOptions) -> RequestAdapterOptions {
     }
 }
 
+/// The adapter's name, then its backend, device type and driver in brackets:
+/// names and driver strings carry parentheses of their own (`llvmpipe (LLVM
+/// 21.1.8, 256 bits)`), so the name ends at the first ` [`.
 fn describe(info: &AdapterInfo) -> String {
     let driver = format!("{} {}", info.driver, info.driver_info);
     format!(
-        "{} ({:?}, {:?}, {})",
+        "{} [{:?}, {:?}, {}]",
         info.name,
         info.backend,
         info.device_type,

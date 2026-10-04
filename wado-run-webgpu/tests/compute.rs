@@ -106,7 +106,7 @@ fn adapter_names() -> Vec<String> {
                 .trim_start()
                 .strip_prefix(&format!("{index}: "))
                 .unwrap_or_else(|| panic!("no index {index} on: {line}"));
-            let (name, _) = described.rsplit_once(" (").expect("described");
+            let (name, _) = described.split_once(" [").expect("described");
             name.to_owned()
         })
         .collect()
@@ -129,7 +129,7 @@ fn adapter_selected_by(selector: &str) -> String {
     let (_, line) = stderr
         .split_once("info: request-adapter: ")
         .unwrap_or_else(|| panic!("no adapter named in stderr: {stderr}"));
-    let (name, _) = line.lines().next().unwrap().rsplit_once(" (").unwrap();
+    let (name, _) = line.lines().next().unwrap().split_once(" [").unwrap();
     name.to_owned()
 }
 
@@ -198,7 +198,7 @@ fn the_help_names_the_subcommand_and_lists_the_adapters_under_their_indices() {
     assert!(stdout.contains("wado run-webgpu"), "stdout: {stdout}");
     for (index, name) in adapter_names().iter().enumerate() {
         assert!(
-            stdout.contains(&format!("\n  {index}: {name} (")),
+            stdout.contains(&format!("\n  {index}: {name} [")),
             "stdout: {stdout}"
         );
     }
