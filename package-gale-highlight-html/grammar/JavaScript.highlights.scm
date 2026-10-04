@@ -10,6 +10,7 @@
 
 ; An import or export list names bindings rather than properties, though each
 ; name is an `identifierName` too.
+(importDefault (Identifier) @variable)
 (importModuleItems (Identifier) @variable)
 (exportModuleItems (Identifier) @variable)
 (importNamespace (Identifier) @variable)

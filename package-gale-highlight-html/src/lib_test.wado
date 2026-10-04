@@ -81,6 +81,12 @@ test "a strict block leaves the file's mode as it was after its brace" {
     assert !after.contains(span("keyword", "interface")), after;
 }
 
+test "every name an import binds is a variable" {
+    let html = highlighted("<script type=\"module\">import React, { useState } from \"react\";</script>");
+    assert html.contains(span("variable", "React")), html;
+    assert html.contains(span("variable", "useState")), html;
+}
+
 test "the lexer base tells a division from a regular expression" {
     let html = highlighted("<script>let q = a / b / c, r = /b+/g;</script>");
     assert html.contains(`a ${span("operator", "/")} b ${span("operator", "/")} c`), html;
