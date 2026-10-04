@@ -332,9 +332,6 @@ fn lexer_element_has_actions(elem: &LexerElement) -> bool {
     return false;
 }
 
-/// Whether codegen emits the action machinery: the language is emittable AND the
-/// grammar has action content. Gates `emit_actions` and the ctx-tree token table
-/// so an actionless grammar stays byte-identical to before Stage C.
 /// Translate `returns` / `locals` / arg attribute types from the host language
 /// to Wado (`int` → `i32`, `boolean` → `bool`, …) so the value-channel vals
 /// struct emits valid Wado field types and `wado_type_default` recognises them.
@@ -359,6 +356,9 @@ fn translate_decl_types(decls: &mut List<AttrDecl>) {
     }
 }
 
+/// Whether codegen emits the action machinery: the language is emittable AND the
+/// grammar has action content. Gates `emit_actions` and the ctx-tree token table
+/// so an actionless grammar stays byte-identical to before Stage C.
 pub fn should_emit_actions(grammar: &Grammar) -> bool {
     return action_language_is_emittable(grammar) && grammar_has_actions(grammar);
 }
