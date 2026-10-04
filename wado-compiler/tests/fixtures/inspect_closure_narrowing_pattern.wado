@@ -1,0 +1,23 @@
+// A closure's `:#?` source shows a pattern the compiler tests by a comparison
+// as it was written, not the test: a float range, a range with a constant
+// bound, and a constant compared by `Eq`.
+global LOW: i32 = 1;
+global NAME: String = "wado";
+
+fn fmt_float(f: fn(f64) -> bool) -> String {
+    return `${f:#?}`;
+}
+
+fn fmt_int(f: fn(i32) -> bool) -> String {
+    return `${f:#?}`;
+}
+
+fn fmt_text(f: fn(String) -> bool) -> String {
+    return `${f:#?}`;
+}
+
+test "a narrowing pattern shows as written" {
+    assert fmt_float(|x| x matches { 0.0..<1.5 }) == "|x: f64| match x {\n    0.0..<1.5 => true,\n    _ => false,\n}";
+    assert fmt_int(|n| n matches { LOW..=5 }) == "|n: i32| match n {\n    LOW..=5 => true,\n    _ => false,\n}";
+    assert fmt_text(|s| s matches { NAME }) == "|s: String| match s {\n    NAME => true,\n    _ => false,\n}";
+}

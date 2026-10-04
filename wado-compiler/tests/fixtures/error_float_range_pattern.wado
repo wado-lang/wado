@@ -1,0 +1,70 @@
+// A float range pattern rejects a NaN bound and equal bounds, its arms must not
+// overlap, and a match on a float needs `_`, since no range takes a NaN. On a
+// type parameter, what no float type admits is reported before any instance.
+
+fn nan_bound(x: f64) -> i32 {
+    return match x {
+        0.0..=f64::NAN => 1,
+        _ => 0,
+    };
+}
+
+fn equal_bounds(x: f64) -> i32 {
+    return match x {
+        1.0..=1.0 => 1,
+        _ => 0,
+    };
+}
+
+fn zero_bounds(x: f64) -> i32 {
+    return match x {
+        -0.0..=0.0 => 1,
+        _ => 0,
+    };
+}
+
+fn rounded_equal(x: f32) -> i32 {
+    return match x {
+        1.0..=1.00000001 => 1,
+        _ => 0,
+    };
+}
+
+fn overlap(x: f64) -> i32 {
+    return match x {
+        0.0..<1.0 => 1,
+        0.5..<2.0 => 2,
+        _ => 0,
+    };
+}
+
+fn no_wildcard(x: f64) -> i32 {
+    return match x {
+        f64::NEG_INFINITY..=f64::INFINITY => 1,
+    };
+}
+
+fn wrong_owner(x: f32) -> i32 {
+    return match x {
+        0.0..=f64::MAX => 1,
+        _ => 0,
+    };
+}
+
+fn generic_reversed<T>(x: T) -> bool {
+    return x matches { 2.0..<1.0 };
+}
+
+fn generic_nan<T>(x: T) -> bool {
+    return x matches { 0.0..=f64::NAN };
+}
+
+export fn run() {
+    let _ = nan_bound(0.0) + equal_bounds(0.0) + zero_bounds(0.0) + rounded_equal(0.0);
+    let _ = overlap(0.0) + no_wildcard(0.0) + wrong_owner(0.0);
+}
+
+__DATA__
+{
+  "compile_error": ":7:9: analysis error: invalid pattern: a NaN is no range bound: `f64::NAN` matches no value; 14:9: invalid pattern: a float range with equal bounds names one value, as a float literal pattern would; 21:9: invalid pattern: a float range with equal bounds names one value, as a float literal pattern would; 28:9: invalid pattern: a float range with equal bounds names one value, as a float literal pattern would; 34:12: invalid pattern: overlapping range patterns in match arms; 42:12: invalid pattern: non-exhaustive match: add a final `_` arm; 49:9: pattern mismatch: expected 'f64', found 'f32'; 55:24: invalid pattern: reversed range pattern; 59:24: invalid pattern: a NaN is no range bound: `f64::NAN` matches no value"
+}

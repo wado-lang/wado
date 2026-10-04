@@ -1501,13 +1501,7 @@ fn parse_char_class<S: AsStrSlice>(text: S, span: Span) -> Result<CharClass, Par
     let chars = text.chars().collect();
     let end = chars.len() - 1;
     let mut pos = 1;
-    let mut negated = false;
     let mut ranges: List<CharRange> = [];
-
-    if pos < end && chars[pos] == '^' {
-        negated = true;
-        pos += 1;
-    }
 
     while pos < end {
         if at_property_escape(&chars, pos, end) {
@@ -1551,7 +1545,7 @@ fn parse_char_class<S: AsStrSlice>(text: S, span: Span) -> Result<CharClass, Par
         }
     }
 
-    return Result::<CharClass, ParseError>::Ok(CharClass { ranges, negated });
+    return Result::<CharClass, ParseError>::Ok(CharClass { ranges, negated: false });
 }
 
 /// `'lo'..'hi'` restricted to the Unicode scalars. A range holding no

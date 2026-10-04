@@ -142,13 +142,22 @@ use {
 
 /// Write `digit_count` decimal digits of `val` into `arr` at `offset`, padded
 /// with leading zeros — a decimal chunk below the leading one carries them.
+/// Two digits per divide: each divide waits on the one before, so the chain
+/// is the cost, and dividing by 100 halves it.
 internal fn write_decimal_digits(arr: &mut Array<u8>, offset: i32, val: u64, digit_count: i32) {
     let mut pos = offset + digit_count;
     let mut t = val;
-    for let mut i = 0; i < digit_count; i += 1 {
-        pos -= 1;
-        builtin::array_set_u8(arr, pos, ('0' as i32 + (t % 10) as i32) as u8);
-        t /= 10;
+    while pos - offset >= 2 {
+        let q = t / 100;
+        let pair = (t - q * 100) as i32;
+        let tens = pair / 10;
+        builtin::array_set_u8(arr, pos - 1, ('0' as i32 + pair - tens * 10) as u8);
+        builtin::array_set_u8(arr, pos - 2, ('0' as i32 + tens) as u8);
+        pos -= 2;
+        t = q;
+    }
+    if pos > offset {
+        builtin::array_set_u8(arr, offset, ('0' as i32 + (t % 10) as i32) as u8);
     }
 }
 
@@ -1652,6 +1661,36 @@ impl f32 {
         return builtin::f32_is_nan(*self);
     }
 
+    /// IEEE 754's `==`: false when either is a NaN, where `==` holds for two.
+    pub fn ieee754_eq(&self, other: f32) -> bool {
+        return builtin::f32_ieee754_eq(*self, other);
+    }
+
+    /// IEEE 754's `!=`: true when either is a NaN.
+    pub fn ieee754_ne(&self, other: f32) -> bool {
+        return builtin::f32_ieee754_ne(*self, other);
+    }
+
+    /// IEEE 754's `<`: false when either is a NaN, where `<` orders NaN last.
+    pub fn ieee754_lt(&self, other: f32) -> bool {
+        return builtin::f32_ieee754_lt(*self, other);
+    }
+
+    /// IEEE 754's `<=`: false when either is a NaN.
+    pub fn ieee754_le(&self, other: f32) -> bool {
+        return builtin::f32_ieee754_le(*self, other);
+    }
+
+    /// IEEE 754's `>`: false when either is a NaN.
+    pub fn ieee754_gt(&self, other: f32) -> bool {
+        return builtin::f32_ieee754_gt(*self, other);
+    }
+
+    /// IEEE 754's `>=`: false when either is a NaN.
+    pub fn ieee754_ge(&self, other: f32) -> bool {
+        return builtin::f32_ieee754_ge(*self, other);
+    }
+
     pub fn is_finite(&self) -> bool {
         return *self - *self == 0.0;
     }
@@ -2090,6 +2129,36 @@ impl f64 {
 
     pub fn is_nan(&self) -> bool {
         return builtin::f64_is_nan(*self);
+    }
+
+    /// IEEE 754's `==`: false when either is a NaN, where `==` holds for two.
+    pub fn ieee754_eq(&self, other: f64) -> bool {
+        return builtin::f64_ieee754_eq(*self, other);
+    }
+
+    /// IEEE 754's `!=`: true when either is a NaN.
+    pub fn ieee754_ne(&self, other: f64) -> bool {
+        return builtin::f64_ieee754_ne(*self, other);
+    }
+
+    /// IEEE 754's `<`: false when either is a NaN, where `<` orders NaN last.
+    pub fn ieee754_lt(&self, other: f64) -> bool {
+        return builtin::f64_ieee754_lt(*self, other);
+    }
+
+    /// IEEE 754's `<=`: false when either is a NaN.
+    pub fn ieee754_le(&self, other: f64) -> bool {
+        return builtin::f64_ieee754_le(*self, other);
+    }
+
+    /// IEEE 754's `>`: false when either is a NaN.
+    pub fn ieee754_gt(&self, other: f64) -> bool {
+        return builtin::f64_ieee754_gt(*self, other);
+    }
+
+    /// IEEE 754's `>=`: false when either is a NaN.
+    pub fn ieee754_ge(&self, other: f64) -> bool {
+        return builtin::f64_ieee754_ge(*self, other);
     }
 
     pub fn is_finite(&self) -> bool {

@@ -1,0 +1,22 @@
+// Highlight throughput of gale-highlight-html over a page carrying a
+// stylesheet, a script, JSON-LD, and `style` / `on*` attributes, so every
+// embedded language is on the measured path.
+
+use { Stdout } from "core:cli";
+use { MonotonicClock } from "wasi:clocks";
+use { Benchmark } from "core:benchmark";
+use { highlight } from "../src/lib.wado";
+
+global INPUT: String = #include_str("./input.html");
+
+test "input highlights its embedded languages" {
+    let out = highlight(INPUT);
+    assert out.contains("<span class=\"keyword\">class</span>");
+    assert out.contains("<span class=\"property\">margin</span>");
+}
+
+export fn run() with (Stdout, MonotonicClock) {
+    let mut b = Benchmark { name: "gale-highlight-html (Gale)", input_size: Option::Some(INPUT.len()) };
+    let last_len = b.run("", || highlight(INPUT).len());
+    assert last_len > 0;
+}

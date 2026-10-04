@@ -38,25 +38,23 @@ type "functype//hfs_match_scalar_arm_mixed_with_call_arm.wado/$cm_binding__Stdou
 
 type "functype//hfs_match_scalar_arm_mixed_with_call_arm.wado/$cm_export__run" = fn();  // TypeId(14)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(15)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(15)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(16)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(16)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(17)
+type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(17)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(18)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(18)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(19)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(19)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(20)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(20)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(21)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(21)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(22)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(23)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(24)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -77,35 +75,53 @@ fn "hfs_match_scalar_arm_mixed_with_call_arm.wado/external_inc"(b) {
 
 fn "hfs_match_scalar_arm_mixed_with_call_arm.wado/run"() with Stdout {
     let b: ref "hfs_match_scalar_arm_mixed_with_call_arm.wado//Buf";
-    let i: i32;
+    let i_1: i32;
     let $local_2: ref "core:prelude/string.wado//String";
-    let packed: i64;
-    let $hfs_v_34: i32;
+    let x: i64;
+    let $hfs_v_352: i32;
     b = struct.new "hfs_match_scalar_arm_mixed_with_call_arm.wado//Buf" { v: 0, pad: 0 };
-    i = 0;
-    $hfs_v_34 = 0;
+    i_1 = 0;
+    $hfs_v_352 = 0;
     b0: block {
         l1: loop {
-            break_if b0 i >= 4;
+            break_if b0 i_1 >= 4;
             let $match_scrut_0: i32;
-            if local.tee $match_scrut_0(i % 2) == 0 {
-                $hfs_v_34 = $hfs_v_34 + 1;
+            if local.tee $match_scrut_0(i_1 % 2) == 0 {
+                $hfs_v_352 = $hfs_v_352 + 1;
             } else {
-                b.v = $hfs_v_34;
+                b.v = $hfs_v_352;
                 "hfs_match_scalar_arm_mixed_with_call_arm.wado/external_inc"(b);
-                $hfs_v_34 = b.v;
+                $hfs_v_352 = b.v;
             }
-            i = i + 1;
-            b.v = $hfs_v_34;
+            i_1 = i_1 + 1;
+            b.v = $hfs_v_352;
             continue l1;
         };
     };
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(b.v, $local_2);
-    $match_scrut_0 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    $hfs_v_34 = builtin::i32_wrap_i64(packed >> 32_i64);
+    $hfs_v_352 = local.tee $match_scrut_0(b.v) < 0;
+    $match_scrut_0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s($match_scrut_0); select i64(x < 0_i64, 0_i64 - x, x)));
+    if $hfs_v_352 {
+        if @unlikely(local.tee $hfs_v_352(0 + 1) > builtin::array_len($local_2.repr)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, $hfs_v_352);
+        }
+        i_1 = $local_2.used;
+        $local_2.used = $hfs_v_352;
+        builtin::array_set_u8($local_2.repr, i_1, 45);
+    } else {
+    }
+    if @unlikely(local.tee i_1($local_2.used + $match_scrut_0) > builtin::array_len($local_2.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, i_1);
+    }
+    $hfs_v_352 = $local_2.used;
+    $local_2.used = i_1;
+    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, $hfs_v_352, x, $match_scrut_0);
+    $match_scrut_0 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
+    $hfs_v_352 = builtin::i32_wrap_i64(x >> 32_i64);
     $match_scrut_0 = "hfs_match_scalar_arm_mixed_with_call_arm.wado/$cm_binding__Stdout_write_via_stream"($match_scrut_0);
-    "core:rt/write_string_to_stream"($hfs_v_34, $local_2.repr, $local_2.used);
+    "core:rt/write_string_to_stream"($hfs_v_352, $local_2.repr, $local_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($match_scrut_0);
 }
 
@@ -116,6 +132,28 @@ fn "hfs_match_scalar_arm_mixed_with_call_arm.wado/$cm_binding__Stdout_write_via_
 fn "hfs_match_scalar_arm_mixed_with_call_arm.wado/$cm_export__run"() {
     "hfs_match_scalar_arm_mixed_with_call_arm.wado/run"();
     "wasi/task-return"(0);
+}
+
+fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
+    let q: u64;
+    let pair: i32;
+    let tens: i32;
+    digit_count = offset + digit_count;
+    b6: block {
+        l7: loop {
+            break_if b6 (digit_count - offset) < 2;
+            q = val /u 100_i64;
+            tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
+            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
+            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            digit_count = digit_count - 2;
+            val = q;
+            continue l7;
+        };
+    };
+    if digit_count > offset {
+        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+    }
 }
 
 fn "core:prelude/primitive.wado/count_digits_u64"(val) {
@@ -200,17 +238,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b24: block {
-        l25: loop {
-            break_if b24 i >= $mv$data$end;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b30: block {
+        l31: loop {
+            break_if b30 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l25;
+            continue l31;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l27: loop {
+        l33: loop {
             ptr_15 = ptr_13 + i;
             count_16 = $mv$data$end - i;
             if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
@@ -240,7 +278,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return count_16;
             }
-            continue l27;
+            continue l33;
         };
     };
 }
@@ -255,50 +293,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     }
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8))), 0, $load_0, 0, self.used);
     self.repr = new_repr;
-}
-
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
-    let start_26: i32;
-    if is_negative {
-        if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
-        }
-        start_26 = self.used;
-        self.used = is_negative;
-        builtin::array_set_u8(self.repr, start_26, 45);
-    } else {
-    }
-    if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
-    }
-    start_26 = self.used;
-    self.used = digit_count;
-    return start_26;
-}
-
-fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
-    let is_negative: bool;
-    let x: i64;
-    let arr: ref Array<u8>;
-    let i: i32;
-    is_negative = self < 0;
-    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(f, is_negative, self);
-    arr = f.repr;
-    is_negative = is_negative + self;
-    i = 0;
-    b36: block {
-        l37: loop {
-            break_if b36 i >= self;
-            is_negative = is_negative - 1;
-            builtin::array_set_u8(arr, is_negative, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
-            x = x /u 10_i64;
-            i = i + 1;
-            continue l37;
-        };
-    };
 }
 
 export fn "hfs_match_scalar_arm_mixed_with_call_arm.wado/$cm_export__run" as "run"

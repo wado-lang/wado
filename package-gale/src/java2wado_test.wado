@@ -538,15 +538,23 @@ test "java members: field declarations become struct fields" {
     assert m.methods.is_empty(), "no methods expected";
 }
 
-test "java members: numeric types map by exact Java width (byte=i8, short=i16, long=i64, float=f32, double=f64)" {
+test "java members: integer types map by exact Java width (byte=i8, short=i16, long=i64)" {
     let lang = ActionLanguage::Java;
-    let m = translate_members(&lang, "byte b = 0; short s = 0; long l = 0; float f = 0; double d = 0;", "T").unwrap();
-    assert m.fields.len() == 5, `fields: ${m.fields.len()}`;
+    let m = translate_members(&lang, "byte b = 0; short s = 0; long l = 0;", "T").unwrap();
+    assert m.fields.len() == 3, `fields: ${m.fields.len()}`;
     assert m.fields[0].ty == "i8", `byte: ${m.fields[0].ty}`;
     assert m.fields[1].ty == "i16", `short: ${m.fields[1].ty}`;
     assert m.fields[2].ty == "i64", `long: ${m.fields[2].ty}`;
-    assert m.fields[3].ty == "f32", `float: ${m.fields[3].ty}`;
-    assert m.fields[4].ty == "f64", `double: ${m.fields[4].ty}`;
+}
+
+test "java: a floating-point declaration is refused, wherever it is declared" {
+    let lang = ActionLanguage::Java;
+    for let ty of ["float", "double"] {
+        assert translate_members(&lang, `${ty} d = 0;`, "T").is_err(), `${ty} field`;
+        assert translate_members(&lang, `${ty} f() { return 0; }`, "T").is_err(), `${ty} return`;
+        assert translate_members(&lang, `int f(${ty} x) { return 0; }`, "T").is_err(), `${ty} parameter`;
+        assert java_action_res(`${ty} x = 0;`, "a : ID ;", false).is_err(), `${ty} local`;
+    }
 }
 
 test "java members: method with a param, print, and return" {
@@ -863,10 +871,17 @@ r : ID ;
     assert !should_emit_actions(&plain);
 }
 
-test "java: a primitive cast is dropped and its operand kept" {
+test "java: an integer cast is dropped and its operand kept" {
     // Wado infers the operand's type from the comparison, so the cast adds nothing.
     let out = java_pred("(int)this.n > (long)3", "a : ID ;", false);
     assert out == "p.n > 3", `out: '${out}'`;
+}
+
+test "java: a floating cast is a loud error" {
+    for let java of ["(double)this.n / 2 > 1", "(float)(this.n) / this.n > 1"] {
+        let res = java_pred_res(java, "a : ID ;", false);
+        assert res.is_err(), `${java}: ${res:?}`;
+    }
 }
 
 test "java: a parenthesized name is a cast only when an operand follows it" {
@@ -914,9 +929,9 @@ test "java action: an increment of anything but a variable or field is refused" 
 
 test "java members: a field without an initializer takes its type's default" {
     let lang = ActionLanguage::Java;
-    let m = translate_members(&lang, "int n; boolean b; double d; long l;", "T").unwrap();
+    let m = translate_members(&lang, "int n; boolean b; long l;", "T").unwrap();
     let inits: List<String> = m.fields.iter_ref().map(|f: &MemberField| f.init).collect();
-    assert inits == ["0", "false", "0.0", "0"], `${inits:?}`;
+    assert inits == ["0", "false", "0"], `${inits:?}`;
 }
 
 test "java members: a String field without an initializer is refused" {

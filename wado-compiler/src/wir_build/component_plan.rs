@@ -164,7 +164,6 @@ pub struct TestExportPlan {
 ///
 /// Canonical intrinsics are NOT collected here — they are discovered lazily
 /// during WIR translation via `WirContext::ensure_canonical`.
-#[allow(clippy::too_many_arguments)]
 pub fn build_component_plan(
     is_test_world: bool,
     target_world: &str,

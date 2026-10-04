@@ -5256,13 +5256,6 @@ impl FunctionRef {
     pub fn is_method(&self) -> bool {
         self.method_info.is_some()
     }
-
-    /// Check if this is a trait method.
-    pub fn is_trait_method(&self) -> bool {
-        self.method_info
-            .as_ref()
-            .is_some_and(LocalMethodName::is_trait_method)
-    }
 }
 
 /// A function argument bundled with its parameter mutability metadata.
@@ -5800,12 +5793,16 @@ pub enum TirPattern {
         is_unsigned: bool,
     },
     /// Holds the scrutinee in `local_index` at `type_id`, matching where `test` on
-    /// it holds: a host type check or a constant's `Eq`. `name` is what it binds.
+    /// it holds: a host type check, a constant's `Eq`, or a range compared by
+    /// its bounds. `name` is what it binds.
     Narrow {
         name: Option<String>,
         local_index: u32,
         type_id: TypeId,
         test: Box<TirExpr>,
+        /// The pattern as written, which a closure's source text shows in
+        /// place of the test the compiler built.
+        shown: String,
     },
     /// A literal or range pattern on a scrutinee whose type is still a type
     /// parameter. What it names depends on the instance, so monomorphization
@@ -5821,30 +5818,43 @@ pub enum TirPattern {
 #[derive(Debug, Clone)]
 pub enum InstancePattern {
     Literal(PatternLiteral),
+    /// Integer, `char` or float, as the scrutinee's type decides.
     Range {
-        start: PatternLiteral,
-        end: PatternLiteral,
+        start: RangeBound,
+        end: RangeBound,
         inclusive: bool,
     },
 }
 
-impl InstancePattern {
-    /// This pattern on a scrutinee, unsigned where `is_unsigned`.
-    pub fn lower(&self, is_unsigned: bool) -> TirPattern {
-        match self {
-            InstancePattern::Literal(value) => TirPattern::Literal(value.to_tir(is_unsigned)),
-            InstancePattern::Range {
-                start,
-                end,
-                inclusive,
-            } => TirPattern::Range {
-                start: start.bits(),
-                end: end.bits(),
-                inclusive: *inclusive,
-                is_unsigned,
-            },
-        }
-    }
+/// What a range-pattern bound names: an integer or `char` literal, which a
+/// float reads by value, or a float, whose value turns on the float type that
+/// reads it.
+#[derive(Debug, Clone)]
+pub enum RangeBound {
+    Discrete(PatternLiteral),
+    Float(FloatBound),
+}
+
+/// A float range bound, before a float type rounds it.
+#[derive(Debug, Clone)]
+pub struct FloatBound {
+    /// What the bound is written as.
+    pub kind: FloatBoundKind,
+    /// How a diagnostic writes it: `-1.5`, `f64::INFINITY`.
+    pub shown: String,
+}
+
+/// A float range bound as written: a literal or a float type's limit.
+#[derive(Debug, Clone)]
+pub enum FloatBoundKind {
+    /// The unsigned literal `digits`, negated where `negated`.
+    Literal {
+        digits: String,
+        negated: bool,
+        suffix: Option<NumericSuffix>,
+    },
+    /// The limit `name` of the float type `owner`, as `f64::INFINITY`.
+    Limit { owner: PrimitiveType, name: String },
 }
 
 /// The value a literal pattern or range bound names, before a scrutinee type
@@ -7768,14 +7778,6 @@ impl TirFunction {
     #[inline]
     pub fn takes_self(&self) -> bool {
         self.params.first().is_some_and(TirParam::is_self)
-    }
-
-    /// Returns true if this is a trait method (implements a trait)
-    #[inline]
-    pub fn is_trait_method(&self) -> bool {
-        self.method_info
-            .as_ref()
-            .is_some_and(LocalMethodName::is_trait_method)
     }
 
     /// Returns true if this is the synthesized `$call` method on a

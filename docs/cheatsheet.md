@@ -765,6 +765,10 @@ let grade = match score {
     90..=100 => "A",
     _ => "invalid",
 };
+// A float range takes -0.0 where it takes 0.0, and a NaN never: `_` is required
+let unit = match x { 0.0..<1.0 => true, _ => false };
+// A bound may be a constant (a global, `Type::CONST`): compared when it runs
+let band = match n { LOW..<HIGH => 1, _ => 0 };
 
 // Type patterns: `p: T` in any pattern position; a `let` annotation is one.
 // Narrowing a resource to one that extends it asks the host, so it is
@@ -1318,6 +1322,7 @@ f64::ieee754_min(x, y) f64::ieee754_max(x, y)  // IEEE's: NaN when either is, on
 f64::clamp(x, lo, hi)                   // a NaN x stays NaN; a NaN bound traps
 
 x.is_nan()     x.is_finite()    // where x is f64 or f32
+x.ieee754_lt(y)  x.ieee754_eq(y)        // IEEE's: false on a NaN (`_ne` true), one instruction
 
 f64::from_str("3.14")                 // Result<f64, ParseFloatError>
 i32::from_str("42")                   // Result<i32, ParseIntError>

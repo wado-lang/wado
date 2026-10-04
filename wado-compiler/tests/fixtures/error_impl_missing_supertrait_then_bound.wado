@@ -1,0 +1,36 @@
+// An impl of `Sub` owes one of its supertrait `Base`, and does not stand in for
+// it. Where that is missing, the impl is an error, and so is a bound on `Base`
+// the type then meets.
+
+trait Base with () {
+    fn base(&self) -> i32;
+}
+
+trait Sub: Base with () {
+    fn sub(&self) -> i32;
+}
+
+struct X {
+    v: i32,
+}
+
+impl Sub for X {
+    fn sub(&self) -> i32 {
+        return self.v;
+    }
+}
+
+fn need<T: Base>(x: T) -> T {
+    return x;
+}
+
+test "a bound on the missing supertrait" {
+    let x = need(X { v: 1 });
+    assert x.sub() == 1;
+}
+
+__DATA__
+{
+    "compile_error": "type 'X' implements trait 'Sub' but not its supertrait 'Base'",
+    "compile_errors_contains": ["type 'X' does not implement trait 'Base' required by bound on 'T'"]
+}

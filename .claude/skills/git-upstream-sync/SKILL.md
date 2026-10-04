@@ -12,9 +12,19 @@ merge conflicts: a clean merge still ends with the sanity check.
 
 ### 1. Fetch and merge with zdiff3
 
+If the branch is on `origin`, pull it first: CI's `tidy` job may have pushed
+`chore: tidy` onto it. If that pull conflicts, take it through steps 2 and 3,
+then start again here, so `origin/main` is merged too. Then move the checked-out submodules to the pointers the
+merge recorded, so the next `git add -A` does not stage a stale checkout.
+
 ```sh
+b=$(git branch --show-current)
+if git ls-remote --exit-code --heads origin "$b" > /dev/null; then
+  git pull --no-rebase origin "$b" || exit 1   # a conflict stops here
+fi
 git fetch origin main
 git -c merge.conflictstyle=zdiff3 merge origin/main
+git submodule update --recommend-shallow
 ```
 
 ### 2. If conflicts exist, commit them as-is
@@ -23,7 +33,17 @@ If the merge produces conflicts, **commit the conflict markers without resolving
 
 ```sh
 git add -A
+git diff --cached origin/main -- vendor
 git commit -m "merge origin/main (conflicts unresolved)"
+```
+
+The `vendor` diff prints nothing unless the branch bumps a submodule itself.
+Anything else is a stale checkout that `git add -A` staged, reverting main's
+bump. Restore main's pointer for each such path before committing, and check
+again after every `git add -A`, step 3's included:
+
+```sh
+git update-index --cacheinfo 160000,"$(git rev-parse origin/main:vendor/wasmtime)",vendor/wasmtime
 ```
 
 ### 3. Resolve conflicts
@@ -39,6 +59,7 @@ After committing the unresolved state:
 
 ```sh
 git add -A
+git diff --cached origin/main -- vendor   # as in step 2
 git commit -m "resolve merge conflicts"
 ```
 

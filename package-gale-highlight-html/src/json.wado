@@ -1,0 +1,23 @@
+//! The JSON recognizer, for a `<script>` whose type holds JSON.
+
+use json from "../grammar/JSON.g4"
+    with {
+        generator: {
+            module: "lib:gale",
+            inputs: ["../grammar/JSON.highlights.scm"],
+        },
+    };
+use { Highlight } from "./highlight.wado";
+
+/// The highlight captures of a JSON text, in source order.
+pub fn json_highlights<S: AsStrSlice>(source: S) -> List<Highlight> {
+    let result = json::parse_json(source);
+    let mut visitor = json::HighlightVisitor::new(&json::HIGHLIGHT_MAPPING);
+    json::highlight_walk(&mut visitor, &result.tokens, &result.cst);
+    visitor.hl_cover_unvisited(&result.tokens);
+    let mut out: List<Highlight> = [];
+    for let c of &visitor.captures {
+        out.push(Highlight { start: c.start, end: c.end, class: json::HIGHLIGHT_MAPPING.capture_classes[c.capture_id] });
+    }
+    return out;
+}

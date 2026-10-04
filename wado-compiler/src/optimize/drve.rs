@@ -21,7 +21,7 @@ pub fn eliminate_dead_return_values(project: &mut NirPackage, gate: &mut Functio
     let mut candidates: IndexSet<FnKey> = IndexSet::default();
     for fid in gate.dirty_funcs(GatedPass::Drve, project.functions.len()) {
         let func = project.functions[fid.index()].borrow();
-        if !is_eligible(&func) || project.sroa_param_clones.contains(&fid) {
+        if !is_eligible(&func) {
             continue;
         }
         if let Some(body) = &func.body

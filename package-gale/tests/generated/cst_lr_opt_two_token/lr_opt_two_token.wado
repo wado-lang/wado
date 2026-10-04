@@ -1540,6 +1540,7 @@ fn scan_e_lr_1(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
             }
         } else if sgk_1 == TK_ID {
             sg_1_1: {
+                let mut cont_done_0 = false;
                 if pos < tokens.len() && tokens[pos] == TK_ID {
                     let sp = pos;
                     sg_2_done: {
@@ -1551,10 +1552,25 @@ fn scan_e_lr_1(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
                         }
                         pos = -1;
                     }
-                    if pos < 0 { pos = sp; }
+                    if pos < 0 {
+                        pos = sp;
+                    } else {
+                        let mut opt_ok: bool = false;
+                        opt_probe: {
+                            if pos >= tokens.len() || tokens[pos] != TK_ID { break opt_probe; }
+                            pos += 1;
+                            opt_ok = true;
+                        }
+                        if opt_ok {
+                            cont_done_0 = true;
+                        } else {
+                            pos = sp;
+                        }
+                    }
                 }
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_1_1; }
-                pos += 1;
+                if !cont_done_0 {
+                    pos += 1;
+                }
                 break sg_1_done;
             }
         }
@@ -1649,23 +1665,27 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                     p.expect(TK_LIT_RPAREN, &SYNC_2, true);
                 } else if _gk == TK_ID {
                     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
-                    let mut opt_scan_pos: i32 = -1;
-                    opt_scan: {
-                        let tokens = &p.kinds;
-                        let mut pos: i32 = p.pos;
-                        sg_0_done: {
-                            sg_0: {
-                                if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_0; }
-                                pos += 1;
-                                if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sg_0; }
-                                pos += 1;
-                                break sg_0_done;
+                    let mut opt_enter: bool = false;
+                    if p.peek_kind() == TK_ID {
+                        opt_enter_scan: {
+                            let tokens = &p.kinds;
+                            let mut pos: i32 = p.pos;
+                            sg_0_done: {
+                                sg_0: {
+                                    if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_0; }
+                                    pos += 1;
+                                    if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sg_0; }
+                                    pos += 1;
+                                    break sg_0_done;
+                                }
+                                break opt_enter_scan;
                             }
-                            break opt_scan;
+                            if pos >= tokens.len() || tokens[pos] != TK_ID { break opt_enter_scan; }
+                            pos += 1;
+                            opt_enter = true;
                         }
-                        opt_scan_pos = pos;
                     }
-                    if opt_scan_pos >= 0 {
+                    if opt_enter {
                         p.site = 2;
                         _parse_d(p);
                         p.expect(TK_LIT_DOT, &SYNC_0, false);

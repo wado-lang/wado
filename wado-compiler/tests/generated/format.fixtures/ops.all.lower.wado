@@ -3926,17 +3926,20 @@ pub fn "$field_get$core:prelude/intparse.wado/ParseFloatError$core:prelude/intpa
 fn write_decimal_digits(arr: &mut Array<u8>, offset: i32, val: u64, digit_count: i32) {
     let mut pos: i32 = (offset + digit_count);
     let mut t: u64 = val;
-    let mut i: i32 = 0;
     loop {
-        if !(i < digit_count) {
+        if !((pos - offset) >= 2) {
             break;
         }
-        $for_0_body: {
-            pos = (pos - 1);
-            core::builtin::array_set_u8(arr, pos, (48 + (t % 10) as i32) as u8);
-            t = (t / 10);
-        }
-        i = (i + 1);
+        let q: u64 = (t / 100);
+        let pair: i32 = (t - (q * 100)) as i32;
+        let tens: i32 = (pair / 10);
+        core::builtin::array_set_u8(arr, (pos - 1), ((48 + pair) - (tens * 10)) as u8);
+        core::builtin::array_set_u8(arr, (pos - 2), (48 + tens) as u8);
+        pos = (pos - 2);
+        t = q;
+    }
+    if (pos > offset) {
+        core::builtin::array_set_u8(arr, offset, (48 + (t % 10) as i32) as u8);
     }
 }
 

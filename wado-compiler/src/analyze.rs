@@ -1158,7 +1158,6 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
 
     /// Imports `lookup_name` from `module_source` into `from` as `import_name`,
     /// or reports why it cannot.
-    #[allow(clippy::too_many_arguments)]
     fn import_symbol(
         &mut self,
         from: &ModuleSource,

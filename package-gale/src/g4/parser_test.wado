@@ -529,13 +529,17 @@ X : '\\uD800' .. '\\uDBFF' ;").unwrap();
     }
 }
 
-test "negated char class" {
+test "a leading `^` in a char set is a member, not a negation" {
+    // ANTLR4 has no `[^...]`: the jar lexes `^a^` as one `[^a]+` token.
     let input = "grammar Test;
-SAFE : [^\"\\\\] ;";
+SAFE : [^a] ;";
     let g = parse(input).unwrap();
     let body = &g.lexer_rules[0].body;
     if let CharClass(cc) = body[0].elements[0] {
-        assert cc.negated == true;
+        assert !cc.negated;
+        assert cc.ranges.len() == 2;
+        assert cc.ranges[0].start == '^' && cc.ranges[0].end == '^';
+        assert cc.ranges[1].start == 'a' && cc.ranges[1].end == 'a';
     } else {
         panic("expected CharClass");
     }

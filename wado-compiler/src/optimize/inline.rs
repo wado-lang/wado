@@ -2426,7 +2426,6 @@ fn carried_calls(
 /// the inlined body, while others recurse. `site` is the context the block's
 /// calls sit in; a `cold_path()` marker turns it [`Site::Cold`] for the rest of
 /// the block, and a loop body is a [`Site::Loop`].
-#[allow(clippy::too_many_arguments)]
 fn inline_calls_in_block(
     body: &mut Body,
     block: BlockId,
@@ -2585,7 +2584,6 @@ fn inline_calls_in_block(
 /// Top-level inline of a statement value: try to inline the call, and if it
 /// fires, re-scan the inlined body for nested opportunities, as far as the
 /// re-scan cap pays for. Returns the (possibly new) value expression id.
-#[allow(clippy::too_many_arguments)]
 fn inline_top_level(
     body: &mut Body,
     value: ExprId,
@@ -2747,7 +2745,6 @@ pub(super) struct InlineRevalInfo {
 /// binds each prepared parameter value and executes the spliced callee body
 /// with locals remapped into the caller's frame and `return`s converted to
 /// `break label`.
-#[allow(clippy::too_many_arguments)]
 fn build_inlined_labeled_block(
     caller: &mut Body,
     candidate: &NirFunction,
@@ -2854,7 +2851,6 @@ fn build_inlined_labeled_block(
 /// place. Returns the new (labeled-block) expression id and the callee key, or
 /// `None` if the call is not an inline candidate. A method binds `self` from
 /// `args[0]`.
-#[allow(clippy::too_many_arguments)]
 fn try_inline_call_expr(
     caller: &mut Body,
     call_id: ExprId,

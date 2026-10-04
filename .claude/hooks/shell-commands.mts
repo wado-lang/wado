@@ -47,8 +47,12 @@ export type Arg = { value: string; raw: string; start: number | null };
 export type Command = { name: string; args: Arg[] };
 type Heredoc = { delimiter: string; stripsTabs: boolean; expands: boolean; script: boolean };
 
-/** Text between `open` and its matching `close`, skipping quoted spans. */
+/** Text between `open` and its matching `close`, skipping quoted spans. Inside
+ * `$(…)` a heredoc body and a comment are skipped too: either may hold a quote
+ * or a `)` the shell reads as text. */
 function balanced(src: string, start: number, open: string, close: string): [string, number] {
+  const script = open === "(";
+  const heredocs: Heredoc[] = [];
   let depth = 1;
   let quote = "";
   let i = start;
@@ -62,6 +66,16 @@ function balanced(src: string, start: number, open: string, close: string): [str
     } else if (c === "'" || c === '"') {
       quote = c;
       i++;
+    } else if (c === "\n" && heredocs.length > 0) {
+      i++;
+      for (const heredoc of heredocs.splice(0)) i = readHeredoc(src, i, heredoc)[1];
+    } else if (script && c === "#" && (i === start || BREAKS_WORD.includes(src[i - 1]))) {
+      const newline = src.indexOf("\n", i);
+      i = newline < 0 ? src.length : newline;
+    } else if (script && opensHeredoc(src, i)) {
+      const [heredoc, end] = heredocHeader(src, i, false);
+      heredocs.push(heredoc);
+      i = end;
     } else {
       if (c === open) depth++;
       else if (c === close && --depth === 0) return [src.slice(start, i), i + 1];
@@ -147,6 +161,19 @@ function readWord(src: string, start: number): Word {
     }
   }
   return { value, subs, end: i };
+}
+
+const opensHeredoc = (src: string, at: number) => src.startsWith("<<", at) && !src.startsWith("<<<", at);
+
+/** The heredoc that `<<` / `<<-` at `at` opens, and the index past its delimiter
+ * word. `script`: the command it feeds is a shell, which runs the body. */
+function heredocHeader(src: string, at: number, script: boolean): [Heredoc, number] {
+  const stripsTabs = src[at + 2] === "-";
+  const start = skipBlanks(src, at + (stripsTabs ? 3 : 2));
+  const word = readWord(src, start);
+  // A quoted delimiter turns the body into data; an unquoted one expands.
+  const expands = !/['"\\]/.test(src.slice(start, word.end));
+  return [{ delimiter: word.value, stripsTabs, expands, script }, word.end];
 }
 
 /** The heredoc body, and the index past its delimiter line. */
@@ -279,20 +306,10 @@ export function commands(src: string, base: number | null = 0): Command[] {
       nested.push({ text, offset: at + 2 });
       return end;
     }
-    if (src.startsWith("<<", at) && !src.startsWith("<<<", at)) {
-      const stripsTabs = src[at + 2] === "-";
-      const start = skipBlanks(src, at + (stripsTabs ? 3 : 2));
-      const word = readWord(src, start);
-      // A quoted delimiter turns the body into data; an unquoted one expands.
-      // Fed to a shell, the body is the script it runs.
-      const expands = !/['"\\]/.test(src.slice(start, word.end));
-      heredocs.push({
-        delimiter: word.value,
-        stripsTabs,
-        expands,
-        script: SHELLS.has(previous),
-      });
-      return word.end;
+    if (opensHeredoc(src, at)) {
+      const [heredoc, end] = heredocHeader(src, at, SHELLS.has(previous));
+      heredocs.push(heredoc);
+      return end;
     }
     let i = at + (src.startsWith("<<<", at) ? 3 : 1);
     while (src[i] === ">" || src[i] === "&") i++;
@@ -351,6 +368,17 @@ export function payloadCommand(input: string): string {
   } catch {
     return "";
   }
+}
+
+/** The PreToolUse hook output denying the call, with `reason` shown to the model. */
+export function denial(reason: string): string {
+  return JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "deny",
+      permissionDecisionReason: reason,
+    },
+  });
 }
 
 export async function readStdin(): Promise<string> {

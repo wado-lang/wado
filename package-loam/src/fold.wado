@@ -74,7 +74,7 @@ fn evaluated(
         "Identity" => *x,
         "Gather" => gather(x, &operands[1], int_attr(node, "axis", 0)?)?,
         "Reshape" | "Unsqueeze" | "Squeeze" => regrouped(node, known, x)?,
-        "Concat" => concat(&operands, int_attr(node, "axis", 0)?)?,
+        "Concat" => concat(&operands, required_int_attr(node, "axis")?)?,
         "ConstantOfShape" => {
             return constant_of_shape(node, x);
         },
@@ -83,7 +83,7 @@ fn evaluated(
             return slice(x, node, known);
         },
         "Cast" => {
-            return cast(x, int_attr(node, "to", 0)?);
+            return cast(x, required_int_attr(node, "to")?);
         },
         "Range" => {
             return range(x, &operands[1], &operands[2]);
@@ -915,6 +915,10 @@ fn operand_known(node: &Node, known: &TreeMap<String, Known>, index: i32) -> Res
 
 fn int_attr(node: &Node, name: String, fallback: i64) -> Result<i64, String> {
     return node.int_attr(name, fallback).map_err(|e| `${e}`);
+}
+
+fn required_int_attr(node: &Node, name: String) -> Result<i64, String> {
+    return node.required_int_attr(name).map_err(|e| `${e}`);
 }
 
 fn axis_index(axis: i64, rank: i32) -> Result<i32, String> {

@@ -41,7 +41,8 @@ The Wado compiler crate.
   `cargo test -p wado-compiler --test e2e` for anything the language touches: it
   covers O0 and O2 and leaves the rest to CI, whose `ignored` lines are that
   split and not a gap, so never set `WADO_FULL_TEST` unless asked by name.
-  `mise run test` and `mise run test-wado` take an hour: run them at the end.
+  `mise run test` and `mise run test-wado` are the slowest runs there are: run
+  them at the end.
 - This crate must compile for `wasm32-unknown-unknown` (checked in CI). Keep
   OS-dependent `std` modules out of production code.
 
@@ -77,10 +78,16 @@ module. A facade puts each test beside the file that implements it, which is why
 `core:collections` is tested from `collections/treemap_test.wado` and
 `collections/treeset_test.wado`.
 
-`core:prelude` owes neither. Every program already imports it, so a synopsis has
-nothing to show, and the e2e fixtures are what hold its behaviour.
+`core:prelude` owes no synopsis. Every program already imports it, so a synopsis
+has nothing to show.
 
-`mise run test-stdlib-coverage` holds the stdlib to
+A language feature is tested from an e2e fixture, even where the prelude
+implements it. The same holds for a prelude item the compiler knows by name,
+such as a trait an operator calls. The rest of the prelude is ordinary library
+code, tested from `<module>_test.wado` like any other module.
+
+The stdlib tests aim at 100% coverage of the stdlib, whatever the fixtures
+cover. `mise run test-stdlib-coverage` holds the stdlib to
 `scripts/stdlib-coverage.json`, the regions its tests leave unrun, and fails on
 a difference either way. New code gets a test, or `#[coverage(off)]` where no
 test can reach it. Remove what a new test covers with

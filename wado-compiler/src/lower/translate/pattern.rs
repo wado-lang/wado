@@ -300,6 +300,7 @@ fn narrow_into_binding(pattern: &mut TirPattern) -> (TirPattern, TirExpr) {
         local_index,
         type_id,
         test,
+        ..
     } = std::mem::replace(pattern, TirPattern::Wildcard)
     else {
         panic!("narrow_into_binding takes a Narrow pattern");
@@ -1367,7 +1368,6 @@ impl<'a> PatternLowerer<'a> {
     /// Build a range condition: `local >= start && local <(=) end`. A `char`
     /// range carries its bounds as code points, so they go back to char
     /// literals to keep the comparison well-typed.
-    #[allow(clippy::too_many_arguments)]
     fn range_condition(
         &self,
         local_index: u32,

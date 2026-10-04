@@ -535,7 +535,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // the signature re-types to the receiver the way an inherited
             // inherent method's does.
             if let Some(trait_def) = trait_name.as_ref().and_then(FqTraitName::canonical)
-                && let Some(link) = self.tysys.own_impl_link(base_type_id, trait_def)
+                && let Some(link) = self.tysys.impl_link(base_type_id, trait_def)
                 && link != base_type_id
                 && info.owner == MethodOwner::Receiver
             {
@@ -605,10 +605,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             info
         } else {
             let type_name = self.tysys.type_table.borrow().type_name(base_type_id);
+            let ord = self.tysys.compiler_trait_def(CompilerItem::Ord);
+            let hint = if self.tysys.trait_declares_method(ord, method_name, |_| true) {
+                self.tysys.ord_withheld_note(base_type_id)
+            } else {
+                None
+            };
             let _ = self.emit(TypeError::MethodNotFound {
                 type_name,
                 method_name: method_name.to_string(),
-                hint: String::new(),
+                hint: hint.unwrap_or_default(),
                 span,
             });
             MethodInfo::undeclared(TypeTable::ERROR)
@@ -1256,7 +1262,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `Trait::method(recv, …)` ident form, and the trait-turbofish
     /// `Take::<A>::take(recv, …)` static form whose `required_trait` carries
     /// the resolved trait arguments and thereby pins one argument list.
-    #[allow(clippy::too_many_arguments)]
     fn resolve_trait_qualified_call_parts(
         &mut self,
         required_trait: RequiredTrait,

@@ -1,5 +1,6 @@
 {
   "outputStyle": "Concise",
+  "autoMemoryEnabled": false,
   "enabledPlugins": {
     "rust-analyzer-lsp@claude-plugins-official": true
   },
@@ -95,15 +96,19 @@
           {
             "type": "command",
             "command": "./.claude/hooks/forbidden-commands.mts"
+          },
+          {
+            "type": "command",
+            "command": "./.claude/hooks/pr-conventions.mts"
           }
         ]
       },
       {
-        "matcher": "mcp__github__create_pull_request",
+        "matcher": "mcp__github__(create|update)_pull_request",
         "hooks": [
           {
             "type": "command",
-            "command": "./.claude/hooks/pr-conventions.sh"
+            "command": "./.claude/hooks/pr-conventions.mts"
           }
         ]
       }

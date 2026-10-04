@@ -6,6 +6,7 @@ use crate::ast::{
     Type, WhileStmt, walk_expr, walk_stmt,
 };
 use crate::compiler_host::CompilerHost;
+use crate::elaborator::sig::AssocConstSig;
 use crate::tir::{ResolvedType, TirPattern, TypeId, TypeTable};
 use crate::tir_visitor::remap_local_reads;
 use crate::token::Span;
@@ -19,15 +20,18 @@ use crate::ast::{BinaryOp, RangeKind, StructPatternField};
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
+use crate::elaborator::float_literal::FloatFormat;
 use crate::elaborator::orchestration::first_infer_span;
+use crate::elaborator::reify::lower_instance_pattern;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
 use crate::elaborator::synth::ArgClass;
 use crate::elaborator::trait_query::assoc_const_owner;
 use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, ParamSlot, StructFieldInfo};
 use crate::name::{
     constant_pattern_local_name, for_body_label, mangle_local_item_name, minted_name,
-    namespace_member_alias,
+    namespace_member_alias, range_local_name,
 };
+use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
 use crate::symbol_notation::render;
 use crate::tir::StructDef;
@@ -908,7 +912,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let (Some(variant), Some(payloads)) = (
             self.tysys.variant_of_type(head),
-            self.case_payload_types(head),
+            self.tysys.case_payload_types(head),
         ) else {
             return true;
         };
@@ -1394,6 +1398,110 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some((alias, ty))
     }
 
+    /// Resolve an associated constant's body where it is read, for the facts
+    /// reify inlines it with. Its names resolve in its declaring module, never
+    /// to a binding of the function it lands in.
+    pub(super) fn resolve_associated_const_body(
+        &mut self,
+        assoc: &AssocConstSig,
+        ctx: &mut FunctionContext,
+    ) {
+        ctx.with_caller_bindings_hidden(|ctx| {
+            self.with_resolving_home(Some(assoc.module.clone()), |s| {
+                s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
+            })
+        });
+    }
+
+    /// Resolve the constant `pattern` names, recording its use: an immutable
+    /// global, bare or under a namespace, or an associated constant. `None`
+    /// where it names none. A case of the scrutinee is asked first by callers.
+    fn resolve_pattern_constant(
+        &mut self,
+        pattern: &Pattern,
+        ctx: &mut FunctionContext,
+    ) -> Option<PatternConstant> {
+        match pattern {
+            Pattern::Ident {
+                id,
+                name,
+                span: name_span,
+            }
+            | Pattern::MutIdent {
+                id,
+                name,
+                span: name_span,
+            } => {
+                let global = self.tysys.resolutions.declared_if_walked(*id)?;
+                let ty = self
+                    .immutable_global_type(name)
+                    .expect("the resolver answers only an immutable global");
+                self.record_reference_to_decl(*id, global, *name_span);
+                Some(PatternConstant {
+                    shown: name.clone(),
+                    ty,
+                })
+            }
+            Pattern::Variant {
+                variant_name,
+                variant_qualifier,
+                name_id,
+                bindings,
+                span,
+                ..
+            } if bindings.is_empty() => {
+                let shown = self.format_pattern_case_name(variant_name, variant_qualifier.as_ref());
+                if let Some(assoc) = self
+                    .tysys
+                    .associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
+                {
+                    self.check_inherent_member_visibility(
+                        assoc.inherent_visibility,
+                        Some(&assoc.module),
+                        MemberOwner::Written(variant_qualifier.as_ref()),
+                        variant_name,
+                        ImplMemberKind::AssociatedConstant,
+                        Some(*name_id),
+                        *span,
+                    );
+                    self.resolve_associated_const_body(&assoc, ctx);
+                    return Some(PatternConstant {
+                        shown,
+                        ty: assoc.ty,
+                    });
+                }
+                let (alias, ty) =
+                    self.namespaced_constant(variant_qualifier.as_ref(), variant_name)?;
+                self.record_item_reference_by_name(*name_id, &alias);
+                Some(PatternConstant { shown, ty })
+            }
+            _ => None,
+        }
+    }
+
+    /// Whether `pattern` names a constant [`Self::resolve_pattern_constant`]
+    /// resolves.
+    pub(super) fn names_pattern_constant(&self, pattern: &Pattern) -> bool {
+        match pattern {
+            Pattern::Ident { id, .. } | Pattern::MutIdent { id, .. } => {
+                self.tysys.resolutions.declared_if_walked(*id).is_some()
+            }
+            Pattern::Variant {
+                variant_name,
+                variant_qualifier,
+                bindings,
+                ..
+            } if bindings.is_empty() => {
+                let qualifier = variant_qualifier.as_ref();
+                self.tysys
+                    .associated_constant_qualified(qualifier, variant_name)
+                    .is_some()
+                    || self.namespaced_constant(qualifier, variant_name).is_some()
+            }
+            _ => false,
+        }
+    }
+
     /// Whether resolving the pattern made the bare name at `id` a binding,
     /// rather than a case or a constant.
     pub(super) fn pattern_name_bound(&self, id: AstId) -> bool {
@@ -1415,15 +1523,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Where a constant pattern's `scrutinee == constant` is a trait call, dispatch
-    /// it on the pattern and reserve the local reify holds the scrutinee in.
+    /// it on the pattern and reserve the local reify holds the scrutinee in. A
+    /// constant holding a float is no pattern, since it carries the rounding a
+    /// float literal pattern would.
     fn resolve_constant_pattern(
         &mut self,
         pattern_id: AstId,
+        constant: &PatternConstant,
         scrutinee: TypeId,
-        constant: TypeId,
         ctx: &mut FunctionContext,
         span: Span,
     ) {
+        let PatternConstant {
+            shown,
+            ty: constant,
+        } = constant;
+        let constant = *constant;
+        if self.tysys.holds_float(constant) {
+            let type_name = self.tysys.type_table.borrow().type_name(constant);
+            let _ = self.emit(TypeError::InvalidPattern {
+                message: format!(
+                    "a constant holding a float is not a pattern: `{shown}` is `{type_name}`; \
+                     compare it in a guard"
+                ),
+                span,
+            });
+            return;
+        }
         {
             let type_table = self.tysys.type_table.borrow();
             // A scalar compares by instruction, and a wide int's constant is
@@ -1508,7 +1634,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &Pattern::Variant {
                             variant_name: name.clone(),
                             variant_qualifier: None,
-                            name_id: Some(*id),
+                            name_id: *id,
                             name_span: *name_span,
                             bindings: vec![],
                             span,
@@ -1519,21 +1645,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         ref_binding,
                     );
                 }
-                // Immutable global constant: a constant-value pattern that
-                // introduces no binding but reads the global — record the
-                // use→def edge so it is not flagged dead (mirrors the expr path).
-                if let Some(global) = self.tysys.resolutions.declared_if_walked(*id) {
+                if let Some(constant) = self.resolve_pattern_constant(pattern, ctx) {
                     assert!(
                         ctx.must_bind.is_none(),
                         "the resolver reads a global only in a refutable pattern"
                     );
-                    let constant = self
-                        .immutable_global_type(name)
-                        .expect("the resolver answers only an immutable global");
-                    self.record_reference_to_decl(*id, global, *name_span);
                     let (peeled, _) = self.tysys.peel_scrutinee_refs(scrutinee_type, ref_binding);
-                    self.typecheck(constant, peeled, *name_span);
-                    self.resolve_constant_pattern(*id, scrutinee_type, constant, ctx, span);
+                    self.typecheck(constant.ty, peeled, *name_span);
+                    self.resolve_constant_pattern(*id, &constant, scrutinee_type, ctx, *name_span);
                     return Vec::new();
                 }
                 let is_mut = is_mut || ctx.must_bind.is_some_and(|m| m.is_mut);
@@ -1611,48 +1730,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         variant_qualifier.as_ref(),
                     )
                 {
-                    // Check for associated constants (e.g., `i32::MAX`, `f64::PI`).
-                    // Use the base type name (no generic args) to match how
-                    // `associated_constants` keys are built via `get_type_name`.
-                    // Resolve to literal patterns when possible for switch optimization.
-                    if let Some(assoc) = self
-                        .tysys
-                        .associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
-                    {
-                        self.check_inherent_member_visibility(
-                            assoc.inherent_visibility,
-                            Some(&assoc.module),
-                            MemberOwner::Written(variant_qualifier.as_ref()),
-                            variant_name,
-                            ImplMemberKind::AssociatedConstant,
+                    // An associated constant (`i32::MAX`, `f64::PI`) or a
+                    // namespaced global binds nothing: it matches by value.
+                    if let Some(constant) = self.resolve_pattern_constant(pattern, ctx) {
+                        self.typecheck(constant.ty, scrutinee_type, *span);
+                        self.resolve_constant_pattern(
                             *name_id,
+                            &constant,
+                            scrutinee_type,
+                            ctx,
                             *span,
                         );
-                        // Resolve the const body for its facts. An associated
-                        // constant introduces no binding — it is either a literal
-                        // or an opaque constant-value pattern — so return none
-                        // either way.
-                        let const_module = assoc.module.clone();
-                        ctx.with_caller_bindings_hidden(|ctx| {
-                            self.with_resolving_home(Some(const_module), |s| {
-                                s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
-                            })
-                        });
-                        self.typecheck(assoc.ty, scrutinee_type, *span);
-                        if let Some(id) = *name_id {
-                            self.resolve_constant_pattern(id, scrutinee_type, assoc.ty, ctx, *span);
-                        }
-                        return Vec::new();
-                    }
-
-                    if let Some((alias, constant)) =
-                        self.namespaced_constant(variant_qualifier.as_ref(), variant_name)
-                    {
-                        if let Some(id) = *name_id {
-                            self.record_item_reference_by_name(id, &alias);
-                            self.resolve_constant_pattern(id, scrutinee_type, constant, ctx, *span);
-                        }
-                        self.typecheck(constant, scrutinee_type, *span);
                         return Vec::new();
                     }
 
@@ -1713,9 +1801,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             enum_info.find_case(normalized_variant_name).cloned()
                         {
                             // Record pattern's case-name identifier -> enum case decl
-                            if let Some(id) = name_id {
-                                self.record_reference_to_def(*id, case_data.ast_id);
-                            }
+                            self.record_reference_to_def(*name_id, case_data.ast_id);
                             // Enum case carries no payload — no binding.
                             return Vec::new();
                         }
@@ -1747,14 +1833,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Record use->def for the variant case name in the pattern
                 // (e.g., `Some` in `Some(x)`). Points at the case declaration's
                 // span so LSP jump-to-def from the pattern lands on the case decl.
-                if let Some(id) = name_id
-                    && let Some(case_ast_id) = self
-                        .tysys
-                        .variant_of_type(scrutinee_type)
-                        .and_then(|info| info.case_named(normalized_variant_name))
-                        .map(|(_, case)| case.ast_id)
+                if let Some(case_ast_id) = self
+                    .tysys
+                    .variant_of_type(scrutinee_type)
+                    .and_then(|info| info.case_named(normalized_variant_name))
+                    .map(|(_, case)| case.ast_id)
                 {
-                    self.record_reference_to_def(*id, case_ast_id);
+                    self.record_reference_to_def(*name_id, case_ast_id);
                 }
 
                 // The cases belong to the structure the scrutinee wraps, so the
@@ -1986,7 +2071,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } => {
                 // Range patterns introduce no binding; resolve for the
                 // reversed/empty-range diagnostics only.
-                self.resolve_range_pattern(start, end, *kind, scrutinee_type, *range_span);
+                self.resolve_range_pattern(start, end, *kind, scrutinee_type, ctx, *range_span);
                 Vec::new()
             }
             Pattern::Typed {
@@ -2125,34 +2210,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         util::settles_literal_patterns(&self.tysys.type_table.borrow(), scrutinee_type)
     }
 
-    /// The type a literal pattern demands of its settled scrutinee, when the
-    /// scrutinee is not it.
-    pub(super) fn literal_pattern_mismatch(
-        &mut self,
-        lit: &Literal,
-        scrutinee_type: TypeId,
-    ) -> Option<String> {
+    /// Whether a string-literal pattern names no value of the settled
+    /// `scrutinee_type`. The arm tests the scrutinee with `==`, so any type
+    /// answering `Eq<String>` matches one the way a `String` does.
+    pub(super) fn string_pattern_mismatch(&mut self, scrutinee_type: TypeId) -> bool {
         if !self.settles_literal_patterns(scrutinee_type) {
-            return None;
+            return false;
         }
-        match lit {
-            Literal::Null => None,
-            // A string-literal arm tests the scrutinee with `==`, so any type
-            // answering `Eq<String>` matches one the way a `String` does.
-            Literal::String(_) => {
-                let is_string = {
-                    let type_table = self.tysys.type_table.borrow();
-                    type_table.is_string(type_table.representation_head(scrutinee_type))
-                };
-                (!is_string && !self.compares_with_string_literal(scrutinee_type))
-                    .then(|| "String".to_string())
-            }
-            _ => util::pattern_literal_mismatch(
-                &util::pattern_literal(lit).ok()?,
-                scrutinee_type,
-                &mut self.tysys.type_table.borrow_mut(),
-            ),
-        }
+        let is_string = {
+            let type_table = self.tysys.type_table.borrow();
+            type_table.is_string(type_table.representation_head(scrutinee_type))
+        };
+        !is_string && !self.compares_with_string_literal(scrutinee_type)
     }
 
     /// Whether `scrutinee == "…"` resolves, which is what a string-literal
@@ -2184,9 +2253,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// kind or out of its range.
     fn check_pattern_value(&mut self, lit: &Literal, scrutinee_type: TypeId, span: Span) {
         if let Literal::String(_) = lit {
-            if let Some(expected) = self.literal_pattern_mismatch(lit, scrutinee_type) {
+            if self.string_pattern_mismatch(scrutinee_type) {
                 self.emit_pattern_literal_error(
-                    util::PatternLiteralError::Mismatch(expected),
+                    util::PatternLiteralError::Mismatch("String".to_string()),
                     scrutinee_type,
                     span,
                 );
@@ -2223,53 +2292,106 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let _ = self.emit(error);
     }
 
-    /// Report a range pattern (`0..<10` or `'a'..='z'`) whose bounds name no
-    /// values of `scrutinee_type`. Range patterns bind nothing and reify
-    /// rebuilds the real `TirPattern::Range`, so no pattern node is produced
-    /// here.
+    /// Report a range pattern (`0..<10`, `'a'..='z'` or `0.0..<1.0`) that names
+    /// no values of `scrutinee_type`. Range patterns bind nothing and reify
+    /// rebuilds the real pattern, so no pattern node is produced here; lowering
+    /// a settled one reserves the local a float range holds its scrutinee in.
     fn resolve_range_pattern(
         &mut self,
         start: &Pattern,
         end: &Pattern,
         kind: RangeKind,
         scrutinee_type: TypeId,
+        ctx: &mut FunctionContext,
         span: Span,
     ) {
-        let resolutions = &self.tysys.resolutions;
-        let (Some(start), Some(end)) = (
-            util::range_bound_literal(start, resolutions),
-            util::range_bound_literal(end, resolutions),
-        ) else {
-            let _ = self.emit(TypeError::InvalidPattern {
-                message: "range pattern bounds must be integer or char literals".to_string(),
-                span,
-            });
-            return;
-        };
-        let (start, end) = match (start, end) {
-            (Ok(start), Ok(end)) => (start, end),
-            (start, end) => {
-                for message in [start.err(), end.err()].into_iter().flatten() {
+        let inclusive = matches!(kind, RangeKind::Inclusive);
+        let pattern = match util::range_pattern(start, end, inclusive, &self.tysys.resolutions) {
+            Some(Ok(pattern)) => pattern,
+            Some(Err(messages)) => {
+                for message in messages {
                     let _ = self.emit(TypeError::InvalidPattern { message, span });
                 }
                 return;
             }
+            None => return self.resolve_constant_range([start, end], scrutinee_type, ctx, span),
         };
-        if self.settles_literal_patterns(scrutinee_type) {
-            let errors = util::range_bound_errors(
-                &start,
-                &end,
+        let errors = if self.settles_literal_patterns(scrutinee_type) {
+            lower_instance_pattern(
+                &pattern,
                 scrutinee_type,
                 &mut self.tysys.type_table.borrow_mut(),
-            );
-            for error in errors {
-                self.emit_pattern_literal_error(error, scrutinee_type, span);
+                |name, ty| ctx.add_local(name, ty, false, None),
+                span,
+            )
+            .err()
+            .unwrap_or_default()
+        } else {
+            util::unsettled_pattern_errors(&pattern)
+        };
+        for error in errors {
+            self.emit_pattern_literal_error(error, scrutinee_type, span);
+        }
+    }
+
+    /// A range with a bound naming a constant other than a primitive's limit.
+    /// Its values show only when the match runs, so it compares the scrutinee
+    /// with each bound by the type's order then, as a constant pattern
+    /// compares by `==`. Reify holds the scrutinee in the local reserved here.
+    fn resolve_constant_range(
+        &mut self,
+        bounds: [&Pattern; 2],
+        scrutinee_type: TypeId,
+        ctx: &mut FunctionContext,
+        span: Span,
+    ) {
+        let scrutinee = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
+        if scrutinee == TypeTable::ERROR {
+            return;
+        }
+        if !util::takes_range_patterns(&self.tysys.type_table.borrow(), scrutinee) {
+            let found = self.tysys.type_table.borrow().type_name(scrutinee);
+            let _ = self.emit(TypeError::PatternTypeMismatch {
+                expected: "an integer, char or float type".to_string(),
+                found,
+                span,
+            });
+            return;
+        }
+        let mut origin = None;
+        for bound in bounds {
+            if let Some(constant) = self.resolve_pattern_constant(bound, ctx) {
+                self.typecheck(constant.ty, scrutinee, span);
+                origin = origin.or(Some(util::constant_pattern_site(bound)));
+                continue;
+            }
+            let error = match util::range_bound(bound, &self.tysys.resolutions) {
+                Some(Ok(bound)) => {
+                    let mut type_table = self.tysys.type_table.borrow_mut();
+                    util::bound_value(&bound, scrutinee, &mut type_table).err()
+                }
+                Some(Err(message)) => Some(util::PatternLiteralError::Invalid(message)),
+                None => Some(util::PatternLiteralError::Invalid(
+                    "a range bound is a literal or a constant".to_string(),
+                )),
+            };
+            if let Some(error) = error {
+                self.emit_pattern_literal_error(error, scrutinee, span);
             }
         }
-        let inclusive = matches!(kind, RangeKind::Inclusive);
-        if let Some(message) = util::range_order_error(&start, &end, inclusive) {
-            let _ = self.emit(TypeError::InvalidPattern { message, span });
-        }
+        // Without a constant, a bound named nothing and was reported above.
+        let Some((origin, _)) = origin else {
+            return;
+        };
+        self.resolve_binary_op(
+            scrutinee,
+            BinaryOp::LtEq,
+            scrutinee,
+            span,
+            span,
+            Some(origin),
+        );
+        ctx.add_local(range_local_name(), scrutinee, false, None);
     }
 
     /// Get payload type for a variant case, substituting type parameters if needed
@@ -3269,20 +3391,39 @@ pub(super) fn remap_pattern_local(pattern: &mut TirPattern, from: u32, to: u32) 
     }
 }
 
+/// A constant a pattern names: how it is written, and its type.
+struct PatternConstant {
+    shown: String,
+    ty: TypeId,
+}
+
 /// A primitive integer's `MIN` / `MAX` written as a pattern (`i32::MIN`), its
-/// qualifier resolved at its own site. `None` for anything else.
-pub(super) fn primitive_assoc_const_to_i128(
+/// qualifier resolved at its own site: the integer type and the value. `None`
+/// for anything else.
+pub(super) fn primitive_int_limit(
     qualifier: Option<&Type>,
     const_name: &str,
     resolutions: &Resolutions,
-) -> Option<i128> {
+) -> Option<(PrimitiveType, i128)> {
     let owner = assoc_const_owner(qualifier, resolutions)?;
-    let (min, max) = resolutions.defs().primitive(owner)?.int_range()?;
+    let prim = resolutions.defs().primitive(owner)?;
+    let (min, max) = prim.int_range()?;
     match const_name {
-        "MIN" => Some(min),
-        "MAX" => Some(max),
+        "MIN" => Some((prim, min)),
+        "MAX" => Some((prim, max)),
         _ => None,
     }
+}
+
+/// The float type owning the limit `qualifier::const_name` (`f64::INFINITY`).
+pub(super) fn primitive_float_limit_owner(
+    qualifier: Option<&Type>,
+    const_name: &str,
+    resolutions: &Resolutions,
+) -> Option<PrimitiveType> {
+    let owner = assoc_const_owner(qualifier, resolutions)?;
+    let prim = resolutions.defs().primitive(owner)?;
+    FloatFormat::of(prim)?.limit(const_name).map(|_| prim)
 }
 
 /// The first statement in a for-of's body that names the loop itself. The

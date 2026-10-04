@@ -9,15 +9,15 @@ description: Investigate and improve code coverage for the wado-compiler crate. 
 
 Use `cargo-llvm-cov` to generate line-level coverage. The tool must be installed via `cargo install cargo-llvm-cov`.
 
+Each `cargo llvm-cov` that is not `report` runs the whole test suite again, so
+run the tests once and read every report from that run:
+
 ```sh
-# Full coverage report (HTML)
-cargo llvm-cov --html -p wado-compiler
-
-# JSON summary for overall metrics
-cargo llvm-cov --json -p wado-compiler 2>/dev/null | jq '.data[0].totals.lines'
-
-# Per-file coverage in JSON (for programmatic analysis)
-cargo llvm-cov --json -p wado-compiler 2>/dev/null | jq '.data[0].files[] | {filename, summary: .summary.lines}' > /tmp/coverage-per-file.json
+cargo llvm-cov clean --workspace   # a stale profile would merge into this run
+cargo llvm-cov --no-report -p wado-compiler
+cargo llvm-cov report --html                                   # target/llvm-cov/html/
+cargo llvm-cov report --json --output-path scratchpad/cov.json
+jq '.data[0].totals.lines' scratchpad/cov.json                  # overall
 ```
 
 ### Step 2: Identify Low-Coverage Files
@@ -25,9 +25,8 @@ cargo llvm-cov --json -p wado-compiler 2>/dev/null | jq '.data[0].files[] | {fil
 Sort files by uncovered line count to find the biggest improvement opportunities:
 
 ```sh
-cargo llvm-cov --json -p wado-compiler 2>/dev/null \
-  | jq -r '.data[0].files[] | "\(.summary.lines.count - .summary.lines.covered)\t\(.summary.lines.percent | round)%\t\(.filename)"' \
-  | sort -rn | head -30
+jq -r '.data[0].files[] | "\(.summary.lines.count - .summary.lines.covered)\t\(.summary.lines.percent | round)%\t\(.filename)"' \
+  scratchpad/cov.json | sort -rn | head -30
 ```
 
 Focus on files with:
@@ -52,12 +51,11 @@ For each low-coverage file, classify gaps into categories:
 To see exactly which lines are uncovered in a file:
 
 ```sh
-# Generate lcov and extract file-specific data
-cargo llvm-cov --lcov -p wado-compiler 2>/dev/null > /tmp/lcov.info
+# lcov from the same run
+cargo llvm-cov report --lcov --output-path scratchpad/lcov.info
 
-# Or use the HTML report
-cargo llvm-cov --html -p wado-compiler
-# Then read target/llvm-cov/html/src/synthesis/inspect.rs.html etc.
+# Or read the HTML report from Step 1:
+# target/llvm-cov/html/src/synthesis/inspect.rs.html etc.
 ```
 
 To find dead code (functions never called):
@@ -87,15 +85,8 @@ E2E tests are `.wado` files in `wado-compiler/tests/fixtures/`. Each file has a 
 
 ### Step 6: Verify Improvement
 
-After changes, re-run coverage and compare:
-
-```sh
-# Before
-cargo llvm-cov --json -p wado-compiler 2>/dev/null | jq '.data[0].totals.lines.percent'
-
-# After changes
-cargo llvm-cov --json -p wado-compiler 2>/dev/null | jq '.data[0].totals.lines.percent'
-```
+After changes, run Step 1 again and compare
+`jq '.data[0].totals.lines.percent' scratchpad/cov.json` with the earlier total.
 
 ### Key Insights from Past Investigations
 

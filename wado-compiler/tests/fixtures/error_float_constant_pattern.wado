@@ -1,0 +1,64 @@
+// A constant whose type is or holds a float is not a pattern, at the top of an
+// arm or nested: it carries the rounding a float literal pattern would.
+
+global LIMIT: f32 = 0.1;
+
+struct Inner {
+    x: f64,
+}
+
+struct Outer {
+    id: i32,
+    inner: Inner,
+}
+
+global ORIGIN: Outer = Outer { id: 0, inner: Inner { x: 0.0 } };
+
+type Meters = f64;
+
+global FAR: Meters = 1000.0;
+
+fn assoc(x: f64) -> i32 {
+    return match x {
+        f64::INFINITY => 1,
+        _ => 0,
+    };
+}
+
+fn global_float(x: f32) -> i32 {
+    return match x {
+        LIMIT => 1,
+        _ => 0,
+    };
+}
+
+fn nested_struct(o: Outer) -> i32 {
+    return match o {
+        ORIGIN => 1,
+        _ => 0,
+    };
+}
+
+fn newtype(m: Meters) -> i32 {
+    return match m {
+        FAR => 1,
+        _ => 0,
+    };
+}
+
+fn in_payload(o: Option<f32>) -> i32 {
+    return match o {
+        Some(LIMIT) => 1,
+        _ => 0,
+    };
+}
+
+export fn run() {
+    let _ = assoc(1.0) + global_float(1.0) + newtype(1.0) + in_payload(null);
+    let _ = nested_struct(ORIGIN);
+}
+
+__DATA__
+{
+  "compile_error": ":23:9: analysis error: invalid pattern: a constant holding a float is not a pattern: `f64::INFINITY` is `f64`; compare it in a guard; 30:9: invalid pattern: a constant holding a float is not a pattern: `LIMIT` is `f32`; compare it in a guard; 37:9: invalid pattern: a constant holding a float is not a pattern: `ORIGIN` is `Outer`; compare it in a guard; 44:9: invalid pattern: a constant holding a float is not a pattern: `FAR` is `Meters`; compare it in a guard; 51:14: invalid pattern: a constant holding a float is not a pattern: `LIMIT` is `f32`; compare it in a guard"
+}

@@ -10,7 +10,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::monomorphize::Templates;
 use crate::name::{FqTraitName, FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
-use crate::synthesis::template::written_impl_reaches;
+use crate::synthesis::template::{eq_from_written_cmp, written_impl_reaches};
 use crate::tir::{InstantiationKey, ResolvedType, TemplateId, TirTypeParam, TypeId, TypeTable};
 
 /// Tracks struct monomorphization state
@@ -412,14 +412,21 @@ impl Monomorphizer {
     }
 
     /// Whether the declaration `tid` names carries its own `impl <trait> for`
-    /// block reaching `tid`.
+    /// block reaching `tid`, or the `Eq` a `cmp` it writes alone gives it.
     pub(super) fn has_own_trait_impl(
         &self,
         type_table: &TypeTable,
         tid: TypeId,
         trait_: DefId,
     ) -> bool {
-        written_impl_reaches(&self.functions.trait_env, trait_, tid, type_table)
+        let trait_env = &self.functions.trait_env;
+        written_impl_reaches(trait_env, trait_, tid, type_table)
+            || eq_from_written_cmp(
+                trait_env,
+                trait_,
+                &type_table.impl_receiver_key(tid),
+                type_table,
+            )
     }
 
     /// The first newtype link at or below `type_id` writing its own impl of

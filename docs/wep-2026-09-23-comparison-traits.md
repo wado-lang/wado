@@ -108,6 +108,16 @@ The first three rows cannot disagree. An order cannot be built from an equality,
 so the third row asks for `cmp` rather than deriving one that ignores the
 written `eq`.
 
+A newtype reads the table by what it writes itself. One writing `cmp` alone
+takes `==` from it, not from its base. One writing `eq` alone inherits no `Ord`
+from its base, which orders values its `eq` may call equal, and a newtype over
+it inherits none from it.
+
+The second row's `==` holds where the written `cmp` does, under its bounds. A
+generic declaration derives one body for every instance (WEP 2026-06-25), so a
+`cmp` written for only some instances (`impl Ord for Ranked<i32>`) decides
+nothing, and `==` derives from the members.
+
 The last row exists for speed. `==` on a `String` or a `List` stops at a length
 mismatch, where `cmp` must walk the common prefix. C++20 kept the two apart for
 the same reason: a written `<=>` does not generate `==` (P1185, "`<=>` != `==`").
@@ -241,6 +251,18 @@ for the `if`. Under the float order:
 - Equal bounds (`1.0..=1.0`) are an error, since they spell the literal pattern
   this section refuses.
 
+An integer literal bound on a float is the float of its value (`0..<1.5`), as
+`let x: f64 = 1` is. Rust refuses both. Wado's expression rule already takes
+the literal, and a pattern reading it otherwise would be the exception.
+
+A bound may also be any constant: an immutable `global` or an associated
+constant. A range takes the rounding a constant carries as it takes a
+literal's, so the reason the constant is no pattern alone does not reach it. A
+constant's value shows only when the match runs, so the range compares by the
+type's order then, as a constant pattern compares by `==`. The checks above need
+the values, so they apply where the compiler knows them: literals and a
+primitive's limits.
+
 ### Comparing a value with itself warns
 
 Reflexivity gives every comparison of an expression with itself one answer, on
@@ -249,8 +271,11 @@ from another language, where it is now always false. The
 [`self_comparison` lint](./spec-expressions.md#the-self_comparison-lint) warns
 about all six operators, and on a float names `is_nan()`. It reports only an
 expression that performs no effect, since one that does may answer differently
-the second time. GCC's `-Wtautological-compare` and Clippy's `eq_op` warn on the
-same shape.
+the second time. For the same reason it skips one that writes: an assignment, a
+`&mut` borrow, a `&mut self` method such as an iterator's `next`, a call of a
+closure, which may capture by `&mut`, and a call handed a value that holds a
+`&mut`, which the callee may write through. GCC's `-Wtautological-compare` and
+Clippy's `eq_op` warn on the same shape.
 
 ### What follows
 
@@ -337,27 +362,39 @@ overlap, which is what `benchmark/ab.ts` decides.
   `half_ieee_compare.wado`, now `half_float_order.wado`) to pin these.
 - [x] Measure the cost on comparison-heavy code and sorting, and record it in
   [Cost](#cost).
-- [ ] Derive `Eq` from a written `cmp`, and reject a use of `Ord` on a type
+- [x] Derive `Eq` from a written `cmp`, and reject a use of `Ord` on a type
   whose `Eq` is written and whose `cmp` is not, a marker included. Each with a
   fixture.
+- [x] Apply the table to a newtype: its own `cmp` gives its `==`, and its own
+  `eq` alone leaves it no `Ord`, through an operator, a bound and a method
+  call. Each with a fixture.
 - [x] Make `f32::min`, `f64::min` and their `max` follow the order, add
   `minimum` and `maximum` on the Wasm instructions, and make `clamp` keep a NaN
   `x` and trap on a NaN bound, `high` included, which `low <= high` passes.
   Each with a fixture. Then measure Loam's kernels, which compare floats
   through `f32::max`, and record it in [Cost](#cost).
 - [x] Rename `minimum` and `maximum` to `ieee754_min` and `ieee754_max`.
-- [ ] Add the six `ieee754_*` comparison methods to `f16`, `bf16`, `f32` and
-  `f64`, each lowering to one Wasm instruction, with a fixture holding each
+- [x] Add the six `ieee754_*` comparison methods to `f16`, `bf16`, `f32` and
+  `f64`, each lowering to one Wasm instruction, with a stdlib test holding each
   method's answers on a NaN, `-0.0` and an ordinary pair.
-- [ ] Report the `self_comparison` lint, with a fixture for each operator, the
+- [x] Report the `self_comparison` lint, with a fixture for each operator, the
   float hint, a chain, an operand that performs an effect, and `allow`.
-- [ ] Accept float range patterns, with fixtures for `-0.0`, a NaN scrutinee, a
+- [x] Accept float range patterns, with fixtures for `-0.0`, a NaN scrutinee, a
   NaN bound, equal bounds, and a `match` that lacks `_`.
-- [ ] Reject a constant pattern whose type is or holds a float, with fixtures
+- [x] Reject a constant pattern whose type is or holds a float, with fixtures
   for `f64::INFINITY`, a `global` float, and a nested struct constant holding
   one.
 
 ## Known gaps
+
+A range with a constant bound other than a primitive's limit is checked for
+nothing its values decide. A NaN constant bound is no error, so `1.0..=LIMIT`
+with `LIMIT` a NaN matches every value from `1.0` up, NaN included. Reversed
+and empty ranges, overlapping arms, and coverage go unreported, and a `match` on
+an integer needs `_` beside such a range even where the arms cover every value.
+
+A `cmp` written for only some instances of a generic head leaves `==` derived
+from the members there, so at those instances the two can disagree.
 
 The NaN test goes only where an operand is a constant. Nothing yet proves that a
 computed operand is not a NaN, so `a < b` between two variables pays the test
@@ -368,3 +405,18 @@ A float `min` or `max` is a conditional branch under wasmtime on x86, where
 order changes at random, `max` costs up to two and a half times `ieee754_max`,
 as
 [Cost](#cost) measures.
+
+The `self_comparison` lint warns about a call of a function that reads or
+writes a `global mut`, since such a function declares no effect yet
+([Global Variables](./spec-expressions.md#global-variables)). With `next_id()`
+incrementing a counter and returning it, `next_id() != next_id()` is true, and
+the lint says it is always false.
+
+The compiler answers the table in [One source for `==` and `cmp`](#one-source-for--and-cmp)
+twice: the trait solver and the elaborator each read the written impls and
+decide, apart from each other, whether a type's `Eq` comes from `cmp` and
+whether it has an `Ord`. The elaborator decides at each place that asks: an
+operator, a bound, a method call, a marker, and synthesis. Nothing makes the
+two agree but the solver's differential check, which panics a debug build on
+the first case where they do not, and a release build compiles with the
+elaborator's answer.

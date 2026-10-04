@@ -6,6 +6,8 @@ use {
     RepeatElement,
     ActionLanguage,
     compute_scan_cyclic,
+    edges_reach_self,
+    peel_labels,
 } from "./ir.wado";
 use { SuperOp } from "./superclass.wado";
 use { LitToken } from "./lexer_gen.wado";
@@ -297,6 +299,10 @@ pub struct GenContext {
     predicate_fns: List<[i32, String]>,
     rule_follow_kinds: GaleMap<String, List<String>>,
     rule_follow_exact: bool,
+    rules_before_eof_token: List<String>,
+    rule_input_end: GaleMap<String, List<List<List<String>>>>,
+    /// Per rule id: whether its scan is memoized (`close_rule_rescans`).
+    rescanned_rules: List<bool>,
     /// Per rule, the labeled rule calls whose capture an action reads. Their
     /// value-struct fields are what `$x.text` / `$x.ctx` resolve to.
     rule_captures: GaleMap<String, RuleCaptures>,
@@ -422,6 +428,9 @@ impl GenContext {
             predicate_fns: [],
             rule_follow_kinds: GaleMap::new(),
             rule_follow_exact: false,
+            rules_before_eof_token: [],
+            rule_input_end: GaleMap::<String, List<List<List<String>>>>::new(),
+            rescanned_rules: [],
             rule_captures: GaleMap::new(),
             alt_bindings: [],
             alt_scan_fns: GaleMap::new(),
@@ -738,11 +747,13 @@ impl GenContext {
         return args;
     }
 
-    /// Answer each left-recursive rule's scan once per reading of a position.
+    /// Answer each left-recursive or rescanned rule's scan once per reading of
+    /// a position.
     ///
     /// Candidates of a scan tournament that share a prefix each scan the
     /// operand under it, so nesting one inside another doubles the work at every
-    /// level. A scan decides nothing and reads only its arguments, so its answer
+    /// level; `close_rule_rescans` names the other way a scan doubles. A scan
+    /// decides nothing and reads only its arguments, so its answer
     /// can be kept for the parse. A prediction reads the caller stack too,
     /// which no key here holds: the walk hides it, and an answer that needed it
     /// is not kept. A left-recursion loop the simulator decides reads the
@@ -755,6 +766,47 @@ impl GenContext {
     /// Whether the parser carries the scan memo (`set_scan_memo`).
     pub fn scan_memo(&self) -> bool {
         return self.scan_memo;
+    }
+
+    /// Marks each rule whose scan a failing repeat body can repeat at the same
+    /// position: a recursive rule called inside an optional or loop body with a
+    /// required element after it. Where that element fails, the body rewinds,
+    /// and what encloses it scans the same tokens again: an unclosed HTML
+    /// element scans its siblings as its content, and each of them does the
+    /// same, which doubles per element.
+    pub fn close_rule_rescans(&mut self) {
+        let mut callees: List<List<i32>> = [];
+        let mut late_failing: List<String> = [];
+        for let rule of &self.parser_rules {
+            let mut names: List<String> = [];
+            for let alt of &rule.alternatives {
+                collect_scannable_refs(&alt.elements, &mut names);
+                collect_late_failing_calls(&alt.elements, false, &mut late_failing);
+            }
+            let mut ids: List<i32> = [];
+            for let name of &names {
+                let id = self.rule_index_of(name);
+                if id >= 0 {
+                    ids.push(id);
+                }
+            }
+            callees.push(ids);
+        }
+        let mut rescanned: List<bool> = [];
+        for let i of 0..<callees.len() {
+            rescanned.push(late_failing.contains_str(self.parser_rules[i].name) && edges_reach_self(&callees, i));
+        }
+        self.rescanned_rules = rescanned;
+    }
+
+    /// Whether the rule's scan is memoized (`close_rule_rescans`).
+    pub fn rule_is_rescanned(&self, rule_index: i32) -> bool {
+        return self.rescanned_rules[rule_index];
+    }
+
+    /// Whether any rule's scan is memoized (`close_rule_rescans`).
+    pub fn any_rule_rescanned(&self) -> bool {
+        return self.rescanned_rules.contains(&true);
     }
 
     /// Enter the atom of a left-recursive rule, or leave it, answering whether
@@ -808,6 +860,29 @@ impl GenContext {
     pub fn set_rule_follow(&mut self, kinds: GaleMap<String, List<String>>, exact: bool) {
         self.rule_follow_kinds = kinds;
         self.rule_follow_exact = exact;
+    }
+
+    /// Records the rules an `EOF` the grammar writes may follow.
+    pub fn set_rules_before_eof_token(&mut self, rules: List<String>) {
+        self.rules_before_eof_token = rules;
+    }
+
+    /// Whether an `EOF` the grammar writes may follow the current rule. The
+    /// FOLLOW above seeds the start rule with one the grammar need not write.
+    pub fn current_rule_precedes_eof_token(&self) -> bool {
+        return self.rules_before_eof_token.contains_str(self.current_rule().name);
+    }
+
+    /// Records, per rule, the strings `r` for which `rule r EOF` can occur
+    /// (`follow_env::rule_input_end`).
+    pub fn set_rule_input_end(&mut self, strings: GaleMap<String, List<List<List<String>>>>) {
+        self.rule_input_end = strings;
+    }
+
+    /// The strings `r` for which `rule r EOF` can occur, for the current rule:
+    /// entry `n - 1` holds those of length `n` as one kind set per position.
+    pub fn current_rule_input_end(&self) -> List<List<List<String>>> {
+        return self.rule_input_end[self.current_rule().name];
     }
 
     /// Whether the FOLLOW fixed point converged exactly, so a per-rule set is
@@ -1185,6 +1260,27 @@ impl GenContext {
 
     pub fn has_parser_superclass(&self) -> bool {
         return !self.parser_superclass_name.is_empty();
+    }
+
+    /// Take the parser rules again after their action bodies were rewritten in
+    /// place. Everything derived in `new` reads only the rules' shape, which a
+    /// body rewrite leaves alone.
+    pub fn adopt_rewritten_bodies(&mut self, parser_rules: &List<ParserRule>) {
+        assert parser_rules.len() == self.parser_rules.len(), "a body rewrite keeps the rules";
+        self.parser_rules = *parser_rules;
+    }
+
+    /// The base interfaces an entry that lexes or parses performs: the lexer's,
+    /// then the parser's.
+    pub fn base_effects(&self) -> List<String> {
+        let mut bases: List<String> = [];
+        if self.has_superclass() {
+            bases.push(self.superclass_name);
+        }
+        if self.has_parser_superclass() {
+            bases.push(self.parser_superclass_name);
+        }
+        return bases;
     }
 
     pub fn parser_superclass_ops(&self) -> &List<SuperOp> {
@@ -2489,7 +2585,7 @@ impl GenContext {
 
     /// Per rule index, the rules a scan of it calls, `-1` standing for a name
     /// no parser rule has.
-    fn scannable_callees(&self) -> List<List<i32>> {
+    pub fn scannable_callees(&self) -> List<List<i32>> {
         let mut callees: List<List<i32>> = [];
         for let rule of &self.parser_rules {
             let mut names: List<String> = [];
@@ -3155,6 +3251,34 @@ pub fn close_over_callers(callees: &List<List<i32>>, marked: List<bool>) -> List
         }
     }
     return out;
+}
+
+/// The rules called inside a repeat body with a required element after the
+/// call in the same alternative. `in_repeat` says `elements` lie in one.
+fn collect_late_failing_calls(elements: &List<Element>, in_repeat: bool, out: &mut List<String>) {
+    for let i of 0..<elements.len() {
+        let elem = peel_labels(&elements[i]);
+        match elem {
+            RuleRef(r) => if in_repeat && elements.iter_ref().skip(i + 1).any(|e| is_required(e)) {
+                out.push(r.name);
+            },
+            Repeat(rep) => collect_late_failing_calls(&[rep.element], true, out),
+            Group(g) => {
+                for let alt of &g.alternatives {
+                    collect_late_failing_calls(&alt.elements, in_repeat, out);
+                }
+            },
+            TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => {
+            },
+            Label(_) => unreachable(),
+        }
+    }
+}
+
+/// Whether an element must match something: anything but an optional or a
+/// star. A rule call counts, though its rule may be nullable.
+fn is_required(elem: &Element) -> bool {
+    return !peel_labels(elem) matches { Repeat(rep) && !rep.kind matches { Plus } };
 }
 
 /// Collect the parser-rule names an element sequence references for

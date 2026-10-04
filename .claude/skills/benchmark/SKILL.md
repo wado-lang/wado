@@ -25,8 +25,9 @@ mise run on-task-started
 
 ## Procedure
 
-1. Run `mise run benchmark-all` **three times**, each to its own log, then pick
-   per row with `node benchmark/pick.ts run1.log run2.log run3.log` (throttling
+1. Run `mise run benchmark-all` **three times**, each to its own log in
+   `scratchpad/`, then pick per row with
+   `node benchmark/pick.ts scratchpad/run{1,2,3}.log` (throttling
    only ever slows things down). Use that tool rather than reading the logs by
    eye: it keys rows by (task, implementation, phase) and selects on ms/iter, so
    a rate that rounds to a tie across runs cannot pair with the wrong ms/iter.
@@ -54,18 +55,17 @@ issues, so an arm costs a benchmark run rather than a release rebuild:
 ```sh
 set -e  # a failed arm would leave pick.ts choosing among the rest
 for t in 13 20 32; do
-  WADO_BENCH_FLAGS="--optimize-inline-threshold $t" mise run benchmark-all > thr$t.log 2>&1
+  WADO_BENCH_FLAGS="--optimize-inline-threshold $t" mise run benchmark-all > scratchpad/thr$t.log 2>&1
 done
-node benchmark/pick.ts thr13.log thr20.log thr32.log
+node benchmark/pick.ts scratchpad/thr{13,20,32}.log
 ```
 
 Read the sweep with `pick.ts` the same way as a best-of-three: it keys rows by
 (task, implementation, phase), so the "best" column names the winning arm per
-row. Only a knob every compiling subcommand accepts can be swept this way — the
-harness spends the flags on `wado run`, so one added to `compile` alone is one
-the sweep cannot reach. The knob a sweep settles on is a default in
-`optimize.rs`, not a flag the README's numbers were taken under — re-run the
-suite unflagged before updating the tables.
+row. Only a knob both `wado compile` and `wado run` accept can be swept this
+way, since the harness passes the flags to both. The knob a sweep settles on is
+a default in `optimize.rs`, not a flag the README's numbers were taken under —
+re-run the suite unflagged before updating the tables.
 
 Comparing the settled default against `origin/main` is a different measurement,
 and `WADO_BIN` plus `ab.ts` is how: see the `wado-performance` skill.

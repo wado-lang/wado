@@ -130,6 +130,10 @@ JCO_PREOPEN=benchmark mise run jco-bench benchmark/zlib/zlib_bench.wado
 | zlib compress   | ~65 MB/s           | —                       |
 | zlib decompress | ~220 MB/s          | —                       |
 
+The Node column is `mise run jco-bench <program.wado>` as above; the wasmtime
+column is `wado run -O2 <program.wado>` from `benchmark/`, as
+`benchmark/mise.toml` runs it.
+
 Compute throughput on V8 lands within ~5–10% of wasmtime (sieve is much faster
 on V8). Numbers are indicative on a noisy cloud VM; keep best-of-3.
 

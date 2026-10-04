@@ -40,7 +40,7 @@ does not need remeasuring. Moonbit (0.1.20260920, `peter-jerry-ye/wasi`
 
 | Language | Size (bytes) |
 | -------- | -----------: |
-| wado     |        6,262 |
+| wado     |        6,250 |
 | c        |       16,786 |
 | moonbit  |       23,593 |
 | zig      |       38,054 |
@@ -52,7 +52,7 @@ Reads gzip data from stdin and decompresses it.
 
 | Language | Size (bytes) | Notes                                  |
 | -------- | -----------: | -------------------------------------- |
-| wado     |       20,671 | stdin + gzip decompress (core:zlib)    |
+| wado     |       20,610 | stdin + gzip decompress (core:zlib)    |
 | c        |       33,439 | stdin + gzip decompress (zlib 1.3.1)   |
 | zig      |       48,300 | stdin + gzip decompress (std.compress) |
 | rust     |       89,609 | stdin + gzip decompress (zlib-rs)      |
@@ -63,7 +63,7 @@ Reads SQL from stdin and writes syntax-highlighted HTML to stdout.
 
 | Language | Size (bytes) | Notes                                       |
 | -------- | -----------: | ------------------------------------------- |
-| wado     |      281,097 | Gale-generated highlighter from `SQLite.g4` |
+| wado     |      279,969 | Gale-generated highlighter from `SQLite.g4` |
 | rust     |    3,484,487 | tree-sitter + tree-sitter-sequel            |
 
 ## Usage

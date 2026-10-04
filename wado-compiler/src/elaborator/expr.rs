@@ -1121,15 +1121,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(ident.id),
                 ident.span,
             );
-            // Not an l-value. The value is its declaring module's AST, walked
-            // again here, so it travels exactly as a default does and names
-            // none of this function's binders.
-            let const_module = assoc.module.clone();
-            ctx.with_caller_bindings_hidden(|ctx| {
-                self.with_resolving_home(Some(const_module), |s| {
-                    s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
-                })
-            });
+            // Not an l-value.
+            self.resolve_associated_const_body(&assoc, ctx);
             if !ident.type_args_on_prefix {
                 return self.value_without_turbofish(ident, assoc.ty);
             }
@@ -3125,24 +3118,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Each case's payload type of the variant `ty`, typed at this instance.
-    pub(super) fn case_payload_types(&self, ty: TypeId) -> Option<Vec<TypeId>> {
-        let variant_info = self.tysys.variant_of_type(ty)?;
-        let type_args = self
-            .tysys
-            .type_table
-            .borrow()
-            .nominal_type_args(ty)
-            .unwrap_or_default();
-        Some(
-            variant_info
-                .cases
-                .iter()
-                .map(|c| self.tysys.substitute_type_params(c.payload, &type_args))
-                .collect(),
-        )
-    }
-
     /// Whether `ty` has no value: `!`, or a type each of whose values would hold one.
     pub(super) fn is_uninhabited(&self, ty: TypeId) -> bool {
         self.is_uninhabited_within(ty, &mut Vec::new())
@@ -3169,7 +3144,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             fields
                 .iter()
                 .any(|&(_, t)| self.is_uninhabited_within(t, open))
-        } else if let Some(payloads) = self.case_payload_types(head) {
+        } else if let Some(payloads) = self.tysys.case_payload_types(head) {
             payloads
                 .iter()
                 .all(|&t| self.is_uninhabited_within(t, open))
@@ -3241,10 +3216,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 util::pattern_literal(lit).ok()?
             }
             Literal::String(_) => {
-                return self
-                    .literal_pattern_mismatch(lit, scrutinee_type)
-                    .is_none()
-                    .then_some(Pat::Opaque);
+                return (!self.string_pattern_mismatch(scrutinee_type)).then_some(Pat::Opaque);
             }
             // `null` is the `None` case where the scrutinee has one.
             Literal::Null => {
@@ -3309,7 +3281,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let variant_info = self.tysys.variant_of_type(scrutinee_type).cloned()?;
         let (index, _) = variant_info.case_named(name)?;
-        let payload_types = self.case_payload_types(scrutinee_type)?;
+        let payload_types = self.tysys.case_payload_types(scrutinee_type)?;
         let cases: Rc<[Case]> = variant_info
             .cases
             .iter()
@@ -3402,32 +3374,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scrutinee_type: TypeId,
     ) -> Option<Pat> {
         // Bad or empty bounds were reported where the pattern was resolved.
-        let resolutions = &self.tysys.resolutions;
-        let start = util::range_bound_literal(start, resolutions)?.ok()?;
-        let end = util::range_bound_literal(end, resolutions)?.ok()?;
         let inclusive = matches!(kind, ast::RangeKind::Inclusive);
-        if util::range_order_error(&start, &end, inclusive).is_some() {
-            return None;
-        }
+        let Some(pattern) = util::range_pattern(start, end, inclusive, &self.tysys.resolutions)
+        else {
+            // A constant bound's value shows only when the match runs.
+            let resolved = [start, end].into_iter().all(|bound| {
+                util::range_bound(bound, &self.tysys.resolutions).is_some_and(|b| b.is_ok())
+                    || self.names_pattern_constant(bound)
+            });
+            return resolved.then_some(Pat::Opaque);
+        };
+        let pattern = pattern.ok()?;
         // What a pattern on a type parameter names is decided per instance.
         if !util::settles_literal_patterns(&self.tysys.type_table.borrow(), scrutinee_type) {
-            return Some(Pat::Opaque);
+            return util::unsettled_pattern_errors(&pattern)
+                .is_empty()
+                .then_some(Pat::Opaque);
         }
-        let errors = util::range_bound_errors(
-            &start,
-            &end,
+        let settled = util::settle_instance_pattern(
+            &pattern,
             scrutinee_type,
             &mut self.tysys.type_table.borrow_mut(),
-        );
-        if !errors.is_empty() {
-            return None;
-        }
-        let hi = if inclusive {
-            end.bits()
-        } else {
-            end.bits() - 1
-        };
-        self.tysys.exh_int(start.bits(), hi, scrutinee_type)
+        )
+        .ok()?;
+        let (lo, hi) = settled.range_keys();
+        self.tysys.exh_int(lo, hi, scrutinee_type)
     }
 
     fn format_missing_cases(cases: &[String]) -> String {

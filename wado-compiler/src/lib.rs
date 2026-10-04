@@ -60,6 +60,7 @@ pub mod primitive;
 pub mod remarks;
 pub mod resolve;
 pub mod resource_move_check;
+pub mod self_comparison;
 pub mod semantics;
 pub mod signature_reach;
 pub mod stdlib;
@@ -139,6 +140,7 @@ pub use optimize::{OptLevel, optimize};
 pub use package::Package;
 pub use parser::{ParseError, Parser};
 pub use resource_move_check::{ResourceMoveError, check_resource_moves_semantic};
+use self_comparison::self_comparison_diagnostics;
 pub use token::Span;
 pub use trace::{TraceSink, set_sink as set_trace_sink};
 
@@ -519,6 +521,7 @@ pub fn lint_diagnostics(
     let mut lints = shadowing_diagnostics(sem);
     lints.extend(undecided_effect_diagnostics(sem));
     lints.extend(literal_cast_diagnostics(sem));
+    lints.extend(self_comparison_diagnostics(sem));
     if unused {
         lints.extend(unused_diagnostics(sem, is_test_world));
     }
@@ -2067,7 +2070,6 @@ pub async fn dump_with_host<H: CompilerHost>(
 /// their Kiln-generated output, exactly as [`compile_with_options`]'s
 /// `CompilerOptions::invocations` does — the caller is responsible for
 /// running the Kiln pipeline first (see `wado-cli`'s `maybe_run_pipeline`).
-#[allow(clippy::too_many_arguments)]
 pub async fn dump_with_host_and_world<H: CompilerHost>(
     source: &str,
     host: &H,

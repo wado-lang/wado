@@ -181,14 +181,10 @@ fn collect_and_validate(
         if !is_eligible(&func) {
             continue;
         }
-        let is_trait_method = func.is_trait_method();
+        // A receiver is fair game like any parameter, a trait method's included:
+        // the original function survives this pass for the calls it cannot
+        // retarget — see `mint_scalarized_clones`.
         for (pi, param) in func.params.iter().enumerate() {
-            // A trait method's `self` stays put: its shape is the vtable slot's.
-            // Every other receiver is fair game, because the original function
-            // survives this pass — see `mint_scalarized_clones`.
-            if is_trait_method && pi == 0 && param.name == "self" {
-                continue;
-            }
             if func.address_taken_locals.contains(&param.local_index) {
                 continue;
             }
@@ -972,8 +968,8 @@ fn mint_scalarized_clones(
 }
 
 /// Whether the clone already standing under this name is the one this run would
-/// mint: same arity, and the same type at every position — the scalar type where
-/// this run scalarizes, the original's elsewhere.
+/// mint: same return type, same arity, and the same type at every position — the
+/// scalar type where this run scalarizes, the original's elsewhere.
 fn standing_clone_matches(
     project: &NirPackage,
     existing: FnKey,
@@ -982,7 +978,8 @@ fn standing_clone_matches(
     candidates: &IndexMap<(FnKey, usize), SroaInfo>,
 ) -> bool {
     let standing = project.functions[existing.index()].borrow();
-    standing.params.len() == fresh.params.len()
+    standing.return_type == fresh.return_type
+        && standing.params.len() == fresh.params.len()
         && standing.params.iter().enumerate().all(|(pi, param)| {
             // `fresh` is still the original's copy here, so its type is what a
             // position this run does not scalarize keeps.

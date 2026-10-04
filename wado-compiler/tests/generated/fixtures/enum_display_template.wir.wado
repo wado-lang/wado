@@ -6,52 +6,48 @@ enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Canc
 
 enum enum_display_template.wado//enum:Fruit { Apple = 0, Banana = 1, Cherry = 2 };  // TypeId(1)
 
-struct core:prelude/types.wado//Box<enum_display_template.wado/Fruit> {  // TypeId(2)
-    mut value: "enum_display_template.wado//enum:Fruit",
-}
+array Array<u8> (mut u8);  // TypeId(2)
 
-array Array<u8> (mut u8);  // TypeId(3)
-
-struct core:prelude/string.wado//String {  // TypeId(4)
+struct core:prelude/string.wado//String {  // TypeId(3)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(5)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(4)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(6)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(5)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(7)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(6)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(8)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(7)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(9)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(8)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
 
-type "functype//enum_display_template.wado/run" = fn();  // TypeId(12)
+type "functype//enum_display_template.wado/run" = fn();  // TypeId(11)
 
-type "functype//enum_display_template.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(13)
+type "functype//enum_display_template.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//enum_display_template.wado/$cm_export__run" = fn();  // TypeId(14)
+type "functype//enum_display_template.wado/$cm_export__run" = fn();  // TypeId(13)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(15)
+type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(14)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(16)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(15)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(17)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(16)
 
-type "functype//enum_display_template.wado/enum_display_template.wado/Fruit^core:prelude/traits.wado/Display::fmt$scalar" = fn(ref "core:prelude/types.wado//Box<enum_display_template.wado/Fruit>", ref "core:prelude/string.wado//String");  // TypeId(18)
+type "functype//enum_display_template.wado/enum_display_template.wado/Fruit^core:prelude/traits.wado/Display::fmt$scalar" = fn("enum_display_template.wado//enum:Fruit", ref "core:prelude/string.wado//String");  // TypeId(17)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(19)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(18)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(20)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(19)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(21)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(20)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(22)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -87,7 +83,7 @@ fn "enum_display_template.wado/run"() with Stdout {
     start_20 = $local_1_1.used;
     $local_1_1.used = new_used_19;
     builtin::array_copy<u8>($local_1_1.repr, start_20, global:enum_display_template.wado::$const_obj_6, 0, 7);
-    "enum_display_template.wado/enum_display_template.wado/Fruit^core:prelude/traits.wado/Display::fmt$scalar"(struct.new "core:prelude/types.wado//Box<enum_display_template.wado/Fruit>" { value: 0 }, $local_1_1);
+    "enum_display_template.wado/enum_display_template.wado/Fruit^core:prelude/traits.wado/Display::fmt$scalar"(0, $local_1_1);
     start_20 = builtin::i32_wrap_i64(local.tee packed_23("wasi/stream-new"()));
     new_used_19 = builtin::i32_wrap_i64(packed_23 >> 32_i64);
     start_20 = "enum_display_template.wado/$cm_binding__Stdout_write_via_stream"(start_20);
@@ -101,14 +97,14 @@ fn "enum_display_template.wado/run"() with Stdout {
     new_used_19 = $local_1_1.used;
     $local_1_1.used = start_20;
     builtin::array_copy<u8>($local_1_1.repr, new_used_19, global:enum_display_template.wado::$const_obj_5, 0, 7);
-    "enum_display_template.wado/enum_display_template.wado/Fruit^core:prelude/traits.wado/Display::fmt$scalar"(struct.new "core:prelude/types.wado//Box<enum_display_template.wado/Fruit>" { value: 0 }, $local_1_1);
+    "enum_display_template.wado/enum_display_template.wado/Fruit^core:prelude/traits.wado/Display::fmt$scalar"(0, $local_1_1);
     new_used_19 = builtin::i32_wrap_i64(local.tee packed_23("wasi/stream-new"()));
     start_20 = builtin::i32_wrap_i64(packed_23 >> 32_i64);
     new_used_19 = "enum_display_template.wado/$cm_binding__Stdout_write_via_stream"(new_used_19);
     "core:rt/write_string_to_stream"(start_20, $local_1_1.repr, $local_1_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_19);
     $local_1_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(26), used: 0 };
-    "enum_display_template.wado/enum_display_template.wado/Fruit^core:prelude/traits.wado/Display::fmt$scalar"(struct.new "core:prelude/types.wado//Box<enum_display_template.wado/Fruit>" { value: 1 }, $local_1_1);
+    "enum_display_template.wado/enum_display_template.wado/Fruit^core:prelude/traits.wado/Display::fmt$scalar"(1, $local_1_1);
     if @unlikely(local.tee new_used_19($local_1_1.used + 10) > builtin::array_len($local_1_1.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_1, new_used_19);
@@ -122,7 +118,7 @@ fn "enum_display_template.wado/run"() with Stdout {
     "core:rt/write_string_to_stream"(new_used_19, $local_1_1.repr, $local_1_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_20);
     $local_1_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
-    "enum_display_template.wado/enum_display_template.wado/Fruit^core:prelude/traits.wado/Display::fmt$scalar"(struct.new "core:prelude/types.wado//Box<enum_display_template.wado/Fruit>" { value: 2 }, $local_1_1);
+    "enum_display_template.wado/enum_display_template.wado/Fruit^core:prelude/traits.wado/Display::fmt$scalar"(2, $local_1_1);
     if @unlikely(local.tee start_20($local_1_1.used + 9) > builtin::array_len($local_1_1.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_1, start_20);
@@ -225,10 +221,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "enum_display_template.wado/enum_display_template.wado/Fruit^core:prelude/traits.wado/Display::fmt$scalar"(self, f) {
-    let $load_0: "enum_display_template.wado//enum:Fruit";
     let new_used_14: i32;
     let start_15: i32;
-    if local.tee $load_0(self.value) == 0 {
+    if self == 0 {
         if @unlikely(local.tee new_used_14(f.used + 5) > builtin::array_len(f.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used_14);
@@ -236,7 +231,7 @@ fn "enum_display_template.wado/enum_display_template.wado/Fruit^core:prelude/tra
         start_15 = f.used;
         f.used = new_used_14;
         builtin::array_copy<u8>(f.repr, start_15, global:enum_display_template.wado::$const_obj_12, 0, 5);
-    } else if $load_0 == 1 {
+    } else if self == 1 {
         if @unlikely(local.tee start_15(f.used + 6) > builtin::array_len(f.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, start_15);
@@ -244,13 +239,13 @@ fn "enum_display_template.wado/enum_display_template.wado/Fruit^core:prelude/tra
         new_used_14 = f.used;
         f.used = start_15;
         builtin::array_copy<u8>(f.repr, new_used_14, global:enum_display_template.wado::$const_obj_11, 0, 6);
-    } else if $load_0 == 2 {
-        if @unlikely(local.tee $load_0(f.used + 6) > builtin::array_len(f.repr)) {
+    } else if self == 2 {
+        if @unlikely(local.tee self(f.used + 6) > builtin::array_len(f.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, $load_0);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, self);
         }
         new_used_14 = f.used;
-        f.used = $load_0;
+        f.used = self;
         builtin::array_copy<u8>(f.repr, new_used_14, global:enum_display_template.wado::$const_obj_10, 0, 6);
     }
 }

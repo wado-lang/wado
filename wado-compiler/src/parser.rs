@@ -950,7 +950,7 @@ impl Parser {
         name: String,
         qualifier: Option<Type>,
         start_span: Span,
-        name_id: Option<AstId>,
+        name_id: AstId,
         name_span: Span,
     ) -> ParseResult<Pattern> {
         self.advance(); // consume (
@@ -1049,7 +1049,7 @@ impl Parser {
                 case_name,
                 Some(qualifier),
                 start_span,
-                Some(case_id),
+                case_id,
                 case_span,
             );
         }
@@ -1057,7 +1057,7 @@ impl Parser {
         Ok(Pattern::Variant {
             variant_name: case_name,
             variant_qualifier: Some(qualifier),
-            name_id: Some(case_id),
+            name_id: case_id,
             name_span: case_span,
             bindings: vec![],
             span: start_span.merge(&end_span),
@@ -3179,7 +3179,7 @@ impl Parser {
             } else if self.check(&TokenKind::LParen) {
                 // Variant with bindings: Some(x), just(n), etc.
                 let name_id = self.alloc_ast_id();
-                self.parse_variant_pattern(name, None, start_span, Some(name_id), start_span)
+                self.parse_variant_pattern(name, None, start_span, name_id, start_span)
             } else if self.check(&TokenKind::LBrace) {
                 // Named struct pattern: Point { x, y }
                 self.parse_struct_pattern_fields(Some(name))

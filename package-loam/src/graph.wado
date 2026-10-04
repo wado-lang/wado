@@ -330,6 +330,11 @@ impl Attr {
     }
 }
 
+/// An attribute the operator requires, which the node does not carry.
+pub fn absent(attr: String) -> AttrError {
+    return AttrError { attr, reason: "is absent and the operator reads it" };
+}
+
 fn int_of(text: &String) -> Result<i64, String> {
     let Ok(v) = i64::from_str(text) else {
         return Result::Err(`holds '${text}', which is not an integer`);
@@ -394,6 +399,14 @@ impl Node {
         return match self.attr(name) {
             Some(a) => a.int(),
             None => Result::Ok(fallback),
+        };
+    }
+
+    /// The one integer attribute `name` holds, which ONNX gives no default.
+    pub fn required_int_attr<S: AsStrSlice>(&self, name: S) -> Result<i64, AttrError> {
+        return match self.attr(name) {
+            Some(a) => a.int(),
+            None => Result::Err(absent(name.as_str_slice().to_string())),
         };
     }
 
