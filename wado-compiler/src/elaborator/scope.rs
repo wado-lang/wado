@@ -5,7 +5,7 @@
 //! path (WEP 2026-05-26).
 
 use std::borrow::Borrow;
-use std::cell::{Cell, Ref, RefCell};
+use std::cell::{Cell, RefCell};
 use std::hash::Hash;
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
@@ -14,7 +14,7 @@ use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::tir::{TraitRef, TypeId, TypeKey, TypeTable};
+use crate::tir::{TraitRef, TypeId, TypeKey};
 
 use super::coercion::PendingLiterals;
 use super::trait_env::{InheritedBound, ViaClause};
@@ -783,7 +783,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let Some(sig) = param.bounds.iter().find_map(|b| b.fn_signature.as_ref()) else {
                 continue;
             };
-            if self.annotate_ctx.trait_ctx.type_params.contains_key(&param.name) {
+            if self
+                .annotate_ctx
+                .trait_ctx
+                .type_params
+                .contains_key(&param.name)
+            {
                 continue;
             }
             let type_id = self.resolve_type(&ast::Type::Function(sig.clone()));
@@ -966,28 +971,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             );
         }
         if let Some(site) = site {
-            let declared: Vec<Vec<TraitRef>> =
-                scope.param_bounds_at(owning_trait, assoc, site, &params);
-            let named: Vec<(TypeKey, Vec<FqTraitName>)> = {
-                let table: Ref<'_, TypeTable> = RefCell::borrow(&scope.tysys.type_table);
-                params
-                    .iter()
-                    .zip(declared)
-                    .map(|(&param, refs)| {
-                        (
-                            table.type_key(param),
-                            refs.iter().map(|r| table.trait_ref_name(r)).collect(),
-                        )
-                    })
-                    .collect()
-            };
-            scope
-                .annotate_ctx
-                .trait_ctx
-                .assoc_param_bounds
-                .extend(named);
+            let declared = scope.param_bounds_at(owning_trait, assoc, site, &params);
+            for (&param, refs) in params.iter().zip(&declared) {
+                scope.give_assoc_param_bounds(param, refs);
+            }
         }
         body(&mut scope)
+    }
+
+    /// Have the family parameter `param` carry `refs` in this frame, by its
+    /// identity.
+    pub(super) fn give_assoc_param_bounds(&mut self, param: TypeId, refs: &[TraitRef]) {
+        let (key, named) = {
+            let table = RefCell::borrow(&self.tysys.type_table);
+            let named: Vec<FqTraitName> = refs.iter().map(|r| table.trait_ref_name(r)).collect();
+            (table.type_key(param), named)
+        };
+        self.annotate_ctx
+            .trait_ctx
+            .assoc_param_bounds
+            .insert(key, named);
     }
 
     /// The bounds `owning_trait`'s associated type `assoc` declares on each of

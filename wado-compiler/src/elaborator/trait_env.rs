@@ -2818,7 +2818,10 @@ pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> nam
                 // `<F: fn(...)>` is that signature, spelled as the type it is.
                 Some(Resolution::Binder(binder)) => match resolutions.fn_bound_signature(binder) {
                     Some(sig) => {
-                        return written_type_arg(&ast::Type::Function(Box::new(sig.clone())), resolutions);
+                        return written_type_arg(
+                            &ast::Type::Function(Box::new(sig.clone())),
+                            resolutions,
+                        );
                     }
                     None => name::FqTypeName::binder(&get_type_name_static(ty)),
                 },

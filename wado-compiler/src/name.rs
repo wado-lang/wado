@@ -3167,9 +3167,9 @@ impl FqTypeName {
         // A spread stands for a run of a tuple's elements, so it lines the
         // two up from both ends.
         let spread = |name: &FqTypeName| name.args.iter().position(FqTypeName::is_pack_spread);
-        let (with, without) = match (spread(self), spread(other)) {
-            (Some(at), _) => ((self, at), other),
-            (None, Some(at)) => ((other, at), self),
+        let (spread_side, at, plain) = match (spread(self), spread(other)) {
+            (Some(at), _) => (self, at, other),
+            (None, Some(at)) => (other, at, self),
             (None, None) => {
                 return self.args.len() == other.args.len()
                     && self
@@ -3179,7 +3179,6 @@ impl FqTypeName {
                         .all(|(a, b)| a.unifies_with(b));
             }
         };
-        let ((spread_side, at), plain) = (with, without);
         let after = spread_side.args.len() - at - 1;
         plain.args.len() >= at + after
             && spread_side.args[..at]

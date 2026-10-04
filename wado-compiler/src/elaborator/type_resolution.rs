@@ -1208,34 +1208,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         base: TypeId,
         base_name: &str,
         assoc: &str,
-        args: &[TypeId],
     ) -> Option<TypeId> {
         let owning_trait = self.bound_declaring_assoc_type(base_name, assoc)?;
-        Some(self.make_frame_projection_of_trait(base, base_name, owning_trait, assoc, args))
-    }
-
-    /// [`Self::make_frame_projection`] for a caller that already knows which
-    /// trait declares `assoc`. `T: Add + Mul` declares `Output` twice, and only
-    /// the site that dispatched can say which one `a * b` yields.
-    // The one place a projection is built from a trait. It interns by its
-    // trait arguments and bounds, so those can only be the declaration's read
-    // at the frame (WEP 2026-08-12).
-    pub(super) fn make_frame_projection_of_trait(
-        &mut self,
-        base: TypeId,
-        base_name: &str,
-        owning_trait: DefId,
-        assoc: &str,
-        args: &[TypeId],
-    ) -> TypeId {
         let site = FamilySite {
             base,
             trait_args: self.trait_args_for(base, base_name, owning_trait),
         };
-        self.make_projection_at(site, base_name, owning_trait, assoc, args)
+        Some(self.make_projection_at(site, base_name, owning_trait, assoc, &[]))
     }
 
-    /// [`Self::make_frame_projection_of_trait`] at a `site` already read.
+    /// The projection `<site.base as owning_trait>::assoc<args>`, carrying what
+    /// the declaration's bounds bind, read at `site`.
+    // The one place a projection is built from a trait. It interns by its
+    // trait arguments and bindings, so those can only be the declaration's
+    // read at the site (WEP 2026-08-12).
     pub(super) fn make_projection_at(
         &mut self,
         site: FamilySite,
@@ -1592,7 +1578,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.unless_on_walk(
                     |scope| &mut scope.assoc_binding_stack,
                     (base, assoc.clone()),
-                    |e| e.make_frame_projection(base, base_name, &assoc, &[]),
+                    |e| e.make_frame_projection(base, base_name, &assoc),
                 )
             })?;
             Some((name, answer))
@@ -1658,8 +1644,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .trait_env
             .assoc_type_decl(&owning_trait, assoc)
-            .map(|decl| decl.type_params.iter().map(|p| p.name.as_str()).collect())
-            .unwrap_or_default();
+            .expect("a declaration read in its trait is the trait's")
+            .type_params
+            .iter()
+            .map(|p| p.name.as_str())
+            .collect();
         let mut out = DeclaringSpace::default();
         let params = self.tysys.trait_env.trait_type_params(owning_trait);
         for (index, param) in params.iter().enumerate() {

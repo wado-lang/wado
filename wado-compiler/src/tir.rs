@@ -1283,6 +1283,15 @@ impl TypeTable {
                 .all(|(&x, &y)| self.type_key(x) == self.type_key(y))
     }
 
+    /// Whether two projections' trait arguments name one instantiation of the
+    /// trait. A side reached by a bare bound, `None`, names none other.
+    fn trait_args_agree(&self, a: Option<&[TypeId]>, b: Option<&[TypeId]>) -> bool {
+        match (a, b) {
+            (Some(a), Some(b)) => self.same_types(a, b),
+            _ => true,
+        }
+    }
+
     /// True when `id` resolves to the never type `!`, through any newtype. An
     /// expression of this type diverges and never yields a value.
     pub fn is_never(&self, id: TypeId) -> bool {
@@ -3353,8 +3362,8 @@ impl TypeTable {
     }
 
     /// Create the projection `<param_id as owning_trait<trait_args>>::assoc_name<args>`,
-    /// carrying `bounds` as its builder instantiated them. The declaring trait
-    /// is required: without it the projection has no identity to compare.
+    /// carrying `assoc_type_bindings` as its builder read them. The declaring
+    /// trait is required: without it the projection has no identity to compare.
     pub fn make_assoc_type_projection(
         &mut self,
         param_id: TypeId,
@@ -3510,8 +3519,7 @@ impl TypeTable {
 
     /// Whether `a` and `b` project one associated type off one base at one
     /// list of arguments: the same type, whatever bindings each carries from
-    /// the frame that built it. A side reached by a bare bound names no other
-    /// trait arguments.
+    /// the frame that built it.
     pub fn projects_alike(&self, a: TypeId, b: TypeId) -> bool {
         match (self.get(a), self.get(b)) {
             (
@@ -3536,10 +3544,7 @@ impl TypeTable {
                     && name_a == name_b
                     && self.same_types(args_a, args_b)
                     && trait_a == trait_b
-                    && match (trait_args_a, trait_args_b) {
-                        (Some(x), Some(y)) => self.same_types(x, y),
-                        _ => true,
-                    }
+                    && self.trait_args_agree(trait_args_a.as_deref(), trait_args_b.as_deref())
             }
             _ => self.type_key(a) == self.type_key(b),
         }
@@ -4395,10 +4400,10 @@ impl TypeTable {
                             .find(|answer| {
                                 answer.owning_trait == owning_trait
                                     && answer.assoc_name == assoc_name
-                                    && match (&answer.trait_args, &new_trait_args) {
-                                        (Some(x), Some(y)) => self.same_types(x, y),
-                                        _ => true,
-                                    }
+                                    && self.trait_args_agree(
+                                        answer.trait_args.as_deref(),
+                                        new_trait_args.as_deref(),
+                                    )
                             })
                             .map(|answer| answer.answer)
                     })
@@ -5008,7 +5013,8 @@ impl TypeTable {
             } => {
                 family_is_open
                     || !self.rooted_in_family(*param_id)
-                    || projection_arguments(args, trait_args).any(|arg| self.contains_open(arg, false))
+                    || projection_arguments(args, trait_args)
+                        .any(|arg| self.contains_open(arg, false))
             }
             _ => self.any_constituent(id, &mut |t| self.contains_open(t, family_is_open)),
         }

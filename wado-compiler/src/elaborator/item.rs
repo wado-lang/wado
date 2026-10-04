@@ -2,6 +2,7 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::ast::{self, Function, GlobalDecl, SelfKind, Type};
 use crate::attribute::{self, WIRE};
@@ -15,8 +16,8 @@ use crate::logger::Logger;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, MethodName, global_name};
 use crate::tir::{
-    AssocTypeSig, ImplProjection, TirEffectOp, TirParam, TraitFrame, TraitRef, TypeId, TypeKey,
-    TypeTable, method_param_offset,
+    AssocTypeSig, ImplProjection, TirEffectOp, TirParam, TraitFrame, TraitRef, TypeId, TypeTable,
+    method_param_offset,
 };
 use crate::token::Span;
 
@@ -1090,11 +1091,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .trait_frame(owning_trait)
                 .cloned();
             let frame = known.unwrap_or_else(|| {
-                let type_params: Vec<&ast::GenericParam> = header
-                    .type_params
-                    .iter()
-                    .filter(|param| param.fills_impl_slot())
-                    .collect();
+                let trait_env = Arc::clone(&scope.tysys.trait_env);
+                let type_params = trait_env.trait_type_params(owning_trait);
                 let params = type_params
                     .iter()
                     .map(|param| {
@@ -1136,17 +1134,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut out = Vec::with_capacity(written.len());
         for (param, &id) in written.iter().zip(&params) {
             let refs = self.trait_refs_of(&param.bounds);
-            let (key, named): (TypeKey, Vec<FqTraitName>) = {
-                let table = self.tysys.type_table.borrow();
-                (
-                    table.type_key(id),
-                    refs.iter().map(|r| table.trait_ref_name(r)).collect(),
-                )
-            };
-            self.annotate_ctx
-                .trait_ctx
-                .assoc_param_bounds
-                .insert(key, named);
+            self.give_assoc_param_bounds(id, &refs);
             out.push(refs);
         }
         out
