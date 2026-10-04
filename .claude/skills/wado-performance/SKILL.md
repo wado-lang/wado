@@ -12,18 +12,15 @@ Loop: profile the hot function → read its WIR for what it allocates/copies per
 iteration → change one thing → A/B both arms in one session, plus the WIR diff of
 the hot function → keep or revert (§5 says which evidence decides).
 
-<<<<<<< HEAD
 Re-profile before choosing a target: the percentages a WEP or an older note
 quotes predate whatever has landed since.
-||||||| 1a4af575a31
-=======
+
 **A speedup lands in the compiler, not in Wado source.** Editing `.wado` files,
 the stdlib included, is fine as an experiment: an ablation that prices a piece,
 or a hand-written shape that shows what the optimizer should emit. Shipping
 such an edit as the speedup is forbidden, unless the user approves it or asks
 for it. A fast iteration loop on the stdlib is not a reason to make an
 exception. §2 and §4 say where the fix goes instead.
->>>>>>> origin/main
 
 ## 1. Profile
 
