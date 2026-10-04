@@ -2214,34 +2214,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         util::settles_literal_patterns(&self.tysys.type_table.borrow(), scrutinee_type)
     }
 
-    /// The type a literal pattern demands of its settled scrutinee, when the
-    /// scrutinee is not it.
-    pub(super) fn literal_pattern_mismatch(
-        &mut self,
-        lit: &Literal,
-        scrutinee_type: TypeId,
-    ) -> Option<String> {
+    /// Whether a string-literal pattern names no value of the settled
+    /// `scrutinee_type`. The arm tests the scrutinee with `==`, so any type
+    /// answering `Eq<String>` matches one the way a `String` does.
+    pub(super) fn string_pattern_mismatch(&mut self, scrutinee_type: TypeId) -> bool {
         if !self.settles_literal_patterns(scrutinee_type) {
-            return None;
+            return false;
         }
-        match lit {
-            Literal::Null => None,
-            // A string-literal arm tests the scrutinee with `==`, so any type
-            // answering `Eq<String>` matches one the way a `String` does.
-            Literal::String(_) => {
-                let is_string = {
-                    let type_table = self.tysys.type_table.borrow();
-                    type_table.is_string(type_table.representation_head(scrutinee_type))
-                };
-                (!is_string && !self.compares_with_string_literal(scrutinee_type))
-                    .then(|| "String".to_string())
-            }
-            _ => util::pattern_literal_mismatch(
-                &util::pattern_literal(lit).ok()?,
-                scrutinee_type,
-                &mut self.tysys.type_table.borrow_mut(),
-            ),
-        }
+        let is_string = {
+            let type_table = self.tysys.type_table.borrow();
+            type_table.is_string(type_table.representation_head(scrutinee_type))
+        };
+        !is_string && !self.compares_with_string_literal(scrutinee_type)
     }
 
     /// Whether `scrutinee == "…"` resolves, which is what a string-literal
@@ -2273,9 +2257,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// kind or out of its range.
     fn check_pattern_value(&mut self, lit: &Literal, scrutinee_type: TypeId, span: Span) {
         if let Literal::String(_) = lit {
-            if let Some(expected) = self.literal_pattern_mismatch(lit, scrutinee_type) {
+            if self.string_pattern_mismatch(scrutinee_type) {
                 self.emit_pattern_literal_error(
-                    util::PatternLiteralError::Mismatch(expected),
+                    util::PatternLiteralError::Mismatch("String".to_string()),
                     scrutinee_type,
                     span,
                 );
@@ -2382,10 +2366,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for bound in bounds {
             if let Some(constant) = self.resolve_pattern_constant(bound, ctx) {
                 self.typecheck(constant.ty, scrutinee, span);
-                let id = constant
-                    .id
-                    .expect("the parser gives every name in a pattern a reference site");
-                origin = origin.or(Some(id));
+                origin = origin.or(Some(util::constant_bound_site(bound)));
                 continue;
             }
             let error = match util::range_bound(bound, &self.tysys.resolutions) {
@@ -2403,7 +2384,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
         // Without a constant, a bound named nothing and was reported above.
-        let Some(origin) = origin else {
+        let Some((origin, _)) = origin else {
             return;
         };
         self.resolve_binary_op(

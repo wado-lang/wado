@@ -3223,10 +3223,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 util::pattern_literal(lit).ok()?
             }
             Literal::String(_) => {
-                return self
-                    .literal_pattern_mismatch(lit, scrutinee_type)
-                    .is_none()
-                    .then_some(Pat::Opaque);
+                return (!self.string_pattern_mismatch(scrutinee_type)).then_some(Pat::Opaque);
             }
             // `null` is the `None` case where the scrutinee has one.
             Literal::Null => {

@@ -67,9 +67,9 @@ use crate::elaborator::stmt::{
 use crate::elaborator::trait_query::trait_sig_of_with;
 use crate::elaborator::types::{VarRef, newtype_member_owner};
 use crate::elaborator::util::{
-    BoundValue, FloatRange, PatternLiteralError, SettledPattern, bound_value, parse_i128_literal,
-    parse_u128_literal, pattern_literal, range_bound, range_pattern, settle_instance_pattern,
-    settles_literal_patterns,
+    BoundValue, FloatRange, PatternLiteralError, SettledPattern, bound_value, constant_bound_site,
+    parse_i128_literal, parse_u128_literal, pattern_literal, range_bound, range_pattern,
+    settle_instance_pattern, settles_literal_patterns,
 };
 use crate::escape::{
     unescape_byte, unescape_bytes, unescape_char, unescape_string, unescape_template_segment,
@@ -8980,23 +8980,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
     ) -> TirPattern {
         let scrutinee = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
+        let mut constants = bounds.map(|bound| self.reify_pattern_constant(bound, ctx));
         let (origin, span) = bounds
             .into_iter()
-            .find_map(|bound| match bound {
-                ast::Pattern::Ident { id, span, .. } => Some((*id, *span)),
-                ast::Pattern::Variant {
-                    name_id: Some(id),
-                    span,
-                    ..
-                } => Some((*id, *span)),
-                _ => None,
-            })
+            .zip(&constants)
+            .find_map(|(bound, constant)| constant.is_some().then(|| constant_bound_site(bound)))
             .expect("annotate takes a range with no constant bound as no range");
-        let [start, end] = bounds.map(|bound| {
-            if let Some(constant) = self.reify_pattern_constant(bound, ctx) {
+        let [start, end] = [0, 1].map(|i| {
+            if let Some(constant) = constants[i].take() {
                 return constant;
             }
-            let bound = range_bound(bound, &self.tysys.resolutions)
+            let bound = range_bound(bounds[i], &self.tysys.resolutions)
                 .and_then(Result::ok)
                 .expect("annotate reports a bound naming nothing");
             let value = bound_value(&bound, scrutinee, &mut self.tysys.type_table.borrow_mut());
@@ -10675,9 +10669,7 @@ fn bound_literal(value: BoundValue, ty: TypeId, type_table: &TypeTable, span: Sp
             },
         },
         BoundValue::Char(c) => TirExprKind::CharLiteral(c),
-        BoundValue::Float(format, bits)
-            if [FloatFormat::F16, FloatFormat::BF16].contains(&format) =>
-        {
+        BoundValue::Float(_, bits) if type_table.is_half(ty) => {
             return half_literal(bits, ty, span);
         }
         BoundValue::Float(format, bits) => {

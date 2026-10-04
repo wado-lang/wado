@@ -1,6 +1,6 @@
 //! Utility functions for the elaborator phase.
 
-use crate::ast::{Literal, NumericSuffix, Pattern};
+use crate::ast::{AstId, Literal, NumericSuffix, Pattern};
 use crate::elaborator::float_literal::{FloatFormat, FloatLiteralError, float_literal_bits};
 use crate::elaborator::stmt::{primitive_float_limit_owner, primitive_int_limit};
 use crate::elaborator::trait_env::written_type_source;
@@ -80,9 +80,9 @@ pub(super) fn pattern_literal(lit: &Literal) -> Result<PatternLiteral, String> {
     }
 }
 
-/// What a range-pattern bound names: a number, byte or char literal, or a
-/// primitive's limit (`i32::MAX`, `f64::INFINITY`). `None` for anything else,
-/// a user constant included.
+/// What a range-pattern bound names when the compiler knows its value: a
+/// number, byte or char literal, or a primitive's limit (`i32::MAX`,
+/// `f64::INFINITY`). `None` for anything else, any other constant included.
 pub(super) fn range_bound(
     pattern: &Pattern,
     resolutions: &Resolutions,
@@ -293,10 +293,15 @@ fn discrete_order_errors(
     let (RangeBound::Discrete(start), RangeBound::Discrete(end)) = (start, end) else {
         return Vec::new();
     };
-    range_order_error(start, end, inclusive)
-        .map(PatternLiteralError::Invalid)
-        .into_iter()
-        .collect()
+    let order = range_order_key(start).cmp(&range_order_key(end));
+    let message = if order.is_gt() {
+        "reversed range pattern"
+    } else if !inclusive && order.is_ge() {
+        "empty range pattern"
+    } else {
+        return Vec::new();
+    };
+    vec![PatternLiteralError::Invalid(message.to_string())]
 }
 
 /// A float range pattern, its bounds rounded into the float type that reads it.
@@ -375,6 +380,19 @@ pub(super) fn float_range(
         inclusive,
     }
     .checked()
+}
+
+/// Where a range bound naming a constant names it. The first such bound is the
+/// site annotate records the range's comparisons on, and reify reads them from.
+pub(super) fn constant_bound_site(bound: &Pattern) -> (AstId, Span) {
+    match bound {
+        Pattern::Ident { id, span, .. } | Pattern::MutIdent { id, span, .. } => (*id, *span),
+        Pattern::Variant { name_id, span, .. } => (
+            name_id.expect("the parser gives every name in a pattern a reference site"),
+            *span,
+        ),
+        _ => unreachable!("only a name names a constant"),
+    }
 }
 
 /// The value a range bound names on a settled scrutinee.
@@ -651,7 +669,7 @@ pub(super) fn pattern_literal_error(
 }
 
 /// The type `lit` demands of `scrutinee`, when `scrutinee` is not it.
-pub(super) fn pattern_literal_mismatch(
+fn pattern_literal_mismatch(
     lit: &PatternLiteral,
     scrutinee: TypeId,
     type_table: &mut TypeTable,
@@ -677,23 +695,6 @@ pub(super) fn pattern_literal_mismatch(
         _ => return None,
     };
     Some(expected.to_string())
-}
-
-/// Why the range `start..end` names no values whatever type reads it: its
-/// bounds out of order.
-pub(super) fn range_order_error(
-    start: &PatternLiteral,
-    end: &PatternLiteral,
-    inclusive: bool,
-) -> Option<String> {
-    let order = range_order_key(start).cmp(&range_order_key(end));
-    if order.is_gt() {
-        Some("reversed range pattern".to_string())
-    } else if !inclusive && order.is_ge() {
-        Some("empty range pattern".to_string())
-    } else {
-        None
-    }
 }
 
 /// A range bound's value as a key ordering it among the integers. Every type
