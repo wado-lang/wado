@@ -62,51 +62,51 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:param_warn.wado::REGION: ref null "core:prelude/string.wado//String" = ref.null none;
 global mut global:param_warn.wado::$modules_initialized: bool = 0;
-global global:param_warn.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(82, 69, 71, 73, 79, 78, 61);
-global global:param_warn.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80, 79, 82, 84, 61, 56, 48, 56, 48), used: 9 };
+global global:param_warn.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(82, 69, 71, 73, 79, 78, 61);
+global global:param_warn.wado::$const_obj_4: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80, 79, 82, 84, 61, 56, 48, 56, 48), used: 9 };
 
 fn "param_warn.wado/run"() with Stdout {
-    let packed_27: i64;
-    let rx_28: i32;
-    let tx_29: i32;
+    let packed_35: i64;
+    let rx_36: i32;
+    let tx_37: i32;
     let v: ref "core:prelude/string.wado//String";
-    let start_65: i32;
+    let start_73: i32;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:param_warn.wado::$modules_initialized);
         cold_path;
         "param_warn.wado/$initialize_module"();
         global:param_warn.wado::$modules_initialized = 1;
     };
-    rx_28 = builtin::i32_wrap_i64(local.tee packed_27("wasi/stream-new"()));
-    tx_29 = builtin::i32_wrap_i64(packed_27 >> 32_i64);
-    rx_28 = "param_warn.wado/$cm_binding__Stdout_write_via_stream"(rx_28);
+    rx_36 = builtin::i32_wrap_i64(local.tee packed_35("wasi/stream-new"()));
+    tx_37 = builtin::i32_wrap_i64(packed_35 >> 32_i64);
+    rx_36 = "param_warn.wado/$cm_binding__Stdout_write_via_stream"(rx_36);
     let $mv_arg_2: ref "core:prelude/string.wado//String";
-    $mv_arg_2 = global:param_warn.wado::$const_obj_2;
-    "core:rt/write_string_to_stream"(tx_29, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_28);
+    $mv_arg_2 = global:param_warn.wado::$const_obj_4;
+    "core:rt/write_string_to_stream"(tx_37, $mv_arg_2.repr, $mv_arg_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_36);
     local.tee $mv_arg_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 }).used = 7;
-    builtin::array_copy<u8>($mv_arg_2.repr, 0, global:param_warn.wado::$const_obj_1, 0, 7);
+    builtin::array_copy<u8>($mv_arg_2.repr, 0, global:param_warn.wado::$const_obj_3, 0, 7);
     v = global:param_warn.wado::REGION;
     let $array_clone_src_3: ref Array<u8>;
     $array_clone_src_3 = v.repr;
-    rx_28 = v.used;
+    rx_36 = v.used;
     let $array_clone_dst_4: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>(rx_28)), 0, $array_clone_src_3, 0, rx_28);
-    $inline_core_prelude_string_wado_String__internal_push_string_24: block {
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_24 rx_28 == 0;
-        if @unlikely(local.tee tx_29(7 + rx_28) > 23) {
+    builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>(rx_36)), 0, $array_clone_src_3, 0, rx_36);
+    $inline_core_prelude_string_wado_String__internal_push_string_27: block {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_27 rx_36 == 0;
+        if @unlikely(local.tee tx_37(7 + rx_36) > 23) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, tx_29);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, tx_37);
         }
-        start_65 = $mv_arg_2.used;
-        $mv_arg_2.used = tx_29;
-        builtin::array_copy<u8>($mv_arg_2.repr, start_65, $array_clone_dst_4, 0, rx_28);
+        start_73 = $mv_arg_2.used;
+        $mv_arg_2.used = tx_37;
+        builtin::array_copy<u8>($mv_arg_2.repr, start_73, $array_clone_dst_4, 0, rx_36);
     };
-    rx_28 = builtin::i32_wrap_i64(local.tee packed_27("wasi/stream-new"()));
-    start_65 = builtin::i32_wrap_i64(packed_27 >> 32_i64);
-    rx_28 = "param_warn.wado/$cm_binding__Stdout_write_via_stream"(rx_28);
-    "core:rt/write_string_to_stream"(start_65, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_28);
+    rx_36 = builtin::i32_wrap_i64(local.tee packed_35("wasi/stream-new"()));
+    start_73 = builtin::i32_wrap_i64(packed_35 >> 32_i64);
+    rx_36 = "param_warn.wado/$cm_binding__Stdout_write_via_stream"(rx_36);
+    "core:rt/write_string_to_stream"(start_73, $mv_arg_2.repr, $mv_arg_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_36);
 }
 
 fn "param_warn.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

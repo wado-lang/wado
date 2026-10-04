@@ -53,19 +53,19 @@ type "functype//mut_check_binding_shapes.wado/$cm_binding__Stdout_write_via_stre
 
 type "functype//mut_check_binding_shapes.wado/$cm_export__run" = fn();  // TypeId(18)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(19)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(19)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(20)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(20)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(21)
+type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(21)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(22)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(22)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(23)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(23)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(24)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(24)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(25)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(25)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(26)
 
@@ -88,7 +88,8 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:mut_check_binding_shapes.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(32);
+global global:mut_check_binding_shapes.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(32);
+global global:mut_check_binding_shapes.wado::$const_obj_4: ref "Array<mut_check_binding_shapes.wado/Held>" = array.new_fixed<ref "mut_check_binding_shapes.wado//Held">(struct.new "mut_check_binding_shapes.wado//Held::Only" { discriminant: 0, payload_0: struct.new "mut_check_binding_shapes.wado//Acc" { sum: 1 } });
 
 fn "mut_check_binding_shapes.wado/run"() with Stdout {
     let total: i32;
@@ -96,24 +97,24 @@ fn "mut_check_binding_shapes.wado/run"() with Stdout {
     let $local_7: ref "core:prelude/string.wado//String";
     let $match_9: ref null "mut_check_binding_shapes.wado//Held";
     let $local_10: ref "mut_check_binding_shapes.wado//Held";
-    let elements_11: ref "Array<mut_check_binding_shapes.wado/Held>";
     let item: ref "mut_check_binding_shapes.wado//Held";
     let $vc_payload_0: ref "mut_check_binding_shapes.wado//Acc";
-    let packed: i64;
-    let $sroa_$iter_0_index_69: i32;
-    let $sroa_$f_buf_81: ref "core:prelude/string.wado//String";
-    elements_11 = array.new_fixed<ref "mut_check_binding_shapes.wado//Held">(struct.new "mut_check_binding_shapes.wado//Held::Only" { discriminant: 0, payload_0: struct.new "mut_check_binding_shapes.wado//Acc" { sum: 1 } });
+    let x_40: i64;
+    let $sroa_items_repr_76: ref "Array<mut_check_binding_shapes.wado/Held>";
+    let $sroa_$iter_0_index_85: i32;
+    let $sroa_$f_buf_97: ref "core:prelude/string.wado//String";
+    $sroa_items_repr_76 = global:mut_check_binding_shapes.wado::$const_obj_4;
     total = 0;
-    $sroa_$iter_0_index_69 = 0;
+    $sroa_$iter_0_index_85 = 0;
     b0: block {
         l1: loop {
             if (if ref.is_null(local.tee $match_9($inline_core_prelude_slice_wado_SliceValueIter_mut_check_binding_shapes_wado_Held__core_prelude_traits_wado_Iterator__next_4: block -> ref null "mut_check_binding_shapes.wado//Held" {
-                if $sroa_$iter_0_index_69 >= 1 {
+                if $sroa_$iter_0_index_85 >= 1 {
                     break $inline_core_prelude_slice_wado_SliceValueIter_mut_check_binding_shapes_wado_Held__core_prelude_traits_wado_Iterator__next_4: ref.null none;
                 }
-                $vc_payload_0 = ref.cast "mut_check_binding_shapes.wado//Held::Only"(builtin::array_get_value<ref "mut_check_binding_shapes.wado//Held">(elements_11, $sroa_$iter_0_index_69)).payload_0;
+                $vc_payload_0 = ref.cast "mut_check_binding_shapes.wado//Held::Only"(builtin::array_get_value<ref "mut_check_binding_shapes.wado//Held">($sroa_items_repr_76, $sroa_$iter_0_index_85)).payload_0;
                 item = struct.new "mut_check_binding_shapes.wado//Held::Only" { discriminant: 0, payload_0: struct.new "mut_check_binding_shapes.wado//Acc" { sum: $vc_payload_0.sum } };
-                $sroa_$iter_0_index_69 = $sroa_$iter_0_index_69 + 1;
+                $sroa_$iter_0_index_85 = $sroa_$iter_0_index_85 + 1;
                 break $inline_core_prelude_slice_wado_SliceValueIter_mut_check_binding_shapes_wado_Held__core_prelude_traits_wado_Iterator__next_4: item;
             })) == 0 -> i32 {
                 if ref.test "mut_check_binding_shapes.wado//Held::Only"(local.tee $local_10(ref.as_non_null($match_9))) -> i32 {
@@ -139,22 +140,28 @@ fn "mut_check_binding_shapes.wado/run"() with Stdout {
     }
     builtin::array_set<i32>(TABLE.repr, 1, 5);
     TABLE.used = 1 + 1;
-    $sroa_$f_buf_81 = local.tee $local_7(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(total, $sroa_$f_buf_81);
+    $sroa_$f_buf_97 = local.tee $local_7(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
+    $sroa_$iter_0_index_85 = total < 0;
+    total = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_40(x_40 = builtin::i64_extend_i32_s(total); select i64(x_40 < 0_i64, 0_i64 - x_40, x_40)));
+    $sroa_$iter_0_index_85 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_97, $sroa_$iter_0_index_85, total);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_97.repr, $sroa_$iter_0_index_85, x_40, total);
     if @unlikely(local.tee total($local_7.used + 1) > builtin::array_len($local_7.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7, total);
     }
-    $sroa_$iter_0_index_69 = $local_7.used;
+    $sroa_$iter_0_index_85 = $local_7.used;
     $local_7.used = total;
-    builtin::array_copy<u8>($local_7.repr, $sroa_$iter_0_index_69, global:mut_check_binding_shapes.wado::$const_obj_1, 0, 1);
-    $sroa_$f_buf_81 = $local_7;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(TABLE.used, $sroa_$f_buf_81);
-    $sroa_$iter_0_index_69 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    total = builtin::i32_wrap_i64(packed >> 32_i64);
-    $sroa_$iter_0_index_69 = "mut_check_binding_shapes.wado/$cm_binding__Stdout_write_via_stream"($sroa_$iter_0_index_69);
+    builtin::array_copy<u8>($local_7.repr, $sroa_$iter_0_index_85, global:mut_check_binding_shapes.wado::$const_obj_3, 0, 1);
+    $sroa_$f_buf_97 = $local_7;
+    total = local.tee $sroa_$iter_0_index_85(TABLE.used) < 0;
+    $sroa_$iter_0_index_85 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_40(x_40 = builtin::i64_extend_i32_s($sroa_$iter_0_index_85); select i64(x_40 < 0_i64, 0_i64 - x_40, x_40)));
+    total = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_97, total, $sroa_$iter_0_index_85);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_97.repr, total, x_40, $sroa_$iter_0_index_85);
+    $sroa_$iter_0_index_85 = builtin::i32_wrap_i64(local.tee x_40("wasi/stream-new"()));
+    total = builtin::i32_wrap_i64(x_40 >> 32_i64);
+    $sroa_$iter_0_index_85 = "mut_check_binding_shapes.wado/$cm_binding__Stdout_write_via_stream"($sroa_$iter_0_index_85);
     "core:rt/write_string_to_stream"(total, $local_7.repr, $local_7.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$iter_0_index_69);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$iter_0_index_85);
 }
 
 fn "mut_check_binding_shapes.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -164,6 +171,28 @@ fn "mut_check_binding_shapes.wado/$cm_binding__Stdout_write_via_stream"(data) wi
 fn "mut_check_binding_shapes.wado/$cm_export__run"() {
     "mut_check_binding_shapes.wado/run"();
     "wasi/task-return"(0);
+}
+
+fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
+    let q: u64;
+    let pair: i32;
+    let tens: i32;
+    digit_count = offset + digit_count;
+    b8: block {
+        l9: loop {
+            break_if b8 (digit_count - offset) < 2;
+            q = val /u 100_i64;
+            tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
+            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
+            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            digit_count = digit_count - 2;
+            val = q;
+            continue l9;
+        };
+    };
+    if digit_count > offset {
+        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+    }
 }
 
 fn "core:prelude/primitive.wado/count_digits_u64"(val) {
@@ -248,17 +277,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b29: block {
-        l30: loop {
-            break_if b29 i >= $mv$data$end;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b32: block {
+        l33: loop {
+            break_if b32 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l30;
+            continue l33;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l32: loop {
+        l35: loop {
             ptr_15 = ptr_13 + i;
             count_16 = $mv$data$end - i;
             if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
@@ -288,7 +317,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return count_16;
             }
-            continue l32;
+            continue l35;
         };
     };
 }
@@ -332,29 +361,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     start_26 = self.used;
     self.used = digit_count;
     return start_26;
-}
-
-fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
-    let is_negative: bool;
-    let x: i64;
-    let arr: ref Array<u8>;
-    let i: i32;
-    is_negative = self < 0;
-    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(f, is_negative, self);
-    arr = f.repr;
-    is_negative = is_negative + self;
-    i = 0;
-    b41: block {
-        l42: loop {
-            break_if b41 i >= self;
-            is_negative = is_negative - 1;
-            builtin::array_set_u8(arr, is_negative, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
-            x = x /u 10_i64;
-            i = i + 1;
-            continue l42;
-        };
-    };
 }
 
 export fn "mut_check_binding_shapes.wado/$cm_export__run" as "run"
