@@ -221,37 +221,43 @@ impl Names {
         for let c of carriers {
             tensors.push(symbol_key(&c.solved.symbol));
         }
-        let mut sanitized = TreeSet::<String>::new();
-        for let tensor of &tensors {
-            sanitized.insert(sanitize(tensor));
+        // In first-seen order, each tensor once.
+        let mut sanitized = TreeMap::<String, String>::new();
+        for let tensor of tensors {
+            if !sanitized.contains_key(tensor) {
+                sanitized[tensor] = sanitize(&tensor);
+            }
+        }
+        let mut claimed = TreeSet::<String>::new();
+        for let [_, ident] of sanitized.entries() {
+            claimed.insert(*ident);
         }
         let mut names = Names {
             idents: TreeMap::<String, String>::new(),
             reserved,
         };
         let mut taken = TreeMap::<String, String>::new();
-        for let tensor of &tensors {
-            names.take(&mut taken, tensor, &sanitized)?;
+        for let [tensor, ident] of sanitized.entries() {
+            names.take(&mut taken, tensor, *ident, &claimed)?;
         }
         return Result::Ok(names);
     }
 
-    /// `tensor`'s identifier. One the generated module already binds is renamed
-    /// past it, and past every identifier some tensor sanitizes to, so the
+    /// Mint `tensor`'s identifier from its sanitized form, `ident`. One the
+    /// generated module already binds is renamed past it, past every form some
+    /// tensor sanitizes to, and past every identifier taken before, so the
     /// renaming takes no other tensor's.
     fn take(
         &mut self,
         taken: &mut TreeMap<String, String>,
         tensor: &String,
-        sanitized: &TreeSet<String>,
+        ident: String,
+        claimed: &TreeSet<String>,
     ) -> Result<(), EmitError> {
-        if self.idents.contains_key(*tensor) {
-            return Result::Ok(());
-        }
-        let mut ident = sanitize(tensor);
+        let mut ident = ident;
         if is_bound(&self.reserved, &ident) {
             ident = `${ident}_`;
-            while is_bound(&self.reserved, &ident) || sanitized.contains(ident) {
+            while is_bound(&self.reserved, &ident) || claimed.contains(ident) || taken.contains_key(ident) {
                 ident = `${ident}_`;
             }
         }
@@ -1050,7 +1056,7 @@ fn is_alias(node: &Node, checked: &Checked) -> bool {
     let primitives = &checked.primitives;
     return node.op == "Identity"
         || node.op == "Cast"
-            && !node.int_attr("to", 0).map(|to| data_type(to)) matches { Ok(Some(Int32)) }
+            && !data_type(settled(node.required_int_attr("to"))) matches { Some(Int32) }
             && primitives.get(node.inputs[0]) == primitives.get(node.outputs[0]);
 }
 

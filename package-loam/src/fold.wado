@@ -83,7 +83,7 @@ fn evaluated(
             return slice(x, node, known);
         },
         "Cast" => {
-            return cast(x, int_attr(node, "to", 0)?);
+            return cast(x, required_int_attr(node, "to")?);
         },
         "Range" => {
             return range(x, &operands[1], &operands[2]);
@@ -917,12 +917,8 @@ fn int_attr(node: &Node, name: String, fallback: i64) -> Result<i64, String> {
     return node.int_attr(name, fallback).map_err(|e| `${e}`);
 }
 
-/// `int_attr` for an attribute ONNX gives no default.
 fn required_int_attr(node: &Node, name: String) -> Result<i64, String> {
-    let Some(a) = node.attr(name) else {
-        return Result::Err(`attribute ${name} is absent and the operator reads it`);
-    };
-    return a.int().map_err(|e| `${e}`);
+    return node.required_int_attr(name).map_err(|e| `${e}`);
 }
 
 fn axis_index(axis: i64, rank: i32) -> Result<i32, String> {

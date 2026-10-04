@@ -27,12 +27,16 @@ use { Tensor, Weights, forward } from "./renamed_unit.onnxtext"
                         pattern: "Bias",
                         axes: ["Row", "Out"],
                     },
+                    {
+                        pattern: "D",
+                        axes: ["Row", "One"],
+                    },
                 ],
             },
         },
     };
 
-test "a folded scalar and a Gemm bias each name the axis of 1 they meet" {
+test "a folded scalar and a Gemm bias, folded or not, each name the axis of 1 they meet" {
     let out = forward(
         &Tensor {
             data: [1.0],
@@ -51,4 +55,5 @@ test "a folded scalar and a Gemm bias each name the axis of 1 they meet" {
 
     assert out.Y.data == [3.0] as List<f32>;
     assert out.G.data == [4.5, 5.25] as List<f32>;
+    assert out.H.data == [5.0, 6.0] as List<f32>;
 }

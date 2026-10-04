@@ -1,10 +1,13 @@
 # Two operands meeting on an axis of 1 each names apart, which broadcasting
-# names as the second does: a folded scalar, and a Gemm bias.
+# names as the second does: a folded scalar, a Gemm bias, and a Gemm bias
+# folded as a scalar.
 <ir_version: 8, opset_import: [ "" : 13 ]>
-renamed_unit (float[1] X, float[1, 3] A, float[3, 2] B) => (float[1] Y, float[1, 2] G)
+renamed_unit (float[1] X, float[1, 3] A, float[3, 2] B) => (float[1] Y, float[1, 2] G, float[1, 2] H)
 <float[1, 2] Bias = {0.5, 0.25}>
 {
     C = Constant<value = float[1] {2.0}>()
     Y = Add(X, C)
     G = Gemm(A, B, Bias)
+    D = Constant<value = float[1, 1] {1.0}>()
+    H = Gemm(A, B, D)
 }
