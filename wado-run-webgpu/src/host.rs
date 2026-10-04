@@ -151,10 +151,10 @@ pub async fn run(component: &Path, args: &Args, gpu: Gpu) -> Result<()> {
                 })
             },
         )?;
-        // The host crate's registers a wgpu callback and awaits it, but polls no
-        // device, so wgpu never fires it and the guest waits forever. A
-        // blocking poll returns once every submission has finished, which is
-        // what the call waits for.
+        // The host crate's version awaits a wgpu callback but polls no device,
+        // so wgpu never fires it and the guest waits forever. A blocking poll
+        // returns once every submission has finished, which is what the call
+        // waits for.
         linker.instance(&interface)?.func_wrap_concurrent(
             "[method]gpu-queue.on-submitted-work-done",
             |accessor: &Accessor<Host>, (_queue,): (Resource<GuestGpuQueue>,)| {
