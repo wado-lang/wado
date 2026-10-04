@@ -133,6 +133,18 @@ sees none of its body. The declaration the compiler writes for it carries both
 attributes, with values that assume the worst: `#[storage(none)]` and
 `#[side_effect(read, write, trap)]`.
 
+### Component Model Imports
+
+A declaration carrying `#[cm(...)]` takes neither attribute: `#[cm]` implies
+both, and the same values hold for every Component Model import. That one rule
+is why the compiler needs no table to answer for them.
+
+- The boundary copies every value, so the result is new storage and the call
+  keeps nothing it was handed: `#[storage(fresh)]`.
+- The callee is opaque and may trap: `#[side_effect(trap, host)]`.
+- Lowering a value reads and writes linear memory, but no program can observe
+  it, so `read` and `write` are not implied.
+
 ### Validation
 
 Each of these is an error:
@@ -140,6 +152,7 @@ Each of these is an error:
 - A body-less `core:builtin` declaration missing either attribute.
 - Either attribute on a function with a body, or on a `trait` or `interface`
   method requirement.
+- Either attribute on a declaration carrying `#[cm(...)]`.
 - A second `#[storage]` or `#[side_effect]` on one declaration.
 - A repeated key, an unknown identifier or key, or `none` beside anything else.
 - A name in a condition key that is not a parameter.
@@ -156,10 +169,9 @@ Each of these is an error:
 - [ ] Write both attributes on every `core:builtin` declaration, and remove the
   four old attributes.
 - [ ] Write both attributes on the declaration of every core Wasm import.
+- [ ] Derive both from `#[cm(...)]` for every Component Model import.
 - [ ] Move the rules into `spec-attributes.md`, replacing the four sections.
 
 ## Known Gaps
 
-- A Component Model import is body-less too. Whether the compiler writes these
-  attributes on its declaration, and with which values, is not decided.
 - Whether a core Wasm import also carries `host` is not decided.
