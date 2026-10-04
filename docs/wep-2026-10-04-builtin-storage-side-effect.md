@@ -59,16 +59,21 @@ The attribute names no parameter. The types say which ones it means:
 
 The bare identifiers are:
 
-| Identifier | Meaning                                                      |
-| ---------- | ------------------------------------------------------------ |
-| `none`     | No effect at all; it stands alone                            |
-| `trap`     | The call may trap                                            |
-| `read`     | The call reads linear memory                                 |
-| `write`    | The call writes linear memory                                |
-| `host`     | The call reaches code the compiler cannot see                |
-| `hint`     | The call computes nothing, but its position is what it means |
+| Identifier  | Meaning                                                          |
+| ----------- | ---------------------------------------------------------------- |
+| `none`      | No effect at all; it stands alone                                |
+| `trap`      | The call may trap                                                |
+| `read`      | The call reads linear memory                                     |
+| `write`     | The call writes linear memory                                    |
+| `host`      | The call reaches code the compiler cannot see                    |
+| `hint`      | The call computes nothing, but its position is what it means     |
+| `black_box` | The optimizer may assume nothing about the operand or the result |
 
 A write through a `&mut` parameter is not listed, since the type states it.
+
+`black_box` exists for `builtin::black_box` alone. A test or a benchmark uses
+that call to keep the work it measures from being folded away, which no other
+identifier says.
 
 ### Trap Conditions
 
@@ -121,6 +126,13 @@ A trap condition that follows from a Wasm instruction is still written in the
 attribute. The alternative is a table inside the compiler, which holds the same
 facts where no reader of the declaration sees them.
 
+### Core Wasm Imports
+
+A function imported from a core `.wasm` / `.wat` asset is opaque: the compiler
+sees none of its body. The declaration the compiler writes for it carries both
+attributes, with values that assume the worst: `#[storage(none)]` and
+`#[side_effect(read, write, trap)]`.
+
 ### Validation
 
 Each of these is an error:
@@ -143,12 +155,11 @@ Each of these is an error:
   that record.
 - [ ] Write both attributes on every `core:builtin` declaration, and remove the
   four old attributes.
+- [ ] Write both attributes on the declaration of every core Wasm import.
 - [ ] Move the rules into `spec-attributes.md`, replacing the four sections.
 
 ## Known Gaps
 
-- A Component Model import and a `.wasm` / `.wat` asset import are body-less
-  too. Whether the compiler writes these attributes on their declarations, and
-  with which values, is not decided.
-- `black_box` must hide its operand from the optimizer. No identifier says
-  that.
+- A Component Model import is body-less too. Whether the compiler writes these
+  attributes on its declaration, and with which values, is not decided.
+- Whether a core Wasm import also carries `host` is not decided.
