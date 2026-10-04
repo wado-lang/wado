@@ -981,49 +981,112 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     }
 }
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
-    /// Resolve what each trait `module` declares says of its associated types,
-    /// once, in the trait's own frame, ahead of every signature that projects
-    /// one. See [`AssocTypeSig`].
+    /// Build the signature of every associated type `module`'s traits declare,
+    /// so a reader past the declaration pass finds each one. See
+    /// [`AssocTypeSig`].
     pub(super) fn register_assoc_type_sigs(&mut self, module: &ast::Module) {
         for item in &module.items {
             let ast::Item::Trait(trait_decl) = item else {
                 continue;
             };
-            if trait_decl.associated_types.is_empty() {
-                continue;
-            }
             let owner = self.tysys.def_at(trait_decl.id);
-            let (mut scope, self_param, _) = self.enter_trait_scope(trait_decl);
-            let trait_params: Vec<(String, TypeId)> = trait_decl
-                .type_params
-                .iter()
-                .filter_map(|param| {
-                    let binder = scope.annotate_ctx.trait_ctx.type_params.get(&param.name)?;
-                    Some((param.name.clone(), binder.type_id))
-                })
-                .collect();
             for assoc in &trait_decl.associated_types {
-                let sig =
-                    scope.with_assoc_params(owner, &assoc.name, &assoc.type_params, None, |e| {
-                        AssocTypeSig {
-                            self_param,
-                            trait_params: trait_params.clone(),
-                            params: e.family_params(owner, &assoc.name),
-                            param_bounds: assoc
-                                .type_params
-                                .iter()
-                                .map(|param| e.trait_refs_of(&param.bounds))
-                                .collect(),
-                            bounds: e.trait_refs_of(&assoc.bounds),
-                        }
-                    });
-                scope.tysys.type_table.borrow_mut().register_assoc_type_sig(
-                    owner,
-                    assoc.name.clone(),
-                    sig,
-                );
+                self.assoc_type_sig(owner, &assoc.name);
             }
         }
+    }
+
+    /// What `owning_trait` declares of its associated type `assoc`, resolved
+    /// once in the trait's own frame and kept. Built on first asking, since a
+    /// declaration's bound may project another associated type of any trait,
+    /// in any module. `None` while it is being built: two associated types may
+    /// each bound the other, and the inner asking reads no bounds.
+    pub(super) fn assoc_type_sig(
+        &mut self,
+        owning_trait: DefId,
+        assoc: &str,
+    ) -> Option<AssocTypeSig> {
+        if let Some(sig) = self
+            .tysys
+            .type_table
+            .borrow()
+            .assoc_type_sig(owning_trait, assoc)
+        {
+            return Some(sig.clone());
+        }
+        let key = (owning_trait, assoc.to_string());
+        if !self.annotate_ctx.assoc_sig_stack.insert(key.clone()) {
+            return None;
+        }
+        let header = self
+            .tysys
+            .trait_env
+            .decl_header_of(&owning_trait)
+            .cloned()
+            .expect("an associated type's trait has a header");
+        let decl = header
+            .assoc_types
+            .iter()
+            .find(|decl| decl.name == assoc)
+            .cloned()
+            .expect("the trait declares the associated type asked of it");
+        let trait_id = self.tysys.resolutions.defs().ast_id(owning_trait);
+        let (mut scope, self_param, _) =
+            self.enter_trait_frame(trait_id, &header.name, header.span, &header.type_params);
+        let trait_params: Vec<Option<TypeId>> = header
+            .type_params
+            .iter()
+            .map(|param| {
+                let binder = scope.annotate_ctx.trait_ctx.type_params.get(&param.name)?;
+                Some(binder.type_id)
+            })
+            .collect();
+        let sig = scope.with_assoc_params(owning_trait, assoc, &decl.type_params, None, |e| {
+            AssocTypeSig {
+                owning_trait,
+                assoc_name: assoc.to_string(),
+                self_param,
+                trait_params,
+                params: e.family_params(owning_trait, assoc),
+                param_bounds: e.family_param_bounds(owning_trait, assoc, &decl.type_params),
+                bounds: e.trait_refs_of(&decl.bounds),
+            }
+        });
+        drop(scope);
+        self.annotate_ctx.assoc_sig_stack.shift_remove(&key);
+        self.tysys.type_table.borrow_mut().register_assoc_type_sig(
+            owning_trait,
+            assoc.to_string(),
+            sig.clone(),
+        );
+        Some(sig)
+    }
+
+    /// The bounds each of `written`, the parameters of `owning_trait`'s
+    /// associated type `assoc` in scope here, declares. Each parameter carries
+    /// its bounds once they are read, so a later one's may project a sibling
+    /// family whose parameter it owes them.
+    pub(super) fn family_param_bounds(
+        &mut self,
+        owning_trait: DefId,
+        assoc: &str,
+        written: &[ast::GenericParam],
+    ) -> Vec<Vec<TraitRef>> {
+        let params = self.family_params(owning_trait, assoc);
+        let mut out = Vec::with_capacity(written.len());
+        for (param, &id) in written.iter().zip(&params) {
+            let refs = self.trait_refs_of(&param.bounds);
+            let named: Vec<FqTraitName> = {
+                let table = self.tysys.type_table.borrow();
+                refs.iter().map(|r| table.trait_ref_name(r)).collect()
+            };
+            self.annotate_ctx
+                .trait_ctx
+                .assoc_param_bounds
+                .insert(id, named);
+            out.push(refs);
+        }
+        out
     }
 
     /// Each of `bounds` naming a trait, at the arguments it writes, resolved in

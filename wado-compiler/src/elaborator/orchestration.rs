@@ -2136,7 +2136,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         namespaced.name.clone(),
                         args,
                         vec![],
-                        vec![],
                     );
                 }
                 // `ns::Type` namespace-import alias in type position: resolve
@@ -2299,7 +2298,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 owning_trait,
                                 None,
                                 ns.name.clone(),
-                                vec![],
                                 vec![],
                                 vec![],
                             )

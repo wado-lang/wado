@@ -140,6 +140,7 @@ struct ParserCheckpoint {
     comment_cursor: usize,
     next_ast_id: u32,
     pending_gt: Option<Span>,
+    consumed_gt: Option<Span>,
     errors_len: usize,
     contextual_keywords_len: usize,
 }
@@ -318,7 +319,8 @@ impl Parser {
             pos: self.pos,
             comment_cursor: self.comment_cursor,
             next_ast_id: self.next_ast_id,
-            pending_gt: self.pending_gt.as_ref().map(|token| token.span),
+            pending_gt: self.pending_gt.as_ref().map(|half| half.span),
+            consumed_gt: self.consumed_gt.as_ref().map(|half| half.span),
             errors_len: self.errors.len(),
             contextual_keywords_len: self.contextual_keywords.len(),
         }
@@ -348,10 +350,12 @@ impl Parser {
         self.trivia
             .discard_from(AstId::new(self.ast_id_space, cp.next_ast_id));
         self.next_ast_id = cp.next_ast_id;
-        self.pending_gt = cp.pending_gt.map(|span| Token {
+        let half = |span| Token {
             kind: TokenKind::Gt,
             span,
-        });
+        };
+        self.pending_gt = cp.pending_gt.map(half);
+        self.consumed_gt = cp.consumed_gt.map(half);
         // Drop errors recorded inside the speculative branch being rolled back.
         self.errors.truncate(cp.errors_len);
         // Likewise the keyword readings: the branch that replaces this one
@@ -626,10 +630,19 @@ impl Parser {
         if let Some(half) = self.pending_gt.take() {
             return self.consumed_gt.insert(half);
         }
+        self.consumed_gt = None;
         if !self.is_at_end() {
             self.pos += 1;
         }
         &self.tokens[self.pos - 1]
+    }
+
+    /// The token last consumed: a half where a `>>` was split, since each half
+    /// closes a list of its own.
+    fn previous(&self) -> &Token {
+        self.consumed_gt
+            .as_ref()
+            .unwrap_or(&self.tokens[self.pos - 1])
     }
 
     fn check(&self, kind: &TokenKind) -> bool {
@@ -677,6 +690,15 @@ impl Parser {
         // Check for GtGt (>>) - split it into two Gt tokens
         if self.check(&TokenKind::GtGt) {
             let span = self.advance().span;
+            self.consumed_gt = Some(Token {
+                kind: TokenKind::Gt,
+                span: Span {
+                    end: span.start + 1,
+                    end_line: span.line,
+                    end_column: span.column + 1,
+                    ..span
+                },
+            });
             self.pending_gt = Some(Token {
                 kind: TokenKind::Gt,
                 span: Span {
@@ -810,7 +832,7 @@ impl Parser {
         if self.pos <= before {
             return start;
         }
-        start.merge(&self.tokens[self.pos - 1].span)
+        start.merge(&self.previous().span)
     }
 
     /// Parse an expression at statement granularity, recovering on failure by
@@ -2123,7 +2145,7 @@ impl Parser {
             self_kind: SelfKind::None,
             is_mut,
             default,
-            span: start_span.merge(&self.tokens[self.pos - 1].span),
+            span: start_span.merge(&self.previous().span),
         })
     }
 
@@ -4977,7 +4999,7 @@ impl Parser {
         // Detect trailing comma: pos moved past at least one comma, and we're at RParen
         let has_trailing_comma = !args.is_empty()
             && self.check(&TokenKind::RParen)
-            && self.tokens[self.pos - 1].kind == TokenKind::Comma;
+            && self.previous().kind == TokenKind::Comma;
         let _ = pos_before;
         Ok((args, has_trailing_comma))
     }
@@ -5182,7 +5204,7 @@ impl Parser {
                 let args = self.parse_type_args()?;
                 // Span through the closing `>`; otherwise an inner type-arg node
                 // to the right wins trailing-comment ownership (drops the comment).
-                let end_span = self.tokens[self.pos - 1].span;
+                let end_span = self.previous().span;
 
                 return Ok(Type::NamespacedGeneric(Box::new(NamespacedGenericType {
                     id: self.alloc_ast_id(),
@@ -5194,7 +5216,7 @@ impl Parser {
                 })));
             } else {
                 // Namespaced type without generics: namespace::type
-                let end_span = self.tokens[self.pos - 1].span;
+                let end_span = self.previous().span;
                 return Ok(Type::NamespacedGeneric(Box::new(NamespacedGenericType {
                     id: self.alloc_ast_id(),
                     namespace: name,
@@ -5210,7 +5232,7 @@ impl Parser {
             self.advance();
             let args = self.parse_type_args()?;
             // Span through the closing `>` (see the namespaced case above).
-            let end_span = self.tokens[self.pos - 1].span;
+            let end_span = self.previous().span;
 
             Ok(Type::Generic(GenericType {
                 id: self.alloc_ast_id(),
@@ -5540,7 +5562,7 @@ impl Parser {
             // Through the last token consumed, as a parameter does: a parent
             // shorter than its descendants breaks the AstId-keyed trivia
             // attribution that picks the outermost node ending on a line.
-            let span = start_span.merge(&self.tokens[self.pos - 1].span);
+            let span = start_span.merge(&self.previous().span);
 
             fields.push(StructField {
                 id,
@@ -6070,7 +6092,7 @@ impl Parser {
         }
 
         self.expect_gt()?;
-        let end_span = self.tokens[self.pos - 1].span; // span of >
+        let end_span = self.previous().span; // span of >
 
         Ok(Type::Generic(GenericType {
             id: self.alloc_ast_id(),
@@ -6931,6 +6953,25 @@ mod tests {
         assert_matches!(consumed.kind, TokenKind::Gt);
         assert_eq!(consumed.span.column, 4);
         assert_matches!(&parser.peek_nth(0).kind, TokenKind::Ident(name) if name == "b");
+    }
+
+    /// Each half of a split `>>` closes its own list, so the inner generic's
+    /// span ends at the first `>`, not past the outer one's.
+    #[test]
+    fn test_an_inner_generic_ends_at_its_half_of_a_split_shift() {
+        let src = "fn f(x: List<List<i32>>) {}\n";
+        let module = parse(src).unwrap();
+        let Item::Function(func) = &module.items[0] else {
+            panic!("expected a function");
+        };
+        let Type::Generic(outer) = &func.params[0].ty else {
+            panic!("expected a generic type");
+        };
+        let Type::Generic(inner) = &outer.args[0] else {
+            panic!("expected a generic argument");
+        };
+        assert_eq!(&src[inner.span.start..inner.span.end], "List<i32>");
+        assert_eq!(&src[outer.span.start..outer.span.end], "List<List<i32>>");
     }
 
     /// A parameter's span covers the whole parameter, and the parameter list's

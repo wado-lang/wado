@@ -1194,7 +1194,7 @@ fn normalized_projection_name(type_table: &TypeTable, type_id: TypeId) -> FqType
         .iter()
         .map(|&arg| type_table.fq_type_name(arg))
         .collect();
-    type_table.family_name_at(family, &args)
+    type_table.family_name_at(*owning_trait, assoc_name, family, &args)
 }
 
 /// The `List<T>` wrapper struct's registration key. `T` is spelled with

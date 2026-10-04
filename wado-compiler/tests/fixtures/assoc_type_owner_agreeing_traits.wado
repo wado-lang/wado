@@ -1,0 +1,32 @@
+// Two traits binding one name to one type agree on it, so `Self::Output`
+// names that type: `V`'s `Add` and `Mul` both say `V`.
+
+struct V {
+    n: i32,
+}
+
+impl Add for V {
+    type Output = V;
+
+    fn add(&self, o: &V) -> V {
+        return V { n: self.n + o.n };
+    }
+}
+
+impl Mul for V {
+    type Output = V;
+
+    fn mul(&self, o: &V) -> V {
+        return V { n: self.n * o.n };
+    }
+}
+
+impl V {
+    fn twice(&self) -> Self::Output {
+        return *self + *self;
+    }
+}
+
+test "agreeing traits name one associated type" {
+    assert V { n: 3 }.twice().n == 6;
+}

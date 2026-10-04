@@ -106,12 +106,12 @@ impl BoundSelf {
 }
 
 /// Where a generic associated type's declaration is read: the type standing
-/// for the trait's `Self`, and the arguments its parameters take there, by
-/// name — `None` where the site does not know them.
+/// for the trait's `Self`, and the arguments its parameters take there, one
+/// per parameter — `None` where the site does not know them.
 #[derive(Clone, Debug)]
 pub(super) struct FamilySite {
     pub(super) base: TypeId,
-    pub(super) trait_args: Option<ParamSpace>,
+    pub(super) trait_args: Option<Vec<TypeId>>,
 }
 
 /// A bound together with what `Self` means where it was written, which is not
@@ -322,6 +322,9 @@ pub(super) struct Scope {
     /// The `(base, assoc)` pairs whose binding is being resolved right now.
     /// Two assoc types bounded through each other have no fixpoint.
     pub(super) assoc_binding_stack: IndexSet<(TypeId, String)>,
+    /// The associated types whose signature is being built right now, since
+    /// two may each bound the other.
+    pub(super) assoc_sig_stack: IndexSet<(DefId, String)>,
     /// The binders whose bound closure is being built right now, since
     /// `T: Uses<T::Item>` asks for it again while it is built.
     pub(super) bound_closure_stack: IndexSet<TypeId>,
@@ -938,11 +941,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         args: &[TypeId],
     ) -> Vec<Vec<TraitRef>> {
         // An impl may bind a name its trait does not declare, which is
-        // reported where the two are compared.
-        let mut table = self.tysys.type_table.borrow_mut();
-        let Some(sig) = table.assoc_type_sig(owning_trait, assoc).cloned() else {
+        // reported where the two are compared. A family named in its own
+        // declaration's bounds is asked while its signature is built, and the
+        // parameter it binds is its own.
+        if self
+            .tysys
+            .trait_env
+            .assoc_type_decl(&owning_trait, assoc)
+            .is_none()
+        {
+            return Vec::new();
+        }
+        let Some(sig) = self.assoc_type_sig(owning_trait, assoc) else {
             return Vec::new();
         };
+        let mut table = self.tysys.type_table.borrow_mut();
         sig.param_bounds
             .iter()
             .map(|refs| {
@@ -958,7 +971,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// The bounds `owning_trait`'s associated type `assoc` declares on itself
-    /// (`type A: Bound`), at `site` and at the arguments `args`.
+    /// (`type A: Bound`), at `site` and at the arguments `args`. Asked past
+    /// the declaration pass, which builds every signature.
     pub(super) fn bounds_at(
         &mut self,
         owning_trait: DefId,
@@ -966,13 +980,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         site: &FamilySite,
         args: &[TypeId],
     ) -> Vec<TraitRef> {
+        let sig = self.assoc_type_sig(owning_trait, assoc).unwrap_or_else(|| {
+            panic!("associated type `{assoc}` of {owning_trait:?} has no signature")
+        });
         let mut table = self.tysys.type_table.borrow_mut();
-        let sig = table
-            .assoc_type_sig(owning_trait, assoc)
-            .cloned()
-            .unwrap_or_else(|| {
-                panic!("associated type `{assoc}` of {owning_trait:?} has no signature")
-            });
         table.instantiate_trait_refs(
             &sig,
             &sig.bounds,

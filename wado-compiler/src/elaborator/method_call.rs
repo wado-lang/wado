@@ -240,52 +240,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_env
             .assoc_type_decl(owning_trait, assoc_name)
             .expect("a projection's trait declares its associated type");
-        let sig = tt
-            .assoc_type_sig(*owning_trait, assoc_name)
-            .expect("a declared associated type has its signature");
         let written_self = Some(SelfBinding {
             type_id: *param_id,
             declaring_trait: Some(*owning_trait),
         });
-        let mut space: ParamSpace = decl
-            .type_params
+        let family_names: Vec<String> = decl.type_params.iter().map(|p| p.name.clone()).collect();
+        let trait_names: Vec<String> = self
+            .tysys
+            .trait_env
+            .trait_decl_params(*owning_trait)
             .iter()
             .map(|param| param.name.clone())
-            .zip(args.iter().copied())
             .collect();
-        if let Some(given) = trait_args {
-            let params = self.tysys.trait_env.trait_decl_params(*owning_trait);
-            assert_eq!(
-                params.len(),
-                given.len(),
-                "a projection's trait arguments are one per parameter"
-            );
-            space.extend(
-                params
-                    .iter()
-                    .map(|param| param.name.clone())
-                    .zip(given.iter().copied()),
-            );
-        }
-        let written: Vec<&ast::TraitBound> = decl
-            .bounds
+        // The family's own parameters shadow the trait's in its bounds.
+        let mut space: ParamSpace = trait_args
             .iter()
-            .filter(|bound| {
-                bound.names_a_trait() && self.tysys.resolutions.bound_decl(bound).is_some()
-            })
+            .flat_map(|given| trait_names.iter().cloned().zip(given.iter().copied()))
+            .filter(|(name, _)| !family_names.contains(name))
             .collect();
-        assert_eq!(
-            written.len(),
-            sig.bounds.len(),
-            "`sig.bounds` is read off the declaration's bounds naming a trait"
-        );
-        written
+        space.extend(family_names.iter().cloned().zip(args.iter().copied()));
+        let trait_names: Vec<String> = trait_names
             .into_iter()
-            .zip(&sig.bounds)
-            .map(|(bound, written)| {
+            .filter(|name| !family_names.contains(name))
+            .collect();
+        let reads_trait_param = |ty: &ast::Type| {
+            let mut mentioned = Vec::new();
+            ty.mentioned_names(&mut mentioned);
+            mentioned.iter().any(|name| trait_names.contains(name))
+        };
+        decl.bounds
+            .iter()
+            .filter(|bound| bound.names_a_trait())
+            .map(|bound| {
                 let mut bound = bound.clone();
-                if trait_args.is_none() && tt.reads_trait_params(sig, written) {
-                    bound.type_args.clear();
+                if trait_args.is_none() {
+                    if bound.type_args.iter().any(reads_trait_param) {
+                        bound.type_args.clear();
+                    }
+                    bound
+                        .assoc_types
+                        .retain(|binding| !reads_trait_param(&binding.ty));
                 }
                 ScopedBound::new(bound, written_self).in_space(space.clone())
             })

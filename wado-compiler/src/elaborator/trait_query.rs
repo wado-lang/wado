@@ -451,14 +451,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         site: &FamilySite,
         binding: &ast::AssociatedTypeBinding,
     ) {
+        // A header whose trait arguments name no type is reported as such, and
+        // a declared bound reading them has nothing to be compared at.
+        if site.trait_args.is_none() {
+            return;
+        }
         let declared = self.param_bounds_at(owning_trait, &decl.name, site, &sig.params);
         let written: Vec<Vec<TraitRef>> =
             self.with_assoc_params(owning_trait, &decl.name, &binding.type_params, None, |e| {
-                binding
-                    .type_params
-                    .iter()
-                    .map(|param| e.trait_refs_of(&param.bounds))
-                    .collect()
+                e.family_param_bounds(owning_trait, &decl.name, &binding.type_params)
             });
         let agrees = declared.len() == binding.type_params.len()
             && declared
@@ -1644,9 +1645,17 @@ impl TypeSystem {
             ResolvedType::AssocTypeProjection { .. } => {
                 // An associated type projection T::Assoc implements a trait if
                 // the trait declaration for Assoc declares that bound, at the
-                // arguments the bound writes.
-                let bounds = self.type_table.borrow().projection_bounds(type_id);
-                return bounds.iter().any(|b| {
+                // arguments the bound writes. One whose signature is still
+                // being built is asked from inside its own declaration, which
+                // has said nothing of it yet.
+                let Some(bounds) = self.type_table.borrow_mut().projection_bounds(type_id) else {
+                    return false;
+                };
+                let named: Vec<FqTraitName> = {
+                    let table = self.type_table.borrow();
+                    bounds.iter().map(|b| table.trait_ref_name(b)).collect()
+                };
+                return named.iter().any(|b| {
                     b.canonical() == Some(decl) && self.args_answer(b.args(), decl, wanted)
                 });
             }
@@ -1796,6 +1805,17 @@ impl TypeSystem {
         let Some(decl_header) = self.trait_env.decl_header_of(&decl) else {
             return true;
         };
+        // Most headers write no argument an impl parameter stands in.
+        let written = header.trait_arg_ids();
+        if type_args.is_none() || !written.iter().any(FqTypeName::mentions_binder) {
+            return header_answers_bound_args(
+                written,
+                &header.ty,
+                &decl_header.type_params,
+                &self.resolutions,
+                wanted,
+            );
+        }
         let slots = ImplParamSlots::of(&header.ty, &header.type_params);
         let at_receiver: Vec<FqTypeName> = {
             let table = self.type_table.borrow();
@@ -1810,8 +1830,7 @@ impl TypeSystem {
                 .collect();
             // All at once: a receiver argument spelled like another impl
             // parameter is not that parameter.
-            header
-                .trait_arg_ids()
+            written
                 .iter()
                 .map(|written| written.rewrite(&|node| settled.get(node).cloned()))
                 .collect()

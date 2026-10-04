@@ -2384,7 +2384,7 @@ impl Monomorphizer {
                     .iter()
                     .map(|arg| Self::trait_arg_at_instance(arg, bound, type_table))
                     .collect();
-                return Some(type_table.family_name_at(family, &args));
+                return Some(type_table.family_name_at(owning_trait, assoc, family, &args));
             }
             let answer = Self::type_at_instance(node, bound, type_table)?;
             Some(type_table.fq_type_name(answer))
