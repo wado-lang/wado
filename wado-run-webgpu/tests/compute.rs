@@ -184,10 +184,11 @@ fn the_log_level_spellings_are_the_ones_wado_takes() {
 }
 
 #[test]
-fn the_help_lists_the_adapters_under_the_indices_gpu_adapter_takes() {
+fn the_help_names_the_subcommand_and_lists_the_adapters_under_their_indices() {
     let output = run(&["--help"]);
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(output.status.success());
+    assert!(stdout.contains("wado run-webgpu"), "stdout: {stdout}");
     for (index, name) in adapter_names().iter().enumerate() {
         assert!(
             stdout.contains(&format!("\n  {index}: {name} (")),
@@ -209,11 +210,4 @@ fn the_help_says_when_there_is_no_adapter() {
     assert!(output.status.success());
     assert!(stdout.contains("wado run-webgpu"), "stdout: {stdout}");
     assert!(stdout.contains("no GPU adapter found"), "stdout: {stdout}");
-}
-
-#[test]
-fn the_usage_names_the_subcommand_it_serves() {
-    let output = run(&["--help"]);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("wado run-webgpu"), "stdout: {stdout}");
 }
