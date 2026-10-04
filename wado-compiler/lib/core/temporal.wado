@@ -1350,15 +1350,10 @@ fn round_time_duration(t: TimeDuration, increment: i64, unit: Unit, mode: Roundi
 /// the rounded time of day. The quantity rounded is measured within the next
 /// larger unit, so a half-even tie looks at the parity within that unit.
 fn round_time(time_of_day: i64, increment: i64, unit: Unit, mode: RoundingMode) -> [i64, i64] {
-    let parent: i64 = match unit {
-        Day => NANOSECONDS_PER_DAY,
-        Hour => NANOSECONDS_PER_DAY,
-        Minute => 3_600_000_000_000,
-        Second => 60_000_000_000,
-        Millisecond => NANOSECONDS_PER_SECOND,
-        Microsecond => 1_000_000,
-        Nanosecond => 1000,
-        _ => panic(`core:temporal: a time rounds to a day or a time unit, and a ${unit} is neither`),
+    let parent = if unit matches { Day } {
+        NANOSECONDS_PER_DAY
+    } else {
+        unit_nanoseconds(unit) * maximum_rounding_increment(unit)
     };
     let quantity = time_of_day % parent;
     let step = increment * unit_nanoseconds(unit);
@@ -1473,8 +1468,8 @@ impl Duration {
     /// trap.
     pub fn total(&self, unit: Unit) -> f64 {
         let d = self.validated();
-        if is_calendar_unit(unit) || d.has_calendar_components() {
-            panic("core:temporal: a total in or of years, months, or weeks needs a calendar anchor");
+        if d.has_calendar_components() {
+            panic("core:temporal: a total of years, months, or weeks needs a calendar anchor");
         }
         let t = d.time_with_days();
         return exact_quotient_to_f64(
@@ -2526,15 +2521,13 @@ fn parse_time_fraction(text: &StrSlice, i: i32) -> Result<[i64, i32], Deserializ
     return Result::Ok([value, j]);
 }
 
-/// The grammar's `UTCOffset` at `start`: a sign and an hour, then optionally
+/// The grammar's `UTCOffset` at `start`, which the caller has seen holds a `+`
+/// or `-`: that sign and an hour, then optionally
 /// minutes, and with `sub_minute` seconds and a fraction, all extended or all
 /// basic. Answers the offset in nanoseconds, the index past it, and whether it
 /// carried seconds.
 fn parse_utc_offset(text: &StrSlice, start: i32, sub_minute: bool) -> Result<[i64, i32, bool], DeserializeError> {
     let sign = byte_at(text, start);
-    if sign != b'+' && sign != b'-' {
-        return Result::Err(DeserializeError::malformed("expected a UTC offset", start as i64));
-    }
     let clock = read_clock(text, start + 1, sub_minute)?;
     if clock.hour > 23 || clock.minute > 59 || clock.second > 59 {
         return Result::Err(DeserializeError::invalid_value("the UTC offset is out of range", start as i64));
@@ -2858,7 +2851,8 @@ fn parse_rfc850_date(text: &StrSlice, comma: i32) -> Result<Instant, Deserialize
     let mut i = comma + 1;
     i = expect_byte(text, i, b' ')?;
     let day = read_two_digits(text, i)?;
-    i = expect_byte(text, i + 2, b'-')?;
+    // Past the `-` that `parse_http_date` chose this form on.
+    i += 3;
     let month = read_month_name(text, i)?;
     i = expect_byte(text, i + 3, b'-')?;
     let two_digit_year = read_two_digits(text, i)?;

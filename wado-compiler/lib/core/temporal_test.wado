@@ -1642,3 +1642,312 @@ test "from_epoch_nanoseconds round-trips the whole Instant range" {
 test "from_epoch_nanoseconds traps past the Instant range" {
     let _ = Instant::from_epoch_nanoseconds(8_640_000_000_000_000_000_001);
 }
+
+#[expect_trap]
+test "from_epoch_nanoseconds traps a whole second count past the range" {
+    let _ = Instant::from_epoch_nanoseconds(-8_640_000_000_001_000_000_000);
+}
+
+test "parsing refuses what lands outside the range" {
+    assert Instant::from_str("+999999-01-01T00:00:00Z") matches { Err(_) };
+    assert ZonedDateTime::parse_rfc3339("+275760-09-14T00:00:00Z") matches { Err(_) };
+    assert ZonedDateTime::from_str("+275760-09-14T00:00+00:00[+00:00]") matches { Err(_) };
+    assert ZonedDateTime::from_str("+275760-09-14T00:00Z[UTC]") matches { Err(_) };
+    assert PlainDateTime::from_str("+275760-09-14T00:00") matches { Err(_) };
+    assert PlainYearMonth::from_str("+300000-01") matches { Err(_) };
+}
+
+test "operations that change nothing answer the receiver" {
+    let i = Instant::from_epoch_seconds(3600);
+    assert i.round(Unit::Hour) == i;
+    let z = i.to_zoned_date_time("+09:00");
+    assert z.round(Unit::Nanosecond) == z;
+    assert z.until(&z, Unit::Day) == Duration {};
+    assert PlainTime { hour: 9 }.round(Unit::Hour) == PlainTime { hour: 9 };
+    let d = PlainDate::new(2024, 2, 29);
+    assert d.until(&d) == Duration {};
+    let dt = d.to_plain_date_time();
+    assert dt.until(&dt) == Duration {};
+    let ym = PlainYearMonth::new(2024, 2);
+    assert ym.until(&ym) == Duration {};
+    assert Duration { hours: 1 }.abs() == Duration { hours: 1 };
+}
+
+test "the inverse operations of the plain types" {
+    let t = PlainTime { hour: 9 };
+    assert t.since(&PlainTime { hour: 7 }) == Duration { hours: 2 };
+    let dt = PlainDate::new(2024, 3, 1).to_plain_date_time();
+    assert dt.subtract(&Duration { days: 1 }) == PlainDate::new(2024, 2, 29).to_plain_date_time();
+    assert dt.since(&PlainDate::new(2024, 2, 29).to_plain_date_time()) == Duration { days: 1 };
+    let ym = PlainYearMonth::new(2024, 3);
+    assert ym.days_in_year() == 366;
+    assert ym.months_in_year() == 12;
+    assert ym.month_code() == "M03";
+    assert ym.subtract(&Duration { months: 3 }) == PlainYearMonth::new(2023, 12);
+    assert ym.since(&PlainYearMonth::new(2023, 12)) == Duration { months: 3 };
+    assert PlainMonthDay::new(12, 25).month_code() == "M12";
+}
+
+test "a zone string carrying a minute offset names that offset zone" {
+    assert Instant::EPOCH.to_zoned_date_time("2020-01-01T00:00+05:30").time_zone == "+05:30";
+}
+
+test "zone annotations follow the TimeZoneIANAName grammar" {
+    // Well-formed names that no database here can resolve.
+    assert ZonedDateTime::from_str("2020-01-01T00:00Z[Etc/GMT-1]") matches { Err(_) };
+    assert ZonedDateTime::from_str("2020-01-01T00:00Z[Etc/GMT+1]") matches { Err(_) };
+    assert ZonedDateTime::from_str("2020-01-01T00:00Z[a1]") matches { Err(_) };
+    // Malformed names.
+    assert ZonedDateTime::from_str("2020-01-01T00:00Z[a//b]") matches { Err(_) };
+    assert ZonedDateTime::from_str("2020-01-01T00:00Z[Europe/Par~is]") matches { Err(_) };
+}
+
+test "annotations follow the AnnotationKey and AnnotationValue grammar" {
+    let bad: List<String> = [
+        "2020-01-01T00:00Z[UTC",
+        "2020-01-01T00:00Z[UTC][u-ca=]",
+        "2020-01-01T00:00Z[UTC][=x]",
+        "2020-01-01T00:00Z[UTC][a.b=x]",
+        "2020-01-01T00:00Z[UTC][u-ca=a--b]",
+        "2020-01-01T00:00Z[UTC][u-ca=a_b]",
+        "2020-01-01T00:00Z[UTC][u-ca=a-]",
+        "2020-01-01T00:00Z[UTC][u-ca=iso8601][!u-ca=iso8601]",
+        "2020-01-01T00:00Z[UTC][u-ca=gregory]",
+        "nope",
+    ];
+    for let s of bad {
+        assert ZonedDateTime::from_str(s) matches { Err(_) };
+    }
+    assert ZonedDateTime::from_str("2020-01-01T00:00Z[UTC][x-y=a-b]") matches { Ok(_) };
+}
+
+test "the plain types refuse a calendar other than ISO 8601 and malformed text" {
+    assert PlainTime::from_str("12:00[u-ca=gregory]") matches { Err(_) };
+    assert PlainDateTime::from_str("2020-01-01T12:00[u-ca=gregory]") matches { Err(_) };
+    assert PlainYearMonth::from_str("2020-01[u-ca=gregory]") matches { Err(_) };
+    assert PlainMonthDay::from_str("12-25[u-ca=gregory]") matches { Err(_) };
+    let bad_times: List<String> = ["x", "12:x0", "12:30:x0", "12:30:00.", "12:30:00.0000000001", "T12:00["];
+    for let s of bad_times {
+        assert PlainTime::from_str(s) matches { Err(_) };
+    }
+    assert PlainDateTime::from_str("x") matches { Err(_) };
+    assert PlainDate::from_str("2020-01-x1") matches { Err(_) };
+    assert PlainMonthDay::from_str("12-x1") matches { Err(_) };
+    assert PlainYearMonth::from_str("2020-01[") matches { Err(_) };
+    assert Instant::from_str("2020-01-01T00:00+x") matches { Err(_) };
+}
+
+test "serde refuses a non-string for the string-only types" {
+    assert from_string::<Duration>("1") matches { Err(_) };
+    assert from_string::<PlainTime>("1") matches { Err(_) };
+    assert from_string::<PlainDateTime>("1") matches { Err(_) };
+    assert from_string::<PlainYearMonth>("1") matches { Err(_) };
+    assert from_string::<PlainMonthDay>("1") matches { Err(_) };
+    assert from_string::<PlainYearMonth>(`"2020-01"`) matches { Ok(ym) && ym == PlainYearMonth::new(2020, 1) };
+    assert from_string::<ZonedDateTime>("1e300") matches { Err(_) };
+}
+
+test "duration strings follow the ISO 8601 duration grammar" {
+    let bad: List<String> = [
+        "P", "PT", "1Y", "P1X", "PT1X", "P1YxD", "P1D1Y", "PT1S1H", "P1.5Y", "PT1.5H30M", "P1YT",
+        "P99999999999999999999Y",
+    ];
+    for let s of bad {
+        assert Duration::parse(s) matches { Err(_) };
+    }
+}
+
+test "Duration rounding modes turn on the sign" {
+    let up = Duration { seconds: 90 };
+    let down = Duration { seconds: -90 };
+    assert up.round(Unit::Minute, Unit::Hour, 1, RoundingMode::Ceil) == Duration { minutes: 2 };
+    assert down.round(Unit::Minute, Unit::Hour, 1, RoundingMode::Ceil) == Duration { minutes: -1 };
+    assert up.round(Unit::Minute, Unit::Hour, 1, RoundingMode::HalfCeil) == Duration { minutes: 2 };
+    assert down.round(Unit::Minute, Unit::Hour, 1, RoundingMode::HalfCeil) == Duration { minutes: -1 };
+    assert up.round(Unit::Minute, Unit::Hour, 1, RoundingMode::HalfFloor) == Duration { minutes: 1 };
+    assert down.round(Unit::Minute, Unit::Hour, 1, RoundingMode::HalfFloor) == Duration { minutes: -2 };
+    // A sub-second part decides a tie at the whole-second step.
+    assert Duration { seconds: 90, milliseconds: 1 }.round(Unit::Minute, Unit::Hour, 1, RoundingMode::HalfTrunc) == Duration { minutes: 2 };
+    assert Duration { seconds: 1 }.round(Unit::Microsecond, Unit::Microsecond) == Duration { microseconds: 1_000_000 };
+}
+
+test "Duration addition normalizes across the second" {
+    assert Duration { seconds: 1 }.add(&Duration { milliseconds: -500 }) == Duration { milliseconds: 500 };
+    assert Duration { seconds: -1 }.add(&Duration { milliseconds: 500 }) == Duration { milliseconds: -500 };
+}
+
+test "Duration::total answers the float nearest the exact quotient" {
+    assert Duration {}.total(Unit::Second) == 0.0;
+    assert Duration { days: 100_000 }.total(Unit::Nanosecond) == 8640000000000000000.0;
+    assert Duration { nanoseconds: 1 }.total(Unit::Hour) == 1.0 / 3600000000000.0;
+    // 2^54 - 1 rounds up to 2^54, carrying out of the 53-bit mantissa.
+    assert Duration { nanoseconds: 18_014_398_509_481_983 }.total(Unit::Nanosecond) == 18014398509481984.0;
+}
+
+test "PlainTime rounds to every sub-second unit" {
+    let t = PlainTime { hour: 1, millisecond: 1, microsecond: 1, nanosecond: 501 };
+    assert t.round(Unit::Microsecond) == PlainTime { hour: 1, millisecond: 1, microsecond: 2 };
+    assert t.round(Unit::Nanosecond, 10) == PlainTime { hour: 1, millisecond: 1, microsecond: 1, nanosecond: 500 };
+}
+
+test "to_http_date names every weekday" {
+    let names: List<String> = ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"];
+    for let mut i = 0; i < 7; i += 1 {
+        let date = Instant::from_epoch_seconds(i as i64 * 86_400).to_http_date();
+        assert date.substr_bytes(0, 3) == names[i];
+    }
+}
+
+test "HTTP-date parsing refuses each malformed part" {
+    let bad: List<String> = [
+        "Sun,06 Nov 1994 08:49:37 GMT",
+        "Sun, x6 Nov 1994 08:49:37 GMT",
+        "Sun, 06-Nov 1994 08:49:37 GMT",
+        "Sun, 06 Xov 1994 08:49:37 GMT",
+        "Sun, 06 Nov-1994 08:49:37 GMT",
+        "Sun, 06 Nov 19x4 08:49:37 GMT",
+        "Sun, 06 Nov 1994-08:49:37 GMT",
+        "Sun, 06 Nov 1994 x8:49:37 GMT",
+        "Sun, 06 Nov 1994 08-49:37 GMT",
+        "Sun, 06 Nov 1994 08:x9:37 GMT",
+        "Sun, 06 Nov 1994 08:49-37 GMT",
+        "Sun, 06 Nov 1994 08:49:x7 GMT",
+        "Sun, 06 Nov 1994 24:49:37 GMT",
+        "Sun, 06 Nov 1994 08:49:37GMT",
+        "Sun, 06 Nov 1994 08:49:37 XMT",
+        "Sun, 06 Nov 1994 08:49:37 GXT",
+        "Sun, 06 Nov 1994 08:49:37 GMX",
+        "Sun, 06 No",
+        "Sunday,x06-Nov-94 08:49:37 GMT",
+        "Sunday, x6-Nov-94 08:49:37 GMT",
+        "Sunday, 06-Xov-94 08:49:37 GMT",
+        "Sunday, 06-Nov 94 08:49:37 GMT",
+        "Sunday, 06-Nov-x4 08:49:37 GMT",
+        "Sunday, 06-Nov-94-08:49:37 GMT",
+        "Sunday, 06-Nov-94 x8:49:37 GMT",
+        "Sunday, 06-Nov-94 08:49:37 UTC",
+        "SunxNov  6 08:49:37 1994",
+        "Sun Xov  6 08:49:37 1994",
+        "Sun Nov- 6 08:49:37 1994",
+        "Sun Nov x6 08:49:37 1994",
+        "Sun Nov 06x08:49:37 1994",
+        "Sun Nov 06 x8:49:37 1994",
+        "Sun Nov 06 08:49:37x1994",
+        "Sun Nov 06 08:49:37 19x4",
+    ];
+    for let s of bad {
+        assert Instant::parse_http_date(s) matches { Err(_) };
+    }
+    assert Instant::parse_http_date("Sun, 06 Nov 1994 08:49:60 GMT") matches { Ok(i) && i.seconds == 784111799 };
+    assert Instant::parse_http_date("Sat, 06-Nov-04 08:49:37 GMT") matches { Err(_) };
+    assert Instant::parse_http_date("Saturday, 06-Nov-04 08:49:37 GMT") matches { Ok(i) && i.to_http_date() == "Sat, 06 Nov 2004 08:49:37 GMT" };
+    assert Instant::parse_http_date("Sun Nov 06 08:49:37 1994") matches { Ok(i) && i.seconds == 784111777 };
+}
+
+#[expect_trap]
+test "a precision past nine digits traps" {
+    let _ = `${Instant::EPOCH:.10}`;
+}
+
+#[expect_trap]
+test "an HTTP-date needs a four-digit year" {
+    let _ = Instant::from_epoch_seconds(253_402_300_800).to_http_date();
+}
+
+#[expect_trap]
+test "a sub-second part of a second or more traps" {
+    let _ = Instant { seconds: 0, nanoseconds: 1_000_000_000 }.epoch_milliseconds();
+}
+
+#[expect_trap]
+test "a local reading past the range traps when it becomes an instant" {
+    let last = PlainDateTime::new(PlainDate::new(275760, 9, 13), PlainTime { hour: 12 });
+    let _ = last.to_zoned_date_time("+00:00");
+}
+
+#[expect_trap]
+test "rounding a local reading past the date range traps" {
+    let latest = Instant::from_epoch_seconds(8_640_000_000_000).to_zoned_date_time("+23:59");
+    let _ = latest.round(Unit::Hour);
+}
+
+#[expect_trap]
+test "a zone string that parses as nothing traps" {
+    let _ = Instant::EPOCH.to_zoned_date_time("nope!");
+}
+
+#[expect_trap]
+test "a zone string with a seconds offset traps" {
+    let _ = Instant::EPOCH.to_zoned_date_time("2020-01-01T00:00+01:00:30");
+}
+
+#[expect_trap]
+test "a date-time string without a zone names none" {
+    let _ = Instant::EPOCH.to_zoned_date_time("2020-01-01T00:00");
+}
+
+#[expect_trap]
+test "a time string names no zone" {
+    let _ = Instant::EPOCH.to_zoned_date_time("T12:00");
+}
+
+#[expect_trap]
+test "a month-day string names no zone" {
+    let _ = Instant::EPOCH.to_zoned_date_time("12-25");
+}
+
+#[expect_trap]
+test "a year-month string names no zone" {
+    let _ = Instant::EPOCH.to_zoned_date_time("+002020-01");
+}
+
+#[expect_trap]
+test "a stored zone that is no offset traps" {
+    let _ = ZonedDateTime { instant: Instant::EPOCH, time_zone: "+1a:00" }.hour();
+}
+
+#[expect_trap]
+test "a total in a calendar unit traps" {
+    let _ = Duration { hours: 1 }.total(Unit::Year);
+}
+
+#[expect_trap]
+test "a rounding increment below one traps" {
+    let _ = Duration { hours: 1 }.round(Unit::Day, Unit::Day, 0);
+}
+
+#[expect_trap]
+test "a PlainDateTime rounds to no calendar unit" {
+    let _ = PlainDate::new(2024, 1, 1).to_plain_date_time().round(Unit::Week);
+}
+
+#[expect_trap]
+test "a PlainTime rounds to no date unit" {
+    let _ = PlainTime { hour: 1 }.round(Unit::Day);
+}
+
+#[expect_trap]
+test "a PlainDate from an epoch day past the range traps" {
+    let _ = PlainDate::from_epoch_days(100_000_001);
+}
+
+#[expect_trap]
+test "a PlainDate difference takes no time unit" {
+    let d = PlainDate::new(2024, 1, 1);
+    let _ = d.until(&d, Unit::Hour);
+}
+
+#[expect_trap]
+test "a PlainTime literal out of range traps" {
+    let _ = PlainTime { hour: 24 }.to_iso8601();
+}
+
+#[expect_trap]
+test "a PlainYearMonth whose first day is before the range traps in arithmetic" {
+    let _ = PlainYearMonth::new(-271821, 4).add(&Duration { months: 1 });
+}
+
+#[expect_trap]
+test "a PlainMonthDay literal that names no day traps" {
+    let _ = PlainMonthDay { month: 2, day: 30 }.to_iso8601();
+}
