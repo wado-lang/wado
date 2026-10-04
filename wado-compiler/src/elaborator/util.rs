@@ -449,21 +449,18 @@ fn float_bound_bits(
             if let Some(suffix) = suffix {
                 let suffix_type = type_table.numeric_suffix_type(*suffix);
                 if type_table.type_key(suffix_type) != type_table.type_key(scrutinee) {
-                    return Err(PatternLiteralError::Mismatch(
-                        type_table.type_name(suffix_type),
-                    ));
+                    return Err(PatternLiteralError::Mismatch(bound.demands(type_table)));
                 }
             }
             signed_literal_bits(digits, *negated, format)
                 .map_err(|error| PatternLiteralError::Invalid(error.message(&bound.shown)))?
         }
         FloatBoundKind::Limit { owner, name } => {
-            if FloatFormat::of(*owner) != Some(format) {
+            let (owner_format, bits) = limit_bits(*owner, name);
+            if owner_format != format {
                 return Err(PatternLiteralError::Mismatch(owner.as_str().to_string()));
             }
-            format
-                .limit(name)
-                .expect("a limit bound names one of the format's limits")
+            bits
         }
     };
     match nan_bound_error(bound, format, bits) {
@@ -552,7 +549,7 @@ fn nan_bound_error(
 }
 
 impl FloatBound {
-    /// The type the bound demands of a scrutinee that is no float.
+    /// The type the bound demands of a scrutinee it names no value of.
     fn demands(&self, type_table: &mut TypeTable) -> String {
         match &self.kind {
             FloatBoundKind::Literal {
@@ -577,14 +574,21 @@ impl FloatBound {
                 digits, negated, ..
             } => signed_literal_bits(digits, *negated, format).ok(),
             FloatBoundKind::Limit { owner, name } => {
-                let owner = FloatFormat::of(*owner).expect("a limit's owner is a float type");
-                let bits = owner
-                    .limit(name)
-                    .expect("a limit bound names one of its limits");
+                let (owner, bits) = limit_bits(*owner, name);
                 Some(owner.value(bits).to_bits())
             }
         }
     }
+}
+
+/// The format of the float type `owner` and the bits of its limit `name`, as
+/// `range_bound` recorded the pair.
+fn limit_bits(owner: PrimitiveType, name: &str) -> (FloatFormat, u64) {
+    let format = FloatFormat::of(owner).expect("a limit's owner is a float type");
+    let bits = format
+        .limit(name)
+        .expect("a limit bound names one of its type's limits");
+    (format, bits)
 }
 
 /// Whether a literal pattern on `scrutinee` can be judged yet. An unsettled
