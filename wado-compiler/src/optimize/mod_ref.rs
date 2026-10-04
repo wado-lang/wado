@@ -17,7 +17,7 @@ use crate::optimize::arena_query::{
 };
 use crate::optimize::bounds::{self, Proofs};
 use crate::optimize::inline::recursive_scc_members;
-use crate::tir::{BuiltinDeclaration, BuiltinDeclarations, DeclarationLookup, TypeTable};
+use crate::tir::{BuiltinDeclaration, BuiltinDeclarations, TypeTable};
 
 /// Read / write flags for a single state channel (e.g., GC heap or
 /// linear memory).
@@ -735,13 +735,9 @@ fn leaf_effect<'a>(
     f: &NirFunction,
     declarations: &'a BuiltinDeclarations,
 ) -> (FnEffect, Option<&'a BuiltinDeclaration>) {
-    let lookup = DeclarationLookup::from(f);
-    let Some(declaration) = declarations.get(lookup) else {
-        assert!(
-            lookup.intrinsic().is_none(),
-            "a call to builtin `{}` has no declaration to read its facts from",
-            f.name
-        );
+    // Reify refuses a body-less source declaration stating no facts, so one
+    // without a declaration is a raw call the compiler minted.
+    let Some(declaration) = declarations.get(f) else {
         return (FnEffect::opaque(), None);
     };
     let effect = match &declaration.facts.side_effect {

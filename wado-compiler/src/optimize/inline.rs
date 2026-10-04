@@ -974,13 +974,13 @@ fn safepoint_calls(project: &NirPackage, descriptors: &[FunctionRef]) -> Vec<boo
     descriptors
         .iter()
         .map(|callee| {
-            callee.intrinsic().is_none_or(|name| {
-                let declaration = project.builtin_declarations.get(callee).unwrap_or_else(|| {
-                    panic!("builtin `{name}` has no declaration to read its facts from")
-                });
-                matches!(declaration.facts.side_effect, SideEffect::Opaque)
-                    || declaration.allocates()
-            })
+            project
+                .builtin_declarations
+                .get(callee)
+                .is_none_or(|declaration| {
+                    matches!(declaration.facts.side_effect, SideEffect::Opaque)
+                        || declaration.allocates()
+                })
         })
         .collect()
 }

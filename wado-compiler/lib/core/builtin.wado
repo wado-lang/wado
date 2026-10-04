@@ -301,25 +301,25 @@ pub fn heap_base() -> i32;
 pub fn memory_fill(dst: i32, value: u8, len: i32);
 /// Performs 128-bit addition: (a_lo, a_hi) + (b_lo, b_hi) = (result_lo, result_hi).
 /// Maps to Wasm i64.add128 instruction.
-#[storage(none)]
+#[storage(fresh)]
 #[side_effect(none)]
 pub fn i64_add128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> [i64, i64];
 
 /// Performs 128-bit subtraction: (a_lo, a_hi) - (b_lo, b_hi) = (result_lo, result_hi).
 /// Maps to Wasm i64.sub128 instruction.
-#[storage(none)]
+#[storage(fresh)]
 #[side_effect(none)]
 pub fn i64_sub128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> [i64, i64];
 
 /// Performs 64x64 unsigned multiplication producing a 128-bit result.
 /// Maps to Wasm i64.mul_wide_u instruction.
-#[storage(none)]
+#[storage(fresh)]
 #[side_effect(none)]
 pub fn i64_mul_wide_u(a: i64, b: i64) -> [i64, i64];
 
 /// Performs 64x64 signed multiplication producing a 128-bit result.
 /// Maps to Wasm i64.mul_wide_s instruction.
-#[storage(none)]
+#[storage(fresh)]
 #[side_effect(none)]
 pub fn i64_mul_wide_s(a: i64, b: i64) -> [i64, i64];
 /// Counts the leading zeros in a 32-bit integer.
