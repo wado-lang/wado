@@ -142,13 +142,22 @@ use {
 
 /// Write `digit_count` decimal digits of `val` into `arr` at `offset`, padded
 /// with leading zeros — a decimal chunk below the leading one carries them.
+/// Two digits per divide: each divide waits on the one before, so the chain
+/// is the cost, and dividing by 100 halves it.
 internal fn write_decimal_digits(arr: &mut Array<u8>, offset: i32, val: u64, digit_count: i32) {
     let mut pos = offset + digit_count;
     let mut t = val;
-    for let mut i = 0; i < digit_count; i += 1 {
-        pos -= 1;
-        builtin::array_set_u8(arr, pos, ('0' as i32 + (t % 10) as i32) as u8);
-        t /= 10;
+    while pos - offset >= 2 {
+        let q = t / 100;
+        let pair = (t - q * 100) as i32;
+        let tens = pair / 10;
+        builtin::array_set_u8(arr, pos - 1, ('0' as i32 + pair - tens * 10) as u8);
+        builtin::array_set_u8(arr, pos - 2, ('0' as i32 + tens) as u8);
+        pos -= 2;
+        t = q;
+    }
+    if pos > offset {
+        builtin::array_set_u8(arr, offset, ('0' as i32 + (t % 10) as i32) as u8);
     }
 }
 

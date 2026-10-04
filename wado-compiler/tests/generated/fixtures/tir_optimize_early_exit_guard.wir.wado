@@ -69,7 +69,7 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:tir_optimize_early_exit_guard.wado::$const_obj_1: ref "core:prelude//List<char>" = struct.new "core:prelude//List<char>" { repr: array.new_fixed<char>(97, 98, 99), used: 3 };
+global global:tir_optimize_early_exit_guard.wado::$const_obj_4: ref "core:prelude//List<char>" = struct.new "core:prelude//List<char>" { repr: array.new_fixed<char>(97, 98, 99), used: 3 };
 
 fn "tir_optimize_early_exit_guard.wado/safe_get"(arr, pos) {
     if pos >= arr.used {
@@ -80,25 +80,25 @@ fn "tir_optimize_early_exit_guard.wado/safe_get"(arr, pos) {
 
 fn "tir_optimize_early_exit_guard.wado/run"() with Stdout {
     let $local_1: ref "core:prelude/string.wado//String";
+    let self_13: char;
     let packed_19: i64;
     let tx_21: i32;
-    let $sroa_self_value_46: char;
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    $sroa_self_value_46 = "tir_optimize_early_exit_guard.wado/safe_get"(global:tir_optimize_early_exit_guard.wado::$const_obj_1, black_box(1));
-    "core:prelude/string.wado/core:prelude/string.wado/String::push"($local_1, $sroa_self_value_46);
-    $sroa_self_value_46 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
+    self_13 = "tir_optimize_early_exit_guard.wado/safe_get"(global:tir_optimize_early_exit_guard.wado::$const_obj_4, black_box(1));
+    "core:prelude/string.wado/core:prelude/string.wado/String::push"($local_1, self_13);
+    self_13 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
     tx_21 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
-    $sroa_self_value_46 = "tir_optimize_early_exit_guard.wado/$cm_binding__Stdout_write_via_stream"($sroa_self_value_46);
+    self_13 = "tir_optimize_early_exit_guard.wado/$cm_binding__Stdout_write_via_stream"(self_13);
     "core:rt/write_string_to_stream"(tx_21, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_self_value_46);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_13);
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    $sroa_self_value_46 = "tir_optimize_early_exit_guard.wado/safe_get"(global:tir_optimize_early_exit_guard.wado::$const_obj_1, black_box(10));
-    "core:prelude/string.wado/core:prelude/string.wado/String::push"($local_1, $sroa_self_value_46);
-    $sroa_self_value_46 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
+    self_13 = "tir_optimize_early_exit_guard.wado/safe_get"(global:tir_optimize_early_exit_guard.wado::$const_obj_4, black_box(10));
+    "core:prelude/string.wado/core:prelude/string.wado/String::push"($local_1, self_13);
+    self_13 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
     tx_21 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
-    $sroa_self_value_46 = "tir_optimize_early_exit_guard.wado/$cm_binding__Stdout_write_via_stream"($sroa_self_value_46);
+    self_13 = "tir_optimize_early_exit_guard.wado/$cm_binding__Stdout_write_via_stream"(self_13);
     "core:rt/write_string_to_stream"(tx_21, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_self_value_46);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_13);
 }
 
 fn "tir_optimize_early_exit_guard.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

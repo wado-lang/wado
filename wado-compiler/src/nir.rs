@@ -125,13 +125,6 @@ impl FunctionRef {
         self.method_info.is_some()
     }
 
-    /// Check if this is a trait method.
-    pub fn is_trait_method(&self) -> bool {
-        self.method_info
-            .as_ref()
-            .is_some_and(LocalMethodName::is_trait_method)
-    }
-
     /// The canonical [`crate::name::FunctionId`] this reference denotes, keyed on
     /// `(module_source, mangled name)`. The mangled `name` already encodes a
     /// method's `struct^trait::method` and any monomorphization type args, so it
@@ -563,14 +556,6 @@ impl NirFunction {
     #[inline]
     pub fn is_method(&self) -> bool {
         self.method_info.is_some()
-    }
-
-    /// Returns true if this is a trait method (implements a trait)
-    #[inline]
-    pub fn is_trait_method(&self) -> bool {
-        self.method_info
-            .as_ref()
-            .is_some_and(LocalMethodName::is_trait_method)
     }
 
     /// Returns true if this is the synthesized `$call` method on a

@@ -18,6 +18,71 @@ wado dump -O2 benchmark/json_catalog/json_catalog.wado    # before/after: diff t
 for i in 1 2 3; do mise run json-catalog; done           # before and after
 ```
 
+## Fusing `write_plain_key`'s appends across the key name (2026-10-03)
+
+`nir/string_push` opens a new group at a run-time-length piece, because the
+source may be the buffer. So `,"` + `name` + `":` pays two capacity checks. The
+fusion was made alias-safe in one group: read the source's length up front and
+add the prefix's length when `ref_eq(source, buffer)`. Each key then paid one
+check. json-twitter ser −3.1%, json-catalog ser +1.6%, four rounds, ranges
+overlapping.
+
+The check was never the cost. Each key write is about 120 machine instructions
+and a `wasmtime_builtin_memory_copy` libcall, for the `array.copy` whose length
+is only known at run time. The 2-byte constant copies around it compile to a
+load and a store. What would pay is a constant name at the site, which a
+spliced or specialized key writer gets.
+
+Two costs came with it. The `ref_eq` blocks the half-price fold that splices a
+small helper on a constant string argument, so `dynamic` in
+`opt_string_append_fuse.wado` stays a call. And `const_object_globalization`
+refuses a literal handed to any instruction taking a struct, `ref_eq`
+included, so every key literal became an allocation per call: twitter ser
+−15.9% until its gate read `#[retain]` instead of the argument's type.
+
+## Two inliner tweaks for the JSON writer's integer path (2026-10-03)
+
+`serialize_i64` is a forwarder to `write_json_i64`. Bottom-up, it receives
+that callee first and grows to 42 lines, so a site created in a later round
+keeps the call and the `JsonSerializer` it builds for the receiver. Two changes
+to `classify_callee` in `optimize/inline.rs`, against the same release base,
+alternating rounds:
+
+- **Holding a forwarder** (`net_cost == 0`) so it receives no splices. It
+  removed the `serialize_i64` hop, but json-twitter ser lost 3.7% (six rounds,
+  ranges apart). The hold also covered `push_str`, which splices into every
+  site, so `internal_push_string` lost its sole caller and stayed a call at 17
+  sites writing `"null"`. A sole callee is spliced only because its caller is
+  one function, and a hold breaks that.
+- **Counting safepoints per path** instead of `has_safepoint`'s any-call rule:
+  an allocation always adds one, a single call per path does not, since the call
+  it replaces already was one. json-catalog de +3.5%, but catalog ser −2.4%,
+  canada de −2.0% and twitter ser −1.3%; four rounds. `Formatter::pad` and
+  `prepare_int_write` doubled in size.
+
+## SWAR blocks in the JSON reader's scans (2026-10-03)
+
+Testing four bytes packed into a `u32` with bit tricks pays in the writer's
+escape scan: json-twitter ser +18.5%. There each byte took three compares,
+which cost twice the bounds-checked read. Two readers took the same shape and
+did not pay:
+
+- **`scan_string_run`**, a block of four plain-ASCII bytes per test, retried at
+  the top of each iteration so it resumes after a multibyte character.
+  json-twitter de −4%, json-catalog de −1.5%, three rotating rounds. The
+  plain-byte test there is already one subtract and compare. twitter's
+  Japanese text fails every block, and citm's strings are short, so the
+  partial block is wasted on nearly every token.
+- **`peek_after_whitespace_run`**, settling a block whose four bytes are all
+  `0x20` with one compare. json-catalog de between +1.7% and +5%, ranges
+  overlapping across sessions; json-twitter de flat. Indentation is spaces on
+  citm, but that is a property of the corpus, not of JSON, and the evidence did
+  not clear the noise.
+
+Generalizes: SWAR pays where the per-byte predicate is the cost, not the read.
+Read the loop's machine code before choosing: `wasmtime compile` with the
+features `wado` enables, then `wasmtime objdump --filter <name>`.
+
 ## Rejecting control bytes in `core:json` without paying per byte (2026-09-29)
 
 RFC 8259 forbids an unescaped byte below 0x20 in a string, so

@@ -25,25 +25,25 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//opt_scalar_forward_precision.wado/sink" = fn();  // TypeId(10)
+type "functype//opt_scalar_forward_precision.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(10)
 
-type "functype//opt_scalar_forward_precision.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(11)
+type "functype//opt_scalar_forward_precision.wado/$cm_export__run" = fn();  // TypeId(11)
 
-type "functype//opt_scalar_forward_precision.wado/$cm_export__run" = fn();  // TypeId(12)
+type "functype//opt_scalar_forward_precision.wado/sink$spec0" = fn();  // TypeId(12)
 
-type "functype//opt_scalar_forward_precision.wado/sink$spec0" = fn();  // TypeId(13)
+type "functype//opt_scalar_forward_precision.wado/sink$spec1" = fn();  // TypeId(13)
 
-type "functype//opt_scalar_forward_precision.wado/sink$spec1" = fn();  // TypeId(14)
+type "functype//opt_scalar_forward_precision.wado/sink$spec2" = fn();  // TypeId(14)
 
 type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(15)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(16)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(17)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(18)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(18)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(19)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
@@ -55,27 +55,14 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
+import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
-import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:opt_scalar_forward_precision.wado::$const_obj_1: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(54), used: 1 };
-global global:opt_scalar_forward_precision.wado::$const_obj_3: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(50, 54), used: 2 };
-global global:opt_scalar_forward_precision.wado::$const_obj_4: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(49, 48), used: 2 };
-
-fn "opt_scalar_forward_precision.wado/sink"() with Stdout {
-    let packed: i64;
-    let rx_14: i32;
-    let tx_15: i32;
-    rx_14 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_15 = builtin::i32_wrap_i64(packed >> 32_i64);
-    rx_14 = "opt_scalar_forward_precision.wado/$cm_binding__Stdout_write_via_stream"(rx_14);
-    let $mv_arg_2: ref "core:prelude/string.wado//String";
-    $mv_arg_2 = global:opt_scalar_forward_precision.wado::$const_obj_1;
-    "core:rt/write_string_to_stream"(tx_15, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_14);
-}
+global global:opt_scalar_forward_precision.wado::$const_obj_6: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(50, 54), used: 2 };
+global global:opt_scalar_forward_precision.wado::$const_obj_7: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(49, 48), used: 2 };
+global global:opt_scalar_forward_precision.wado::$const_obj_8: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(54), used: 1 };
 
 fn "opt_scalar_forward_precision.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
@@ -84,34 +71,47 @@ fn "opt_scalar_forward_precision.wado/$cm_binding__Stdout_write_via_stream"(data
 fn "opt_scalar_forward_precision.wado/$cm_export__run"() {
     "opt_scalar_forward_precision.wado/sink$spec0"();
     "opt_scalar_forward_precision.wado/sink$spec1"();
-    "opt_scalar_forward_precision.wado/sink"();
+    "opt_scalar_forward_precision.wado/sink$spec2"();
     "wasi/task-return"(0);
 }
 
 fn "opt_scalar_forward_precision.wado/sink$spec0"() with Stdout {
     let packed: i64;
-    let rx_14: i32;
-    let tx_15: i32;
-    rx_14 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_15 = builtin::i32_wrap_i64(packed >> 32_i64);
-    rx_14 = "opt_scalar_forward_precision.wado/$cm_binding__Stdout_write_via_stream"(rx_14);
+    let rx_22: i32;
+    let tx_23: i32;
+    rx_22 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_23 = builtin::i32_wrap_i64(packed >> 32_i64);
+    rx_22 = "opt_scalar_forward_precision.wado/$cm_binding__Stdout_write_via_stream"(rx_22);
     let $mv_arg_2: ref "core:prelude/string.wado//String";
-    $mv_arg_2 = global:opt_scalar_forward_precision.wado::$const_obj_3;
-    "core:rt/write_string_to_stream"(tx_15, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_14);
+    $mv_arg_2 = global:opt_scalar_forward_precision.wado::$const_obj_6;
+    "core:rt/write_string_to_stream"(tx_23, $mv_arg_2.repr, $mv_arg_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_22);
 }
 
 fn "opt_scalar_forward_precision.wado/sink$spec1"() with Stdout {
     let packed: i64;
-    let rx_14: i32;
-    let tx_15: i32;
-    rx_14 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_15 = builtin::i32_wrap_i64(packed >> 32_i64);
-    rx_14 = "opt_scalar_forward_precision.wado/$cm_binding__Stdout_write_via_stream"(rx_14);
+    let rx_22: i32;
+    let tx_23: i32;
+    rx_22 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_23 = builtin::i32_wrap_i64(packed >> 32_i64);
+    rx_22 = "opt_scalar_forward_precision.wado/$cm_binding__Stdout_write_via_stream"(rx_22);
     let $mv_arg_2: ref "core:prelude/string.wado//String";
-    $mv_arg_2 = global:opt_scalar_forward_precision.wado::$const_obj_4;
-    "core:rt/write_string_to_stream"(tx_15, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_14);
+    $mv_arg_2 = global:opt_scalar_forward_precision.wado::$const_obj_7;
+    "core:rt/write_string_to_stream"(tx_23, $mv_arg_2.repr, $mv_arg_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_22);
+}
+
+fn "opt_scalar_forward_precision.wado/sink$spec2"() with Stdout {
+    let packed: i64;
+    let rx_22: i32;
+    let tx_23: i32;
+    rx_22 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_23 = builtin::i32_wrap_i64(packed >> 32_i64);
+    rx_22 = "opt_scalar_forward_precision.wado/$cm_binding__Stdout_write_via_stream"(rx_22);
+    let $mv_arg_2: ref "core:prelude/string.wado//String";
+    $mv_arg_2 = global:opt_scalar_forward_precision.wado::$const_obj_8;
+    "core:rt/write_string_to_stream"(tx_23, $mv_arg_2.repr, $mv_arg_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_22);
 }
 
 fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
