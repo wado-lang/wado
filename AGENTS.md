@@ -133,7 +133,7 @@ The wasm-tools crates (`wasmparser`, `wasm-encoder`, `wasmprinter`, `wit-parser`
 ## References
 
 Wado targets Wasm 3.0 (GC and JSPI included), the Component Model, and WASI 0.3
-(p3), which wasmtime fully supports. The sources of truth are vendored:
+(p3), all fully supported by wasmtime. The sources of truth are vendored:
 
 - Component Model: `vendor/component-model/design/mvp/` (`CanonicalABI.md`, `Concurrency.md` for async, streams and futures)
 - WASI p3: `find vendor/wasmtime/crates/wasi/src/p3/wit -name '*.wit'`
