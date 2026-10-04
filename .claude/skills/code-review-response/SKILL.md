@@ -16,11 +16,16 @@ cleared list.
    is a proposal: put it to the user and wait. Only these block.
 3. Group the other survivors by the class each is an instance of, and report the
    classes to the user before fixing. It is a report, not a request: keep going.
+   For each class, say what the findings are, what admits the class, and the
+   fix.
 4. Fix the class at the altitude that admits it, not the sites named.
 5. Commit, then invoke `/distill`. Always: a fix written for a reviewer arrives
    in the reviewer's framing.
 6. Report once more, after `/distill`: what was fixed, and what was skipped and
    why. On a pull request it is one comment.
+
+The user does not see the review's numbering. Name a finding by its content
+(file and defect), never by its number.
 
 A test the review asks for has to catch something new. One that holds by
 construction, or takes a branch the fixture never reaches, reads as coverage
