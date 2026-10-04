@@ -1114,22 +1114,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let type_id = if let Some(type_id) = known {
             type_id
         } else {
-            let walk = (pending.impl_id, name.to_string());
-            if !self.annotate_ctx.impl_binding_stack.insert(walk.clone()) {
-                return None;
-            }
             // In the impl's frame, whoever names it: an asking binding's own
             // family parameters are not this one's.
-            let type_id = {
-                let mut impl_frame = self.enter_inherited_type_param_scope();
-                impl_frame.annotate_ctx.trait_ctx = pending.frame.clone();
-                impl_frame.annotate_ctx.trait_ctx.assoc_type_bindings = AssocBindings {
-                    resolved: IndexMap::default(),
-                    pending: Some(Rc::clone(&pending)),
-                };
-                impl_frame.resolve_assoc_binding(pending.site.as_ref(), binding)
-            };
-            self.annotate_ctx.impl_binding_stack.shift_remove(&walk);
+            let type_id = self.unless_on_walk(
+                |scope| &mut scope.impl_binding_stack,
+                (pending.impl_id, name.to_string()),
+                |e| {
+                    let mut impl_frame = e.enter_inherited_type_param_scope();
+                    impl_frame.annotate_ctx.trait_ctx = pending.frame.clone();
+                    impl_frame.annotate_ctx.trait_ctx.assoc_type_bindings = AssocBindings {
+                        resolved: IndexMap::default(),
+                        pending: Some(Rc::clone(&pending)),
+                    };
+                    Some(impl_frame.resolve_assoc_binding(pending.site.as_ref(), binding))
+                },
+            )?;
             pending
                 .resolved
                 .borrow_mut()

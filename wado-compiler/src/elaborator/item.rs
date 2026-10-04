@@ -1011,14 +1011,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         {
             return Some(Rc::clone(sig));
         }
-        let key = (owning_trait, assoc.to_string());
-        if !self.annotate_ctx.assoc_sig_stack.insert(key.clone()) {
-            return None;
-        }
-        let sig = self.in_trait_frame(owning_trait, |e, frame| {
-            e.build_assoc_type_sig(owning_trait, assoc, frame)
-        });
-        self.annotate_ctx.assoc_sig_stack.shift_remove(&key);
+        let sig = self.unless_on_walk(
+            |scope| &mut scope.assoc_sig_stack,
+            (owning_trait, assoc.to_string()),
+            |e| {
+                Some(e.in_trait_frame(owning_trait, |e, frame| {
+                    e.build_assoc_type_sig(owning_trait, assoc, frame)
+                }))
+            },
+        )?;
         let sig = Rc::new(sig);
         self.tysys.type_table.borrow_mut().register_assoc_type_sig(
             owning_trait,
