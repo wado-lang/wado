@@ -727,12 +727,16 @@ impl TraitRef {
 /// a frame of its own.
 #[derive(Debug, Clone)]
 pub struct AssocTypeSig {
+    /// The trait declaring the associated type.
     pub owning_trait: DefId,
+    /// The associated type's name.
     pub assoc_name: String,
     /// The trait frame's `Self`.
     pub self_param: TypeId,
-    /// The trait frame's own parameters, one per the trait's parameter in
-    /// declaration order; `None` for one no type stands for (an effect).
+    /// The trait frame's own parameters, one per the trait's type parameter
+    /// (every one but an effect) in declaration order: the positions a
+    /// projection's trait arguments fill. `None` for one the frame binds to no
+    /// type.
     pub trait_params: Vec<Option<TypeId>>,
     /// The associated type's own parameters, in declaration order.
     pub params: Vec<TypeId>,
@@ -906,7 +910,7 @@ pub struct TypeTable {
     assoc_type_sigs: IndexMap<DefId, IndexMap<String, Rc<AssocTypeSig>>>,
     /// What [`Self::projection_bounds`] answered for each projection, which
     /// depends on nothing but the interned projection.
-    projection_bounds_cache: IndexMap<TypeId, Rc<[TraitRef]>>,
+    projection_bounds_cache: IndexMap<TypeKey, Rc<[TraitRef]>>,
     /// Erasure redirects: set by `erase_newtypes_and_flags()`.
     /// After erasure, `get(id)` for any erased `TypeId` returns the base type.
     /// Newtype → ultimate base type; Flags → u32.
@@ -2029,6 +2033,26 @@ impl TypeTable {
     /// keep their indices, and the intern map and secondary indices are rebuilt.
     /// `get(id)` must not panic for a surviving id, so `keep` is implicitly
     /// closed under `redirects` and stale redirect entries are dropped.
+    /// Every type the registries answer `<_ as owning_trait>::assoc_name` with,
+    /// and the trait arguments each answer is filed under.
+    fn registered_answers(&self, owning_trait: DefId, assoc_name: &str) -> Vec<TypeId> {
+        let concrete = self
+            .assoc_type_resolutions
+            .iter()
+            .filter(|(key, _)| key.trait_decl == owning_trait && key.assoc_name == assoc_name)
+            .map(|(_, answers)| answers);
+        let generic = self
+            .generic_assoc_type_defs
+            .iter()
+            .filter(|(key, _)| key.trait_decl == owning_trait && key.assoc_name == assoc_name)
+            .map(|(_, answers)| answers);
+        concrete
+            .chain(generic)
+            .flat_map(|answers| answers.0.iter())
+            .flat_map(|(args, answer)| args.iter().copied().chain([*answer]))
+            .collect()
+    }
+
     pub fn retain(&mut self, keep: &IndexSet<TypeId>) {
         // Implicit closure under `redirects`: every kept id whose `get`
         // result lives at a different id must keep that target alive too.
@@ -2087,13 +2111,17 @@ impl TypeTable {
                     ResolvedType::AssocTypeProjection {
                         param_id,
                         args,
+                        owning_trait,
                         trait_args,
+                        assoc_name,
                         assoc_type_bindings,
-                        ..
                     } => {
                         components.push(*param_id);
                         components.extend(projection_arguments(args, trait_args));
                         components.extend(assoc_type_bindings.iter().map(|(_, t)| *t));
+                        // What a substitution will answer it with: a family
+                        // an impl binds is reached through no other type.
+                        components.extend(self.registered_answers(*owning_trait, assoc_name));
                     }
                     ResolvedType::Primitive(_)
                     | ResolvedType::Unit
@@ -2120,6 +2148,8 @@ impl TypeTable {
         // Punch holes for dropped ids; `TypeId`s are never renumbered, so
         // surviving entries keep their indices.
         self.types.retain(|id, _| effective_keep.contains(&id));
+        // Read off the types just pruned, so asked again where needed.
+        self.projection_bounds_cache.clear();
         // A redirect entry is meaningful only when both endpoints survive.
         self.redirects
             .retain(|id, &target| effective_keep.contains(&id) && effective_keep.contains(&target));
@@ -3316,8 +3346,8 @@ impl TypeTable {
     /// `refs`, written in `sig`'s trait frame, at a site: `Self` standing for
     /// `base`, each trait parameter for its argument in `trait_args`, the
     /// associated type's own parameters for `args`. Where the site does not
-    /// know the trait's arguments, a ref that reads one keeps its trait alone,
-    /// since its arguments would be read in a frame that never bound them.
+    /// know the trait's arguments, a ref that reads one says nothing there and
+    /// is left out: kept bare, it would claim the trait's defaults.
     pub fn instantiate_trait_refs(
         &mut self,
         sig: &AssocTypeSig,
@@ -3345,11 +3375,12 @@ impl TypeTable {
                 }
             }
         }
-        refs.iter()
+        let said: Vec<&TraitRef> = refs
+            .iter()
+            .filter(|written| trait_args.is_some() || !self.reads_trait_params(sig, written))
+            .collect();
+        said.into_iter()
             .map(|written| {
-                if trait_args.is_none() && self.reads_trait_params(sig, written) {
-                    return TraitRef::bare(written.decl);
-                }
                 let at_site = written
                     .args
                     .iter()
@@ -3432,7 +3463,8 @@ impl TypeTable {
     /// the family's its arguments. `None` while its signature is still being
     /// built, which a reader inside that build meets.
     pub fn projection_bounds(&mut self, id: TypeId) -> Option<Rc<[TraitRef]>> {
-        if let Some(bounds) = self.projection_bounds_cache.get(&id) {
+        let key = self.type_key(id);
+        if let Some(bounds) = self.projection_bounds_cache.get(&key) {
             return Some(Rc::clone(bounds));
         }
         let ResolvedType::AssocTypeProjection {
@@ -3453,7 +3485,7 @@ impl TypeTable {
         let bounds: Rc<[TraitRef]> = self
             .instantiate_trait_refs(&sig, &sig.bounds, param_id, trait_args.as_deref(), &args)
             .into();
-        self.projection_bounds_cache.insert(id, Rc::clone(&bounds));
+        self.projection_bounds_cache.insert(key, Rc::clone(&bounds));
         Some(bounds)
     }
 
@@ -6870,12 +6902,15 @@ pub type SlotProjections = IndexMap<u32, Vec<ProjectionAnswer>>;
 /// What a use site says one projection off a slot is.
 #[derive(Debug, Clone)]
 pub struct ProjectionAnswer {
+    /// The trait declaring the associated type.
     pub owning_trait: DefId,
     /// The arguments the trait is reached at, where the bound answering wrote
     /// them: `H: Holder<i32, Out = A> + Holder<String, Out = B>` answers
     /// `Out` twice. `None` answers it at any.
     pub trait_args: Option<Vec<TypeId>>,
+    /// The associated type's name.
     pub assoc_name: String,
+    /// What it is at the use site.
     pub answer: TypeId,
 }
 

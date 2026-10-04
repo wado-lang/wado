@@ -348,13 +348,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Handle Self::AssociatedType
         if namespaced.namespace == "Self" {
             let declared = self.self_trait_declaring_assoc_type(&namespaced.name);
-            // Look up the associated type binding
-            if let Some(&family) = self
-                .annotate_ctx
-                .trait_ctx
-                .assoc_type_bindings
-                .get(&namespaced.name)
-            {
+            // What the impl in hand binds it to, a sibling written later too.
+            if let Some(family) = self.impl_binding(&namespaced.name) {
                 return Some(AssocTarget::Family {
                     owner: declared,
                     family,
@@ -1332,13 +1327,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ResolvedType::TypeParam { .. }
             );
         if in_own_declaration {
-            let params = self.tysys.trait_env.trait_decl_params(owner).to_vec();
-            return params
+            let binders = &self.annotate_ctx.trait_ctx.type_params;
+            return self
+                .tysys
+                .trait_env
+                .trait_type_params(owner)
                 .iter()
-                .map(|param| {
-                    let binder = self.annotate_ctx.trait_ctx.type_params.get(&param.name)?;
-                    Some(binder.type_id)
-                })
+                .map(|param| Some(binders.get(&param.name)?.type_id))
                 .collect();
         }
         if let Some((bound, space)) = self
@@ -1381,15 +1376,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             type_id: base,
             declaring_trait: Some(owner),
         };
-        let args: Vec<TypeId> = self.under_self_binding(Some(bounded), |e| {
-            e.param_space_of(owner, written)
-                .into_iter()
-                .map(|(_, arg)| arg)
-                .collect()
-        });
-        args.iter()
-            .all(|&arg| arg != TypeTable::UNKNOWN)
-            .then_some(args)
+        let params: Vec<ast::GenericParam> = self
+            .tysys
+            .trait_env
+            .trait_type_params(owner)
+            .into_iter()
+            .cloned()
+            .collect();
+        let mut space = ParamSpace::new();
+        for (index, param) in params.iter().enumerate() {
+            let arg = match (written.get(index), &param.default) {
+                (Some(&arg), _) => arg,
+                (None, Some(default)) => self.under_self_binding(Some(bounded), |e| {
+                    e.resolve_in_space(&space, std::slice::from_ref(default))[0]
+                }),
+                (None, None) => return None,
+            };
+            if arg == TypeTable::UNKNOWN {
+                return None;
+            }
+            space.push((param.name.clone(), arg));
+        }
+        Some(space.into_iter().map(|(_, arg)| arg).collect())
     }
 
     /// The arguments the declaration of the projection `base` reaches `owner`
@@ -1646,7 +1654,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|decl| decl.type_params.iter().map(|p| p.name.as_str()).collect())
             .unwrap_or_default();
         let mut out = DeclaringSpace::default();
-        let params = self.tysys.trait_env.trait_decl_params(owning_trait);
+        let params = self.tysys.trait_env.trait_type_params(owning_trait);
         for (index, param) in params.iter().enumerate() {
             if family.contains(&param.name.as_str()) {
                 continue;

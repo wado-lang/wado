@@ -15,7 +15,7 @@ use crate::logger::Logger;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, MethodName, global_name};
 use crate::tir::{
-    AssocTypeSig, ImplProjection, TirEffectOp, TirParam, TraitRef, TypeId, TypeTable,
+    AssocTypeSig, ImplProjection, TirEffectOp, TirParam, TraitRef, TypeId, TypeKey, TypeTable,
     method_param_offset,
 };
 use crate::token::Span;
@@ -770,18 +770,13 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             .as_ref()
             .and_then(|t| scope.tysys.resolutions.head_decl(t));
 
-        let impl_site = scope.impl_family_site(impl_block);
-        let mut associated_types = hashmap::IndexMap::default();
         for binding in &impl_block.associated_types {
             scope.reject_unsupported_assoc_params(&binding.name, &binding.type_params);
-            let type_id = scope.resolve_assoc_binding(impl_site.as_ref(), binding);
-            scope
-                .annotate_ctx
-                .trait_ctx
-                .assoc_type_bindings
-                .insert(binding.name.clone(), type_id);
-            associated_types.insert(binding.name.clone(), type_id);
         }
+        let associated_types: hashmap::IndexMap<String, TypeId> = scope
+            .bind_impl_assoc_types(impl_block)
+            .into_iter()
+            .collect();
 
         // The block's name-level facts. Answered here because this is the only
         // phase standing in the block's own frame.
@@ -1057,6 +1052,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let trait_params: Vec<Option<TypeId>> = header
             .type_params
             .iter()
+            .filter(|param| param.fills_impl_slot())
             .map(|param| {
                 let binder = scope.annotate_ctx.trait_ctx.type_params.get(&param.name)?;
                 Some(binder.type_id)
@@ -1089,14 +1085,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut out = Vec::with_capacity(written.len());
         for (param, &id) in written.iter().zip(&params) {
             let refs = self.trait_refs_of(&param.bounds);
-            let named: Vec<FqTraitName> = {
+            let (key, named): (TypeKey, Vec<FqTraitName>) = {
                 let table = self.tysys.type_table.borrow();
-                refs.iter().map(|r| table.trait_ref_name(r)).collect()
+                (
+                    table.type_key(id),
+                    refs.iter().map(|r| table.trait_ref_name(r)).collect(),
+                )
             };
             self.annotate_ctx
                 .trait_ctx
                 .assoc_param_bounds
-                .insert(id, named);
+                .insert(key, named);
             out.push(refs);
         }
         out
@@ -1327,20 +1326,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             );
             // In this frame, not one scope out: a signature naming
             // `Self::Item` is numbered by these slots.
-            frame_scope
-                .annotate_ctx
-                .trait_ctx
-                .assoc_type_bindings
-                .clear();
-            let impl_site = frame_scope.impl_family_site(impl_block);
-            for binding in &impl_block.associated_types {
-                let type_id = frame_scope.resolve_assoc_binding(impl_site.as_ref(), binding);
-                frame_scope
-                    .annotate_ctx
-                    .trait_ctx
-                    .assoc_type_bindings
-                    .insert(binding.name.clone(), type_id);
-            }
+            frame_scope.bind_impl_assoc_types(impl_block);
 
             let param_types: Vec<TypeId> = method
                 .params

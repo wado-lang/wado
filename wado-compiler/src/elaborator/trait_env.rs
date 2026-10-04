@@ -1378,6 +1378,16 @@ impl TraitEnv {
             .map_or(&[], |header| header.type_params.as_slice())
     }
 
+    /// The parameters of `trait_` a reference to it gives a type argument, in
+    /// order: every one but an effect, which is no type. A trait's arguments
+    /// are one per these.
+    pub(super) fn trait_type_params(&self, trait_: DefId) -> Vec<&ast::GenericParam> {
+        self.trait_decl_params(trait_)
+            .iter()
+            .filter(|param| param.fills_impl_slot())
+            .collect()
+    }
+
     /// The trait arguments the impl on `receiver` answering a bound writing
     /// `wanted` names itself by, as it spells them.
     pub(crate) fn impl_written_trait_args(

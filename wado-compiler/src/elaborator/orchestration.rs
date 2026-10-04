@@ -70,13 +70,42 @@ use crate::token::Span;
 use crate::unparse::unparse_type_into;
 use crate::wit_consume::module_host_leaf_imports;
 
-/// Every trait bound a module writes, wherever it stands.
-#[derive(Default)]
-struct BoundsWritten(Vec<ast::TraitBound>);
+/// What every trait bound a module writes, wherever it stands, gets wrong in
+/// the associated types it binds: one its trait does not declare, or one
+/// taking parameters, which a family is until a projection gives it some.
+struct BoundBindingsChecked<'a> {
+    resolutions: &'a Resolutions,
+    trait_env: &'a TraitEnv,
+    errors: Vec<TypeError>,
+}
 
-impl AstVisitor for BoundsWritten {
+impl AstVisitor for BoundBindingsChecked<'_> {
     fn visit_trait_bounds(&mut self, bounds: &[ast::TraitBound]) {
-        self.0.extend(bounds.iter().cloned());
+        for bound in bounds {
+            let Some(trait_) = self.resolutions.bound_decl(bound) else {
+                continue;
+            };
+            for binding in &bound.assoc_types {
+                let declared = self
+                    .trait_env
+                    .trait_declaring_assoc_type(&trait_, &binding.name)
+                    .and_then(|owner| self.trait_env.assoc_type_decl(&owner, &binding.name));
+                match declared {
+                    None => self.errors.push(TypeError::AssocTypeNotInTrait {
+                        trait_name: bound.name.clone(),
+                        assoc_name: binding.name.clone(),
+                        span: binding.span,
+                    }),
+                    Some(decl) if !decl.type_params.is_empty() => {
+                        self.errors.push(TypeError::BoundBindsAssocFamily {
+                            assoc_name: binding.name.clone(),
+                            span: binding.span,
+                        });
+                    }
+                    Some(_) => {}
+                }
+            }
+        }
         ast::walk_trait_bounds(self, bounds);
     }
 }
@@ -917,34 +946,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             if !is_user_local(module_source) {
                 continue;
             }
-            let mut written = BoundsWritten::default();
+            let mut checked = BoundBindingsChecked {
+                resolutions: &resolutions,
+                trait_env: &trait_env,
+                errors: Vec::new(),
+            };
             for item in &module.items {
-                written.visit_item(item);
+                checked.visit_item(item);
             }
-            for bound in written.0 {
-                let Some(trait_) = resolutions.bound_decl(&bound) else {
-                    continue;
-                };
-                for binding in &bound.assoc_types {
-                    let declared = trait_env
-                        .trait_declaring_assoc_type(&trait_, &binding.name)
-                        .and_then(|owner| trait_env.assoc_type_decl(&owner, &binding.name));
-                    let error = match declared {
-                        None => TypeError::AssocTypeNotInTrait {
-                            trait_name: bound.name.clone(),
-                            assoc_name: binding.name.clone(),
-                            span: binding.span,
-                        },
-                        Some(decl) if !decl.type_params.is_empty() => {
-                            TypeError::BoundBindsAssocFamily {
-                                assoc_name: binding.name.clone(),
-                                span: binding.span,
-                            }
-                        }
-                        Some(_) => continue,
-                    };
-                    let _ = logger.error_in(module_source, error);
-                }
+            for error in checked.errors {
+                let _ = logger.error_in(module_source, error);
             }
         }
 

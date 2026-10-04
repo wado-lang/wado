@@ -410,12 +410,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             };
             let sig = self
-                .tysys
-                .type_table
-                .borrow()
                 .assoc_type_sig(*owner, &binding.name)
-                .cloned()
-                .expect("every declared associated type has its signature");
+                .expect("an impl is checked outside any signature's build");
             self.check_assoc_binding_params(*owner, &decl, &sig, site, binding);
             if sig.bounds.is_empty() {
                 continue;
@@ -424,6 +420,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .annotate_ctx
                 .trait_ctx
                 .assoc_type_bindings
+                .resolved
                 .get(&binding.name)
                 .copied()
                 .unwrap_or_else(|| self.resolve_assoc_binding(Some(&impl_site), binding));
@@ -1134,9 +1131,10 @@ impl TypeSystem {
         trait_: DefId,
         wanted: &[FqTypeName],
     ) -> bool {
+        let key = self.type_table.borrow().type_key(param);
         ctx.trait_ctx
             .assoc_param_bounds
-            .get(&param)
+            .get(&key)
             .is_some_and(|bounds| {
                 bounds.iter().any(|bound| {
                     bound.canonical() == Some(trait_)
@@ -2277,14 +2275,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         decl: DefId,
         slots: &IndexMap<u32, TypeId>,
     ) -> Option<Vec<TypeId>> {
-        // Slot 0 is `Self`; each type parameter takes the next, in order.
         let params = self.tysys.trait_decl_type_params_of(&decl)?;
-        (1..)
-            .zip(params.iter())
-            .map(|(slot, param)| {
-                param
-                    .is_real_type_param()
-                    .then(|| slots.get(&slot).copied())
+        trait_params_from_impl::<ast::Type>(&params, &[], None)
+            .into_iter()
+            .map(|supplied| {
+                supplied
+                    .takes_a_slot
+                    .then(|| slots.get(&supplied.slot).copied())
                     .flatten()
             })
             .collect()

@@ -14,7 +14,7 @@ use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::tir::{TraitRef, TypeId, TypeTable};
+use crate::tir::{TraitRef, TypeId, TypeKey, TypeTable};
 
 use super::coercion::PendingLiterals;
 use super::trait_env::{InheritedBound, ViaClause};
@@ -103,6 +103,35 @@ impl BoundSelf {
             }),
         }
     }
+}
+
+/// What `Self::X` names in a frame: the bindings resolved so far, and the
+/// impl whose bindings are being resolved, so one naming a sibling written
+/// after it (`type Ints = Self::Buf<i32>;` before `type Buf<E>`) resolves that
+/// one first. One value, so a frame leaving them behind leaves both.
+#[derive(Clone, Debug, Default)]
+pub(super) struct AssocBindings {
+    pub(super) resolved: IndexMap<String, TypeId>,
+    pub(super) pending: Option<Rc<ImplBindings>>,
+}
+
+impl AssocBindings {
+    /// Forget every binding, resolved or pending.
+    pub(super) fn clear(&mut self) {
+        self.resolved.clear();
+        self.pending = None;
+    }
+}
+
+/// An impl's associated-type bindings and where they are read; see
+/// [`AssocBindings::pending`].
+#[derive(Debug)]
+pub(super) struct ImplBindings {
+    pub(super) site: Option<(DefId, FamilySite)>,
+    pub(super) bindings: Vec<ast::AssociatedTypeBinding>,
+    /// What each is bound to once resolved, shared by every scope the
+    /// resolution nests, which each restore their own frame on leaving.
+    pub(super) resolved: RefCell<IndexMap<String, TypeId>>,
 }
 
 /// Where a generic associated type's declaration is read: the type standing
@@ -253,10 +282,10 @@ pub(super) struct TraitContext {
     pub(super) type_param_bounds: IndexMap<String, Vec<ScopedBound>>,
     /// Associated type bindings in scope (`Self::Name` → resolved type).
     /// Set when resolving trait implementations.
-    pub(super) assoc_type_bindings: IndexMap<String, TypeId>,
+    pub(super) assoc_type_bindings: AssocBindings,
     /// The bounds each generic associated type's parameter in scope carries,
     /// by its identity, instantiated where the frame stands.
-    pub(super) assoc_param_bounds: IndexMap<TypeId, Vec<FqTraitName>>,
+    pub(super) assoc_param_bounds: IndexMap<TypeKey, Vec<FqTraitName>>,
     /// Current `Self` type in scope (the type being implemented in an impl block).
     pub(super) self_type: Option<TypeId>,
     /// The trait `Self` is being elaborated against — the trait an `impl` block
@@ -277,7 +306,7 @@ pub(super) struct TraitContext {
 /// Everything [`Elaborator::set_self_binding`] installs, so a scoped install
 /// takes and restores what `Self` means as one.
 pub(super) struct SelfFrame {
-    assoc_type_bindings: IndexMap<String, TypeId>,
+    assoc_type_bindings: AssocBindings,
     self_type: Option<TypeId>,
     self_trait: Option<DefId>,
     abstract_selections: Option<Rc<AbstractSelections>>,
@@ -325,6 +354,9 @@ pub(super) struct Scope {
     /// The associated types whose signature is being built right now, since
     /// two may each bound the other.
     pub(super) assoc_sig_stack: IndexSet<(DefId, String)>,
+    /// The impl bindings being resolved right now, since two may name each
+    /// other.
+    pub(super) impl_binding_stack: IndexSet<String>,
     /// The binders whose bound closure is being built right now, since
     /// `T: Uses<T::Item>` asks for it again while it is built.
     pub(super) bound_closure_stack: IndexSet<TypeId>,
@@ -909,14 +941,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if let Some(site) = site {
             let declared: Vec<Vec<TraitRef>> =
                 scope.param_bounds_at(owning_trait, assoc, site, &params);
-            let named: Vec<(TypeId, Vec<FqTraitName>)> = {
+            let named: Vec<(TypeKey, Vec<FqTraitName>)> = {
                 let table: Ref<'_, TypeTable> = RefCell::borrow(&scope.tysys.type_table);
                 params
                     .iter()
                     .zip(declared)
                     .map(|(&param, refs)| {
                         (
-                            param,
+                            table.type_key(param),
                             refs.iter().map(|r| table.trait_ref_name(r)).collect(),
                         )
                     })
@@ -1010,6 +1042,72 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             Some(site),
             |scope| scope.resolve_type(&binding.ty),
         )
+    }
+
+    /// Bind each of `impl_block`'s associated types in this frame, as `Self::X`
+    /// then reads them, and answer them in the order written. One may name a
+    /// sibling written after it, which [`Self::impl_binding`] resolves first.
+    pub(super) fn bind_impl_assoc_types(
+        &mut self,
+        impl_block: &ast::ImplBlock,
+    ) -> Vec<(String, TypeId)> {
+        let site = self.impl_family_site(impl_block);
+        self.annotate_ctx.trait_ctx.assoc_type_bindings = AssocBindings {
+            resolved: IndexMap::default(),
+            pending: Some(Rc::new(ImplBindings {
+                site,
+                bindings: impl_block.associated_types.clone(),
+                resolved: RefCell::default(),
+            })),
+        };
+        impl_block
+            .associated_types
+            .iter()
+            .map(|binding| {
+                let type_id = self
+                    .impl_binding(&binding.name)
+                    .expect("a written binding is resolved, cycle or not");
+                (binding.name.clone(), type_id)
+            })
+            .collect()
+    }
+
+    /// What the impl being bound binds `name` to, resolving it now where it is
+    /// written but not yet resolved. `None` where the impl binds no `name`, or
+    /// it is being resolved already: two bindings naming each other have no
+    /// answer, and the inner naming is reported as naming nothing.
+    pub(super) fn impl_binding(&mut self, name: &str) -> Option<TypeId> {
+        let bindings = &self.annotate_ctx.trait_ctx.assoc_type_bindings;
+        if let Some(&type_id) = bindings.resolved.get(name) {
+            return Some(type_id);
+        }
+        let pending = Rc::clone(bindings.pending.as_ref()?);
+        let binding = pending.bindings.iter().find(|b| b.name == name)?;
+        let known = pending.resolved.borrow().get(name).copied();
+        let type_id = if let Some(type_id) = known {
+            type_id
+        } else {
+            if !self
+                .annotate_ctx
+                .impl_binding_stack
+                .insert(name.to_string())
+            {
+                return None;
+            }
+            let type_id = self.resolve_assoc_binding(pending.site.as_ref(), binding);
+            self.annotate_ctx.impl_binding_stack.shift_remove(name);
+            pending
+                .resolved
+                .borrow_mut()
+                .insert(name.to_string(), type_id);
+            type_id
+        };
+        self.annotate_ctx
+            .trait_ctx
+            .assoc_type_bindings
+            .resolved
+            .insert(name.to_string(), type_id);
+        Some(type_id)
     }
 
     /// Reject a bound writing `Self` where the frame binds none. `Self::Assoc`

@@ -1936,15 +1936,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .as_ref()
             .zip(trait_name.and_then(FqTraitName::canonical))
             .map(|(written, trait_key)| self.impl_trait_ref(written, &impl_block.ty, trait_key));
-        let impl_site = self.impl_family_site(impl_block);
-
-        for binding in &impl_block.associated_types {
-            let type_id = self.resolve_assoc_binding(impl_site.as_ref(), binding);
-            self.annotate_ctx
-                .trait_ctx
-                .assoc_type_bindings
-                .insert(binding.name.clone(), type_id);
-
+        for (name, type_id) in self.bind_impl_assoc_types(impl_block) {
             let Some(trait_ref) = impl_trait_ref.clone() else {
                 continue;
             };
@@ -1952,12 +1944,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 self.tysys
                     .type_table
                     .borrow_mut()
-                    .register_assoc_type_resolution(
-                        target_type_id,
-                        trait_ref,
-                        binding.name.clone(),
-                        type_id,
-                    );
+                    .register_assoc_type_resolution(target_type_id, trait_ref, name, type_id);
             } else {
                 // A generic impl registers the definition instead, which the
                 // monomorphizer reads to answer a `GenericInstance`.
@@ -1966,12 +1953,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     self.tysys
                         .type_table
                         .borrow_mut()
-                        .register_generic_assoc_type_def(
-                            base_decl,
-                            trait_ref,
-                            binding.name.clone(),
-                            type_id,
-                        );
+                        .register_generic_assoc_type_def(base_decl, trait_ref, name, type_id);
                 }
             }
         }

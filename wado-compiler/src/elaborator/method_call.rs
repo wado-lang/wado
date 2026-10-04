@@ -210,8 +210,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// A projection's are the declaration's own, read in its trait's frame
     /// at the projection: `Self` its base, the trait's parameters the
     /// arguments it was reached at, the family's parameters its arguments. A
-    /// bound reading a trait parameter the projection does not know keeps its
-    /// trait alone, as [`TypeTable::instantiate_trait_refs`] does.
+    /// bound, or a binding, reading a trait parameter the projection does not
+    /// know is left out, as [`TypeTable::instantiate_trait_refs`] leaves it.
     pub(super) fn carried_bounds(&self, ty: TypeId) -> Vec<ScopedBound> {
         if let Some(name) = self.tysys.binder_name(ty) {
             return self
@@ -253,12 +253,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         decl.bounds
             .iter()
-            .filter(|bound| bound.names_a_trait())
+            .filter(|bound| {
+                bound.names_a_trait()
+                    && !bound.type_args.iter().any(|ty| declaring.reads_unknown(ty))
+            })
             .map(|bound| {
                 let mut bound = bound.clone();
-                if bound.type_args.iter().any(|ty| declaring.reads_unknown(ty)) {
-                    bound.type_args.clear();
-                }
                 bound
                     .assoc_types
                     .retain(|binding| !declaring.reads_unknown(&binding.ty));

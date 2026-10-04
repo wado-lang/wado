@@ -1977,12 +1977,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let impl_sig = signatures
             .impl_sig(impl_ref.0)
             .instantiate_slots(&scope.tysys.type_table, &impl_slots);
-        scope.annotate_ctx.trait_ctx.assoc_type_bindings.extend(
-            impl_sig
-                .associated_types
-                .iter()
-                .map(|(n, &t)| (n.clone(), t)),
-        );
+        scope
+            .annotate_ctx
+            .trait_ctx
+            .assoc_type_bindings
+            .resolved
+            .extend(
+                impl_sig
+                    .associated_types
+                    .iter()
+                    .map(|(n, &t)| (n.clone(), t)),
+            );
 
         let blanket_type_param = is_blanket_type_param.then(|| impl_struct_name.clone());
         // The block names the receiver — not the letter, which another blanket

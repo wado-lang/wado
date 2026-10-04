@@ -3344,9 +3344,13 @@ impl std::fmt::Display for FqTypeName {
 
 /// What a projection name projects off; see [`FqTypeName::projected`].
 pub struct Projected<'n> {
+    /// The type the associated type is projected off.
     pub base: &'n FqTypeName,
+    /// The associated type's name.
     pub assoc: &'n str,
+    /// The trait declaring it.
     pub owning_trait: DefId,
+    /// The arguments the trait is reached at, `None` where unknown.
     pub trait_args: Option<&'n [FqTypeName]>,
 }
 
