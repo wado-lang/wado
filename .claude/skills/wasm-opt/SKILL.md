@@ -15,9 +15,7 @@ binaryen is not in the mise registry, and mise's `github:` backend gets a 403
 from the GitHub API in a cloud session. Download the release tarball instead:
 
 ```sh
-S=$(mktemp -d)
-curl -sSL https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz | tar xz -C $S
-B=$S/binaryen-version_133/bin
+curl -sSL https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz | tar xz -C scratchpad
 ```
 
 wasm-tools comes from mise. Where its shim reports no version set, call the
@@ -26,8 +24,17 @@ binary under `~/.local/share/mise/installs/wasm-tools/latest/` directly.
 ## Pipeline
 
 ```sh
+B=scratchpad/binaryen-version_133/bin
+S=scratchpad/wasm-opt
+FEATURES=(--mvp-features --enable-sign-ext --enable-mutable-globals
+  --enable-nontrapping-float-to-int --enable-simd --enable-relaxed-simd
+  --enable-bulk-memory --enable-bulk-memory-opt --enable-call-indirect-overlong
+  --enable-exception-handling --enable-tail-call --enable-reference-types
+  --enable-multivalue --enable-gc --enable-extended-const --enable-multimemory)
+mkdir -p $S
 wado compile -Os -f no-wide-arithmetic prog.wado -o $S/prog.wasm
 node scripts/jco/transpile-released.mjs $S/prog.wasm $S/jco   # → $S/jco/prog.core.wasm
+$B/wasm-opt "${FEATURES[@]}" $S/jco/prog.core.wasm -o $S/none.wasm
 $B/wasm-opt "${FEATURES[@]}" -O3 $S/jco/prog.core.wasm -o $S/O3.wasm
 ```
 
@@ -36,21 +43,11 @@ $B/wasm-opt "${FEATURES[@]}" -O3 $S/jco/prog.core.wasm -o $S/O3.wasm
   wasm-opt drops by default.
 - `-f no-wide-arithmetic` is required, since the module is run on V8 (see the
   `jco` skill).
-- Name the features explicitly. Never pass `-all`: it lets wasm-opt emit
-  proposals V8 cannot load, compact imports among them. Wado needs this set,
-  as an array because zsh does not word-split a string:
-
-  ```sh
-  FEATURES=(--mvp-features --enable-sign-ext --enable-mutable-globals
-    --enable-nontrapping-float-to-int --enable-simd --enable-relaxed-simd
-    --enable-bulk-memory --enable-bulk-memory-opt --enable-call-indirect-overlong
-    --enable-exception-handling --enable-tail-call --enable-reference-types
-    --enable-multivalue --enable-gc --enable-extended-const --enable-multimemory)
-  ```
-
-- Run with no pass (`$B/wasm-opt "${FEATURES[@]}" in.wasm -o rt.wasm`) as
-  well. This re-encodes the module and nothing more, so it separates encoding
-  waste from optimization.
+- Name the features explicitly, as an array because zsh does not word-split a
+  string. Never pass `-all`: it lets wasm-opt emit proposals V8 cannot load,
+  compact imports among them.
+- The run with no pass (`none.wasm`) re-encodes the module and nothing more,
+  so it separates encoding waste from optimization.
 - Add `-g` to keep function names for a diff. Measure size without it.
 
 ## Reading the difference

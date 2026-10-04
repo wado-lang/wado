@@ -25,7 +25,7 @@ cargo build --profile debugger --bin wado
 cat > scratchpad/gdb_commands.txt << 'EOF'
 file ./target/debugger/wado
 set pagination off
-break wado-compiler/src/codegen/emit.rs:749
+break emit_function
 run compile -o scratchpad/out.wasm example/hello.wado
 info locals
 print func.name
@@ -35,14 +35,17 @@ EOF
 rust-gdb --batch -x scratchpad/gdb_commands.txt
 ```
 
+Break on a function name, not a `file:line`: gdb matches the bare name in
+every module, and a line number drifts with the next edit above it.
+
 ## Ask one question per run, not one per build
 
 A breakpoint that fires thousands of times and gets `grep`ed answers one
 question and costs a rebuild for the next. Make the breakpoint itself select:
 
 ```
-break wado-compiler/src/wir_build/calls.rs:27 if $_streq(name->data_ptr, "…")
-break …/func_inst.rs:2052
+break local_get if $_streq(name->data_ptr, "…")
+break substitute_types_in_expr
 commands
 silent
 bt 6

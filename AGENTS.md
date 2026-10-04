@@ -89,7 +89,7 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 - A regression fixture's shape is its point: when a harness cannot classify one, fix the harness, not the fixture.
 - Run what the change can reach, not more: a test-only addition does not need the full suite.
 - An unexplained failure indicts the measurement as often as the change: re-run the exact command by hand before believing it, and never revert a design over one. zsh does not word-split `$VAR`, so a flag list in one variable reaches a command as one argument.
-- A CI-only timeout in a test that reads `wasi:clocks` is the runner's slowness, not the branch.
+- A CI-only timeout in a test that reads `wasi:clocks`, once it passes on the merged tree, is the runner's slowness, not the branch.
 - Run `/code-review-response` to answer any review finding, whoever the reviewer is and however it reaches you. A finding arriving as a pull request event is one, and handling it straight from the event skips every step the skill ends with.
 - Run `/distill` once a piece of work is done, and again after answering review findings. An extra run costs nothing, so run it the moment you wonder whether you should. §"The Cycle" says where it sits.
 

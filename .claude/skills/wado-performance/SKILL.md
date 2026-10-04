@@ -328,13 +328,17 @@ A change to the compiler needs two compilers. `benchmark-baseline` builds
 `origin/main`'s once and caches it under that commit; `WADO_BIN` then runs it
 through _this_ tree's harness, so only the compiler differs — the baseline's own
 `benchmark/` would put the branch's harness changes inside the comparison too.
-The task fetches `origin/main` each time it runs, so resolve `base` once and
-use it for every step of one comparison: a moved main is another compiler.
+The task fetches `origin/main` each time it runs and deletes the baseline of an
+older main, so copy it out once and compare against the copy: a moved main is
+another compiler.
 
 ```sh
-base=$(mise run benchmark-baseline)   # slow the first time, cached after
+cp "$(mise run benchmark-baseline)" scratchpad/wado-main   # slow the first time
+```
+
+```sh
 # alternate, so neither arm always goes second
-WADO_BIN=$base mise run benchmark-all > scratchpad/b1.log 2>&1
+WADO_BIN="$PWD/scratchpad/wado-main" mise run benchmark-all > scratchpad/b1.log 2>&1
 mise run benchmark-all > scratchpad/h1.log 2>&1  # …and so on, 3 each
 node benchmark/ab.ts --base scratchpad/b{1,2,3}.log --head scratchpad/h{1,2,3}.log
 ```
@@ -381,12 +385,11 @@ Keep the world one `--world=…` token: zsh does not word-split an expansion, so
 two words in a variable reach `wado` as a single flag it rejects.
 
 ```sh
-# $base: the baseline resolved for the timing rounds above
 for f in benchmark/*/*.wado; do
   case "$f" in *_schema.wado) continue ;; esac
   world=
   case "$f" in */http_routing/*) world=--world=wasi:http/service ;; esac
-  "$base" compile -O2 ${world:+"$world"} -o scratchpad/b.wasm "$f" > scratchpad/cc.log 2>&1 \
+  scratchpad/wado-main compile -O2 ${world:+"$world"} -o scratchpad/b.wasm "$f" > scratchpad/cc.log 2>&1 \
     || { echo "FAILED  $f"; cat scratchpad/cc.log; continue; }
   target/release/wado compile -O2 ${world:+"$world"} -o scratchpad/h.wasm "$f" > scratchpad/cc.log 2>&1 \
     || { echo "FAILED  $f"; cat scratchpad/cc.log; continue; }
@@ -413,9 +416,8 @@ apart, and the reference rows only catch drift big enough to cross a range. Loop
 that one benchmark back to back and check the ranking holds pair by pair.
 
 ```sh
-# $base: the same baseline as above
 for i in 1 2 3 4 5; do
-  "$base" run -O2 benchmark/sieve/sieve.wado
+  scratchpad/wado-main run -O2 benchmark/sieve/sieve.wado
   target/release/wado run -O2 benchmark/sieve/sieve.wado
 done
 ```
@@ -437,11 +439,15 @@ belonging to neither arm. It overwrites uncommitted edits under `lib/`, so
 commit them first.
 
 ```sh
+set -e  # a failed build would leave an earlier A/B's binary as its arm
+rm -f scratchpad/wado-base scratchpad/wado-head
 fork=$(git merge-base origin/main HEAD)
 git restore --source="$fork" --worktree -- wado-compiler/lib
-cargo build --release --bin wado --quiet && cp target/release/wado scratchpad/wado-base
+cargo build --release --bin wado --quiet
+cp target/release/wado scratchpad/wado-base
 git restore --source=HEAD --worktree -- wado-compiler/lib
-cargo build --release --bin wado --quiet && cp target/release/wado scratchpad/wado-head
+cargo build --release --bin wado --quiet
+cp target/release/wado scratchpad/wado-head
 for r in 1 2 3; do
   for arm in base head; do
     WADO_BIN="$PWD/scratchpad/wado-$arm" mise run benchmark-json-catalog
