@@ -10,7 +10,7 @@ use {
 } from "./atn.wado";
 use { AtnState, atn_invocation_prec, atn_predict_once } from "./atn_predict.wado";
 
-pub fn atn_with_lr_tables(sim: AtnSim) -> AtnSim {
+internal fn atn_with_lr_tables(sim: AtnSim) -> AtnSim {
     let mut out = sim;
     let nrules = out.rule_start.len();
     for let mut r = 0; r < nrules; r += 1 {
@@ -227,7 +227,7 @@ fn atn_state_cont_open_ended(sim: &AtnSim, state: i32) -> bool {
     return sim.state_cont_first_open[state] || sim.state_cont_neg_count[state] > 0;
 }
 
-pub fn atn_lr_loop_decision(
+internal fn atn_lr_loop_decision(
     sim: &AtnSim,
     atn: &mut AtnState,
     decision: i32,
