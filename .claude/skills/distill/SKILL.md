@@ -47,7 +47,8 @@ also cut a rule that is trivially deduced from a principle the file or the root
 `AGENTS.md` already states: detail dilutes the rules that matter. Keep one that
 fences a principle against a reading broader than intended. Cut words, never a
 fact: grep for what links to a passage before removing it, and keep a code
-block runnable on its own, by running it.
+block runnable on its own: every name it uses defined in it, every command and
+path real. Run only a block without side effects to check it.
 
 ## Sweep by Shape
 

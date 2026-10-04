@@ -189,7 +189,7 @@ Rust from 0.68 to 3.17 MB/s.
 The four rules these benchmarks established — live set over allocation count,
 module-lifetime GC data as a per-collection tax, benchmark on an idle host
 against a same-window arm, and size a GC win by its release number — are Wado's,
-not Gale's, and live in the `wado-performance` skill with the evidence from here.
+not Gale's, so they live in the `wado-performance` skill.
 
 What is Gale's: the decoded ATN is the module-lifetime data those rules are
 about. `state_cont_*` is flat offset/count columns and the LR fixpoint is gated

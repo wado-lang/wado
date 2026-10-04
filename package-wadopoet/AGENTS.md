@@ -53,7 +53,13 @@ tracking what the template's own text has opened (code, string, char, template,
 comment). A hole in code is written as it renders.
 
 ```wado
+let text = "say \"hi\"\n";
+let quote = '\'';
+let hole = "${x}";
+let name = "expr_list";
+
 wado`let s = "${text}";`      // let s = "say \"hi\"\n";
+wado`let c = '${quote}';`     // let c = '\'';
 wado`print(\`${hole}\`);`     // print(`\${x}`);
 wado`pos = ${name}(tokens);`  // pos = expr_list(tokens);
 ```

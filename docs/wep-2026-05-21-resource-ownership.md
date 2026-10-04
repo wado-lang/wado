@@ -744,16 +744,6 @@ Verified against the tree.
 
 ## Known gaps
 
-### Visitors that cross a closure's frame
-
-`TirRefVisitor::walk_expr` descends into closure bodies, whose locals are
-numbered in their own frame, so a walk reading the enclosing body's locals reads
-the wrong slots once it crosses that boundary. `walk_expr_in_frame` stops there.
-The visitors in `lower/plan/value_copy/` (`analyze.rs`, `ownership.rs`,
-`place.rs`, `synthesize.rs`) read locals and never mention a closure. Whether
-each one descends wrongly or by intent is unread, and a wrong answer is a
-miscompile.
-
 ### The release that lets a binding leave the function
 
 `let v = self.held; self.held = null;` gives `v` what the place held. In

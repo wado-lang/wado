@@ -342,7 +342,8 @@ reason that does not turn on how `uscale` is admitted:
   its fast path and gets it inlined everywhere. json-canada ser +3.4%, de +2.7%
   — and **fts -4.5%**, three rounds, non-overlapping. `fixed_width_for_prec`
   scales once, so it gains nothing from the mask and only pays the growth; it is
-  the same size-sensitive function the skill's `cold_outline` note names.
+  the same size-sensitive function whose out-of-range tail `cold_outline` would not
+take, since it holds a `return`.
 - **Merging `check_special`'s two zero tests** into `bits << 1 == 0` (cost 18 →
   under budget). json-canada de **-2.4%** on its own and nothing measurable on
   ser, on a function the de path never calls. Pure placement.

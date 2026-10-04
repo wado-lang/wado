@@ -45,7 +45,7 @@ raises its `opt-level` where it matters. `--release` is for distribution.
 ## Tooling
 
 - Make every edit with the editing tools.
-- Run one heavy job at a time, in the background, its output in a file that records its own end: `cmd > run.log 2>&1 && s=0 || s=$?; echo "exit=$s" >> run.log`. Wait for the harness's notification, never a `sleep` loop. An abandoned job keeps running, so kill it by pid (`ps -eo pid,etime,pcpu,args`) before restarting; `test`, `test-wado`, `test-stdlib` and `test-gale-o2` refuse to start beside themselves where `flock` exists.
+- Run one heavy job at a time, in the background, its output in a file outside the tree that records its own end: `cmd > /tmp/run.log 2>&1 && s=0 || s=$?; echo "exit=$s" >> /tmp/run.log`. Scratch files never go in the tree, where `git add -A` picks them up. Wait for the harness's notification, never a `sleep` loop. An abandoned job keeps running, so kill it by pid (`ps -eo pid,etime,pcpu,args`) before restarting; `test`, `test-wado`, `test-stdlib` and `test-gale-o2` refuse to start beside themselves where `flock` exists.
 - A generated file carries `-diff` in `.gitattributes`: regenerate and commit it, don't read it. `scripts/changed-sources.sh` lists the changed sources without them. On an internal pull request CI's `tidy` job regenerates them, with clippy and format, and pushes `chore: tidy`, so pull before pushing.
 
 ## Git
@@ -54,7 +54,7 @@ raises its `opt-level` where it matters. `--release` is for distribution.
 - Read the whole diff before committing. A trimmed comment or doc keeps every clause that names a pass, a type, a literal, a condition, or the bug behind the code.
 - A defect found mid-task is fixed on the branch in hand.
 - Delete local branches `git branch --merged main` lists without asking, except `main` and a branch with no commits of its own yet; never one `--no-merged` lists.
-- Merge `origin/main` only through the `git-upstream-sync` skill. CI's test jobs run on the branch merged with `main`, so reproduce a CI-only failure there first.
+- Merge `origin/main` only through the `git-upstream-sync` skill. CI's test jobs run on the branch merged with `main`, so reproduce a CI-only failure there first. `tidy` is the exception: it checks out the head.
 
 ## Writing
 
@@ -82,12 +82,12 @@ modules while tuples follow TypeScript.
 
 @docs/cheatsheet.md is the quick reference. For the detailed specification read
 `docs/spec-*.md` (one file per area, indexed in `docs/README.md`), or the WEP
-that proposed a feature at `docs/wep-*.md`. `wado doc core:prelude` states every
-stdlib signature; read it rather than guess.
+that proposed a feature at `docs/wep-*.md`. `wado doc <module>` (`core:prelude`, say)
+states a stdlib module's signatures; read it rather than guess.
 
-Where Wado reads a binary input, it reads a text form too (`.wat` beside
-`.wasm`, `.onnxtext` beside `.onnx`), so the repository commits a readable diff.
-The binary is canonical where they disagree.
+Commit a binary input's text form beside it (`.wat` beside `.wasm`, `.onnxtext`
+beside `.onnx`) so its diff is readable. The binary is canonical where they
+disagree.
 
 ## Repository Map
 
@@ -133,7 +133,7 @@ The wasm-tools crates (`wasmparser`, `wasm-encoder`, `wasmprinter`, `wit-parser`
 ## References
 
 Wado targets Wasm 3.0 (GC and JSPI included), the Component Model, and WASI 0.3
-(p3), all fully supported by wasmtime. The sources of truth are vendored:
+(p3), which wasmtime fully supports. The sources of truth are vendored:
 
 - Component Model: `vendor/component-model/design/mvp/` (`CanonicalABI.md`, `Concurrency.md` for async, streams and futures)
 - WASI p3: `find vendor/wasmtime/crates/wasi/src/p3/wit -name '*.wit'`

@@ -22,7 +22,8 @@ git submodule update --init --recommend-shallow
 ## 2. If It Conflicts, Commit the Conflicts Unresolved
 
 The raw conflict gets its own commit, so the resolution reads as a diff against
-it. Never squash the two. Stage, then check the submodules before committing:
+it. Never squash the two. Stage, then check the submodules before committing;
+this check follows every `git add -A` here, step 3's included:
 
 ```sh
 git add -A
@@ -50,6 +51,7 @@ its generator; never hand-resolve, defer, or discard one. Then:
 
 ```sh
 git add -A
+git diff --cached origin/main -- vendor   # as in step 2
 git commit -m "resolve merge conflicts"
 ```
 

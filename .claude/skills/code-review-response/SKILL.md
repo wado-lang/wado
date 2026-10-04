@@ -12,11 +12,11 @@ cleared list.
    the suggested patch is wrong; one grounded in a project rule is fixed citing
    the rule; one not real, or already a known gap, is skipped with the reason.
    Whose defect it was does not matter, and a severity label is not evidence.
-2. Group the survivors by the class each is an instance of, and report the
+2. A finding that changes a public API, a language rule, or a phase's contract
+   is a proposal: put it to the user and wait. Only these block.
+3. Group the other survivors by the class each is an instance of, and report the
    classes to the user before fixing. It is a report, not a request: keep going.
-3. Fix the class at the altitude that admits it, not the sites named.
-4. A finding that changes a public API, a language rule, or a phase's contract
-   is a proposal: put it to the user and wait.
+4. Fix the class at the altitude that admits it, not the sites named.
 5. Commit, then invoke `/distill`. Always: a fix written for a reviewer arrives
    in the reviewer's framing.
 6. Report once more, after `/distill`: what was fixed, and what was skipped and

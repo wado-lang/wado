@@ -20,7 +20,7 @@ Run the benchmarks and update `benchmark/README.md` and `wasm-size/README.md`.
 ## Procedure
 
 1. Run `mise run benchmark-all` three times, each to its own log, and pick per
-   row with `node benchmark/pick.ts run1.log run2.log run3.log`.
+   row with `node benchmark/pick.ts /tmp/run1.log /tmp/run2.log /tmp/run3.log`.
 2. Run http-routing on its own:
    `SLICE=10 ROUNDS=3 SHAPES="1 4" mise run benchmark-http-routing`. Add
    `HEADROOM_CHECK=1` when `CONNECTIONS_PER_WORKER`, `OHA_CORE_COUNT` or
@@ -41,9 +41,9 @@ swept this way.
 ```sh
 set -e  # a failed arm would leave pick.ts choosing among the rest
 for t in 13 20 32; do
-  WADO_BENCH_FLAGS="--optimize-inline-threshold $t" mise run benchmark-all > thr$t.log 2>&1
+  WADO_BENCH_FLAGS="--optimize-inline-threshold $t" mise run benchmark-all > /tmp/thr$t.log 2>&1
 done
-node benchmark/pick.ts thr13.log thr20.log thr32.log
+node benchmark/pick.ts /tmp/thr13.log /tmp/thr20.log /tmp/thr32.log
 ```
 
 The winner becomes a default in `optimize.rs`; re-run the suite unflagged before

@@ -47,15 +47,12 @@ The shim's browser `cli` is unimplemented, so the playground keeps its own.
 
 ## Numbers
 
-Indicative, best of three on a cloud VM:
+Node's rate over wasmtime's, best of three on one machine:
 
-| Benchmark       | Node (jco)       | wasmtime |
-| --------------- | ---------------- | -------- |
-| mandelbrot      | ~4.0 M px/s      | ~4.2 M   |
-| sieve           | ~150 M numbers/s | ~64 M    |
-| fts             | ~12 M conv/s     | —        |
-| zlib compress   | ~65 MB/s         | —        |
-| zlib decompress | ~220 MB/s        | —        |
+| Benchmark  | Node (jco) / wasmtime |
+| ---------- | --------------------- |
+| mandelbrot | ~0.95×                |
+| sieve      | ~2.3×                 |
 
 ## Known Blocker
 

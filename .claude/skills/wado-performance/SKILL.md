@@ -77,9 +77,8 @@ refuses a region containing a `return`.
   doubling, which can flip a ranking.
 - `List::with_capacity` zero-fills (`array.new_default`). Size it about right;
   growing by doubling zero-fills more.
-- Every `array.get` is bounds-checked, with no unchecked form. A lone one costs
-  about 20 machine instructions; up to four in one block share the check, at
-  about 8 each. Wider blocks add nothing (`dead-ends.md`). So read a run of
+- Every `array.get` is bounds-checked, with no unchecked form. Up to four in one
+  block share the check, each then costing well under half a lone one. Wider blocks add nothing (`dead-ends.md`). So read a run of
   several bytes per check, as `peek_after_whitespace_run` in `core:json` does,
   when runs are long. `array.set` shares nothing; only `array.copy` /
   `array.fill` amortise writes. `wasmtime explore -W gc,function-references`
@@ -127,15 +126,20 @@ Only relative numbers carry signal.
 
 ### A Compiler Change
 
+Build the head arm first, with `cargo build --release --bin wado`; every command
+below compares against `target/release/wado`, and a stale one compares main with
+itself.
+
 Run every benchmark at `-O0` through `-O3` before trusting an optimizer change:
 the suites miss shapes only large bodies like `gale_gen` produce, and a trap
-there reads `ERROR task failed`.
+there reads `ERROR task failed`. A later `-O` wins, so
+`WADO_BENCH_FLAGS=-O1 mise run benchmark-all` runs the suite at `-O1`.
 
 ```sh
 base=$(mise run benchmark-baseline)   # origin/main's compiler, cached per commit
-WADO_BIN=$base mise run benchmark-all > b1.log 2>&1
-mise run benchmark-all > h1.log 2>&1  # alternate, 3 each
-node benchmark/ab.ts --base b1.log b2.log b3.log --head h1.log h2.log h3.log
+WADO_BIN=$base mise run benchmark-all > /tmp/b1.log 2>&1
+mise run benchmark-all > /tmp/h1.log 2>&1   # alternate, 3 each
+node benchmark/ab.ts --base /tmp/b1.log /tmp/b2.log /tmp/b3.log --head /tmp/h1.log /tmp/h2.log /tmp/h3.log
 ```
 
 Time Wado rows alone with `mise run all-wado [names…]` from `benchmark/`; the
@@ -147,7 +151,7 @@ bytes are identical has not moved. Gate on each compile's exit status, since a
 failed one leaves the last round's file behind:
 
 ```sh
-base=$(mise run benchmark-baseline)   # cached: seconds after the first build
+base=$(mise run benchmark-baseline)   # cached after the first build
 for f in benchmark/*/*.wado; do
   case "$f" in *_schema.wado) continue ;; esac
   world=
@@ -175,14 +179,15 @@ A release build embeds the stdlib, so build one binary per arm, replacing the
 whole of `lib/` each time, then run rounds against them:
 
 ```sh
-for arm in base head; do
+mkdir -p /tmp/ab
+for arm in origin/main HEAD; do
   rm -rf wado-compiler/lib
-  git checkout $arm -- wado-compiler/lib
+  git checkout "$arm" -- wado-compiler/lib
   cargo build --release --bin wado --quiet
-  cp target/release/wado /tmp/ab/wado-$arm
+  cp target/release/wado "/tmp/ab/wado-${arm//\//-}"
 done
 git checkout HEAD -- wado-compiler/lib
-for r in 1 2 3; do for arm in base head; do
+for r in 1 2 3; do for arm in origin-main HEAD; do
   WADO_BIN=/tmp/ab/wado-$arm mise run benchmark-json-catalog
 done; done
 ```
