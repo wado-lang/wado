@@ -1148,10 +1148,7 @@ mod tests {
         const ORD: TraitDeclId = BETA;
         let mut p = Builder::default().build();
         p.comparisons = Some((EQ, ORD));
-        let ord_for_all = p.push_impl(generic(
-            1,
-            concrete(ORD, list_of(SolverType::Param(0))),
-        ));
+        let ord_for_all = p.push_impl(generic(1, concrete(ORD, list_of(SolverType::Param(0)))));
         p.push_impl(concrete(EQ, list_of(decl(I32))));
         assert_eq!(
             comparison_row(&p, &list_of(decl(POINT))),

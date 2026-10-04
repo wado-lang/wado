@@ -1544,7 +1544,6 @@ impl TraitEnv {
         })
     }
 
-
     /// What `answer` gives for the first block on `receiver` writing
     /// `trait_<wanted>` that it answers for, a concrete one before a generic
     /// one (coherence Rule 1).
