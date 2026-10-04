@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791102252053,
+  "lastUpdate": 1791106076070,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -63417,6 +63417,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5a8350eca2b37f6bcae5bd97ef09b441bb0794bf"
         },
         "date": 1791102251381,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338887,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8d3ee8df1eb48a261032cd774ff68dfb16227375",
+          "message": "Merge pull request #2265 from wado-lang/ccr-7ef2d7c0-reoak1\n\nfix(gale): match ANTLR4 on four parse, lex and action cases",
+          "timestamp": "2026-10-04T18:07:07+09:00",
+          "tree_id": "0cbd46b4e133c3e0b557f77dc7da7755bb1a448d",
+          "url": "https://github.com/wado-lang/wado/commit/8d3ee8df1eb48a261032cd774ff68dfb16227375"
+        },
+        "date": 1791106075027,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
