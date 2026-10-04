@@ -403,6 +403,35 @@ pub(super) fn withheld_at(program: &Program, ty: &SolverType) -> Vec<TraitDeclId
         .collect()
 }
 
+/// The row of the comparison table `ty` reads (spec-traits.md §Derivation
+/// Policy): which of `eq` and `ord` a written impl reaching `ty` implements
+/// without the other, with that impl. A concrete impl answers before a generic
+/// one, as coherence Rule 1 orders them.
+#[must_use]
+pub fn comparison_row(
+    program: &Program,
+    eq: TraitDeclId,
+    ord: TraitDeclId,
+    ty: &SolverType,
+) -> Option<(TraitDeclId, ImplId)> {
+    let written = |trait_| {
+        program
+            .impls
+            .iter()
+            .filter(|(_, def)| {
+                at_self(program, def, trait_, &[ImplOrigin::Written])
+                    && match_target(&def.target, ty, &mut vec![None; def.params.len()])
+            })
+            .min_by_key(|(_, def)| !def.params.is_empty())
+            .map(|(&id, _)| id)
+    };
+    match (written(eq), written(ord)) {
+        (Some(id), None) => Some((eq, id)),
+        (None, Some(id)) => Some((ord, id)),
+        _ => None,
+    }
+}
+
 /// One impl applying to one type. `holds` reads the bound it answers; selection
 /// reads the arguments it answers at.
 struct Answer {
@@ -594,7 +623,7 @@ fn match_target(target: &SolverType, ty: &SolverType, bindings: &mut [Option<Bin
 #[cfg(test)]
 mod tests {
     use super::super::program::{Fact, ParamDef, Pin, TraitDef, TypeDef};
-    use super::super::testing::{Builder, concrete, decl, ref_to};
+    use super::super::testing::{Builder, concrete, decl, generic, ref_to};
     use super::*;
 
     const ALPHA: TraitDeclId = TraitDeclId(0);
@@ -1119,6 +1148,33 @@ mod tests {
         assert_eq!(holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE), None);
         p.push_impl(concrete(ALPHA, decl(POINT)));
         assert!(holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE).is_some());
+    }
+
+    /// Each instance reads its own row, by the written impls reaching it; a
+    /// concrete impl answers before a generic one.
+    #[test]
+    fn each_instance_reads_its_own_comparison_row() {
+        const ORD: TraitDeclId = BETA;
+        let mut p = Builder::default().build();
+        let ord_for_all = p.push_impl(generic(
+            1,
+            concrete(ORD, list_of(SolverType::Param(0))),
+        ));
+        p.push_impl(concrete(EQ, list_of(decl(I32))));
+        assert_eq!(
+            comparison_row(&p, EQ, ORD, &list_of(decl(POINT))),
+            Some((ORD, ord_for_all))
+        );
+        assert_eq!(comparison_row(&p, EQ, ORD, &list_of(decl(I32))), None);
+        assert_eq!(comparison_row(&p, EQ, ORD, &ref_to(list_of(decl(POINT)))), None);
+
+        let mut p = Builder::default().build();
+        p.push_impl(generic(1, concrete(EQ, list_of(SolverType::Param(0)))));
+        let eq_for_i32_first = p.push_impl(concrete(EQ, list_of(decl(I32))));
+        assert_eq!(
+            comparison_row(&p, EQ, ORD, &list_of(decl(I32))),
+            Some((EQ, eq_for_i32_first))
+        );
     }
 
     fn withholding(trait_: TraitDeclId, target: SolverType) -> ImplDef {

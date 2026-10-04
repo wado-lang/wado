@@ -4,7 +4,7 @@
 //! system itself: per-call mutable state does not, even when cache-shaped, since
 //! sharing a recursion stack across module walks would leak frames between them.
 
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -365,15 +365,25 @@ impl TypeSystem {
         }
     }
 
+    /// The solver, which the module passes ask once every declaration is
+    /// resolved.
+    pub(crate) fn solver(&self) -> Ref<'_, SolverBridge> {
+        self.solver
+            .as_ref()
+            .expect("the solver is built before the module passes")
+            .borrow()
+    }
+
     /// The first link at or below `type_id` — itself included — owning an impl
     /// of `trait_`. A link owns what it writes where it reaches the link, and
     /// the `Eq` a `cmp` it writes alone gives it.
     pub(crate) fn impl_link(&self, type_id: TypeId, trait_: DefId) -> Option<TypeId> {
         let tt = self.type_table.borrow();
+        let solver = self.solver();
         let mut tid = type_id;
         loop {
             if written_impl_reaches(&self.trait_env, trait_, tid, &tt)
-                || eq_from_written_cmp(&self.trait_env, trait_, tid, &tt).is_some()
+                || eq_from_written_cmp(&self.trait_env, &solver, trait_, tid, &tt).is_some()
             {
                 return Some(tid);
             }

@@ -12,8 +12,8 @@ use crate::tir::{AnonStructId, ResolvedType, TypeId, TypeTable};
 use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
     ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, Selection, SolverType,
-    TraitDeclId, TypeDeclId, TypeDef, bound_candidates, candidates, derive, holds_with_args, owed,
-    pair_comparisons, rank,
+    TraitDeclId, TypeDeclId, TypeDef, bound_candidates, candidates, comparison_row, derive,
+    holds_with_args, owed, pair_comparisons, rank,
 };
 
 use super::trait_env::{BlanketReceiver, ImplHeader, ImplTargetKey, written_arg_nodes};
@@ -628,6 +628,14 @@ fn newtype_decls<'a>(
 pub(crate) struct SolverBridge {
     program: Program,
     lowering: Lowering,
+    /// `Eq` and `Ord`, the traits the comparison table pairs.
+    comparisons: Option<(TraitDeclId, TraitDeclId)>,
+}
+
+impl std::fmt::Debug for SolverBridge {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SolverBridge").finish_non_exhaustive()
+    }
 }
 
 impl SolverBridge {
@@ -712,13 +720,16 @@ impl SolverBridge {
         Self::state_primitive_impls(tysys, &mut lowering, &mut program);
         Self::state_traits(tysys, &mut lowering, &mut program);
         Self::state_scopes(tysys, modules, &mut lowering, &mut program);
-        if let (Some(eq), Some(ord)) = (
-            Self::derived_trait(tysys, &mut lowering, CompilerItem::Eq),
-            Self::derived_trait(tysys, &mut lowering, CompilerItem::Ord),
-        ) {
+        let comparisons = Self::derived_trait(tysys, &mut lowering, CompilerItem::Eq)
+            .zip(Self::derived_trait(tysys, &mut lowering, CompilerItem::Ord));
+        if let Some((eq, ord)) = comparisons {
             pair_comparisons(&mut program, eq, ord);
         }
-        let mut bridge = Self { program, lowering };
+        let mut bridge = Self {
+            program,
+            lowering,
+            comparisons,
+        };
         let shapes = bridge.shapes(modules);
         bridge.state_declarations(tysys, &tysys.data, &table, shapes, ImplId(0));
         let heads: Vec<TypeDeclId> = (0..bridge.lowering.decls.len())
@@ -803,7 +814,9 @@ impl SolverBridge {
         shapes: Vec<(Declaration, OnBoundTrait)>,
         named_from: ImplId,
     ) -> Vec<TypeDeclId> {
-        let Self { program, lowering } = self;
+        let Self {
+            program, lowering, ..
+        } = self;
         let mut stated = Self::state_newtype_bases(tysys, data, table, lowering, program);
         let (mut structs, variants, handles) = Self::declarations(tysys, data, table, lowering);
         let shape_kinds: Vec<(TypeDeclId, OnBoundTrait)> = shapes
@@ -1737,6 +1750,34 @@ impl SolverBridge {
             // settle (WEP 2026-07-31), which the order does not answer.
             Selection::Overloaded(live) => Ordered::Overloaded(named(&live)),
         })
+    }
+
+    /// Which of `Eq` and `Ord` is written for `instance` without the other,
+    /// with the block writing it: the row of the comparison table `instance`
+    /// reads, by [`comparison_row`]. A type parameter is rigid, so only an impl
+    /// reaching every instance reaches it.
+    pub(crate) fn comparison_written_alone(
+        &self,
+        table: &TypeTable,
+        instance: TypeId,
+    ) -> Option<(CompilerItem, DefId)> {
+        let (eq, ord) = self.comparisons?;
+        // A shape the lowering cannot say is one no source names, so no written
+        // impl reaches it.
+        let ty = self
+            .lowering
+            .type_id(table, instance, &|_, index| Some(index))?;
+        let (written, impl_) = comparison_row(&self.program, eq, ord, &ty)?;
+        let item = if written == eq {
+            CompilerItem::Eq
+        } else {
+            CompilerItem::Ord
+        };
+        Some((
+            item,
+            self.impl_def_of(impl_)
+                .expect("a written impl names its block"),
+        ))
     }
 
     /// The impl block a candidate names: the one it was lowered from, or for a

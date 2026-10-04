@@ -41,9 +41,7 @@ use crate::elaborator::trait_env::{
 use crate::elaborator::types::{RequiredTrait, StructFieldInfo, VariantInfo};
 use crate::name::FqTraitName;
 use crate::resolve::{Resolution, Resolutions};
-use crate::synthesis::template::{
-    PairedEq, comparison_written_alone, eq_from_written_cmp, written_impl_reaches,
-};
+use crate::synthesis::template::{PairedEq, eq_from_written_cmp, written_impl_reaches};
 use crate::tir::{SlotProjections, TraitRef};
 
 /// Proof that a bound was asked and answered no. Its field is private here, so
@@ -1568,10 +1566,12 @@ impl TypeSystem {
         )
     }
 
-    /// [`comparison_written_alone`] for `type_id`.
+    /// Which comparison trait `type_id` writes without the other, by
+    /// [`SolverBridge::comparison_written_alone`].
     pub(super) fn comparison_written_alone(&self, type_id: TypeId) -> Option<OnBoundTrait> {
-        let tt = self.type_table.borrow();
-        let (written, _) = comparison_written_alone(&self.trait_env, type_id, &tt)?;
+        let (written, _) = self
+            .solver()
+            .comparison_written_alone(&self.type_table.borrow(), type_id)?;
         OnBoundTrait::of_compiler_item(written)
     }
 
@@ -1584,14 +1584,13 @@ impl TypeSystem {
     pub(super) fn ord_withheld_by(&self, type_id: TypeId) -> Option<TypeId> {
         let ord = self.compiler_trait_def(CompilerItem::Ord)?;
         let tt = self.type_table.borrow();
+        let solver = self.solver();
         let mut link = type_id;
         loop {
             if matches!(tt.get(link), ResolvedType::Primitive(_)) {
                 return None;
             }
-            if let Some((CompilerItem::Eq, _)) =
-                comparison_written_alone(&self.trait_env, link, &tt)
-            {
+            if let Some((CompilerItem::Eq, _)) = solver.comparison_written_alone(&tt, link) {
                 return Some(link);
             }
             if written_impl_reaches(&self.trait_env, ord, link, &tt) {
@@ -3175,6 +3174,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // method; any other derived impl names no block.
         let paired = eq_from_written_cmp(
             &self.tysys.trait_env,
+            &self.tysys.solver(),
             trait_,
             lookup_type_id,
             &self.tysys.type_table.borrow(),
@@ -3233,7 +3233,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let tt = self.tysys.type_table.borrow();
                 Some((
                     link,
-                    eq_from_written_cmp(&self.tysys.trait_env, trait_decl, link, &tt)?,
+                    eq_from_written_cmp(
+                        &self.tysys.trait_env,
+                        &self.tysys.solver(),
+                        trait_decl,
+                        link,
+                        &tt,
+                    )?,
                 ))
             });
         let (

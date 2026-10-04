@@ -40,8 +40,7 @@ use crate::name::{
 use crate::synthesis::common;
 use crate::synthesis::common::{locals_from_params, option_some, relocate_synthetic_locals};
 use crate::synthesis::template::{
-    answering_link, blanket_dispatch_for, comparison_written_alone, ref_blanket_call,
-    trait_call_template,
+    answering_link, blanket_dispatch_for, ref_blanket_call, trait_call_template,
 };
 use crate::{hashmap, tir};
 
@@ -3588,7 +3587,7 @@ fn written_cmps(module: &TirModule, tt: &TypeTable) -> Vec<WrittenCmp> {
             if !of_ord || method.method_name != "cmp" {
                 return None;
             }
-            // A reference reads no row, so `comparison_written_alone` gives it no `eq`.
+            // A reference reads no row of the comparison table, so it gets no `eq`.
             let Receiver::Type(receiver) = method.receiver() else {
                 return None;
             };
@@ -3642,7 +3641,7 @@ fn generate_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>)
     let mut generated = Vec::new();
     for cmp in written_cmps(module, &tt) {
         let gives_eq = matches!(
-            comparison_written_alone(ctx.trait_env, cmp.self_type, &tt),
+            ctx.trait_env.solver().comparison_written_alone(&tt, cmp.self_type),
             Some((CompilerItem::Ord, block)) if block == cmp.block
         );
         if !gives_eq || !ctx.is_requested_anywhere(&cmp.receiver, &eq_key) {

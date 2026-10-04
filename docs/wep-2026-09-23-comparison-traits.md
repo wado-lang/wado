@@ -387,6 +387,9 @@ overlap, which is what `benchmark/ab.ts` decides.
 - [x] Reject a constant pattern whose type is or holds a float, with fixtures
   for `f64::INFINITY`, a `global` float, and a nested struct constant holding
   one.
+- [x] State the table in [One source for `==` and `cmp`](#one-source-for--and-cmp)
+  once, in the trait solver. A bound, an operator, a method call, monomorphization
+  and synthesis all read an instance's row from it.
 
 ## Known gaps
 
@@ -411,10 +414,3 @@ writes a `global mut`, since such a function declares no effect yet
 ([Global Variables](./spec-expressions.md#global-variables)). With `next_id()`
 incrementing a counter and returning it, `next_id() != next_id()` is true, and
 the lint says it is always false.
-
-The compiler states the table in [One source for `==` and `cmp`](#one-source-for--and-cmp)
-twice. The trait solver states it as impls, each paired with the written impl it
-follows from, and lets precedence between the impls reaching an instance pick
-the row, and a bound reads the row from there. The elaborator reads the written
-impls reaching the instance in `comparison_written_alone`, which an operator, a
-method call and synthesis ask. Nothing makes the two agree but the fixtures.

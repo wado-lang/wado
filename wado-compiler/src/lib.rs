@@ -75,6 +75,7 @@ use crate::component_model::{
     try_for_each_signed_type, wado_primitive_name_to_cm,
 };
 use crate::defs::DefId;
+use crate::elaborator::trait_env::TraitEnv;
 use crate::name::entry_dir_of;
 use crate::wit_consume::module_host_leaf_imports;
 use crate::world_registry::WorldInfo;
@@ -1654,7 +1655,10 @@ fn compile_after_load<H: CompilerHost>(
         entry_module_source,
         tir_modules,
         symbols,
-        tysys.trait_env,
+        TraitEnv::with_solver(
+            tysys.trait_env,
+            tysys.solver.expect("elaboration builds the solver"),
+        ),
         implicit_modules,
         module_name,
         tysys.cm_interface_registry,
@@ -2193,7 +2197,10 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 entry_module_source_out.clone(),
                 resolved_modules,
                 symbols.clone(),
-                tysys.trait_env,
+                TraitEnv::with_solver(
+                    tysys.trait_env,
+                    tysys.solver.expect("elaboration builds the solver"),
+                ),
                         implicit_modules.clone(),
                 module_name,
                 tysys.cm_interface_registry,

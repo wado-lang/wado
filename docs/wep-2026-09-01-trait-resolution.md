@@ -556,7 +556,8 @@ Nothing flips at once. The fixture corpus is the drift detector, as
 `verify_arg_synthesis` already uses it for argument synthesis (WEP 2026-07-31):
 a question the solver answers is asserted against the compiler's own path in
 debug builds over every fixture before the compiler's path is retired. `holds`
-still runs that way beside `type_implements_trait`.
+ran that way beside `type_implements_trait` until it answered every question the
+lowering states.
 
 Selection has one candidate set. The order names the impls that answer, each an
 impl block, or for a derived body the `Reflect*` blanket it comes from. Lookup
@@ -650,9 +651,11 @@ newtype declared in a body is stated when annotate hoists it
 A question the lowering cannot state still falls to `type_implements_trait`'s
 own rules: a bound in scope the lowering cannot spell, or a type it has no way
 to say (an inference variable, a closure environment, a mapped pack). Those
-rules carry a second copy of what the solver states for reflection, `Default`
-and the comparison table, and no member walk, so a structural trait asked there
-holds only through an impl. No fixture asks one about a structural trait.
+rules carry a second copy of what the solver states for reflection and
+`Default`. They read an instance's row of the comparison table from the solver,
+as every other phase does, and apply it themselves. They walk no members, so a
+structural trait asked there holds only through an impl. No fixture asks one
+about a structural trait.
 
 ### Specificity is refused, and now has a named cost
 

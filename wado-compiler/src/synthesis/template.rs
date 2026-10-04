@@ -20,6 +20,7 @@ use std::sync::Arc;
 use crate::call_args::CallArgs;
 use crate::compiler_item::{CompilerItem, FormatterField};
 use crate::defs::{DefId, DefKind};
+use crate::elaborator::SolverBridge;
 use crate::elaborator::trait_env::{
     BlanketBound, BlanketImpl, BlanketParamSource, ImplReceiver, TraitEnv,
 };
@@ -1099,7 +1100,7 @@ pub(crate) fn answering_link(
     {
         return Some((receiver, template));
     }
-    if let Some(paired) = eq_from_written_cmp(trait_env, trait_, receiver, tt) {
+    if let Some(paired) = eq_from_written_cmp(trait_env, trait_env.solver(), trait_, receiver, tt) {
         return Some((receiver, paired.template()));
     }
     let resolved = tt.get(receiver);
@@ -1215,36 +1216,6 @@ pub(crate) fn written_impl_reaches(
         .any(|block| tt.impl_reaches_instance(block, receiver))
 }
 
-/// Which of `Eq` and `Ord` is written at `Self` for `instance` without the
-/// other, with the block answering it. That one decides how the other derives
-/// there (spec-traits.md §Derivation Policy): a written `cmp` gives `==`, and a
-/// written `eq` gives no `Ord`. Each instance of a generic head reads its own
-/// row, by the impls that reach it. A reference reads none: `==` on one
-/// compares what it points to (`Eq for &T`), as `pair_comparisons` states.
-pub(crate) fn comparison_written_alone(
-    trait_env: &TraitEnv,
-    instance: TypeId,
-    tt: &TypeTable,
-) -> Option<(CompilerItem, DefId)> {
-    let receiver = tt.impl_receiver_key(instance);
-    if receiver.ref_kind().is_some() {
-        return None;
-    }
-    let written = |item| {
-        trait_env.answering_block(
-            &receiver,
-            tt.compiler_items().trait_def(item)?,
-            &[],
-            |block| tt.impl_reaches_instance(block, instance),
-        )
-    };
-    match (written(CompilerItem::Eq), written(CompilerItem::Ord)) {
-        (Some(block), None) => Some((CompilerItem::Eq, block)),
-        (None, Some(block)) => Some((CompilerItem::Ord, block)),
-        _ => None,
-    }
-}
-
 /// The trait's `eq` emitted into the block of a `cmp` written alone.
 #[derive(Clone, Copy)]
 pub(crate) struct PairedEq {
@@ -1263,6 +1234,7 @@ impl PairedEq {
 /// answers `==` with it rather than with its base's.
 pub(crate) fn eq_from_written_cmp(
     trait_env: &TraitEnv,
+    solver: &SolverBridge,
     trait_: DefId,
     instance: TypeId,
     tt: &TypeTable,
@@ -1270,7 +1242,7 @@ pub(crate) fn eq_from_written_cmp(
     if tt.compiler_items().trait_def(CompilerItem::Eq) != Some(trait_) {
         return None;
     }
-    let (CompilerItem::Ord, block) = comparison_written_alone(trait_env, instance, tt)? else {
+    let (CompilerItem::Ord, block) = solver.comparison_written_alone(tt, instance)? else {
         return None;
     };
     let eq = trait_env

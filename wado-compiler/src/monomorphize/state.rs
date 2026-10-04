@@ -421,7 +421,7 @@ impl Monomorphizer {
     ) -> bool {
         let trait_env = &self.functions.trait_env;
         written_impl_reaches(trait_env, trait_, tid, type_table)
-            || eq_from_written_cmp(trait_env, trait_, tid, type_table).is_some()
+            || eq_from_written_cmp(trait_env, trait_env.solver(), trait_, tid, type_table).is_some()
     }
 
     /// The first newtype link at or below `type_id` writing its own impl of

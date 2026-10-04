@@ -49,6 +49,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use tysys::TypeSystem;
 
+pub(crate) use solver_bridge::SolverBridge;
+
 use crate::hashmap::IndexMap;
 
 use crate::ast::{
