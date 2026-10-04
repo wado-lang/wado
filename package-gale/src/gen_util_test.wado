@@ -1,0 +1,47 @@
+use { negate_cond, and_operand } from "./gen_util.wado";
+
+test "negating an operand prefixes it, and negating a negation strips it" {
+    assert negate_cond("p.recovering") == "!p.recovering";
+    assert negate_cond("_kind_set_3(p.peek_kind())") == "!_kind_set_3(p.peek_kind())";
+    assert negate_cond("(chars[pos] matches { 'a' | 'b' })") == "!(chars[pos] matches { 'a' | 'b' })";
+    assert negate_cond("!pred_5(p)") == "pred_5(p)";
+    assert negate_cond("List::<i32>::new().is_empty()") == "!List::<i32>::new().is_empty()";
+}
+
+test "negating an equality flips it" {
+    assert negate_cond("k == TK_POUND") == "k != TK_POUND";
+    assert negate_cond("tokens[pos] != TK_A") == "tokens[pos] == TK_A";
+    assert negate_cond("f(a, b) == g(c > d)") == "f(a, b) != g(c > d)";
+}
+
+test "negating anything else parenthesizes it" {
+    assert negate_cond("a || b") == "!(a || b)";
+    assert negate_cond("a == b && c") == "!(a == b && c)";
+    assert negate_cond("x matches { A | B }") == "!(x matches { A | B })";
+    assert negate_cond("s == \" == \"") == "s != \" == \"";
+    assert negate_cond("c == ' '") == "c != ' '";
+}
+
+test "a predicate's own unspaced text is never taken for one operand" {
+    assert negate_cond("vals.a&&vals.b") == "!(vals.a&&vals.b)";
+    assert negate_cond("!vals.done&&vals.ok") == "!(!vals.done&&vals.ok)";
+    assert negate_cond("vals.n<3") == "!(vals.n<3)";
+    assert and_operand("vals.a||vals.b") == "(vals.a||vals.b)";
+}
+
+test "text the scan does not follow is parenthesized, through either helper" {
+    assert negate_cond("p.x() /* it's */") == "!(p.x() /* it's */)";
+    assert negate_cond("f('a)") == "!(f('a))";
+    assert and_operand("(p.x() /* it's */)") == "((p.x() /* it's */))";
+    assert and_operand("f(`${a} || b`)") == "(f(`${a} || b`))";
+    assert and_operand("k == -1") == "(k == -1)";
+    assert and_operand("a && -b") == "(a && -b)";
+    assert and_operand("&a") == "(&a)";
+}
+
+test "an && operand is bare only as a chain of operands and equalities" {
+    assert and_operand("a || b") == "(a || b)";
+    assert and_operand("a && b") == "a && b";
+    assert and_operand("k == TK_A && !f(a || b)") == "k == TK_A && !f(a || b)";
+    assert and_operand("x matches { A | B }") == "(x matches { A | B })";
+}

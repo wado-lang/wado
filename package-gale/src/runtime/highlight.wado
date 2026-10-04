@@ -79,7 +79,7 @@ impl HighlightVisitor {
 }
 
 impl HighlightVisitor {
-    pub fn hl_enter(&mut self, rule_id: i32) {
+    internal fn hl_enter(&mut self, rule_id: i32) {
         self.rule_stack.push(rule_id);
         if !self.mapping.rule_captures.is_empty() {
             let active = first_written(self.own_rule_capture(rule_id), self.enclosing_rule_capture());
@@ -87,14 +87,14 @@ impl HighlightVisitor {
         }
     }
 
-    pub fn hl_exit(&mut self) {
+    internal fn hl_exit(&mut self) {
         self.rule_stack.pop();
         if !self.mapping.rule_captures.is_empty() {
             self.rule_capture_stack.pop();
         }
     }
 
-    pub fn hl_visit_token(&mut self, toks: &TokenStream, idx: i32) {
+    internal fn hl_visit_token(&mut self, toks: &TokenStream, idx: i32) {
         while self.visited.len() <= idx {
             self.visited.push(false);
         }

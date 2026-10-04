@@ -1,45 +1,47 @@
-pub global ATN_BASIC: i32 = 1;
-pub global ATN_RULE_START: i32 = 2;
-pub global ATN_RULE_STOP: i32 = 3;
-pub global ATN_BLOCK_START: i32 = 4;
-pub global ATN_BLOCK_END: i32 = 5;
-pub global ATN_STAR_LOOP_ENTRY: i32 = 6;
-pub global ATN_STAR_LOOP_BACK: i32 = 7;
-pub global ATN_PLUS_LOOP_BACK: i32 = 8;
-pub global ATN_LOOP_END: i32 = 9;
+#![allow(dead_code)]
 
-pub global ATN_TR_EPSILON: i32 = 0;
-pub global ATN_TR_ATOM: i32 = 1;
-pub global ATN_TR_NOT_ATOM: i32 = 2;
-pub global ATN_TR_WILDCARD: i32 = 3;
-pub global ATN_TR_RULE: i32 = 4;
-pub global ATN_TR_PRECEDENCE: i32 = 5;
+internal global ATN_BASIC: i32 = 1;
+internal global ATN_RULE_START: i32 = 2;
+internal global ATN_RULE_STOP: i32 = 3;
+internal global ATN_BLOCK_START: i32 = 4;
+internal global ATN_BLOCK_END: i32 = 5;
+internal global ATN_STAR_LOOP_ENTRY: i32 = 6;
+internal global ATN_STAR_LOOP_BACK: i32 = 7;
+internal global ATN_PLUS_LOOP_BACK: i32 = 8;
+internal global ATN_LOOP_END: i32 = 9;
 
-pub struct AtnSim {
-    pub state_kind: List<i32>,
-    pub state_tr_start: List<i32>,
-    pub state_tr_count: List<i32>,
-    pub tr_kind: List<i32>,
-    pub tr_target: List<i32>,
-    pub tr_label: List<i32>,
-    pub tr_follow: List<i32>,
-    pub tr_prec: List<i32>,
-    pub decision_state: List<i32>,
-    pub rule_start: List<i32>,
-    pub rule_nullable: List<bool> = [],
-    pub rule_first: List<List<i32>> = [],
-    pub rule_first_neg: List<List<i32>> = [],
-    pub rule_first_open: List<bool> = [],
-    pub state_cont_nullable: List<bool> = [],
-    pub state_cont_first_start: List<i32> = [],
-    pub state_cont_first_count: List<i32> = [],
-    pub state_cont_neg_start: List<i32> = [],
-    pub state_cont_neg_count: List<i32> = [],
-    pub cont_first_label: List<i32> = [],
-    pub cont_neg_label: List<i32> = [],
-    pub state_cont_first_open: List<bool> = [],
-    pub state_collapse_to: List<i32> = [],
-    pub state_call_prec: List<i32>,
+internal global ATN_TR_EPSILON: i32 = 0;
+internal global ATN_TR_ATOM: i32 = 1;
+internal global ATN_TR_NOT_ATOM: i32 = 2;
+internal global ATN_TR_WILDCARD: i32 = 3;
+internal global ATN_TR_RULE: i32 = 4;
+internal global ATN_TR_PRECEDENCE: i32 = 5;
+
+internal struct AtnSim {
+    internal state_kind: List<i32>,
+    internal state_tr_start: List<i32>,
+    internal state_tr_count: List<i32>,
+    internal tr_kind: List<i32>,
+    internal tr_target: List<i32>,
+    internal tr_label: List<i32>,
+    internal tr_follow: List<i32>,
+    internal tr_prec: List<i32>,
+    internal decision_state: List<i32>,
+    internal rule_start: List<i32>,
+    internal rule_nullable: List<bool> = [],
+    internal rule_first: List<List<i32>> = [],
+    internal rule_first_neg: List<List<i32>> = [],
+    internal rule_first_open: List<bool> = [],
+    internal state_cont_nullable: List<bool> = [],
+    internal state_cont_first_start: List<i32> = [],
+    internal state_cont_first_count: List<i32> = [],
+    internal state_cont_neg_start: List<i32> = [],
+    internal state_cont_neg_count: List<i32> = [],
+    internal cont_first_label: List<i32> = [],
+    internal cont_neg_label: List<i32> = [],
+    internal state_cont_first_open: List<bool> = [],
+    internal state_collapse_to: List<i32> = [],
+    internal state_call_prec: List<i32>,
 }
 
 fn atn_read_u8(bytes: &ByteList, pos: i32) -> i32 {
@@ -59,7 +61,7 @@ fn atn_read_u24(bytes: &ByteList, pos: i32) -> i32 {
     return b0 | b1 << 8 | b2 << 16;
 }
 
-pub fn atn_decode(bytes: &ByteList) -> AtnSim {
+internal fn atn_decode(bytes: &ByteList) -> AtnSim {
     let mut p = 0;
     let nrules = atn_read_u16(bytes, p);
     p += 2;
