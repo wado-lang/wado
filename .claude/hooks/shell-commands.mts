@@ -72,11 +72,10 @@ function balanced(src: string, start: number, open: string, close: string): [str
     } else if (script && c === "#" && (i === start || " \t\n".includes(src[i - 1]))) {
       const newline = src.indexOf("\n", i);
       i = newline < 0 ? src.length : newline;
-    } else if (script && src.startsWith("<<", i) && !src.startsWith("<<<", i)) {
-      const stripsTabs = src[i + 2] === "-";
-      const word = readWord(src, skipBlanks(src, i + (stripsTabs ? 3 : 2)));
-      heredocs.push({ delimiter: word.value, stripsTabs, expands: false, script: false });
-      i = word.end;
+    } else if (script && opensHeredoc(src, i)) {
+      const [heredoc, end] = heredocHeader(src, i, false);
+      heredocs.push(heredoc);
+      i = end;
     } else {
       if (c === open) depth++;
       else if (c === close && --depth === 0) return [src.slice(start, i), i + 1];
@@ -162,6 +161,19 @@ function readWord(src: string, start: number): Word {
     }
   }
   return { value, subs, end: i };
+}
+
+const opensHeredoc = (src: string, at: number) => src.startsWith("<<", at) && !src.startsWith("<<<", at);
+
+/** The heredoc that `<<` / `<<-` at `at` opens, and the index past its delimiter
+ * word. `script`: the command it feeds is a shell, which runs the body. */
+function heredocHeader(src: string, at: number, script: boolean): [Heredoc, number] {
+  const stripsTabs = src[at + 2] === "-";
+  const start = skipBlanks(src, at + (stripsTabs ? 3 : 2));
+  const word = readWord(src, start);
+  // A quoted delimiter turns the body into data; an unquoted one expands.
+  const expands = !/['"\\]/.test(src.slice(start, word.end));
+  return [{ delimiter: word.value, stripsTabs, expands, script }, word.end];
 }
 
 /** The heredoc body, and the index past its delimiter line. */
@@ -294,20 +306,10 @@ export function commands(src: string, base: number | null = 0): Command[] {
       nested.push({ text, offset: at + 2 });
       return end;
     }
-    if (src.startsWith("<<", at) && !src.startsWith("<<<", at)) {
-      const stripsTabs = src[at + 2] === "-";
-      const start = skipBlanks(src, at + (stripsTabs ? 3 : 2));
-      const word = readWord(src, start);
-      // A quoted delimiter turns the body into data; an unquoted one expands.
-      // Fed to a shell, the body is the script it runs.
-      const expands = !/['"\\]/.test(src.slice(start, word.end));
-      heredocs.push({
-        delimiter: word.value,
-        stripsTabs,
-        expands,
-        script: SHELLS.has(previous),
-      });
-      return word.end;
+    if (opensHeredoc(src, at)) {
+      const [heredoc, end] = heredocHeader(src, at, SHELLS.has(previous));
+      heredocs.push(heredoc);
+      return end;
     }
     let i = at + (src.startsWith("<<<", at) ? 3 : 1);
     while (src[i] === ">" || src[i] === "&") i++;
