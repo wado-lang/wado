@@ -86,7 +86,11 @@ element** in a loop:
 - **`$value_copy$T…`** — a value-semantics deep copy of a value-typed binding/arg
   unless the source is _fresh_ (a call / literal / variant result, or a fresh
   value's payload). `x?` desugars to `match f() {…}`, so freshness must see
-  through the `match`; a missed copy shows up here and is removable.
+  through the `match`; a missed copy shows up here and is removable. Count them
+  with `wado compile -O2 --log-level info … 2>&1 | grep -c 'remark: a copy of'`.
+  A cut in the count is a result even when the benchmark is flat, and a less
+  noisy one. Count rather than assume: moving a copy from a callee into its
+  call sites multiplies it.
 
 Also: a `Trait::method(…)` call left in a hot loop (the inliner declined it), and
 `array_set_u8` / `array_get_value` (bounds-checked; one per element is the store floor
@@ -257,6 +261,21 @@ control for it — even on the machine that produced it; a HEAD build has measur
 615 MB/s against its own recorded 656 in the same afternoon. Isolate the phase —
 A/B a float-format change on `fts`, not on a serialize benchmark that dilutes it.
 
+The JSON inputs pull opposite ways. `citm_catalog.json` is pretty-printed and
+mostly spaces; `canada.json` is minified and all floats. A `core:json` scan or
+number change tuned on one taxes the other, so measure json-catalog and
+json-canada both, and json-twitter for a string-heavy third.
+
+A CI "Performance Alert" is a ratio against the previous commit on a runner that
+swings widely, so it is not a regression by itself. When it flags benchmarks the
+diff cannot reach, all at once, it is the runner: dismiss it without measuring.
+Only a narrow set the change plausibly touches is worth an A/B, at the `-O`
+level the alert names.
+
+While the user is still iterating, the reading they want is 4–5 alternating
+pairs on the target row plus the wasm hash below. The whole-suite A/B is for the
+end of the branch.
+
 **A dev-build A/B is only valid where the dev build is.** The inflation §1
 describes flips A/B verdicts, not only profile weights. Dev runs the wasmtime
 runtime, GC and allocator at dev speed, so a row bound by allocation reads a
@@ -268,6 +287,12 @@ moved is a deserialize or a CST build, which is what allocates. Iterate on
 dev, then settle any row whose work is building an object graph on release.
 
 ### A/B-ing a compiler change
+
+Run every benchmark at `-O0` through `-O3` before trusting an optimizer change.
+The test suites cover constructs, not the shapes a body as large as `gale_gen`'s
+brings together: both passed a `drop_value` change that trapped there, and only
+at `-O1`, since `-O2` and `-O3` folded the shape away. A trap reads
+`ERROR task failed` in the log, not a slow row.
 
 A change to the compiler needs two compilers. `benchmark-baseline` builds
 `origin/main`'s once and caches it under that commit; `WADO_BIN` then runs it
@@ -339,7 +364,13 @@ done
 Give the four `wasm-size` programs the same pass at `-Os`: no benchmark covers
 `sqlite_highlight`, the largest generated program in the tree.
 
-Then time only the rows that differ, back to back, and read the rest as unmoved.
+Then diff the rows that differ, function by function, before timing anything:
+`wado dump --wir -O2` under both compilers, or the WAT with its `(;N;)` and type
+indices normalized. The diff names what moved, such as a fold lost
+(`new_used = 0 + 3` becoming `$local.used + 3`) or a call left alive. A suite
+run cannot tell either from noise. A pure correctness fix is held to
+byte-identical output. Time only the rows whose hot path the diff touched, back
+to back, and read the rest as unmoved.
 
 `ab.ts` decides each row by whether the arms' `[min, max]` overlap, not by the
 delta: on a 5 ms benchmark a 6% gap between bests sits inside one arm's own
@@ -428,7 +459,21 @@ syntax-highlight 8.3% (a fused write unparses its offset as an expression) and
 shrank the `-Os` binary 1.5%, while the thing that justified it was a +8%
 benchmark and a diff showing one less capacity check per key. Size is its own
 budget (`mise run report-wasm-size`); as evidence about speed it is only the
-tiebreaker at rank 3.
+tiebreaker at rank 3. A design that trades size for speed takes the speed: state
+the size cost and pick the faster one without asking.
+
+A fold of an idiom wasmtime's backend already matches buys size, not speed.
+Folding `x << n | x >>u W - n` into `rotl` cut three instructions to one and
+left SHA-256 unchanged. Judge such a fold by the diff and the module size; a
+host that does not fold for itself, such as jco on a JS engine, is where a speed
+difference could show.
+
+A runtime setting one benchmark wants is not a global default. Make it a CLI
+option with the conservative default, and let the benchmarks that earn more opt
+in through `gc_heap_flags` in `benchmark/wado.sh`. A 512 MiB
+`--gc-heap-initial` tuned on microgpt made json-catalog, zlib and sqlite-parse
+slower. Sweep the candidate both ways from the default: the value below is as
+unvalidated as the value above.
 
 ## 6. Lessons
 

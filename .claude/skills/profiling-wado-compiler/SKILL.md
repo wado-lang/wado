@@ -200,6 +200,16 @@ compile itself. `--stacks N` prints the largest stacks whole.
   path, so rebuilding `target/profiling/wado` (or `target/debug/wado`)
   makes earlier profiles re-symbolicate to garbage. Analyze before
   rebuilding, or keep the matching binary.
+- **Choose a target from a fresh profile, not from a WEP's percentages.**
+  Those predate whatever has landed since. One fresh profile put a pass's
+  per-node `Vec::new()` on top of both self CPU and allocation, and removing
+  that class bought more than the refactor the roadmap pointed at. Fix the
+  top item, then profile again: where the top moves says whether the class
+  is worth sweeping.
+- **Estimate from where the time goes, not from what a change removes.**
+  `-O3` is dominated by the inliner and the NIR fixed point, so dropping a
+  fraction of the lowered functions buys much less than that fraction: the
+  ones dropped are the small, cheap stdlib methods.
 - **Validate with the profile, not req/s or wall time.** The CPU
   breakdown is reproducible run to run; throughput on a busy dev
   machine swings by tens of percent. Use the profile to confirm a
