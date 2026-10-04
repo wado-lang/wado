@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791069624609,
+  "lastUpdate": 1791080340224,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -63261,6 +63261,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 279825,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "124d4de2e3ad00bd0c510125b56d8627e2962b2e",
+          "message": "Merge pull request #2259 from wado-lang/claude/gale-highlight-html-vcmlpu\n\nfeat(gale-highlight-html): highlight HTML with embedded CSS, JavaScript and JSON",
+          "timestamp": "2026-10-04T11:01:35+09:00",
+          "tree_id": "bd91e56322911ced5ceaef3f787b1ce56b9b7641",
+          "url": "https://github.com/wado-lang/wado/commit/124d4de2e3ad00bd0c510125b56d8627e2962b2e"
+        },
+        "date": 1791080339612,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20617,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 339304,
             "unit": "bytes"
           }
         ]
