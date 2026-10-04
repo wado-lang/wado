@@ -2115,6 +2115,21 @@ WS : ' ' -> skip ;
     assert !src.contains("best_act"), "predicates need no best_act";
 }
 
+test "gated predicates with one body share one predicate fn" {
+    let grammar = "grammar T;
+options { language = Wado; }
+s : x EOF | y EOF ;
+x : {false}? A | {true}? A B ;
+y : { false }? B | B A ;
+A : 'a' ;
+B : 'b' ;
+WS : ' ' -> skip ;
+";
+    let output = gen_source(grammar);
+    assert count_occurrences(&output, "fn pred_") == 2, output;
+    assert parses(grammar, "s", ["a b", "b a"]) == "a b => (s (x a b))\nb a => (s (y b a))\n";
+}
+
 test "an action or predicate the emitter runs is not also reported as unhandled" {
     // A driver shows each of these running. The report is only a warning, so a
     // body that runs and is reported anyway fails no driver.

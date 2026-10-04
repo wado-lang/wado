@@ -5,6 +5,7 @@ use {
     LiteralElement,
     RepeatElement,
     ActionLanguage,
+    ActionKind,
     compute_scan_cyclic,
     edges_reach_self,
     peel_labels,
@@ -293,10 +294,11 @@ pub struct GenContext {
     /// empty where codegen cannot answer — a body reading it there is reported.
     expected_names: String,
     /// Context-free gated predicates extracted to standalone `pred_<id>(p)`
-    /// fns: `[action_id, body]`. The dispatch calls `pred_<id>(p)` instead of
+    /// fns: `[predicate_fn_id, body]`. The dispatch calls `pred_<id>(p)` instead of
     /// inlining the condition, so the same fn is callable from every decision
     /// path (token-led / interchangeable dispatch and the ATN's disabled alternatives).
     predicate_fns: List<[i32, String]>,
+    predicate_fn_owners: GaleMap<i32, i32>,
     rule_follow_kinds: GaleMap<String, List<String>>,
     rule_follow_exact: bool,
     rules_before_eof_token: List<String>,
@@ -335,6 +337,48 @@ pub struct GenContext {
     /// functions; `scan_queue` holds the called rules not yet emitted.
     scan_called: List<bool>,
     scan_queue: List<i32>,
+}
+
+/// By action id, the id of the grammar's first predicate with the same text:
+/// the one `pred_<id>` fn every copy of that body calls. Derived from the
+/// grammar rather than from registration, so a condition rendered before its
+/// predicate is registered names the same fn.
+fn predicate_fn_owners(parser_rules: &List<ParserRule>) -> GaleMap<i32, i32> {
+    let mut by_text = GaleMap::<String, i32>::new();
+    let mut owners = GaleMap::<i32, i32>::new();
+    for let rule of parser_rules {
+        for let alt of &rule.alternatives {
+            add_alt_predicate_owners(alt, &mut by_text, &mut owners);
+        }
+    }
+    return owners;
+}
+
+fn add_alt_predicate_owners(alt: &Alternative, by_text: &mut GaleMap<String, i32>, owners: &mut GaleMap<i32, i32>) {
+    for let a of &alt.actions {
+        if a.kind matches { Predicate } {
+            let id = a.source.action_id;
+            owners[id] = by_text.get_or_insert(a.source.text.trim().to_string(), id);
+        }
+    }
+    for let e of &alt.elements {
+        add_element_predicate_owners(e, by_text, owners);
+    }
+}
+
+fn add_element_predicate_owners(elem: &Element, by_text: &mut GaleMap<String, i32>, owners: &mut GaleMap<i32, i32>) {
+    match *elem {
+        Group(g) => {
+            for let alt of &g.alternatives {
+                add_alt_predicate_owners(alt, by_text, owners);
+            }
+        },
+        Repeat(rep) => add_element_predicate_owners(&rep.element, by_text, owners),
+        Label(lab) => add_element_predicate_owners(&lab.element, by_text, owners),
+        Not(n) => add_element_predicate_owners(&n.element, by_text, owners),
+        _ => {
+        },
+    }
 }
 
 fn one_token_rule_kinds(rule: &ParserRule) -> Option<List<String>> {
@@ -426,6 +470,7 @@ impl GenContext {
             vocab_names: [],
             expected_names: "",
             predicate_fns: [],
+            predicate_fn_owners: predicate_fn_owners(parser_rules),
             rule_follow_kinds: GaleMap::new(),
             rule_follow_exact: false,
             rules_before_eof_token: [],
@@ -1311,16 +1356,22 @@ impl GenContext {
         }
     }
 
+    /// The id naming the `pred_<id>` fn that predicate `id` calls: the first
+    /// predicate in the grammar with the same text.
+    pub fn predicate_fn_id(&self, id: i32) -> i32 {
+        return self.predicate_fn_owners.get(id).unwrap_or(id);
+    }
+
     /// Register a context-free gated predicate's body for a standalone
-    /// `pred_<id>(p)` fn. Deduped by `id` (a predicate is marked once, but stay
-    /// idempotent).
-    pub fn register_predicate_fn<S: AsStrSlice>(&mut self, id: i32, body: S) {
+    /// `pred_<id>(p)` fn, one per distinct body.
+    pub fn register_predicate_fn<S: AsStrSlice>(&mut self, action_id: i32, body: S) {
+        let id = self.predicate_fn_id(action_id);
         for let e of &self.predicate_fns {
             if e.0 == id {
                 return;
             }
         }
-        self.predicate_fns.push([id, body.to_string()]);
+        self.predicate_fns.push([id, body.trim().to_string()]);
     }
 
     pub fn predicate_fns(&self) -> &List<[i32, String]> {

@@ -682,7 +682,7 @@ fn gate_condition_for(a: &AltAction, ctx: &GenContext, handle: &String = &PARSER
         // the dispatch calls it rather than inlining the condition. Only for the
         // parser: the fn takes one, and a scan has none. A scan asks for its own
         // handle and falls through to the translator, which renders against it.
-        return Option::Some(`${pred_fn_name(a.source.action_id)}(p)`);
+        return Option::Some(`${pred_fn_name(ctx.predicate_fn_id(a.source.action_id))}(p)`);
     }
     let rule = ctx.current_rule();
     let vals_in_scope = rule_emits_vals(ctx, rule);
