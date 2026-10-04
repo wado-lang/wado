@@ -22,10 +22,7 @@ that never asks the time gains no WASI import.
 Where this module departs from the specification, it does so deliberately:
 
 - Temporal's BigInt epoch nanoseconds are an `i64` second count and a `u32`
-  sub-second part, and `epoch_nanoseconds` answers an `i128`. A duration
-  component is an exact `i64` rather than a float64; a result that does not
-  fit one (a nanosecond count of more than ~292 years, or a microsecond
-  count of more than ~292,000) traps.
+  sub-second part, and `epoch_nanoseconds` answers an `i128`.
 - A RangeError traps, except in a parser, which returns a
   `DeserializeError`. A struct literal bypasses every constructor check, so
   every operation checks its receiver and arguments first.
@@ -467,33 +464,38 @@ The local date and time together, dropping the zone.
 A signed span of time, as a Temporal-shaped record of ten components rather
 than one scalar. Corresponds to `Temporal.Duration`.
 
-Temporal's invariants hold: every non-zero component has one sign, a year,
-month, or week count is below 2^32, and the days and time components
-together are below 2^53 seconds. So that negation stays exact, no component
-is `i64::MIN`. A struct literal can break them, so every
-operation checks its receiver and traps on one that does. The date
-components (`years`, `months`, `weeks`) have no fixed length, so a duration
-carrying one applies only to a receiver that knows a calendar position.
+Each component is an `f64` holding an integer, as Temporal's float64 does,
+so a result Temporal rounds to a float is rounded the same way here. A
+component may exceed 2^53, the integers an `f64` holds exactly: a
+nanosecond count balanced from a span longer than about 104 days does.
 
-#### `years: i64`
+Temporal's invariants hold: every component is a finite integer, every
+non-zero one has one sign, a year, month, or week count is below 2^32, and
+the days and time components together are below 2^53 seconds. A struct
+literal can break them, so every operation checks its receiver and traps on
+one that does. The date components (`years`, `months`, `weeks`) have no
+fixed length, so a duration carrying one applies only to a receiver that
+knows a calendar position.
 
-#### `months: i64`
+#### `years: f64`
 
-#### `weeks: i64`
+#### `months: f64`
 
-#### `days: i64`
+#### `weeks: f64`
 
-#### `hours: i64`
+#### `days: f64`
 
-#### `minutes: i64`
+#### `hours: f64`
 
-#### `seconds: i64`
+#### `minutes: f64`
 
-#### `milliseconds: i64`
+#### `seconds: f64`
 
-#### `microseconds: i64`
+#### `milliseconds: f64`
 
-#### `nanoseconds: i64`
+#### `microseconds: f64`
+
+#### `nanoseconds: f64`
 
 #### `pub fn parse<S: AsStrSlice>(text: S) -> Result<Duration, DeserializeError>`
 

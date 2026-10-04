@@ -709,11 +709,28 @@ test "an out-of-range offset literal traps on use, like an IANA name" {
     let _ = `${ZonedDateTime { instant: Instant::EPOCH, time_zone: "+99:99" }}`;
 }
 
-#[expect_trap]
-test "a nanosecond span beyond the i64 range traps rather than wrapping" {
-    // ~400 years in nanoseconds overflows the i64 a component is stored in.
+test "a nanosecond count past 2^63 is the float Temporal rounds it to" {
+    // ~400 years in nanoseconds, past what an i64 holds.
     let far = Instant::from_epoch_seconds(400 * 365 * 86400);
-    let _ = Instant::EPOCH.until(&far, Unit::Nanosecond);
+    assert Instant::EPOCH.until(&far, Unit::Nanosecond) == Duration { nanoseconds: 12_614_400_000_000_000_000.0 };
+    // 10^19 + 1 has no float; the nearest is 10^19.
+    let odd = Instant::new(10_000_000_000, 1);
+    let d = Instant::EPOCH.until(&odd, Unit::Nanosecond);
+    assert d.nanoseconds == 10_000_000_000_000_000_000.0;
+    assert `${d}` == "PT10000000000S";
+    assert Duration { microseconds: 10_000_000_000_000_000_000.0 }.total(Unit::Second) == 10_000_000_000_000.0;
+}
+
+test "a nanosecond count between 2^53 and 2^63 rounds as Temporal's does" {
+    // 2^53 + 1 nanoseconds rounds to 2^53, ties to even.
+    let past = Instant::new(9_007_199, 254_740_993);
+    assert Instant::EPOCH.until(&past, Unit::Nanosecond).nanoseconds == 9_007_199_254_740_992.0;
+}
+
+test "a negated zero duration keeps positive zeros" {
+    let d = Duration {}.negated();
+    assert 1.0 / d.hours > 0.0;
+    assert 1.0 / Instant::new(0, 1).until(&Instant::EPOCH, Unit::Microsecond).microseconds > 0.0;
 }
 
 test "Duration renders as an ISO 8601 duration" {
@@ -1630,8 +1647,8 @@ test "ISO week numbering keeps its anchor days across -400..=400" {
 
         // Every ISO year runs a whole number of weeks, so week 1 plus that count
         // lands in the next week-year and not a week sooner.
-        assert jan4.add(&Duration { weeks: (weeks - 1) as i64 }).year_of_week() == y;
-        assert jan4.add(&Duration { weeks: weeks as i64 }).year_of_week() == y + 1;
+        assert jan4.add(&Duration { weeks: (weeks - 1) as f64 }).year_of_week() == y;
+        assert jan4.add(&Duration { weeks: weeks as f64 }).year_of_week() == y + 1;
     }
 }
 
@@ -1793,7 +1810,7 @@ test "Duration::total answers the float nearest the exact quotient" {
     assert Duration { days: 100_000 }.total(Unit::Nanosecond) == 8640000000000000000.0;
     assert Duration { nanoseconds: 1 }.total(Unit::Hour) == 1.0 / 3600000000000.0;
     // 2^54 - 1 rounds up to 2^54, carrying out of the 53-bit mantissa.
-    assert Duration { nanoseconds: 18_014_398_509_481_983 }.total(Unit::Nanosecond) == 18014398509481984.0;
+    assert Duration { seconds: 18_014_398, nanoseconds: 509_481_983 }.total(Unit::Nanosecond) == 18014398509481984.0;
 }
 
 test "PlainTime rounds to every sub-second unit" {
@@ -1880,8 +1897,18 @@ test "ZonedDateTime::new refuses text that is no zone identifier" {
 }
 
 #[expect_trap]
-test "a duration component of i64::MIN, which has no negation, traps" {
-    let _ = Duration { nanoseconds: i64::MIN }.negated();
+test "a duration component that is not an integer traps" {
+    let _ = Duration { hours: 1.5 }.negated();
+}
+
+#[expect_trap]
+test "a duration component that is not finite traps" {
+    let _ = Duration { seconds: f64::INFINITY }.negated();
+}
+
+#[expect_trap]
+test "a NaN duration component traps" {
+    let _ = Duration { days: f64::NAN }.negated();
 }
 
 #[expect_trap]

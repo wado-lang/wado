@@ -98,8 +98,10 @@ pub struct ZonedDateTime {
 
 `core:temporal` is a port of Temporal as ECMA-262 specifies it. Where the
 specification moves on from the TC39 proposal this module was ported from
-(`wado-compiler/ref/tc39-temporal.md`), the module follows it. Three principles
-govern the port:
+(`wado-compiler/ref/tc39-temporal.md`), the module follows it.
+
+The goal is that date and time code gives the same answers in JavaScript and in
+Wado, so a program can do that work on either side. Three principles serve it:
 
 - Within the range an ordinary application uses, the module behaves exactly as
   the specification says.
@@ -109,9 +111,13 @@ govern the port:
 - A behaviour that differs from the specification is a bug, unless this WEP
   names it as a deliberate departure.
 
+A float64 stays an `f64` where Temporal can produce a value an integer type
+would hold differently. That is every `Duration` component, as the next section
+says. Elsewhere every value Temporal can produce is an integer that an integer
+type holds exactly, so the integer type is used.
+
 The departures are these:
 
-- Temporal's BigInt and float64 numbers are `i64`, as the next section says.
 - A RangeError traps. A parser returns a `DeserializeError` instead, since its
   input is data.
 - An options bag is a parameter list with defaults. The options it leaves out
@@ -132,13 +138,18 @@ shape of `wasi:clocks` `instant`, so host conversion is a field-for-field copy.
 truncating. Temporal's range still applies: an instant more than 10^8 days from
 the epoch traps.
 
-A duration component is an exact `i64` where Temporal's is a float64. A time
-duration is a pair of `i64` seconds and nanoseconds rather than an `i128`, since
-`i128` arithmetic is slow. `Duration::total` alone divides in `i128`, so that
-its float is the one nearest the exact quotient. A component that does not fit
-an `i64` traps. Only a nanosecond count of a span longer than about 292 years,
-or a microsecond count of one longer than about 292,000 years, can do that: a
-time duration stays below 2^53 seconds, so a millisecond count always fits.
+A duration component is an `f64` holding an integer, as Temporal's float64 is.
+An `i64` would hold every component exactly, which Temporal does not: a
+nanosecond count balanced from a span longer than about 104 days passes 2^53,
+and Temporal rounds it to the nearest float. An `i64` would also trap where
+Temporal goes on, past about 292 years of nanoseconds.
+
+The arithmetic runs on Temporal's internal records instead, which are exact. A
+time duration is a pair of `i64` seconds and nanoseconds rather than an `i128`,
+since `i128` arithmetic is slow. An `i128` appears only where a value passes
+2^63: reading a microsecond or nanosecond component that large, writing one
+back as its nearest float, and dividing in `Duration::total`, whose float is
+the one nearest the exact quotient.
 
 ### ISO 8601 only
 
@@ -183,8 +194,9 @@ moment, wherever it is read".
 
 Temporal's constructor rejects a duration that `IsValidDuration` refuses: mixed
 signs, a year, month, or week count of 2^32 or more, or days and time totalling
-2^53 seconds or more. A Wado struct literal has no constructor, so such a
-literal is representable, and every operation on it traps.
+2^53 seconds or more. It also rejects a component that is not a finite integer.
+A Wado struct literal has no constructor, so such a literal is representable,
+and every operation on it traps.
 
 `add` and `subtract` rebalance rather than summing component-wise, as Temporal
 does without a `relativeTo`: they sum the exact time, a day counting as 24

@@ -17,10 +17,7 @@
 //! Where this module departs from the specification, it does so deliberately:
 //!
 //! - Temporal's BigInt epoch nanoseconds are an `i64` second count and a `u32`
-//!   sub-second part, and `epoch_nanoseconds` answers an `i128`. A duration
-//!   component is an exact `i64` rather than a float64; a result that does not
-//!   fit one (a nanosecond count of more than ~292 years, or a microsecond
-//!   count of more than ~292,000) traps.
+//!   sub-second part, and `epoch_nanoseconds` answers an `i128`.
 //! - A RangeError traps, except in a parser, which returns a
 //!   `DeserializeError`. A struct literal bypasses every constructor check, so
 //!   every operation checks its receiver and arguments first.
@@ -294,7 +291,7 @@ impl Instant {
                 "core:temporal: Instant differences are measured in hours and below; use ZonedDateTime::until for a calendar unit",
             );
         }
-        return duration_from_internal(&Duration {}, instant_difference(start, end), largest_unit);
+        return duration_from_internal(&DateDuration {}, instant_difference(start, end), largest_unit);
     }
 
     /// The span from `other` to this instant — `until` with the sign flipped.
@@ -687,7 +684,7 @@ impl ZonedDateTime {
         let z = self.checked();
         let d = duration.validated();
         let date = d.date_part();
-        if date.raw_sign() == 0 {
+        if date.sign() == 0 {
             return z.with_instant(add_instant(z.instant, d.time_part()));
         }
         let [days, time_of_day] = z.local();
@@ -712,7 +709,11 @@ impl ZonedDateTime {
         let start = self.checked();
         let end = other.checked();
         if !is_date_unit(largest_unit) {
-            return duration_from_internal(&Duration {}, instant_difference(start.instant, end.instant), largest_unit);
+            return duration_from_internal(
+                &DateDuration {},
+                instant_difference(start.instant, end.instant),
+                largest_unit,
+            );
         }
         if start.time_zone != end.time_zone {
             panic(
@@ -1253,20 +1254,38 @@ fn time_duration(seconds: i64, nanoseconds: i64) -> TimeDuration {
 }
 
 /// Temporal's `TimeDurationFromComponents`, with `days` counted as 24 hours.
-/// The components are those of a duration whose time total is below 2^53
-/// seconds, so no partial sum overflows.
+/// Each component is an integer whose term lies below 2^53 seconds, as
+/// `Duration::is_valid` checks before calling it, so every conversion is exact
+/// and no partial sum overflows.
 fn time_duration_from_components(
-    days: i64,
-    hours: i64,
-    minutes: i64,
-    seconds: i64,
-    milliseconds: i64,
-    microseconds: i64,
-    nanoseconds: i64,
+    days: f64,
+    hours: f64,
+    minutes: f64,
+    seconds: f64,
+    milliseconds: f64,
+    microseconds: f64,
+    nanoseconds: f64,
 ) -> TimeDuration {
-    let whole = days * SECONDS_PER_DAY + hours * 3600 + minutes * 60 + seconds + milliseconds / 1000 + microseconds / 1_000_000 + nanoseconds / NANOSECONDS_PER_SECOND;
-    let sub = milliseconds % 1000 * 1_000_000 + microseconds % 1_000_000 * 1000 + nanoseconds % NANOSECONDS_PER_SECOND;
-    return time_duration(whole, sub);
+    let whole = days as i64 * SECONDS_PER_DAY + hours as i64 * 3600 + minutes as i64 * 60 + seconds as i64;
+    let ms = sub_second_count(milliseconds, 1000);
+    let us = sub_second_count(microseconds, 1_000_000);
+    let ns = sub_second_count(nanoseconds, NANOSECONDS_PER_SECOND);
+    return time_duration(whole + ms.seconds + us.seconds + ns.seconds, ms.nanoseconds + us.nanoseconds + ns.nanoseconds);
+}
+
+/// The integer `count` of a unit `per_second` to the second, as a time
+/// duration. A count past the `i64` range, which a microsecond or nanosecond
+/// one below 2^53 seconds can be, is split in an `i128`.
+fn sub_second_count(count: f64, per_second: i64) -> TimeDuration {
+    let unit_nanoseconds = NANOSECONDS_PER_SECOND / per_second;
+    // 2^63, the first float an `i64` cannot hold.
+    if f64::abs(count) < 9_223_372_036_854_775_808.0 {
+        let exact = count as i64;
+        return time_duration(exact / per_second, exact % per_second * unit_nanoseconds);
+    }
+    let exact = count as i128;
+    let divisor = per_second as i128;
+    return time_duration((exact / divisor) as i64, (exact % divisor) as i64 * unit_nanoseconds);
 }
 
 impl TimeDuration {
@@ -1407,24 +1426,50 @@ fn add_time(time_of_day: i64, time: TimeDuration) -> [i64, i64] {
 /// A signed span of time, as a Temporal-shaped record of ten components rather
 /// than one scalar. Corresponds to `Temporal.Duration`.
 ///
-/// Temporal's invariants hold: every non-zero component has one sign, a year,
-/// month, or week count is below 2^32, and the days and time components
-/// together are below 2^53 seconds. So that negation stays exact, no component
-/// is `i64::MIN`. A struct literal can break them, so every
-/// operation checks its receiver and traps on one that does. The date
-/// components (`years`, `months`, `weeks`) have no fixed length, so a duration
-/// carrying one applies only to a receiver that knows a calendar position.
+/// Each component is an `f64` holding an integer, as Temporal's float64 does,
+/// so a result Temporal rounds to a float is rounded the same way here. A
+/// component may exceed 2^53, the integers an `f64` holds exactly: a
+/// nanosecond count balanced from a span longer than about 104 days does.
+///
+/// Temporal's invariants hold: every component is a finite integer, every
+/// non-zero one has one sign, a year, month, or week count is below 2^32, and
+/// the days and time components together are below 2^53 seconds. A struct
+/// literal can break them, so every operation checks its receiver and traps on
+/// one that does. The date components (`years`, `months`, `weeks`) have no
+/// fixed length, so a duration carrying one applies only to a receiver that
+/// knows a calendar position.
 pub struct Duration {
-    pub years: i64 = 0,
-    pub months: i64 = 0,
-    pub weeks: i64 = 0,
-    pub days: i64 = 0,
-    pub hours: i64 = 0,
-    pub minutes: i64 = 0,
-    pub seconds: i64 = 0,
-    pub milliseconds: i64 = 0,
-    pub microseconds: i64 = 0,
-    pub nanoseconds: i64 = 0,
+    pub years: f64 = 0,
+    pub months: f64 = 0,
+    pub weeks: f64 = 0,
+    pub days: f64 = 0,
+    pub hours: f64 = 0,
+    pub minutes: f64 = 0,
+    pub seconds: f64 = 0,
+    pub milliseconds: f64 = 0,
+    pub microseconds: f64 = 0,
+    pub nanoseconds: f64 = 0,
+}
+
+/// Temporal's Date Duration Record: the date components as exact integers,
+/// which a valid duration keeps below 2^53.
+struct DateDuration {
+    years: i64 = 0,
+    months: i64 = 0,
+    weeks: i64 = 0,
+    days: i64 = 0,
+}
+
+impl DateDuration {
+    /// Temporal's `DateDurationSign`.
+    fn sign(&self) -> i32 {
+        for let component of [self.years, self.months, self.weeks, self.days] {
+            if component != 0 {
+                return if component > 0 { 1 } else { -1 };
+            }
+        }
+        return 0;
+    }
 }
 
 impl Eq for Duration;
@@ -1452,14 +1497,14 @@ impl Duration {
 
     /// The same span in the opposite direction.
     pub fn negated(&self) -> Duration {
-        return self.validated().scaled(-1);
+        return self.validated().flipped();
     }
 
     /// The same span with a non-negative sign.
     pub fn abs(&self) -> Duration {
         let d = self.validated();
         if d.raw_sign() < 0 {
-            return d.scaled(-1);
+            return d.flipped();
         }
         return d;
     }
@@ -1477,7 +1522,7 @@ impl Duration {
                 "core:temporal: adding a duration that carries years, months, or weeks needs the calendar position a relativeTo anchor would supply",
             );
         }
-        return duration_from_internal(&Duration {}, one.time_with_days().plus(two.time_with_days()), largest);
+        return duration_from_internal(&DateDuration {}, one.time_with_days().plus(two.time_with_days()), largest);
     }
 
     /// The difference of the two spans, balanced the same way as `add`.
@@ -1526,7 +1571,7 @@ impl Duration {
             validate_rounding_increment(increment, maximum, false);
         }
         let rounded = round_time_duration(d.time_with_days(), increment, smallest_unit, mode);
-        return duration_from_internal(&Duration {}, rounded, largest_unit);
+        return duration_from_internal(&DateDuration {}, rounded, largest_unit);
     }
 
     /// Temporal's `toString` (and `toJSON`), e.g. `"P1Y2M3W4DT5H6M7.5S"`. A
@@ -1536,7 +1581,7 @@ impl Duration {
     }
 
     /// Every component, largest first.
-    fn components(&self) -> [i64, i64, i64, i64, i64, i64, i64, i64, i64, i64] {
+    fn components(&self) -> [f64, f64, f64, f64, f64, f64, f64, f64, f64, f64] {
         return [
             self.years, self.months, self.weeks, self.days, self.hours, self.minutes, self.seconds, self.milliseconds,
             self.microseconds, self.nanoseconds,
@@ -1546,41 +1591,48 @@ impl Duration {
     /// Temporal's `DurationSign`, without the validity check.
     fn raw_sign(&self) -> i32 {
         for let component of self.components() {
-            if component > 0 {
+            if component > 0.0 {
                 return 1;
             }
-            if component < 0 {
+            if component < 0.0 {
                 return -1;
             }
         }
         return 0;
     }
 
-    /// Temporal's `IsValidDuration`.
+    /// Temporal's `IsValidDuration`, with the integer check Temporal's
+    /// `ToIntegerIfIntegral` makes on the way in.
     fn is_valid(&self) -> bool {
         let sign = self.raw_sign();
         for let component of self.components() {
-            // `i64::MIN` has no negation in an `i64`.
-            if component > 0 && sign < 0 || component < 0 && sign > 0 || component == i64::MIN {
+            if !(component.is_finite() && f64::trunc(component) == component) {
+                return false;
+            }
+            if component > 0.0 && sign < 0 || component < 0.0 && sign > 0 {
                 return false;
             }
         }
-        if !(is_below(self.years, CALENDAR_UNIT_LIMIT)
-            && is_below(self.months, CALENDAR_UNIT_LIMIT)
-            && is_below(self.weeks, CALENDAR_UNIT_LIMIT)) {
+        let calendar_limit = CALENDAR_UNIT_LIMIT as f64;
+        if !(f64::abs(self.years) < calendar_limit
+            && f64::abs(self.months) < calendar_limit
+            && f64::abs(self.weeks) < calendar_limit) {
             return false;
         }
-        // Each bound keeps the sum below from overflowing; a microsecond or
-        // nanosecond count below the i64 limit is far below 2^53 seconds.
-        let limit = TIME_DURATION_SECONDS_LIMIT;
-        if !(is_below(self.days, limit / SECONDS_PER_DAY + 1)
-            && is_below(self.hours, limit / 3600 + 1)
-            && is_below(self.minutes, limit / 60 + 1)
-            && is_below(self.seconds, limit)
-            && is_below(self.milliseconds / 1000, limit)) {
+        // Each term below 2^53 seconds keeps the exact sum below from
+        // overflowing. A product rounds monotonically and every bound is a
+        // float, so each comparison is exact.
+        let limit = TIME_DURATION_SECONDS_LIMIT as f64;
+        if !(f64::abs(self.days) * 86_400.0 < limit
+            && f64::abs(self.hours) * 3600.0 < limit
+            && f64::abs(self.minutes) * 60.0 < limit
+            && f64::abs(self.seconds) < limit
+            && f64::abs(self.milliseconds) < limit * 1000.0
+            && f64::abs(self.microseconds) < limit * 1_000_000.0
+            && f64::abs(self.nanoseconds) < limit * 1_000_000_000.0) {
             return false;
         }
-        return is_below(self.time_with_days().seconds, limit);
+        return is_below(self.time_with_days().seconds, TIME_DURATION_SECONDS_LIMIT);
     }
 
     /// Trap unless this is a valid duration, the check a struct literal skips.
@@ -1592,18 +1644,25 @@ impl Duration {
     }
 
     fn has_calendar_components(&self) -> bool {
-        return self.years != 0 || self.months != 0 || self.weeks != 0;
+        return self.years != 0.0 || self.months != 0.0 || self.weeks != 0.0;
     }
 
-    /// The date components alone, Temporal's date duration record.
-    fn date_part(&self) -> Duration {
-        return Duration { years: self.years, months: self.months, weeks: self.weeks, days: self.days };
+    /// The date components alone, Temporal's date duration record. A valid
+    /// duration's date components are integers below 2^53, so each converts
+    /// exactly.
+    fn date_part(&self) -> DateDuration {
+        return DateDuration {
+            years: self.years as i64,
+            months: self.months as i64,
+            weeks: self.weeks as i64,
+            days: self.days as i64,
+        };
     }
 
     /// The time components as a time duration, the days left out.
     fn time_part(&self) -> TimeDuration {
         return time_duration_from_components(
-            0,
+            0.0,
             self.hours,
             self.minutes,
             self.seconds,
@@ -1632,7 +1691,7 @@ impl Duration {
     fn default_largest_unit(&self) -> Unit {
         let mut rank = 0;
         for let component of self.components() {
-            if component != 0 {
+            if component != 0.0 {
                 return unit_of_rank(rank);
             }
             rank += 1;
@@ -1640,19 +1699,19 @@ impl Duration {
         return Unit::Nanosecond;
     }
 
-    /// Every component scaled by `factor`.
-    fn scaled(&self, factor: i64) -> Duration {
+    /// Every component negated, a zero staying `+0` as Temporal's integers do.
+    fn flipped(&self) -> Duration {
         return Duration {
-            years: self.years * factor,
-            months: self.months * factor,
-            weeks: self.weeks * factor,
-            days: self.days * factor,
-            hours: self.hours * factor,
-            minutes: self.minutes * factor,
-            seconds: self.seconds * factor,
-            milliseconds: self.milliseconds * factor,
-            microseconds: self.microseconds * factor,
-            nanoseconds: self.nanoseconds * factor,
+            years: 0.0 - self.years,
+            months: 0.0 - self.months,
+            weeks: 0.0 - self.weeks,
+            days: 0.0 - self.days,
+            hours: 0.0 - self.hours,
+            minutes: 0.0 - self.minutes,
+            seconds: 0.0 - self.seconds,
+            milliseconds: 0.0 - self.milliseconds,
+            microseconds: 0.0 - self.microseconds,
+            nanoseconds: 0.0 - self.nanoseconds,
         };
     }
 }
@@ -1664,9 +1723,10 @@ fn is_below(value: i64, limit: i64) -> bool {
 }
 
 /// Temporal's `TemporalDurationFromInternal`: the date components as given,
-/// and the time balanced into the components up to `largest_unit`. A
-/// millisecond, microsecond, or nanosecond count beyond the `i64` range traps.
-fn duration_from_internal(date: &Duration, time: TimeDuration, largest_unit: Unit) -> Duration {
+/// and the time balanced into the components up to `largest_unit`. Each
+/// component is the float nearest its exact value, as Temporal's `𝔽` takes,
+/// and a rounded result outside the duration range traps.
+fn duration_from_internal(date: &DateDuration, time: TimeDuration, largest_unit: Unit) -> Duration {
     let sign = time.sign() as i64;
     let magnitude = time.abs();
     let s = magnitude.seconds;
@@ -1676,9 +1736,9 @@ fn duration_from_internal(date: &Duration, time: TimeDuration, largest_unit: Uni
     let mut hours: i64 = 0;
     let mut minutes: i64 = 0;
     let mut seconds: i64 = 0;
-    let mut milliseconds = n / 1_000_000;
-    let mut microseconds = n / 1000 % 1000;
-    let nanoseconds = n % 1000;
+    let mut milliseconds = (n / 1_000_000) as f64;
+    let mut microseconds = (n / 1000 % 1000) as f64;
+    let mut nanoseconds = (n % 1000) as f64;
     if rank <= unit_rank(Unit::Day) {
         days = s / SECONDS_PER_DAY;
         hours = s % SECONDS_PER_DAY / 3600;
@@ -1694,34 +1754,42 @@ fn duration_from_internal(date: &Duration, time: TimeDuration, largest_unit: Uni
     } else if rank == unit_rank(Unit::Second) {
         seconds = s;
     } else if rank == unit_rank(Unit::Millisecond) {
-        milliseconds = scaled_count(s, milliseconds, 1000);
+        milliseconds = nearest_count(s, n / 1_000_000, 1000);
     } else if rank == unit_rank(Unit::Microsecond) {
-        milliseconds = 0;
-        microseconds = scaled_count(s, n / 1000, 1_000_000);
+        milliseconds = 0.0;
+        microseconds = nearest_count(s, n / 1000, 1_000_000);
     } else {
-        return Duration { ..*date, nanoseconds: sign * scaled_count(s, n, NANOSECONDS_PER_SECOND) }.validated();
+        milliseconds = 0.0;
+        microseconds = 0.0;
+        nanoseconds = nearest_count(s, n, NANOSECONDS_PER_SECOND);
     }
     return Duration {
-        years: date.years,
-        months: date.months,
-        weeks: date.weeks,
-        days: date.days + sign * days,
-        hours: sign * hours,
-        minutes: sign * minutes,
-        seconds: sign * seconds,
-        milliseconds: sign * milliseconds,
-        microseconds: sign * microseconds,
-        nanoseconds: sign * nanoseconds,
+        years: date.years as f64,
+        months: date.months as f64,
+        weeks: date.weeks as f64,
+        days: (date.days + sign * days) as f64,
+        hours: (sign * hours) as f64,
+        minutes: (sign * minutes) as f64,
+        seconds: (sign * seconds) as f64,
+        milliseconds: with_sign(sign, milliseconds),
+        microseconds: with_sign(sign, microseconds),
+        nanoseconds: with_sign(sign, nanoseconds),
     }.validated();
 }
 
-/// `seconds` whole seconds in a unit `per_second` to the second, plus `sub`
-/// of them. Traps where the count does not fit an `i64`.
-fn scaled_count(seconds: i64, sub: i64, per_second: i64) -> i64 {
-    if seconds > (i64::MAX - per_second) / per_second {
-        panic("core:temporal: the count does not fit the i64 a duration component is stored in");
+/// The float nearest `seconds` whole seconds in a unit `per_second` to the
+/// second, plus `sub` of them. Below 2^63 the `i64` conversion rounds once;
+/// beyond it the exact count is rounded from an `i128`.
+fn nearest_count(seconds: i64, sub: i64, per_second: i64) -> f64 {
+    if seconds <= (i64::MAX - per_second) / per_second {
+        return (seconds * per_second + sub) as f64;
     }
-    return seconds * per_second + sub;
+    return exact_quotient_to_f64(seconds as i128 * per_second as i128 + sub as i128, 1);
+}
+
+/// `magnitude` carrying `sign`, a zero staying `+0`.
+fn with_sign(sign: i64, magnitude: f64) -> f64 {
+    return if sign < 0 { 0.0 - magnitude } else { magnitude };
 }
 
 /// The f64 nearest `numerator / denominator`, ties to even, for a positive
@@ -1809,28 +1877,13 @@ fn duration_to_string(duration: &Duration, precision: i32) -> String {
 
 /// Temporal's `TemporalDurationToString` for a valid duration.
 fn temporal_duration_to_string(d: &Duration, precision: i32) -> String {
-    let mut date_part = "";
-    if d.years != 0 {
-        date_part = `${date_part}${i64::abs(d.years)}Y`;
-    }
-    if d.months != 0 {
-        date_part = `${date_part}${i64::abs(d.months)}M`;
-    }
-    if d.weeks != 0 {
-        date_part = `${date_part}${i64::abs(d.weeks)}W`;
-    }
-    if d.days != 0 {
-        date_part = `${date_part}${i64::abs(d.days)}D`;
-    }
-    let mut time_part = "";
-    if d.hours != 0 {
-        time_part = `${time_part}${i64::abs(d.hours)}H`;
-    }
-    if d.minutes != 0 {
-        time_part = `${time_part}${i64::abs(d.minutes)}M`;
-    }
+    let date_part = `${designated(d.years, "Y")}${designated(d.months, "M")}${designated(d.weeks, "W")}${designated(
+        d.days,
+        "D",
+    )}`;
+    let mut time_part = `${designated(d.hours, "H")}${designated(d.minutes, "M")}`;
     let zero_minutes_and_higher = unit_rank(d.default_largest_unit()) >= unit_rank(Unit::Second);
-    let seconds = time_duration_from_components(0, 0, 0, d.seconds, d.milliseconds, d.microseconds, d.nanoseconds);
+    let seconds = time_duration_from_components(0.0, 0.0, 0.0, d.seconds, d.milliseconds, d.microseconds, d.nanoseconds);
     if seconds.sign() != 0 || zero_minutes_and_higher || precision >= 0 {
         let magnitude = seconds.abs();
         time_part = `${time_part}${magnitude.seconds}${format_fraction(magnitude.nanoseconds, precision)}S`;
@@ -1840,6 +1893,15 @@ fn temporal_duration_to_string(d: &Duration, precision: i32) -> String {
         return `${sign_part}P${date_part}`;
     }
     return `${sign_part}P${date_part}T${time_part}`;
+}
+
+/// A component's magnitude and its designator, or nothing for a zero. A valid
+/// duration's components from days up are integers below 2^53.
+fn designated(component: f64, designator: String) -> String {
+    if component == 0.0 {
+        return "";
+    }
+    return `${f64::abs(component) as i64}${designator}`;
 }
 
 impl Serialize for Duration {
@@ -1886,7 +1948,7 @@ fn parse_iso_duration(text: &StrSlice) -> Result<Duration, DeserializeError> {
         }
         date_slot = slot + 1;
         seen_component = true;
-        out = assign_date_component(out, slot, value);
+        out = assign_date_component(out, slot, value as f64);
         i = after + 1;
     }
 
@@ -1915,7 +1977,7 @@ fn parse_iso_duration(text: &StrSlice) -> Result<Duration, DeserializeError> {
             }
             time_slot = slot + 1;
             seen_component = true;
-            out = assign_time_component(out, slot, value);
+            out = assign_time_component(out, slot, value as f64);
             if after > after_number {
                 fraction_seen = true;
                 out = spill_fraction(out, slot, fraction);
@@ -1927,7 +1989,7 @@ fn parse_iso_duration(text: &StrSlice) -> Result<Duration, DeserializeError> {
     if !seen_component {
         return Result::Err(DeserializeError::malformed("a duration needs at least one component", i as i64));
     }
-    let result = if negative { out.scaled(-1) } else { out };
+    let result = if negative { out.flipped() } else { out };
     if !result.is_valid() {
         return Result::Err(DeserializeError::invalid_value("the duration is outside Temporal's range"));
     }
@@ -1966,18 +2028,18 @@ fn spill_fraction(duration: Duration, slot: i32, fraction_nanoseconds: i64) -> D
     let mut rest = fraction_nanoseconds * slot_seconds;
     let mut out = duration;
     if slot == 0 {
-        out = Duration { ..out, minutes: rest / 60_000_000_000 };
+        out = Duration { ..out, minutes: (rest / 60_000_000_000) as f64 };
         rest %= 60_000_000_000;
     }
     if slot <= 1 {
-        out = Duration { ..out, seconds: rest / NANOSECONDS_PER_SECOND };
+        out = Duration { ..out, seconds: (rest / NANOSECONDS_PER_SECOND) as f64 };
         rest %= NANOSECONDS_PER_SECOND;
     }
     return Duration {
         ..out,
-        milliseconds: rest / 1_000_000,
-        microseconds: rest / 1000 % 1000,
-        nanoseconds: rest % 1000,
+        milliseconds: (rest / 1_000_000) as f64,
+        microseconds: (rest / 1000 % 1000) as f64,
+        nanoseconds: (rest % 1000) as f64,
     };
 }
 
@@ -2015,7 +2077,7 @@ fn duration_time_slot(byte: u8) -> i32 {
 }
 
 /// Store `value` in the date component named by `slot`.
-fn assign_date_component(duration: Duration, slot: i32, value: i64) -> Duration {
+fn assign_date_component(duration: Duration, slot: i32, value: f64) -> Duration {
     if slot == 0 {
         return Duration { ..duration, years: value };
     }
@@ -2029,7 +2091,7 @@ fn assign_date_component(duration: Duration, slot: i32, value: i64) -> Duration 
 }
 
 /// Store `value` in the time component named by `slot`.
-fn assign_time_component(duration: Duration, slot: i32, value: i64) -> Duration {
+fn assign_time_component(duration: Duration, slot: i32, value: f64) -> Duration {
     if slot == 0 {
         return Duration { ..duration, hours: value };
     }
@@ -2134,7 +2196,7 @@ fn year_month_within_limits(year: i64, month: i64) -> bool {
 /// Temporal's `CalendarDateAdd` under ISO 8601 with `constrain`, answering the
 /// epoch day of the result. A month-end overflow lands on the month's last day;
 /// a result outside the date range traps.
-fn calendar_date_add(date: &IsoDate, duration: &Duration) -> i64 {
+fn calendar_date_add(date: &IsoDate, duration: &DateDuration) -> i64 {
     let months = date.month - 1 + duration.months;
     let year = date.year + duration.years + floor_div(months, 12);
     let month = floor_mod(months, 12) + 1;
@@ -2149,10 +2211,10 @@ fn calendar_date_add(date: &IsoDate, duration: &Duration) -> i64 {
 /// Temporal's `CalendarDateUntil` under ISO 8601: the largest whole years and
 /// months that do not carry `one` past `two` (`ISODateSurpasses`, which tests
 /// the month-end before constraining it), then whole weeks and days.
-fn calendar_date_until(one: &IsoDate, two: &IsoDate, largest_unit: Unit) -> Duration {
+fn calendar_date_until(one: &IsoDate, two: &IsoDate, largest_unit: Unit) -> DateDuration {
     let order = compare_iso_dates(one, two);
     if order == 0 {
-        return Duration {};
+        return DateDuration {};
     }
     let sign = -order as i64;
     let mut years: i64 = 0;
@@ -2177,7 +2239,7 @@ fn calendar_date_until(one: &IsoDate, two: &IsoDate, largest_unit: Unit) -> Dura
     let base = epoch_days_of(base_year, base_month, i64::min(one.day, iso_days_in_month(base_year, base_month)));
     let remaining = epoch_days_of(two.year, two.month, two.day) - base;
     let weeks = if largest_unit matches { Week } { remaining / 7 } else { 0 };
-    return Duration { years: years, months: months, weeks: weeks, days: remaining - weeks * 7 };
+    return DateDuration { years: years, months: months, weeks: weeks, days: remaining - weeks * 7 };
 }
 
 /// Temporal's `CompareISODate`.
@@ -2207,7 +2269,7 @@ fn difference_iso_date_time(
     days2: i64,
     time2: i64,
     largest_unit: Unit,
-) -> [Duration, TimeDuration] {
+) -> [DateDuration, TimeDuration] {
     let mut time = time_duration(0, time2 - time1);
     let time_sign = time.sign();
     let mut adjusted = days2;
@@ -2219,7 +2281,7 @@ fn difference_iso_date_time(
     let date = calendar_date_until(&iso_date_from_epoch_days(days1), &iso_date_from_epoch_days(adjusted), date_largest);
     if unit_rank(largest_unit) != unit_rank(date_largest) {
         return [
-            Duration { ..date, days: 0 },
+            DateDuration { ..date, days: 0 },
             time.plus_days(date.days),
         ];
     }
@@ -3152,7 +3214,7 @@ impl PlainDate {
         let date = self.checked();
         let d = duration.validated();
         let days = d.time_with_days().seconds / SECONDS_PER_DAY;
-        let date_duration = Duration { years: d.years, months: d.months, weeks: d.weeks, days: days };
+        let date_duration = DateDuration { ..d.date_part(), days: days };
         return PlainDate::from_epoch_days(calendar_date_add(&date.iso_date(), &date_duration));
     }
 
@@ -3170,7 +3232,11 @@ impl PlainDate {
         if !is_date_unit(largest_unit) {
             panic("core:temporal: a PlainDate difference is measured in days and above");
         }
-        return calendar_date_until(&one.iso_date(), &two.iso_date(), largest_unit).validated();
+        return duration_from_internal(
+            &calendar_date_until(&one.iso_date(), &two.iso_date(), largest_unit),
+            time_duration(0, 0),
+            largest_unit,
+        );
     }
 
     /// The span from `other` to this date — `until` with the sign flipped.
@@ -3309,7 +3375,7 @@ impl PlainTime {
         if is_date_unit(largest_unit) {
             panic("core:temporal: a PlainTime difference is measured in hours and below");
         }
-        return duration_from_internal(&Duration {}, time_duration(0, end - start), largest_unit);
+        return duration_from_internal(&DateDuration {}, time_duration(0, end - start), largest_unit);
     }
 
     /// The span from `other` to this time — `until` with the sign flipped.
@@ -3370,7 +3436,7 @@ impl PlainDateTime {
         let [days, start] = self.parts();
         let d = duration.validated();
         let [carry, time_of_day] = add_time(start, d.time_with_days());
-        let date_duration = Duration { years: d.years, months: d.months, weeks: d.weeks, days: carry };
+        let date_duration = DateDuration { ..d.date_part(), days: carry };
         let added = calendar_date_add(&iso_date_from_epoch_days(days), &date_duration);
         return PlainDateTime::from_parts(added, time_of_day);
     }
@@ -3503,7 +3569,7 @@ impl PlainYearMonth {
     pub fn add(&self, duration: &Duration) -> PlainYearMonth {
         let first = self.first_day();
         let d = duration.validated();
-        if d.weeks != 0 || d.days != 0 || d.time_part().sign() != 0 {
+        if d.weeks != 0.0 || d.days != 0.0 || d.time_part().sign() != 0 {
             panic("core:temporal: a PlainYearMonth moves in years and months only");
         }
         let added = iso_date_from_epoch_days(calendar_date_add(&first, &d.date_part()));
@@ -3532,9 +3598,9 @@ impl PlainYearMonth {
         let _ = two.first_day();
         let months = (two.year as i64 - one.year as i64) * 12 + two.month as i64 - one.month as i64;
         if largest_unit matches { Month } {
-            return Duration { months: months };
+            return Duration { months: months as f64 };
         }
-        return Duration { years: months / 12, months: months % 12 };
+        return Duration { years: (months / 12) as f64, months: (months % 12) as f64 };
     }
 
     /// The span from `other` to this month — `until` with the sign flipped.
