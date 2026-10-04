@@ -1,0 +1,27 @@
+// A variant derives no `Ord` whether or not it writes `eq`, so the error does
+// not blame the `eq` it writes.
+
+variant Shape {
+    Dot,
+    Line(i32),
+}
+
+impl Eq for Shape {
+    fn eq(&self, other: &Self) -> bool {
+        return true;
+    }
+}
+
+fn least<T: Ord>(a: T, b: T) -> T {
+    return if a < b { a } else { b };
+}
+
+test {
+    let _ = least(Shape::Dot, Shape::Line(1));
+}
+
+__DATA__
+{
+    "compile_error": ":20:13: analysis error: type 'Shape' does not implement trait 'Ord' required by bound on 'T'",
+    "compile_errors_not_contains": ["writes `eq`"]
+}

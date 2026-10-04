@@ -1459,6 +1459,30 @@ implementation — slower than `x * y + z`.
 
 #### `pub fn is_nan(&self) -> bool`
 
+#### `pub fn ieee754_eq(&self, other: f32) -> bool`
+
+IEEE 754's `==`: false when either is a NaN, where `==` holds for two.
+
+#### `pub fn ieee754_ne(&self, other: f32) -> bool`
+
+IEEE 754's `!=`: true when either is a NaN.
+
+#### `pub fn ieee754_lt(&self, other: f32) -> bool`
+
+IEEE 754's `<`: false when either is a NaN, where `<` orders NaN last.
+
+#### `pub fn ieee754_le(&self, other: f32) -> bool`
+
+IEEE 754's `<=`: false when either is a NaN.
+
+#### `pub fn ieee754_gt(&self, other: f32) -> bool`
+
+IEEE 754's `>`: false when either is a NaN.
+
+#### `pub fn ieee754_ge(&self, other: f32) -> bool`
+
+IEEE 754's `>=`: false when either is a NaN.
+
 #### `pub fn is_finite(&self) -> bool`
 
 #### `pub fn to_bits(&self) -> u32`
@@ -1794,6 +1818,30 @@ implementation — slower than `x * y + z`.
 
 #### `pub fn is_nan(&self) -> bool`
 
+#### `pub fn ieee754_eq(&self, other: f64) -> bool`
+
+IEEE 754's `==`: false when either is a NaN, where `==` holds for two.
+
+#### `pub fn ieee754_ne(&self, other: f64) -> bool`
+
+IEEE 754's `!=`: true when either is a NaN.
+
+#### `pub fn ieee754_lt(&self, other: f64) -> bool`
+
+IEEE 754's `<`: false when either is a NaN, where `<` orders NaN last.
+
+#### `pub fn ieee754_le(&self, other: f64) -> bool`
+
+IEEE 754's `<=`: false when either is a NaN.
+
+#### `pub fn ieee754_gt(&self, other: f64) -> bool`
+
+IEEE 754's `>`: false when either is a NaN.
+
+#### `pub fn ieee754_ge(&self, other: f64) -> bool`
+
+IEEE 754's `>=`: false when either is a NaN.
+
 #### `pub fn is_finite(&self) -> bool`
 
 #### `pub fn to_bits(&self) -> u64`
@@ -1935,6 +1983,30 @@ Rounds `v` once to the nearest f16, ties to even, saturating to an infinity.
 
 True for a NaN, quiet or signaling.
 
+#### `pub fn ieee754_eq(&self, other: f16) -> bool`
+
+IEEE 754's `==`, on the values widened to f32.
+
+#### `pub fn ieee754_ne(&self, other: f16) -> bool`
+
+IEEE 754's `!=`, on the values widened to f32.
+
+#### `pub fn ieee754_lt(&self, other: f16) -> bool`
+
+IEEE 754's `<`, on the values widened to f32.
+
+#### `pub fn ieee754_le(&self, other: f16) -> bool`
+
+IEEE 754's `<=`, on the values widened to f32.
+
+#### `pub fn ieee754_gt(&self, other: f16) -> bool`
+
+IEEE 754's `>`, on the values widened to f32.
+
+#### `pub fn ieee754_ge(&self, other: f16) -> bool`
+
+IEEE 754's `>=`, on the values widened to f32.
+
 #### `impl FromStr for f16`
 
 ##### `fn from_str<S: AsStrSlice>(s: S) -> Result<f16, ParseFloatError>`
@@ -2037,6 +2109,30 @@ Rounds `v` once to the nearest bf16, ties to even.
 #### `pub fn is_nan(&self) -> bool`
 
 True for a NaN, quiet or signaling.
+
+#### `pub fn ieee754_eq(&self, other: bf16) -> bool`
+
+IEEE 754's `==`, on the values widened to f32.
+
+#### `pub fn ieee754_ne(&self, other: bf16) -> bool`
+
+IEEE 754's `!=`, on the values widened to f32.
+
+#### `pub fn ieee754_lt(&self, other: bf16) -> bool`
+
+IEEE 754's `<`, on the values widened to f32.
+
+#### `pub fn ieee754_le(&self, other: bf16) -> bool`
+
+IEEE 754's `<=`, on the values widened to f32.
+
+#### `pub fn ieee754_gt(&self, other: bf16) -> bool`
+
+IEEE 754's `>`, on the values widened to f32.
+
+#### `pub fn ieee754_ge(&self, other: bf16) -> bool`
+
+IEEE 754's `>=`, on the values widened to f32.
 
 #### `impl FromStr for bf16`
 

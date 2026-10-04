@@ -592,6 +592,24 @@ impl Interpreter<'_> {
                 },
                 _ => Lattice::Unevaluated,
             },
+            &CtfeBuiltin::Ieee754Comparison(op) => match args {
+                [a, b] => match (
+                    self.operand_lattice_folded(body, a.expr),
+                    self.operand_lattice_folded(body, b.expr),
+                ) {
+                    (Lattice::Const(a), Lattice::Const(b)) => {
+                        let (a, _) = a.as_float().expect("an IEEE comparison takes floats");
+                        let (b, _) = b.as_float().expect("an IEEE comparison takes floats");
+                        // Unordered, only `!=` holds.
+                        let holds = a.partial_cmp(&b).map_or(op == NirBinaryOp::NotEq, |o| {
+                            op.holds_for(o).expect("an IEEE builtin names a comparison")
+                        });
+                        Lattice::Const(Value::Bool(holds))
+                    }
+                    _ => Lattice::Unevaluated,
+                },
+                _ => Lattice::Unevaluated,
+            },
             CtfeBuiltin::HeapBase(address) => Lattice::Const(Value::Int {
                 value: u64::from(address.cast_unsigned()),
                 prim: PrimitiveType::I32,

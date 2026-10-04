@@ -443,8 +443,6 @@ On `f16` and `bf16` they compare the operands widened to `f32`. No method
 returns an IEEE three-way answer: IEEE's comparison is partial, and the order
 above is the one three-way comparison a float has.
 
-> Not yet implemented: the `ieee754_*` methods.
-
 `min` and `max` follow the order wherever they are called: `f32::min`,
 `f64::min`, `Iterator::min`, and every `min` over a `T: Ord`. NaN is greatest,
 so `min(1.0, NaN)` is `1.0` and `max(1.0, NaN)` is NaN.

@@ -1231,7 +1231,6 @@ fn stream_read_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
 /// `payload_ast` / `cm_package` are precomputed by the caller so this body
 /// serves both the WASI-record path ([`synthesize_record_stream_reads`]) and
 /// the value-payload path ([`synthesize_stream_reads`]).
-#[allow(clippy::too_many_arguments)]
 fn synthesize_stream_read_func(
     func_name: String,
     stream_read_name: CanonicalIntrinsic,
