@@ -321,7 +321,12 @@ impl<'b, F: Fn(FuncId) -> Option<&'b BuiltinDeclaration>> Scan<'_, F> {
         let ExprKind::Call { func_id, args, .. } = &self.body.exprs[e].kind else {
             return;
         };
-        let Some(Trap::Only(checks)) = (self.builtin)(*func_id).and_then(|b| b.facts.trap()) else {
+        let Some(builtin) = (self.builtin)(*func_id) else {
+            return;
+        };
+        // A call to a `!` declaration traps whatever its conditions say.
+        let (Some(Trap::Only(checks)), false) = (builtin.facts.trap(), builtin.never_returns)
+        else {
             return;
         };
         let arg = |pos: usize| args[pos].expr;

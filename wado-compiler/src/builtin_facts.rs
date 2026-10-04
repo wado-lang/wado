@@ -293,6 +293,9 @@ pub struct ReturnShape {
 pub struct Fault {
     /// The attribute the fault points at.
     pub attr: &'static str,
+    /// Which of the attributes so named, counting from 0: a second one is
+    /// the fault, and every other fault is in the first, the one read.
+    pub occurrence: usize,
     /// Why, as the diagnostic words it.
     pub message: String,
 }
@@ -338,6 +341,7 @@ pub fn read(
 fn fault(attr: &'static str, message: impl Into<String>) -> Fault {
     Fault {
         attr,
+        occurrence: 0,
         message: message.into(),
     }
 }
@@ -351,7 +355,10 @@ fn single<'a>(
     let mut written = attrs.iter().filter(|attr| attr.name == name);
     let first = written.next()?;
     if written.next().is_some() {
-        faults.push(fault(name, format!("`#[{name}]` is written once")));
+        faults.push(Fault {
+            occurrence: 1,
+            ..fault(name, format!("`#[{name}]` is written once"))
+        });
     }
     Some(&first.args)
 }
@@ -511,6 +518,16 @@ impl Reader<'_, '_> {
                 }
                 AttrArg::KeyIdentArray(key, items) if matches!(key.as_str(), "outside" | "at") => {
                     arrays.push((key, items));
+                }
+                // The parser reads an empty array as text, having no item to
+                // tell it otherwise.
+                AttrArg::KeyArray(key, items)
+                    if items.is_empty() && matches!(key.as_str(), "outside" | "at") =>
+                {
+                    self.report(
+                        SIDE_EFFECT,
+                        format!("`#[side_effect({key} = [])]` names no parameter"),
+                    );
                 }
                 AttrArg::KeyIdent(key, name)
                     if matches!(key.as_str(), "count" | "unset" | "negative") =>
@@ -789,6 +806,13 @@ mod tests {
                 "`#[side_effect(negative = x)]` names no parameter",
             ),
             (vec![ident("pure")], "`#[side_effect]` takes no `pure`"),
+            (
+                vec![
+                    ident("trap"),
+                    AttrArg::KeyArray("outside".to_string(), Vec::new()),
+                ],
+                "`#[side_effect(outside = [])]` names no parameter",
+            ),
         ];
         for (args, expected) in cases {
             let attrs = [
@@ -857,6 +881,23 @@ mod tests {
         assert_eq!(
             messages(read(&attrs, &copy_params(), UNIT)),
             ["`#[storage]` goes with `#[side_effect]`"]
+        );
+    }
+
+    #[test]
+    fn a_second_attribute_is_the_one_at_fault() {
+        let attrs = [
+            attr(STORAGE, vec![ident("none")]),
+            attr(SIDE_EFFECT, vec![ident("none")]),
+            attr(STORAGE, vec![ident("fresh")]),
+        ];
+        let faults = read(&attrs, &[], UNIT).unwrap_err();
+        assert_eq!(
+            faults
+                .iter()
+                .map(|f| (f.attr, f.occurrence))
+                .collect::<Vec<_>>(),
+            [(STORAGE, 1)]
         );
     }
 }

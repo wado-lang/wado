@@ -1846,7 +1846,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     let attr = func
                         .attrs
                         .iter()
-                        .find(|attr| attr.name == fault.attr)
+                        .filter(|attr| attr.name == fault.attr)
+                        .nth(fault.occurrence)
                         .expect("a fault points at an attribute the declaration carries");
                     self.attr_error(code_of(fault.attr), attr, fault.message);
                 }
@@ -10248,7 +10249,8 @@ fn reserves_a_name_only(func: &ast::Function) -> bool {
 }
 
 /// Whether the declaration carries `#[cm(...)]`, which makes it a Component
-/// Model import called through an adapter.
+/// Model import called through an adapter. Not `Function::is_cm_import`, which
+/// a `#[canonical(...)]` builtin answers too.
 fn carries_cm(func: &ast::Function) -> bool {
     func.attrs.iter().any(|attr| attr.name == CM)
 }

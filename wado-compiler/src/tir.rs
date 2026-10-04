@@ -7333,8 +7333,6 @@ pub struct BuiltinDeclaration {
     /// The arrays `outside` names: the call reaches their elements and nothing
     /// they reach.
     pub ranged_params: IndexSet<usize>,
-    /// Some parameter's type can carry storage.
-    pub takes_storage: bool,
     /// `#[immediate(...)]` positions, lowered to a Wasm immediate. Codegen
     /// reads the argument's literal value, so nothing may rewrite it into a
     /// load.
@@ -7419,7 +7417,6 @@ impl BuiltinDeclaration {
             retains,
             mut_params: shape.mut_params,
             ranged_params,
-            takes_storage: !shape.storage_params.is_empty(),
             immediate_params: shape.immediate_params,
             element_access,
             never_returns: shape.returns_never,
@@ -7443,13 +7440,13 @@ impl BuiltinDeclaration {
                 .all(|&p| self.element_access == Some((p, ArrayElementAccess::Write)))
     }
 
-    /// Whether the call writes no struct field: every `&mut` parameter is an
-    /// array it ranges over, and it is handed no storage or states what it
-    /// does with what it is handed.
+    /// Whether the call writes no struct field: its storage and effects are
+    /// stated, and every `&mut` parameter is an array it ranges over. An
+    /// opaque call may suspend, and another task may write any field meanwhile.
     pub fn writes_no_field(&self) -> bool {
-        self.mut_params.is_subset(&self.ranged_params)
-            && (!self.takes_storage
-                || (self.facts.storage != Storage::Opaque && !self.facts.is_opaque()))
+        self.facts.storage != Storage::Opaque
+            && !self.facts.is_opaque()
+            && self.mut_params.is_subset(&self.ranged_params)
     }
 }
 
