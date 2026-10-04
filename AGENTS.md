@@ -85,9 +85,8 @@ modules while tuples follow TypeScript.
 that proposed a feature at `docs/wep-*.md`. `wado doc <module>` (`core:prelude`, say)
 states a stdlib module's signatures; read it rather than guess.
 
-Commit a binary input's text form beside it (`.wat` beside `.wasm`, `.onnxtext`
-beside `.onnx`) so its diff is readable. The binary is canonical where they
-disagree.
+Avoid committing a binary: its diff is unreadable. Where a text form means the
+same, commit that instead (`.wat` for `.wasm`, `.onnxtext` for `.onnx`).
 
 ## Repository Map
 
