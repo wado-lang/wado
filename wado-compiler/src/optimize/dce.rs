@@ -1903,8 +1903,16 @@ pub(super) fn deletable_value(
     body.find_in_live_node_under(NodeRef::Expr(root), |node| match node {
         _ if operand_values_may_trap(body, node) => Some(()),
         NodeRef::Expr(id) => match &body.exprs[id].kind {
+            // A hint goes with the code containing it, but `cold_path();` on
+            // its own is what it marks.
             ExprKind::Call { func_id, .. } => {
-                (!calls.call(id, *func_id).is_deletable()).then_some(())
+                let effect = calls.call(id, *func_id);
+                let deletable = if id == root {
+                    effect.is_deletable()
+                } else {
+                    effect.is_unobservable()
+                };
+                (!deletable).then_some(())
             }
             ExprKind::GlobalVarSet { .. }
             | ExprKind::Assign { .. }

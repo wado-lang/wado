@@ -19,6 +19,7 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
+use crate::builtin_facts::SideEffect;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::inline_block_label;
 use crate::nir::{FunctionRef, InlineHint, NirFunction, NirLocal, NirUnaryOp};
@@ -966,19 +967,19 @@ fn has_safepoint(
 }
 
 /// Whether a call to each function, by `FuncId` index, is a safepoint: any call
-/// to a function with a body, a component-model operation (which leaves for the
-/// host), and a builtin whose result is freshly allocated. The other builtins
-/// are Wasm instructions.
+/// to a function with a body, a builtin declaring `#[side_effect(opaque)]`
+/// (which leaves for the host), and a builtin whose result is freshly
+/// allocated. The other builtins are Wasm instructions.
 fn safepoint_calls(project: &NirPackage, descriptors: &[FunctionRef]) -> Vec<bool> {
     descriptors
         .iter()
         .map(|callee| {
             callee.intrinsic().is_none_or(|name| {
-                project
-                    .builtin_registry
-                    .intrinsic(name)
-                    .is_some_and(|info| info.canonical_name.is_some())
-                    || project.builtin_declarations.allocates(callee)
+                let declaration = project.builtin_declarations.get(callee).unwrap_or_else(|| {
+                    panic!("builtin `{name}` has no declaration to read its facts from")
+                });
+                matches!(declaration.facts.side_effect, SideEffect::Opaque)
+                    || declaration.allocates()
             })
         })
         .collect()

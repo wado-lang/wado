@@ -4,7 +4,7 @@
 //! [`ExprKind`] / [`StmtKind`] variant must be added to `accumulate_expr` /
 //! `accumulate_stmt` explicitly, or it silently defaults to pure.
 
-use crate::builtin_facts::{SideEffect, Trap};
+use crate::builtin_facts::{SideEffect, Storage, Trap};
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::nir::{FuncId, NirFunction, NirUnaryOp};
@@ -760,12 +760,20 @@ fn leaf_effect<'a>(
             reads_mutable_state: *read || *write,
             writes_state: *write,
             may_trap: !matches!(trap, Trap::Never) || declaration.never_returns,
-            writes_shared_heap: !declaration.mut_params.is_empty(),
+            writes_shared_heap: !declaration.mut_params.is_empty()
+                || stores_unseen(declaration),
             hint: *hint,
             ..FnEffect::default()
         },
     };
     (effect, Some(declaration))
+}
+
+/// Whether a call may store where no `&mut` argument shows, which no body scan
+/// narrows.
+fn stores_unseen(declaration: &BuiltinDeclaration) -> bool {
+    declaration.facts.storage == Storage::Opaque
+        || matches!(declaration.facts.side_effect, SideEffect::Opaque)
 }
 
 /// Each bodyless function's summary and, for a builtin, what it declared,
@@ -884,13 +892,14 @@ pub(super) fn summarize(project: &NirPackage) -> (FnSummaries, Vec<Option<&Built
                     }
                     // The body scan answers for a builtin at its call site: its
                     // trap conditions, and whose memory its `&mut` arguments
-                    // write. An opaque one may write anything, which no scan
-                    // narrows.
-                    ExprKind::Call { func_id, .. } if builtins[func_id.index()].is_some() => {
+                    // write.
+                    ExprKind::Call { func_id, .. }
+                        if let Some(declaration) = builtins[func_id.index()] =>
+                    {
                         let callee = effects[func_id.index()];
                         own.merge(FnEffect {
                             may_trap: callee.may_trap && !bounds.proofs.holds(id, *func_id),
-                            writes_shared_heap: callee.opaque,
+                            writes_shared_heap: stores_unseen(declaration),
                             ..callee
                         });
                     }
