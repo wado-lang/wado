@@ -2314,6 +2314,20 @@ DOT : '.' ;
     assert got == "0.25rem => D:0.25rem\n12px => D:12px\n.5rem => D:.5rem\n3. => N:3 DOT:.\n1.5 => N:1.5\nx1.5 => E:x1.5\nx3. => E:x3 DOT:.\n", got;
 }
 
+test "a chain of optionals lexes the longest match in a matcher linear in its length" {
+    // css3's `UnicodeRange`. Each lookahead-aware `'?'?` peeks what follows it,
+    // and an emit that nests the whole suffix at every stop doubles the matcher
+    // per optional: five of them took 1,905 lines.
+    let src = "lexer grammar L;
+U : 'u+' '?'? '?'? '?'? '?'? '?'? ;
+Q : '?' ;
+";
+    // One peek, saved and restored, per optional with another after it.
+    assert count_occurrences(&gen_source(src), "peek_save_") == 8;
+    let got = lexes(src, ["u+", "u+??", "u+?????", "u+??????"]);
+    assert got == "u+ => U:u+\nu+?? => U:u+??\nu+????? => U:u+?????\nu+?????? => U:u+????? Q:?\n", got;
+}
+
 test "a called lexer rule keeps its own case folding" {
     let got = lexes("lexer grammar L;
 A : B 'z' ;
