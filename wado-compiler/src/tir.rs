@@ -7350,9 +7350,11 @@ impl BuiltinDeclaration {
         let returns = match facts.storage {
             Storage::Opaque => None,
             Storage::PartOfArgs => Some(ReturnConvention::PartOf(shape.storage_params.clone())),
-            Storage::None | Storage::Fresh | Storage::HoldsArgs | Storage::StoresArgs => {
-                Some(ReturnConvention::Owned)
-            }
+            Storage::None
+            | Storage::Fresh
+            | Storage::HoldsArgs
+            | Storage::CopiesArgs
+            | Storage::StoresArgs => Some(ReturnConvention::Owned),
         };
         let retain = |source: usize, into: RetainInto<usize>| RetainSpec {
             source,
@@ -7360,7 +7362,7 @@ impl BuiltinDeclaration {
             into,
         };
         let retains = match facts.storage {
-            Storage::HoldsArgs => shape
+            Storage::HoldsArgs | Storage::CopiesArgs => shape
                 .storage_params
                 .iter()
                 .map(|&p| retain(p, RetainInto::Result))

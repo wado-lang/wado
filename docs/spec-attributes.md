@@ -571,7 +571,7 @@ pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
 pub fn array_copy<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_offset: i32, len: i32);
 ```
 
-The first argument is one of six values:
+The first argument is one of seven values:
 
 | Value          | Meaning                                                           |
 | -------------- | ----------------------------------------------------------------- |
@@ -579,8 +579,23 @@ The first argument is one of six values:
 | `fresh`        | The result is new storage and holds nothing it was handed         |
 | `part_of_args` | The result is an argument's storage, or part of it                |
 | `holds_args`   | The result is new storage that holds what the arguments hold      |
+| `copies_args`  | The result is new storage that holds copies of what the args hold |
 | `stores_args`  | The call stores what the arguments hold into the `&mut` argument  |
 | `opaque`       | The optimizer assumes nothing about what the call shares or keeps |
+
+A `holds_args` result holds the very objects it was handed, so a write through
+one is seen through the other. A `copies_args` result holds copies made as a
+value copy makes them, so making it reads everything the arguments reach. A
+reference among them still names the object it named, so the result holds what
+the arguments hold, as a `holds_args` one does.
+
+<!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
+
+```wado
+#[storage(copies_args)]
+#[side_effect(none)]
+pub fn array_clone<T>(src: &Array<T>) -> Array<T>;
+```
 
 The attribute names no parameter, since the types say which ones it means. Only
 a parameter whose type can carry storage counts, and a type parameter does,
@@ -590,8 +605,8 @@ itself: `builtin::select` hands back one of its two operands, so its
 what it points to, so `array_copy` stores the elements of `src`. The
 destination of `stores_args` is the one `&mut` parameter.
 
-`len = p` says the returned array holds `p` elements. It goes with `fresh` and
-`holds_args`, the two values whose result is new storage.
+`len = p` says the returned array holds `p` elements. It goes with `fresh`,
+`holds_args` and `copies_args`, the values whose result is new storage.
 
 ### `#[side_effect(...)]`
 
@@ -604,7 +619,7 @@ result.
 | `trap`      | The call may trap                                                |
 | `read`      | The call reads linear memory                                     |
 | `write`     | The call writes linear memory                                    |
-| `opaque`    | The optimizer assumes nothing about what the call does           |
+| `opaque`    | The optimizer assumes nothing the signature does not state       |
 | `hint`      | The call computes nothing, but its position is what it means     |
 | `black_box` | The optimizer may assume nothing about the operand or the result |
 
@@ -616,10 +631,16 @@ result.
 pub fn i32_load(addr: i32) -> i32;
 ```
 
-The signature states two facts, so no identifier lists them. A `&mut` parameter
-is written through, and the write may reach everything the referent reaches. A
-declaration returning `!` never returns: every call ends in a trap. That is not
-`trap`, which says a call that returns may instead trap.
+The signature states facts of its own, so no identifier lists them:
+
+- A `&mut` parameter is written through, and the write may reach everything the
+  referent reaches, as far as the `Array<T>` rule below allows.
+- A declaration returning `!` never returns: every call ends in a trap. That is
+  not `trap`, which says a call that returns may instead trap.
+- An `Array<T>` parameter, by value or by reference, is reached as the array:
+  its length and its element slots. What its elements reach is not read or
+  written, unless the declaration is `copies_args`, which reads all of it, or
+  `opaque` in either attribute.
 
 A fact the attribute leaves out is a fact the call does not have: a call with no
 `trap` never traps. `none`, `opaque` and `black_box` each stand alone.
@@ -702,14 +723,14 @@ other fact:
 - `unset` naming an array that is not in `outside`.
 - `outside` or `unset` naming a parameter that is not an array, or `at`,
   `count` or `negative` naming one that is not an integer.
-- `len` in `#[storage]` beside a value other than `fresh` or `holds_args`, on a
-  declaration that does not return an array, or naming a parameter that is not
-  an integer.
+- `len` in `#[storage]` beside a value other than `fresh`, `holds_args` or
+  `copies_args`, on a declaration that does not return an array, or naming a
+  parameter that is not an integer.
 - `stores_args` on a declaration without exactly one `&mut` parameter.
-- `fresh`, `part_of_args` or `holds_args` on a declaration that returns `()` or
-  `!`.
-- `part_of_args`, `holds_args` or `stores_args` on a declaration with no
-  parameter that can carry storage.
+- `fresh`, `part_of_args`, `holds_args` or `copies_args` on a declaration that
+  returns `()` or `!`.
+- `part_of_args`, `holds_args`, `copies_args` or `stores_args` on a declaration
+  with no parameter that can carry storage.
 
 Rationale: [WEP: Builtin Storage and Side-Effect
 Attributes](./wep-2026-10-04-builtin-storage-side-effect.md).

@@ -18,6 +18,9 @@ pub enum Storage {
     PartOfArgs,
     /// The result is new storage holding what the arguments hold.
     HoldsArgs,
+    /// The result is new storage holding value copies of what the arguments
+    /// hold, so making it reads everything they reach.
+    CopiesArgs,
     /// The call stores what the arguments hold into its one `&mut` argument.
     StoresArgs,
     /// Nothing is known.
@@ -25,11 +28,12 @@ pub enum Storage {
 }
 
 impl Storage {
-    const WRITTEN: [(&'static str, Self); 6] = [
+    const WRITTEN: [(&'static str, Self); 7] = [
         ("none", Self::None),
         ("fresh", Self::Fresh),
         ("part_of_args", Self::PartOfArgs),
         ("holds_args", Self::HoldsArgs),
+        ("copies_args", Self::CopiesArgs),
         ("stores_args", Self::StoresArgs),
         ("opaque", Self::Opaque),
     ];
@@ -42,18 +46,24 @@ impl Storage {
 
     /// Whether the result is new storage, the values `len` goes with.
     pub fn returns_new_storage(self) -> bool {
-        matches!(self, Self::Fresh | Self::HoldsArgs)
+        matches!(self, Self::Fresh | Self::HoldsArgs | Self::CopiesArgs)
     }
 
     /// Whether the value says something about the result, which a `()`
     /// return has none of.
     fn describes_result(self) -> bool {
-        matches!(self, Self::Fresh | Self::PartOfArgs | Self::HoldsArgs)
+        matches!(
+            self,
+            Self::Fresh | Self::PartOfArgs | Self::HoldsArgs | Self::CopiesArgs
+        )
     }
 
     /// Whether the value relates the call to the arguments' storage.
     fn shares_args(self) -> bool {
-        matches!(self, Self::PartOfArgs | Self::HoldsArgs | Self::StoresArgs)
+        matches!(
+            self,
+            Self::PartOfArgs | Self::HoldsArgs | Self::CopiesArgs | Self::StoresArgs
+        )
     }
 }
 
@@ -425,7 +435,7 @@ impl Reader<'_, '_> {
 
     fn storage(&mut self, args: &[AttrArg]) -> Option<(Storage, Option<String>)> {
         let Some((AttrArg::Ident(word), keys)) = args.split_first() else {
-            self.report(STORAGE, "`#[storage]` takes one value first: `none`, `fresh`, `part_of_args`, `holds_args`, `stores_args` or `opaque`");
+            self.report(STORAGE, "`#[storage]` takes one value first: `none`, `fresh`, `part_of_args`, `holds_args`, `copies_args`, `stores_args` or `opaque`");
             return None;
         };
         let Some(storage) = Storage::parse(word) else {
@@ -454,7 +464,7 @@ impl Reader<'_, '_> {
             if !storage.returns_new_storage() {
                 self.report(
                     STORAGE,
-                    format!("`len` goes with `fresh` or `holds_args`, not `{word}`"),
+                    format!("`len` goes with `fresh`, `holds_args` or `copies_args`, not `{word}`"),
                 );
             }
             if !self.ret.is_array {
@@ -853,7 +863,7 @@ mod tests {
             (
                 vec![ident("none"), key("len", "a")],
                 &ints,
-                "`len` goes with `fresh` or `holds_args`, not `none`",
+                "`len` goes with `fresh`, `holds_args` or `copies_args`, not `none`",
             ),
             (
                 vec![ident("shared")],

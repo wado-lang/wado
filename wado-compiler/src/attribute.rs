@@ -479,7 +479,8 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         name: STORAGE,
         targets: FUNCTION_TARGET,
         args: AttrArgs::Read(
-            "one of `none`, `fresh`, `part_of_args`, `holds_args`, `stores_args` and `opaque`, \
+            "one of `none`, `fresh`, `part_of_args`, `holds_args`, `copies_args`, `stores_args` \
+             and `opaque`, \
              with an optional `len = p`",
         ),
         summary: "what a call's result shares with its arguments, and what the call keeps",

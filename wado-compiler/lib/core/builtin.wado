@@ -170,7 +170,7 @@ pub fn array_copy<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_of
 /// Allocates a new Array<T> and copies every element of `src` into
 /// it. Used by the synthesized `$value_copy$` functions to deep-copy raw
 /// array fields of value-semantic structs.
-#[storage(holds_args)]
+#[storage(copies_args)]
 #[side_effect(none)]
 pub fn array_clone<T>(src: &Array<T>) -> Array<T>;
 
@@ -185,7 +185,7 @@ pub fn array_clone_shallow<T>(src: &Array<T>) -> Array<T>;
 /// elements into it. The `$value_copy$` of `List<T>` / `String` uses this to
 /// right-size the backing array to `used` — a value copy does not inherit the
 /// source's slack capacity. `len` must be <= `src.len()`.
-#[storage(holds_args, len = len)]
+#[storage(copies_args, len = len)]
 #[side_effect(trap, outside = [src], count = len)]
 pub fn array_clone_prefix<T>(src: &Array<T>, len: i32) -> Array<T>;
 

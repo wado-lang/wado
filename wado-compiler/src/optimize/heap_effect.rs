@@ -6,6 +6,7 @@ use std::rc::Rc;
 
 use cranelift_entity::EntityRef;
 
+use crate::builtin_facts::Storage;
 use crate::graph::strongly_connected_components;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
@@ -1575,8 +1576,7 @@ impl HeapFrame {
                     s.writes.record_meet(prov, &t.writes.through_args, &reach);
                 }
                 Target::Builtin(declaration) => {
-                    let touched =
-                        builtin_touches(effects, ty, declaration.ranged_params.contains(&j));
+                    let touched = builtin_touches(effects, declaration, ty);
                     s.reads.record(prov, &touched);
                     if declaration.mut_params.contains(&j) {
                         s.writes.record(prov, &touched);
@@ -1722,11 +1722,7 @@ impl HeapFrame {
                 }
                 Target::Builtin(declaration) => {
                     (effect == Effect::Read || declaration.mut_params.contains(&j))
-                        && keys.meets(&builtin_touches(
-                            effects,
-                            ty,
-                            declaration.ranged_params.contains(&j),
-                        ))
+                        && keys.meets(&builtin_touches(effects, declaration, ty))
                 }
                 Target::Opaque => keys.meets(&effects.reach(ty)),
             }
@@ -1836,10 +1832,26 @@ pub(super) fn field_path(body: &Body, mut e: ExprId) -> Option<(ExprId, Vec<(Typ
     Some((e, path))
 }
 
-/// What a builtin touches through an argument of type `ty`: only the array
-/// where the argument is a range's array, else all it reaches.
-fn builtin_touches(effects: &HeapEffects, ty: TypeId, ranged: bool) -> Rc<TypeSet> {
-    if !ranged {
+/// What a builtin touches through an argument of type `ty`. An `Array<T>` is
+/// reached as the array, its length and element slots, unless the declaration
+/// copies what the elements reach or states nothing of its storage; anything
+/// else is reached whole.
+fn builtin_touches(
+    effects: &HeapEffects,
+    declaration: &BuiltinDeclaration,
+    ty: TypeId,
+) -> Rc<TypeSet> {
+    let reaches_elements = matches!(
+        declaration.facts.storage,
+        Storage::CopiesArgs | Storage::Opaque
+    );
+    let is_array = matches!(
+        effects
+            .type_table
+            .get(strip_handles(ty, effects.type_table)),
+        ResolvedType::BuiltinArray(_)
+    );
+    if reaches_elements || !is_array {
         return effects.reach(ty);
     }
     Rc::new(

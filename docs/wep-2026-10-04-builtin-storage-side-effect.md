@@ -3,7 +3,8 @@
 ## Context
 
 A declaration with no body, such as a `core:builtin` primitive, has no body to
-read its behavior from. Its attributes are the only source. The optimizer asks
+read its behavior from. Its attributes and its signature are the only sources.
+The optimizer asks
 the same few questions of every such call:
 
 - Does the result share storage with an argument, and does the call keep an
@@ -34,16 +35,24 @@ is not part of this design.
 
 ### `#[storage(...)]`
 
-The first argument is one of six values:
+The first argument is one of seven values:
 
-| Value          | Meaning                                                           | Example                                        |
-| -------------- | ----------------------------------------------------------------- | ---------------------------------------------- |
-| `none`         | The call shares no storage and keeps none                         | `i32_and`, `i32_load`                          |
-| `fresh`        | The result is new storage and holds nothing it was handed         | `array_new`                                    |
-| `part_of_args` | The result is an argument's storage, or part of it                | `array_get_ref`, `select`, `black_box`         |
-| `holds_args`   | The result is new storage that holds what the arguments hold      | `variant_case_construct`, `array_clone_prefix` |
-| `stores_args`  | The call stores what the arguments hold into the `&mut` argument  | `array_set`, `array_copy`                      |
-| `opaque`       | The optimizer assumes nothing about what the call shares or keeps |                                                |
+| Value          | Meaning                                                           | Example                                         |
+| -------------- | ----------------------------------------------------------------- | ----------------------------------------------- |
+| `none`         | The call shares no storage and keeps none                         | `i32_and`, `i32_load`                           |
+| `fresh`        | The result is new storage and holds nothing it was handed         | `array_new`                                     |
+| `part_of_args` | The result is an argument's storage, or part of it                | `array_get_ref`, `select`, `black_box`          |
+| `holds_args`   | The result is new storage that holds what the arguments hold      | `variant_case_construct`, `array_clone_shallow` |
+| `copies_args`  | The result is new storage that holds copies of what the args hold | `array_clone`, `array_clone_prefix`             |
+| `stores_args`  | The call stores what the arguments hold into the `&mut` argument  | `array_set`, `array_copy`                       |
+| `opaque`       | The optimizer assumes nothing about what the call shares or keeps |                                                 |
+
+`holds_args` and `copies_args` differ in what making the result reads. A
+`holds_args` result holds the very objects it was handed, so a write through
+one is seen through the other. A `copies_args` result holds copies made as a
+value copy makes them, so making it reads everything the arguments reach. A
+reference among them still names the object it named, so the result holds what
+the arguments hold, as a `holds_args` one does.
 
 The attribute names no parameter. The types say which ones it means:
 
@@ -63,8 +72,8 @@ reaches. `opaque` in either attribute lists nothing, so it stays true whatever
 the call does. A call into code the compiler cannot see is `opaque` in
 `#[side_effect]`.
 
-`len = p` says the returned array holds `p` elements. It goes with `fresh` and
-`holds_args`, the two values whose result is new storage.
+`len = p` says the returned array holds `p` elements. It goes with `fresh`,
+`holds_args` and `copies_args`, the values whose result is new storage.
 
 ### `#[side_effect(...)]`
 
@@ -76,7 +85,7 @@ The bare identifiers are:
 | `trap`      | The call may trap                                                |
 | `read`      | The call reads linear memory                                     |
 | `write`     | The call writes linear memory                                    |
-| `opaque`    | The optimizer assumes nothing about what the call does           |
+| `opaque`    | The optimizer assumes nothing the signature does not state       |
 | `hint`      | The call computes nothing, but its position is what it means     |
 | `black_box` | The optimizer may assume nothing about the operand or the result |
 
@@ -149,7 +158,7 @@ pub fn array_get_value<T>(arr: &Array<T>, idx: i32) -> T;
 #[side_effect(trap, outside = [dst, src], at = [dst_offset, src_offset], count = len)]
 pub fn array_copy<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_offset: i32, len: i32);
 
-#[storage(holds_args, len = len)]
+#[storage(copies_args, len = len)]
 #[side_effect(trap, outside = [src], count = len)]
 pub fn array_clone_prefix<T>(src: &Array<T>, len: i32) -> Array<T>;
 
@@ -161,10 +170,17 @@ pub fn i32_load(addr: i32) -> i32;
 ### Where the Facts Live
 
 The compiler learns a builtin's storage and side effects from its attributes
-alone. A table hardcoded inside the compiler, keyed by a builtin's name or its
-module, is forbidden: it holds the same facts where no reader of the
+and its signature. A table hardcoded inside the compiler, keyed by a builtin's
+name or its module, is forbidden: it holds the same facts where no reader of the
 declaration sees them. So a trap condition that follows from a Wasm instruction
 is still written in the attribute.
+
+Besides the two facts under `#[side_effect(...)]`, the signature states:
+
+- An `Array<T>` parameter, by value or by reference, is reached as the array:
+  its length and its element slots. The objects its elements reach are not
+  read or written, unless the declaration is `copies_args`, which reads
+  everything they reach, or `opaque` in either attribute.
 
 A pass may still name a builtin for what it computes or means: lowering it to
 an instruction, rewriting a call to it, or reading `cold_path` as a branch
@@ -233,14 +249,14 @@ fact.
 - `unset` naming an array that is not in `outside`.
 - `outside` or `unset` naming a parameter that is not an array, or `at`,
   `count` or `negative` naming one that is not an integer.
-- `len` in `#[storage]` beside a value other than `fresh` or `holds_args`, on a
-  declaration that does not return an array, or naming a parameter that is not
-  an integer.
+- `len` in `#[storage]` beside a value other than `fresh`, `holds_args` or
+  `copies_args`, on a declaration that does not return an array, or naming a
+  parameter that is not an integer.
 - `stores_args` on a declaration without exactly one `&mut` parameter.
-- `fresh`, `part_of_args` or `holds_args` on a declaration that returns `()` or
-  `!`.
-- `part_of_args`, `holds_args` or `stores_args` on a declaration with no
-  parameter that can carry storage.
+- `fresh`, `part_of_args`, `holds_args` or `copies_args` on a declaration that
+  returns `()` or `!`.
+- `part_of_args`, `holds_args`, `copies_args` or `stores_args` on a declaration
+  with no parameter that can carry storage.
 
 ## Roadmap
 
@@ -271,6 +287,10 @@ declaration still to be written.
   - [x] `heap_effect::classify_callee`: an `array_` builtin writes only its
     array.
   - [x] `dce`: `cold_path` is inert.
+- [x] Read the facts the signature states (Where the Facts Live): an
+  `Array<T>` parameter reaches only the array unless the declaration is
+  `copies_args` or `opaque`. Declare `array_clone` and `array_clone_prefix`
+  `copies_args`.
 - [x] Move the rules into `spec-attributes.md`, replacing the four sections,
   and update what `spec-effects.md` and `spec-memory.md` say about
   `#[retain]` and `#[result]`.
@@ -283,5 +303,6 @@ declaration still to be written.
   carries `#[storage(none)]`, which is then false.
 - A `&mut` parameter always counts as a write, so `array_get_ref_mut`, which
   only hands out a reference, invalidates what the optimizer knew of the array.
-- A bundled core Wasm asset such as the libm is declared `opaque`, so a call to it
-  is never hoisted, merged or deleted.
+- A bundled core Wasm asset such as the libm is declared `opaque`, so a call to
+  it is never hoisted, merged or deleted, and no field version forwards across
+  it.
