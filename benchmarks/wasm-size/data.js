@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791080340224,
+  "lastUpdate": 1791081633424,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -63285,6 +63285,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/124d4de2e3ad00bd0c510125b56d8627e2962b2e"
         },
         "date": 1791080339612,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20617,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 339304,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f3b2577668721b6a72c84a4ae047f787c47ccd38",
+          "message": "Merge pull request #2261 from wado-lang/ccr-4293f746-rmzst6\n\nfeat: one order per type — a written cmp answers ==, a written eq withholds Ord",
+          "timestamp": "2026-10-04T11:01:58+09:00",
+          "tree_id": "ec389852b0089612d08322444bd17ce5dae03f97",
+          "url": "https://github.com/wado-lang/wado/commit/f3b2577668721b6a72c84a4ae047f787c47ccd38"
+        },
+        "date": 1791081632635,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
