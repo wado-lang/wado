@@ -442,6 +442,8 @@ commit them first.
 set -e  # a failed build would leave an earlier A/B's binary as its arm
 rm -f scratchpad/wado-base scratchpad/wado-head
 fork=$(git merge-base origin/main HEAD)
+# however the block ends, `lib/` goes back to HEAD rather than stay reverted
+trap 'git restore --source=HEAD --worktree -- wado-compiler/lib' EXIT
 git restore --source="$fork" --worktree -- wado-compiler/lib
 cargo build --release --bin wado --quiet
 cp target/release/wado scratchpad/wado-base

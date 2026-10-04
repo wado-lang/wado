@@ -35,8 +35,9 @@ EOF
 rust-gdb --batch -x scratchpad/gdb_commands.txt
 ```
 
-Break on a function name, not a `file:line`: gdb matches the bare name in
-every module, and a line number drifts with the next edit above it.
+Break on a function name, not a `file:line`: a line number drifts with the
+next edit above it. gdb matches a bare name in every module, so qualify one
+that more than one module defines.
 
 ## Ask one question per run, not one per build
 
@@ -44,7 +45,7 @@ A breakpoint that fires thousands of times and gets `grep`ed answers one
 question and costs a rebuild for the next. Make the breakpoint itself select:
 
 ```
-break local_get if $_streq(name->data_ptr, "…")
+break wado_compiler::wir_build::calls::local_get if $_streq(name->data_ptr, "…")
 break substitute_types_in_expr
 commands
 silent

@@ -47,8 +47,12 @@ export type Arg = { value: string; raw: string; start: number | null };
 export type Command = { name: string; args: Arg[] };
 type Heredoc = { delimiter: string; stripsTabs: boolean; expands: boolean; script: boolean };
 
-/** Text between `open` and its matching `close`, skipping quoted spans. */
+/** Text between `open` and its matching `close`, skipping quoted spans. Inside
+ * `$(…)` a heredoc body and a comment are skipped too: either may hold a quote
+ * or a `)` the shell reads as text. */
 function balanced(src: string, start: number, open: string, close: string): [string, number] {
+  const script = open === "(";
+  const heredocs: Heredoc[] = [];
   let depth = 1;
   let quote = "";
   let i = start;
@@ -62,6 +66,17 @@ function balanced(src: string, start: number, open: string, close: string): [str
     } else if (c === "'" || c === '"') {
       quote = c;
       i++;
+    } else if (c === "\n" && heredocs.length > 0) {
+      i++;
+      for (const heredoc of heredocs.splice(0)) i = readHeredoc(src, i, heredoc)[1];
+    } else if (script && c === "#" && (i === start || " \t\n".includes(src[i - 1]))) {
+      const newline = src.indexOf("\n", i);
+      i = newline < 0 ? src.length : newline;
+    } else if (script && src.startsWith("<<", i) && !src.startsWith("<<<", i)) {
+      const stripsTabs = src[i + 2] === "-";
+      const word = readWord(src, skipBlanks(src, i + (stripsTabs ? 3 : 2)));
+      heredocs.push({ delimiter: word.value, stripsTabs, expands: false, script: false });
+      i = word.end;
     } else {
       if (c === open) depth++;
       else if (c === close && --depth === 0) return [src.slice(start, i), i + 1];
