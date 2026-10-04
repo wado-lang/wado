@@ -108,9 +108,11 @@ pub enum SideEffect<P> {
 /// parameters as `P`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BuiltinFacts<P> {
+    /// `#[storage]`'s value.
     pub storage: Storage,
     /// `len = p`: the returned array holds `p` elements.
     pub len: Option<P>,
+    /// `#[side_effect]`.
     pub side_effect: SideEffect<P>,
 }
 
@@ -265,12 +267,15 @@ fn written_checks<P: std::fmt::Display>(checks: &[TrapCheck<P>]) -> Vec<String> 
 /// One parameter as validation reads its type.
 #[derive(Debug, Clone, Copy)]
 pub struct ParamShape<'a> {
+    /// The name the attributes call it by.
     pub name: &'a str,
     /// Some instantiation of its type can carry storage.
     pub carries_storage: bool,
+    /// Taken by `&mut`.
     pub is_mut_ref: bool,
     /// An `Array<T>`, by value or through a reference.
     pub is_array: bool,
+    /// An integer, as a count or an index is.
     pub is_integer: bool,
 }
 
@@ -279,6 +284,7 @@ pub struct ParamShape<'a> {
 pub struct ReturnShape {
     /// Neither `()` nor `!`.
     pub returns_value: bool,
+    /// An `Array<T>`, by value or through a reference.
     pub is_array: bool,
 }
 
@@ -287,6 +293,7 @@ pub struct ReturnShape {
 pub struct Fault {
     /// The attribute the fault points at.
     pub attr: &'static str,
+    /// Why, as the diagnostic words it.
     pub message: String,
 }
 
@@ -301,13 +308,7 @@ pub fn read(
     let storage = single(attrs, STORAGE, &mut faults);
     let side_effect = single(attrs, SIDE_EFFECT, &mut faults);
     let facts = match (storage, side_effect) {
-        (None, None) => {
-            return if faults.is_empty() {
-                Ok(None)
-            } else {
-                Err(faults)
-            };
-        }
+        (None, None) => return Ok(None),
         (Some(_), None) => {
             faults.push(fault(STORAGE, "`#[storage]` goes with `#[side_effect]`"));
             None
@@ -405,8 +406,9 @@ impl Reader<'_, '_> {
         storage: &[AttrArg],
         side_effect: &[AttrArg],
     ) -> Option<BuiltinFacts<String>> {
-        let (storage, len) = self.storage(storage)?;
-        let side_effect = self.side_effect(side_effect)?;
+        let storage = self.storage(storage);
+        let side_effect = self.side_effect(side_effect);
+        let ((storage, len), side_effect) = storage.zip(side_effect)?;
         Some(BuiltinFacts {
             storage,
             len,
@@ -795,6 +797,21 @@ mod tests {
             ];
             assert_eq!(messages(read(&attrs, &copy_params(), UNIT)), [expected]);
         }
+    }
+
+    #[test]
+    fn both_attributes_report_their_faults() {
+        let attrs = [
+            attr(STORAGE, vec![ident("shared")]),
+            attr(SIDE_EFFECT, vec![ident("trap"), keys("outside", &["len"])]),
+        ];
+        assert_eq!(
+            messages(read(&attrs, &copy_params(), UNIT)),
+            [
+                "`#[storage(shared)]` is no storage value",
+                "`#[side_effect(outside = len)]` names a parameter that is not an array",
+            ]
+        );
     }
 
     #[test]

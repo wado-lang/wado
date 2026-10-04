@@ -545,7 +545,7 @@ It names one parameter, unquoted, and repeats for a second. Like
 [`#[storage(...)]`](#storage), it belongs to a declaration with no body, because a body is
 called rather than encoded as one instruction. A `trait` or `interface` method
 requirement is an error for the same reason: it reaches an impl, which is
-called.
+called. So is a declaration carrying `#[cm(...)]`, which its adapter calls.
 
 ### `#[storage(...)]`
 

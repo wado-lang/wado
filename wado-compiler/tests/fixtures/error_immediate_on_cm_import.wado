@@ -1,0 +1,17 @@
+// A Component Model import is called through its adapter, never encoded as one
+// instruction, so no argument of it can be a Wasm immediate. `#[immediate]` is
+// the standard library's, so this file is one of its modules.
+#![stdlib("core:simd")]
+
+#[cm("wasi:demo/clock@0.1.0#tick")]
+#[immediate(step)]
+fn tick(step: u32) -> u32;
+
+export fn run() {
+    let _ = tick(1);
+}
+
+__DATA__
+{
+  "compile_error_codes": ["IMMEDIATE_ATTR"]
+}

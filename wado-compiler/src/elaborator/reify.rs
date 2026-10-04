@@ -1220,7 +1220,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .ann_decl_type_params(func.id)
             .expect("the declaring walk records the type params for every function reify emits");
         let declared = self.reify_declared_facts(func, &params, return_type);
-        let immediates = self.reify_immediate_attrs(&func.attrs, &params);
+        let immediates = self.reify_immediate_attrs(func, &params);
         if body.is_some() {
             self.reject_bodyless_attrs_on_body(&func.attrs);
         }
@@ -1783,7 +1783,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .attrs
             .iter()
             .filter(|attr| attr.name == STORAGE || attr.name == SIDE_EFFECT);
-        if func.attrs.iter().any(|attr| attr.name == CM) {
+        if carries_cm(func) {
             for attr in written {
                 self.attr_error(
                     code_of(&attr.name),
@@ -1857,15 +1857,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// The parameters named by `#[immediate(p)]`, each lowered to a Wasm
     /// immediate and so required to still be a literal when codegen reads it.
-    fn reify_immediate_attrs(
-        &self,
-        attrs: &[ast::Attribute],
-        params: &[tir::TirParam],
-    ) -> Vec<String> {
-        attrs
+    fn reify_immediate_attrs(&self, func: &ast::Function, params: &[tir::TirParam]) -> Vec<String> {
+        func.attrs
             .iter()
             .filter(|a| a.name == IMMEDIATE)
-            .filter_map(|attr| self.reify_immediate_attr(attr, params))
+            .filter_map(|attr| self.reify_immediate_attr(attr, params, carries_cm(func)))
             .collect()
     }
 
@@ -1873,11 +1869,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &self,
         attr: &ast::Attribute,
         params: &[tir::TirParam],
+        is_cm_import: bool,
     ) -> Option<String> {
         let emit = |message: String| {
             self.attr_error(Code::ImmediateAttr, attr, message);
             None
         };
+        if is_cm_import {
+            return emit(
+                "#[immediate] does not belong on a Component Model import: its adapter \
+                 calls it rather than encoding it as one instruction"
+                    .to_string(),
+            );
+        }
         let Some(ast::AttrArg::Ident(name)) = attr.args.first() else {
             return emit("#[immediate] names one parameter, unquoted".to_string());
         };
@@ -10241,6 +10245,12 @@ fn wire_name_policy_of(attrs: &[ast::Attribute]) -> Option<NamePolicy> {
 /// owed nothing about one either.
 fn reserves_a_name_only(func: &ast::Function) -> bool {
     func.unavailable_attr().is_some()
+}
+
+/// Whether the declaration carries `#[cm(...)]`, which makes it a Component
+/// Model import called through an adapter.
+fn carries_cm(func: &ast::Function) -> bool {
+    func.attrs.iter().any(|attr| attr.name == CM)
 }
 
 /// The code a fault in the attribute named `name` is reported under.

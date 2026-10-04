@@ -7294,6 +7294,7 @@ pub enum ArrayElementAccess {
 /// are read against it.
 #[derive(Debug, Clone, Default)]
 pub struct DeclarationShape {
+    /// How many parameters it takes.
     pub arity: usize,
     /// Positions whose type can carry storage in some instantiation.
     pub storage_params: Vec<usize>,
@@ -7304,7 +7305,9 @@ pub struct DeclarationShape {
     pub mut_params: IndexSet<usize>,
     /// `#[immediate(...)]` positions.
     pub immediate_params: IndexSet<usize>,
+    /// It returns neither `()` nor `!`.
     pub returns_value: bool,
+    /// It returns `&mut`.
     pub returns_mut_ref: bool,
     /// The declaration returns `!`, so every call ends in a trap.
     pub returns_never: bool,
@@ -7330,6 +7333,8 @@ pub struct BuiltinDeclaration {
     /// The arrays `outside` names: the call reaches their elements and nothing
     /// they reach.
     pub ranged_params: IndexSet<usize>,
+    /// Some parameter's type can carry storage.
+    pub takes_storage: bool,
     /// `#[immediate(...)]` positions, lowered to a Wasm immediate. Codegen
     /// reads the argument's literal value, so nothing may rewrite it into a
     /// load.
@@ -7414,6 +7419,7 @@ impl BuiltinDeclaration {
             retains,
             mut_params: shape.mut_params,
             ranged_params,
+            takes_storage: !shape.storage_params.is_empty(),
             immediate_params: shape.immediate_params,
             element_access,
             never_returns: shape.returns_never,
@@ -7425,12 +7431,25 @@ impl BuiltinDeclaration {
         self.facts.storage.returns_new_storage()
     }
 
-    /// Whether the call writes no struct field: its storage and effects are
-    /// stated, and every `&mut` parameter is an array it ranges over.
-    pub fn writes_no_field(&self) -> bool {
-        self.facts.storage != Storage::Opaque
+    /// Whether the call writes nothing itself: it hands back part of an
+    /// argument, and its one `&mut` parameter, if any, is the array whose
+    /// element it hands back. A write through the result is its user's.
+    pub fn only_aliases(&self) -> bool {
+        matches!(self.returns, Some(ReturnConvention::PartOf(_)))
             && !self.facts.is_opaque()
-            && self.mut_params.is_subset(&self.ranged_params)
+            && self
+                .mut_params
+                .iter()
+                .all(|&p| self.element_access == Some((p, ArrayElementAccess::Write)))
+    }
+
+    /// Whether the call writes no struct field: every `&mut` parameter is an
+    /// array it ranges over, and it is handed no storage or states what it
+    /// does with what it is handed.
+    pub fn writes_no_field(&self) -> bool {
+        self.mut_params.is_subset(&self.ranged_params)
+            && (!self.takes_storage
+                || (self.facts.storage != Storage::Opaque && !self.facts.is_opaque()))
     }
 }
 
@@ -7576,6 +7595,13 @@ impl DeclarationTable<BuiltinDeclaration> {
     pub fn returns_owned<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {
         self.get(call.into())
             .is_some_and(|d| d.returns == Some(ReturnConvention::Owned))
+    }
+
+    /// Whether `call` writes nothing itself, only handing back part of an
+    /// argument.
+    pub fn only_aliases<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {
+        self.get(call.into())
+            .is_some_and(BuiltinDeclaration::only_aliases)
     }
 
     /// Whether `call` returns new storage.

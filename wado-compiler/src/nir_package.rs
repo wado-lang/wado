@@ -248,13 +248,13 @@ impl NirPackage {
             .iter()
             .filter_map(|f| {
                 let f = f.borrow();
-                // Bodied only: an extern stub's `return_type` is not an id this
-                // table resolves.
                 let writes_no_slot = self
                     .builtin_declarations
                     .get(&*f)
                     .is_some_and(BuiltinDeclaration::writes_no_field)
                     || f.is_value_copy()
+                    // Bodied only: an extern stub's `return_type` is not an id
+                    // this table resolves.
                     || (f.body.is_some() && type_table.is_never(f.return_type));
                 writes_no_slot.then(|| f.id.expect("func_id assigned at lower"))
             })
