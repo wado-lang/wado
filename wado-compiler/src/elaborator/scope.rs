@@ -971,8 +971,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// The bounds `owning_trait`'s associated type `assoc` declares on itself
-    /// (`type A: Bound`), at `site` and at the arguments `args`. Asked past
-    /// the declaration pass, which builds every signature.
+    /// (`type A: Bound`), at `site` and at the arguments `args`. Asked of an
+    /// impl, never from inside the signature's own build.
     pub(super) fn bounds_at(
         &mut self,
         owning_trait: DefId,

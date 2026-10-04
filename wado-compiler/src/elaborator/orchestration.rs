@@ -1301,9 +1301,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // even when their body walk stays clean.
         let mut decl_failed: IndexSet<ModuleSource> = IndexSet::default();
 
-        // Phase 0 — what each trait declares of its associated types, ahead of
-        // every declaration: a struct field projecting one builds it, in any
-        // module, whichever order the modules run in.
+        // Phase 0 — what each trait declares of its associated types. The
+        // elaborator builds one on asking, but a projection the static
+        // resolver builds is read by the trait solver, which cannot.
         for module_source in &sorted_sources {
             if is_stdlib_snapshot_hit(snapshot, module_source) {
                 continue;

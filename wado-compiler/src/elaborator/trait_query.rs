@@ -1651,12 +1651,9 @@ impl TypeSystem {
                 let Some(bounds) = self.type_table.borrow_mut().projection_bounds(type_id) else {
                     return false;
                 };
-                let named: Vec<FqTraitName> = {
-                    let table = self.type_table.borrow();
-                    bounds.iter().map(|b| table.trait_ref_name(b)).collect()
-                };
-                return named.iter().any(|b| {
-                    b.canonical() == Some(decl) && self.args_answer(b.args(), decl, wanted)
+                return bounds.iter().filter(|b| b.decl == decl).any(|b| {
+                    let named = self.type_table.borrow().trait_ref_name(b);
+                    self.args_answer(named.args(), decl, wanted)
                 });
             }
             ResolvedType::Newtype { base_type, .. } => {

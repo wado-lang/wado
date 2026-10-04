@@ -29,7 +29,6 @@ use super::sig::{MethodSig, Param};
 use super::static_call::{CandidateKind, Selector, StaticLookup, StaticQuery};
 use super::synth::ArgClass;
 use super::trait_query::SelfBinding;
-use super::type_resolution::ParamSpace;
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
 use super::tysys::TypeSystem;
 use super::{AbstractSelection, Elaborator};
@@ -244,43 +243,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             type_id: *param_id,
             declaring_trait: Some(*owning_trait),
         });
-        let family_names: Vec<String> = decl.type_params.iter().map(|p| p.name.clone()).collect();
-        let trait_names: Vec<String> = self
-            .tysys
-            .trait_env
-            .trait_decl_params(*owning_trait)
-            .iter()
-            .map(|param| param.name.clone())
-            .collect();
-        // The family's own parameters shadow the trait's in its bounds.
-        let mut space: ParamSpace = trait_args
-            .iter()
-            .flat_map(|given| trait_names.iter().cloned().zip(given.iter().copied()))
-            .filter(|(name, _)| !family_names.contains(name))
-            .collect();
-        space.extend(family_names.iter().cloned().zip(args.iter().copied()));
-        let trait_names: Vec<String> = trait_names
-            .into_iter()
-            .filter(|name| !family_names.contains(name))
-            .collect();
-        let reads_trait_param = |ty: &ast::Type| {
-            let mut mentioned = Vec::new();
-            ty.mentioned_names(&mut mentioned);
-            mentioned.iter().any(|name| trait_names.contains(name))
-        };
+        let declaring = self.declaring_space(*owning_trait, assoc_name, trait_args.as_deref());
+        let mut space = declaring.space.clone();
+        space.extend(
+            decl.type_params
+                .iter()
+                .map(|param| param.name.clone())
+                .zip(args.iter().copied()),
+        );
         decl.bounds
             .iter()
             .filter(|bound| bound.names_a_trait())
             .map(|bound| {
                 let mut bound = bound.clone();
-                if trait_args.is_none() {
-                    if bound.type_args.iter().any(reads_trait_param) {
-                        bound.type_args.clear();
-                    }
-                    bound
-                        .assoc_types
-                        .retain(|binding| !reads_trait_param(&binding.ty));
+                if bound.type_args.iter().any(|ty| declaring.reads_unknown(ty)) {
+                    bound.type_args.clear();
                 }
+                bound
+                    .assoc_types
+                    .retain(|binding| !declaring.reads_unknown(&binding.ty));
                 ScopedBound::new(bound, written_self).in_space(space.clone())
             })
             .collect()

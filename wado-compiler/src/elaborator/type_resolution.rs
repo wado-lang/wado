@@ -1480,7 +1480,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         |scope| &mut scope.assoc_binding_stack,
                         (base, assoc.to_string()),
                         |e| {
-                            let answer = e.resolve_in_declaring_frame(site, owning_trait, ty)?;
+                            let answer =
+                                e.resolve_in_declaring_frame(site, owning_trait, assoc, ty)?;
                             (!e.names_projection(answer, base, assoc)).then_some(answer)
                         },
                     ) {
@@ -1525,39 +1526,76 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// `ty`, written in `owning_trait`, read at `site`: `Self` as its base, the
-    /// trait's parameters as the arguments it is reached at. `None` where `ty`
-    /// reads a parameter the site does not know, or names nothing.
+    /// `ty`, written in `owning_trait`'s declaration of `assoc`, read at
+    /// `site`: `Self` as its base, the trait's parameters as the arguments it
+    /// is reached at. `None` where `ty` reads a parameter the site does not
+    /// know, or names nothing.
     fn resolve_in_declaring_frame(
         &mut self,
         site: &FamilySite,
         owning_trait: DefId,
+        assoc: &str,
         ty: &ast::Type,
     ) -> Option<TypeId> {
-        let names: Vec<String> = self
-            .tysys
-            .trait_env
-            .trait_decl_params(owning_trait)
-            .iter()
-            .map(|param| param.name.clone())
-            .collect();
-        let space: ParamSpace = if let Some(args) = &site.trait_args {
-            names.into_iter().zip(args.iter().copied()).collect()
-        } else {
-            let mut mentioned = Vec::new();
-            ty.mentioned_names(&mut mentioned);
-            if mentioned.iter().any(|name| names.contains(name)) {
-                return None;
-            }
-            ParamSpace::new()
-        };
+        let declaring = self.declaring_space(owning_trait, assoc, site.trait_args.as_deref());
+        if declaring.reads_unknown(ty) {
+            return None;
+        }
         let self_binding = SelfBinding {
             type_id: site.base,
             declaring_trait: Some(owning_trait),
         };
-        let resolved = self.in_space(&space, |e| {
+        let resolved = self.in_space(&declaring.space, |e| {
             e.under_self_binding(Some(self_binding), |e| e.resolve_type(ty))
         });
         (resolved != TypeTable::UNKNOWN).then_some(resolved)
+    }
+
+    /// The trait's parameters as `owning_trait`'s declaration of `assoc`
+    /// reads them, reached at `trait_args`. The family's own parameters shadow
+    /// a trait parameter they share a name with.
+    pub(super) fn declaring_space(
+        &self,
+        owning_trait: DefId,
+        assoc: &str,
+        trait_args: Option<&[TypeId]>,
+    ) -> DeclaringSpace {
+        let family: Vec<&str> = self
+            .tysys
+            .trait_env
+            .assoc_type_decl(&owning_trait, assoc)
+            .map(|decl| decl.type_params.iter().map(|p| p.name.as_str()).collect())
+            .unwrap_or_default();
+        let mut out = DeclaringSpace::default();
+        let params = self.tysys.trait_env.trait_decl_params(owning_trait);
+        for (index, param) in params.iter().enumerate() {
+            if family.contains(&param.name.as_str()) {
+                continue;
+            }
+            match trait_args {
+                Some(args) => out.space.push((param.name.clone(), args[index])),
+                None => out.unknown.push(param.name.clone()),
+            }
+        }
+        out
+    }
+}
+
+/// The trait parameters a declaration in the trait reads, at the arguments a
+/// site gives them; see [`Elaborator::declaring_space`].
+#[derive(Default)]
+pub(super) struct DeclaringSpace {
+    /// The parameters the site gives arguments, as a reading frame binds them.
+    pub(super) space: ParamSpace,
+    /// The parameters it does not, which a written type must not read.
+    unknown: Vec<String>,
+}
+
+impl DeclaringSpace {
+    /// Whether `ty` reads a parameter the site gives no argument.
+    pub(super) fn reads_unknown(&self, ty: &ast::Type) -> bool {
+        let mut mentioned = Vec::new();
+        ty.mentioned_names(&mut mentioned);
+        mentioned.iter().any(|name| self.unknown.contains(name))
     }
 }
