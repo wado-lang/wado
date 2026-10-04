@@ -67,8 +67,9 @@ use crate::elaborator::stmt::{
 use crate::elaborator::trait_query::trait_sig_of_with;
 use crate::elaborator::types::{VarRef, newtype_member_owner};
 use crate::elaborator::util::{
-    FloatRange, PatternLiteralError, SettledPattern, parse_i128_literal, parse_u128_literal,
-    pattern_literal, range_pattern, settle_instance_pattern, settles_literal_patterns,
+    BoundValue, FloatRange, PatternLiteralError, SettledPattern, bound_value, parse_i128_literal,
+    parse_u128_literal, pattern_literal, range_bound, range_pattern, settle_instance_pattern,
+    settles_literal_patterns,
 };
 use crate::escape::{
     unescape_byte, unescape_bytes, unescape_char, unescape_string, unescape_template_segment,
@@ -76,8 +77,8 @@ use crate::escape::{
 use crate::format_spec::{FormatKind, TemplateFormatSpec};
 use crate::name::{
     LocalMethodName, MethodName, constant_pattern_local_name, deref_capture_name,
-    display_function_name, effect_default_impl_name, float_range_local_name, for_body_label,
-    mangle_local_item_name, minted_name, test_function_name,
+    display_function_name, effect_default_impl_name, for_body_label, mangle_local_item_name,
+    minted_name, range_local_name, test_function_name,
 };
 use crate::primitive::PrimitiveType;
 use crate::symbol::{Symbol, SymbolKind};
@@ -8890,34 +8891,56 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Resolve a nullary qualified pattern (`TokenKind::FOO`, `i32::MAX`) to its
-    /// associated-constant value. An integer constant becomes a `Literal`
-    /// pattern, signed per the scrutinee, so it benefits from switch lowering;
-    /// everything else becomes a `ConstantValue`. `None` when the name is not a
-    /// recorded associated constant — i.e. it is a real variant case.
-    fn reify_associated_const_pattern(
+    /// The value of the constant `pattern` names, as annotate's
+    /// `resolve_pattern_constant` resolved it: an immutable global, bare or
+    /// under a namespace, or an associated constant inlined. `None` where it
+    /// names none.
+    fn reify_pattern_constant(
         &mut self,
-        variant_name: &str,
-        variant_qualifier: Option<&ast::Type>,
-        scrutinee_type: TypeId,
-        span: Span,
+        pattern: &ast::Pattern,
         ctx: &mut FunctionContext,
-    ) -> Option<TirPattern> {
-        let AssocConstSig {
-            module: const_module,
-            ty: type_id,
-            value: const_expr,
-            ..
-        } = self
-            .tysys
-            .associated_constant_qualified(variant_qualifier, variant_name)?;
+    ) -> Option<TirExpr> {
+        match pattern {
+            ast::Pattern::Ident { name, span, .. } => self.immutable_global_expr(name, *span),
+            ast::Pattern::Variant {
+                variant_name,
+                variant_qualifier,
+                bindings,
+                span,
+                ..
+            } if bindings.is_empty() => {
+                if let Some(AssocConstSig {
+                    module: const_module,
+                    ty: type_id,
+                    value: const_expr,
+                    ..
+                }) = self
+                    .tysys
+                    .associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
+                {
+                    // Reify the body under its defining module so colliding
+                    // cross-module `AstId`s can't mis-type the inlined constant
+                    // (see `reify_ident`).
+                    let resolved = self.with_module_perspective(&const_module, |this| {
+                        this.reify_expr(&const_expr, ctx, Some(type_id))
+                    });
+                    return Some(TirExpr::new(resolved.kind, type_id, *span));
+                }
+                let alias = self
+                    .sem
+                    .imports
+                    .pattern_ns_member(variant_qualifier.as_ref(), variant_name)?;
+                self.immutable_global_expr(&alias, *span)
+            }
+            _ => None,
+        }
+    }
 
-        // Reify the body under its defining module so colliding cross-module
-        // `AstId`s can't mis-type the inlined constant (see `reify_ident`).
-        let resolved = self.with_module_perspective(&const_module, |this| {
-            this.reify_expr(&const_expr, ctx, Some(type_id))
-        });
-        match &resolved.kind {
+    /// The pattern matching `constant`'s value. A literal folds to a `Literal`
+    /// pattern, an integer signed per the scrutinee, so it benefits from switch
+    /// lowering; anything else is a `ConstantValue`.
+    fn constant_value_pattern(&self, constant: TirExpr, scrutinee_type: TypeId) -> TirPattern {
+        match &constant.kind {
             TirExprKind::IntLiteral { repr, .. } => {
                 let is_unsigned = self
                     .tysys
@@ -8926,23 +8949,99 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .is_unsigned_int(scrutinee_type);
                 if is_unsigned {
                     if let Ok(v) = parse_u128_literal(repr) {
-                        return Some(TirPattern::Literal(TirLiteralPattern::U128(v)));
+                        return TirPattern::Literal(TirLiteralPattern::U128(v));
                     }
                 } else if let Ok(v) = parse_i128_literal(repr) {
-                    return Some(TirPattern::Literal(TirLiteralPattern::I128(v)));
+                    return TirPattern::Literal(TirLiteralPattern::I128(v));
                 }
             }
             TirExprKind::BoolLiteral(v) => {
-                return Some(TirPattern::Literal(TirLiteralPattern::Bool(*v)));
+                return TirPattern::Literal(TirLiteralPattern::Bool(*v));
             }
             TirExprKind::CharLiteral(v) => {
-                return Some(TirPattern::Literal(TirLiteralPattern::Char(*v)));
+                return TirPattern::Literal(TirLiteralPattern::Char(*v));
             }
             _ => {}
         }
-        Some(TirPattern::ConstantValue {
-            expr: Box::new(TirExpr::new(resolved.kind, type_id, span)),
-        })
+        TirPattern::ConstantValue {
+            expr: Box::new(constant),
+        }
+    }
+
+    /// A range with a constant bound, as annotate's `resolve_constant_range`
+    /// resolved it: the scrutinee held in the local annotate reserved,
+    /// matching where `start <= it` and `it < end` (`<=` where `inclusive`)
+    /// hold by the type's order.
+    fn reify_constant_range(
+        &mut self,
+        bounds: [&ast::Pattern; 2],
+        inclusive: bool,
+        scrutinee_type: TypeId,
+        ctx: &mut FunctionContext,
+    ) -> TirPattern {
+        let scrutinee = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
+        let (origin, span) = bounds
+            .into_iter()
+            .find_map(|bound| match bound {
+                ast::Pattern::Ident { id, span, .. } => Some((*id, *span)),
+                ast::Pattern::Variant {
+                    name_id: Some(id),
+                    span,
+                    ..
+                } => Some((*id, *span)),
+                _ => None,
+            })
+            .expect("annotate takes a range with no constant bound as no range");
+        let [start, end] = bounds.map(|bound| {
+            if let Some(constant) = self.reify_pattern_constant(bound, ctx) {
+                return constant;
+            }
+            let bound = range_bound(bound, &self.tysys.resolutions)
+                .and_then(Result::ok)
+                .expect("annotate reports a bound naming nothing");
+            let value = bound_value(&bound, scrutinee, &mut self.tysys.type_table.borrow_mut());
+            let Ok(value) = value else {
+                unreachable!("annotate reports a bound naming no value of the scrutinee");
+            };
+            bound_literal(value, scrutinee, &self.tysys.type_table.borrow(), span)
+        });
+        let local_index = ctx.add_local(range_local_name(), scrutinee, false, None);
+        let value = TirExpr::new(
+            TirExprKind::Local {
+                index: local_index,
+                name: range_local_name(),
+            },
+            scrutinee,
+            span,
+        );
+        let below_end = if inclusive {
+            ast::BinaryOp::LtEq
+        } else {
+            ast::BinaryOp::Lt
+        };
+        let from_start = self.reify_binary_op(
+            origin,
+            ast::BinaryOp::LtEq,
+            start,
+            value.clone(),
+            TypeTable::BOOL,
+            span,
+        );
+        let to_end = self.reify_binary_op(origin, below_end, value, end, TypeTable::BOOL, span);
+        TirPattern::Narrow {
+            name: None,
+            local_index,
+            type_id: scrutinee,
+            test: Box::new(TirExpr::new(
+                TirExprKind::Binary {
+                    op: TirBinaryOp::And,
+                    left: Box::new(from_start),
+                    right: Box::new(to_end),
+                },
+                TypeTable::BOOL,
+                span,
+            )),
+        }
     }
 
     /// `pattern` on `scrutinee_type`: lowered now when the type is settled,
@@ -9059,41 +9158,27 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// A bare ident naming an immutable global lowers to a
-    /// `ConstantValue` comparison against that global rather than a
-    /// binding (mirrors `Elaborator::resolve_if_pattern_inner`). Mutable
-    /// globals are not constants and fall through to a binding.
-    fn reify_immutable_global_pattern(&self, name: &str, span: Span) -> Option<TirPattern> {
-        if let Some(&(ty, mutable)) = self.sem.decls.current_module_globals.get(name)
-            && !mutable
-        {
-            return Some(TirPattern::ConstantValue {
-                expr: Box::new(TirExpr::new(
-                    TirExprKind::GlobalVarGet {
-                        module_source: self.current_module_source.clone(),
-                        name: name.to_string(),
-                    },
-                    ty,
-                    span,
-                )),
-            });
-        }
-        if let Some((source_module, original_name, ty, mutable)) =
-            self.sem.decls.imported_globals.get(name)
-            && !*mutable
-        {
-            return Some(TirPattern::ConstantValue {
-                expr: Box::new(TirExpr::new(
-                    TirExprKind::GlobalVarGet {
-                        module_source: source_module.clone(),
-                        name: original_name.clone(),
-                    },
-                    *ty,
-                    span,
-                )),
-            });
-        }
-        None
+    /// A read of the immutable global `name`, defined here or imported. A
+    /// mutable global is no constant, so its name binds in a pattern.
+    fn immutable_global_expr(&self, name: &str, span: Span) -> Option<TirExpr> {
+        let (module_source, name, ty) = match self.sem.decls.current_module_globals.get(name) {
+            Some(&(ty, false)) => (self.current_module_source.clone(), name.to_string(), ty),
+            Some(_) => return None,
+            None => match self.sem.decls.imported_globals.get(name)? {
+                (source_module, original_name, ty, false) => {
+                    (source_module.clone(), original_name.clone(), *ty)
+                }
+                _ => return None,
+            },
+        };
+        Some(TirExpr::new(
+            TirExprKind::GlobalVarGet {
+                module_source,
+                name,
+            },
+            ty,
+            span,
+        ))
     }
 
     /// A constant pattern whose `==` annotate dispatched to `Eq`: the scrutinee
@@ -9183,7 +9268,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     if self.scrutinee_has_variant_case(scrutinee_type, name) {
                         return self.reify_nullary_variant_case(scrutinee_type, name);
                     }
-                    if let Some(const_pat) = self.reify_immutable_global_pattern(name, *span) {
+                    if let Some(constant) = self.reify_pattern_constant(pattern, ctx) {
+                        let const_pat = self.constant_value_pattern(constant, scrutinee_type);
                         return self.compare_constant_by_eq(
                             Some(*id),
                             const_pat,
@@ -9294,40 +9380,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Pattern::Variant {
                 variant_name,
-                variant_qualifier,
                 name_id,
                 bindings,
-                span,
                 ..
             } => {
-                // Associated-constant pattern (`TokenKind::FOO`,
-                // `i32::MAX`): a nullary qualified name that resolves to a
-                // recorded associated constant rather than a variant case.
-                // The elaborator inlines it to the constant's value
-                // reify reproduces the same lowering from
-                // `sem.decls.associated_constants`. Real variant cases are
-                // never in that map, so the lookup distinguishes the two.
-                if bindings.is_empty()
-                    && let Some(const_pat) = self.reify_associated_const_pattern(
-                        variant_name,
-                        variant_qualifier.as_ref(),
-                        scrutinee_type,
-                        *span,
-                        ctx,
-                    )
-                {
-                    return self.compare_constant_by_eq(*name_id, const_pat, scrutinee_type, ctx);
-                }
-
-                // `ns::NAME` naming an immutable global the namespace exports
-                // is a constant-value pattern, as the bare `NAME` is.
-                if bindings.is_empty()
-                    && let Some(alias) = self
-                        .sem
-                        .imports
-                        .pattern_ns_member(variant_qualifier.as_ref(), variant_name)
-                    && let Some(const_pat) = self.reify_immutable_global_pattern(&alias, *span)
-                {
+                // An associated constant (`TokenKind::FOO`, `i32::MAX`) or a
+                // namespaced global (`ns::NAME`) matches by value. No case is
+                // either, so the lookup distinguishes the two.
+                if let Some(constant) = self.reify_pattern_constant(pattern, ctx) {
+                    let const_pat = self.constant_value_pattern(constant, scrutinee_type);
                     return self.compare_constant_by_eq(*name_id, const_pat, scrutinee_type, ctx);
                 }
 
@@ -9440,9 +9501,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 start, end, kind, ..
             } => {
                 let inclusive = matches!(kind, RangeKind::Inclusive);
-                let pattern = range_pattern(start, end, inclusive, &self.tysys.resolutions)
-                    .and_then(Result::ok)
-                    .expect("annotate diagnoses a range bound that names no value");
+                let Some(pattern) = range_pattern(start, end, inclusive, &self.tysys.resolutions)
+                else {
+                    return self.reify_constant_range([start, end], inclusive, scrutinee_type, ctx);
+                };
+                let pattern =
+                    pattern.expect("annotate diagnoses a range bound that names no value");
                 self.literal_value_pattern(pattern, scrutinee_type, site, ctx)
             }
             ast::Pattern::Struct {
@@ -10519,7 +10583,7 @@ pub(crate) fn lower_instance_pattern(
             SettledPattern::Float(range) => {
                 // Lowering peels a reference scrutinee, as match ergonomics reads it.
                 let float_type = type_table.peel_refs(scrutinee);
-                let local_index = add_local(float_range_local_name(), float_type);
+                let local_index = add_local(range_local_name(), float_type);
                 float_range_narrow(&range, float_type, local_index, type_table, span)
             }
         },
@@ -10540,7 +10604,7 @@ fn float_range_narrow(
     let value = TirExpr::new(
         TirExprKind::Local {
             index: local_index,
-            name: float_range_local_name(),
+            name: range_local_name(),
         },
         float_type,
         span,
@@ -10597,6 +10661,34 @@ fn float_range_narrow(
         type_id: float_type,
         test: Box::new(test),
     }
+}
+
+/// The literal of type `ty` holding a range bound's `value`.
+fn bound_literal(value: BoundValue, ty: TypeId, type_table: &TypeTable, span: Span) -> TirExpr {
+    let kind = match value {
+        BoundValue::Int(bits) => TirExprKind::IntLiteral {
+            value: bits as u64,
+            repr: if type_table.is_unsigned_int(ty) {
+                bits.cast_unsigned().to_string()
+            } else {
+                bits.to_string()
+            },
+        },
+        BoundValue::Char(c) => TirExprKind::CharLiteral(c),
+        BoundValue::Float(format, bits)
+            if [FloatFormat::F16, FloatFormat::BF16].contains(&format) =>
+        {
+            return half_literal(bits, ty, span);
+        }
+        BoundValue::Float(format, bits) => {
+            let value = format.value(bits);
+            TirExprKind::FloatLiteral {
+                value,
+                repr: format_float_repr(value),
+            }
+        }
+    };
+    TirExpr::new(kind, ty, span)
 }
 
 /// A call of `func` on the one argument `arg`.

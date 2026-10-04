@@ -4999,15 +4999,6 @@ impl<'a> TirUnparser<'a> {
                     end,
                     inclusive,
                 } => {
-                    emit_pattern_literal(start, &mut self.output);
-                    self.output.push_str(if *inclusive { "..=" } else { "..<" });
-                    emit_pattern_literal(end, &mut self.output);
-                }
-                InstancePattern::FloatRange {
-                    start,
-                    end,
-                    inclusive,
-                } => {
                     emit_range_bound(start, &mut self.output);
                     self.output.push_str(if *inclusive { "..=" } else { "..<" });
                     emit_range_bound(end, &mut self.output);

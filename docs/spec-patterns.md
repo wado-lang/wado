@@ -241,7 +241,8 @@ type with an `Eq` compares as `==` would: a `String`, a struct, a tuple or an
 
 A constant is not a pattern when its type is a float or holds one, in a field,
 element or payload at any depth. So `f64::INFINITY`, a `global` holding `0.1`,
-and a struct constant with an `f64` field are errors here.
+and a struct constant with an `f64` field are errors here. A float constant is
+still a [range bound](#range-patterns).
 
 Only a refutable pattern reads a bare name as a constant: a `match` arm,
 `if let`, `while let`, and `let ... else`. So `let limit = v else { … }` runs
@@ -271,16 +272,38 @@ assert grade == "P" && lower;
 
 - The scrutinee is an integer, `char` or float.
 - Each bound is an integer, `char`, byte or float literal, optionally negated,
-  or a primitive type's associated constant such as `i32::MAX` or
-  `f64::INFINITY`. A user-defined constant is not a bound.
-- A bound takes the scrutinee's type as a literal does where that type is
-  expected, so on a float an integer or byte literal is the float of its value
-  (`0..<1.5`). A suffixed literal and a constant keep their own type.
+  or a [constant](#constant-patterns): an immutable `global`, bare or under a
+  namespace, or an associated constant.
+- A literal bound takes the scrutinee's type as a literal does where that type
+  is expected, so on a float an integer or byte literal is the float of its
+  value (`0..<1.5`). A suffixed literal and a constant keep their own type.
+
+The compiler knows the value of a literal and of a primitive type's limit, such
+as `i32::MAX` or `f64::INFINITY`. A range bounded by those alone is checked
+before the program runs:
+
 - A reversed range pattern is an error, and so is an empty one (`5..<5`).
 - Two arms' range patterns must not overlap. The alternatives of one arm's
   or-pattern may.
 - Range patterns count toward [exhaustiveness](#exhaustiveness): `0 => …` and
   `1..=255 => …` together cover a `u8`.
+
+Any other constant shows its value only when the match runs. A range bounded by
+one matches where `START <= scrutinee` and `scrutinee < END` (`<=` for `..=`)
+hold by the type's order, as a constant pattern matches where `==` holds. It
+covers no value for exhaustiveness:
+
+<!-- {"fixture":"range_pattern_constant_bounds.wado"} -->
+
+```wado
+let score = builtin::black_box(15);
+let tier = match score {
+    LOW..<HIGH => 1,
+    HIGH..=Grade::PASS => 2,
+    _ => 0,
+};
+assert tier == 1;
+```
 
 A float range compares by the
 [float order](./spec-standard-traits.md#float-comparison), so `0.0..<1.0`
@@ -295,7 +318,7 @@ let nan = builtin::black_box(f64::NAN);
 assert !(nan matches { f64::NEG_INFINITY..=f64::INFINITY });
 ```
 
-Two more rules apply to it:
+Two more rules apply to one the compiler checks:
 
 - A NaN bound is an error. A NaN scrutinee therefore matches no range, and a
   `match` on a float needs a `_` arm. `f64::NEG_INFINITY..=f64::INFINITY`

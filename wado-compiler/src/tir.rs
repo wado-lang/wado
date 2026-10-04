@@ -5820,21 +5820,17 @@ pub enum TirPattern {
 #[derive(Debug, Clone)]
 pub enum InstancePattern {
     Literal(PatternLiteral),
+    /// Integer, `char` or float, as the scrutinee's type decides.
     Range {
-        start: PatternLiteral,
-        end: PatternLiteral,
-        inclusive: bool,
-    },
-    /// A range with a float bound.
-    FloatRange {
         start: RangeBound,
         end: RangeBound,
         inclusive: bool,
     },
 }
 
-/// What a range-pattern bound names: a value of an integer or `char`
-/// scrutinee, or a float, whose value turns on the float type that reads it.
+/// What a range-pattern bound names: an integer or `char` literal, which a
+/// float reads by value, or a float, whose value turns on the float type that
+/// reads it.
 #[derive(Debug, Clone)]
 pub enum RangeBound {
     Discrete(PatternLiteral),

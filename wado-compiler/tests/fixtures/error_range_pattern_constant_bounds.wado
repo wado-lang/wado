@@ -1,0 +1,40 @@
+// A constant range bound has its constant's type, a mutable global is no
+// bound, and the scrutinee is still an integer, char or float. Which values a
+// constant names shows only when the match runs, so its range covers none.
+
+global LOW: i32 = 10;
+global WORD: String = "a";
+global mut COUNT: i32 = 0;
+global TOP: u8 = 255;
+
+fn typed(x: i64) -> bool {
+    return x matches { LOW..<20 };
+}
+
+fn mutable(x: i32) -> bool {
+    return x matches { 0..<COUNT };
+}
+
+fn text(s: String) -> bool {
+    return s matches { WORD..<WORD };
+}
+
+fn uncovered(x: u8) -> i32 {
+    return match x {
+        0..=TOP => 1,
+    };
+}
+
+fn generic<T>(x: T) -> bool {
+    return x matches { LOW..<20 };
+}
+
+export fn run() {
+    let _ = typed(0) && mutable(0) && text("a") && generic(0);
+    let _ = uncovered(0);
+}
+
+__DATA__
+{
+  "compile_error": ":11:24: analysis error: type mismatch: expected 'i64', found 'i32'; 15:24: invalid pattern: a range bound is a literal or a constant; 19:24: pattern mismatch: expected 'an integer, char or float type', found 'String'; 23:12: invalid pattern: non-exhaustive match: add a final `_` arm; 29:24: pattern mismatch: expected 'an integer, char or float type', found 'T'"
+}

@@ -3385,7 +3385,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<Pat> {
         // Bad or empty bounds were reported where the pattern was resolved.
         let inclusive = matches!(kind, ast::RangeKind::Inclusive);
-        let pattern = util::range_pattern(start, end, inclusive, &self.tysys.resolutions)?.ok()?;
+        let Some(pattern) = util::range_pattern(start, end, inclusive, &self.tysys.resolutions)
+        else {
+            // A constant bound's value shows only when the match runs.
+            let resolved = [start, end].into_iter().all(|bound| {
+                util::range_bound(bound, &self.tysys.resolutions).is_some_and(|b| b.is_ok())
+                    || self.names_pattern_constant(bound)
+            });
+            return resolved.then_some(Pat::Opaque);
+        };
+        let pattern = pattern.ok()?;
         // What a pattern on a type parameter names is decided per instance.
         if !util::settles_literal_patterns(&self.tysys.type_table.borrow(), scrutinee_type) {
             return util::unsettled_pattern_errors(&pattern)

@@ -474,10 +474,11 @@ pub fn constant_pattern_local_name() -> String {
     format!("{INTERNAL_PREFIX}constant")
 }
 
-/// The local a float range pattern holds its scrutinee in.
+/// The local a range pattern compared by tests holds its scrutinee in: a
+/// float range, or one with a constant bound.
 #[must_use]
-pub fn float_range_local_name() -> String {
-    format!("{INTERNAL_PREFIX}float_range")
+pub fn range_local_name() -> String {
+    format!("{INTERNAL_PREFIX}range")
 }
 
 /// Local holding one flattened field of a variant-return slot. `slot_local`

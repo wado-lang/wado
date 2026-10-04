@@ -137,9 +137,9 @@ pub(super) fn range_bound(
     }
 }
 
-/// The range pattern `start..end` (`..=` where `inclusive`): discrete where
-/// both bounds are, a float range otherwise, or why a bound names no value.
-/// `None` where a bound is neither a literal nor a primitive's limit.
+/// The range pattern `start..end` (`..=` where `inclusive`), or why a bound
+/// names no value. `None` where a bound is neither a literal nor a primitive's
+/// limit.
 pub(super) fn range_pattern(
     start: &Pattern,
     end: &Pattern,
@@ -150,27 +150,14 @@ pub(super) fn range_pattern(
         range_bound(start, resolutions)?,
         range_bound(end, resolutions)?,
     );
-    let (start, end) = match (start, end) {
-        (Ok(start), Ok(end)) => (start, end),
-        (start, end) => {
-            return Some(Err([start.err(), end.err()]
-                .into_iter()
-                .flatten()
-                .collect()));
-        }
-    };
-    Some(Ok(match (start, end) {
-        (RangeBound::Discrete(start), RangeBound::Discrete(end)) => InstancePattern::Range {
+    Some(match (start, end) {
+        (Ok(start), Ok(end)) => Ok(InstancePattern::Range {
             start,
             end,
             inclusive,
-        },
-        (start, end) => InstancePattern::FloatRange {
-            start,
-            end,
-            inclusive,
-        },
-    }))
+        }),
+        (start, end) => Err([start.err(), end.err()].into_iter().flatten().collect()),
+    })
 }
 
 /// A literal or range pattern on a settled scrutinee.
@@ -221,36 +208,35 @@ pub(super) fn settle_instance_pattern(
             start,
             end,
             inclusive,
-        } if float_format(scrutinee, type_table).is_some() => float_range(
-            &RangeBound::Discrete(start.clone()),
-            &RangeBound::Discrete(end.clone()),
-            *inclusive,
-            scrutinee,
-            type_table,
-        )
-        .map(SettledPattern::Float),
+        } if float_format(scrutinee, type_table).is_some() => {
+            float_range(start, end, *inclusive, scrutinee, type_table).map(SettledPattern::Float)
+        }
         InstancePattern::Range {
             start,
             end,
             inclusive,
         } => {
-            let mut errors = range_bound_errors(start, end, scrutinee, type_table);
-            errors.extend(unsettled_pattern_errors(pattern));
+            let values = [start, end].map(|bound| bound_value(bound, scrutinee, type_table));
+            let mut errors = discrete_order_errors(start, end, *inclusive);
+            let [Ok(start), Ok(end)] = values else {
+                errors.extend(values.into_iter().filter_map(Result::err));
+                return Err(errors);
+            };
             if !errors.is_empty() {
                 return Err(errors);
             }
+            let [start, end] = [start, end].map(|value| match value {
+                BoundValue::Int(bits) => bits,
+                BoundValue::Char(c) => i128::from(u32::from(c)),
+                BoundValue::Float(..) => unreachable!("only a float reads a float bound"),
+            });
             Ok(SettledPattern::Range {
-                start: start.bits(),
-                end: end.bits(),
+                start,
+                end,
                 inclusive: *inclusive,
                 is_unsigned,
             })
         }
-        InstancePattern::FloatRange {
-            start,
-            end,
-            inclusive,
-        } => float_range(start, end, *inclusive, scrutinee, type_table).map(SettledPattern::Float),
     }
 }
 
@@ -263,14 +249,11 @@ pub(super) fn unsettled_pattern_errors(pattern: &InstancePattern) -> Vec<Pattern
     match pattern {
         InstancePattern::Literal(_) => Vec::new(),
         InstancePattern::Range {
-            start,
-            end,
+            start: start @ RangeBound::Discrete(_),
+            end: end @ RangeBound::Discrete(_),
             inclusive,
-        } => range_order_error(start, end, *inclusive)
-            .map(PatternLiteralError::Invalid)
-            .into_iter()
-            .collect(),
-        InstancePattern::FloatRange {
+        } => discrete_order_errors(start, end, *inclusive),
+        InstancePattern::Range {
             start,
             end,
             inclusive,
@@ -298,6 +281,22 @@ pub(super) fn unsettled_pattern_errors(pattern: &InstancePattern) -> Vec<Pattern
             errors
         }
     }
+}
+
+/// Why the range `start..end` of two integer or `char` literals names no
+/// values whatever type reads it: its bounds out of order.
+fn discrete_order_errors(
+    start: &RangeBound,
+    end: &RangeBound,
+    inclusive: bool,
+) -> Vec<PatternLiteralError> {
+    let (RangeBound::Discrete(start), RangeBound::Discrete(end)) = (start, end) else {
+        return Vec::new();
+    };
+    range_order_error(start, end, inclusive)
+        .map(PatternLiteralError::Invalid)
+        .into_iter()
+        .collect()
 }
 
 /// A float range pattern, its bounds rounded into the float type that reads it.
@@ -356,34 +355,13 @@ pub(super) fn float_range(
     scrutinee: TypeId,
     type_table: &mut TypeTable,
 ) -> Result<FloatRange, Vec<PatternLiteralError>> {
-    let scrutinee = type_table.peel_refs(scrutinee);
-    let format = float_format(scrutinee, type_table);
-    let mut errors = Vec::new();
-    let mut bits = |bound: &RangeBound, errors: &mut Vec<PatternLiteralError>| {
-        let found = match (bound, format) {
-            (RangeBound::Discrete(lit), Some(format)) => int_literal_float_bits(lit, format)
-                .or_else(|| pattern_literal_error(lit, scrutinee, type_table).map(Err)),
-            (RangeBound::Discrete(lit), None) => {
-                pattern_literal_error(lit, scrutinee, type_table).map(Err)
-            }
-            (RangeBound::Float(bound), Some(format)) => {
-                Some(float_bound_bits(bound, format, scrutinee, type_table))
-            }
-            (RangeBound::Float(bound), None) => Some(Err(PatternLiteralError::Mismatch(
-                bound.demands(type_table),
-            ))),
-        };
-        match found {
-            Some(Ok(bits)) => Some(bits),
-            Some(Err(error)) => {
-                errors.push(error);
-                None
-            }
-            None => None,
-        }
-    };
-    let (start, end) = (bits(start, &mut errors), bits(end, &mut errors));
-    let (Some(format), Some(start), Some(end)) = (format, start, end) else {
+    let values = [start, end].map(|bound| bound_value(bound, scrutinee, type_table));
+    let [
+        Ok(BoundValue::Float(format, start)),
+        Ok(BoundValue::Float(_, end)),
+    ] = values
+    else {
+        let errors: Vec<_> = values.into_iter().filter_map(Result::err).collect();
         assert!(
             !errors.is_empty(),
             "a float range on a non-float names a mismatch"
@@ -397,6 +375,48 @@ pub(super) fn float_range(
         inclusive,
     }
     .checked()
+}
+
+/// The value a range bound names on a settled scrutinee.
+pub(super) enum BoundValue {
+    /// The bits an integer compares by, read unsigned on an unsigned scrutinee.
+    Int(i128),
+    Char(char),
+    /// The bits of a float in the scrutinee's format.
+    Float(FloatFormat, u64),
+}
+
+/// The value `bound` names on `scrutinee`, or why it names none.
+pub(super) fn bound_value(
+    bound: &RangeBound,
+    scrutinee: TypeId,
+    type_table: &mut TypeTable,
+) -> Result<BoundValue, PatternLiteralError> {
+    let scrutinee = type_table.peel_refs(scrutinee);
+    match (bound, float_format(scrutinee, type_table)) {
+        (RangeBound::Discrete(lit), Some(format)) => match int_literal_float_bits(lit, format) {
+            Some(bits) => bits.map(|bits| BoundValue::Float(format, bits)),
+            None => Err(pattern_literal_error(lit, scrutinee, type_table)
+                .expect("a suffixed integer, a limit or a char is no float")),
+        },
+        (RangeBound::Discrete(lit), None) => {
+            if let Some(error) = pattern_literal_error(lit, scrutinee, type_table) {
+                return Err(error);
+            }
+            Ok(match lit {
+                PatternLiteral::Char(c) => BoundValue::Char(*c),
+                PatternLiteral::Int { .. } => BoundValue::Int(lit.bits()),
+                PatternLiteral::Bool(_) => unreachable!("a range bound is never a `bool`"),
+            })
+        }
+        (RangeBound::Float(bound), Some(format)) => {
+            float_bound_bits(bound, format, scrutinee, type_table)
+                .map(|bits| BoundValue::Float(format, bits))
+        }
+        (RangeBound::Float(bound), None) => {
+            Err(PatternLiteralError::Mismatch(bound.demands(type_table)))
+        }
+    }
 }
 
 /// The bits `bound` names in `format`, read by `scrutinee`, or why it names
@@ -452,6 +472,16 @@ fn signed_literal_bits(
     } else {
         bits
     })
+}
+
+/// Whether a range pattern ranges over `scrutinee`, read through newtypes: an
+/// integer, `char` or float.
+pub(super) fn takes_range_patterns(type_table: &TypeTable, scrutinee: TypeId) -> bool {
+    let head = type_table.representation_head(scrutinee);
+    type_table.is_integer(head)
+        || type_table.is_wide_int(head)
+        || type_table.is_primitive(head, PrimitiveType::Char)
+        || float_format(head, type_table).is_some()
 }
 
 /// The float format of `scrutinee`, read through references and newtypes.
@@ -647,19 +677,6 @@ pub(super) fn pattern_literal_mismatch(
         _ => return None,
     };
     Some(expected.to_string())
-}
-
-/// Why the bounds of a range pattern name no values of `scrutinee`.
-pub(super) fn range_bound_errors(
-    start: &PatternLiteral,
-    end: &PatternLiteral,
-    scrutinee: TypeId,
-    type_table: &mut TypeTable,
-) -> Vec<PatternLiteralError> {
-    [start, end]
-        .into_iter()
-        .filter_map(|bound| pattern_literal_error(bound, scrutinee, type_table))
-        .collect()
 }
 
 /// Why the range `start..end` names no values whatever type reads it: its
