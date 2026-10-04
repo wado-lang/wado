@@ -49,15 +49,10 @@ wasmtime-wasi-http = { path = "vendor/wasmtime/crates/wasi-http" }
 wasmtime-wasi-tls = { path = "vendor/wasmtime/crates/wasi-tls" }
 ```
 
-Those four names redirect 31 crates. The `cranelift-*`, `pulley-*`,
-`wasmtime-internal-*` and `wiggle*` crates follow through the dependency graph.
-`sync-vendor` already holds the submodule at the `Cargo.lock` version, so the
-sources match what the workspace expects and nothing needs porting.
-
-Keep the stanza on a throwaway branch. CI checks out without submodules
-(`submodules: false`, also `actions/checkout`'s default), so on `main` every job
-dies while parsing the manifest. Landing it means turning submodule checkout on
-across every workflow.
+The rest of wasmtime's crates follow through the dependency graph, and
+`sync-vendor` holds the submodule at the `Cargo.lock` version, so nothing needs
+porting. Keep the stanza on a throwaway branch: CI checks out without
+submodules, so every job would die parsing the manifest.
 
 `reference/` holds patches written this way, each with its measurement:
 

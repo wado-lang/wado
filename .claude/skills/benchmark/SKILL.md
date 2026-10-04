@@ -5,51 +5,38 @@ description: Measure Wado's performance or the size of the Wasm it generates, an
 
 # Benchmark
 
-Run the benchmarks and update `benchmark/README.md` (and `wasm-size/README.md`).
+Run the benchmarks and update `benchmark/README.md` and `wasm-size/README.md`.
 
 ## Prerequisites
 
-```sh
-mise run on-task-started
-```
-
-- `vendor/wasmtime` submodule must exist (the SessionStart hook handles it;
-  otherwise `git submodule update --init --recommend-shallow vendor/wasmtime`).
-- http-routing needs `oha` (`cargo install oha`); `bun` is mise-managed.
-- gale-gen's and sqlite-parse's ANTLR4 references need `java` (sqlite-parse also
-  needs `javac`); the jar is fetched to `~/.cache/gale`. Those rows are skipped
-  if the tool is absent.
+- `mise run on-task-started`, and the `vendor/wasmtime` submodule.
+- http-routing needs `oha` (`cargo install oha`).
+- The ANTLR4 rows of gale-gen and sqlite-parse need `java` (and `javac`); the
+  run prints `SKIP:` without them.
 - wasm-size needs `rustup target add wasm32-wasip1` and Moonbit
   (`curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash`, then
   `moon update` in each `wasm-size/*` dir).
 
 ## Procedure
 
-1. Run `mise run benchmark-all` **three times**, each to its own log, then pick
-   per row with `node benchmark/pick.ts run1.log run2.log run3.log` (throttling
-   only ever slows things down). Use that tool rather than reading the logs by
-   eye: it keys rows by (task, implementation, phase) and selects on ms/iter, so
-   a rate that rounds to a tie across runs cannot pair with the wrong ms/iter.
-   Which benchmarks run, and in what order, is `benchmark/mise.toml`'s `all`
-   task.
-2. Run http-routing separately (needs `oha` + pinned cores):
-   `SLICE=10 ROUNDS=3 SHAPES="1 4" mise run benchmark-http-routing`. It keeps
-   the per-(server, request) max internally, so one invocation suffices, and it
-   measures one worker shape per entry in `SHAPES`. Add `HEADROOM_CHECK=1` when
-   `CONNECTIONS_PER_WORKER`, `OHA_CORE_COUNT` or `SHAPES` changed, to confirm
-   `oha` was not the ceiling.
-3. Refresh the README Environment line versions: `mise exec -- node --version`,
-   `mise exec -- bun --version`, `rustc --version`, `cc --version | head -1`
-   (wasmtime version is the vendored `vendor/wasmtime` workspace version).
-4. Update the tables, following README.md's existing layout. http-routing is
-   req/s (higher is better), one table per worker shape. Keep measured figures
-   inside tables — prose around them is not re-measured and drifts.
-5. wasm-size: `mise run report-wasm-size`, then update `wasm-size/README.md`.
+1. Run `mise run benchmark-all` three times, each to its own log, and pick per
+   row with `node benchmark/pick.ts run1.log run2.log run3.log`.
+2. Run http-routing on its own:
+   `SLICE=10 ROUNDS=3 SHAPES="1 4" mise run benchmark-http-routing`. Add
+   `HEADROOM_CHECK=1` when `CONNECTIONS_PER_WORKER`, `OHA_CORE_COUNT` or
+   `SHAPES` changed, to confirm `oha` was not the ceiling.
+3. Refresh the README's Environment line from `mise exec -- node --version`,
+   `mise exec -- bun --version`, `rustc --version`, `cc --version | head -1`,
+   and the `vendor/wasmtime` workspace version.
+4. Update the tables in the README's existing layout; http-routing is one req/s
+   table per worker shape.
+5. `mise run report-wasm-size`, then update `wasm-size/README.md`.
 
-## Sweeping a compiler knob
+## Sweeping a Compiler Knob
 
-`WADO_BENCH_FLAGS` is appended to every `wado compile` / `wado run` the harness
-issues, so an arm costs a benchmark run rather than a release rebuild:
+`WADO_BENCH_FLAGS` is appended to every `wado run` the harness issues, so an arm
+costs a run, not a rebuild. A knob only `compile` accepts cannot be swept this
+way.
 
 ```sh
 set -e  # a failed arm would leave pick.ts choosing among the rest
@@ -59,38 +46,13 @@ done
 node benchmark/pick.ts thr13.log thr20.log thr32.log
 ```
 
-Read the sweep with `pick.ts` the same way as a best-of-three: it keys rows by
-(task, implementation, phase), so the "best" column names the winning arm per
-row. Only a knob every compiling subcommand accepts can be swept this way — the
-harness spends the flags on `wado run`, so one added to `compile` alone is one
-the sweep cannot reach. The knob a sweep settles on is a default in
-`optimize.rs`, not a flag the README's numbers were taken under — re-run the
-suite unflagged before updating the tables.
+The winner becomes a default in `optimize.rs`; re-run the suite unflagged before
+updating the tables. Comparing it against `origin/main` is the
+`wado-performance` skill's A/B.
 
-Comparing the settled default against `origin/main` is a different measurement,
-and `WADO_BIN` plus `ab.ts` is how: see the `wado-performance` skill.
+## Reading Output
 
-## Reading output
-
-Each program prints a throughput line — `<rate> <unit>/s   (<ms> ms/iter, <n> iter)` — per phase (zlib prints two phases, `Compress:`/`Decompress:`).
-Read the rate and the ms/iter straight off; the iteration count auto-calibrates
-to ~1s, so there is no total to report. The unit is the benchmark's own
-(numbers/s, px/s, conversions/s, MB/s, req/s); `vs best` = fastest rate / this
-rate.
-
-Each benchmark prints the implementations it compared, so read them off the run
-rather than from a list here. Two are conditional: the ANTLR4 rows for
-`sqlite-parse` and `gale-gen` are skipped when `java` is absent, and the run
-says `SKIP:` when it drops one.
-
-## Workload sizing
-
-Benchmarks auto-calibrate their iteration count to run ~1s, so no manual
-denomination is needed. A workload whose single iteration approaches that
-reports one iteration and stops averaging — shrink its problem size, across
-every language implementation of that benchmark, until it calibrates again.
-
-## Notes
-
-- Tool versions come from mise, not the system.
-- Cloud VMs are noisy; best-of-three absorbs the drift.
+Each program prints `<rate> <unit>/s   (<ms> ms/iter, <n> iter)` per phase. The
+iteration count calibrates to about a second; a workload whose single iteration
+approaches that stops averaging, so shrink it in every language's
+implementation. `vs best` is the fastest rate over this one.
