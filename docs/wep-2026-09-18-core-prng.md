@@ -36,6 +36,9 @@ specification.
 | xoshiro256++ |  187 M |  762 M |
 | SHISHUA      |  185 M | 1.65 G |
 
+PCG64 is not a candidate. Its 128-bit state is a `u128`, which is a GC type in
+Wado, so every output allocates.
+
 ## Decision
 
 `core:prng` answers the three demands separately and does not mix them: a scalar
