@@ -84,6 +84,13 @@ The signature states two facts, so no identifier lists them. A `&mut` parameter
 is written through. A declaration returning `!` never returns: every call ends
 in a trap. That is not `trap`, which says a call that returns may instead trap.
 
+A write through a `&mut` parameter may reach everything the referent reaches.
+When the call also states `outside = [a]` for that parameter, the write reaches
+only the elements of `a` in that range.
+
+A `hint` call is never deleted, moved or merged on its own. It goes when the
+code that contains it goes, and it never keeps that code alive.
+
 A fact the attribute leaves out is a fact the call does not have. A call with no
 `trap` never traps. A wrong attribute miscompiles as wrong code does, so
 validation checks the form of an attribute and never second-guesses its facts.
@@ -121,6 +128,10 @@ non-negative and they end at or before `a`'s length, as the Wasm instructions
 read them unsigned.
 
 `outside = [a]` also says the call does not replace `a`.
+
+A call that states `outside = [a], at = [i]` without `count` and returns a value
+is an element accessor: it reaches the one element of `a` at `i`. It writes
+that element when it returns `&mut`, and reads it otherwise.
 
 The attributes state what a call does when the host behaves as specified.
 Running out of memory is assumed never to happen, and no attribute states it.
@@ -257,6 +268,8 @@ declaration still to be written.
   - [ ] `value_copy::place`: the `array_get_*` results are part of the array.
   - [ ] `nir::FunctionRef::array_element_access`: which builtins read or write
     an element.
+  - [ ] `heap_effect::classify_callee`: an `array_` builtin writes only its
+    array.
   - [ ] `dce`: `cold_path` is inert.
 - [ ] Move the rules into `spec-attributes.md`, replacing the four sections,
   and update what `spec-effects.md` and `spec-memory.md` say about
@@ -268,9 +281,6 @@ declaration still to be written.
   [WEP: Migration to GC in Components](./wep-2026-03-28-gc-in-components.md)
   plans, shares storage with what it is handed. The raw call of every import
   carries `#[storage(none)]`, which is then false.
-- How far a write through a `&mut` parameter reaches is not stated: the
-  referent's own slots, or everything the referent reaches. heap_effect limits
-  an array builtin's write to the array, by the builtin's name.
 - A `&mut` parameter always counts as a write, so `array_get_ref_mut`, which
   only hands out a reference, invalidates what the optimizer knew of the array.
 - A bundled core Wasm asset such as the libm is declared `opaque`, so a call to it
