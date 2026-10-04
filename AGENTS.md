@@ -51,9 +51,9 @@ raises its `opt-level` where it matters. `--release` is for distribution.
 ## Git
 
 - Commit and push each self-contained unit without asking, never onto `main`. Open a pull request only when the user asks.
-- Read the whole diff before committing. A trimmed comment keeps the clause that names a pass, a type, a literal, or the bug behind the code.
+- Read the whole diff before committing. A trimmed comment or doc keeps every clause that names a pass, a type, a literal, a condition, or the bug behind the code.
 - A defect found mid-task is fixed on the branch in hand.
-- Delete local branches `git branch --merged main` lists without asking; never one `--no-merged` lists.
+- Delete local branches `git branch --merged main` lists without asking, except `main` and a branch with no commits of its own yet; never one `--no-merged` lists.
 - Merge `origin/main` only through the `git-upstream-sync` skill. CI's test jobs run on the branch merged with `main`, so reproduce a CI-only failure there first.
 
 ## Writing
@@ -65,7 +65,7 @@ raises its `opt-level` where it matters. `--release` is for distribution.
 
 ## Testing
 
-- Test the language from an e2e fixture: a `.wado` file in `wado-compiler/tests/fixtures/`, expectations in its `__DATA__`. `{"compile_error": "…"}` matches the whole report, position included; `{"compile_error_codes": [...]}` names the `Code`. Kiln is the exception, since a generator needs the filesystem.
+- Test the language from an e2e fixture: a `.wado` file in `wado-compiler/tests/fixtures/`, expectations in its `__DATA__`. Nearly everything the language does is stated there, diagnostics included. `{"compile_error": "…"}` matches the whole report, position included; `{"compile_error_codes": [...]}` names the `Code`. Kiln is the exception, since a generator needs the filesystem.
 - Test a stdlib function from the `*_test.wado` beside its module.
 - Write an integration test only for what no fixture can state, in `tests/integration/`, declared in its `main.rs`. Each file directly in `tests/` links another ~150 MB target.
 - A regression fixture's shape is its point: when a harness cannot classify one, fix the harness.

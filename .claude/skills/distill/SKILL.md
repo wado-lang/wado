@@ -32,7 +32,8 @@ failing test.
 - Delete dead code and wasted work. A stored closure pins all it captured.
 - Contracts, not defences. A default or fallback whose validity you cannot argue
   turns a broken call into a wrong answer: `assert!` what the caller owes,
-  `unreachable!` the arm that cannot happen.
+  `unreachable!` the arm that cannot happen. A branch that can happen is control
+  flow and stays.
 
 ### Comments
 
@@ -46,7 +47,7 @@ also cut a rule that is trivially deduced from a principle the file or the root
 `AGENTS.md` already states: detail dilutes the rules that matter. Keep one that
 fences a principle against a reading broader than intended. Cut words, never a
 fact: grep for what links to a passage before removing it, and keep a code
-block runnable on its own.
+block runnable on its own, by running it.
 
 ## Sweep by Shape
 

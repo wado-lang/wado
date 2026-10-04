@@ -46,12 +46,13 @@ regions.
 
 ## Fuel
 
-`--report-fuel` on `run`, `test` and `serve` counts guest instructions, which a
-given build spends identically on any machine; host calls and GC spend none. A
+`--report-fuel` on `run`, `test` and `serve` counts guest instructions, so pure
+computation in one build spends the same on any machine; host calls and GC
+spend none, but a guest waiting on I/O loops as often as the host makes it. A
 test's count includes instantiation. Under `serve` it forces one worker and one
-request at a time, leaves out the query string, and reports what a task spends
-after its response on an `(after response)` line, until the next request
-arrives.
+request at a time, leaves out the query string, marks a request that trapped
+its worker `(trapped)`, and reports what a task spends after its response on an
+`(after response)` line, until the next request arrives.
 
 ## Query
 

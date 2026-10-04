@@ -49,7 +49,9 @@ Each of these is a bug when it lands per element of a loop:
   point defeats both, which is a pass to fix.
 - `array.new` / `array.new_default`, where a buffer could be reused.
 - `$value_copy$T…`, a deep copy of a non-fresh value. Count them:
-  `wado compile -O2 --log-level info … 2>&1 | grep -c 'remark: a copy of'`. A cut
+  `wado compile -O2 --log-level info … 2>&1 | grep -c 'remark: a copy of'` for
+  the entry package; remarks skip the stdlib, so a stdlib copy is counted in
+  `wado dump -O2` instead. A cut
   count is a result even when the benchmark is flat. Moving a copy into a
   callee's call sites multiplies it.
 
@@ -104,7 +106,8 @@ find the price with `WADO_TRACE=inline` and fix it in `optimize/inline.rs`.
 Never bend source to the current prices (collapsing `let`s, choosing a width,
 splitting to get under the threshold). Raising the threshold wholesale measured
 slower. A rare heavy branch needs only `builtin::cold_path()`;
-`nir/cold_outline` moves it out. A slow path that is not rare is not cold.
+`nir/cold_outline` moves it out, and a marked region it cannot take (one holding
+a `return`, say) is a gap in that pass, per §2. A slow path that is not rare is not cold.
 
 ## 5. Measurement
 

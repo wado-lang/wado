@@ -5,7 +5,7 @@ description: The only way to merge origin/main into a branch, conflicts or not. 
 
 # Upstream Sync
 
-Every step runs whether or not the merge conflicts.
+A clean merge skips steps 2 and 3 but still ends with step 4.
 
 ## 1. Merge
 
@@ -16,26 +16,31 @@ onto it.
 git pull --no-rebase origin "$(git branch --show-current)"   # pushed branches only
 git fetch origin main
 git -c merge.conflictstyle=zdiff3 merge origin/main
+git submodule update --init --recommend-shallow
 ```
 
-## 2. Commit the conflicts unresolved
+## 2. If It Conflicts, Commit the Conflicts Unresolved
 
 The raw conflict gets its own commit, so the resolution reads as a diff against
-it. Never squash the two.
+it. Never squash the two. Stage, then check the submodules before committing:
 
 ```sh
 git add -A
 git diff --cached origin/main -- vendor
-git commit -m "merge origin/main (conflicts unresolved)"
 ```
 
-The `vendor` diff prints nothing unless the branch bumps a submodule itself.
-Otherwise `git add -A` staged a stale checkout and reverts main's bump; restore
-main's pointer first:
+That prints nothing unless the branch bumps a submodule itself. Anything else is
+a stale checkout `git add -A` staged, reverting main's bump; restore main's
+pointer for each such path:
 
 ```sh
-git update-index --cacheinfo 160000,<sha from origin/main>,<path>
-git submodule update --init --recommend-shallow <path>
+git update-index --cacheinfo 160000,"$(git rev-parse origin/main:<path>)",<path>
+```
+
+Then commit:
+
+```sh
+git commit -m "merge origin/main (conflicts unresolved)"
 ```
 
 ## 3. Resolve
@@ -48,6 +53,6 @@ git add -A
 git commit -m "resolve merge conflicts"
 ```
 
-## 4. Sanity check
+## 4. Sanity Check
 
 `mise run test`. CI applies clippy and format.

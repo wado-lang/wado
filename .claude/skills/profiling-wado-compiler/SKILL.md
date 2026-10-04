@@ -25,8 +25,17 @@ samply record --save-only --rate 1000 -o /tmp/prof.json -- \
 node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts /tmp/prof.json   # --top 60, --binary wado-lsp, --under 'fn'
 ```
 
-For a server, record it in the background, drive load, then SIGTERM the child,
-not samply: `kill -TERM "$(pgrep -P "$SAMPLY_PID" | head -1)"; wait "$SAMPLY_PID"`. `samply load` opens the call tree in a browser.
+For a server, SIGTERM the child, not samply, or the recording hangs:
+
+```sh
+samply record --save-only --rate 1000 -o /tmp/prof.json -- \
+  target/profiling/wado serve --addr 127.0.0.1:8080 app.wado &
+SAMPLY_PID=$!
+# ... drive load (oha against benchmark/http_routing) ...
+kill -TERM "$(pgrep -P "$SAMPLY_PID" | head -1)"; wait "$SAMPLY_PID"
+```
+
+ `samply load` opens the call tree in a browser.
 
 The analyzer weights by CPU, not wall-clock, and reports CPU by library, the
 top self and inclusive frames (all, and `wado` only), syscall and allocator cost

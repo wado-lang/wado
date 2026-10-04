@@ -13,6 +13,14 @@ The protocol: [lsp.md](lsp.md).
 - No `catch_unwind` around compiler calls: a panic reaching the server is a
   compiler bug, and taking the server down says so.
 - Every AST walk goes through `wado_compiler::ast::AstVisitor`.
+- One of each shared piece: tests build hosts with `src/test_support.rs`
+  (`MapHost`, `open`, `open_files`), native hosts install the stderr trace sink
+  from `src/trace_sink.rs`, and every span becomes a `Range` through
+  `text::range_from_codepoints`.
+- The `Engine` caches one snapshot per document version, dropped by
+  `update_document` / `close_document` along with an invocation index a host
+  injected (`open_document_with_invocations`), so an edited document falls back
+  to consume-only Kiln discovery.
 - A wrapper over `CompilerHost` (`DiagnosticCollector`) delegates every method;
   a trait default drops the wrapped host's dependency index.
 - The server is synchronous `std::io` driven by `futures::executor::block_on`,

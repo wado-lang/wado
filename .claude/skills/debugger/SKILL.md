@@ -23,11 +23,11 @@ cargo build --profile debugger --bin wado
 cat > /tmp/gdb_commands.txt << 'EOF'
 file ./target/debugger/wado
 set pagination off
-break wado-compiler/src/wir_build/calls.rs:131 if $_streq(name->data_ptr, "…")
+break <file.rs>:<line> if $_streq(<a String local>.data_ptr, "…")
 commands
 silent
 bt 6
-print *expr
+print <a local>
 continue
 end
 run compile -o /tmp/out.wasm example/hello.wado
@@ -37,6 +37,8 @@ rust-gdb --batch -x /tmp/gdb_commands.txt > /tmp/gdb.log 2>&1
 grep -a '^\$[0-9]* = ' /tmp/gdb.log | sort -u
 ```
 
+- Fill in a line and locals that exist there; gdb names a missing symbol and
+  prints nothing else.
 - Make the breakpoint select with a condition, so one run answers the question
   and `bt` names the origin.
 - Print a Rust `String` with `print`; `printf "%s"` aborts the command file.

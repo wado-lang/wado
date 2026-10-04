@@ -26,14 +26,14 @@ Where the mise shim for wasm-tools reports no version, call it under
 ```sh
 B=/tmp/binaryen/binaryen-version_133/bin
 S=/tmp/wasm-opt && mkdir -p $S
-FEATURES="--mvp-features --enable-sign-ext --enable-mutable-globals \
-  --enable-nontrapping-float-to-int --enable-simd --enable-relaxed-simd \
-  --enable-bulk-memory --enable-bulk-memory-opt --enable-call-indirect-overlong \
-  --enable-exception-handling --enable-tail-call --enable-reference-types \
-  --enable-multivalue --enable-gc --enable-extended-const --enable-multimemory"
+FEATURES=(--mvp-features --enable-sign-ext --enable-mutable-globals
+  --enable-nontrapping-float-to-int --enable-simd --enable-relaxed-simd
+  --enable-bulk-memory --enable-bulk-memory-opt --enable-call-indirect-overlong
+  --enable-exception-handling --enable-tail-call --enable-reference-types
+  --enable-multivalue --enable-gc --enable-extended-const --enable-multimemory)
 wado compile -Os -f no-wide-arithmetic prog.wado -o $S/prog.wasm
 node scripts/jco/transpile-released.mjs $S/prog.wasm $S/jco   # → $S/jco/prog.core.wasm
-$B/wasm-opt $FEATURES -O3 $S/jco/prog.core.wasm -o $S/O3.wasm
+$B/wasm-opt "${FEATURES[@]}" -O3 $S/jco/prog.core.wasm -o $S/O3.wasm
 ```
 
 - `-Os` is the baseline: an `-O2` one counts names wasm-opt drops anyway.

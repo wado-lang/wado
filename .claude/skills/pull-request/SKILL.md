@@ -22,6 +22,7 @@ The title and description come from that diff, not from the session. Say that
 generated output was regenerated, not what moved inside it. Tidy the branch's
 comments and docs while there.
 
+After `git fetch origin main`,
 `git merge-tree --write-tree --no-messages --name-only HEAD origin/main` exits 1
 on a conflict, touching nothing; resolve one with the `git-upstream-sync` skill.
 

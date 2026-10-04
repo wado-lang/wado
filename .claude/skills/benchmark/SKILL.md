@@ -34,9 +34,9 @@ Run the benchmarks and update `benchmark/README.md` and `wasm-size/README.md`.
 
 ## Sweeping a Compiler Knob
 
-`WADO_BENCH_FLAGS` is appended to every `wado run` the harness issues, so an arm
-costs a run, not a rebuild. A knob only `compile` accepts cannot be swept this
-way.
+`WADO_BENCH_FLAGS` is appended to every `wado compile` and `wado run` the harness
+issues, so an arm costs a run, not a rebuild. Only a knob both accept can be
+swept this way.
 
 ```sh
 set -e  # a failed arm would leave pick.ts choosing among the rest
