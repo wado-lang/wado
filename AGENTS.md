@@ -28,6 +28,10 @@ mise trust                 # trust the mise.toml config (first time only)
 mise run on-task-started   # install project tools
 ```
 
+Once you cut the branch, attach `wado-lang/wado` to the session with
+`add_repo` and `push` access. A session without it cannot subscribe to its
+pull request's activity.
+
 ### The Cycle
 
 Write the change, commit it, invoke the `/distill` skill, then test. `/distill`
