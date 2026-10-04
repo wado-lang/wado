@@ -46,9 +46,8 @@ struct RetentionFacts {
     /// own argument there, and only what lands somewhere it cannot see escapes.
     into_param: IndexMap<u32, IndexSet<u32>>,
     /// Positions whose claim is on what the referent's elements hold rather
-    /// than on the reference itself: a reference parameter of `holds_args` or
-    /// `stores_args`. An array of plain data
-    /// hands on nothing, so the claim is gated on the argument's type at each
+    /// than on the reference itself: a reference parameter of `holds_args`,
+    /// `copies_args` or `stores_args`. An array of plain data hands on nothing, so the claim is gated on the argument's type at each
     /// call. Only a declaration states one; a body walk never does.
     elements: IndexSet<u32>,
 }

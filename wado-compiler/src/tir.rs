@@ -7276,7 +7276,7 @@ pub struct RetainSpec<Param> {
 /// Where a retained reference lands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RetainInto<Param> {
-    /// The result, which `holds_args` builds around it.
+    /// The result, which `holds_args` or `copies_args` builds around it.
     Result,
     /// The `&mut` parameter `stores_args` stores into.
     Param(Param),
@@ -7426,7 +7426,8 @@ impl BuiltinDeclaration {
         }
     }
 
-    /// Whether the call returns new storage: `fresh` or `holds_args`.
+    /// Whether the call returns new storage: `fresh`, `holds_args` or
+    /// `copies_args`.
     pub fn allocates(&self) -> bool {
         self.facts.storage.returns_new_storage()
     }
