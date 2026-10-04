@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791085590657,
+  "lastUpdate": 1791102252053,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -63373,6 +63373,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8b87b12314289b9061848565c1f2f01fad4fdfee"
         },
         "date": 1791085590218,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338887,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5a8350eca2b37f6bcae5bd97ef09b441bb0794bf",
+          "message": "Merge pull request #2263 from wado-lang/worktree-memory-cleanup\n\nchore: keep agent knowledge in the repo instead of auto memory",
+          "timestamp": "2026-10-04T17:03:53+09:00",
+          "tree_id": "6159c1bbf5227286ed66cedf2790832ea414b617",
+          "url": "https://github.com/wado-lang/wado/commit/5a8350eca2b37f6bcae5bd97ef09b441bb0794bf"
+        },
+        "date": 1791102251381,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
