@@ -5,327 +5,94 @@ description: How to drive the `wado` command — compile, run, test, serve, form
 
 # The `wado` CLI
 
-`wado <command> --help` is the source of truth for flags and is thorough — it
-states the allocator modes and their per-world defaults, the optimization
-levels, every `dump` phase, and every `query` kind. Run it rather than guessing.
-
-Inside the wado repository, `wado` means `cargo run --bin wado --`.
-
-## Commands
-
-```
-Usage: wado <command> [options]
-
-Commands:
-  init [options]                      Create a new wado.toml manifest
-  update [options]                    Resolve dependencies and write wado.lock
-  fetch [options]                     Download the project's registry dependencies
-  clean [options]                     Evict derived cache state (git worktrees)
-  build [options]                     Build the project's worlds from wado.toml
-  compile [options] <file.wado>       Compile a single Wado source file
-  check [options] [file.wado | dir]   Verify a source file and its Kiln generators
-  run [options] [file.wado]           Compile and run a Wado CLI program
-  serve [options] [file.wado]         Compile and serve a Wado HTTP service
-  test [options] [files or dirs...]   Run tests in Wado source files
-  format [options] <file.wado>...     Format a Wado source file
-  doc [options] <file.wado>...        Generate documentation from source files
-  dump [options] <file.wado>...       Dump compiler internal state
-  wit [options] [file.wado | dir]     Emit the WIT contract for a Wado program
-  syntax [options]                    Generate syntax definition files
-  lsp [options]                       Start the language server (LSP over stdio)
-  query <kind> [options] <file.wado>  Query language service information
-  publish [options]                   Check whether the package can be published
-  help [command]                      Show a command's help, builtin or external
-
-Global options:
-  --help     Show this help message
-  --list     List every command, builtin and external
-  --version  Show version information
-```
-
-`build` works from a `wado.toml` and writes `build/<world>.wasm`. `compile`
-takes exactly one source file; `dump`, `doc`, and `format` take several.
-`check`, `run`, `serve`, and `wit` fall back to the manifest when given no path.
+`wado --help` and `wado <command> --help` are the source of truth for commands
+and flags: worlds, allocators, `-O` levels, every `dump` phase and `query` kind.
+Inside the repository `wado` means `cargo run --bin wado --`. What follows is
+what `--help` does not say.
 
 ## External Commands
 
-A name the list above does not hold is looked up as `wado-<name>` on `PATH`, so
-`wado run-webgpu app.wado` runs `wado-run-webgpu app.wado`. The child
-receives the rest of the command line unparsed and owns the exit status, and
-`$WADO` names the `wado` that invoked it. `wado --list` names every one it finds.
+An unknown command runs `wado-<name>` from `PATH`, with the rest of the command
+line unparsed and `$WADO` naming the caller (`wado run-webgpu` is one). Only
+absolute `PATH` entries are searched, and a builtin always wins; `wado --list`
+shows both.
 
-Only `PATH` is searched, and never an entry that is empty or relative. A builtin
-always wins, so a `wado-run` on `PATH` is never run; `--list` marks it.
+## Worlds
 
-## Target World
+`run`, `serve` and `test` pick their world. `compile`, `dump` and `wit` default
+to `wasi:cli/command`; `--world` overrides it. `build --world <fq>` instead picks
+one of `wado.toml`'s worlds.
 
-A Wado program targets a Wasm _world_: the CLI command (`wasi:cli/command`, the
-default), the HTTP service (`wasi:http/service`, run via `wado serve`), or the
-synthetic test world (selected with `--world test`, used by E2E tests). Several
-defaults — including the allocator — depend on the target world.
+## Check
 
-`--world <name>` overrides it on `compile`, `check`, `dump`, and `wit` (`check`
-defaults to the library world instead — see Check).
-`--world test` exports the entry module's `test` blocks and drops everything
-else. `run`, `serve`, and `test` pick their world automatically. `build --world <fq>` is a different flag: it selects which of `wado.toml`'s declared worlds to
-build.
-
-```sh
-wado compile --world test file.wado  # compile against the test world
-wado check --world test file.wado    # type-check against the test world
-```
-
-## Allocators
-
-Three allocators are available via `--allocator <mode>`:
-
-- `bump` (default for CLI): bump pointer; never frees. Fast, minimal code.
-- `freelist` (default for the HTTP world): reclaims freed memory via a free list. For long-running processes.
-- `debug` (default for the test world): never reuses freed memory; poisons freed memory with `0xFF`. For use-after-free detection.
-
-```sh
-wado compile --allocator bump file.wado      # bump allocator
-wado compile --allocator freelist file.wado  # free-list allocator
-wado compile --allocator debug file.wado     # debug allocator
-```
-
-`wado compile` selects the `debug` allocator automatically when targeting the
-test world; E2E tests rely on this.
-
-## Compile
-
-```sh
-wado compile -o file.wasm file.wado    # generate Wasm
-wado compile -o file.wat file.wado     # generate WAT
-wado compile --wat-to-stdout file.wado # output WAT to stdout
-```
-
-Optimization levels: `-O0` (none), `-O1` (development), `-O2` (production,
-default), `-O3` (aggressive), `-Os` (`-O2` + strip symbols).
-
-To inspect invalid Wasm when debugging codegen bugs, skip validation:
-
-```sh
-# Output raw Wasm bytes even if invalid
-wado compile --no-validate --wat-to-stdout file.wado
-```
-
-`wado check` verifies Wado sources without emitting Wasm. It runs their Kiln
-generators and resolves dependencies exactly as `compile` / `run` do, writing
-what the generators produce and fetching what the cache lacks.
-
-With no file it checks every world `wado.toml` declares, exactly the targets
-`wado build` builds. Naming a directory checks that directory's project the same
-way, so a workspace member needs no `cd`. It runs at `O0` since it throws the
-component away, so it reports everything a build would and skips the
-optimization loop, which is most of a large build's time.
-
-Naming a file checks that file alone, against the world whose `[world]` entry
-names it and otherwise the library world, which requires no entry point. So a
-library module checks as itself; `--world <name>` opts into a world's contract.
+`wado check` runs Kiln generators and resolves dependencies as a build does,
+then stops before emitting, at `-O0`. With no path, or a directory, it checks
+every world the manifest declares. A named file is checked against the world
+whose `[world]` entry names it, or else the library world, which needs no entry
+point.
 
 ## Run
 
-```sh
-wado run file.wado  # run a CLI program with wasmtime
-```
-
-A program reaches only the directories granted to it: the current one, or
-exactly the `--dir` grants once any is given. Paths open relative to a grant, so
-an absolute path never opens — reach a file outside the tree by granting its
-directory and naming it relative to that.
-
-```sh
-wado run --dir /tmp/scratch prog.wado Foo.g4  # Foo.g4 resolves inside /tmp/scratch
-```
+A program reaches only the current directory, or exactly the `--dir` grants once
+any is given, and paths resolve relative to a grant:
+`wado run --dir /tmp/scratch prog.wado Foo.g4` opens `/tmp/scratch/Foo.g4`.
 
 ## Test
 
-`wado test` discovers and runs `test` blocks (compiled against the `test` world,
-see Target World above).
-
 ```sh
-wado test                           # discover and run every .wado test in the project
-wado test file.wado                 # run tests in one file
-wado test --filter '**/json*.wado'  # run tests in files matching a wildcard
-wado test --profile guest file.wado # guest profile over that file's tests
-wado test --coverage=lcov,json      # also report what ran, into build/coverage/
+wado test --filter '**/json*.wado'  # files matching a wildcard
+wado test --profile guest f.wado    # see wado-performance
+wado test --coverage=lcov,json      # into build/coverage/
 ```
 
-`--coverage` prints a per-file summary after the run. `coverage.json` names,
-for each region, the tests that ran it. `wado dump --coverage-plan file.wado`
-shows the regions a file is measured by.
-
-`--profile` takes one file, runs it serially, and leaves a test that hangs
-unbounded — it samples on the epoch deadline the per-test timeout is counted in.
-See the `wado-performance` skill for reading the profile it writes.
-
-A failure or resolved `#[TODO]` prints its own one-line notice immediately,
-otherwise a digest (`N/Total files · tests, failed, todo, skip · ETA`) prints
-every 5s, ending in a `compile:`/`load:`/`skip:`/`test:` summary. `tail`ing the
-last line or two is enough to read the current state of a long run.
-
-## Serve
-
-Use `wado serve` to run a Wado HTTP service (wasi:http/service world):
-
-```sh
-wado serve file.wado                        # serve on 0.0.0.0:8080 (default)
-wado serve --addr 127.0.0.1:3000 file.wado  # serve on a custom address
-```
+A failure prints at once; otherwise a digest prints every 5s, so the last line
+of the log is the run's state. `--profile` takes one file, runs it serially, and
+lifts the per-test timeout. `wado dump --coverage-plan` shows a file's coverage
+regions.
 
 ## Fuel
 
-`--report-fuel` meters the guest in wasmtime fuel, about one unit per Wasm
-instruction, and reports what it spent. It counts instructions, not time, so
-pure computation in one build spends the same fuel on every machine. A different
-`-O` level or compiler change is a different build and spends differently. Host
-calls and GC spend none, but a guest waiting on I/O can loop more or less,
-depending on how the host answers.
-
-```sh
-wado run --report-fuel prog.wado    # stderr: fuel 477
-wado test --report-fuel f.wado      # ok      f.wado :: name (2ms, fuel 890)
-wado serve --report-fuel svc.wado   # stderr per request: fuel 1234 GET /path
-```
-
-A test's reading includes its instantiation. A serve reading leaves out the
-query, which can carry credentials. A request that traps its worker is reported
-with `(trapped)`. A guest task can outlive its response, and wasmtime can
-neither cancel it nor say when it ends. What it spends before the next request
-arrives gets a second line marked `(after response)`; what it spends later is
-charged to that next request. A serve worker's requests would share one meter, so
-`--report-fuel` forces `--workers 1 --max-concurrency 1`. Metering costs a few
-percent on the benchmarks, but wasmtime's documentation cites up to 2-3x for
-some workloads.
-
-## Dump
-
-Use `wado dump` to inspect compiler internal state for debugging.
-See `wado dump --help` for the full help.
-
-```sh
-wado dump file.wado                  # show final WIR (default)
-wado dump --nir file.wado            # show final NIR (after optimization)
-wado dump --nir -O0 file.wado        # show NIR without optimization
-wado dump --ast file.wado            # show parsed AST
-wado dump --modules file.wado        # show loaded modules
-wado dump --symbols file.wado        # show symbol table
-wado dump --types file.wado          # show type table
-wado dump --tir-resolved file.wado       # show TIR after type resolution
-wado dump --tir-monomorphized file.wado  # show TIR after monomorphization
-wado dump --nir-lowered file.wado        # show NIR right after lowering (before optimize)
-wado dump --assert-plan file.wado        # show which operands each `assert` captures
-```
+`--report-fuel` on `run`, `test` and `serve` counts guest instructions, which a
+given build spends identically on any machine; host calls and GC spend none. A
+test's count includes instantiation. Under `serve` it forces one worker and one
+request at a time, leaves out the query string, and reports what a task spends
+after its response on an `(after response)` line, until the next request
+arrives.
 
 ## Query
 
-`wado query` answers compiler questions about a symbol, for tooling and docs. A
-symbol is addressed either by position (`--line`/`--column` in a file) or by
-_symbol notation_ `MODULE#SYMBOL`:
-
-- `MODULE` is the import specifier; quote it as in `use` — droppable for a scheme or bare name (`core:json`), required for a path or URL (`"./utils.wado"`).
-- `SYMBOL` uses Wado's operators: bare `name` (free function/type/global), `Type::name` (associated const/fn), `Type.name` (method), `Type^Trait::name` (trait-impl member).
+A symbol is addressed by `--line`/`--column` or by `MODULE#SYMBOL`
+(`docs/wep-2026-06-14-symbol-notation.md`): the module as written in a `use`,
+then `name`, `Type::name`, `Type.name` (a method), or `Type^Trait::name`.
 
 ```sh
-wado query hover --symbol core:json#from_string                   # signature / type
-wado query hover --symbol ./hello.wado#run --base example          # local module
-wado query definition --symbol core:cbor#CborDeserializer.peek_byte
-wado query references --symbol core:cli#println --base example     # all uses (workspace)
-wado query hover --line 5 --column 10 file.wado                   # position-based
-wado query diagnostics file.wado                                  # errors/warnings
-wado query inlay-hints file.wado                                  # hints, spliced into the source
+wado query hover --symbol core:json#from_string
+wado query references --symbol core:cli#println --base example
+wado query inlay-hints file.wado   # hints spliced into the source
 ```
 
-`inlay-hints` takes a file, not a symbol, and prints every line that carries a
-hint with the labels spliced in at the anchors an editor would render them at
-(`let x‹: i32› = add(‹a: ›1, ‹b: ›2);`). That is how to check anchor placement —
-against `example/`, say — without reading positions off a list. `--json` prints
-the raw hints instead, positioned in the LSP's default UTF-16 encoding.
-
-Common options:
-
-- `--symbol <notation>` — locate by name instead of `--line`/`--column`.
-- `--base <dir>` — anchor relative modules (default: cwd; `core:` / `wasi:` are location-independent).
-- `--all` — include private members; the default is the public-API view (matches `wado doc`).
-- `--json` — machine-readable output.
-
-For a type, `hover` also lists its `impl` blocks. `references` loads every
-`.wado` under `--base`, so it spans the workspace. See
-`docs/wep-2026-06-14-symbol-notation.md` for the notation spec.
+`--base` anchors relative modules and bounds what `references` loads; `--all`
+adds private members. `inlay-hints` shows each hint at its anchor
+(`let x‹: i32› = …`), which is how to check placement; `--json` gives UTF-16
+positions.
 
 ## Format
 
-The `wado format` command formats Wado source code.
-
-```sh
-wado format -w file.wado  # rewrite in place
-```
-
-In the wado repository, `mise run format` formats the whole workspace. Every
-package skips `**/generated/**` and `**/build/**` plus its own `[format] exclude`; `[format] include` opts any of those back in. `wado-compiler` excludes
-`tests/**`, so the e2e fixtures and the golden format fixtures keep the
-hand-authored layouts that are part of the test.
-
-A directory argument is walked from the package that encloses it, so the globs
-match as authored whichever subdirectory you name. `wado format -w wado-compiler/tests` formats nothing and reports that directory as empty.
-
-**Caution:** naming a file bypasses the filters. The golden-fixture scripts
-rewrite excluded fixtures that way, so `wado format -w wado-compiler/tests/fixtures/x.wado` reformats it too, silently discarding a
-layout the test depends on. When the syntax is updated, make sure to add tests
-to `wado-compiler/tests/format.rs`.
-
-What the formatter decides — width, wrapping, comment placement — is in
-`docs/formatter.md`.
+`mise run format` formats the workspace. Each package skips `**/generated/**`,
+`**/build/**` and its `[format] exclude`, and `wado-compiler` excludes `tests/**`
+because fixture layouts are part of the tests. Exclusions apply only when
+walking a directory: `wado format -w` on a named fixture file rewrites it.
+Formatter rules are in `docs/formatter.md`.
 
 ## Publish
 
-`wado publish` builds the package and uploads it through `wkg`. Credentials
-belong to `wkg`, not Wado — authenticate to the registry first (`docker login`,
-or `WKG_OCI_USERNAME` / `WKG_OCI_PASSWORD`; for GHCR the password is a token with
-the `write:packages` scope). `--dry-run` runs every readiness check without
-uploading.
-
-## Compilation Log and Timing
-
-The compiler emits timestamped diagnostics to stderr. Use `--log-level` to
-control verbosity (`debug`, `info`, `warn` — the default — `error`, `off`).
-
-```sh
-wado compile --log-level debug file.wado
-```
+`wado publish` uploads through `wkg`, whose credentials it uses (`docker login`,
+or `WKG_OCI_USERNAME` / `WKG_OCI_PASSWORD`; a `write:packages` token for GHCR).
+`--dry-run` runs every check without uploading.
 
 ## Optimizer Remarks
 
-A `remark:` reports a cost the optimizer could not remove, at the exact source
-span. They are info-level, so the default `warn` hides them — ask when chasing
-why something is slower or larger than expected, not on every build.
-
-```sh
-wado check --log-level info file.wado              # runs at O0; fastest
-wado check --world test --log-level info lib.wado  # a library with test blocks
-```
-
-Two kinds are reported, across the whole entry package — its entry point and
-every local module it reaches. A dependency, `core:` and `wasi:` stay out:
-
-- A **value-semantic copy that survived**. Wado deep-copies aggregates on
-  assignment, argument passing, and return; the ones no pass removed are
-  invisible in the source.
-
-  ```
-  file.wado:6:5: info: remark: a copy of `List<i32>` survives optimization
-  ```
-
-- A **compile-time parameter that still decides a branch**. `-D log.level=info`
-  did not strip what it was told to. The remark names the parameter, and the
-  intermediate global when the gate reads a derived one instead.
-
-  ```
-  file.wado:111:5: info: remark: compile-time parameter `log.level` is still read
-  here through global `LOG_STATIC_LEVEL`, so this branch is decided at run time;
-  the code it guards was not stripped
-  ```
-
-Design: `docs/wep-2026-06-03-optimizer-remarks.md`. What a remark is currently
-expected to report is the "Not yet implemented" list in `docs/optimizer.md`.
+`--log-level info` (the default is `warn`) reports, for the entry package's own
+modules, each value copy that survived optimization and each compile-time
+parameter that still decides a branch at run time. `wado check --log-level info`
+is the fastest way to see them. Design: `docs/wep-2026-06-03-optimizer-remarks.md`.
