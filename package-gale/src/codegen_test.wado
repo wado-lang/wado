@@ -4131,7 +4131,10 @@ WS : ' ' -> skip ;
 }
 
 test "an optional rule whose only empty alternative is predicated is entered on what follows it as the predicate says" {
-    for let [pred, tree] of [["false", "(s z)"], ["true", "(s b z)"]] {
+    for let [pred, tree] of [
+        ["false", "(s z)"],
+        ["true", "(s b z)"],
+    ] {
         let got = parses(`grammar T;
 s : b? Z EOF ;
 b : {${pred}}? | Y ;

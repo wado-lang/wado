@@ -870,8 +870,6 @@ test "java: an integer cast is dropped and its operand kept" {
 }
 
 test "java: a floating cast is a loud error" {
-    // Dropping it turns `(double)n / 2` into integer division; converting only
-    // its operand leaves `f64 / i32`, which Wado rejects where Java promotes.
     for let java of ["(double)this.n / 2 > 1", "(float)(this.n) / this.n > 1"] {
         let res = java_pred_res(java, "a : ID ;", false);
         assert res.is_err(), `${java}: ${res:?}`;
