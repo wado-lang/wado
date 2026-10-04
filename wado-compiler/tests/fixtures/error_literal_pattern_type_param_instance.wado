@@ -18,7 +18,7 @@ fn is_a<T>(x: T) -> i32 {
 
 fn is_seven<T>(x: T) -> i32 {
     return match x {
-        7 => 1,                  // compile error: pattern mismatch: expected 'an integer type', found 'f64'
+        7 => 1,                  // compile error: invalid pattern: float literals cannot be used in match patterns
         _ => 0,
     };
 }
@@ -59,7 +59,7 @@ __DATA__
   "compile_errors_contains": [
     "pattern mismatch: expected 'bool', found 'i32'",
     "pattern mismatch: expected 'char', found 'i32'",
-    "pattern mismatch: expected 'an integer type', found 'f64'",
+    "invalid pattern: float literals cannot be used in match patterns",
     "pattern mismatch: expected 'u8', found 'i32'",
     "pattern mismatch: expected 'char', found 'f64'",
     "invalid pattern: literal out of range for `u8`: 300"

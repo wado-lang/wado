@@ -2,7 +2,7 @@
 
 use crate::ast::{Literal, NumericSuffix, Pattern};
 use crate::elaborator::float_literal::{FloatFormat, FloatLiteralError, float_literal_bits};
-use crate::elaborator::stmt::{primitive_assoc_const_to_i128, primitive_float_limit_owner};
+use crate::elaborator::stmt::{primitive_float_limit_owner, primitive_int_limit};
 use crate::elaborator::trait_env::written_type_source;
 use crate::elaborator::types::TypeError;
 use crate::escape::{unescape_byte, unescape_char};
@@ -47,13 +47,16 @@ fn saturated_value(magnitude: u128, negated: bool) -> i128 {
     }
 }
 
+/// Why a float literal is no pattern.
+const FLOAT_LITERAL_PATTERN: &str = "float literals cannot be used in match patterns";
+
 /// The value a number, byte, char or bool literal pattern names, or why it
 /// names none.
 pub(super) fn pattern_literal(lit: &Literal) -> Result<PatternLiteral, String> {
     match lit {
         Literal::Number(repr, suffix) => {
             if denotes_float(repr, *suffix) {
-                return Err("float literals cannot be used in match patterns".to_string());
+                return Err(FLOAT_LITERAL_PATTERN.to_string());
             }
             let (negated, digits) = repr
                 .strip_prefix('-')
@@ -108,13 +111,16 @@ pub(super) fn range_bound(
             ..
         } if bindings.is_empty() => {
             let shown = format!("{}::{variant_name}", written_type_source(qualifier));
-            if let Some(value) =
-                primitive_assoc_const_to_i128(Some(qualifier), variant_name, resolutions)
+            if let Some((owner, value)) =
+                primitive_int_limit(Some(qualifier), variant_name, resolutions)
             {
                 return Some(Ok(RangeBound::Discrete(PatternLiteral::Int {
                     magnitude: value.unsigned_abs(),
                     negated: value < 0,
-                    suffix: None,
+                    suffix: Some(
+                        NumericSuffix::from_name(owner.as_str())
+                            .expect("every integer type has a suffix"),
+                    ),
                     shown,
                 })));
             }
@@ -215,6 +221,18 @@ pub(super) fn settle_instance_pattern(
             start,
             end,
             inclusive,
+        } if float_format(scrutinee, type_table).is_some() => float_range(
+            &RangeBound::Discrete(start.clone()),
+            &RangeBound::Discrete(end.clone()),
+            *inclusive,
+            scrutinee,
+            type_table,
+        )
+        .map(SettledPattern::Float),
+        InstancePattern::Range {
+            start,
+            end,
+            inclusive,
         } => {
             let mut errors = range_bound_errors(start, end, scrutinee, type_table);
             errors.extend(unsettled_pattern_errors(pattern));
@@ -257,17 +275,17 @@ pub(super) fn unsettled_pattern_errors(pattern: &InstancePattern) -> Vec<Pattern
             end,
             inclusive,
         } => {
-            let [start, end] = [start, end].map(|bound| match bound {
-                RangeBound::Float(float) => float.f64_bits().map(|bits| (float, bits)),
-                RangeBound::Discrete(_) => None,
-            });
             let mut errors: Vec<_> = [start, end]
                 .into_iter()
-                .flatten()
-                .filter_map(|(bound, bits)| nan_bound_error(bound, FloatFormat::F64, bits))
+                .filter_map(|bound| match bound {
+                    RangeBound::Float(float) => {
+                        nan_bound_error(float, FloatFormat::F64, float.f64_bits()?)
+                    }
+                    RangeBound::Discrete(_) => None,
+                })
                 .collect();
             if errors.is_empty()
-                && let (Some((_, start)), Some((_, end))) = (start, end)
+                && let (Some(start), Some(end)) = (start.f64_bits(), end.f64_bits())
             {
                 let range = FloatRange {
                     format: FloatFormat::F64,
@@ -339,12 +357,13 @@ pub(super) fn float_range(
     type_table: &mut TypeTable,
 ) -> Result<FloatRange, Vec<PatternLiteralError>> {
     let scrutinee = type_table.peel_refs(scrutinee);
-    let prim = type_table.primitive_head(scrutinee);
-    let format = prim.and_then(FloatFormat::of);
+    let format = float_format(scrutinee, type_table);
     let mut errors = Vec::new();
     let mut bits = |bound: &RangeBound, errors: &mut Vec<PatternLiteralError>| {
         let found = match (bound, format) {
-            (RangeBound::Discrete(lit), _) => {
+            (RangeBound::Discrete(lit), Some(format)) => int_literal_float_bits(lit, format)
+                .or_else(|| pattern_literal_error(lit, scrutinee, type_table).map(Err)),
+            (RangeBound::Discrete(lit), None) => {
                 pattern_literal_error(lit, scrutinee, type_table).map(Err)
             }
             (RangeBound::Float(bound), Some(format)) => {
@@ -433,6 +452,46 @@ fn signed_literal_bits(
     } else {
         bits
     })
+}
+
+/// The float format of `scrutinee`, read through references and newtypes.
+fn float_format(scrutinee: TypeId, type_table: &TypeTable) -> Option<FloatFormat> {
+    type_table
+        .primitive_head(type_table.peel_refs(scrutinee))
+        .and_then(FloatFormat::of)
+}
+
+/// The bits an unsuffixed integer literal names in `format`: its value, as an
+/// integer literal converts wherever a float is expected. `None` for any other
+/// literal, which keeps its own type.
+fn int_literal_float_bits(
+    lit: &PatternLiteral,
+    format: FloatFormat,
+) -> Option<Result<u64, PatternLiteralError>> {
+    let PatternLiteral::Int {
+        magnitude,
+        negated,
+        suffix: None,
+        shown,
+    } = lit
+    else {
+        return None;
+    };
+    Some(
+        signed_literal_bits(&magnitude.to_string(), *negated, format)
+            .map_err(|error| PatternLiteralError::Invalid(error.message(shown))),
+    )
+}
+
+impl RangeBound {
+    /// The bits of the `f64` the bound names on a float, whatever float type
+    /// reads it. `None` where that shows only per instance.
+    fn f64_bits(&self) -> Option<u64> {
+        match self {
+            RangeBound::Float(float) => float.f64_bits(),
+            RangeBound::Discrete(lit) => int_literal_float_bits(lit, FloatFormat::F64)?.ok(),
+        }
+    }
 }
 
 /// Why `bound`, holding `bits` in `format`, is no bound: it is a NaN.
@@ -533,6 +592,13 @@ pub(super) fn pattern_literal_error(
     type_table: &mut TypeTable,
 ) -> Option<PatternLiteralError> {
     let scrutinee = type_table.peel_refs(scrutinee);
+    if matches!(lit, PatternLiteral::Int { suffix: None, .. })
+        && float_format(scrutinee, type_table).is_some()
+    {
+        return Some(PatternLiteralError::Invalid(
+            FLOAT_LITERAL_PATTERN.to_string(),
+        ));
+    }
     if let Some(expected) = pattern_literal_mismatch(lit, scrutinee, type_table) {
         return Some(PatternLiteralError::Mismatch(expected));
     }

@@ -3309,17 +3309,19 @@ pub(super) fn remap_pattern_local(pattern: &mut TirPattern, from: u32, to: u32) 
 }
 
 /// A primitive integer's `MIN` / `MAX` written as a pattern (`i32::MIN`), its
-/// qualifier resolved at its own site. `None` for anything else.
-pub(super) fn primitive_assoc_const_to_i128(
+/// qualifier resolved at its own site: the integer type and the value. `None`
+/// for anything else.
+pub(super) fn primitive_int_limit(
     qualifier: Option<&Type>,
     const_name: &str,
     resolutions: &Resolutions,
-) -> Option<i128> {
+) -> Option<(PrimitiveType, i128)> {
     let owner = assoc_const_owner(qualifier, resolutions)?;
-    let (min, max) = resolutions.defs().primitive(owner)?.int_range()?;
+    let prim = resolutions.defs().primitive(owner)?;
+    let (min, max) = prim.int_range()?;
     match const_name {
-        "MIN" => Some(min),
-        "MAX" => Some(max),
+        "MIN" => Some((prim, min)),
+        "MAX" => Some((prim, max)),
         _ => None,
     }
 }

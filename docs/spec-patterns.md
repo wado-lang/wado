@@ -273,6 +273,9 @@ assert grade == "P" && lower;
 - Each bound is an integer, `char`, byte or float literal, optionally negated,
   or a primitive type's associated constant such as `i32::MAX` or
   `f64::INFINITY`. A user-defined constant is not a bound.
+- A bound takes the scrutinee's type as a literal does where that type is
+  expected, so on a float an integer or byte literal is the float of its value
+  (`0..<1.5`). A suffixed literal and a constant keep their own type.
 - A reversed range pattern is an error, and so is an empty one (`5..<5`).
 - Two arms' range patterns must not overlap. The alternatives of one arm's
   or-pattern may.
