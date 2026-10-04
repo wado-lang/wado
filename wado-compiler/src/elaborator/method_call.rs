@@ -235,14 +235,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return Vec::new();
         };
-        let (Some(decl), Some(sig)) = (
-            self.tysys
-                .trait_env
-                .assoc_type_decl(owning_trait, assoc_name),
-            tt.assoc_type_sig(*owning_trait, assoc_name),
-        ) else {
-            return Vec::new();
-        };
+        let decl = self
+            .tysys
+            .trait_env
+            .assoc_type_decl(owning_trait, assoc_name)
+            .expect("a projection's trait declares its associated type");
+        let sig = tt
+            .assoc_type_sig(*owning_trait, assoc_name)
+            .expect("a declared associated type has its signature");
         let written_self = Some(SelfBinding {
             type_id: *param_id,
             declaring_trait: Some(*owning_trait),
@@ -267,12 +267,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .zip(given.iter().copied()),
             );
         }
-        // `sig.bounds` was read off these, one per bound naming a trait.
-        decl.bounds
+        let written: Vec<&ast::TraitBound> = decl
+            .bounds
             .iter()
             .filter(|bound| {
                 bound.names_a_trait() && self.tysys.resolutions.bound_decl(bound).is_some()
             })
+            .collect();
+        assert_eq!(
+            written.len(),
+            sig.bounds.len(),
+            "`sig.bounds` is read off the declaration's bounds naming a trait"
+        );
+        written
+            .into_iter()
             .zip(&sig.bounds)
             .map(|(bound, written)| {
                 let mut bound = bound.clone();

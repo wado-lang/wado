@@ -534,9 +534,9 @@ test "a projection's arguments pick the member of the family" {
 An impl binds the family with the parameters the trait declares: as many, and
 each with the bounds the trait gives the parameter at that position. The names
 are the impl's own. A bound cannot bind a family (`S: Store<Buf = X>`), since
-it is no single type until a projection gives it arguments. Each parameter is a plain type parameter. A pack, an effect
-parameter, or a default is an error, since a projection writes one type per
-parameter.
+it is no single type until a projection gives it arguments. Each parameter is a
+plain type parameter. A pack, an effect parameter, or a default is an error,
+since a projection writes one type per parameter.
 
 A bound on a parameter (`type Buf<E: Elem>`) is in scope in the impl's binding,
 and every projection's argument must satisfy it. A bound on the associated type
@@ -572,6 +572,12 @@ test "the type's own bound answers for each member of the family" {
     assert measure(&Weigher {}, [3, 4] as List<i32>) == 7;
 }
 ```
+
+Both kinds of bound are written in the trait, so a trait parameter in one
+means the argument the trait is reached at. Under `S: Store<i32>`,
+`type Buf<E: Conv<X>>` owes `E: Conv<i32>`. Under `H: Holder<i32>`,
+`type Out: Into<X>` gives `H::Out` the methods of `Into<i32>`. A projection of
+`Holder<i32>`'s `Out` and one of `Holder<String>`'s are two types.
 
 ### Blanket Implementations
 

@@ -937,6 +937,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         site: &FamilySite,
         args: &[TypeId],
     ) -> Vec<Vec<TraitRef>> {
+        // An impl may bind a name its trait does not declare, which is
+        // reported where the two are compared.
         let mut table = self.tysys.type_table.borrow_mut();
         let Some(sig) = table.assoc_type_sig(owning_trait, assoc).cloned() else {
             return Vec::new();
@@ -953,6 +955,29 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 )
             })
             .collect()
+    }
+
+    /// The bounds `owning_trait`'s associated type `assoc` declares on itself
+    /// (`type A: Bound`), at `site` and at the arguments `args`.
+    pub(super) fn bounds_at(
+        &mut self,
+        owning_trait: DefId,
+        assoc: &str,
+        site: &FamilySite,
+        args: &[TypeId],
+    ) -> Vec<TraitRef> {
+        let mut table = self.tysys.type_table.borrow_mut();
+        let sig = table
+            .assoc_type_sig(owning_trait, assoc)
+            .cloned()
+            .expect("a declared associated type has its signature");
+        table.instantiate_trait_refs(
+            &sig,
+            &sig.bounds,
+            site.base,
+            site.trait_args.as_deref(),
+            args,
+        )
     }
 
     /// What an impl binds `binding` to, its own parameters left open as the

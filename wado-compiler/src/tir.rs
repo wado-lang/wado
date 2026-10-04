@@ -849,6 +849,15 @@ fn one_assoc_answer<T: Copy + PartialEq>(
     answers.all(|answer| answer == first).then_some(first)
 }
 
+/// Every argument a projection names apart from its base: the associated
+/// type's own and its trait's. A walk reading one reads both.
+pub fn projection_arguments<'a>(
+    args: &'a [TypeId],
+    trait_args: &'a Option<Vec<TypeId>>,
+) -> impl Iterator<Item = TypeId> + 'a {
+    args.iter().chain(trait_args.iter().flatten()).copied()
+}
+
 /// Whether a slot search descends into a projection's base or stops there.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Through {
@@ -2068,8 +2077,7 @@ impl TypeTable {
                         ..
                     } => {
                         components.push(*param_id);
-                        components.extend(args.iter().copied());
-                        components.extend(trait_args.iter().flatten().copied());
+                        components.extend(projection_arguments(args, trait_args));
                         components.extend(assoc_type_bindings.iter().map(|(_, t)| *t));
                     }
                     ResolvedType::Primitive(_)
@@ -4624,10 +4632,8 @@ impl TypeTable {
                 ..
             } => {
                 !self.projects_from_param(*param_id)
-                    || args
-                        .iter()
-                        .chain(trait_args.iter().flatten())
-                        .any(|&arg| self.contains_hole(arg, packs_count))
+                    || projection_arguments(args, trait_args)
+                        .any(|arg| self.contains_hole(arg, packs_count))
             }
             _ => self.any_constituent(id, &mut |t| self.contains_hole(t, packs_count)),
         }
@@ -4702,10 +4708,8 @@ impl TypeTable {
                     Through::Projection => self.mentions_slot(*param_id, through),
                     Through::ProjectionStops => false,
                 };
-                base || args
-                    .iter()
-                    .chain(trait_args.iter().flatten())
-                    .any(|&arg| self.mentions_slot(arg, through))
+                base || projection_arguments(args, trait_args)
+                    .any(|arg| self.mentions_slot(arg, through))
             }
             _ => self.any_constituent(id, &mut |t| self.mentions_slot(t, through)),
         }
@@ -4783,8 +4787,7 @@ impl TypeTable {
                 ..
             } => {
                 f(*param_id)
-                    || args.iter().any(|&t| f(t))
-                    || trait_args.iter().flatten().any(|&t| f(t))
+                    || projection_arguments(args, trait_args).any(&mut *f)
                     || assoc_type_bindings.iter().any(|(_, t)| f(*t))
             }
             _ => false,
@@ -4826,9 +4829,12 @@ impl TypeTable {
     }
 
     fn collect_assoc_type_projections(&self, id: TypeId, out: &mut Vec<TypeId>) {
-        if let ResolvedType::AssocTypeProjection { args, .. } = self.get(id) {
+        if let ResolvedType::AssocTypeProjection {
+            args, trait_args, ..
+        } = self.get(id)
+        {
             out.push(id);
-            for &arg in args {
+            for arg in projection_arguments(args, trait_args) {
                 self.collect_assoc_type_projections(arg, out);
             }
             return;
@@ -4908,9 +4914,15 @@ impl TypeTable {
     fn any_infer_var(&self, id: TypeId, pred: &mut impl FnMut(TypeId) -> bool) -> bool {
         match self.get(id) {
             ResolvedType::InferVar(_) => pred(id),
-            ResolvedType::AssocTypeProjection { param_id, args, .. } => {
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                args,
+                trait_args,
+                ..
+            } => {
                 self.any_infer_var(*param_id, pred)
-                    || args.iter().any(|&arg| self.any_infer_var(arg, pred))
+                    || projection_arguments(args, trait_args)
+                        .any(|arg| self.any_infer_var(arg, pred))
             }
             _ => self.any_constituent(id, &mut |t| self.any_infer_var(t, pred)),
         }

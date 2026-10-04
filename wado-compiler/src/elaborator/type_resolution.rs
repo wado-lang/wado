@@ -335,22 +335,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (((param, &arg), written), refs) in
             params.iter().zip(&args).zip(&namespaced.args).zip(owed)
         {
-            for trait_ref in refs {
-                let (bound_name, bound_trait) = {
-                    let table = self.tysys.type_table.borrow();
-                    (
-                        table.def_name(trait_ref.decl).to_string(),
-                        table.trait_ref_name(&trait_ref),
-                    )
-                };
-                self.enforce_single_bound_args(
-                    arg,
-                    &bound_name,
-                    Some(&bound_trait),
-                    &param.name,
-                    written.span(),
-                );
-            }
+            self.enforce_trait_refs(arg, &refs, &param.name, written.span());
         }
         Some(args)
     }
@@ -523,14 +508,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// or `None` where `base` is no projection or none declares it.
     fn projection_member_owner(&self, base: TypeId, assoc: &str) -> Option<DefId> {
         let table = self.tysys.type_table.borrow();
-        if !matches!(table.get(base), ResolvedType::AssocTypeProjection { .. }) {
+        let ResolvedType::AssocTypeProjection { bounds, .. } = table.get(base) else {
             return None;
-        }
-        table.projection_bounds(base).iter().find_map(|bound| {
-            let decl = bound.canonical()?;
+        };
+        bounds.iter().find_map(|bound| {
             self.tysys
                 .trait_env
-                .trait_declaring_assoc_type(&decl, assoc)
+                .trait_declaring_assoc_type(&bound.decl, assoc)
         })
     }
 
@@ -1227,7 +1211,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// trait declares `assoc`. `T: Add + Mul` declares `Output` twice, and only
     /// the site that dispatched can say which one `a * b` yields.
     // The one place a projection is built from a trait. It interns by its
-    // bounds, so those can only be the declaration's (WEP 2026-08-12).
+    // trait arguments and bounds, so those can only be the declaration's read
+    // at the frame (WEP 2026-08-12).
     pub(super) fn make_frame_projection_of_trait(
         &mut self,
         base: TypeId,
@@ -1240,45 +1225,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .trait_env
             .assoc_type_decl(&owning_trait, assoc)
-            .cloned();
-        let (assoc_params, assoc_bounds) = decl.as_ref().map_or_else(Default::default, |decl| {
-            (decl.type_params.clone(), decl.bounds.clone())
-        });
+            .cloned()
+            .expect("the trait a projection is built under declares its associated type");
         assert_eq!(
             args.len(),
-            assoc_params.len(),
+            decl.type_params.len(),
             "a projection of `{assoc}` is built at the arguments its declaration takes"
         );
         let site = FamilySite {
             base,
             trait_args: self.trait_args_for(base, base_name, owning_trait),
         };
-        let bounds = {
-            let mut table = self.tysys.type_table.borrow_mut();
-            match table.assoc_type_sig(owning_trait, assoc).cloned() {
-                Some(sig) => table.instantiate_trait_refs(
-                    &sig,
-                    &sig.bounds,
-                    site.base,
-                    site.trait_args.as_deref(),
-                    args,
-                ),
-                None => Vec::new(),
-            }
-        };
+        let bounds = self.bounds_at(owning_trait, assoc, &site, args);
         // Built over the family's own parameters, which a bound may name, then
         // instantiated at `args`.
         let assoc_type_bindings =
-            self.with_assoc_params(owning_trait, assoc, &assoc_params, Some(&site), |e| {
-                e.frame_assoc_bindings(base, base_name, owning_trait, assoc, &assoc_bounds)
+            self.with_assoc_params(owning_trait, assoc, &decl.type_params, Some(&site), |e| {
+                e.frame_assoc_bindings(base, base_name, owning_trait, assoc, &decl.bounds)
             });
-        let open = self.family_params(owning_trait, assoc);
         let mut table = self.tysys.type_table.borrow_mut();
         let bindings_at: Vec<(String, TypeId)> = assoc_type_bindings
             .into_iter()
             .map(|(name, bound)| (name, table.instantiate_family(bound, args)))
             .collect();
-        debug_assert_eq!(open.len(), args.len());
         let trait_args = site
             .trait_args
             .map(|space| space.into_iter().map(|(_, arg)| arg).collect());

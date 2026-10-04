@@ -434,28 +434,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // so it is checked over the family's own parameters, which carry
             // the bounds the declaration gives them and nothing more.
             self.with_assoc_params(*owner, &decl.name, &decl.type_params, Some(site), |scope| {
-                let owed: Vec<(String, FqTraitName)> = {
-                    let mut table = scope.tysys.type_table.borrow_mut();
-                    let refs = table.instantiate_trait_refs(
-                        &sig,
-                        &sig.bounds,
-                        site.base,
-                        site.trait_args.as_deref(),
-                        &sig.params,
-                    );
-                    refs.iter()
-                        .map(|r| (table.def_name(r.decl).to_string(), table.trait_ref_name(r)))
-                        .collect()
-                };
-                for (bound_name, bound_trait) in &owed {
-                    scope.enforce_single_bound_args(
-                        type_id,
-                        bound_name,
-                        Some(bound_trait),
-                        &binding.name,
-                        binding.span,
-                    );
-                }
+                let owed = scope.bounds_at(*owner, &decl.name, site, &sig.params);
+                scope.enforce_trait_refs(type_id, &owed, &binding.name, binding.span);
             });
         }
     }
@@ -2825,6 +2805,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|ty| e.resolve_type(ty))
                 .collect()
         })
+    }
+
+    /// [`Self::enforce_single_bound_args`] for each of `refs`, bounds already
+    /// instantiated as types, owed by `param_name`.
+    pub(super) fn enforce_trait_refs(
+        &mut self,
+        type_arg: TypeId,
+        refs: &[TraitRef],
+        param_name: &str,
+        span: Span,
+    ) {
+        for trait_ref in refs {
+            let (trait_name, trait_) = {
+                let table = self.tysys.type_table.borrow();
+                (
+                    table.def_name(trait_ref.decl).to_string(),
+                    table.trait_ref_name(trait_ref),
+                )
+            };
+            self.enforce_single_bound_args(type_arg, &trait_name, Some(&trait_), param_name, span);
+        }
     }
 
     /// Whether one concrete type argument meets one trait bound — the primitive
