@@ -521,6 +521,32 @@ impl Poly {
         return Poly::collected(terms);
     }
 
+    /// `[c, rest]` where this is `c * name + rest` and `rest` reads no `name`,
+    /// or `None` where it reads `name` other than as one term of its own.
+    pub fn linear_in(&self, name: &String) -> Option<[i64, Poly]> {
+        let mut coefficient: i64 = 0;
+        let mut rest: List<Term> = [];
+        for let t of &self.terms {
+            if t.symbols.len() == 1 && !t.symbols[0].is_derived() && t.symbols[0].name == *name {
+                coefficient = t.coefficient;
+                continue;
+            }
+            for let s of &t.symbols {
+                if Poly::of(*s).symbols().contains_str(name.as_str_slice()) {
+                    return null;
+                }
+            }
+            rest.push(*t);
+        }
+        if coefficient == 0 {
+            return null;
+        }
+        return Option::Some([
+            coefficient,
+            Poly { terms: rest },
+        ]);
+    }
+
     /// Whether every input makes this at most `other`.
     fn at_most(&self, other: &Poly) -> bool {
         let mut budget = PROOF_BUDGET;

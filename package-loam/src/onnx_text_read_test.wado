@@ -427,13 +427,39 @@ test "a word that is no float names itself where a value goes" {
     assert e == "alpha: infinite is not a value";
 }
 
-test "a subgraph attribute is refused as one, not read as a word" {
+test "a subgraph attribute is read as the graph it spells" {
+    let g = read(
+        `<ir_version: 3, opset_import: ["" : 3]>
+        agraph (bool[1] C, float[1, 2] X) => (float[1, 4] Y) {
+            Y = If <then_branch = t () => (float[1, 4] A) { A = Concat(X, X) }, else_branch = e () => (float[1, 4] B) { B = Concat(X, X) }> (C)
+        }`,
+    ).unwrap();
+    let then_branch = g.nodes[0].attr("then_branch").unwrap().graph.unwrap();
+    assert then_branch.name == "t";
+    assert then_branch.inputs.is_empty();
+    assert then_branch.outputs[0].name == "A";
+    assert then_branch.nodes[0].inputs == ["X", "X"];
+    // A branch is read at its model's opset, as its parent is.
+    assert then_branch.nodes[0].attr("axis").unwrap().values == ["1"] as List<String>;
+    assert g.nodes[0].attr("else_branch").unwrap().graph.unwrap().name == "e";
+}
+
+test "a list of subgraphs is refused as one" {
     let e = read(
         `agraph (bool C, float[2] X) => (float[2] Y) {
-            Y = If <then_branch = t () => (float[2] A) { A = Relu(X) }> (C)
+            Y = Foo <bodies = [t () => (float[2] A) { A = Relu(X) }]> (C)
         }`,
     ).unwrap_err().reason;
-    assert e == "then_branch: a subgraph attribute is not read";
+    assert e == "bodies: a list of subgraphs is not read";
+}
+
+test "an attribute holding a graph is refused where a value is read" {
+    let g = read(
+        `agraph (bool C, float[2] X) => (float[2] Y) {
+            Y = Foo <n = t () => (float[2] A) { A = Relu(X) }> (C)
+        }`,
+    ).unwrap();
+    assert `${g.nodes[0].int_attr("n", 0).unwrap_err()}` == "attribute n holds a graph, and the operator reads numbers";
 }
 
 test "a signed word that is no float names itself" {

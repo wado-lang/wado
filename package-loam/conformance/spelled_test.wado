@@ -1,0 +1,50 @@
+//! A length spelled as arithmetic over a name, the name bound from the length.
+
+use { Odd, Seq, Tensor, Weights, forward } from "./spelled.onnxtext"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: {
+                layout: [
+                    {
+                        pattern: "X",
+                        axes: ["Seq"],
+                    },
+                    {
+                        pattern: "V",
+                        axes: ["Odd"],
+                    },
+                ],
+            },
+        },
+    };
+
+fn seq(data: List<f32>) -> Tensor<f32, [Seq]> {
+    return Tensor {
+        data,
+        extents: [data.len()],
+    };
+}
+
+fn odd(data: List<f32>) -> Tensor<f32, [Odd]> {
+    return Tensor {
+        data,
+        extents: [data.len()],
+    };
+}
+
+test "a name read back out of the length it spells binds" {
+    let o = forward(&seq([-1.0, 2.0]), &odd([1.0, 2.0, 3.0]), &Weights::embedded());
+    assert o.Y.data == [0.0, 2.0];
+    assert o.Z.data == [-1.0, -2.0, -3.0];
+}
+
+#[expect_trap]
+test "a length the arithmetic cannot spell is refused" {
+    forward(&seq([1.0]), &odd([1.0, 2.0]), &Weights::embedded());
+}
+
+#[expect_trap]
+test "a length the name would have to be negative to spell is refused" {
+    forward(&seq([]), &odd([1.0]), &Weights::embedded());
+}

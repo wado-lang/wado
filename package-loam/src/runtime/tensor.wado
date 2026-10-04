@@ -76,6 +76,17 @@ pub fn axis_mismatch(
     );
 }
 
+/// Why an input's axis is not the length the graph spells for it, `length`,
+/// which the other inputs make `expected`.
+pub fn extent_mismatch(tensor: String, axis: String, extent: i32, length: String, expected: i64) -> Option<String> {
+    if extent as i64 == expected {
+        return null;
+    }
+    return Option::Some(
+        `${tensor}: axis ${axis} is ${extent} in the tensor, and the graph makes it ${length}, which the inputs make ${expected}`,
+    );
+}
+
 /// Why the inputs break a condition the build relied on and could not prove:
 /// `slack` is how far within it they are, and `condition` states it.
 pub fn unmet(slack: i64, condition: String) -> Option<String> {
@@ -409,6 +420,30 @@ pub fn slice_axis<E, ..Pre, In, Out, ..Post>(
     }
     let mut extents = t.extents;
     extents[axis] = length;
+    return Tensor { data: out, extents };
+}
+
+/// `a` and then `b` along `axis`, the two meeting on every other axis, as
+/// `Concat` joins a cache and the positions computed after it.
+pub fn concat<E, ..Pre, A, B, Out, ..Post>(
+    a: &Tensor<E, [..Pre, A, ..Post]>,
+    b: &Tensor<E, [..Pre, B, ..Post]>,
+    axis: i32,
+) -> Tensor<E, [..Pre, Out, ..Post]> {
+    let outer = element_count(&a.extents[0..<axis].to_list());
+    let a_run = element_count(&a.extents[axis..<a.extents.len()].to_list());
+    let b_run = element_count(&b.extents[axis..<b.extents.len()].to_list());
+    let mut out = List::<E>::with_capacity(a.data.len() + b.data.len());
+    for let o of 0..<outer {
+        for let n of 0..<a_run {
+            out.push(a.data[o * a_run + n]);
+        }
+        for let n of 0..<b_run {
+            out.push(b.data[o * b_run + n]);
+        }
+    }
+    let mut extents = a.extents;
+    extents[axis] = a.extents[axis] + b.extents[axis];
     return Tensor { data: out, extents };
 }
 

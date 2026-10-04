@@ -1,0 +1,261 @@
+//! A tiny GPT-2 exported as one graph that branches on whether it is given a
+//! past, so one module holds one set of weights. The prompt runs through the
+//! branch without a past, all its positions at once, and each step after it
+//! through the branch with one. Each reproduces the logits onnxruntime computes.
+
+use { assert_close, ints_of, tensor_of } from "./oracle.wado";
+use merged from "../tests/models/tiny-gpt2/merged/model.onnx"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: {
+                dims: { batch_size: 1 },
+                layout: [
+                    {
+                        pattern: "input_ids",
+                        axes: ["Batch", "Seq"],
+                    },
+                    // Without a past the keys are the sequence itself, so the
+                    // mask over them and the sequence share one axis.
+                    {
+                        pattern: "attention_mask",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "use_cache_branch",
+                        axes: ["One"],
+                    },
+                    {
+                        pattern: "past_key_values.*",
+                        axes: ["Batch", "Head", "Past", "Dim"],
+                    },
+                    {
+                        pattern: "present.*",
+                        axes: ["Batch", "Head", "Seq", "Dim"],
+                    },
+                    {
+                        pattern: "transformer.wte.weight*",
+                        axes: ["Vocab", "Embed"],
+                    },
+                    {
+                        pattern: "transformer.wpe.weight*",
+                        axes: ["Pos", "Embed"],
+                    },
+                    {
+                        pattern: "*ln_1.*",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "*ln_2.*",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "*c_attn.weight*",
+                        axes: ["Embed", "Qkv"],
+                    },
+                    {
+                        pattern: "*c_attn.bias*",
+                        axes: ["Qkv"],
+                    },
+                    {
+                        pattern: "*attn.c_proj.weight*",
+                        axes: ["(Head Dim)", "Embed"],
+                    },
+                    {
+                        pattern: "*mlp.c_fc.weight*",
+                        axes: ["Embed", "Inner"],
+                    },
+                    {
+                        pattern: "*mlp.c_fc.bias*",
+                        axes: ["Inner"],
+                    },
+                    {
+                        pattern: "*mlp.c_proj.weight*",
+                        axes: ["Inner", "Embed"],
+                    },
+                    {
+                        pattern: "onnx::MatMul_1588*",
+                        axes: ["Embed", "Vocab"],
+                    },
+                    {
+                        pattern: "*attn.bias*",
+                        axes: ["Batch", "Head", "Pos", "Pos"],
+                    },
+                    {
+                        pattern: "/transformer/Range_output_0",
+                        axes: ["Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_2_output_0",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_4_output_0",
+                        axes: ["Batch", "Head", "Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_5_output_0",
+                        axes: ["Batch", "Head", "Seq", "Seq"],
+                    },
+                    {
+                        pattern: "*/c_attn/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Qkv"],
+                    },
+                    {
+                        pattern: "*/c_proj/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Embed"],
+                    },
+                    {
+                        pattern: "*/c_fc/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Inner"],
+                    },
+                    {
+                        pattern: "*/attn/Split_output_*",
+                        axes: ["Batch", "Seq", "Embed"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_2_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    {
+                        pattern: "*/attn/Slice_3_output_0",
+                        axes: ["Batch", "Head", "Seq", "Pos"],
+                    },
+                    {
+                        pattern: "*/attn/Slice_4_output_0",
+                        axes: ["Batch", "Head", "Seq", "Seq"],
+                    },
+                ],
+            },
+        },
+    };
+
+type Cache = List<merged::Tensor<f32, [merged::Batch, merged::Head, merged::Past, merged::Dim]>>;
+
+/// The logits for `ids` after the positions `cache` holds, and the cache grown
+/// by theirs. An empty cache takes the branch without a past.
+fn run(
+    ids: List<i64>,
+    cache: &Cache,
+    weights: &merged::Weights,
+) -> [merged::Tensor<f32, [merged::Batch, merged::Seq, merged::Vocab]>, Cache] {
+    let past = cache[0].extents[2];
+    let length = past + ids.len();
+    let o = merged::forward(
+        &merged::Tensor::<i64, [merged::Batch, merged::Seq]> {
+            data: ids,
+            extents: [1, ids.len()],
+        },
+        &merged::Tensor::<i64, [merged::Batch, merged::Seq]> {
+            data: List::<i64>::filled(length, 1),
+            extents: [1, length],
+        },
+        &cache[0],
+        &cache[1],
+        &cache[2],
+        &cache[3],
+        &cache[4],
+        &cache[5],
+        &cache[6],
+        &cache[7],
+        &cache[8],
+        &cache[9],
+        &merged::Tensor::<bool, [merged::One]> {
+            data: [past > 0],
+            extents: [1],
+        },
+        weights,
+    );
+    let presents = [
+        o.present_0_key, o.present_0_value, o.present_1_key, o.present_1_value, o.present_2_key, o.present_2_value,
+        o.present_3_key, o.present_3_value, o.present_4_key, o.present_4_value,
+    ];
+    let mut grown: Cache = [];
+    for let p of presents {
+        grown.push(merged::Tensor { data: p.data, extents: p.extents });
+    }
+    return [o.logits, grown];
+}
+
+fn empty_cache() -> Cache {
+    let mut cache: Cache = [];
+    for let _ of 0..<10 {
+        cache.push(merged::Tensor {
+            data: [],
+            extents: [1, 4, 0, 8],
+        });
+    }
+    return cache;
+}
+
+test "the prompt and each step after it reproduce onnxruntime's logits through one module" {
+    let weights = merged::Weights::embedded();
+    let data: List<[ByteList, ByteList]> = [
+        [
+            #include_bytes("../tests/models/tiny-gpt2/merged/test_data_set_0/input_0.pb"),
+            #include_bytes("../tests/models/tiny-gpt2/merged/test_data_set_0/output_0.pb"),
+        ],
+        [
+            #include_bytes("../tests/models/tiny-gpt2/merged/test_data_set_1/input_0.pb"),
+            #include_bytes("../tests/models/tiny-gpt2/merged/test_data_set_1/output_0.pb"),
+        ],
+        [
+            #include_bytes("../tests/models/tiny-gpt2/merged/test_data_set_2/input_0.pb"),
+            #include_bytes("../tests/models/tiny-gpt2/merged/test_data_set_2/output_0.pb"),
+        ],
+    ];
+    let mut cache = empty_cache();
+    let mut length = 0;
+    for let pair of data {
+        let [input, output] = pair;
+        let [ids, _] = ints_of(input);
+        let [want, want_extents] = tensor_of(output);
+        length += ids.len();
+        let [logits, grown] = run(ids, &cache, &weights);
+        assert logits.extents == want_extents;
+        assert_close(&logits.data, &want);
+        assert grown[0].extents == [1, 4, length, 8] as List<i32>;
+        cache = grown;
+    }
+}
+
+// The branch with a past reads the mask against the past and the step
+// together; one only as long as the step stops it.
+#[expect_trap]
+test "a mask that is not as long as the past and the step stops the step" {
+    let weights = merged::Weights::embedded();
+    let [_, cache] = run([1, 5, 42, 7], &empty_cache(), &weights);
+    merged::forward(
+        &merged::Tensor::<i64, [merged::Batch, merged::Seq]> {
+            data: [11],
+            extents: [1, 1],
+        },
+        &merged::Tensor::<i64, [merged::Batch, merged::Seq]> {
+            data: [1],
+            extents: [1, 1],
+        },
+        &cache[0],
+        &cache[1],
+        &cache[2],
+        &cache[3],
+        &cache[4],
+        &cache[5],
+        &cache[6],
+        &cache[7],
+        &cache[8],
+        &cache[9],
+        &merged::Tensor::<bool, [merged::One]> {
+            data: [true],
+            extents: [1],
+        },
+        &weights,
+    );
+}

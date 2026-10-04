@@ -1,7 +1,7 @@
 //! The ONNX graph Loam reads, in the shape the rest of the package consumes.
 //! Dimensions are extents without identity, since an ONNX shape is positional.
 
-use { TreeMap } from "core:collections";
+use { TreeMap, TreeSet } from "core:collections";
 use { Enumeration } from "lib:grog";
 use onnx from "./onnx.proto"
     with {
@@ -101,6 +101,7 @@ pub fn element_of(dtype: &String) -> Option<Element> {
         "float16" => Option::Some(Element { primitive: "f16", width: 2, computed: KERNEL_ELEMENT, stored: "F16" }),
         "bfloat16" => Option::Some(Element { primitive: "bf16", width: 2, computed: KERNEL_ELEMENT, stored: "BF16" }),
         "int64" => Option::Some(Element { primitive: "i64", width: 8, computed: "i64", stored: "I64" }),
+        "bool" => Option::Some(Element { primitive: "bool", width: 1, computed: "bool", stored: "BOOL" }),
         _ => null,
     };
 }
@@ -232,7 +233,7 @@ impl Known {
 }
 
 /// An attribute's values as written, each number or string as its text. A
-/// tensor has no text form and travels in `tensor`.
+/// tensor or a graph has no text form and travels in `tensor` or `graph`.
 pub struct Attr {
     pub name: String,
     pub values: List<String>,
@@ -241,6 +242,8 @@ pub struct Attr {
     /// alone does not tell where a string reads as `3` or `inf`.
     pub is_string: bool = false,
     pub tensor: Option<Known> = null,
+    /// A subgraph, as `If` carries its branches.
+    pub graph: Option<Graph> = null,
 }
 
 /// An attribute its operator cannot read as written, and why.
@@ -309,6 +312,9 @@ impl Attr {
         if self.tensor matches { Some(_) } {
             return Result::Err(self.error(`holds a tensor, and the operator reads ${reads}`));
         }
+        if self.graph matches { Some(_) } {
+            return Result::Err(self.error(`holds a graph, and the operator reads ${reads}`));
+        }
         if !self.is_list && self.values.is_empty() {
             return Result::Err(self.error("holds no value the build reads"));
         }
@@ -361,6 +367,18 @@ impl Node {
         return `${self.name()} = ${self.op}`;
     }
 
+    /// Every tensor the node reads: its operands, and what each subgraph it
+    /// carries reads from the graph around it.
+    pub fn reads(&self) -> List<String> {
+        let mut read = self.inputs;
+        for let a of self.attrs {
+            if let Some(g) = a.graph {
+                read.extend(&g.outer_reads());
+            }
+        }
+        return read;
+    }
+
     /// The attribute `name`, where the node carries it.
     pub fn attr<S: AsStrSlice>(&self, name: S) -> Option<Attr> {
         for let a of self.attrs {
@@ -408,6 +426,39 @@ pub struct Graph {
     pub opset: Option<i64> = null,
 }
 
+impl Graph {
+    /// The tensors the graph reads and does not define, which a subgraph reads
+    /// from the scope around it.
+    pub fn outer_reads(&self) -> List<String> {
+        let mut defined = TreeSet::<String>::new();
+        for let declared of [&self.inputs, &self.initializers] {
+            for let vi of *declared {
+                defined.insert(vi.name);
+            }
+        }
+        for let [name, _] of self.constants.entries() {
+            defined.insert(*name);
+        }
+        let mut read: List<String> = [];
+        for let node of &self.nodes {
+            for let input of node.reads() {
+                if input != "" && !defined.contains(input) {
+                    read.push(input);
+                }
+            }
+            for let output of node.outputs {
+                defined.insert(output);
+            }
+        }
+        for let vi of &self.outputs {
+            if !defined.contains(vi.name) {
+                read.push(vi.name);
+            }
+        }
+        return read;
+    }
+}
+
 /// The version a model imports the default domain at, from `(domain, version)`
 /// pairs: ONNX spells that domain `""` or `"ai.onnx"`.
 pub fn default_opset(imports: &List<[String, i64]>) -> Option<i64> {
@@ -422,11 +473,12 @@ pub fn default_opset(imports: &List<[String, i64]>) -> Option<i64> {
 /// `nodes` as the current opset defines them, read from `opset`'s definitions.
 /// A graph naming no opset is read as the current one. Arithmetic keeps its
 /// `axis` only where it aligns B at it, as before opset 7 with `broadcast`,
-/// which no later opset spells.
+/// which no later opset spells. A subgraph is read at its model's opset.
 pub fn upgraded(nodes: List<Node>, opset: Option<i64>) -> Result<List<Node>, String> {
     let version = opset.unwrap_or(i64::MAX);
     let mut out: List<Node> = [];
-    for let node of nodes {
+    for let read of nodes {
+        let node = Node { ..read, attrs: upgraded_subgraphs(read.attrs, opset)? };
         if is_binary_elementwise(&node.op) && node.attr("axis") matches { Some(_) } {
             let aligns = version < 7 && node.int_attr("broadcast", 0).map_err(|e| `${node.site()}: ${e}`)? != 0;
             if !aligns {
@@ -445,6 +497,18 @@ pub fn upgraded(nodes: List<Node>, opset: Option<i64>) -> Result<List<Node>, Str
             continue;
         }
         out.push(node);
+    }
+    return Result::Ok(out);
+}
+
+fn upgraded_subgraphs(attrs: List<Attr>, opset: Option<i64>) -> Result<List<Attr>, String> {
+    let mut out: List<Attr> = [];
+    for let a of attrs {
+        let Some(g) = a.graph else {
+            out.push(a);
+            continue;
+        };
+        out.push(Attr { ..a, graph: Option::Some(Graph { ..g, nodes: upgraded(g.nodes, opset)?, opset }) });
     }
     return Result::Ok(out);
 }

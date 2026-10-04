@@ -1,0 +1,406 @@
+//! A tiny GPT-2 decoding one position per step against the keys and values it
+//! computed before. The prompt runs through the decoder without a past, which
+//! returns its keys and values beside its logits, and each step after it
+//! through the decoder taking them back, whose cache grows by the position it
+//! computes. Each step reproduces the logits onnxruntime computes for it.
+
+use { assert_close, ints_of, tensor_of } from "./oracle.wado";
+use prompt from "../tests/models/tiny-gpt2/model.onnxtext"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            inputs: ["../tests/models/tiny-gpt2/model.safetensors"],
+            options: {
+                dims: { batch_size: 1 },
+                layout: [
+                    {
+                        pattern: "input_ids",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "attention_mask",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "present.*",
+                        axes: ["Batch", "Head", "Seq", "Dim"],
+                    },
+                    {
+                        pattern: "transformer.wte.weight",
+                        axes: ["Vocab", "Embed"],
+                    },
+                    {
+                        pattern: "transformer.wpe.weight",
+                        axes: ["Pos", "Embed"],
+                    },
+                    {
+                        pattern: "*ln_1.*",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "*ln_2.*",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "*c_attn.weight",
+                        axes: ["Embed", "Qkv"],
+                    },
+                    {
+                        pattern: "*c_attn.bias",
+                        axes: ["Qkv"],
+                    },
+                    {
+                        pattern: "*attn.c_proj.weight",
+                        axes: ["(Head Dim)", "Embed"],
+                    },
+                    {
+                        pattern: "*mlp.c_fc.weight",
+                        axes: ["Embed", "Inner"],
+                    },
+                    {
+                        pattern: "*mlp.c_fc.bias",
+                        axes: ["Inner"],
+                    },
+                    {
+                        pattern: "*mlp.c_proj.weight",
+                        axes: ["Inner", "Embed"],
+                    },
+                    {
+                        pattern: "onnx::MatMul_1588",
+                        axes: ["Embed", "Vocab"],
+                    },
+                    // The position ids, a range over the sequence, and the
+                    // attention mask widened.
+                    {
+                        pattern: "/transformer/Range_output_0",
+                        axes: ["Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_2_output_0",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_4_output_0",
+                        axes: ["Batch", "Head", "Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_5_output_0",
+                        axes: ["Batch", "Head", "Seq", "Seq"],
+                    },
+                    // Each Conv1D flattens [Batch, Seq] around its Gemm and restores it.
+                    {
+                        pattern: "*/c_attn/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Qkv"],
+                    },
+                    {
+                        pattern: "*/c_proj/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Embed"],
+                    },
+                    {
+                        pattern: "*/c_fc/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Inner"],
+                    },
+                    {
+                        pattern: "*/attn/Split_output_*",
+                        axes: ["Batch", "Seq", "Embed"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_2_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    // The causal mask, sliced from the bias buffer to the
+                    // sequence the run gives.
+                    {
+                        pattern: "*attn.bias",
+                        axes: ["Batch", "Head", "Pos", "Pos"],
+                    },
+                    {
+                        pattern: "*/attn/Slice_3_output_0",
+                        axes: ["Batch", "Head", "Seq", "Pos"],
+                    },
+                    {
+                        pattern: "*/attn/Slice_4_output_0",
+                        axes: ["Batch", "Head", "Seq", "Seq"],
+                    },
+                ],
+            },
+        },
+    };
+use step from "../tests/models/tiny-gpt2/with-past/model.onnx"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: {
+                dims: { batch_size: 1 },
+                layout: [
+                    {
+                        pattern: "input_ids",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "attention_mask",
+                        axes: ["Batch", "Total"],
+                    },
+                    {
+                        pattern: "past_key_values.*",
+                        axes: ["Batch", "Head", "Past", "Dim"],
+                    },
+                    {
+                        pattern: "present.*",
+                        axes: ["Batch", "Head", "Total", "Dim"],
+                    },
+                    {
+                        pattern: "transformer.wte.weight",
+                        axes: ["Vocab", "Embed"],
+                    },
+                    {
+                        pattern: "transformer.wpe.weight",
+                        axes: ["Pos", "Embed"],
+                    },
+                    {
+                        pattern: "*ln_1.*",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "*ln_2.*",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "*c_attn.weight",
+                        axes: ["Embed", "Qkv"],
+                    },
+                    {
+                        pattern: "*c_attn.bias",
+                        axes: ["Qkv"],
+                    },
+                    {
+                        pattern: "*attn.c_proj.weight",
+                        axes: ["(Head Dim)", "Embed"],
+                    },
+                    {
+                        pattern: "*mlp.c_fc.weight",
+                        axes: ["Embed", "Inner"],
+                    },
+                    {
+                        pattern: "*mlp.c_fc.bias",
+                        axes: ["Inner"],
+                    },
+                    {
+                        pattern: "*mlp.c_proj.weight",
+                        axes: ["Inner", "Embed"],
+                    },
+                    {
+                        pattern: "onnx::MatMul_1615",
+                        axes: ["Embed", "Vocab"],
+                    },
+                    {
+                        pattern: "/transformer/Range_output_0",
+                        axes: ["Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_2_output_0",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_4_output_0",
+                        axes: ["Batch", "Head", "Total"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_5_output_0",
+                        axes: ["Batch", "Head", "Seq", "Total"],
+                    },
+                    {
+                        pattern: "*/c_attn/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Qkv"],
+                    },
+                    {
+                        pattern: "*/c_proj/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Embed"],
+                    },
+                    {
+                        pattern: "*/c_fc/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Inner"],
+                    },
+                    {
+                        pattern: "*/attn/Split_output_*",
+                        axes: ["Batch", "Seq", "Embed"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_2_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    {
+                        pattern: "*attn.bias",
+                        axes: ["Batch", "Head", "Pos", "Pos"],
+                    },
+                    {
+                        pattern: "*/attn/Slice_3_output_0",
+                        axes: ["Batch", "Head", "Seq", "Pos"],
+                    },
+                    {
+                        pattern: "*/attn/Slice_4_output_0",
+                        axes: ["Batch", "Head", "Seq", "Total"],
+                    },
+                ],
+            },
+        },
+    };
+
+/// The keys and values so far, one `[data, extents]` per layer's key and
+/// value in the order the graphs name them. Each module declares a tensor type
+/// of its own, so the cache crosses from one to the other as its elements.
+type Cache = List<[List<f32>, List<i32>]>;
+
+fn past(cache: &Cache, i: i32) -> step::Tensor<f32, [step::Batch, step::Head, step::Past, step::Dim]> {
+    let [data, extents] = cache[i];
+    return step::Tensor { data, extents };
+}
+
+/// The logits for `token` after the positions `cache` holds, and the cache
+/// grown by its position.
+fn decode(
+    token: i64,
+    cache: &Cache,
+    weights: &step::Weights,
+) -> [step::Tensor<f32, [step::Batch, step::Seq, step::Vocab]>, Cache] {
+    let length = cache[0].1[2] + 1;
+    let o = step::forward(
+        &step::Tensor::<i64, [step::Batch, step::Seq]> {
+            data: [token],
+            extents: [1, 1],
+        },
+        &past(cache, 0),
+        &past(cache, 1),
+        &past(cache, 2),
+        &past(cache, 3),
+        &past(cache, 4),
+        &past(cache, 5),
+        &past(cache, 6),
+        &past(cache, 7),
+        &past(cache, 8),
+        &past(cache, 9),
+        &step::Tensor::<i64, [step::Batch, step::Total]> {
+            data: List::<i64>::filled(length, 1),
+            extents: [1, length],
+        },
+        weights,
+    );
+    let grown: Cache = [
+        [o.present_0_key.data, o.present_0_key.extents],
+        [o.present_0_value.data, o.present_0_value.extents],
+        [o.present_1_key.data, o.present_1_key.extents],
+        [o.present_1_value.data, o.present_1_value.extents],
+        [o.present_2_key.data, o.present_2_key.extents],
+        [o.present_2_value.data, o.present_2_value.extents],
+        [o.present_3_key.data, o.present_3_key.extents],
+        [o.present_3_value.data, o.present_3_value.extents],
+        [o.present_4_key.data, o.present_4_key.extents],
+        [o.present_4_value.data, o.present_4_value.extents],
+    ];
+    return [o.logits, grown];
+}
+
+/// The prompt's logits, and the keys and values it leaves.
+fn prefill(input_ids: ByteList) -> [prompt::Tensor<f32, [prompt::Batch, prompt::Seq, prompt::Vocab]>, Cache] {
+    let [ids, extents] = ints_of(input_ids);
+    let weights = prompt::Weights::load(&#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
+    let o = prompt::forward(
+        &prompt::Tensor::<i64, [prompt::Batch, prompt::Seq]> { data: ids, extents },
+        &prompt::Tensor::<i64, [prompt::Batch, prompt::Seq]> { data: List::<i64>::filled(extents[1], 1), extents },
+        &weights,
+    );
+    let cache: Cache = [
+        [o.present_0_key.data, o.present_0_key.extents],
+        [o.present_0_value.data, o.present_0_value.extents],
+        [o.present_1_key.data, o.present_1_key.extents],
+        [o.present_1_value.data, o.present_1_value.extents],
+        [o.present_2_key.data, o.present_2_key.extents],
+        [o.present_2_value.data, o.present_2_value.extents],
+        [o.present_3_key.data, o.present_3_key.extents],
+        [o.present_3_value.data, o.present_3_value.extents],
+        [o.present_4_key.data, o.present_4_key.extents],
+        [o.present_4_value.data, o.present_4_value.extents],
+    ];
+    return [o.logits, cache];
+}
+
+test "the prompt returns the logits it did without the cache, and a key and value per layer" {
+    let [logits, cache] = prefill(#include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"));
+    let [want, want_extents] = tensor_of(#include_bytes("../tests/models/tiny-gpt2/test_data_set_0/output_0.pb"));
+    assert logits.extents == want_extents;
+    assert_close(&logits.data, &want);
+    assert cache.len() == 10;
+    for let [_, extents] of cache {
+        assert extents == [1, 4, 4, 8] as List<i32>;
+    }
+}
+
+test "each step after the prompt computes one position against the cache, as onnxruntime does" {
+    let [_, prefilled] = prefill(#include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"));
+    let weights = step::Weights::embedded();
+    let mut cache = prefilled;
+    let data: List<[ByteList, ByteList]> = [
+        [
+            #include_bytes("../tests/models/tiny-gpt2/with-past/test_data_set_0/input_0.pb"),
+            #include_bytes("../tests/models/tiny-gpt2/with-past/test_data_set_0/output_0.pb"),
+        ],
+        [
+            #include_bytes("../tests/models/tiny-gpt2/with-past/test_data_set_1/input_0.pb"),
+            #include_bytes("../tests/models/tiny-gpt2/with-past/test_data_set_1/output_0.pb"),
+        ],
+    ];
+    for let [i, pair] of data.into_iter().enumerate() {
+        let [input, output] = pair;
+        let [ids, _] = ints_of(input);
+        let [want, want_extents] = tensor_of(output);
+        let [logits, grown] = decode(ids[0], &cache, &weights);
+        assert logits.extents == want_extents;
+        assert_close(&logits.data, &want);
+        assert grown[0].1 == [1, 4, 5 + i, 8] as List<i32>;
+        cache = grown;
+    }
+}
+
+// That the check names the mask's axis is `emit_test`'s to show; a trap is
+// all this one can see.
+#[expect_trap]
+test "a mask that is not one position longer than the cache stops the step" {
+    let [_, cache] = prefill(#include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"));
+    step::forward(
+        &step::Tensor::<i64, [step::Batch, step::Seq]> {
+            data: [11],
+            extents: [1, 1],
+        },
+        &past(&cache, 0),
+        &past(&cache, 1),
+        &past(&cache, 2),
+        &past(&cache, 3),
+        &past(&cache, 4),
+        &past(&cache, 5),
+        &past(&cache, 6),
+        &past(&cache, 7),
+        &past(&cache, 8),
+        &past(&cache, 9),
+        &step::Tensor::<i64, [step::Batch, step::Total]> {
+            data: [1, 1, 1, 1],
+            extents: [1, 4],
+        },
+        &step::Weights::embedded(),
+    );
+}

@@ -157,6 +157,75 @@ test "a model round-trips through the declarations" {
     assert g.nodes[0].inputs[1] == "W";
 }
 
+fn branch_attr(name: String, graph: String) -> onnx::AttributeProto {
+    return onnx::AttributeProto {
+        name: Option::Some(name),
+        type: Option::Some(onnx::AttributeProtoAttributeType::Graph),
+        g: Option::Some(onnx::GraphProto {
+            name: Option::Some(graph),
+            node: [
+                onnx::NodeProto {
+                    op_type: Option::Some("Concat"),
+                    input: ["X", "X"],
+                    output: ["A"],
+                },
+            ],
+        }),
+    };
+}
+
+test "a subgraph attribute is read as the graph it carries, at its model's opset" {
+    let model = onnx::ModelProto {
+        opset_import: [
+            onnx::OperatorSetIdProto {
+                domain: Option::Some(""),
+                version: Option::Some(3),
+            },
+        ],
+        graph: Option::Some(onnx::GraphProto {
+            name: Option::Some("branching"),
+            node: [
+                onnx::NodeProto {
+                    op_type: Option::Some("If"),
+                    input: ["C"],
+                    output: ["Y"],
+                    attribute: [
+                        branch_attr("then_branch", "t"),
+                        branch_attr("else_branch", "e"),
+                    ],
+                },
+            ],
+        }),
+    };
+
+    let g = graph_of(grog::encode(&model));
+
+    let then_branch = g.nodes[0].attr("then_branch").unwrap().graph.unwrap();
+    assert then_branch.name == "t";
+    assert then_branch.nodes[0].attr("axis").unwrap().values == ["1"] as List<String>;
+    assert g.nodes[0].attr("else_branch").unwrap().graph.unwrap().name == "e";
+}
+
+test "a list of subgraphs is refused as one" {
+    let model = onnx::ModelProto {
+        graph: Option::Some(onnx::GraphProto {
+            name: Option::Some("looping"),
+            node: [
+                onnx::NodeProto {
+                    op_type: Option::Some("Foo"),
+                    attribute: [
+                        onnx::AttributeProto {
+                            name: Option::Some("bodies"),
+                            type: Option::Some(onnx::AttributeProtoAttributeType::Graphs),
+                        },
+                    ],
+                },
+            ],
+        }),
+    };
+    assert read(grog::encode(&model)).unwrap_err().reason == "bodies: a list of subgraphs is not read";
+}
+
 fn dimension(value: onnx::TensorShapeProtoDimensionValue) -> onnx::TensorShapeProtoDimension {
     return onnx::TensorShapeProtoDimension { value: Option::Some(value) };
 }

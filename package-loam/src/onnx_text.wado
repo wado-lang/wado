@@ -466,6 +466,14 @@ fn read_attr(s: &onnx::CstStore, toks: &onnx::TokenStream, attr: i32) -> Result<
     if let Some(tensor) = first_child_of_kind(s, single, onnx::RK_TENSOR_CONSTANT) {
         return read_tensor_attr(s, toks, tensor, name);
     }
+    if let Some(graph) = first_child_of_kind(s, single, onnx::RK_GRAPH) {
+        return Result::Ok(Attr {
+            name,
+            values: [],
+            is_list: false,
+            graph: Option::Some(read_graph(s, toks, graph)?),
+        });
+    }
     let [text, is_string] = single_attr_text(s, toks, single, &name)?;
     return Result::Ok(Attr {
         name,
@@ -494,7 +502,7 @@ fn single_attr_text(
             if first_child_of_kind(s, single, onnx::RK_TENSOR_CONSTANT) matches { Some(_) } {
                 return Result::Err(`${attr_name}: a list of tensors is not read`);
             }
-            return Result::Err(`${attr_name}: a subgraph attribute is not read`);
+            return Result::Err(`${attr_name}: a list of subgraphs is not read`);
         }
     }
     panic("singleAttrValue: no child");

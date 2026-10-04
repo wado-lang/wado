@@ -1,0 +1,26 @@
+// A closure or function value has no `Display`, as in Rust: `${f:?}` is how it
+// renders. This holds whether or not the closure is specialised to its functor.
+
+fn double(x: i32) -> i32 {
+    return x * 2;
+}
+
+fn through_param(f: fn(i32) -> i32) -> String {
+    return `${f}`;
+}
+
+test "a closure or function value is not displayable" {
+    let f = |x: i32| x + 1;
+    let a = `${f}`;
+    let g = double;
+    let b = `${g}`;
+    let c = `${double}`;
+    let d = through_param(f);
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "type `fn(i32)->i32` does not implement trait `Display`; use `${x:?}` for debug output, or add an `impl Display`",
+    "compile_error_count": 4
+}

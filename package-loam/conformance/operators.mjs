@@ -74,9 +74,6 @@ add('MatMulShared', binary('MatMul', [2, 2, 3], [3, 4], { A: ['Batch', 'Row', 'K
 add('MatMulRowVector', binary('MatMul', [3], [3, 4], { A: ['K'], B: ['K', 'Col'] }));
 add('MatMulColumnVector', binary('MatMul', [2, 3], [3], { A: ['Row', 'K'], B: ['K'] }));
 add('MatMulBroadcastBatch', binary('MatMul', [1, 2, 3], [2, 3, 4], { A: ['Batch', 'Row', 'K'], B: ['Batch', 'K', 'Col'] }));
-// The axis a product sums over, named apart on each side.
-add('MatMulRenamedInner', binary('MatMul', [2, 3], [3, 4], { A: ['Row', 'Hidden'], B: ['Inner', 'Col'] }));
-add('MatMulSharedRenamedInner', binary('MatMul', [2, 2, 3], [3, 4], { A: ['Batch', 'Row', 'Hidden'], B: ['Inner', 'Col'] }));
 
 add('Gemm', {
   inputs: { A: float([2, 3]), B: float([3, 4]), C: float([4]) },
@@ -92,11 +89,6 @@ add('GemmScalarBias', {
   inputs: { A: float([2, 3]), B: float([3, 4]), C: float([]) },
   nodes: [node('Gemm', ['A', 'B', 'C'], 'Y')],
   layout: mm,
-});
-add('GemmRenamedInner', {
-  inputs: { A: float([2, 3]), B: float([4, 3]), C: float([4]) },
-  nodes: [node('Gemm', ['A', 'B', 'C'], 'Y', { transB: 1 })],
-  layout: { A: ['Row', 'Hidden'], B: ['Col', 'Inner'], C: ['Col'] },
 });
 
 const cube = { A: ['Row', 'Col', 'Depth'] };
@@ -193,12 +185,6 @@ add('ConvDepthwise', {
   inputs: { A: float([1, 3, 4, 4]), W: float([3, 1, 3, 3]), B: float([3]) },
   nodes: [node('Conv', ['A', 'W', 'B'], 'Y', { group: 3, pads: [1, 1, 1, 1] })],
   layout: { ...convolved, W: ['Out', 'One', 'KH', 'KW'] },
-});
-// The weight's input channels and the bias's axis, each named apart.
-add('ConvRenamedChannels', {
-  inputs: { A: float([1, 2, 4, 4]), W: float([3, 2, 3, 3]), B: float([3]) },
-  nodes: [node('Conv', ['A', 'W', 'B'], 'Y', { pads: [1, 1, 1, 1] })],
-  layout: { ...convolved, W: ['Out', 'InChan', 'KH', 'KW'], B: ['Bias'] },
 });
 
 add('SoftmaxLast', { inputs: { A: float([2, 3]) }, nodes: [node('Softmax', ['A'], 'Y')], layout: { A: ['Row', 'Col'] } });

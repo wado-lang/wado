@@ -38,6 +38,16 @@ test "a string attribute that reads as a number prints quoted" {
     assert round_trip(&g) == g;
 }
 
+test "a subgraph attribute prints as the graph it holds" {
+    let g = read(
+        `<ir_version: 8, opset_import: ["" : 14]>
+        g (bool[1] C, float[2] X) => (float[2] Y) {
+            Y = If <then_branch = t () => (float[2] A) <float[2] W = {1.0, 2.0}> { A = Add(X, W) }, else_branch = e () => (float[2] B) { B = Neg(X) }> (C)
+        }`,
+    ).unwrap();
+    assert round_trip(&g) == g;
+}
+
 test "a half initializer prints as its bit patterns" {
     let g = read(`g (float16[2] X) => (float16[2] Y) <float16[2] W = {15360, 2049}> { Y = Add(X, W) }`).unwrap();
     assert round_trip(&g) == g;
