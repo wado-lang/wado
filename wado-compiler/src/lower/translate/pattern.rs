@@ -300,6 +300,7 @@ fn narrow_into_binding(pattern: &mut TirPattern) -> (TirPattern, TirExpr) {
         local_index,
         type_id,
         test,
+        ..
     } = std::mem::replace(pattern, TirPattern::Wildcard)
     else {
         panic!("narrow_into_binding takes a Narrow pattern");

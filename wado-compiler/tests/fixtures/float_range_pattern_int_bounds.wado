@@ -1,0 +1,42 @@
+// An integer literal bound of a float range converts by value, as an integer
+// literal does wherever a float is expected.
+
+fn grade(x: f64) -> i32 {
+    return match x {
+        0..<1.5 => 1,
+        1.5..=10 => 2,
+        _ => 0,
+    };
+}
+
+fn wide(x: f32) -> i32 {
+    return match x {
+        -1..<0x10 => 1,
+        b'A'..=1e3 => 2,
+        _ => 0,
+    };
+}
+
+fn unit<T>(x: T) -> bool {
+    return x matches { 0..<1 };
+}
+
+test "an integer bound of a float range is its value" {
+    assert grade(builtin::black_box(-0.0)) == 1;
+    assert grade(builtin::black_box(1.4)) == 1;
+    assert grade(builtin::black_box(10.0)) == 2;
+    assert grade(builtin::black_box(10.5)) == 0;
+    assert wide(builtin::black_box(-1.0_f32)) == 1;
+    assert wide(builtin::black_box(15.5_f32)) == 1;
+    assert wide(builtin::black_box(65.0_f32)) == 2;
+    assert wide(builtin::black_box(1000.0_f32)) == 2;
+    assert wide(builtin::black_box(64.5_f32)) == 0;
+}
+
+test "an integer range is a float range on a float instance" {
+    assert unit(builtin::black_box(0));
+    assert !unit(builtin::black_box(1));
+    assert unit(builtin::black_box(0.5));
+    assert unit(builtin::black_box(f16::from_f32(0.75)));
+    assert !unit(builtin::black_box(f32::NAN));
+}

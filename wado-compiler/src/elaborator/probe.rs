@@ -10,7 +10,7 @@ use crate::hashmap::IndexSet;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TypeTable};
 use crate::token::Span;
 
-use super::reify::Reify;
+use super::reify::{Reify, rt_call};
 
 impl<H: CompilerHost> Reify<'_, H> {
     /// The probe `site` on node `id` takes, as a statement, when the plan puts
@@ -26,7 +26,8 @@ impl<H: CompilerHost> Reify<'_, H> {
             TypeTable::I32,
             span,
         );
-        let call = self.rt_call(
+        let call = rt_call(
+            &self.tysys.type_table.borrow(),
             CompilerItem::CoverageProbe,
             id_literal,
             TypeTable::UNIT,

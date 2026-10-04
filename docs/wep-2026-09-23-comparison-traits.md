@@ -251,6 +251,18 @@ for the `if`. Under the float order:
 - Equal bounds (`1.0..=1.0`) are an error, since they spell the literal pattern
   this section refuses.
 
+An integer literal bound on a float is the float of its value (`0..<1.5`), as
+`let x: f64 = 1` is. Rust refuses both. Wado's expression rule already takes
+the literal, and a pattern reading it otherwise would be the exception.
+
+A bound may also be any constant: an immutable `global` or an associated
+constant. A range takes the rounding a constant carries as it takes a
+literal's, so the reason the constant is no pattern alone does not reach it. A
+constant's value shows only when the match runs, so the range compares by the
+type's order then, as a constant pattern compares by `==`. The checks above need
+the values, so they apply where the compiler knows them: literals and a
+primitive's limits.
+
 ### Comparing a value with itself warns
 
 Reflexivity gives every comparison of an expression with itself one answer, on
@@ -367,13 +379,19 @@ overlap, which is what `benchmark/ab.ts` decides.
   method's answers on a NaN, `-0.0` and an ordinary pair.
 - [x] Report the `self_comparison` lint, with a fixture for each operator, the
   float hint, a chain, an operand that performs an effect, and `allow`.
-- [ ] Accept float range patterns, with fixtures for `-0.0`, a NaN scrutinee, a
+- [x] Accept float range patterns, with fixtures for `-0.0`, a NaN scrutinee, a
   NaN bound, equal bounds, and a `match` that lacks `_`.
-- [ ] Reject a constant pattern whose type is or holds a float, with fixtures
+- [x] Reject a constant pattern whose type is or holds a float, with fixtures
   for `f64::INFINITY`, a `global` float, and a nested struct constant holding
   one.
 
 ## Known gaps
+
+A range with a constant bound other than a primitive's limit is checked for
+nothing its values decide. A NaN constant bound is no error, so `1.0..=LIMIT`
+with `LIMIT` a NaN matches every value from `1.0` up, NaN included. Reversed
+and empty ranges, overlapping arms, and coverage go unreported, and a `match` on
+an integer needs `_` beside such a range even where the arms cover every value.
 
 A `cmp` written for only some instances of a generic head leaves `==` derived
 from the members there, so at those instances the two can disagree.

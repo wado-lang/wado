@@ -1,0 +1,106 @@
+// A range bound may name a constant: an immutable global, bare or under a
+// namespace, or an associated constant. The range compares the scrutinee with
+// it by the type's order when the match runs, as a constant pattern compares
+// by `==`.
+use limits from "./sub/range_pattern_constant_bounds_dep.wado";
+
+global LOW: i32 = 10;
+global HIGH: i32 = 5 * 4;
+global FIRST: char = 'a';
+global CUTOFF: f64 = 0.5;
+global HALF: f16 = 0.5;
+global WIDE_LOW: i128 = -100;
+
+type Meters = f64;
+global SHORT: Meters = 1.5;
+
+struct Grade {}
+
+impl Grade {
+    const PASS: i32 = 60;
+}
+
+fn band(x: i32) -> i32 {
+    return match x {
+        LOW..<HIGH => 1,
+        HIGH..=Grade::PASS => 2,
+        Grade::PASS..<limits::LIMIT => 3,
+        _ => 0,
+    };
+}
+
+fn split(x: f64) -> i32 {
+    return match x {
+        0.0..<CUTOFF => 1,
+        CUTOFF..=f64::PI => 2,
+        _ => 0,
+    };
+}
+
+fn lower(c: char) -> bool {
+    return c matches { FIRST..='z' };
+}
+
+fn short(m: Meters) -> bool {
+    return m matches { 0..<SHORT };
+}
+
+fn half(x: f16) -> bool {
+    return x matches { 0.0..<HALF };
+}
+
+fn wide(x: i128) -> bool {
+    return x matches { WIDE_LOW..<0 };
+}
+
+fn by_ref(x: &i32) -> bool {
+    return x matches { LOW..<HIGH };
+}
+
+fn nested(o: Option<i32>) -> i32 {
+    return match o {
+        Some(LOW..<HIGH) => 1,
+        Some(_) => 2,
+        None => 0,
+    };
+}
+
+test "a constant bound compares when the match runs" {
+    let score = builtin::black_box(15);
+    let tier = match score {
+        LOW..<HIGH => 1,
+        HIGH..=Grade::PASS => 2,
+        _ => 0,
+    };
+    assert tier == 1;
+    assert band(builtin::black_box(10)) == 1;
+    assert band(builtin::black_box(19)) == 1;
+    assert band(builtin::black_box(20)) == 2;
+    assert band(builtin::black_box(60)) == 2;
+    assert band(builtin::black_box(99)) == 3;
+    assert band(builtin::black_box(100)) == 0;
+    assert band(builtin::black_box(9)) == 0;
+}
+
+test "a float compares by the float order" {
+    assert split(builtin::black_box(-0.0)) == 1;
+    assert split(builtin::black_box(0.5)) == 2;
+    assert split(builtin::black_box(3.5)) == 0;
+    assert split(builtin::black_box(f64::NAN)) == 0;
+    assert half(builtin::black_box(f16::from_f32(0.25)));
+    assert !half(builtin::black_box(f16::from_f32(0.5)));
+    assert !half(builtin::black_box(f16::NAN));
+}
+
+test "a char, a newtype, a wide integer, a reference and a payload" {
+    assert lower(builtin::black_box('q'));
+    assert !lower(builtin::black_box('A'));
+    assert short(builtin::black_box(1.0));
+    assert !short(builtin::black_box(1.5));
+    assert wide(builtin::black_box(-100_i128));
+    assert !wide(builtin::black_box(-101_i128));
+    assert by_ref(&builtin::black_box(15));
+    assert !by_ref(&builtin::black_box(20));
+    assert nested(builtin::black_box(Option::Some(15))) == 1;
+    assert nested(builtin::black_box(Option::Some(25))) == 2;
+}

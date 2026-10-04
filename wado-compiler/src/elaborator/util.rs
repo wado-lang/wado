@@ -1,13 +1,17 @@
 //! Utility functions for the elaborator phase.
 
-use crate::ast::{Literal, NumericSuffix, Pattern};
-use crate::elaborator::stmt::primitive_assoc_const_to_i128;
+use crate::ast::{AstId, Literal, NumericSuffix, Pattern};
+use crate::elaborator::float_literal::{FloatFormat, FloatLiteralError, float_literal_bits};
+use crate::elaborator::stmt::{primitive_float_limit_owner, primitive_int_limit};
 use crate::elaborator::trait_env::written_type_source;
 use crate::elaborator::types::TypeError;
 use crate::escape::{unescape_byte, unescape_char};
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
-use crate::tir::{InstancePattern, PatternLiteral, ResolvedType, TirPattern, TypeId, TypeTable};
+use crate::tir::{
+    FloatBound, FloatBoundKind, InstancePattern, PatternLiteral, RangeBound, ResolvedType,
+    TirLiteralPattern, TypeId, TypeTable,
+};
 use crate::token::Span;
 
 /// Why the integer literal `repr` of `magnitude`, negated where `negated`, is no
@@ -73,17 +77,29 @@ pub(super) fn pattern_literal(lit: &Literal) -> Result<PatternLiteral, String> {
     }
 }
 
-/// The value a range-pattern bound names: a number, byte or char literal, or a
-/// primitive's bound (`i32::MAX`). `None` for anything else, a user constant
-/// included.
-pub(super) fn range_bound_literal(
+/// What a range-pattern bound names when the compiler knows its value: a
+/// number, byte or char literal, or a primitive's limit (`i32::MAX`,
+/// `f64::INFINITY`). `None` for anything else, any other constant included.
+pub(super) fn range_bound(
     pattern: &Pattern,
     resolutions: &Resolutions,
-) -> Option<Result<PatternLiteral, String>> {
+) -> Option<Result<RangeBound, String>> {
     match pattern {
-        Pattern::Literal(Literal::Number(repr, suffix)) if denotes_float(repr, *suffix) => None,
+        Pattern::Literal(Literal::Number(repr, suffix)) if denotes_float(repr, *suffix) => {
+            let (negated, digits) = repr
+                .strip_prefix('-')
+                .map_or((false, repr.as_str()), |digits| (true, digits));
+            Some(Ok(RangeBound::Float(FloatBound {
+                kind: FloatBoundKind::Literal {
+                    digits: digits.to_string(),
+                    negated,
+                    suffix: *suffix,
+                },
+                shown: repr.clone(),
+            })))
+        }
         Pattern::Literal(lit @ (Literal::Number(..) | Literal::Byte(_) | Literal::Char(_))) => {
-            Some(pattern_literal(lit))
+            Some(pattern_literal(lit).map(RangeBound::Discrete))
         }
         Pattern::Variant {
             variant_name,
@@ -91,16 +107,488 @@ pub(super) fn range_bound_literal(
             bindings,
             ..
         } if bindings.is_empty() => {
-            let value = primitive_assoc_const_to_i128(Some(qualifier), variant_name, resolutions)?;
-            Some(Ok(PatternLiteral::Int {
-                magnitude: value.unsigned_abs(),
-                negated: value < 0,
-                suffix: None,
-                shown: format!("{}::{variant_name}", written_type_source(qualifier)),
-            }))
+            let shown = format!("{}::{variant_name}", written_type_source(qualifier));
+            if let Some((owner, value)) =
+                primitive_int_limit(Some(qualifier), variant_name, resolutions)
+            {
+                return Some(Ok(RangeBound::Discrete(PatternLiteral::Int {
+                    magnitude: value.unsigned_abs(),
+                    negated: value < 0,
+                    suffix: Some(
+                        NumericSuffix::from_name(owner.as_str())
+                            .expect("every integer type has a suffix"),
+                    ),
+                    shown,
+                })));
+            }
+            let owner = primitive_float_limit_owner(Some(qualifier), variant_name, resolutions)?;
+            Some(Ok(RangeBound::Float(FloatBound {
+                kind: FloatBoundKind::Limit {
+                    owner,
+                    name: variant_name.clone(),
+                },
+                shown,
+            })))
         }
         _ => None,
     }
+}
+
+/// The range pattern `start..end` (`..=` where `inclusive`), or why a bound
+/// names no value. `None` where a bound is neither a literal nor a primitive's
+/// limit.
+pub(super) fn range_pattern(
+    start: &Pattern,
+    end: &Pattern,
+    inclusive: bool,
+    resolutions: &Resolutions,
+) -> Option<Result<InstancePattern, Vec<String>>> {
+    let (start, end) = (
+        range_bound(start, resolutions)?,
+        range_bound(end, resolutions)?,
+    );
+    Some(match (start, end) {
+        (Ok(start), Ok(end)) => Ok(InstancePattern::Range {
+            start,
+            end,
+            inclusive,
+        }),
+        (start, end) => Err([start.err(), end.err()].into_iter().flatten().collect()),
+    })
+}
+
+/// A literal or range pattern on a settled scrutinee.
+pub(super) enum SettledPattern {
+    Literal(TirLiteralPattern),
+    /// The bits of its bounds, read unsigned where `is_unsigned`.
+    Range {
+        start: i128,
+        end: i128,
+        inclusive: bool,
+        is_unsigned: bool,
+    },
+    Float(FloatRange),
+}
+
+impl SettledPattern {
+    /// The keys of the values a range takes, inclusive, ordered as the
+    /// scrutinee orders them.
+    pub(super) fn range_keys(&self) -> (i128, i128) {
+        match self {
+            SettledPattern::Range {
+                start,
+                end,
+                inclusive,
+                ..
+            } => (*start, if *inclusive { *end } else { end - 1 }),
+            SettledPattern::Float(range) => range.keys(),
+            SettledPattern::Literal(_) => unreachable!("a literal pattern is no range"),
+        }
+    }
+}
+
+/// What `pattern` names on the settled `scrutinee`, or why it names nothing.
+pub(super) fn settle_instance_pattern(
+    pattern: &InstancePattern,
+    scrutinee: TypeId,
+    type_table: &mut TypeTable,
+) -> Result<SettledPattern, Vec<PatternLiteralError>> {
+    let is_unsigned = type_table.is_unsigned_int(type_table.peel_refs(scrutinee));
+    match pattern {
+        InstancePattern::Literal(value) => {
+            match pattern_literal_error(value, scrutinee, type_table) {
+                Some(error) => Err(vec![error]),
+                None => Ok(SettledPattern::Literal(value.to_tir(is_unsigned))),
+            }
+        }
+        InstancePattern::Range {
+            start,
+            end,
+            inclusive,
+        } if float_format(scrutinee, type_table).is_some() => {
+            float_range(start, end, *inclusive, scrutinee, type_table).map(SettledPattern::Float)
+        }
+        InstancePattern::Range {
+            start,
+            end,
+            inclusive,
+        } => {
+            let values = [start, end].map(|bound| bound_value(bound, scrutinee, type_table));
+            let mut errors = discrete_order_errors(start, end, *inclusive);
+            let [Ok(start), Ok(end)] = values else {
+                errors.extend(values.into_iter().filter_map(Result::err));
+                return Err(errors);
+            };
+            if !errors.is_empty() {
+                return Err(errors);
+            }
+            let [start, end] = [start, end].map(|value| match value {
+                BoundValue::Int(bits) => bits,
+                BoundValue::Char(c) => i128::from(u32::from(c)),
+                BoundValue::Float(..) => unreachable!("only a float reads a float bound"),
+            });
+            Ok(SettledPattern::Range {
+                start,
+                end,
+                inclusive: *inclusive,
+                is_unsigned,
+            })
+        }
+    }
+}
+
+/// Why `pattern` names no value whatever type reads it, as far as that shows
+/// before an instance settles the type: a range out of order, or a float range
+/// with a NaN bound or with bounds out of order or equal as `f64` reads them.
+/// Every float type rounds alike, so what is out of order in `f64` is out of
+/// order, or equal, in each.
+pub(super) fn unsettled_pattern_errors(pattern: &InstancePattern) -> Vec<PatternLiteralError> {
+    match pattern {
+        InstancePattern::Literal(_) => Vec::new(),
+        InstancePattern::Range {
+            start: start @ RangeBound::Discrete(_),
+            end: end @ RangeBound::Discrete(_),
+            inclusive,
+        } => discrete_order_errors(start, end, *inclusive),
+        InstancePattern::Range {
+            start,
+            end,
+            inclusive,
+        } => {
+            let mut errors: Vec<_> = [start, end]
+                .into_iter()
+                .filter_map(|bound| match bound {
+                    RangeBound::Float(float) => {
+                        nan_bound_error(float, FloatFormat::F64, float.f64_bits()?)
+                    }
+                    RangeBound::Discrete(_) => None,
+                })
+                .collect();
+            if errors.is_empty()
+                && let (Some(start), Some(end)) = (start.f64_bits(), end.f64_bits())
+            {
+                let range = FloatRange {
+                    format: FloatFormat::F64,
+                    start,
+                    end,
+                    inclusive: *inclusive,
+                };
+                errors.extend(range.checked().err().into_iter().flatten());
+            }
+            errors
+        }
+    }
+}
+
+/// Why the range `start..end` of two integer or `char` literals names no
+/// values whatever type reads it: its bounds out of order.
+fn discrete_order_errors(
+    start: &RangeBound,
+    end: &RangeBound,
+    inclusive: bool,
+) -> Vec<PatternLiteralError> {
+    let (RangeBound::Discrete(start), RangeBound::Discrete(end)) = (start, end) else {
+        return Vec::new();
+    };
+    let order = range_order_key(start).cmp(&range_order_key(end));
+    let message = if order.is_gt() {
+        "reversed range pattern"
+    } else if !inclusive && order.is_ge() {
+        "empty range pattern"
+    } else {
+        return Vec::new();
+    };
+    vec![PatternLiteralError::Invalid(message.to_string())]
+}
+
+/// A float range pattern, its bounds rounded into the float type that reads it.
+pub(super) struct FloatRange {
+    pub(super) format: FloatFormat,
+    pub(super) start: u64,
+    pub(super) end: u64,
+    pub(super) inclusive: bool,
+}
+
+impl FloatRange {
+    /// The keys of the values the range takes, inclusive: [`float_order_key`]
+    /// of its bounds, the end stepped back below an exclusive bound.
+    pub(super) fn keys(&self) -> (i128, i128) {
+        let [start, end] =
+            [self.start, self.end].map(|bits| float_order_key(self.format.value(bits)));
+        (start, if self.inclusive { end } else { end - 1 })
+    }
+
+    /// This range, or why it names no values: its bounds out of order, or equal.
+    fn checked(self) -> Result<Self, Vec<PatternLiteralError>> {
+        let (lo, hi) = self.keys();
+        let message = if lo > hi + i128::from(!self.inclusive) {
+            "reversed range pattern"
+        } else if lo > hi {
+            "empty range pattern"
+        } else if lo == hi && self.inclusive {
+            "a float range with equal bounds names one value, as a float literal pattern would"
+        } else {
+            return Ok(self);
+        };
+        Err(vec![PatternLiteralError::Invalid(message.to_string())])
+    }
+}
+
+/// A key ordering the non-NaN floats as the float order does, so a range of
+/// floats is a range of keys: `-0.0` keys as `0.0`, and adjacent `f64`s key
+/// adjacently.
+fn float_order_key(value: f64) -> i128 {
+    assert!(!value.is_nan(), "a NaN is no range bound");
+    // `-0.0 + 0.0` is `0.0`, so no negative key is spent on `-0.0`.
+    let bits = (value + 0.0).to_bits().cast_signed();
+    i128::from(if bits < 0 {
+        (bits ^ i64::MAX) + 1
+    } else {
+        bits
+    })
+}
+
+/// The float range `start..end` (`..=` where `inclusive`) over `scrutinee`, or
+/// why it names no values of it.
+pub(super) fn float_range(
+    start: &RangeBound,
+    end: &RangeBound,
+    inclusive: bool,
+    scrutinee: TypeId,
+    type_table: &mut TypeTable,
+) -> Result<FloatRange, Vec<PatternLiteralError>> {
+    let values = [start, end].map(|bound| bound_value(bound, scrutinee, type_table));
+    let [
+        Ok(BoundValue::Float(format, start)),
+        Ok(BoundValue::Float(_, end)),
+    ] = values
+    else {
+        let errors: Vec<_> = values.into_iter().filter_map(Result::err).collect();
+        assert!(
+            !errors.is_empty(),
+            "a float range on a non-float names a mismatch"
+        );
+        return Err(errors);
+    };
+    FloatRange {
+        format,
+        start,
+        end,
+        inclusive,
+    }
+    .checked()
+}
+
+/// Where a pattern naming a constant names it: the site annotate records the
+/// comparison on, and reify reads it from. A range records on its first
+/// constant bound.
+pub(super) fn constant_pattern_site(pattern: &Pattern) -> (AstId, Span) {
+    match pattern {
+        Pattern::Ident { id, span, .. } | Pattern::MutIdent { id, span, .. } => (*id, *span),
+        Pattern::Variant { name_id, span, .. } => (*name_id, *span),
+        _ => unreachable!("only a name names a constant"),
+    }
+}
+
+/// The value a range bound names on a settled scrutinee.
+pub(super) enum BoundValue {
+    /// The bits an integer compares by, read unsigned on an unsigned scrutinee.
+    Int(i128),
+    Char(char),
+    /// The bits of a float in the scrutinee's format.
+    Float(FloatFormat, u64),
+}
+
+/// The value `bound` names on `scrutinee`, or why it names none.
+pub(super) fn bound_value(
+    bound: &RangeBound,
+    scrutinee: TypeId,
+    type_table: &mut TypeTable,
+) -> Result<BoundValue, PatternLiteralError> {
+    let scrutinee = type_table.peel_refs(scrutinee);
+    match (bound, float_format(scrutinee, type_table)) {
+        (RangeBound::Discrete(lit), Some(format)) => match int_literal_float_bits(lit, format) {
+            Some(bits) => bits.map(|bits| BoundValue::Float(format, bits)),
+            None => Err(pattern_literal_error(lit, scrutinee, type_table)
+                .expect("a suffixed integer, a limit or a char is no float")),
+        },
+        (RangeBound::Discrete(lit), None) => {
+            if let Some(error) = pattern_literal_error(lit, scrutinee, type_table) {
+                return Err(error);
+            }
+            Ok(match lit {
+                PatternLiteral::Char(c) => BoundValue::Char(*c),
+                PatternLiteral::Int { .. } => BoundValue::Int(lit.bits()),
+                PatternLiteral::Bool(_) => unreachable!("a range bound is never a `bool`"),
+            })
+        }
+        (RangeBound::Float(bound), Some(format)) => {
+            float_bound_bits(bound, format, scrutinee, type_table)
+                .map(|bits| BoundValue::Float(format, bits))
+        }
+        (RangeBound::Float(bound), None) => {
+            Err(PatternLiteralError::Mismatch(bound.demands(type_table)))
+        }
+    }
+}
+
+/// The bits `bound` names in `format`, read by `scrutinee`, or why it names
+/// none.
+fn float_bound_bits(
+    bound: &FloatBound,
+    format: FloatFormat,
+    scrutinee: TypeId,
+    type_table: &mut TypeTable,
+) -> Result<u64, PatternLiteralError> {
+    let bits = match &bound.kind {
+        FloatBoundKind::Literal {
+            digits,
+            negated,
+            suffix,
+        } => {
+            if let Some(suffix) = suffix {
+                let suffix_type = type_table.numeric_suffix_type(*suffix);
+                if type_table.type_key(suffix_type) != type_table.type_key(scrutinee) {
+                    return Err(PatternLiteralError::Mismatch(bound.demands(type_table)));
+                }
+            }
+            signed_literal_bits(digits, *negated, format)
+                .map_err(|error| PatternLiteralError::Invalid(error.message(&bound.shown)))?
+        }
+        FloatBoundKind::Limit { owner, name } => {
+            let (owner_format, bits) = limit_bits(*owner, name);
+            if owner_format != format {
+                return Err(PatternLiteralError::Mismatch(owner.as_str().to_string()));
+            }
+            bits
+        }
+    };
+    match nan_bound_error(bound, format, bits) {
+        Some(error) => Err(error),
+        None => Ok(bits),
+    }
+}
+
+/// The bits the literal `digits`, negated where `negated`, rounds to in
+/// `format`.
+fn signed_literal_bits(
+    digits: &str,
+    negated: bool,
+    format: FloatFormat,
+) -> Result<u64, FloatLiteralError> {
+    let bits = float_literal_bits(digits, format)?;
+    Ok(if negated {
+        bits | format.sign_bit()
+    } else {
+        bits
+    })
+}
+
+/// Whether a range pattern ranges over `scrutinee`, read through newtypes: an
+/// integer, `char` or float.
+pub(super) fn takes_range_patterns(type_table: &TypeTable, scrutinee: TypeId) -> bool {
+    let head = type_table.representation_head(scrutinee);
+    type_table.is_integer(head)
+        || type_table.is_wide_int(head)
+        || type_table.is_primitive(head, PrimitiveType::Char)
+        || float_format(head, type_table).is_some()
+}
+
+/// The float format of `scrutinee`, read through references and newtypes.
+fn float_format(scrutinee: TypeId, type_table: &TypeTable) -> Option<FloatFormat> {
+    type_table
+        .primitive_head(type_table.peel_refs(scrutinee))
+        .and_then(FloatFormat::of)
+}
+
+/// The bits an unsuffixed integer literal names in `format`: its value, as an
+/// integer literal converts wherever a float is expected. `None` for any other
+/// literal, which keeps its own type.
+fn int_literal_float_bits(
+    lit: &PatternLiteral,
+    format: FloatFormat,
+) -> Option<Result<u64, PatternLiteralError>> {
+    let PatternLiteral::Int {
+        magnitude,
+        negated,
+        suffix: None,
+        shown,
+    } = lit
+    else {
+        return None;
+    };
+    Some(
+        signed_literal_bits(&magnitude.to_string(), *negated, format)
+            .map_err(|error| PatternLiteralError::Invalid(error.message(shown))),
+    )
+}
+
+impl RangeBound {
+    /// The bits of the `f64` the bound names on a float, whatever float type
+    /// reads it. `None` where that shows only per instance.
+    fn f64_bits(&self) -> Option<u64> {
+        match self {
+            RangeBound::Float(float) => float.f64_bits(),
+            RangeBound::Discrete(lit) => int_literal_float_bits(lit, FloatFormat::F64)?.ok(),
+        }
+    }
+}
+
+/// Why `bound`, holding `bits` in `format`, is no bound: it is a NaN.
+fn nan_bound_error(
+    bound: &FloatBound,
+    format: FloatFormat,
+    bits: u64,
+) -> Option<PatternLiteralError> {
+    format.value(bits).is_nan().then(|| {
+        PatternLiteralError::Invalid(format!(
+            "a NaN is no range bound: `{}` matches no value",
+            bound.shown
+        ))
+    })
+}
+
+impl FloatBound {
+    /// The type the bound demands of a scrutinee it names no value of.
+    fn demands(&self, type_table: &mut TypeTable) -> String {
+        match &self.kind {
+            FloatBoundKind::Literal {
+                suffix: Some(suffix),
+                ..
+            } => {
+                let suffix_type = type_table.numeric_suffix_type(*suffix);
+                type_table.type_name(suffix_type)
+            }
+            FloatBoundKind::Literal { suffix: None, .. } => "a float type".to_string(),
+            FloatBoundKind::Limit { owner, .. } => owner.as_str().to_string(),
+        }
+    }
+
+    /// The bits of the `f64` the bound names, whatever type reads it: a literal
+    /// rounded into `f64`, a limit widened from its own type. `None` for a
+    /// literal past `f64`'s range, which each instance reports.
+    fn f64_bits(&self) -> Option<u64> {
+        let format = FloatFormat::F64;
+        match &self.kind {
+            FloatBoundKind::Literal {
+                digits, negated, ..
+            } => signed_literal_bits(digits, *negated, format).ok(),
+            FloatBoundKind::Limit { owner, name } => {
+                let (owner, bits) = limit_bits(*owner, name);
+                Some(owner.value(bits).to_bits())
+            }
+        }
+    }
+}
+
+/// The format of the float type `owner` and the bits of its limit `name`, as
+/// `range_bound` recorded the pair.
+fn limit_bits(owner: PrimitiveType, name: &str) -> (FloatFormat, u64) {
+    let format = FloatFormat::of(owner).expect("a limit's owner is a float type");
+    let bits = format
+        .limit(name)
+        .expect("a limit bound names one of its type's limits");
+    (format, bits)
 }
 
 /// Whether a literal pattern on `scrutinee` can be judged yet. An unsettled
@@ -118,15 +606,6 @@ pub(super) fn settles_literal_patterns(type_table: &TypeTable, scrutinee: TypeId
         ResolvedType::GenericInstance { .. } => type_table.is_concrete(head),
         _ => false,
     }
-}
-
-/// `pattern` on `scrutinee`, settled: an unsigned instance compares unsigned.
-pub(crate) fn lower_literal_pattern(
-    pattern: &InstancePattern,
-    scrutinee: TypeId,
-    type_table: &TypeTable,
-) -> TirPattern {
-    pattern.lower(type_table.is_unsigned_int(type_table.peel_refs(scrutinee)))
 }
 
 /// Why a literal pattern or range bound names no value of the settled
@@ -154,12 +633,25 @@ impl PatternLiteralError {
 }
 
 /// Why `lit` names no value of `scrutinee`.
-pub(crate) fn pattern_literal_error(
+pub(super) fn pattern_literal_error(
     lit: &PatternLiteral,
     scrutinee: TypeId,
     type_table: &mut TypeTable,
 ) -> Option<PatternLiteralError> {
     let scrutinee = type_table.peel_refs(scrutinee);
+    if let PatternLiteral::Int {
+        suffix: None,
+        shown,
+        ..
+    } = lit
+        && float_format(scrutinee, type_table).is_some()
+    {
+        let float = type_table.type_name(scrutinee);
+        return Some(PatternLiteralError::Invalid(format!(
+            "`{shown}` is a float on `{float}`, and a float literal is no pattern; \
+             compare it in a guard"
+        )));
+    }
     if let Some(expected) = pattern_literal_mismatch(lit, scrutinee, type_table) {
         return Some(PatternLiteralError::Mismatch(expected));
     }
@@ -182,7 +674,7 @@ pub(crate) fn pattern_literal_error(
 }
 
 /// The type `lit` demands of `scrutinee`, when `scrutinee` is not it.
-pub(super) fn pattern_literal_mismatch(
+fn pattern_literal_mismatch(
     lit: &PatternLiteral,
     scrutinee: TypeId,
     type_table: &mut TypeTable,
@@ -208,36 +700,6 @@ pub(super) fn pattern_literal_mismatch(
         _ => return None,
     };
     Some(expected.to_string())
-}
-
-/// Why the bounds of a range pattern name no values of `scrutinee`.
-pub(crate) fn range_bound_errors(
-    start: &PatternLiteral,
-    end: &PatternLiteral,
-    scrutinee: TypeId,
-    type_table: &mut TypeTable,
-) -> Vec<PatternLiteralError> {
-    [start, end]
-        .into_iter()
-        .filter_map(|bound| pattern_literal_error(bound, scrutinee, type_table))
-        .collect()
-}
-
-/// Why the range `start..end` names no values whatever type reads it: its
-/// bounds out of order.
-pub(super) fn range_order_error(
-    start: &PatternLiteral,
-    end: &PatternLiteral,
-    inclusive: bool,
-) -> Option<String> {
-    let order = range_order_key(start).cmp(&range_order_key(end));
-    if order.is_gt() {
-        Some("reversed range pattern".to_string())
-    } else if !inclusive && order.is_ge() {
-        Some("empty range pattern".to_string())
-    } else {
-        None
-    }
 }
 
 /// A range bound's value as a key ordering it among the integers. Every type
@@ -403,4 +865,21 @@ pub(super) fn replaced<O, T, R>(
     let saved = guard.saved.take().expect("enclosing value present");
     let left = std::mem::replace(field(guard.owner), saved);
     (result, left)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn adjacent_floats_key_adjacently() {
+        let tiny = f64::from_bits(1);
+        let key = float_order_key;
+        assert_eq!(key(-tiny) + 1, key(0.0));
+        assert_eq!(key(-0.0), key(0.0));
+        assert_eq!(key(0.0) + 1, key(tiny));
+        assert_eq!(key(f64::MAX) + 1, key(f64::INFINITY));
+        assert_eq!(key(f64::NEG_INFINITY) + 1, key(f64::MIN));
+        assert!(key(-1.0) < key(-0.5));
+    }
 }

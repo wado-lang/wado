@@ -1,0 +1,33 @@
+// An associated constant matched by a pattern or a range bound reads its body
+// in its own module, never through a local the matching function binds under
+// a name the body uses.
+global BASE: i32 = 60;
+
+struct Grade {}
+
+impl Grade {
+    const PASS: i32 = BASE;
+    const TOP: i32 = top: {
+        let t = BASE + 30;
+        t
+    };
+}
+
+fn tier(x: i32) -> i32 {
+    #[allow(shadowed_name)]
+    let BASE = 1000;
+    return match x {
+        Grade::PASS => 1,
+        Grade::PASS..<Grade::TOP => 2,
+        _ => BASE,
+    };
+}
+
+test "the body reads the global, not the caller's local" {
+    assert tier(builtin::black_box(60)) == 1;
+    assert tier(builtin::black_box(70)) == 2;
+    assert tier(builtin::black_box(95)) == 1000;
+}
+
+__DATA__
+{"test": {}}
