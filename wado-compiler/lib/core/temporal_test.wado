@@ -1456,6 +1456,18 @@ test "Instant serializes under CBOR datetime tag 0 and round-trips" {
     assert back == inst;
 }
 
+test "an Instant outside the four-digit years goes untagged under CBOR" {
+    // RFC 3339's year has four digits, so tag 0 cannot carry an expanded one.
+    for let text of ["+010000-01-01T00:00:00Z", "-000001-12-31T23:59:59Z"] {
+        let inst = Instant::from_str(text).unwrap();
+        let bytes = to_bytes::<Instant>(&inst).expect("serialize Instant to CBOR");
+        assert bytes[0] != 0xc0;
+        assert from_bytes::<Instant, ByteList>(bytes).unwrap() == inst;
+    }
+    let first = Instant::from_str("0000-01-01T00:00:00Z").unwrap();
+    assert to_bytes::<Instant>(&first).unwrap()[0] == 0xc0;
+}
+
 test "ZonedDateTime round-trips through CBOR keeping its zone" {
     let zdt = ZonedDateTime::from_str("2023-11-15T07:13:20+09:00[+09:00]").unwrap();
     let bytes = to_bytes::<ZonedDateTime>(&zdt).expect("serialize ZonedDateTime to CBOR");

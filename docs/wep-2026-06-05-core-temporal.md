@@ -125,8 +125,9 @@ A duration component is an exact `i64` where Temporal's is a float64. A time
 duration is a pair of `i64` seconds and nanoseconds rather than an `i128`, since
 `i128` arithmetic is slow. `Duration::total` alone divides in `i128`, so that
 its float is the one nearest the exact quotient. A component that does not fit
-an `i64` traps; only a millisecond, microsecond, or nanosecond count of a span
-longer than about 292 years can do that.
+an `i64` traps. Only a nanosecond count of a span longer than about 292 years,
+or a microsecond count of one longer than about 292,000 years, can do that: a
+time duration stays below 2^53 seconds, so a millisecond count always fits.
 
 ### ISO 8601 only
 
@@ -233,9 +234,10 @@ The format specifier's precision is Temporal's `fractionalSecondDigits`: it
 truncates to that many digits, and without one the fraction runs to its last
 non-zero digit.
 
-That string is the serde wire form. An `Instant`'s is RFC 3339, so it goes
-under CBOR's date/time tag 0 (RFC 8949 §3.4.1). A `ZonedDateTime`'s carries an
-annotation tag 0 does not admit, so it goes untagged. JSON emits both bare, and
+That string is the serde wire form. An `Instant`'s is RFC 3339 in the years
+0000 to 9999, so there it goes under CBOR's date/time tag 0 (RFC 8949 §3.4.1).
+An expanded year is not RFC 3339, so it goes untagged. A `ZonedDateTime`'s
+carries an annotation tag 0 does not admit, so it goes untagged. JSON emits both bare, and
 the rest are plain strings. Deserialization of the two instant-bearing types
 also accepts an epoch-seconds number (tag 1 / JSON number), read as UTC.
 

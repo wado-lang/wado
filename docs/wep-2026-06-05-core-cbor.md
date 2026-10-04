@@ -386,13 +386,15 @@ API above.
 
 Typed timestamps map to [`core:temporal`](./wep-2026-06-05-core-temporal.md):
 
-- Encode: both serialize as their Temporal string. An `Instant`'s is RFC 3339,
-  wrapped in the standard date/time tag 0 (RFC 8949 §3.4.1) under CBOR. A
-  `ZonedDateTime`'s carries an RFC 9557 zone annotation, which tag 0 does not
-  admit, so it goes untagged. JSON emits both bare.
+- Encode: both serialize as their Temporal string. An `Instant`'s is RFC 3339
+  in the years 0000 to 9999, and there CBOR wraps it in the standard date/time
+  tag 0 (RFC 8949 §3.4.1). An expanded year such as `+275760` is not RFC 3339,
+  so it goes untagged. A `ZonedDateTime`'s carries an RFC 9557 zone annotation,
+  which tag 0 does not admit, so it goes untagged. JSON emits both bare.
 - Decode: both accept their string (tag 0 / JSON string) or an epoch-seconds
   number (tag 1 / JSON number, read as UTC). A number outside Temporal's range
-  is an overflow error. Tag passthrough (§6.1) makes the tag number advisory.
+  is an overflow error. The decoder unwraps tags 0 and 1 without checking the
+  number, so either tag may wrap either form.
 
 The impls are format-agnostic and live in `core:temporal` itself, shared by
 `core:cbor` and `core:json` through a `Serializer::serialize_tag` hook (a no-op
@@ -464,9 +466,10 @@ type are complete. The remaining items are lossy CBOR→JSON conversion and CWT.
   return; (2) `[..T].len()` in a generic body now yields the monomorphized
   arity rather than the unsubstituted pack count of 1 (deferred via a new
   `TirExprKind::TupleLen`, mirroring `TupleZip`).
-- [x] typed date/time mapping: `Instant`/`ZonedDateTime` emit tag 0 (RFC 3339
-  text) via a `Serializer::serialize_tag` hook, and decode a string (tag 0)
-  or a numeric epoch (tag 1) through a `deserialize_any` visitor. The impls
+- [x] typed date/time mapping: an `Instant` in the years 0000 to 9999 emits
+  tag 0 (RFC 3339 text) via a `Serializer::serialize_tag` hook, and both types
+  decode a string (tag 0) or a numeric epoch (tag 1) through a
+  `deserialize_any` visitor. The impls
   live in `core:temporal`.
 - [x] map keys of any key type: `SerializeMap::key` writes the key as the value
   it is and `DeserializeMap::next_key::<K>()` reads it back, so an

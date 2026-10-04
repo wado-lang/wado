@@ -20,7 +20,8 @@
 //! - Temporal's BigInt epoch nanoseconds are an `i64` second count and a `u32`
 //!   sub-second part, and `epoch_nanoseconds` answers an `i128`. A duration
 //!   component is an exact `i64` rather than a float64; a result that does not
-//!   fit one (a nanosecond count of more than ~292 years) traps.
+//!   fit one (a nanosecond count of more than ~292 years, or a microsecond
+//!   count of more than ~292,000) traps.
 //! - A RangeError traps, except in a parser, which returns a
 //!   `DeserializeError`. A struct literal bypasses every constructor check, so
 //!   every operation checks its receiver and arguments first.
@@ -322,7 +323,7 @@ impl Instant {
 
     /// Temporal's `toString` (and `toJSON`): the UTC reading with a `Z`, its
     /// fraction printed as far as the last non-zero digit. This is the serde
-    /// wire form, and an RFC 3339 timestamp.
+    /// wire form, and an RFC 3339 timestamp in the years `0..=9999`.
     pub fn to_iso8601(&self) -> String {
         return format_instant(self.checked(), -1);
     }
@@ -333,7 +334,7 @@ impl Instant {
     pub fn to_http_date(&self) -> String {
         let [days, time_of_day] = self.checked().epoch_day_parts();
         let date = iso_date_from_epoch_days(days);
-        if date.year < 0 || date.year > 9999 {
+        if !is_four_digit_year(date.year) {
             panic(`core:temporal: an HTTP-date has a four-digit year, and ${date.year} is not one`);
         }
         let second_of_day = time_of_day / NANOSECONDS_PER_SECOND;
@@ -774,8 +775,9 @@ impl ZonedDateTime {
         return self.format(-1, true);
     }
 
-    /// RFC 3339: the local date and time and the offset, without the zone
-    /// annotation RFC 9557 adds. `parse_rfc3339` reads it back.
+    /// The local date and time and the offset, without the zone annotation
+    /// RFC 9557 adds: RFC 3339 in the years `0..=9999`, and ISO 8601's expanded
+    /// year outside them. `parse_rfc3339` reads it back.
     pub fn to_rfc3339(&self) -> String {
         return self.format(-1, false);
     }
@@ -2290,10 +2292,15 @@ fn floor_div_i128(a: i128, m: i128) -> i128 {
 
 // Formatting, as Temporal's `toString` writes each part.
 
+/// Whether a year has the four digits RFC 3339 and RFC 7231 require of one.
+fn is_four_digit_year(year: i64) -> bool {
+    return 0 <= year <= 9999;
+}
+
 /// Temporal's `PadISOYear`: four digits in `0..=9999`, otherwise a sign and
 /// six digits.
 fn format_iso_year(year: i64) -> String {
-    if 0 <= year <= 9999 {
+    if is_four_digit_year(year) {
         return `${year:04}`;
     }
     if year > 9999 {
@@ -3768,15 +3775,20 @@ impl Deserialize for PlainMonthDay {
     }
 }
 
-// serde — an `Instant` serializes as its Temporal string, which is RFC 3339,
-// under the CBOR standard date/time tag 0 (RFC 8949 §3.4.1); JSON ignores the
-// tag and emits the bare string. A `ZonedDateTime` string carries an RFC 9557
-// annotation, which tag 0 does not admit, so it goes untagged. Either reads
-// its string back, or an epoch-seconds number (tag 1 / JSON number) as UTC.
+// serde — an `Instant` serializes as its Temporal string. In the years
+// `0..=9999` that string is RFC 3339, so it goes under the CBOR standard
+// date/time tag 0 (RFC 8949 §3.4.1); an expanded year is not RFC 3339, so it
+// goes untagged. JSON ignores the tag and emits the bare string. A
+// `ZonedDateTime` string carries an RFC 9557 annotation, which tag 0 does not
+// admit, so it goes untagged. Either reads its string back, or an
+// epoch-seconds number (tag 1 / JSON number) as UTC.
 
 impl Serialize for Instant {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
-        s.serialize_tag(0)?;
+        let [days, _] = self.checked().epoch_day_parts();
+        if is_four_digit_year(iso_date_from_epoch_days(days).year) {
+            s.serialize_tag(0)?;
+        }
         let text = self.to_iso8601();
         return s.serialize_string(&text);
     }
