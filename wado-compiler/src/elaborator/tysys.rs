@@ -155,17 +155,48 @@ impl TypeSystem {
     /// handed it may write: one it is or holds at any depth, or one behind a
     /// function, resource or signal, whose captures and state no type shows.
     pub(crate) fn reaches_mut_ref(&self, type_id: TypeId) -> bool {
-        self.reaches_mut_ref_from(type_id, &mut IndexSet::default())
+        self.reaches(type_id, &|_, resolved| {
+            matches!(
+                resolved,
+                ResolvedType::MutRef(_)
+                    | ResolvedType::Function { .. }
+                    | ResolvedType::Resource { .. }
+                    | ResolvedType::GenericResource { .. }
+                    | ResolvedType::Reactive(_)
+            )
+        })
     }
 
-    fn reaches_mut_ref_from(&self, type_id: TypeId, walked: &mut IndexSet<TypeKey>) -> bool {
+    /// Whether a value of `type_id` is or holds a float, in a field, element or
+    /// payload at any depth.
+    pub(crate) fn holds_float(&self, type_id: TypeId) -> bool {
+        self.reaches(type_id, &|ty, resolved| {
+            let tt = self.type_table.borrow();
+            matches!(resolved, ResolvedType::Primitive(_)) && (tt.is_float(ty) || tt.is_half(ty))
+        })
+    }
+
+    /// Whether `type_id`, or a type a value of it holds at any depth, is one
+    /// `target` picks.
+    fn reaches(&self, type_id: TypeId, target: &dyn Fn(TypeId, &ResolvedType) -> bool) -> bool {
+        self.reaches_from(type_id, target, &mut IndexSet::default())
+    }
+
+    fn reaches_from(
+        &self,
+        type_id: TypeId,
+        target: &dyn Fn(TypeId, &ResolvedType) -> bool,
+        walked: &mut IndexSet<TypeKey>,
+    ) -> bool {
         let resolved = self.type_table.borrow().get(type_id).clone();
+        if target(type_id, &resolved) {
+            return true;
+        }
         let reached = match resolved {
-            ResolvedType::MutRef(_)
-            | ResolvedType::Function { .. }
+            ResolvedType::MutRef(inner) | ResolvedType::Reactive(inner) => vec![inner],
+            ResolvedType::Function { .. }
             | ResolvedType::Resource { .. }
-            | ResolvedType::GenericResource { .. }
-            | ResolvedType::Reactive(_) => return true,
+            | ResolvedType::GenericResource { .. } => return false,
             // A parameter is answered where it is bound: an instance walks its
             // arguments.
             ResolvedType::Primitive(_)
@@ -195,7 +226,7 @@ impl TypeSystem {
         }
         reached
             .into_iter()
-            .any(|member| self.reaches_mut_ref_from(member, walked))
+            .any(|member| self.reaches_from(member, target, walked))
     }
 
     /// The `Type::Case` spelling of the case the resolve walk names at a bare

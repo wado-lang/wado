@@ -243,9 +243,6 @@ A constant is not a pattern when its type is a float or holds one, in a field,
 element or payload at any depth. So `f64::INFINITY`, a `global` holding `0.1`,
 and a struct constant with an `f64` field are errors here.
 
-> Not yet implemented: a float constant pattern is accepted and matches by
-> `==`.
-
 Only a refutable pattern reads a bare name as a constant: a `match` arm,
 `if let`, `while let`, and `let ... else`. So `let limit = v else { … }` runs
 the `else` block unless `v == limit`. A local, a parameter, or a closure capture

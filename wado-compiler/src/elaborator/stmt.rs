@@ -1415,15 +1415,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Where a constant pattern's `scrutinee == constant` is a trait call, dispatch
-    /// it on the pattern and reserve the local reify holds the scrutinee in.
+    /// it on the pattern and reserve the local reify holds the scrutinee in. A
+    /// constant holding a float is no pattern, since it carries the rounding a
+    /// float literal pattern would.
     fn resolve_constant_pattern(
         &mut self,
         pattern_id: AstId,
+        name: &str,
         scrutinee: TypeId,
         constant: TypeId,
         ctx: &mut FunctionContext,
         span: Span,
     ) {
+        if self.tysys.holds_float(constant) {
+            let type_name = self.tysys.type_table.borrow().type_name(constant);
+            let _ = self.emit(TypeError::InvalidPattern {
+                message: format!(
+                    "a constant holding a float is not a pattern: `{name}` is `{type_name}`; \
+                     compare it in a guard"
+                ),
+                span,
+            });
+            return;
+        }
         {
             let type_table = self.tysys.type_table.borrow();
             // A scalar compares by instruction, and a wide int's constant is
@@ -1533,7 +1547,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.record_reference_to_decl(*id, global, *name_span);
                     let (peeled, _) = self.tysys.peel_scrutinee_refs(scrutinee_type, ref_binding);
                     self.typecheck(constant, peeled, *name_span);
-                    self.resolve_constant_pattern(*id, scrutinee_type, constant, ctx, span);
+                    self.resolve_constant_pattern(
+                        *id,
+                        name,
+                        scrutinee_type,
+                        constant,
+                        ctx,
+                        *name_span,
+                    );
                     return Vec::new();
                 }
                 let is_mut = is_mut || ctx.must_bind.is_some_and(|m| m.is_mut);
@@ -1640,7 +1661,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                         self.typecheck(assoc.ty, scrutinee_type, *span);
                         if let Some(id) = *name_id {
-                            self.resolve_constant_pattern(id, scrutinee_type, assoc.ty, ctx, *span);
+                            self.resolve_constant_pattern(
+                                id,
+                                &qualified_variant_name,
+                                scrutinee_type,
+                                assoc.ty,
+                                ctx,
+                                *span,
+                            );
                         }
                         return Vec::new();
                     }
@@ -1650,7 +1678,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     {
                         if let Some(id) = *name_id {
                             self.record_item_reference_by_name(id, &alias);
-                            self.resolve_constant_pattern(id, scrutinee_type, constant, ctx, *span);
+                            self.resolve_constant_pattern(
+                                id,
+                                &qualified_variant_name,
+                                scrutinee_type,
+                                constant,
+                                ctx,
+                                *span,
+                            );
                         }
                         self.typecheck(constant, scrutinee_type, *span);
                         return Vec::new();
