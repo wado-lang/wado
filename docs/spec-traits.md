@@ -533,7 +533,8 @@ test "a projection's arguments pick the member of the family" {
 
 An impl binds the family with the parameters the trait declares: as many, and
 each with the bounds the trait gives the parameter at that position. The names
-are the impl's own. Each parameter is a plain type parameter. A pack, an effect
+are the impl's own. A bound cannot bind a family (`S: Store<Buf = X>`), since
+it is no single type until a projection gives it arguments. Each parameter is a plain type parameter. A pack, an effect
 parameter, or a default is an error, since a projection writes one type per
 parameter.
 

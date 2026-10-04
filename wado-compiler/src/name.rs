@@ -3563,6 +3563,16 @@ impl FqTraitName {
         }
     }
 
+    /// This trait with [`FqTypeName::rewrite`] applied to each argument: every
+    /// replacement made at once, so one never rewrites another's result.
+    #[must_use]
+    pub fn rewrite_args(&self, at: &impl Fn(&FqTypeName) -> Option<FqTypeName>) -> Self {
+        Self {
+            head: self.head.clone(),
+            args: self.args.iter().map(|a| a.rewrite(at)).collect(),
+        }
+    }
+
     /// The same trait with its type arguments dropped.
     #[must_use]
     pub fn head_only(&self) -> Self {

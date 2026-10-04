@@ -34,9 +34,10 @@ use crate::{ast, format_spec, hashmap};
 pub struct Parser {
     tokens: Vec<Token>,
     pos: usize,
-    /// Tracks when we've split a `GtGt` into two Gt tokens for nested generics.
-    /// When true, the next `expect_gt` call should succeed without consuming a token.
-    pending_gt: bool,
+    /// The second half of a `GtGt` split into two `>` for nested generics,
+    /// until it is consumed. It is the current token meanwhile, so every
+    /// lookahead and span reads it before `tokens[pos]`.
+    pending_gt: Option<Token>,
     /// When true, `Name {` is not parsed as a struct literal. This is set in
     /// expression contexts where a block `{` follows the expression (e.g.,
     /// if/while/match conditions), preventing ambiguity between struct literals
@@ -136,7 +137,7 @@ struct ParserCheckpoint {
     pos: usize,
     comment_cursor: usize,
     next_ast_id: u32,
-    pending_gt: bool,
+    pending_gt: Option<Span>,
     errors_len: usize,
     contextual_keywords_len: usize,
 }
@@ -224,7 +225,7 @@ impl Parser {
         Self {
             tokens,
             pos: 0,
-            pending_gt: false,
+            pending_gt: None,
             restrict_struct_literals: false,
             shebang,
             data_section,
@@ -314,7 +315,7 @@ impl Parser {
             pos: self.pos,
             comment_cursor: self.comment_cursor,
             next_ast_id: self.next_ast_id,
-            pending_gt: self.pending_gt,
+            pending_gt: self.pending_gt.as_ref().map(|token| token.span),
             errors_len: self.errors.len(),
             contextual_keywords_len: self.contextual_keywords.len(),
         }
@@ -344,7 +345,10 @@ impl Parser {
         self.trivia
             .discard_from(AstId::new(self.ast_id_space, cp.next_ast_id));
         self.next_ast_id = cp.next_ast_id;
-        self.pending_gt = cp.pending_gt;
+        self.pending_gt = cp.pending_gt.map(|span| Token {
+            kind: TokenKind::Gt,
+            span,
+        });
         // Drop errors recorded inside the speculative branch being rolled back.
         self.errors.truncate(cp.errors_len);
         // Likewise the keyword readings: the branch that replaces this one
@@ -589,29 +593,26 @@ impl Parser {
 
     // Token handling
 
+    /// The current token. The second half of a split `>>` is a `>` of its
+    /// own, so a lookahead taken between the halves sees it rather than the
+    /// token after it.
     fn peek(&self) -> &Token {
-        &self.tokens[self.pos]
+        self.peek_nth(0)
     }
 
-    /// The current token's kind. The second half of a split `>>` is a `>` of
-    /// its own, so a lookahead taken between the halves sees it rather than
-    /// the token after it.
     fn peek_kind(&self) -> &TokenKind {
-        if self.pending_gt {
-            return &TokenKind::Gt;
-        }
-        &self.tokens[self.pos].kind
+        &self.peek().kind
     }
 
     /// Peek at the nth token ahead (0 = current, 1 = next, etc.)
     fn peek_nth(&self, n: usize) -> &Token {
-        let idx = self.pos + n;
-        if idx < self.tokens.len() {
-            &self.tokens[idx]
-        } else {
-            // Return the last token (should be Eof)
-            &self.tokens[self.tokens.len() - 1]
-        }
+        let idx = match (&self.pending_gt, n) {
+            (Some(half), 0) => return half,
+            (Some(_), n) => self.pos + n - 1,
+            (None, n) => self.pos + n,
+        };
+        // Past the end is the last token, `Eof`.
+        &self.tokens[idx.min(self.tokens.len() - 1)]
     }
 
     fn is_at_end(&self) -> bool {
@@ -619,8 +620,8 @@ impl Parser {
     }
 
     fn advance(&mut self) -> &Token {
-        if self.pending_gt {
-            self.pending_gt = false;
+        if self.pending_gt.is_some() {
+            self.pending_gt = None;
             return &self.tokens[self.pos - 1];
         }
         if !self.is_at_end() {
@@ -673,8 +674,15 @@ impl Parser {
 
         // Check for GtGt (>>) - split it into two Gt tokens
         if self.check(&TokenKind::GtGt) {
-            self.advance();
-            self.pending_gt = true; // Remember we have one more > to consume
+            let span = self.advance().span;
+            self.pending_gt = Some(Token {
+                kind: TokenKind::Gt,
+                span: Span {
+                    start: span.start + 1,
+                    column: span.column + 1,
+                    ..span
+                },
+            });
             return Ok(());
         }
 
@@ -6904,6 +6912,21 @@ mod tests {
         let module = parser.parse();
         let errors = parser.take_errors();
         (module, errors)
+    }
+
+    /// The second half of a split `>>` is the current token until consumed:
+    /// every lookahead counts from it, and it spans its own character.
+    #[test]
+    fn test_a_pending_half_of_a_split_shift_is_the_current_token() {
+        let mut parser = Parser::from_lex_no_trivia(lex("a >> b c"));
+        parser.advance();
+        parser.expect_gt().unwrap();
+        assert_matches!(parser.peek_kind(), TokenKind::Gt);
+        assert_eq!(parser.peek().span.column, 4);
+        assert_matches!(&parser.peek_nth(1).kind, TokenKind::Ident(name) if name == "b");
+        assert_matches!(&parser.peek_nth(2).kind, TokenKind::Ident(name) if name == "c");
+        parser.advance();
+        assert_matches!(&parser.peek_nth(0).kind, TokenKind::Ident(name) if name == "b");
     }
 
     /// A parameter's span covers the whole parameter, and the parameter list's

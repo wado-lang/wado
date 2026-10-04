@@ -2371,6 +2371,21 @@ impl Monomorphizer {
         type_table: &TypeTable,
     ) -> FqTypeName {
         arg.rewrite(&|node| {
+            // A family's projection is named at its arguments, which may be
+            // any type, so it is spelled rather than looked up.
+            if let Some((base, assoc, owning_trait)) = node.projected()
+                && !node.args().is_empty()
+            {
+                let base_id = Self::type_at_instance(base, bound, type_table)?;
+                let family =
+                    type_table.resolve_assoc_type_qualified(base_id, &owning_trait, assoc)?;
+                let args: Vec<FqTypeName> = node
+                    .args()
+                    .iter()
+                    .map(|arg| Self::trait_arg_at_instance(arg, bound, type_table))
+                    .collect();
+                return Some(type_table.family_name_at(family, &args));
+            }
             let answer = Self::type_at_instance(node, bound, type_table)?;
             Some(type_table.fq_type_name(answer))
         })
@@ -2384,18 +2399,12 @@ impl Monomorphizer {
         bound: &impl Fn(&str) -> Option<TypeId>,
         type_table: &TypeTable,
     ) -> Option<TypeId> {
-        if let Some((base, assoc, owning_trait)) = node.projected() {
-            let base_id = Self::type_at_instance(base, bound, type_table)?;
-            let family = type_table.resolve_assoc_type_qualified(base_id, &owning_trait, assoc)?;
-            let args = node
-                .args()
-                .iter()
-                .map(|arg| Self::type_at_instance(arg, bound, type_table))
-                .collect::<Option<Vec<_>>>()?;
-            return type_table.find_instantiated(family, &args);
-        }
         if !node.args().is_empty() {
             return None;
+        }
+        if let Some((base, assoc, owning_trait)) = node.projected() {
+            let base_id = Self::type_at_instance(base, bound, type_table)?;
+            return type_table.resolve_assoc_type_qualified(base_id, &owning_trait, assoc);
         }
         bound(node.binder_name()?)
     }

@@ -29,6 +29,7 @@ use super::sig::{MethodSig, Param};
 use super::static_call::{CandidateKind, Selector, StaticLookup, StaticQuery};
 use super::synth::ArgClass;
 use super::trait_query::SelfBinding;
+use super::type_resolution::ParamSpace;
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
 use super::tysys::TypeSystem;
 use super::{AbstractSelection, Elaborator};
@@ -214,8 +215,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// it: a type parameter's declared ones, or those the trait's
     /// `type A: Bound` puts on the projection `ty`. Empty for any other type.
     /// A projection's are the declaration's own, arguments included, written
-    /// with `Self` meaning the projection's base and read under
-    /// [`Self::in_family_space`].
+    /// with `Self` meaning the projection's base and the family's parameters
+    /// the projection's arguments.
     pub(super) fn carried_bounds(&self, ty: TypeId) -> Vec<ScopedBound> {
         if let Some(name) = self.tysys.binder_name(ty) {
             return self
@@ -233,10 +234,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             type_id: projected.base,
             declaring_trait: Some(projected.owning_trait),
         });
+        let space: ParamSpace = decl
+            .type_params
+            .iter()
+            .map(|param| param.name.clone())
+            .zip(projected.args)
+            .collect();
         decl.bounds
             .iter()
             .filter(|bound| bound.names_a_trait())
-            .map(|bound| ScopedBound::new(bound.clone(), written_self))
+            .map(|bound| ScopedBound::new(bound.clone(), written_self).in_space(space.clone()))
             .collect()
     }
 
@@ -267,21 +274,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 args: args.clone(),
             },
         ))
-    }
-
-    /// Run `body` where the names of `ty`'s family parameters stand for the
-    /// arguments `ty` gives them, as the bounds [`Self::carried_bounds`]
-    /// answers for it are written; `body` alone for any other type.
-    pub(super) fn in_family_space<R>(
-        &mut self,
-        ty: TypeId,
-        body: impl FnOnce(&mut Self) -> R,
-    ) -> R {
-        let Some((decl, projected)) = self.projected_decl(ty) else {
-            return body(self);
-        };
-        let names: Vec<String> = decl.type_params.iter().map(|p| p.name.clone()).collect();
-        self.with_type_params_bound(&names, &projected.args, body)
     }
 
     /// What the call `call` selected through a declared bound, where the walk

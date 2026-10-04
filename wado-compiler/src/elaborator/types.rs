@@ -753,6 +753,9 @@ pub enum TypeError {
         param: String,
         /// The bounds that declare it, in bound-list order.
         traits: Vec<String>,
+        /// Whether it takes parameters of its own, which no bound can pin, so
+        /// binding it is no way out.
+        family: bool,
         span: Span,
     },
 
@@ -1131,10 +1134,17 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// An `impl` binds a name its trait does not declare — a typo for one it
-    /// does, which leaves the real associated type unbound.
-    ImplAssocTypeNotInTrait {
+    /// An `impl` or a bound binds a name its trait does not declare — a typo
+    /// for one it does, which leaves the real associated type unbound.
+    AssocTypeNotInTrait {
         trait_name: String,
+        assoc_name: String,
+        span: Span,
+    },
+
+    /// A bound binds a generic associated type (`S: Store<Buf = X>`), which
+    /// names a family rather than a type until a projection gives it arguments.
+    BoundBindsAssocFamily {
         assoc_name: String,
         span: Span,
     },
@@ -1926,20 +1936,24 @@ impl TypeError {
                 assoc,
                 param,
                 traits,
+                family,
                 span,
-            } => (
-                Code::AmbiguousCandidate,
-                format!(
-                    "ambiguous associated type '{param}::{assoc}': declared by {}; name the trait's own binding, e.g. '{param}: {}<{assoc} = ...>'",
-                    traits
-                        .iter()
-                        .map(|t| format!("'{t}'"))
-                        .collect::<Vec<_>>()
-                        .join(" and "),
-                    traits.first().map(String::as_str).unwrap_or(assoc)
-                ),
-                *span,
-            ),
+            } => {
+                let declared = traits
+                    .iter()
+                    .map(|t| format!("'{t}'"))
+                    .collect::<Vec<_>>()
+                    .join(" and ");
+                let message = if *family {
+                    format!("ambiguous associated type '{param}::{assoc}': declared by {declared}")
+                } else {
+                    format!(
+                        "ambiguous associated type '{param}::{assoc}': declared by {declared}; name the trait's own binding, e.g. '{param}: {}<{assoc} = ...>'",
+                        traits.first().map(String::as_str).unwrap_or(assoc)
+                    )
+                };
+                (Code::AmbiguousCandidate, message, *span)
+            }
             TypeError::AmbiguousValueBlankets {
                 trait_name,
                 receiver,
@@ -2427,13 +2441,20 @@ impl TypeError {
                 format!("impl of trait '{trait_name}' does not bind associated type '{assoc_name}'"),
                 *span,
             ),
-            TypeError::ImplAssocTypeNotInTrait {
+            TypeError::AssocTypeNotInTrait {
                 trait_name,
                 assoc_name,
                 span,
             } => (
                 Code::TraitDeclInvalid,
                 format!("trait '{trait_name}' declares no associated type '{assoc_name}'"),
+                *span,
+            ),
+            TypeError::BoundBindsAssocFamily { assoc_name, span } => (
+                Code::TraitDeclInvalid,
+                format!(
+                    "associated type `{assoc_name}` takes type parameters, so a bound cannot bind it to one type"
+                ),
                 *span,
             ),
             TypeError::ImplAssocTypeParamsMismatch {

@@ -438,7 +438,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// `bounds`, written over `params`, with each parameter's name read as the
     /// family's own parameter at its position, which no other name reaches.
-    fn bounds_over_family(
+    pub(super) fn bounds_over_family(
         &mut self,
         owning_trait: DefId,
         assoc: &str,
@@ -1850,10 +1850,10 @@ impl TypeSystem {
     }
 
     /// Whether a bound writing `wanted` selects the header — see
-    /// [`super::trait_env::header_answers_bound_args`].
-    /// Whether `header` writes the trait arguments `wanted` asks for, at the
-    /// receiver whose arguments are `type_args`: an impl parameter the target
-    /// places stands for the receiver's argument there, not for any type.
+    /// [`super::trait_env::header_answers_bound_args`] — at the receiver whose
+    /// arguments are `type_args`: an impl parameter the target places stands
+    /// for the receiver's argument there, not for any type. One whose argument
+    /// inference has yet to settle stays open.
     fn header_answers_bound_args(
         &self,
         header: &ImplHeader,
@@ -1869,26 +1869,21 @@ impl TypeSystem {
         let slots = ImplParamSlots::of(&header.ty, &header.type_params);
         let at_receiver: Vec<FqTypeName> = {
             let table = self.type_table.borrow();
+            let settled: IndexMap<FqTypeName, FqTypeName> = header
+                .type_params
+                .iter()
+                .filter_map(|param| {
+                    let &arg = type_args?.get(slots.of_name(&param.name)? as usize)?;
+                    (!table.awaits_inference(arg))
+                        .then(|| (FqTypeName::binder(&param.name), table.fq_type_name(arg)))
+                })
+                .collect();
+            // All at once: a receiver argument spelled like another impl
+            // parameter is not that parameter.
             header
                 .trait_arg_ids()
                 .iter()
-                .map(|written| {
-                    header
-                        .type_params
-                        .iter()
-                        .fold(written.clone(), |written, param| {
-                            let Some(&arg) = slots
-                                .of_name(&param.name)
-                                .and_then(|slot| type_args?.get(slot as usize))
-                            else {
-                                return written;
-                            };
-                            written.substitute(
-                                &FqTypeName::binder(&param.name),
-                                &table.fq_type_name(arg),
-                            )
-                        })
-                })
+                .map(|written| written.rewrite(&|node| settled.get(node).cloned()))
                 .collect()
         };
         header_answers_bound_args(
@@ -2310,10 +2305,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// frame wrote itself, and for an inherited one the chain from what `bounds`
     /// writes down to the trait that declared it.
     fn bound_space(&mut self, bounds: &[ScopedBound], elaborated: &ElaboratedBound) -> ParamSpace {
+        let own = elaborated.space.clone();
         let Some((root, via)) = elaborated.inherited.clone() else {
-            return ParamSpace::new();
+            return own;
         };
-        let root_args = self.trait_args_of_bound(bounds, root);
+        let root_args = self.in_space(&own, |e| e.trait_args_of_bound(bounds, root));
         self.inherited_space(root, &root_args, &via)
     }
 
@@ -2464,34 +2460,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the node [`Scope::abstract_selections`] records the selection under,
     /// and `through_ref` whether its receiver was a reference to `self_type_id`.
     pub(super) fn find_method_in_trait_bounds(
-        &mut self,
-        call: Option<AstId>,
-        through_ref: bool,
-        bounds: &[ScopedBound],
-        method_name: &str,
-        self_type_id: TypeId,
-        span: Span,
-        required_trait: Option<&RequiredTrait>,
-        args: ArgSource<'_, '_>,
-    ) -> Option<(FqTraitName, MethodInfo)> {
-        // A family's bounds are written over its parameters, which stand for
-        // the projection's arguments while they are read.
-        self.in_family_space(self_type_id, |e| {
-            e.find_method_in_bounds_read_here(
-                call,
-                through_ref,
-                bounds,
-                method_name,
-                self_type_id,
-                span,
-                required_trait,
-                args,
-            )
-        })
-    }
-
-    /// [`Self::find_method_in_trait_bounds`] with `bounds` read in this frame.
-    fn find_method_in_bounds_read_here(
         &mut self,
         call: Option<AstId>,
         through_ref: bool,

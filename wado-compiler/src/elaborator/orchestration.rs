@@ -70,6 +70,17 @@ use crate::token::Span;
 use crate::unparse::unparse_type_into;
 use crate::wit_consume::module_host_leaf_imports;
 
+/// Every trait bound a module writes, wherever it stands.
+#[derive(Default)]
+struct BoundsWritten(Vec<ast::TraitBound>);
+
+impl AstVisitor for BoundsWritten {
+    fn visit_trait_bounds(&mut self, bounds: &[ast::TraitBound]) {
+        self.0.extend(bounds.iter().cloned());
+        ast::walk_trait_bounds(self, bounds);
+    }
+}
+
 /// One `resource Child extends Parent` clause, held until every resource has
 /// been collected: a parent may be declared after its child, or elsewhere.
 struct PendingExtends {
@@ -899,6 +910,44 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
 
+        // A bound binding an associated type (`I: Iterator<Item = u8>`) names
+        // one its trait declares, and one taking no parameters: a family is no
+        // type until a projection gives it arguments, so nothing could hold it.
+        for (module_source, module) in modules {
+            if !is_user_local(module_source) {
+                continue;
+            }
+            let mut written = BoundsWritten::default();
+            for item in &module.items {
+                written.visit_item(item);
+            }
+            for bound in written.0 {
+                let Some(trait_) = resolutions.bound_decl(&bound) else {
+                    continue;
+                };
+                for binding in &bound.assoc_types {
+                    let declared = trait_env
+                        .trait_declaring_assoc_type(&trait_, &binding.name)
+                        .and_then(|owner| trait_env.assoc_type_decl(&owner, &binding.name));
+                    let error = match declared {
+                        None => TypeError::AssocTypeNotInTrait {
+                            trait_name: bound.name.clone(),
+                            assoc_name: binding.name.clone(),
+                            span: binding.span,
+                        },
+                        Some(decl) if !decl.type_params.is_empty() => {
+                            TypeError::BoundBindsAssocFamily {
+                                assoc_name: binding.name.clone(),
+                                span: binding.span,
+                            }
+                        }
+                        Some(_) => continue,
+                    };
+                    let _ = logger.error_in(module_source, error);
+                }
+            }
+        }
+
         // Nothing downstream rejects an impl that disagrees with its trait: an
         // unbound associated type reaches codegen unsubstituted, a wrong arity
         // only fails Wasm validation.
@@ -944,7 +993,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 if !trait_env.declares_assoc_type(&decl_key, &binding.name) {
                     let _ = logger.error_in(
                         &header.module,
-                        TypeError::ImplAssocTypeNotInTrait {
+                        TypeError::AssocTypeNotInTrait {
                             trait_name: decl.name.clone(),
                             assoc_name: binding.name.clone(),
                             span: binding.span,

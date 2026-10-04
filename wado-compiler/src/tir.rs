@@ -3458,30 +3458,6 @@ impl TypeTable {
         })
     }
 
-    /// The trait whose impl on `concrete` binds `assoc_name`, where exactly
-    /// one does: the one declaring the associated type a frame with no trait
-    /// of its own, an inherent impl's, reaches by name.
-    pub fn assoc_type_owner(&self, concrete: TypeId, assoc_name: &str) -> Option<DefId> {
-        if self.contains_type_param(concrete) {
-            return None;
-        }
-        let registered = self.inheriting(concrete, |receiver| {
-            let receiver = self.instance_key(receiver);
-            let owners: IndexSet<DefId> = self
-                .assoc_type_resolutions
-                .keys()
-                .filter(|key| key.receiver == receiver && key.assoc_name == assoc_name)
-                .map(|key| key.trait_decl)
-                .collect();
-            (owners.len() == 1).then(|| owners[0])
-        });
-        registered.or_else(|| {
-            let (owner, _) =
-                self.generic_assoc_type_def(self.decl_of_type(concrete)?, assoc_name)?;
-            Some(owner)
-        })
-    }
-
     /// Register a generic associated type definition.
     /// E.g., for `impl Iterator for ListIter<T> { type Item = T; }`,
     /// register `(ListIter's ``AstId``, "Item") → TypeParam(0, "T")`.
@@ -3676,10 +3652,8 @@ impl TypeTable {
         concrete_id: TypeId,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        let type_args = self.nominal_type_args(concrete_id)?;
-        let (_, def_type_id) =
-            self.generic_assoc_type_def(self.decl_of_type(concrete_id)?, assoc_name)?;
-        Some(self.substitute_positional(def_type_id, &type_args))
+        self.resolve_generic_assoc_type_of_owner(concrete_id, assoc_name)
+            .map(|(_, resolved)| resolved)
     }
 
     /// Whether the declaration behind `type_id` can be reflected — every
@@ -3719,10 +3693,45 @@ impl TypeTable {
         concrete_id: TypeId,
         assoc_name: &str,
     ) -> Option<TypeId> {
+        self.resolve_assoc_type_of_owner(concrete_id, assoc_name)
+            .map(|(_, resolved)| resolved)
+    }
+
+    /// [`Self::resolve_assoc_type_of_instance`] with the trait whose impl binds
+    /// it, which says how many arguments its own parameters take.
+    pub fn resolve_assoc_type_of_owner(
+        &mut self,
+        concrete_id: TypeId,
+        assoc_name: &str,
+    ) -> Option<(DefId, TypeId)> {
         if let Some(resolved) = self.resolve_assoc_type(concrete_id, assoc_name) {
-            return Some(resolved);
+            let owner = self.inheriting(concrete_id, |receiver| {
+                let receiver = self.instance_key(receiver);
+                self.assoc_type_resolutions
+                    .iter()
+                    .find(|(key, answers)| {
+                        key.receiver == receiver
+                            && key.assoc_name == assoc_name
+                            && answers.tagged().any(|(_, answer)| answer == resolved)
+                    })
+                    .map(|(key, _)| key.trait_decl)
+            })?;
+            return Some((owner, resolved));
         }
-        self.resolve_generic_assoc_type_mono(concrete_id, assoc_name)
+        self.resolve_generic_assoc_type_of_owner(concrete_id, assoc_name)
+    }
+
+    /// [`Self::resolve_generic_assoc_type_mono`] with the trait whose generic
+    /// impl binds it.
+    pub fn resolve_generic_assoc_type_of_owner(
+        &mut self,
+        concrete_id: TypeId,
+        assoc_name: &str,
+    ) -> Option<(DefId, TypeId)> {
+        let type_args = self.nominal_type_args(concrete_id)?;
+        let (owner, def_type_id) =
+            self.generic_assoc_type_def(self.decl_of_type(concrete_id)?, assoc_name)?;
+        Some((owner, self.substitute_positional(def_type_id, &type_args)))
     }
 
     /// [`Self::resolve_assoc_type_of_instance`] for a caller that knows which
@@ -3819,79 +3828,36 @@ impl TypeTable {
         )
     }
 
-    /// [`Self::instantiate_family`] for a reader that cannot intern: the
-    /// instantiation where it was interned already, `None` where it was not.
-    pub fn find_instantiated(&self, family: TypeId, args: &[TypeId]) -> Option<TypeId> {
-        let at = |id: TypeId| self.find_instantiated(id, args);
-        let all = |ids: &[TypeId]| ids.iter().map(|&id| at(id)).collect::<Option<Vec<_>>>();
-        let rebuilt = match self.get(family).clone() {
-            ResolvedType::AssocParam { index, .. } => return args.get(index as usize).copied(),
-            ResolvedType::BuiltinArray(inner) => ResolvedType::BuiltinArray(at(inner)?),
-            ResolvedType::Ref(inner) => ResolvedType::Ref(at(inner)?),
-            ResolvedType::MutRef(inner) => ResolvedType::MutRef(at(inner)?),
-            ResolvedType::Reactive(inner) => ResolvedType::Reactive(at(inner)?),
-            ResolvedType::Function {
-                is_mut,
-                params,
-                return_type,
-                effects,
-            } => ResolvedType::Function {
-                is_mut,
-                params: all(&params)?,
-                return_type: at(return_type)?,
-                effects,
-            },
-            ResolvedType::GenericInstance { def, type_args } => ResolvedType::GenericInstance {
-                def,
-                type_args: all(&type_args)?,
-            },
-            ResolvedType::GenericResource { def, type_args } => ResolvedType::GenericResource {
-                def,
-                type_args: all(&type_args)?,
-            },
-            ResolvedType::Newtype {
-                def,
-                type_args,
-                base_type,
-            } => ResolvedType::Newtype {
-                def,
-                type_args: all(&type_args)?,
-                base_type: at(base_type)?,
-            },
-            ResolvedType::AssocTypeProjection {
-                param_id,
-                assoc_name,
-                args: own,
-                owning_trait,
-                bounds,
-                assoc_type_bindings,
-            } => ResolvedType::AssocTypeProjection {
-                param_id: at(param_id)?,
-                assoc_name,
-                args: all(&own)?,
-                owning_trait,
-                bounds,
-                assoc_type_bindings: assoc_type_bindings
-                    .into_iter()
-                    .map(|(name, bound)| Some((name, at(bound)?)))
-                    .collect::<Option<Vec<_>>>()?,
-            },
-            // Nothing in these is a family's parameter.
-            ResolvedType::Primitive(_)
-            | ResolvedType::Unit
-            | ResolvedType::Never
-            | ResolvedType::Struct { .. }
-            | ResolvedType::Enum { .. }
-            | ResolvedType::Resource { .. }
-            | ResolvedType::Variant { .. }
-            | ResolvedType::TypeParam { .. }
-            | ResolvedType::InferVar(_)
-            | ResolvedType::TypePack { .. }
-            | ResolvedType::Flags { .. }
-            | ResolvedType::Unknown
-            | ResolvedType::Error => return Some(family),
-        };
-        self.intern_map.get(&rebuilt).copied()
+    /// The name of `family` at arguments given as names, for a reader that
+    /// names types without interning them, as mangling does: each of the
+    /// family's own parameters replaced by its argument, all at once.
+    pub fn family_name_at(&self, family: TypeId, args: &[FqTypeName]) -> FqTypeName {
+        let mut params = Vec::new();
+        self.collect_assoc_params(family, &mut params);
+        let at_args: IndexMap<FqTypeName, FqTypeName> = params
+            .into_iter()
+            .map(|param| {
+                let ResolvedType::AssocParam { index, .. } = self.get(param) else {
+                    unreachable!("collect_assoc_params collects family parameters");
+                };
+                (self.fq_type_name(param), args[*index as usize].clone())
+            })
+            .collect();
+        self.fq_type_name(family)
+            .rewrite(&|node| at_args.get(node).cloned())
+    }
+
+    fn collect_assoc_params(&self, id: TypeId, out: &mut Vec<TypeId>) {
+        if let ResolvedType::AssocParam { .. } = self.get(id) {
+            if !out.contains(&id) {
+                out.push(id);
+            }
+            return;
+        }
+        self.any_constituent(id, &mut |t| {
+            self.collect_assoc_params(t, out);
+            false
+        });
     }
 
     /// The shared traversal behind [`Self::substitute_type_params_with`],

@@ -27,6 +27,33 @@ pub(super) type ParamSpace = Vec<(String, TypeId)>;
 /// read in — empty for one the frame wrote itself.
 type FrameBound = (ScopedBound, ParamSpace);
 
+/// What an associated type named off `Self` or a type parameter is, before
+/// its own arguments are applied.
+enum AssocTarget {
+    /// A binding, its own parameters open, and the trait declaring it where
+    /// one is known.
+    Family {
+        owner: Option<DefId>,
+        family: TypeId,
+    },
+    /// A projection off `base`, which the frame files under `base_name`.
+    Projection {
+        base: TypeId,
+        base_name: String,
+        owner: DefId,
+    },
+}
+
+impl AssocTarget {
+    /// The trait whose declaration says how many arguments it takes.
+    fn owner(&self) -> Option<DefId> {
+        match self {
+            Self::Family { owner, .. } => *owner,
+            Self::Projection { owner, .. } => Some(*owner),
+        }
+    }
+}
+
 impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_type(&mut self, ty: &Type) -> TypeId {
         match ty {
@@ -181,10 +208,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if pins.iter().all(|pin| pin.is_some() && *pin == pins[0]) {
             return false;
         }
+        let family = declaring.iter().any(|bound| {
+            self.trait_decl_of(bound)
+                .and_then(|decl| self.tysys.trait_env.assoc_type_decl(&decl, assoc_name))
+                .is_some_and(|decl| !decl.type_params.is_empty())
+        });
         let _ = self.emit(TypeError::AmbiguousAssocType {
             assoc: assoc_name.to_string(),
             param: param_name.to_string(),
             traits: declaring.iter().map(|bound| bound.name.clone()).collect(),
+            family,
             span,
         });
         true
@@ -213,56 +246,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !names_assoc_type {
             return self.resolve_namespace_member(namespaced);
         }
-        let Some(args) = self.assoc_args(namespaced) else {
+        let Some(target) = self.assoc_target(namespaced) else {
             return TypeTable::ERROR;
         };
-        self.assoc_at(namespaced, &args)
-    }
-
-    /// The trait declaring the associated type `namespaced` names off `Self` or
-    /// a type parameter, read from the declarations in scope: the trait `Self`
-    /// is elaborated against, a bound, or else the impls of the type itself.
-    fn assoc_owner(&self, namespaced: &NamespacedGenericType) -> Option<DefId> {
-        let (declared, base) = if namespaced.namespace == "Self" {
-            (
-                self.self_trait_declaring_assoc_type(&namespaced.name),
-                self.annotate_ctx.trait_ctx.self_type,
-            )
-        } else {
-            (
-                self.bound_declaring_assoc_type(&namespaced.namespace, &namespaced.name),
-                self.annotate_ctx
-                    .trait_ctx
-                    .type_params
-                    .get(&namespaced.namespace)
-                    .map(|binder| binder.type_id),
-            )
+        let Some(args) = self.assoc_args(namespaced, target.owner()) else {
+            return TypeTable::ERROR;
         };
-        declared.or_else(|| {
-            let base = base?;
-            self.projection_member_owner(base, &namespaced.name)
-                .or_else(|| {
-                    self.tysys
-                        .type_table
-                        .borrow()
-                        .assoc_type_owner(base, &namespaced.name)
-                })
-        })
+        match target {
+            AssocTarget::Family { family, .. } => self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .instantiate_family(family, &args),
+            AssocTarget::Projection {
+                base,
+                base_name,
+                owner,
+            } => self.make_frame_projection_of_trait(
+                base,
+                &base_name,
+                owner,
+                &namespaced.name,
+                &args,
+            ),
+        }
     }
 
     /// The arguments `namespaced` writes for its associated type's own
-    /// parameters, as many as the declaration takes and each meeting its
+    /// parameters, as many as `owner`'s declaration takes and each meeting its
     /// parameter's bounds, or `None` once the count is reported wrong.
-    fn assoc_args(&mut self, namespaced: &NamespacedGenericType) -> Option<Vec<TypeId>> {
-        let params = self
-            .assoc_owner(namespaced)
-            .and_then(|owner| {
-                self.tysys
-                    .trait_env
-                    .assoc_type_decl(&owner, &namespaced.name)
-            })
-            .map(|decl| decl.type_params.clone())
-            .unwrap_or_default();
+    fn assoc_args(
+        &mut self,
+        namespaced: &NamespacedGenericType,
+        owner: Option<DefId>,
+    ) -> Option<Vec<TypeId>> {
+        let decl = owner.and_then(|owner| {
+            self.tysys
+                .trait_env
+                .assoc_type_decl(&owner, &namespaced.name)
+                .cloned()
+        });
+        let params = decl
+            .as_ref()
+            .map_or(&[][..], |decl| decl.type_params.as_slice());
         if params.len() != namespaced.args.len() {
             let _ = self.emit(TypeError::TypeArgumentCount {
                 name: format!("{}::{}", namespaced.namespace, namespaced.name),
@@ -272,10 +298,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return None;
         }
+        let (Some(owner), Some(decl)) = (owner, &decl) else {
+            return Some(Vec::new());
+        };
         let args = self.resolve_turbofish_args(&namespaced.args);
+        // A parameter's bound may name its siblings, which stand for their own
+        // arguments here; the family's spelling of each is replaced at once.
+        let at_args: IndexMap<FqTypeName, FqTypeName> = {
+            let own = self.family_params(owner, &decl.name);
+            let table = self.tysys.type_table.borrow();
+            own.iter()
+                .zip(&args)
+                .map(|(&param, &arg)| (table.fq_type_name(param), table.fq_type_name(arg)))
+                .collect()
+        };
         for ((param, &arg), written) in params.iter().zip(&args).zip(&namespaced.args) {
-            for bound in param.real_bounds() {
-                let (bound_name, bound_trait) = self.tysys.bound_named_written(&bound);
+            for (bound_name, bound_trait) in
+                self.bounds_over_family(owner, &decl.name, params, &param.bounds)
+            {
+                let bound_trait =
+                    bound_trait.map(|fq| fq.rewrite_args(&|node| at_args.get(node).cloned()));
                 self.enforce_single_bound_args(
                     arg,
                     &bound_name,
@@ -288,30 +330,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(args)
     }
 
-    /// The associated type `namespaced` names off `Self` or a type parameter,
-    /// at `args`: a binding instantiated at them, or a projection carrying them.
-    fn assoc_at(&mut self, namespaced: &NamespacedGenericType, args: &[TypeId]) -> TypeId {
-        let at = |e: &mut Self, family: TypeId| {
-            e.tysys
-                .type_table
-                .borrow_mut()
-                .instantiate_family(family, args)
-        };
+    /// What `namespaced` names off `Self` or a type parameter, with the trait
+    /// declaring it: a binding a type or the frame supplies, or a projection
+    /// to build. `None` once it is reported as naming nothing.
+    fn assoc_target(&mut self, namespaced: &NamespacedGenericType) -> Option<AssocTarget> {
         // Handle Self::AssociatedType
         if namespaced.namespace == "Self" {
+            let declared = self.self_trait_declaring_assoc_type(&namespaced.name);
             // Look up the associated type binding
-            if let Some(&type_id) = self
+            if let Some(&family) = self
                 .annotate_ctx
                 .trait_ctx
                 .assoc_type_bindings
                 .get(&namespaced.name)
             {
-                return at(self, type_id);
+                return Some(AssocTarget::Family {
+                    owner: declared,
+                    family,
+                });
             }
             if let Some(self_type) = self.annotate_ctx.trait_ctx.self_type
-                && let Some(resolved) = self.assoc_bound_by_type(self_type, &namespaced.name)
+                && let Some((owner, family)) = self.assoc_bound_by_type(self_type, &namespaced.name)
             {
-                return at(self, resolved);
+                return Some(AssocTarget::Family {
+                    owner: Some(owner),
+                    family,
+                });
             }
             // `Self` is a generic instance (`Cell<T>` elaborating a default body
             // it does not override), so the concrete-keyed lookup above is
@@ -322,23 +366,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // declares the name — because the unqualified form gives up when two
             // traits declare it differently (WEP-2026-08-12).
             if let Some(self_type) = self.annotate_ctx.trait_ctx.self_type {
-                let trait_key = self.self_trait_declaring_assoc_type(&namespaced.name);
-                let resolved = {
+                let found = {
                     let mut table = self.tysys.type_table.borrow_mut();
-                    trait_key
+                    declared
                         .and_then(|trait_key| {
-                            table.resolve_trait_assoc_type_of_instance(
+                            let family = table.resolve_trait_assoc_type_of_instance(
                                 self_type,
                                 &trait_key,
                                 &namespaced.name,
-                            )
+                            )?;
+                            Some((trait_key, family))
                         })
                         .or_else(|| {
-                            table.resolve_generic_assoc_type_mono(self_type, &namespaced.name)
+                            table.resolve_generic_assoc_type_of_owner(self_type, &namespaced.name)
                         })
                 };
-                if let Some(resolved) = resolved {
-                    return at(self, resolved);
+                if let Some((owner, family)) = found {
+                    return Some(AssocTarget::Family {
+                        owner: Some(owner),
+                        family,
+                    });
                 }
             }
             // A parameter standing in for `Self` carries the frame's bounds under
@@ -349,18 +396,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .self_type
                 .and_then(|id| Some((id, self.tysys.binder_name(id)?)));
             if let Some((self_type, param_name)) = self_param
-                && let Some(projection) =
-                    self.make_frame_projection(self_type, &param_name, &namespaced.name, args)
+                && let Some(owner) = self.bound_declaring_assoc_type(&param_name, &namespaced.name)
             {
-                return projection;
+                return Some(AssocTarget::Projection {
+                    base: self_type,
+                    base_name: param_name,
+                    owner,
+                });
             }
-            return self.unknown_namespaced_type("Self", &namespaced.name, namespaced.span);
+            let _ = self.unknown_namespaced_type("Self", &namespaced.name, namespaced.span);
+            return None;
         }
 
         // Handle T::AssociatedType where T is a type parameter in scope
         let param_type_id = self.annotate_ctx.trait_ctx.type_params[&namespaced.namespace].type_id;
         let base_name = namespaced.namespace.clone();
-        self.project_off(param_type_id, &base_name, namespaced, args)
+        self.project_off(param_type_id, &base_name, namespaced)
     }
 
     /// `ns::Type` / `ns::Type<args>`, where `ns` is a namespace import.
@@ -385,69 +436,62 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// What a concrete `base` itself binds `assoc` to. A base still carrying a
-    /// type parameter binds nothing yet, so the frame's bounds answer instead.
-    fn assoc_bound_by_type(&mut self, base: TypeId, assoc: &str) -> Option<TypeId> {
+    /// What a concrete `base` itself binds `assoc` to, and the trait declaring
+    /// it. A base still carrying a type parameter binds nothing yet, so the
+    /// frame's bounds answer instead.
+    fn assoc_bound_by_type(&mut self, base: TypeId, assoc: &str) -> Option<(DefId, TypeId)> {
         if self.tysys.type_table.borrow().contains_type_param(base) {
             return None;
         }
         self.tysys
             .type_table
             .borrow_mut()
-            .resolve_assoc_type_of_instance(base, assoc)
+            .resolve_assoc_type_of_owner(base, assoc)
     }
 
     /// The associated type `namespaced` names, projected off `base_type_id`,
-    /// which the frame files under `base_name`, at `args`.
+    /// which the frame files under `base_name`.
     fn project_off(
         &mut self,
         base_type_id: TypeId,
         base_name: &str,
         namespaced: &NamespacedGenericType,
-        args: &[TypeId],
-    ) -> TypeId {
-        let at = |e: &mut Self, family: TypeId| {
-            e.tysys
-                .type_table
-                .borrow_mut()
-                .instantiate_family(family, args)
-        };
-        if let Some(resolved) = self.assoc_bound_by_type(base_type_id, &namespaced.name) {
-            return at(self, resolved);
+    ) -> Option<AssocTarget> {
+        if let Some((owner, family)) = self.assoc_bound_by_type(base_type_id, &namespaced.name) {
+            return Some(AssocTarget::Family {
+                owner: Some(owner),
+                family,
+            });
         }
         if self.report_ambiguous_assoc_type(base_name, &namespaced.name, namespaced.span) {
-            return TypeTable::ERROR;
+            return None;
         }
+        let declared = self.bound_declaring_assoc_type(base_name, &namespaced.name);
         // What the frame's bounds bind it to, where they say: `I:
         // IntoIterator<Item = u8>` answers `I::Item` directly.
-        if let Some(direct_type) = self.frame_projection(base_type_id, base_name, &namespaced.name)
-        {
-            return at(self, direct_type);
-        }
-        if let Some(projection) =
-            self.make_frame_projection(base_type_id, base_name, &namespaced.name, args)
-        {
-            return projection;
+        if let Some(family) = self.frame_projection(base_type_id, base_name, &namespaced.name) {
+            return Some(AssocTarget::Family {
+                owner: declared,
+                family,
+            });
         }
         // The frame files no bounds under that name, so what the base itself
         // carries answers: a projection travels with its own.
-        if let Some(projected) = self.project_off_projection(base_type_id, &namespaced.name, args) {
-            return projected;
+        let found = declared
+            .map(|owner| (owner, base_name.to_string()))
+            .or_else(|| {
+                let owner = self.projection_member_owner(base_type_id, &namespaced.name)?;
+                Some((owner, String::new()))
+            });
+        if let Some((owner, base_name)) = found {
+            return Some(AssocTarget::Projection {
+                base: base_type_id,
+                base_name,
+                owner,
+            });
         }
-        self.unknown_namespaced_type(base_name, &namespaced.name, namespaced.span)
-    }
-
-    /// `base::assoc` where `base` is itself a projection, so the frame files no
-    /// bounds under a name for it. Its own bounds travel with it, and the trait
-    /// declaring `assoc` is found among those.
-    fn project_off_projection(
-        &mut self,
-        base: TypeId,
-        assoc: &str,
-        args: &[TypeId],
-    ) -> Option<TypeId> {
-        let owning = self.projection_member_owner(base, assoc)?;
-        Some(self.make_frame_projection_of_trait(base, "", owning, assoc, args))
+        let _ = self.unknown_namespaced_type(base_name, &namespaced.name, namespaced.span);
+        None
     }
 
     /// The trait declaring `assoc` among the bounds projection `base` carries,

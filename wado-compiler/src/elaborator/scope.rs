@@ -19,6 +19,7 @@ use crate::tir::TypeId;
 use super::coercion::PendingLiterals;
 use super::trait_env::{InheritedBound, ViaClause};
 use super::trait_query::SelfBinding;
+use super::type_resolution::ParamSpace;
 use super::types::TypeError;
 use super::util;
 use super::{AbstractSelections, Elaborator};
@@ -73,6 +74,8 @@ pub(super) struct ElaboratedBound {
     pub(super) inherited: Option<(DefId, Vec<ViaClause>)>,
     /// Whose `Self` this bound's written types mean.
     pub(super) self_type: BoundSelf,
+    /// The [`ScopedBound::space`] of the bound this was reached from.
+    pub(super) space: ParamSpace,
 }
 
 /// Whose `Self` a bound's written types mean. The two cases are not the same
@@ -110,6 +113,11 @@ pub(super) struct ScopedBound {
     /// What `Self` meant where the bound was written. `None` in a frame that
     /// binds none, where a `Self`-rooted spelling is rejected at the declaration.
     pub(super) self_binding: Option<SelfBinding>,
+    /// Names the bound's written types read that the frame reading it does
+    /// not bind: a generic associated type's parameters, at the arguments a
+    /// projection gives them. Bound for the bound's own types alone, so a
+    /// frame's parameter of the same name is untouched elsewhere.
+    pub(super) space: ParamSpace,
 }
 
 impl ScopedBound {
@@ -117,7 +125,13 @@ impl ScopedBound {
         Self {
             bound,
             self_binding,
+            space: ParamSpace::new(),
         }
+    }
+
+    /// This bound with its written types read in `space`.
+    pub(super) fn in_space(self, space: ParamSpace) -> Self {
+        Self { space, ..self }
     }
 
     /// What `param` declares, pinned to one frame's `Self`. An `fn` bound is left
@@ -606,7 +620,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut out: Vec<(ElaboratedBound, Option<DefId>)> = Vec::with_capacity(bounds.len());
         for scoped in bounds {
             let bound = &scoped.bound;
-            self.merge_bound(&mut out, bound, None, scoped.scope());
+            self.merge_bound(&mut out, bound, None, scoped.scope(), &scoped.space);
             if !bound.names_a_trait() {
                 continue;
             }
@@ -621,6 +635,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     &inherited.bound,
                     Some((root, inherited.via.clone())),
                     BoundSelf::Bounded,
+                    &scoped.space,
                 );
             }
         }
@@ -640,11 +655,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         bound: &ast::TraitBound,
         inherited: Option<(DefId, Vec<ViaClause>)>,
         self_type: BoundSelf,
+        space: &ParamSpace,
     ) {
         let entry = || ElaboratedBound {
             bound: bound.clone(),
             inherited: inherited.clone(),
             self_type,
+            space: space.clone(),
         };
         if !bound.names_a_trait() {
             if !out

@@ -7,7 +7,7 @@
 
 use crate::compiler_item::SeqField;
 use crate::module_source::ModuleSource;
-use crate::name::StructName;
+use crate::name::{FqTypeName, StructName};
 use crate::nir::{NirStruct, NirVariantDecl};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::wir::{
@@ -1167,15 +1167,15 @@ pub(super) fn generic_instance_name(
 ) -> String {
     let type_arg_names: Vec<String> = type_args
         .iter()
-        .map(|t| type_table.mangle_type_arg_for_generic(normalize_assoc_projection(type_table, *t)))
+        .map(|t| normalized_projection_name(type_table, *t).to_mangled())
         .collect();
     mangle_generic_name(name, &type_arg_names)
 }
 
-/// Resolve an associated-type projection (`f64::Err`) to the type it names.
-/// A projection can still sit in a generic instance's arguments while the
-/// instance was registered under the resolved spelling.
-fn normalize_assoc_projection(type_table: &TypeTable, type_id: TypeId) -> TypeId {
+/// The name of an associated-type projection (`f64::Err`) as the type it
+/// names. A projection can still sit in a generic instance's arguments while
+/// the instance was registered under the resolved spelling.
+fn normalized_projection_name(type_table: &TypeTable, type_id: TypeId) -> FqTypeName {
     let ResolvedType::AssocTypeProjection {
         param_id,
         assoc_name,
@@ -1184,12 +1184,17 @@ fn normalize_assoc_projection(type_table: &TypeTable, type_id: TypeId) -> TypeId
         ..
     } = type_table.get(type_id)
     else {
-        return type_id;
+        return type_table.fq_type_name(type_id);
     };
-    type_table
-        .resolve_assoc_type_qualified(*param_id, owning_trait, assoc_name)
-        .and_then(|family| type_table.find_instantiated(family, args))
-        .unwrap_or(type_id)
+    let Some(family) = type_table.resolve_assoc_type_qualified(*param_id, owning_trait, assoc_name)
+    else {
+        return type_table.fq_type_name(type_id);
+    };
+    let args: Vec<FqTypeName> = args
+        .iter()
+        .map(|&arg| type_table.fq_type_name(arg))
+        .collect();
+    type_table.family_name_at(family, &args)
 }
 
 /// The `List<T>` wrapper struct's registration key. `T` is spelled with
