@@ -1077,6 +1077,19 @@ pub(crate) fn trait_method_template(
     receiver: TypeId,
     tt: &TypeTable,
 ) -> Option<TemplateId> {
+    answering_link(trait_env, trait_name, method, receiver, tt).map(|(_, template)| template)
+}
+
+/// [`trait_method_template`] with the link of `receiver`'s newtype chain whose
+/// answer it is: the receiver, or the base it inherits the answer from. A call
+/// names that link, as the elaborator's does.
+pub(crate) fn answering_link(
+    trait_env: &TraitEnv,
+    trait_name: &FqTraitName,
+    method: &str,
+    receiver: TypeId,
+    tt: &TypeTable,
+) -> Option<(TypeId, TemplateId)> {
     let trait_ = trait_name.called_decl();
     let key = tt.impl_receiver_key(receiver);
     if let Some(template) =
@@ -1084,10 +1097,10 @@ pub(crate) fn trait_method_template(
             tt.impl_reaches_instance(block, receiver)
         })
     {
-        return Some(template);
+        return Some((receiver, template));
     }
     if let Some(paired) = eq_from_written_cmp(trait_env, trait_, receiver, tt) {
-        return Some(paired.template());
+        return Some((receiver, paired.template()));
     }
     let resolved = tt.get(receiver);
     let blanket = match resolved {
@@ -1113,11 +1126,13 @@ pub(crate) fn trait_method_template(
         ),
     };
     if let Some(blanket) = blanket {
-        return trait_env.method_template(blanket.def, method);
+        return trait_env
+            .method_template(blanket.def, method)
+            .map(|template| (receiver, template));
     }
     match tt.get(receiver) {
         ResolvedType::Newtype { base_type, .. } => {
-            trait_method_template(trait_env, trait_name, method, *base_type, tt)
+            answering_link(trait_env, trait_name, method, *base_type, tt)
         }
         _ => None,
     }

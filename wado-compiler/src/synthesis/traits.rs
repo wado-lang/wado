@@ -40,7 +40,8 @@ use crate::name::{
 use crate::synthesis::common;
 use crate::synthesis::common::{locals_from_params, option_some, relocate_synthetic_locals};
 use crate::synthesis::template::{
-    blanket_dispatch_for, comparison_written_alone, ref_blanket_call, trait_call_template,
+    answering_link, blanket_dispatch_for, comparison_written_alone, ref_blanket_call,
+    trait_call_template,
 };
 use crate::{hashmap, tir};
 
@@ -4972,15 +4973,7 @@ fn trait_call_on_type(
     let receiver = ref_expr(value, ref_type, span);
 
     let resolved = tt.get(value_type).clone();
-    let (recv, is_type_param, type_arg_names) =
-        decompose_type_for_method_name(&resolved, value_type, tt);
-
-    let mut info = LocalMethodName::of(recv, Some(trait_name.clone()), method_name.to_string());
-    if !type_arg_names.is_empty() {
-        info = info.with_struct_type_args(&type_arg_names);
-    }
-    info.is_type_param_receiver = is_type_param;
-
+    let (_, is_type_param, _) = decompose_type_for_method_name(&resolved, value_type, tt);
     // For `T::method` where `T` is a type parameter, the body's home
     // module isn't known until monomorphization substitutes `T` with a
     // concrete type. `module_source` (the surrounding synthesis module)
@@ -4995,6 +4988,20 @@ fn trait_call_on_type(
     } else {
         blanket_dispatch_for(trait_env, value_type, trait_name, method_name, tt)
     };
+    // A newtype inheriting its base's answer is called by the base's name.
+    let named = match blanket {
+        None if !is_type_param => answering_link(trait_env, trait_name, method_name, value_type, tt)
+            .map_or(value_type, |(link, _)| link),
+        _ => value_type,
+    };
+
+    let resolved = tt.get(named).clone();
+    let (recv, _, type_arg_names) = decompose_type_for_method_name(&resolved, named, tt);
+    let mut info = LocalMethodName::of(recv, Some(trait_name.clone()), method_name.to_string());
+    if !type_arg_names.is_empty() {
+        info = info.with_struct_type_args(&type_arg_names);
+    }
+    info.is_type_param_receiver = is_type_param;
 
     let (impl_module, monomorph_info, template) =
         if let Some((mono, blanket_module, template)) = blanket {
@@ -5003,7 +5010,7 @@ fn trait_call_on_type(
             let impl_module = if is_type_param {
                 module_source.clone()
             } else {
-                resolve_impl_module_via_env(value_type, trait_name, tt, trait_env, module_source)
+                resolve_impl_module_via_env(named, trait_name, tt, trait_env, module_source)
             };
             let monomorph_info = match &resolved {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) if needs_ref_monomorph => {
@@ -5012,7 +5019,7 @@ fn trait_call_on_type(
                 }
                 _ => None,
             };
-            let template = trait_call_template(trait_env, &info, value_type, &impl_module, tt);
+            let template = trait_call_template(trait_env, &info, named, &impl_module, tt);
             // A written block is the one answering these trait arguments, where
             // the receiver alone can reach several (`Eq for &T`, `Eq<String> for &T`).
             let impl_module = match &template {
