@@ -1512,12 +1512,19 @@ impl SolverBridge {
         else {
             return Some(None);
         };
+        let owed = owed(&self.program, &q.env, q.module, held.requests);
         let table = tysys.type_table.borrow();
-        let names: Vec<String> = ctx.trait_ctx.type_params.keys().cloned().collect();
+        let shape_heads = [self.lowering.anonymous_head(), self.lowering.template_head()];
         let mut shapes = Vec::new();
-        self.shapes_in(&table, type_id, &param_index(&names), &mut shapes);
+        if owed
+            .iter()
+            .any(|r| matches!(&r.ty, SolverType::Decl(head, _) if shape_heads.contains(head)))
+        {
+            let names: Vec<String> = ctx.trait_ctx.type_params.keys().cloned().collect();
+            self.shapes_in(&table, type_id, &param_index(&names), &mut shapes);
+        }
         let defs = tysys.resolutions.defs();
-        let bodies = owed(&self.program, &q.env, q.module, held.requests)
+        let bodies = owed
             .into_iter()
             .flat_map(|request| {
                 let trait_ = self.lowering.trait_def_of(request.trait_);
@@ -1608,8 +1615,9 @@ impl SolverBridge {
         }
     }
 
-    /// The impls the order ties for a bound [`Self::answer_owing`] holds: a bound reaches
-    /// them as a call does, so neither may win by declaration order.
+    /// The impls the order ties for a bound [`Self::answer_owing`] holds: a
+    /// bound reaches them as a call does, so neither may win by declaration
+    /// order.
     pub(super) fn tied_through_bound(
         &self,
         tysys: &TypeSystem,

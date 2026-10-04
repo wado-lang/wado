@@ -282,7 +282,9 @@ impl Query<'_> {
                 vec![DerivationRequest {
                     ty: ty.clone(),
                     trait_: implemented,
-                    structural: def.origin != ImplOrigin::Paired,
+                    // The `==` paired with a written `cmp` calls `cmp`.
+                    structural: def.origin != ImplOrigin::Paired
+                        && program.traits.get(&implemented).is_some_and(|t| t.structural),
                 }]
             }
             ImplOrigin::Withheld => unreachable!("a withholding impl answers nothing"),
@@ -1030,7 +1032,7 @@ mod tests {
                 requests: vec![DerivationRequest {
                     ty: decl(POINT),
                     trait_: EQ,
-                    structural: true,
+                    structural: false,
                 }],
                 ..Holds::default()
             })
@@ -1186,7 +1188,7 @@ mod tests {
                 requests: vec![DerivationRequest {
                     ty: decl(DURATION),
                     trait_: ALPHA,
-                    structural: true,
+                    structural: false,
                 }],
                 ..Holds::default()
             })

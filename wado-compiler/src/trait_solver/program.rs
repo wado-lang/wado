@@ -263,6 +263,9 @@ pub struct TraitDef {
     /// Holds of every type before any body exists — `Inspect`. The unbounded
     /// blanket that would say so is rejected, so the trait says it itself.
     pub holds_for_all: bool,
+    /// Derived over a declaration's members, so a body derived or asked for
+    /// by a marker calls it on each member. Set by [`super::derive`].
+    pub structural: bool,
     pub on_ref: RefRule,
     /// Per type parameter, its declared default, if any. A bound spells no
     /// arguments (WEP 2026-07-31), so it asks for the trait at its defaults.
@@ -291,7 +294,7 @@ pub struct ModuleScope {
 }
 
 /// A type declaration, reduced to what `holds` reads of it at a query. Its
-/// members arrive at `derive` as a [`Declaration`] and are not kept.
+/// members arrive at `derive` as a [`Declaration`].
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct TypeDef {
     /// For a newtype, the base it inherits impls from, spelled with the

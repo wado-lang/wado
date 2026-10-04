@@ -28,6 +28,7 @@ pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declar
             | SolverType::Projection { .. } => None,
         })
         .collect();
+    program.traits.entry(trait_).or_default().structural = true;
     let mut standing: Vec<(&Declaration, ImplId, Env)> = Vec::new();
     for decl in declarations {
         program.declarations.insert(decl.id, decl.clone());
