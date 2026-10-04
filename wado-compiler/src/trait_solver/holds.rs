@@ -129,6 +129,14 @@ impl Query<'_> {
         if trait_def.is_some_and(|def| def.holds_for_all) {
             return Some(Holds::default());
         }
+        if let SolverType::Decl(head, _) = ty
+            && program
+                .types
+                .get(head)
+                .is_some_and(|def| def.withholds.contains(&trait_))
+        {
+            return None;
+        }
         let on_ref = trait_def.map_or(RefRule::default(), |def| def.on_ref);
         if matches!(ty, SolverType::Ref { .. }) && on_ref == RefRule::Always {
             return Some(Holds::default());
@@ -181,27 +189,16 @@ impl Query<'_> {
             .impls
             .iter()
             .find_map(|(&id, def)| {
-                // The bound's arguments are what the impl must answer at.
-                // Selection asks without this gate.
-                let implemented = def.trait_?;
-                if !program.bound_reaches(implemented, trait_) {
+                // Only an impl of `trait_` itself answers. One of a subtrait
+                // owes an impl of `trait_` beside it, and where that is missing
+                // the subtrait's impl is the error, not this answer.
+                if def.trait_ != Some(trait_) {
                     return None;
                 }
                 let answer = self.impl_answers(id, def, ty)?;
-                // The impl writes its arguments at the trait it names, so what
-                // the walk from there reaches at `trait_` is what the bound's
-                // arguments compare against.
-                let reached = program.args_reaching(
-                    &ParamBound {
-                        trait_: implemented,
-                        args: answer.trait_args.clone(),
-                    },
-                    trait_,
-                );
-                if !reached
-                    .iter()
-                    .any(|written| answers_args(program, def, ty, subject, written, args))
-                {
+                // The bound's arguments are what the impl must answer at.
+                // Selection asks without this gate.
+                if !answers_args(program, def, ty, subject, &answer.trait_args, args) {
                     return None;
                 }
                 Some(answer.holds)
@@ -316,12 +313,14 @@ impl Query<'_> {
     }
 }
 
-/// Whether the program declares `trait_` for `ty`'s own head, by an impl or a
-/// marker whose target reaches it. A declared impl always wins over a derived one.
+/// Whether the program declares `trait_` at its defaults for `ty`'s own head,
+/// by an impl or a marker whose target reaches it. A declared impl always wins
+/// over a derived one, which answers only at the defaults.
 fn declared_for(program: &Program, trait_: TraitDeclId, ty: &SolverType) -> bool {
     program.impls.values().any(|def| {
         def.trait_ == Some(trait_)
             && matches!(def.origin, ImplOrigin::Written | ImplOrigin::Marker)
+            && at_defaults(program, def)
             && matches!(def.target, SolverType::Decl(..))
             && match_target(&def.target, ty, &mut vec![None; def.params.len()])
     })
@@ -437,6 +436,12 @@ pub(super) fn answers_args(
         // one no bound can name, so every impl answers there.
         asks.is_empty() || asks.iter().any(|ask| said(i, written.get(i)).contains(ask))
     })
+}
+
+/// Whether the impl answers its trait at the declared defaults, as a derived
+/// impl does: `impl Eq for D`, not `impl Eq<String> for D`.
+pub(super) fn at_defaults(program: &Program, def: &ImplDef) -> bool {
+    answers_args(program, def, &def.target, None, &def.trait_args, &[])
 }
 
 /// Match an impl target against a type, binding the target's parameters by
@@ -595,18 +600,15 @@ mod tests {
         assert_eq!(holds(&p, &Env::default(), &decl(I32), ALPHA, HERE), None);
     }
 
-    /// A bound naming a subtrait answers for its supertraits: implementing
-    /// `Sub` is implementing `Base`.
+    /// An impl of `Sub` owes one of `Base` beside it, and does not stand in
+    /// for it: where that is missing, the `Sub` impl is the error.
     #[test]
-    fn an_impl_of_a_subtrait_answers_its_supertrait() {
+    fn an_impl_of_a_subtrait_does_not_answer_its_supertrait() {
         let p = Builder::default()
             .supertrait(SUB, BASE)
             .concrete(SUB, decl(POINT))
             .build();
-        assert_eq!(
-            holds(&p, &Env::default(), &decl(POINT), BASE, HERE),
-            Some(Holds::default())
-        );
+        assert_eq!(holds(&p, &Env::default(), &decl(POINT), BASE, HERE), None);
     }
 
     /// A generic body's parameter holds by its own signature, not by any impl.
@@ -991,12 +993,49 @@ mod tests {
             DURATION,
             TypeDef {
                 newtype_base: Some(decl(I32)),
+                ..TypeDef::default()
             },
         );
         assert_eq!(
             holds(&p, &Env::default(), &decl(DURATION), ALPHA, HERE),
             Some(Holds::default())
         );
+    }
+
+    /// A newtype writing `eq` alone withholds its base's `Ord`, and only that.
+    #[test]
+    fn a_newtype_does_not_inherit_what_it_withholds() {
+        const COARSE: TypeDeclId = TypeDeclId(9);
+        let mut p = Builder::default()
+            .concrete(ALPHA, decl(I32))
+            .concrete(BETA, decl(I32))
+            .build();
+        p.types.insert(
+            COARSE,
+            TypeDef {
+                newtype_base: Some(decl(I32)),
+                withholds: vec![ALPHA],
+            },
+        );
+        assert_eq!(holds(&p, &Env::default(), &decl(COARSE), ALPHA, HERE), None);
+        assert_eq!(
+            holds(&p, &Env::default(), &decl(COARSE), BETA, HERE),
+            Some(Holds::default())
+        );
+    }
+
+    /// A declaration withholding a trait has none, a marker asking for one
+    /// included.
+    #[test]
+    fn a_marker_does_not_answer_what_the_declaration_withholds() {
+        let mut p = Builder::default().build();
+        p.push_impl(ImplDef {
+            origin: ImplOrigin::Marker,
+            ..concrete(ALPHA, decl(POINT))
+        });
+        assert!(holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE).is_some());
+        p.types.entry(POINT).or_default().withholds.push(ALPHA);
+        assert_eq!(holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE), None);
     }
 
     /// `type MyList<T> = List<T>` inherits at its own arguments.
@@ -1011,6 +1050,7 @@ mod tests {
             MY_LIST,
             TypeDef {
                 newtype_base: Some(list_of(SolverType::Param(0))),
+                ..TypeDef::default()
             },
         );
         assert_eq!(
@@ -1050,6 +1090,7 @@ mod tests {
             DURATION,
             TypeDef {
                 newtype_base: Some(decl(I32)),
+                ..TypeDef::default()
             },
         );
         // Answered through the marker, so it owes the body; through the base
@@ -1276,29 +1317,6 @@ mod tests {
         assert_eq!(
             holds(&p, &Env::default(), &decl(CM), PRODUCT, HERE),
             Some(Holds::default())
-        );
-    }
-
-    /// A derived `impl Sub for Point` answering `Point: Base` owes the `Sub`
-    /// body, so the request names the impl's trait rather than the bound's.
-    #[test]
-    fn a_request_names_the_answering_impl_s_trait() {
-        let p = Builder::default()
-            .supertrait(SUB, BASE)
-            .impl_(ImplDef {
-                origin: ImplOrigin::Derived,
-                ..concrete(SUB, decl(POINT))
-            })
-            .build();
-        assert_eq!(
-            holds(&p, &Env::default(), &decl(POINT), BASE, HERE),
-            Some(Holds {
-                requests: vec![DerivationRequest {
-                    ty: decl(POINT),
-                    trait_: SUB,
-                }],
-                ..Holds::default()
-            })
         );
     }
 

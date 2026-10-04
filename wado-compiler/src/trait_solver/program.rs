@@ -274,6 +274,10 @@ pub struct TypeDef {
     /// For a newtype, the base it inherits impls from, spelled with the
     /// newtype's own parameters by position.
     pub newtype_base: Option<SolverType>,
+    /// The traits the declaration has none of, whatever its impls, a marker or
+    /// its base would answer: `Ord`, where it or a base it inherits from
+    /// writes `eq` alone.
+    pub withholds: Vec<TraitDeclId>,
 }
 
 /// What a declaration looks like to `derive`: the members a structural trait

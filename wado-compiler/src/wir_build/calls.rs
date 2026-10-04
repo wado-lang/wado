@@ -845,6 +845,18 @@ impl FunctionTranslator<'_, '_> {
                 let x = self.translate_operand(args[0].expr);
                 self.float_is_nan(FloatWidth::F64, x)
             }
+            "f32_ieee754_eq" => binary!(self, args, WirInstr::F32Eq),
+            "f32_ieee754_ne" => binary!(self, args, WirInstr::F32Ne),
+            "f32_ieee754_lt" => binary!(self, args, WirInstr::F32Lt),
+            "f32_ieee754_le" => binary!(self, args, WirInstr::F32Le),
+            "f32_ieee754_gt" => binary!(self, args, WirInstr::F32Gt),
+            "f32_ieee754_ge" => binary!(self, args, WirInstr::F32Ge),
+            "f64_ieee754_eq" => binary!(self, args, WirInstr::F64Eq),
+            "f64_ieee754_ne" => binary!(self, args, WirInstr::F64Ne),
+            "f64_ieee754_lt" => binary!(self, args, WirInstr::F64Lt),
+            "f64_ieee754_le" => binary!(self, args, WirInstr::F64Le),
+            "f64_ieee754_gt" => binary!(self, args, WirInstr::F64Gt),
+            "f64_ieee754_ge" => binary!(self, args, WirInstr::F64Ge),
             "black_box" => unary!(self, args, WirInstr::BlackBox),
             "is_uninitialized" => {
                 let mut a = self.translate_operand(args[0].expr);

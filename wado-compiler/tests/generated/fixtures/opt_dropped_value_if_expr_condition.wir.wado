@@ -44,19 +44,19 @@ type "functype//opt_dropped_value_if_expr_condition.wado/$cm_binding__Stdout_wri
 
 type "functype//opt_dropped_value_if_expr_condition.wado/$cm_export__run" = fn();  // TypeId(16)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(17)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(17)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(18)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(18)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(19)
+type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(19)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(20)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(20)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(21)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(21)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(22)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(22)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(23)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(23)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
 
@@ -166,52 +166,70 @@ fn "opt_dropped_value_if_expr_condition.wado/go"(ctx, k, n, token) {
 fn "opt_dropped_value_if_expr_condition.wado/run"() with Stdout {
     let ctx: ref "opt_dropped_value_if_expr_condition.wado//Ctx";
     let $local_1: ref "core:prelude/string.wado//String";
-    let packed_24: i64;
-    let rx_25: i32;
-    let tx_26: i32;
+    let self_20: i32;
+    let is_negative_26: bool;
+    let x_30: i64;
     ctx = struct.new "opt_dropped_value_if_expr_condition.wado//Ctx" { calls: 0 };
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"("opt_dropped_value_if_expr_condition.wado/go"(ctx, black_box(1), black_box(4), black_box(4)), $local_1);
-    rx_25 = builtin::i32_wrap_i64(local.tee packed_24("wasi/stream-new"()));
-    tx_26 = builtin::i32_wrap_i64(packed_24 >> 32_i64);
-    rx_25 = "opt_dropped_value_if_expr_condition.wado/$cm_binding__Stdout_write_via_stream"(rx_25);
-    "core:rt/write_string_to_stream"(tx_26, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_25);
+    is_negative_26 = local.tee self_20("opt_dropped_value_if_expr_condition.wado/go"(ctx, black_box(1), black_box(4), black_box(4))) < 0;
+    self_20 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_30(x_30 = builtin::i64_extend_i32_s(self_20); select i64(x_30 < 0_i64, 0_i64 - x_30, x_30)));
+    is_negative_26 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_1, is_negative_26, self_20);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, is_negative_26, x_30, self_20);
+    self_20 = builtin::i32_wrap_i64(local.tee x_30("wasi/stream-new"()));
+    is_negative_26 = builtin::i32_wrap_i64(x_30 >> 32_i64);
+    self_20 = "opt_dropped_value_if_expr_condition.wado/$cm_binding__Stdout_write_via_stream"(self_20);
+    "core:rt/write_string_to_stream"(is_negative_26, $local_1.repr, $local_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_20);
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"("opt_dropped_value_if_expr_condition.wado/go"(ctx, black_box(1), black_box(4), black_box(5)), $local_1);
-    rx_25 = builtin::i32_wrap_i64(local.tee packed_24("wasi/stream-new"()));
-    tx_26 = builtin::i32_wrap_i64(packed_24 >> 32_i64);
-    rx_25 = "opt_dropped_value_if_expr_condition.wado/$cm_binding__Stdout_write_via_stream"(rx_25);
-    "core:rt/write_string_to_stream"(tx_26, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_25);
+    is_negative_26 = local.tee self_20("opt_dropped_value_if_expr_condition.wado/go"(ctx, black_box(1), black_box(4), black_box(5))) < 0;
+    self_20 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_30(x_30 = builtin::i64_extend_i32_s(self_20); select i64(x_30 < 0_i64, 0_i64 - x_30, x_30)));
+    is_negative_26 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_1, is_negative_26, self_20);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, is_negative_26, x_30, self_20);
+    self_20 = builtin::i32_wrap_i64(local.tee x_30("wasi/stream-new"()));
+    is_negative_26 = builtin::i32_wrap_i64(x_30 >> 32_i64);
+    self_20 = "opt_dropped_value_if_expr_condition.wado/$cm_binding__Stdout_write_via_stream"(self_20);
+    "core:rt/write_string_to_stream"(is_negative_26, $local_1.repr, $local_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_20);
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"("opt_dropped_value_if_expr_condition.wado/go"(ctx, black_box(2), black_box(4), black_box(5)), $local_1);
-    rx_25 = builtin::i32_wrap_i64(local.tee packed_24("wasi/stream-new"()));
-    tx_26 = builtin::i32_wrap_i64(packed_24 >> 32_i64);
-    rx_25 = "opt_dropped_value_if_expr_condition.wado/$cm_binding__Stdout_write_via_stream"(rx_25);
-    "core:rt/write_string_to_stream"(tx_26, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_25);
+    is_negative_26 = local.tee self_20("opt_dropped_value_if_expr_condition.wado/go"(ctx, black_box(2), black_box(4), black_box(5))) < 0;
+    self_20 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_30(x_30 = builtin::i64_extend_i32_s(self_20); select i64(x_30 < 0_i64, 0_i64 - x_30, x_30)));
+    is_negative_26 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_1, is_negative_26, self_20);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, is_negative_26, x_30, self_20);
+    self_20 = builtin::i32_wrap_i64(local.tee x_30("wasi/stream-new"()));
+    is_negative_26 = builtin::i32_wrap_i64(x_30 >> 32_i64);
+    self_20 = "opt_dropped_value_if_expr_condition.wado/$cm_binding__Stdout_write_via_stream"(self_20);
+    "core:rt/write_string_to_stream"(is_negative_26, $local_1.repr, $local_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_20);
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"("opt_dropped_value_if_expr_condition.wado/go"(ctx, black_box(2), black_box(4), black_box(6)), $local_1);
-    rx_25 = builtin::i32_wrap_i64(local.tee packed_24("wasi/stream-new"()));
-    tx_26 = builtin::i32_wrap_i64(packed_24 >> 32_i64);
-    rx_25 = "opt_dropped_value_if_expr_condition.wado/$cm_binding__Stdout_write_via_stream"(rx_25);
-    "core:rt/write_string_to_stream"(tx_26, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_25);
+    is_negative_26 = local.tee self_20("opt_dropped_value_if_expr_condition.wado/go"(ctx, black_box(2), black_box(4), black_box(6))) < 0;
+    self_20 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_30(x_30 = builtin::i64_extend_i32_s(self_20); select i64(x_30 < 0_i64, 0_i64 - x_30, x_30)));
+    is_negative_26 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_1, is_negative_26, self_20);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, is_negative_26, x_30, self_20);
+    self_20 = builtin::i32_wrap_i64(local.tee x_30("wasi/stream-new"()));
+    is_negative_26 = builtin::i32_wrap_i64(x_30 >> 32_i64);
+    self_20 = "opt_dropped_value_if_expr_condition.wado/$cm_binding__Stdout_write_via_stream"(self_20);
+    "core:rt/write_string_to_stream"(is_negative_26, $local_1.repr, $local_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_20);
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"("opt_dropped_value_if_expr_condition.wado/go"(ctx, black_box(9), black_box(4), black_box(6)), $local_1);
-    rx_25 = builtin::i32_wrap_i64(local.tee packed_24("wasi/stream-new"()));
-    tx_26 = builtin::i32_wrap_i64(packed_24 >> 32_i64);
-    rx_25 = "opt_dropped_value_if_expr_condition.wado/$cm_binding__Stdout_write_via_stream"(rx_25);
-    "core:rt/write_string_to_stream"(tx_26, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_25);
+    is_negative_26 = local.tee self_20("opt_dropped_value_if_expr_condition.wado/go"(ctx, black_box(9), black_box(4), black_box(6))) < 0;
+    self_20 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_30(x_30 = builtin::i64_extend_i32_s(self_20); select i64(x_30 < 0_i64, 0_i64 - x_30, x_30)));
+    is_negative_26 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_1, is_negative_26, self_20);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, is_negative_26, x_30, self_20);
+    self_20 = builtin::i32_wrap_i64(local.tee x_30("wasi/stream-new"()));
+    is_negative_26 = builtin::i32_wrap_i64(x_30 >> 32_i64);
+    self_20 = "opt_dropped_value_if_expr_condition.wado/$cm_binding__Stdout_write_via_stream"(self_20);
+    "core:rt/write_string_to_stream"(is_negative_26, $local_1.repr, $local_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_20);
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(ctx.calls, $local_1);
-    rx_25 = builtin::i32_wrap_i64(local.tee packed_24("wasi/stream-new"()));
-    tx_26 = builtin::i32_wrap_i64(packed_24 >> 32_i64);
-    rx_25 = "opt_dropped_value_if_expr_condition.wado/$cm_binding__Stdout_write_via_stream"(rx_25);
-    "core:rt/write_string_to_stream"(tx_26, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_25);
+    is_negative_26 = local.tee self_20(ctx.calls) < 0;
+    self_20 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_30(x_30 = builtin::i64_extend_i32_s(self_20); select i64(x_30 < 0_i64, 0_i64 - x_30, x_30)));
+    is_negative_26 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_1, is_negative_26, self_20);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, is_negative_26, x_30, self_20);
+    self_20 = builtin::i32_wrap_i64(local.tee x_30("wasi/stream-new"()));
+    is_negative_26 = builtin::i32_wrap_i64(x_30 >> 32_i64);
+    self_20 = "opt_dropped_value_if_expr_condition.wado/$cm_binding__Stdout_write_via_stream"(self_20);
+    "core:rt/write_string_to_stream"(is_negative_26, $local_1.repr, $local_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_20);
 }
 
 fn "opt_dropped_value_if_expr_condition.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -221,6 +239,28 @@ fn "opt_dropped_value_if_expr_condition.wado/$cm_binding__Stdout_write_via_strea
 fn "opt_dropped_value_if_expr_condition.wado/$cm_export__run"() {
     "opt_dropped_value_if_expr_condition.wado/run"();
     "wasi/task-return"(0);
+}
+
+fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
+    let q: u64;
+    let pair: i32;
+    let tens: i32;
+    digit_count = offset + digit_count;
+    b16: block {
+        l17: loop {
+            break_if b16 (digit_count - offset) < 2;
+            q = val /u 100_i64;
+            tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
+            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
+            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            digit_count = digit_count - 2;
+            val = q;
+            continue l17;
+        };
+    };
+    if digit_count > offset {
+        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+    }
 }
 
 fn "core:prelude/primitive.wado/count_digits_u64"(val) {
@@ -305,17 +345,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b37: block {
-        l38: loop {
-            break_if b37 i >= $mv$data$end;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b40: block {
+        l41: loop {
+            break_if b40 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l38;
+            continue l41;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l40: loop {
+        l43: loop {
             ptr_15 = ptr_13 + i;
             count_16 = $mv$data$end - i;
             if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
@@ -345,7 +385,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return count_16;
             }
-            continue l40;
+            continue l43;
         };
     };
 }
@@ -389,29 +429,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     start_26 = self.used;
     self.used = digit_count;
     return start_26;
-}
-
-fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
-    let is_negative: bool;
-    let x: i64;
-    let arr: ref Array<u8>;
-    let i: i32;
-    is_negative = self < 0;
-    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(f, is_negative, self);
-    arr = f.repr;
-    is_negative = is_negative + self;
-    i = 0;
-    b49: block {
-        l50: loop {
-            break_if b49 i >= self;
-            is_negative = is_negative - 1;
-            builtin::array_set_u8(arr, is_negative, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
-            x = x /u 10_i64;
-            i = i + 1;
-            continue l50;
-        };
-    };
 }
 
 export fn "opt_dropped_value_if_expr_condition.wado/$cm_export__run" as "run"

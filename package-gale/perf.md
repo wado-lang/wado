@@ -172,6 +172,15 @@ decision, and a statement reaches it through every function body. The parse
 runs at 2.6 MB/s, against 3.1 MB/s with the pushes removed and 0.7 MB/s with no
 memo.
 
+A failing optional or loop body repeats a scan too. HTML's `htmlElement` scans
+`(htmlContent '<' '/' TAG_NAME '>')?`, and an unclosed `<br>` scans every
+sibling after it as its content before the close fails. Each of those siblings
+does the same, so without a memo the time doubles with every two `<br>`s, and a
+40 KB page takes 157 s. The memo also keeps the answer of a recursive rule that
+a repeat body calls with a required element after it (`close_rule_rescans`).
+Keeping every recursive rule costs the Rust parse a third of its speed: that
+memoizes 145 rules, and most of them are never scanned twice.
+
 Release host, `-O2`, one parse of Rust nested 14 deep:
 
 | Rust input   |  before |  after |
@@ -323,10 +332,11 @@ re-measure before committing. Candidates read off the profile above:
   falling through still tests every arm before it (Rust: 56 branches, 161 `try_`
   calls). ASCII resolves early (single-char branches are sorted and come first), so
   this is a worst case rather than a benchmark-visible cost.
-- **A non-left-recursive rule's scan has no memo.** SQLite's four select
+- **Most non-left-recursive rules' scans have no memo.** SQLite's four select
   alternatives each scan a plain `SELECT` to its end. The scan memo
-  ("Nesting no longer doubles the scan", above) covers only left-recursive
-  rules, so this is still paid once per alternative.
+  ("Nesting no longer doubles the scan", above) covers left-recursive rules and
+  the recursive rules a failing repeat body rescans, so this is still paid once
+  per alternative.
 
 Found by reading generated code (2026-09), not yet measured on a benchmark:
 

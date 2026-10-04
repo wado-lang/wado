@@ -1,0 +1,14 @@
+// `#![allow(self_comparison)]` waives the lint for the whole module.
+
+#![allow(self_comparison)]
+
+export fn run() {
+    let a = builtin::black_box(3);
+    assert a == a;
+}
+
+__DATA__
+{
+  "stdout": "",
+  "warnings_not_contains": ["compares a value with itself"]
+}

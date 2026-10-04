@@ -5255,13 +5255,6 @@ impl FunctionRef {
     pub fn is_method(&self) -> bool {
         self.method_info.is_some()
     }
-
-    /// Check if this is a trait method.
-    pub fn is_trait_method(&self) -> bool {
-        self.method_info
-            .as_ref()
-            .is_some_and(LocalMethodName::is_trait_method)
-    }
 }
 
 /// A function argument bundled with its parameter mutability metadata.
@@ -7680,14 +7673,6 @@ impl TirFunction {
     #[inline]
     pub fn takes_self(&self) -> bool {
         self.params.first().is_some_and(TirParam::is_self)
-    }
-
-    /// Returns true if this is a trait method (implements a trait)
-    #[inline]
-    pub fn is_trait_method(&self) -> bool {
-        self.method_info
-            .as_ref()
-            .is_some_and(LocalMethodName::is_trait_method)
     }
 
     /// Returns true if this is the synthesized `$call` method on a

@@ -12,7 +12,7 @@
 //! exposes `kinds` as a `GaleSet<String>`; the bitsets are materialised to
 //! that form once per rule after the fixed point converges.
 
-use { ParserRule, Element } from "./ir.wado";
+use { ParserRule, Element, peel_labels } from "./ir.wado";
 use { GenContext } from "./gen_context.wado";
 use { bits_ids, bits_set, bits_union_into } from "./token_kinds.wado";
 use { GaleMap, GaleSet } from "./gale_map.wado";
@@ -311,6 +311,377 @@ fn accumulate_first_bits(ctx: &mut GenContext, elem: &Element, bits: &mut List<u
     for let id of &ids {
         bits_set(bits, *id);
     }
+}
+
+/// The longest string `rule_input_end` follows, as deep as a FOLLOW mask reads.
+global INPUT_END_MAX_LEN: i32 = 4;
+
+/// For each rule `R`, the strings `r` of one to `INPUT_END_MAX_LEN` tokens for
+/// which `R r EOF` can occur: the rule, then `r`, then the end of the input.
+/// Entry `n - 1` holds the strings of length `n` as one kind set per position,
+/// empty where there is none. The start rule's end is the input's, as in the
+/// seeded FOLLOW.
+///
+/// A position's set merges every string of that length, so a combination of
+/// kinds from different strings can pass. A wildcard or `~set` derives nothing
+/// here, so a string through one is missed.
+pub fn rule_input_end(
+    parser_rules: &List<ParserRule>,
+    ctx: &mut GenContext,
+) -> GaleMap<String, List<List<List<String>>>> {
+    let eof = ctx.eof_kind_id();
+    let lang = rule_strings(parser_rules, ctx, eof);
+    let mut sites: List<EndSite> = [];
+    for let mut ri = 0; ri < parser_rules.len(); ri += 1 {
+        let outer = EndAfter {
+            ends: strs_none(),
+            tail: strs_empty(),
+        };
+        for let alt of &parser_rules[ri].alternatives {
+            walk_end_sites(&alt.elements, &outer, ri, ctx, &lang, eof, &mut sites);
+        }
+    }
+    let mut end: List<Strings> = [];
+    for let _ of parser_rules {
+        end.push(strs_none());
+    }
+    if !parser_rules.is_empty() {
+        end[0] = strs_empty();
+    }
+    loop {
+        let mut changed = false;
+        for let site of &sites {
+            let mut reach = strs_concat(&site.tail, &end[site.caller]);
+            let _ = strs_union_into(&mut reach, &site.ends);
+            changed = strs_union_into(&mut end[site.callee], &reach) || changed;
+        }
+        if !changed {
+            break;
+        }
+    }
+    let mut result = GaleMap::<String, List<List<List<String>>>>::new();
+    for let mut ri = 0; ri < parser_rules.len(); ri += 1 {
+        let mut by_len: List<List<List<String>>> = [];
+        for let n of 1..=INPUT_END_MAX_LEN {
+            let mut positions: List<List<String>> = [];
+            if strs_has(&end[ri], n) {
+                for let d of 0..<n {
+                    let mut kinds: List<String> = [];
+                    for let id of &slot_ids(&end[ri].at, slot(n, d)) {
+                        kinds.push(ctx.token_name(*id));
+                    }
+                    positions.push(kinds);
+                }
+            }
+            by_len.push(positions);
+        }
+        result[parser_rules[ri].name] = by_len;
+    }
+    return result;
+}
+
+/// How many positions the strings of every length up to `INPUT_END_MAX_LEN`
+/// have between them: one kind set each.
+global SLOTS: i32 = INPUT_END_MAX_LEN * (INPUT_END_MAX_LEN + 1) / 2;
+
+fn slot(n: i32, d: i32) -> i32 {
+    assert 0 <= d && d < n && n <= INPUT_END_MAX_LEN;
+    return n * (n - 1) / 2 + d;
+}
+
+/// The token strings of at most `INPUT_END_MAX_LEN` tokens an element can
+/// derive: per length, whether one exists and the kinds at each position.
+struct Strings {
+    /// Bit `n` is set when a string of length `n` exists.
+    lens: u32,
+    /// Kind `id` at slot `slot(n, d)` is bit `id % 64` of word
+    /// `(id / 64) * SLOTS + slot(n, d)`, so the sets grow together and no
+    /// length allocates a list of its own.
+    at: List<u64>,
+}
+
+fn strs_has(s: &Strings, n: i32) -> bool {
+    return s.lens & 1_u32 << n as u32 != 0_u32;
+}
+
+fn strs_none() -> Strings {
+    return Strings { lens: 0_u32, at: [] };
+}
+
+/// Only the empty string.
+fn strs_empty() -> Strings {
+    return Strings { lens: 1_u32, at: [] };
+}
+
+fn strs_token(ids: &List<i32>) -> Strings {
+    assert !ids.is_empty(), "a token reference names a kind";
+    let mut s = Strings { lens: 2_u32, at: [] };
+    for let id of ids {
+        let _ = or_word(&mut s.at, *id / 64 * SLOTS + slot(1, 0), 1_u64 << (*id % 64) as u64);
+    }
+    return s;
+}
+
+/// ORs `bits` into word `k` of `at`, answering whether it grew.
+fn or_word(at: &mut List<u64>, k: i32, bits: u64) -> bool {
+    if bits == 0_u64 {
+        return false;
+    }
+    while at.len() <= k {
+        at.push(0_u64);
+    }
+    let merged = at[k] | bits;
+    if merged == at[k] {
+        return false;
+    }
+    at[k] = merged;
+    return true;
+}
+
+/// ORs the kind set at slot `from` of `src` into slot `to` of `dst`.
+fn or_slot(dst: &mut List<u64>, to: i32, src: &List<u64>, from: i32) {
+    for let mut k = from; k < src.len(); k += SLOTS {
+        let _ = or_word(dst, k - from + to, src[k]);
+    }
+}
+
+/// The kinds at slot `sl`, ascending.
+fn slot_ids(at: &List<u64>, sl: i32) -> List<i32> {
+    let mut bits: List<u64> = [];
+    for let mut k = sl; k < at.len(); k += SLOTS {
+        bits.push(at[k]);
+    }
+    return bits_ids(&bits);
+}
+
+/// Adds `src` to `dst`, answering whether `dst` grew. A slot holds kinds only
+/// where its length exists, so the words merge as one set.
+fn strs_union_into(dst: &mut Strings, src: &Strings) -> bool {
+    let new_lens = dst.lens | src.lens != dst.lens;
+    dst.lens |= src.lens;
+    return bits_union_into(&mut dst.at, &src.at) || new_lens;
+}
+
+/// Each string of `a` followed by each of `b`, cut at `INPUT_END_MAX_LEN`.
+fn strs_concat(a: &Strings, b: &Strings) -> Strings {
+    if a.lens == 1_u32 {
+        return *b;
+    }
+    if b.lens == 1_u32 {
+        return *a;
+    }
+    let mut s = strs_none();
+    for let n of 0..=INPUT_END_MAX_LEN {
+        for let i of 0..=n {
+            if !strs_has(a, i) || !strs_has(b, n - i) {
+                continue;
+            }
+            s.lens |= 1_u32 << n as u32;
+            for let d of 0..<i {
+                or_slot(&mut s.at, slot(n, d), &a.at, slot(i, d));
+            }
+            for let d of 0..<n - i {
+                or_slot(&mut s.at, slot(n, i + d), &b.at, slot(n - i, d));
+            }
+        }
+    }
+    return s;
+}
+
+/// Zero or more strings of `x`.
+fn strs_star(x: &Strings) -> Strings {
+    let mut s = strs_empty();
+    for let _ of 0..<INPUT_END_MAX_LEN {
+        let more = strs_concat(&s, x);
+        if !strs_union_into(&mut s, &more) {
+            break;
+        }
+    }
+    return s;
+}
+
+/// Per rule, the strings it derives, to the fixed point. A rule is evaluated
+/// again only when a rule it calls has grown.
+fn rule_strings(parser_rules: &List<ParserRule>, ctx: &mut GenContext, eof: i32) -> List<Strings> {
+    let callees = ctx.scannable_callees();
+    let mut callers: List<List<i32>> = [];
+    let mut lang: List<Strings> = [];
+    let mut queued: List<bool> = [];
+    let mut work: List<i32> = [];
+    for let ri of 0..<parser_rules.len() {
+        callers.push([]);
+        lang.push(strs_none());
+        queued.push(true);
+        work.push(ri);
+    }
+    for let ri of 0..<callees.len() {
+        for let callee of &callees[ri] {
+            if *callee >= 0 {
+                callers[*callee].push(ri);
+            }
+        }
+    }
+    while let Some(ri) = work.pop() {
+        queued[ri] = false;
+        let mut grew = false;
+        for let alt of &parser_rules[ri].alternatives {
+            grew = strs_union_into(&mut lang[ri], &sequence_strings(&alt.elements, ctx, &lang, eof)) || grew;
+        }
+        if grew {
+            for let caller of &callers[ri] {
+                if !queued[*caller] {
+                    queued[*caller] = true;
+                    work.push(*caller);
+                }
+            }
+        }
+    }
+    return lang;
+}
+
+fn sequence_strings(elements: &List<Element>, ctx: &mut GenContext, lang: &List<Strings>, eof: i32) -> Strings {
+    let mut s = strs_empty();
+    for let e of elements {
+        s = strs_concat(&s, &element_strings(e, ctx, lang, eof));
+    }
+    return s;
+}
+
+/// An `EOF` inside a rule derives the empty string here: what it ends is the
+/// walk's concern (`end_after_element`), not the rule's language.
+fn element_strings(elem: &Element, ctx: &mut GenContext, lang: &List<Strings>, eof: i32) -> Strings {
+    return match elem {
+        TokenRef(_) | Literal(_) => {
+            let mut fv: List<String> = [];
+            let ids = ctx.first_ids_of_element(elem, &mut fv);
+            if ids.contains(&eof) {
+                strs_empty();
+            } else {
+                strs_token(&ids);
+            }
+        },
+        RuleRef(r) => {
+            let idx = ctx.rule_index_of(&r.name);
+            if idx >= 0 {
+                lang[idx];
+            } else {
+                strs_none();
+            }
+        },
+        Group(g) => {
+            let mut s = strs_none();
+            for let alt of &g.alternatives {
+                let _ = strs_union_into(&mut s, &sequence_strings(&alt.elements, ctx, lang, eof));
+            }
+            s;
+        },
+        Repeat(rep) => {
+            let body = element_strings(&rep.element, ctx, lang, eof);
+            match rep.kind {
+                Optional => {
+                    let mut s = strs_empty();
+                    let _ = strs_union_into(&mut s, &body);
+                    s;
+                },
+                Star => strs_star(&body),
+                Plus => strs_concat(&body, &strs_star(&body)),
+            }
+        },
+        Label(lab) => element_strings(&lab.element, ctx, lang, eof),
+        Wildcard(_) | Not(_) => strs_none(),
+    };
+}
+
+/// What can come after a position, as `rule_input_end` needs it.
+struct EndAfter {
+    /// The strings that end the input short of the rule's end.
+    ends: Strings,
+    /// The strings that reach the rule's end, after which the caller's apply.
+    tail: Strings,
+}
+
+/// One `RuleRef` call site's contribution to its callee's `rule_input_end`.
+struct EndSite {
+    caller: i32,
+    callee: i32,
+    ends: Strings,
+    tail: Strings,
+}
+
+fn walk_end_sites(
+    elements: &List<Element>,
+    outer: &EndAfter,
+    caller: i32,
+    ctx: &mut GenContext,
+    lang: &List<Strings>,
+    eof: i32,
+    sites: &mut List<EndSite>,
+) {
+    let mut after = *outer;
+    for let mut i = elements.len() - 1; i >= 0; i -= 1 {
+        walk_end_element(&elements[i], &after, caller, ctx, lang, eof, sites);
+        after = end_after_element(&elements[i], &after, ctx, lang, eof);
+    }
+}
+
+fn walk_end_element(
+    elem: &Element,
+    after: &EndAfter,
+    caller: i32,
+    ctx: &mut GenContext,
+    lang: &List<Strings>,
+    eof: i32,
+    sites: &mut List<EndSite>,
+) {
+    match elem {
+        RuleRef(r) => {
+            let callee = ctx.rule_index_of(&r.name);
+            if callee >= 0 {
+                sites.push(EndSite { caller, callee, ends: after.ends, tail: after.tail });
+            }
+        },
+        Group(g) => {
+            for let alt of &g.alternatives {
+                walk_end_sites(&alt.elements, after, caller, ctx, lang, eof, sites);
+            }
+        },
+        Repeat(rep) => {
+            if rep.kind matches { Optional } {
+                walk_end_element(&rep.element, after, caller, ctx, lang, eof, sites);
+                return;
+            }
+            // More iterations may follow one before the exit.
+            let more = strs_star(&element_strings(&rep.element, ctx, lang, eof));
+            let again = EndAfter {
+                ends: strs_concat(&more, &after.ends),
+                tail: strs_concat(&more, &after.tail),
+            };
+            walk_end_element(&rep.element, &again, caller, ctx, lang, eof, sites);
+        },
+        Label(lab) => walk_end_element(&lab.element, after, caller, ctx, lang, eof, sites),
+        TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => {
+        },
+    }
+}
+
+/// What can come after the position before `elem`, given `after` follows it.
+/// A written `EOF` ends the input there, whatever follows it.
+fn end_after_element(elem: &Element, after: &EndAfter, ctx: &mut GenContext, lang: &List<Strings>, eof: i32) -> EndAfter {
+    let peeled = peel_labels(elem);
+    if peeled matches { TokenRef(_) } {
+        let mut fv: List<String> = [];
+        if ctx.first_ids_of_element(peeled, &mut fv).contains(&eof) {
+            return EndAfter {
+                ends: strs_empty(),
+                tail: strs_none(),
+            };
+        }
+    }
+    let s = element_strings(elem, ctx, lang, eof);
+    return EndAfter {
+        ends: strs_concat(&s, &after.ends),
+        tail: strs_concat(&s, &after.tail),
+    };
 }
 
 /// Materialise a bitset into the public `FollowSet` (a `GaleSet<String>`).

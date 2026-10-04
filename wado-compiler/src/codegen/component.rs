@@ -1754,7 +1754,6 @@ fn lib_task_return_valtype(
 /// Resolve the `task.return` result type for an `async` export. A `--lib`
 /// `future<T>` result resolves to the interned `future<T>` type; everything
 /// else (WASI handler results, unit) resolves through `cm_result`.
-#[allow(clippy::too_many_arguments)]
 fn resolve_task_return_valtype(
     export: &WorldExportPlan,
     project: &NirPackage,

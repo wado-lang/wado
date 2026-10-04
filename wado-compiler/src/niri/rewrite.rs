@@ -451,7 +451,6 @@ impl Interpreter<'_> {
 
     /// A variant case and its payload. The shape index answers for the payload's
     /// type and for the name that spells the case the value holds.
-    #[allow(clippy::too_many_arguments)]
     fn write_variant<S: EditSink>(
         &self,
         sink: &mut S,

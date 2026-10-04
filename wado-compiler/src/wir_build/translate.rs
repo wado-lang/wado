@@ -400,7 +400,6 @@ enum CallWrapperArg {
 /// with the surviving args. The wrapper's external signature stays
 /// `(env, canonical_user_params...) -> canonical_return` regardless of
 /// which `$call` params have been DAE'd.
-#[allow(clippy::too_many_arguments)]
 fn register_call_wrapper(
     ctx: &mut WirContext<'_>,
     wrapper_fq: &str,
@@ -503,7 +502,6 @@ fn register_call_wrapper(
 /// the function-table slot stays stable across DAE shrinkage on the impl: only
 /// surviving params are forwarded. A DCE'd impl leaves an `Unreachable` body,
 /// keeping the slot populated so the canonical schema holds.
-#[allow(clippy::too_many_arguments)]
 fn register_inspect_wrapper(
     ctx: &mut WirContext<'_>,
     module_source: &ModuleSource,

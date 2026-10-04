@@ -1188,7 +1188,6 @@ impl HeapFrame {
         );
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn record(
         &mut self,
         effects: &HeapEffects,
@@ -1668,7 +1667,6 @@ impl HeapFrame {
 
     /// [`Self::call_may`], leaving out the arguments `answered` accepts: the
     /// ones a caller accounts for on its own.
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn call_may_besides(
         &self,
         effects: &HeapEffects,
@@ -1690,7 +1688,6 @@ impl HeapFrame {
         )
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn call_may_keys(
         &self,
         effects: &HeapEffects,

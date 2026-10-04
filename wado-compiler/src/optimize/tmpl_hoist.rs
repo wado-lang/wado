@@ -1417,7 +1417,6 @@ fn transform_tmpl_block(
 
 /// Build a `target_local.<field> = 0` statement (an `Expr(Assign)` over a
 /// `FieldAccess`), returning its arena id.
-#[allow(clippy::too_many_arguments)]
 fn build_field_reset(
     engine: &mut Engine,
     local_index: u32,

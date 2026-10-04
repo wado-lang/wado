@@ -1483,6 +1483,17 @@ impl TraitEnv {
         self.declares_trait(key).then_some(*key)
     }
 
+    /// [`Self::methodful_impls_by_receiver`] narrowed to the impls answering
+    /// `trait_` at its declared defaults: `Eq<Self>`, not `Eq<String>`.
+    pub(crate) fn methodful_default_impls_by_receiver<'a>(
+        &'a self,
+        receiver: &'a name::Receiver,
+        trait_: DefId,
+    ) -> impl Iterator<Item = DefId> + 'a {
+        self.methodful_impls_by_receiver(receiver, trait_)
+            .filter(move |&entry| self.block_answers(entry, trait_, &[]))
+    }
+
     /// The trait an [`crate::name::FqTraitName`] names, when it names a trait
     /// declaration.
     pub(crate) fn trait_def_of_fq(&self, fq: &name::FqTraitName) -> Option<DefId> {
@@ -1538,8 +1549,9 @@ impl TraitEnv {
         generic
     }
 
-    /// [`Self::has_any_methodful_impl_by_receiver`] narrowed to impls `covers`
-    /// admits and, where given, `module_source` writes.
+    /// Whether an impl on `receiver` writes `trait_` at its declared defaults
+    /// where `covers` admits it and, where given, `module_source` writes it:
+    /// the impl a derived one would duplicate.
     pub(crate) fn has_covering_methodful_impl_by_receiver(
         &self,
         receiver: &name::Receiver,
@@ -1547,7 +1559,7 @@ impl TraitEnv {
         module_source: Option<&ModuleSource>,
         covers: impl Fn(DefId) -> bool,
     ) -> bool {
-        self.methodful_impls_by_receiver(receiver, trait_)
+        self.methodful_default_impls_by_receiver(receiver, trait_)
             .any(|entry| {
                 module_source.is_none_or(|module| self.defs.module(entry) == module)
                     && covers(entry)

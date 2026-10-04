@@ -554,7 +554,7 @@ export fn run() with Stdout {
         "the materializing store is not what stopped it: {remarks:?}"
     );
     assert!(
-        remarks[0].contains("fmt_decimal"),
+        remarks[0].contains("write_decimal_digits"),
         "the surviving formatter is: {remarks:?}"
     );
 }

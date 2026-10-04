@@ -1,0 +1,19 @@
+//! CLI: highlight HTML files, embedded CSS and JavaScript included, to HTML.
+//!
+//!     wado run package-gale-highlight-html \
+//!         --output-dir build/highlight example/page.html
+//!
+//! writes `build/highlight/example/page.html.html`. Add `--standalone` (with
+//! `--theme light|dark`) for full themed pages instead of fragments. The
+//! file-walking, timing, and output are the grammar-agnostic `run_cli` from
+//! `gale-highlight`; only `highlight` is HTML-specific.
+
+use { highlight } from "./lib.wado";
+use { run_cli } from "lib:gale";
+use { args, Environment, Stderr } from "core:cli";
+use { Preopens } from "wasi:filesystem";
+use { MonotonicClock } from "wasi:clocks";
+
+export fn run() with (Stderr, Environment, Preopens, MonotonicClock) {
+    run_cli(|src: &String| highlight(*src), args());
+}

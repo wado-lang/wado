@@ -4,62 +4,60 @@
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(0)
 
-struct core:prelude/types.wado//Box<v128> {  // TypeId(1)
-    mut value: v128,
-}
+array Array<u8> (mut u8);  // TypeId(1)
 
-array Array<u8> (mut u8);  // TypeId(2)
-
-struct core:prelude/string.wado//String {  // TypeId(3)
+struct core:prelude/string.wado//String {  // TypeId(2)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-array Array<i32> (mut i32);  // TypeId(4)
+array Array<i32> (mut i32);  // TypeId(3)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(5)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(4)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(6)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(5)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(7)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(6)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(8)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(7)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(9)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(8)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
 
-type "functype//simd_shuffle.wado/$test_0_shuffle_names_a_byte_of_either_operand" = fn();  // TypeId(12)
+type "functype//simd_shuffle.wado/$test_0_shuffle_names_a_byte_of_either_operand" = fn();  // TypeId(11)
 
-type "functype//simd_shuffle.wado/$test_1_shuffle_may_repeat_and_reverse" = fn();  // TypeId(13)
+type "functype//simd_shuffle.wado/$test_1_shuffle_may_repeat_and_reverse" = fn();  // TypeId(12)
 
-type "functype//simd_shuffle.wado/$test_2_swizzle_takes_its_indices_at_runtime__and_zeroes_an_out_of_range_one" = fn();  // TypeId(14)
+type "functype//simd_shuffle.wado/$test_2_swizzle_takes_its_indices_at_runtime__and_zeroes_an_out_of_range_one" = fn();  // TypeId(13)
 
-type "functype//simd_shuffle.wado/$cm_export__$test_0_shuffle_names_a_byte_of_either_operand" = fn();  // TypeId(15)
+type "functype//simd_shuffle.wado/$cm_export__$test_0_shuffle_names_a_byte_of_either_operand" = fn();  // TypeId(14)
 
-type "functype//simd_shuffle.wado/$cm_export__$test_1_shuffle_may_repeat_and_reverse" = fn();  // TypeId(16)
+type "functype//simd_shuffle.wado/$cm_export__$test_1_shuffle_may_repeat_and_reverse" = fn();  // TypeId(15)
 
-type "functype//simd_shuffle.wado/$cm_export__$test_2_swizzle_takes_its_indices_at_runtime__and_zeroes_an_out_of_range_one" = fn();  // TypeId(17)
+type "functype//simd_shuffle.wado/$cm_export__$test_2_swizzle_takes_its_indices_at_runtime__and_zeroes_an_out_of_range_one" = fn();  // TypeId(16)
 
-type "functype//simd_shuffle.wado/$test_0_shuffle_names_a_byte_of_either_operand$cold0" = fn(v128, i32);  // TypeId(18)
+type "functype//simd_shuffle.wado/$test_0_shuffle_names_a_byte_of_either_operand$cold0" = fn(v128, i32);  // TypeId(17)
 
-type "functype//simd_shuffle.wado/$test_0_shuffle_names_a_byte_of_either_operand$cold1" = fn(v128, i32);  // TypeId(19)
+type "functype//simd_shuffle.wado/$test_0_shuffle_names_a_byte_of_either_operand$cold1" = fn(v128, i32);  // TypeId(18)
 
-type "functype//simd_shuffle.wado/$test_0_shuffle_names_a_byte_of_either_operand$cold2" = fn(v128, i32);  // TypeId(20)
+type "functype//simd_shuffle.wado/$test_0_shuffle_names_a_byte_of_either_operand$cold2" = fn(v128, i32);  // TypeId(19)
 
-type "functype//simd_shuffle.wado/$test_0_shuffle_names_a_byte_of_either_operand$cold3" = fn(v128, i32);  // TypeId(21)
+type "functype//simd_shuffle.wado/$test_0_shuffle_names_a_byte_of_either_operand$cold3" = fn(v128, i32);  // TypeId(20)
 
-type "functype//simd_shuffle.wado/$test_1_shuffle_may_repeat_and_reverse$cold0" = fn(v128, i32);  // TypeId(22)
+type "functype//simd_shuffle.wado/$test_1_shuffle_may_repeat_and_reverse$cold0" = fn(v128, i32);  // TypeId(21)
 
-type "functype//simd_shuffle.wado/$test_1_shuffle_may_repeat_and_reverse$cold1" = fn(v128, i32);  // TypeId(23)
+type "functype//simd_shuffle.wado/$test_1_shuffle_may_repeat_and_reverse$cold1" = fn(v128, i32);  // TypeId(22)
 
-type "functype//simd_shuffle.wado/$test_2_swizzle_takes_its_indices_at_runtime__and_zeroes_an_out_of_range_one$cold0" = fn(v128, i32);  // TypeId(24)
+type "functype//simd_shuffle.wado/$test_2_swizzle_takes_its_indices_at_runtime__and_zeroes_an_out_of_range_one$cold0" = fn(v128, i32);  // TypeId(23)
 
-type "functype//simd_shuffle.wado/$test_2_swizzle_takes_its_indices_at_runtime__and_zeroes_an_out_of_range_one$cold1" = fn(v128, i32);  // TypeId(25)
+type "functype//simd_shuffle.wado/$test_2_swizzle_takes_its_indices_at_runtime__and_zeroes_an_out_of_range_one$cold1" = fn(v128, i32);  // TypeId(24)
 
-type "functype//simd_shuffle.wado/$test_2_swizzle_takes_its_indices_at_runtime__and_zeroes_an_out_of_range_one$cold2" = fn(v128, i32);  // TypeId(26)
+type "functype//simd_shuffle.wado/$test_2_swizzle_takes_its_indices_at_runtime__and_zeroes_an_out_of_range_one$cold2" = fn(v128, i32);  // TypeId(25)
+
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(26)
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(27)
 
@@ -73,21 +71,19 @@ type "functype//core:simd/core:simd/u8x16^core:prelude/traits.wado/From<Array<i3
 
 type "functype//core:simd/core:simd/u8x16::from_string<&core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String") -> v128;  // TypeId(32)
 
-type "functype//core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$scalar" = fn(ref "core:prelude/types.wado//Box<v128>", ref "core:prelude/string.wado//String");  // TypeId(33)
+type "functype//core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$scalar" = fn(v128, ref "core:prelude/string.wado//String");  // TypeId(33)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(34)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(35)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(36)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(36)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(37)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(37)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(38)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(38)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(39)
-
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(40)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(39)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -102,50 +98,50 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
-global global:simd_shuffle.wado::$const_obj_3: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80), used: 16 };
-global global:simd_shuffle.wado::$const_obj_4: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 97, 98, 99, 100, 101, 102), used: 16 };
-global global:simd_shuffle.wado::$const_obj_6: ref Array<i32> = array.new_fixed<i32>(15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 99);
-global global:simd_shuffle.wado::$const_obj_10: ref Array<u8> = array.new_fixed<u8>(10);
-global global:simd_shuffle.wado::$const_obj_11: ref Array<u8> = array.new_fixed<u8>(108, 97, 110, 101, 40, 114, 111, 116, 97, 116, 101, 100, 44, 32, 49, 53, 41, 58, 32);
-global global:simd_shuffle.wado::$const_obj_13: ref Array<u8> = array.new_fixed<u8>(117, 56, 120, 49, 54);
-global global:simd_shuffle.wado::$const_obj_14: ref Array<u8> = array.new_fixed<u8>(32, 97, 115, 32);
-global global:simd_shuffle.wado::$const_obj_15: ref Array<u8> = array.new_fixed<u8>(114, 111, 116, 97, 116, 101, 100, 58, 32);
-global global:simd_shuffle.wado::$const_obj_16: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 108, 97, 110, 101, 40, 114, 111, 116, 97, 116, 101, 100, 44, 32, 49, 53, 41, 32, 61, 61, 32, 39, 98, 39, 32, 97, 115, 32, 105, 51, 50, 10);
-global global:simd_shuffle.wado::$const_obj_17: ref Array<u8> = array.new_fixed<u8>(58);
-global global:simd_shuffle.wado::$const_obj_18: ref Array<u8> = array.new_fixed<u8>(115, 105, 109, 100, 95, 115, 104, 117, 102, 102, 108, 101, 46, 119, 97, 100, 111);
-global global:simd_shuffle.wado::$const_obj_19: ref Array<u8> = array.new_fixed<u8>(32, 97, 116, 32);
-global global:simd_shuffle.wado::$const_obj_20: ref Array<u8> = array.new_fixed<u8>(36, 116, 101, 115, 116, 95, 48, 95, 115, 104, 117, 102, 102, 108, 101, 95, 110, 97, 109, 101, 115, 95, 97, 95, 98, 121, 116, 101, 95, 111, 102, 95, 101, 105, 116, 104, 101, 114, 95, 111, 112, 101, 114, 97, 110, 100);
-global global:simd_shuffle.wado::$const_obj_21: ref Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
-global global:simd_shuffle.wado::$const_obj_23: ref Array<u8> = array.new_fixed<u8>(108, 97, 110, 101, 40, 114, 111, 116, 97, 116, 101, 100, 44, 32, 52, 41, 58, 32);
-global global:simd_shuffle.wado::$const_obj_28: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 108, 97, 110, 101, 40, 114, 111, 116, 97, 116, 101, 100, 44, 32, 52, 41, 32, 61, 61, 32, 39, 48, 39, 32, 97, 115, 32, 105, 51, 50, 10);
-global global:simd_shuffle.wado::$const_obj_35: ref Array<u8> = array.new_fixed<u8>(108, 97, 110, 101, 40, 114, 111, 116, 97, 116, 101, 100, 44, 32, 51, 41, 58, 32);
-global global:simd_shuffle.wado::$const_obj_40: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 108, 97, 110, 101, 40, 114, 111, 116, 97, 116, 101, 100, 44, 32, 51, 41, 32, 61, 61, 32, 39, 68, 39, 32, 97, 115, 32, 105, 51, 50, 10);
-global global:simd_shuffle.wado::$const_obj_47: ref Array<u8> = array.new_fixed<u8>(108, 97, 110, 101, 40, 114, 111, 116, 97, 116, 101, 100, 44, 32, 48, 41, 58, 32);
-global global:simd_shuffle.wado::$const_obj_52: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 108, 97, 110, 101, 40, 114, 111, 116, 97, 116, 101, 100, 44, 32, 48, 41, 32, 61, 61, 32, 39, 65, 39, 32, 97, 115, 32, 105, 51, 50, 10);
-global global:simd_shuffle.wado::$const_obj_59: ref Array<u8> = array.new_fixed<u8>(108, 97, 110, 101, 40, 98, 114, 111, 97, 100, 99, 97, 115, 116, 44, 32, 49, 53, 41, 58, 32);
-global global:simd_shuffle.wado::$const_obj_63: ref Array<u8> = array.new_fixed<u8>(98, 114, 111, 97, 100, 99, 97, 115, 116, 58, 32);
-global global:simd_shuffle.wado::$const_obj_64: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 108, 97, 110, 101, 40, 98, 114, 111, 97, 100, 99, 97, 115, 116, 44, 32, 49, 53, 41, 32, 61, 61, 32, 39, 55, 39, 32, 97, 115, 32, 105, 51, 50, 10);
-global global:simd_shuffle.wado::$const_obj_68: ref Array<u8> = array.new_fixed<u8>(36, 116, 101, 115, 116, 95, 49, 95, 115, 104, 117, 102, 102, 108, 101, 95, 109, 97, 121, 95, 114, 101, 112, 101, 97, 116, 95, 97, 110, 100, 95, 114, 101, 118, 101, 114, 115, 101);
-global global:simd_shuffle.wado::$const_obj_71: ref Array<u8> = array.new_fixed<u8>(108, 97, 110, 101, 40, 98, 114, 111, 97, 100, 99, 97, 115, 116, 44, 32, 48, 41, 58, 32);
-global global:simd_shuffle.wado::$const_obj_76: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 108, 97, 110, 101, 40, 98, 114, 111, 97, 100, 99, 97, 115, 116, 44, 32, 48, 41, 32, 61, 61, 32, 39, 55, 39, 32, 97, 115, 32, 105, 51, 50, 10);
-global global:simd_shuffle.wado::$const_obj_83: ref Array<u8> = array.new_fixed<u8>(108, 97, 110, 101, 40, 112, 105, 99, 107, 101, 100, 44, 32, 49, 53, 41, 58, 32);
-global global:simd_shuffle.wado::$const_obj_87: ref Array<u8> = array.new_fixed<u8>(112, 105, 99, 107, 101, 100, 58, 32);
-global global:simd_shuffle.wado::$const_obj_88: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 108, 97, 110, 101, 40, 112, 105, 99, 107, 101, 100, 44, 32, 49, 53, 41, 32, 61, 61, 32, 48, 10);
-global mut global:simd_shuffle.wado::$const_obj_92: ref null Array<u8> = ref.null none;
-global global:simd_shuffle.wado::$const_obj_95: ref Array<u8> = array.new_fixed<u8>(108, 97, 110, 101, 40, 112, 105, 99, 107, 101, 100, 44, 32, 49, 52, 41, 58, 32);
-global global:simd_shuffle.wado::$const_obj_100: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 108, 97, 110, 101, 40, 112, 105, 99, 107, 101, 100, 44, 32, 49, 52, 41, 32, 61, 61, 32, 39, 49, 39, 32, 97, 115, 32, 105, 51, 50, 10);
-global mut global:simd_shuffle.wado::$const_obj_104: ref null Array<u8> = ref.null none;
-global global:simd_shuffle.wado::$const_obj_107: ref Array<u8> = array.new_fixed<u8>(108, 97, 110, 101, 40, 112, 105, 99, 107, 101, 100, 44, 32, 48, 41, 58, 32);
-global global:simd_shuffle.wado::$const_obj_112: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 108, 97, 110, 101, 40, 112, 105, 99, 107, 101, 100, 44, 32, 48, 41, 32, 61, 61, 32, 39, 102, 39, 32, 97, 115, 32, 105, 51, 50, 10);
-global mut global:simd_shuffle.wado::$const_obj_116: ref null Array<u8> = ref.null none;
-global global:core:prelude/primitive.wado::$const_obj_119: ref Array<u8> = array.new_fixed<u8>(118, 49, 50, 56, 40, 48, 120);
+global global:simd_shuffle.wado::$const_obj_6: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80), used: 16 };
+global global:simd_shuffle.wado::$const_obj_7: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 97, 98, 99, 100, 101, 102), used: 16 };
+global global:simd_shuffle.wado::$const_obj_9: ref Array<i32> = array.new_fixed<i32>(15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 99);
+global global:simd_shuffle.wado::$const_obj_13: ref Array<u8> = array.new_fixed<u8>(10);
+global global:simd_shuffle.wado::$const_obj_14: ref Array<u8> = array.new_fixed<u8>(108, 97, 110, 101, 40, 114, 111, 116, 97, 116, 101, 100, 44, 32, 49, 53, 41, 58, 32);
+global global:simd_shuffle.wado::$const_obj_16: ref Array<u8> = array.new_fixed<u8>(117, 56, 120, 49, 54);
+global global:simd_shuffle.wado::$const_obj_17: ref Array<u8> = array.new_fixed<u8>(32, 97, 115, 32);
+global global:simd_shuffle.wado::$const_obj_18: ref Array<u8> = array.new_fixed<u8>(114, 111, 116, 97, 116, 101, 100, 58, 32);
+global global:simd_shuffle.wado::$const_obj_19: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 108, 97, 110, 101, 40, 114, 111, 116, 97, 116, 101, 100, 44, 32, 49, 53, 41, 32, 61, 61, 32, 39, 98, 39, 32, 97, 115, 32, 105, 51, 50, 10);
+global global:simd_shuffle.wado::$const_obj_20: ref Array<u8> = array.new_fixed<u8>(58);
+global global:simd_shuffle.wado::$const_obj_21: ref Array<u8> = array.new_fixed<u8>(115, 105, 109, 100, 95, 115, 104, 117, 102, 102, 108, 101, 46, 119, 97, 100, 111);
+global global:simd_shuffle.wado::$const_obj_22: ref Array<u8> = array.new_fixed<u8>(32, 97, 116, 32);
+global global:simd_shuffle.wado::$const_obj_23: ref Array<u8> = array.new_fixed<u8>(36, 116, 101, 115, 116, 95, 48, 95, 115, 104, 117, 102, 102, 108, 101, 95, 110, 97, 109, 101, 115, 95, 97, 95, 98, 121, 116, 101, 95, 111, 102, 95, 101, 105, 116, 104, 101, 114, 95, 111, 112, 101, 114, 97, 110, 100);
+global global:simd_shuffle.wado::$const_obj_24: ref Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
+global global:simd_shuffle.wado::$const_obj_26: ref Array<u8> = array.new_fixed<u8>(108, 97, 110, 101, 40, 114, 111, 116, 97, 116, 101, 100, 44, 32, 52, 41, 58, 32);
+global global:simd_shuffle.wado::$const_obj_31: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 108, 97, 110, 101, 40, 114, 111, 116, 97, 116, 101, 100, 44, 32, 52, 41, 32, 61, 61, 32, 39, 48, 39, 32, 97, 115, 32, 105, 51, 50, 10);
+global global:simd_shuffle.wado::$const_obj_38: ref Array<u8> = array.new_fixed<u8>(108, 97, 110, 101, 40, 114, 111, 116, 97, 116, 101, 100, 44, 32, 51, 41, 58, 32);
+global global:simd_shuffle.wado::$const_obj_43: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 108, 97, 110, 101, 40, 114, 111, 116, 97, 116, 101, 100, 44, 32, 51, 41, 32, 61, 61, 32, 39, 68, 39, 32, 97, 115, 32, 105, 51, 50, 10);
+global global:simd_shuffle.wado::$const_obj_50: ref Array<u8> = array.new_fixed<u8>(108, 97, 110, 101, 40, 114, 111, 116, 97, 116, 101, 100, 44, 32, 48, 41, 58, 32);
+global global:simd_shuffle.wado::$const_obj_55: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 108, 97, 110, 101, 40, 114, 111, 116, 97, 116, 101, 100, 44, 32, 48, 41, 32, 61, 61, 32, 39, 65, 39, 32, 97, 115, 32, 105, 51, 50, 10);
+global global:simd_shuffle.wado::$const_obj_62: ref Array<u8> = array.new_fixed<u8>(108, 97, 110, 101, 40, 98, 114, 111, 97, 100, 99, 97, 115, 116, 44, 32, 49, 53, 41, 58, 32);
+global global:simd_shuffle.wado::$const_obj_66: ref Array<u8> = array.new_fixed<u8>(98, 114, 111, 97, 100, 99, 97, 115, 116, 58, 32);
+global global:simd_shuffle.wado::$const_obj_67: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 108, 97, 110, 101, 40, 98, 114, 111, 97, 100, 99, 97, 115, 116, 44, 32, 49, 53, 41, 32, 61, 61, 32, 39, 55, 39, 32, 97, 115, 32, 105, 51, 50, 10);
+global global:simd_shuffle.wado::$const_obj_71: ref Array<u8> = array.new_fixed<u8>(36, 116, 101, 115, 116, 95, 49, 95, 115, 104, 117, 102, 102, 108, 101, 95, 109, 97, 121, 95, 114, 101, 112, 101, 97, 116, 95, 97, 110, 100, 95, 114, 101, 118, 101, 114, 115, 101);
+global global:simd_shuffle.wado::$const_obj_74: ref Array<u8> = array.new_fixed<u8>(108, 97, 110, 101, 40, 98, 114, 111, 97, 100, 99, 97, 115, 116, 44, 32, 48, 41, 58, 32);
+global global:simd_shuffle.wado::$const_obj_79: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 108, 97, 110, 101, 40, 98, 114, 111, 97, 100, 99, 97, 115, 116, 44, 32, 48, 41, 32, 61, 61, 32, 39, 55, 39, 32, 97, 115, 32, 105, 51, 50, 10);
+global global:simd_shuffle.wado::$const_obj_86: ref Array<u8> = array.new_fixed<u8>(108, 97, 110, 101, 40, 112, 105, 99, 107, 101, 100, 44, 32, 49, 53, 41, 58, 32);
+global global:simd_shuffle.wado::$const_obj_90: ref Array<u8> = array.new_fixed<u8>(112, 105, 99, 107, 101, 100, 58, 32);
+global global:simd_shuffle.wado::$const_obj_91: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 108, 97, 110, 101, 40, 112, 105, 99, 107, 101, 100, 44, 32, 49, 53, 41, 32, 61, 61, 32, 48, 10);
+global mut global:simd_shuffle.wado::$const_obj_95: ref null Array<u8> = ref.null none;
+global global:simd_shuffle.wado::$const_obj_98: ref Array<u8> = array.new_fixed<u8>(108, 97, 110, 101, 40, 112, 105, 99, 107, 101, 100, 44, 32, 49, 52, 41, 58, 32);
+global global:simd_shuffle.wado::$const_obj_103: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 108, 97, 110, 101, 40, 112, 105, 99, 107, 101, 100, 44, 32, 49, 52, 41, 32, 61, 61, 32, 39, 49, 39, 32, 97, 115, 32, 105, 51, 50, 10);
+global mut global:simd_shuffle.wado::$const_obj_107: ref null Array<u8> = ref.null none;
+global global:simd_shuffle.wado::$const_obj_110: ref Array<u8> = array.new_fixed<u8>(108, 97, 110, 101, 40, 112, 105, 99, 107, 101, 100, 44, 32, 48, 41, 58, 32);
+global global:simd_shuffle.wado::$const_obj_115: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 108, 97, 110, 101, 40, 112, 105, 99, 107, 101, 100, 44, 32, 48, 41, 32, 61, 61, 32, 39, 102, 39, 32, 97, 115, 32, 105, 51, 50, 10);
+global mut global:simd_shuffle.wado::$const_obj_119: ref null Array<u8> = ref.null none;
+global global:core:prelude/primitive.wado::$const_obj_126: ref Array<u8> = array.new_fixed<u8>(118, 49, 50, 56, 40, 48, 120);
 
 fn "simd_shuffle.wado/$test_0_shuffle_names_a_byte_of_either_operand"() {
     let a: v128;
     let b: v128;
     let $v1_3: i32;
-    a = "core:simd/core:simd/u8x16::from_string<&core:prelude/string.wado/String>"(global:simd_shuffle.wado::$const_obj_4);
-    b = "core:simd/core:simd/u8x16::from_string<&core:prelude/string.wado/String>"(global:simd_shuffle.wado::$const_obj_3);
+    a = "core:simd/core:simd/u8x16::from_string<&core:prelude/string.wado/String>"(global:simd_shuffle.wado::$const_obj_7);
+    b = "core:simd/core:simd/u8x16::from_string<&core:prelude/string.wado/String>"(global:simd_shuffle.wado::$const_obj_6);
     b = i8x16.shuffle([16, 17, 18, 19, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], a, b);
     if @unlikely(local.tee $v1_3(b1: block -> i32 {
         b2: block {
@@ -432,7 +428,7 @@ fn "simd_shuffle.wado/$test_0_shuffle_names_a_byte_of_either_operand"() {
 fn "simd_shuffle.wado/$test_1_shuffle_may_repeat_and_reverse"() {
     let a: v128;
     let $v1_2: i32;
-    a = i8x16.shuffle([7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7], local.tee a("core:simd/core:simd/u8x16::from_string<&core:prelude/string.wado/String>"(global:simd_shuffle.wado::$const_obj_4)), a);
+    a = i8x16.shuffle([7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7], local.tee a("core:simd/core:simd/u8x16::from_string<&core:prelude/string.wado/String>"(global:simd_shuffle.wado::$const_obj_7)), a);
     if @unlikely(local.tee $v1_2(b73: block -> i32 {
         b74: block {
             b75: block {
@@ -579,8 +575,8 @@ fn "simd_shuffle.wado/$test_2_swizzle_takes_its_indices_at_runtime__and_zeroes_a
     let a: v128;
     let $v1_3: i32;
     let $sroa_indices_value_23: v128;
-    a = "core:simd/core:simd/u8x16::from_string<&core:prelude/string.wado/String>"(global:simd_shuffle.wado::$const_obj_4);
-    $sroa_indices_value_23 = "core:simd/core:simd/u8x16^core:prelude/traits.wado/From<Array<i32>>::from"(global:simd_shuffle.wado::$const_obj_6);
+    a = "core:simd/core:simd/u8x16::from_string<&core:prelude/string.wado/String>"(global:simd_shuffle.wado::$const_obj_7);
+    $sroa_indices_value_23 = "core:simd/core:simd/u8x16^core:prelude/traits.wado/From<Array<i32>>::from"(global:simd_shuffle.wado::$const_obj_9);
     $sroa_indices_value_23 = a i8x16.swizzle $sroa_indices_value_23;
     if @unlikely(local.tee $v1_3(b109: block -> i32 {
         b110: block {
@@ -814,8 +810,9 @@ fn "simd_shuffle.wado/$test_0_shuffle_names_a_byte_of_either_operand$cold0"(rota
     let $local_17: ref "core:prelude/string.wado//String";
     let new_used_27: i32;
     let start_28: i32;
-    let f_70: ref "core:prelude/string.wado//String";
-    let $sroa_$f_buf_165: ref "core:prelude/string.wado//String";
+    let self_62: ref "core:prelude/string.wado//String";
+    let x_136: i64;
+    let $sroa_$f_buf_181: ref "core:prelude/string.wado//String";
     $local_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(179), used: 0 };
     if @unlikely(local.tee new_used_27(0 + 88) > builtin::array_len($local_17.repr)) {
         cold_path;
@@ -823,60 +820,63 @@ fn "simd_shuffle.wado/$test_0_shuffle_names_a_byte_of_either_operand$cold0"(rota
     }
     start_28 = $local_17.used;
     $local_17.used = new_used_27;
-    builtin::array_copy<u8>(local.tee $load_2($local_17.repr), start_28, global:simd_shuffle.wado::$const_obj_21, 0, 20);
+    builtin::array_copy<u8>(local.tee $load_2($local_17.repr), start_28, global:simd_shuffle.wado::$const_obj_24, 0, 20);
     new_used_27 = start_28 + 20;
-    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_20, 0, 46);
+    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_23, 0, 46);
     new_used_27 = start_28 + 66;
-    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_19, 0, 4);
+    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_22, 0, 4);
     new_used_27 = start_28 + 70;
-    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_18, 0, 17);
+    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_21, 0, 17);
     start_28 = start_28 + 87;
-    builtin::array_copy<u8>($load_2, start_28, global:simd_shuffle.wado::$const_obj_17, 0, 1);
-    $sroa_$f_buf_165 = $local_17;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(28, $sroa_$f_buf_165);
+    builtin::array_copy<u8>($load_2, start_28, global:simd_shuffle.wado::$const_obj_20, 0, 1);
+    start_28 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar"(local.tee $sroa_$f_buf_181($local_17), 0, 2);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee self_62($sroa_$f_buf_181).repr, start_28, 28_i64, 2);
     if @unlikely(local.tee start_28($local_17.used + 53) > builtin::array_len($local_17.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_17, start_28);
     }
     new_used_27 = $local_17.used;
     $local_17.used = start_28;
-    builtin::array_copy<u8>(local.tee $load_2($local_17.repr), new_used_27, global:simd_shuffle.wado::$const_obj_16, 0, 44);
+    builtin::array_copy<u8>(local.tee $load_2($local_17.repr), new_used_27, global:simd_shuffle.wado::$const_obj_19, 0, 44);
     new_used_27 = new_used_27 + 44;
-    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_15, 0, 9);
-    f_70 = local.tee $sroa_$f_buf_165($local_17);
-    "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$scalar"(struct.new "core:prelude/types.wado//Box<v128>" { value: rotated }, f_70);
-    if @unlikely(local.tee new_used_27(f_70.used + 4) > builtin::array_len(f_70.repr)) {
+    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_18, 0, 9);
+    self_62 = local.tee $sroa_$f_buf_181($local_17);
+    "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$scalar"(rotated, self_62);
+    if @unlikely(local.tee new_used_27(self_62.used + 4) > builtin::array_len(self_62.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_70, new_used_27);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_62, new_used_27);
     }
-    start_28 = f_70.used;
-    f_70.used = new_used_27;
-    builtin::array_copy<u8>(local.tee $load_2(f_70.repr), start_28, global:simd_shuffle.wado::$const_obj_14, 0, 4);
-    if @unlikely(local.tee start_28(f_70.used + 5) > builtin::array_len($load_2)) {
+    start_28 = self_62.used;
+    self_62.used = new_used_27;
+    builtin::array_copy<u8>(local.tee $load_2(self_62.repr), start_28, global:simd_shuffle.wado::$const_obj_17, 0, 4);
+    if @unlikely(local.tee start_28(self_62.used + 5) > builtin::array_len($load_2)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_70, start_28);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_62, start_28);
     }
-    new_used_27 = f_70.used;
-    f_70.used = start_28;
-    builtin::array_copy<u8>(f_70.repr, new_used_27, global:simd_shuffle.wado::$const_obj_13, 0, 5);
+    new_used_27 = self_62.used;
+    self_62.used = start_28;
+    builtin::array_copy<u8>(self_62.repr, new_used_27, global:simd_shuffle.wado::$const_obj_16, 0, 5);
     if @unlikely(local.tee new_used_27($local_17.used + 20) > builtin::array_len($local_17.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_17, new_used_27);
     }
     start_28 = $local_17.used;
     $local_17.used = new_used_27;
-    builtin::array_copy<u8>(local.tee $load_2($local_17.repr), start_28, global:simd_shuffle.wado::$const_obj_10, 0, 1);
+    builtin::array_copy<u8>(local.tee $load_2($local_17.repr), start_28, global:simd_shuffle.wado::$const_obj_13, 0, 1);
     start_28 = start_28 + 1;
-    builtin::array_copy<u8>($load_2, start_28, global:simd_shuffle.wado::$const_obj_11, 0, 19);
-    $sroa_$f_buf_165 = $local_17;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($v1, $sroa_$f_buf_165);
+    builtin::array_copy<u8>($load_2, start_28, global:simd_shuffle.wado::$const_obj_14, 0, 19);
+    $sroa_$f_buf_181 = $local_17;
+    start_28 = $v1 < 0;
+    $v1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_136(x_136 = builtin::i64_extend_i32_s($v1); select i64(x_136 < 0_i64, 0_i64 - x_136, x_136)));
+    start_28 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar"($sroa_$f_buf_181, start_28, $v1);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_181.repr, start_28, x_136, $v1);
     if @unlikely(local.tee $v1($local_17.used + 1) > builtin::array_len($local_17.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_17, $v1);
     }
     start_28 = $local_17.used;
     $local_17.used = $v1;
-    builtin::array_copy<u8>($local_17.repr, start_28, global:simd_shuffle.wado::$const_obj_10, 0, 1);
+    builtin::array_copy<u8>($local_17.repr, start_28, global:simd_shuffle.wado::$const_obj_13, 0, 1);
     "core:rt/panic"($local_17.repr, $local_17.used);
     unreachable;
 }
@@ -886,8 +886,9 @@ fn "simd_shuffle.wado/$test_0_shuffle_names_a_byte_of_either_operand$cold1"(rota
     let $local_15: ref "core:prelude/string.wado//String";
     let new_used_27: i32;
     let start_28: i32;
-    let f_70: ref "core:prelude/string.wado//String";
-    let $sroa_$f_buf_165: ref "core:prelude/string.wado//String";
+    let self_62: ref "core:prelude/string.wado//String";
+    let x_136: i64;
+    let $sroa_$f_buf_181: ref "core:prelude/string.wado//String";
     $local_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(177), used: 0 };
     if @unlikely(local.tee new_used_27(0 + 88) > builtin::array_len($local_15.repr)) {
         cold_path;
@@ -895,60 +896,63 @@ fn "simd_shuffle.wado/$test_0_shuffle_names_a_byte_of_either_operand$cold1"(rota
     }
     start_28 = $local_15.used;
     $local_15.used = new_used_27;
-    builtin::array_copy<u8>(local.tee $load_2($local_15.repr), start_28, global:simd_shuffle.wado::$const_obj_21, 0, 20);
+    builtin::array_copy<u8>(local.tee $load_2($local_15.repr), start_28, global:simd_shuffle.wado::$const_obj_24, 0, 20);
     new_used_27 = start_28 + 20;
-    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_20, 0, 46);
+    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_23, 0, 46);
     new_used_27 = start_28 + 66;
-    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_19, 0, 4);
+    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_22, 0, 4);
     new_used_27 = start_28 + 70;
-    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_18, 0, 17);
+    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_21, 0, 17);
     start_28 = start_28 + 87;
-    builtin::array_copy<u8>($load_2, start_28, global:simd_shuffle.wado::$const_obj_17, 0, 1);
-    $sroa_$f_buf_165 = $local_15;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(27, $sroa_$f_buf_165);
+    builtin::array_copy<u8>($load_2, start_28, global:simd_shuffle.wado::$const_obj_20, 0, 1);
+    start_28 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar"(local.tee $sroa_$f_buf_181($local_15), 0, 2);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee self_62($sroa_$f_buf_181).repr, start_28, 27_i64, 2);
     if @unlikely(local.tee start_28($local_15.used + 52) > builtin::array_len($local_15.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_15, start_28);
     }
     new_used_27 = $local_15.used;
     $local_15.used = start_28;
-    builtin::array_copy<u8>(local.tee $load_2($local_15.repr), new_used_27, global:simd_shuffle.wado::$const_obj_28, 0, 43);
+    builtin::array_copy<u8>(local.tee $load_2($local_15.repr), new_used_27, global:simd_shuffle.wado::$const_obj_31, 0, 43);
     new_used_27 = new_used_27 + 43;
-    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_15, 0, 9);
-    f_70 = local.tee $sroa_$f_buf_165($local_15);
-    "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$scalar"(struct.new "core:prelude/types.wado//Box<v128>" { value: rotated }, f_70);
-    if @unlikely(local.tee new_used_27(f_70.used + 4) > builtin::array_len(f_70.repr)) {
+    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_18, 0, 9);
+    self_62 = local.tee $sroa_$f_buf_181($local_15);
+    "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$scalar"(rotated, self_62);
+    if @unlikely(local.tee new_used_27(self_62.used + 4) > builtin::array_len(self_62.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_70, new_used_27);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_62, new_used_27);
     }
-    start_28 = f_70.used;
-    f_70.used = new_used_27;
-    builtin::array_copy<u8>(local.tee $load_2(f_70.repr), start_28, global:simd_shuffle.wado::$const_obj_14, 0, 4);
-    if @unlikely(local.tee start_28(f_70.used + 5) > builtin::array_len($load_2)) {
+    start_28 = self_62.used;
+    self_62.used = new_used_27;
+    builtin::array_copy<u8>(local.tee $load_2(self_62.repr), start_28, global:simd_shuffle.wado::$const_obj_17, 0, 4);
+    if @unlikely(local.tee start_28(self_62.used + 5) > builtin::array_len($load_2)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_70, start_28);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_62, start_28);
     }
-    new_used_27 = f_70.used;
-    f_70.used = start_28;
-    builtin::array_copy<u8>(f_70.repr, new_used_27, global:simd_shuffle.wado::$const_obj_13, 0, 5);
+    new_used_27 = self_62.used;
+    self_62.used = start_28;
+    builtin::array_copy<u8>(self_62.repr, new_used_27, global:simd_shuffle.wado::$const_obj_16, 0, 5);
     if @unlikely(local.tee new_used_27($local_15.used + 19) > builtin::array_len($local_15.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_15, new_used_27);
     }
     start_28 = $local_15.used;
     $local_15.used = new_used_27;
-    builtin::array_copy<u8>(local.tee $load_2($local_15.repr), start_28, global:simd_shuffle.wado::$const_obj_10, 0, 1);
+    builtin::array_copy<u8>(local.tee $load_2($local_15.repr), start_28, global:simd_shuffle.wado::$const_obj_13, 0, 1);
     start_28 = start_28 + 1;
-    builtin::array_copy<u8>($load_2, start_28, global:simd_shuffle.wado::$const_obj_23, 0, 18);
-    $sroa_$f_buf_165 = $local_15;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($v1, $sroa_$f_buf_165);
+    builtin::array_copy<u8>($load_2, start_28, global:simd_shuffle.wado::$const_obj_26, 0, 18);
+    $sroa_$f_buf_181 = $local_15;
+    start_28 = $v1 < 0;
+    $v1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_136(x_136 = builtin::i64_extend_i32_s($v1); select i64(x_136 < 0_i64, 0_i64 - x_136, x_136)));
+    start_28 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar"($sroa_$f_buf_181, start_28, $v1);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_181.repr, start_28, x_136, $v1);
     if @unlikely(local.tee $v1($local_15.used + 1) > builtin::array_len($local_15.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_15, $v1);
     }
     start_28 = $local_15.used;
     $local_15.used = $v1;
-    builtin::array_copy<u8>($local_15.repr, start_28, global:simd_shuffle.wado::$const_obj_10, 0, 1);
+    builtin::array_copy<u8>($local_15.repr, start_28, global:simd_shuffle.wado::$const_obj_13, 0, 1);
     "core:rt/panic"($local_15.repr, $local_15.used);
     unreachable;
 }
@@ -958,8 +962,9 @@ fn "simd_shuffle.wado/$test_0_shuffle_names_a_byte_of_either_operand$cold2"(rota
     let $local_13: ref "core:prelude/string.wado//String";
     let new_used_27: i32;
     let start_28: i32;
-    let f_70: ref "core:prelude/string.wado//String";
-    let $sroa_$f_buf_165: ref "core:prelude/string.wado//String";
+    let self_62: ref "core:prelude/string.wado//String";
+    let x_136: i64;
+    let $sroa_$f_buf_181: ref "core:prelude/string.wado//String";
     $local_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(177), used: 0 };
     if @unlikely(local.tee new_used_27(0 + 88) > builtin::array_len($local_13.repr)) {
         cold_path;
@@ -967,60 +972,63 @@ fn "simd_shuffle.wado/$test_0_shuffle_names_a_byte_of_either_operand$cold2"(rota
     }
     start_28 = $local_13.used;
     $local_13.used = new_used_27;
-    builtin::array_copy<u8>(local.tee $load_2($local_13.repr), start_28, global:simd_shuffle.wado::$const_obj_21, 0, 20);
+    builtin::array_copy<u8>(local.tee $load_2($local_13.repr), start_28, global:simd_shuffle.wado::$const_obj_24, 0, 20);
     new_used_27 = start_28 + 20;
-    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_20, 0, 46);
+    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_23, 0, 46);
     new_used_27 = start_28 + 66;
-    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_19, 0, 4);
+    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_22, 0, 4);
     new_used_27 = start_28 + 70;
-    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_18, 0, 17);
+    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_21, 0, 17);
     start_28 = start_28 + 87;
-    builtin::array_copy<u8>($load_2, start_28, global:simd_shuffle.wado::$const_obj_17, 0, 1);
-    $sroa_$f_buf_165 = $local_13;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(26, $sroa_$f_buf_165);
+    builtin::array_copy<u8>($load_2, start_28, global:simd_shuffle.wado::$const_obj_20, 0, 1);
+    start_28 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar"(local.tee $sroa_$f_buf_181($local_13), 0, 2);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee self_62($sroa_$f_buf_181).repr, start_28, 26_i64, 2);
     if @unlikely(local.tee start_28($local_13.used + 52) > builtin::array_len($local_13.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_13, start_28);
     }
     new_used_27 = $local_13.used;
     $local_13.used = start_28;
-    builtin::array_copy<u8>(local.tee $load_2($local_13.repr), new_used_27, global:simd_shuffle.wado::$const_obj_40, 0, 43);
+    builtin::array_copy<u8>(local.tee $load_2($local_13.repr), new_used_27, global:simd_shuffle.wado::$const_obj_43, 0, 43);
     new_used_27 = new_used_27 + 43;
-    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_15, 0, 9);
-    f_70 = local.tee $sroa_$f_buf_165($local_13);
-    "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$scalar"(struct.new "core:prelude/types.wado//Box<v128>" { value: rotated }, f_70);
-    if @unlikely(local.tee new_used_27(f_70.used + 4) > builtin::array_len(f_70.repr)) {
+    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_18, 0, 9);
+    self_62 = local.tee $sroa_$f_buf_181($local_13);
+    "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$scalar"(rotated, self_62);
+    if @unlikely(local.tee new_used_27(self_62.used + 4) > builtin::array_len(self_62.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_70, new_used_27);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_62, new_used_27);
     }
-    start_28 = f_70.used;
-    f_70.used = new_used_27;
-    builtin::array_copy<u8>(local.tee $load_2(f_70.repr), start_28, global:simd_shuffle.wado::$const_obj_14, 0, 4);
-    if @unlikely(local.tee start_28(f_70.used + 5) > builtin::array_len($load_2)) {
+    start_28 = self_62.used;
+    self_62.used = new_used_27;
+    builtin::array_copy<u8>(local.tee $load_2(self_62.repr), start_28, global:simd_shuffle.wado::$const_obj_17, 0, 4);
+    if @unlikely(local.tee start_28(self_62.used + 5) > builtin::array_len($load_2)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_70, start_28);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_62, start_28);
     }
-    new_used_27 = f_70.used;
-    f_70.used = start_28;
-    builtin::array_copy<u8>(f_70.repr, new_used_27, global:simd_shuffle.wado::$const_obj_13, 0, 5);
+    new_used_27 = self_62.used;
+    self_62.used = start_28;
+    builtin::array_copy<u8>(self_62.repr, new_used_27, global:simd_shuffle.wado::$const_obj_16, 0, 5);
     if @unlikely(local.tee new_used_27($local_13.used + 19) > builtin::array_len($local_13.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_13, new_used_27);
     }
     start_28 = $local_13.used;
     $local_13.used = new_used_27;
-    builtin::array_copy<u8>(local.tee $load_2($local_13.repr), start_28, global:simd_shuffle.wado::$const_obj_10, 0, 1);
+    builtin::array_copy<u8>(local.tee $load_2($local_13.repr), start_28, global:simd_shuffle.wado::$const_obj_13, 0, 1);
     start_28 = start_28 + 1;
-    builtin::array_copy<u8>($load_2, start_28, global:simd_shuffle.wado::$const_obj_35, 0, 18);
-    $sroa_$f_buf_165 = $local_13;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($v1, $sroa_$f_buf_165);
+    builtin::array_copy<u8>($load_2, start_28, global:simd_shuffle.wado::$const_obj_38, 0, 18);
+    $sroa_$f_buf_181 = $local_13;
+    start_28 = $v1 < 0;
+    $v1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_136(x_136 = builtin::i64_extend_i32_s($v1); select i64(x_136 < 0_i64, 0_i64 - x_136, x_136)));
+    start_28 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar"($sroa_$f_buf_181, start_28, $v1);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_181.repr, start_28, x_136, $v1);
     if @unlikely(local.tee $v1($local_13.used + 1) > builtin::array_len($local_13.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_13, $v1);
     }
     start_28 = $local_13.used;
     $local_13.used = $v1;
-    builtin::array_copy<u8>($local_13.repr, start_28, global:simd_shuffle.wado::$const_obj_10, 0, 1);
+    builtin::array_copy<u8>($local_13.repr, start_28, global:simd_shuffle.wado::$const_obj_13, 0, 1);
     "core:rt/panic"($local_13.repr, $local_13.used);
     unreachable;
 }
@@ -1030,8 +1038,9 @@ fn "simd_shuffle.wado/$test_0_shuffle_names_a_byte_of_either_operand$cold3"(rota
     let $local_11: ref "core:prelude/string.wado//String";
     let new_used_27: i32;
     let start_28: i32;
-    let f_70: ref "core:prelude/string.wado//String";
-    let $sroa_$f_buf_165: ref "core:prelude/string.wado//String";
+    let self_62: ref "core:prelude/string.wado//String";
+    let x_136: i64;
+    let $sroa_$f_buf_181: ref "core:prelude/string.wado//String";
     $local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(177), used: 0 };
     if @unlikely(local.tee new_used_27(0 + 88) > builtin::array_len($local_11.repr)) {
         cold_path;
@@ -1039,60 +1048,63 @@ fn "simd_shuffle.wado/$test_0_shuffle_names_a_byte_of_either_operand$cold3"(rota
     }
     start_28 = $local_11.used;
     $local_11.used = new_used_27;
-    builtin::array_copy<u8>(local.tee $load_2($local_11.repr), start_28, global:simd_shuffle.wado::$const_obj_21, 0, 20);
+    builtin::array_copy<u8>(local.tee $load_2($local_11.repr), start_28, global:simd_shuffle.wado::$const_obj_24, 0, 20);
     new_used_27 = start_28 + 20;
-    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_20, 0, 46);
+    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_23, 0, 46);
     new_used_27 = start_28 + 66;
-    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_19, 0, 4);
+    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_22, 0, 4);
     new_used_27 = start_28 + 70;
-    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_18, 0, 17);
+    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_21, 0, 17);
     start_28 = start_28 + 87;
-    builtin::array_copy<u8>($load_2, start_28, global:simd_shuffle.wado::$const_obj_17, 0, 1);
-    $sroa_$f_buf_165 = $local_11;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(25, $sroa_$f_buf_165);
+    builtin::array_copy<u8>($load_2, start_28, global:simd_shuffle.wado::$const_obj_20, 0, 1);
+    start_28 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar"(local.tee $sroa_$f_buf_181($local_11), 0, 2);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee self_62($sroa_$f_buf_181).repr, start_28, 25_i64, 2);
     if @unlikely(local.tee start_28($local_11.used + 52) > builtin::array_len($local_11.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_11, start_28);
     }
     new_used_27 = $local_11.used;
     $local_11.used = start_28;
-    builtin::array_copy<u8>(local.tee $load_2($local_11.repr), new_used_27, global:simd_shuffle.wado::$const_obj_52, 0, 43);
+    builtin::array_copy<u8>(local.tee $load_2($local_11.repr), new_used_27, global:simd_shuffle.wado::$const_obj_55, 0, 43);
     new_used_27 = new_used_27 + 43;
-    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_15, 0, 9);
-    f_70 = local.tee $sroa_$f_buf_165($local_11);
-    "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$scalar"(struct.new "core:prelude/types.wado//Box<v128>" { value: rotated }, f_70);
-    if @unlikely(local.tee new_used_27(f_70.used + 4) > builtin::array_len(f_70.repr)) {
+    builtin::array_copy<u8>($load_2, new_used_27, global:simd_shuffle.wado::$const_obj_18, 0, 9);
+    self_62 = local.tee $sroa_$f_buf_181($local_11);
+    "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$scalar"(rotated, self_62);
+    if @unlikely(local.tee new_used_27(self_62.used + 4) > builtin::array_len(self_62.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_70, new_used_27);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_62, new_used_27);
     }
-    start_28 = f_70.used;
-    f_70.used = new_used_27;
-    builtin::array_copy<u8>(local.tee $load_2(f_70.repr), start_28, global:simd_shuffle.wado::$const_obj_14, 0, 4);
-    if @unlikely(local.tee start_28(f_70.used + 5) > builtin::array_len($load_2)) {
+    start_28 = self_62.used;
+    self_62.used = new_used_27;
+    builtin::array_copy<u8>(local.tee $load_2(self_62.repr), start_28, global:simd_shuffle.wado::$const_obj_17, 0, 4);
+    if @unlikely(local.tee start_28(self_62.used + 5) > builtin::array_len($load_2)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_70, start_28);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_62, start_28);
     }
-    new_used_27 = f_70.used;
-    f_70.used = start_28;
-    builtin::array_copy<u8>(f_70.repr, new_used_27, global:simd_shuffle.wado::$const_obj_13, 0, 5);
+    new_used_27 = self_62.used;
+    self_62.used = start_28;
+    builtin::array_copy<u8>(self_62.repr, new_used_27, global:simd_shuffle.wado::$const_obj_16, 0, 5);
     if @unlikely(local.tee new_used_27($local_11.used + 19) > builtin::array_len($local_11.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_11, new_used_27);
     }
     start_28 = $local_11.used;
     $local_11.used = new_used_27;
-    builtin::array_copy<u8>(local.tee $load_2($local_11.repr), start_28, global:simd_shuffle.wado::$const_obj_10, 0, 1);
+    builtin::array_copy<u8>(local.tee $load_2($local_11.repr), start_28, global:simd_shuffle.wado::$const_obj_13, 0, 1);
     start_28 = start_28 + 1;
-    builtin::array_copy<u8>($load_2, start_28, global:simd_shuffle.wado::$const_obj_47, 0, 18);
-    $sroa_$f_buf_165 = $local_11;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($v1, $sroa_$f_buf_165);
+    builtin::array_copy<u8>($load_2, start_28, global:simd_shuffle.wado::$const_obj_50, 0, 18);
+    $sroa_$f_buf_181 = $local_11;
+    start_28 = $v1 < 0;
+    $v1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_136(x_136 = builtin::i64_extend_i32_s($v1); select i64(x_136 < 0_i64, 0_i64 - x_136, x_136)));
+    start_28 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar"($sroa_$f_buf_181, start_28, $v1);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_181.repr, start_28, x_136, $v1);
     if @unlikely(local.tee $v1($local_11.used + 1) > builtin::array_len($local_11.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_11, $v1);
     }
     start_28 = $local_11.used;
     $local_11.used = $v1;
-    builtin::array_copy<u8>($local_11.repr, start_28, global:simd_shuffle.wado::$const_obj_10, 0, 1);
+    builtin::array_copy<u8>($local_11.repr, start_28, global:simd_shuffle.wado::$const_obj_13, 0, 1);
     "core:rt/panic"($local_11.repr, $local_11.used);
     unreachable;
 }
@@ -1102,8 +1114,9 @@ fn "simd_shuffle.wado/$test_1_shuffle_may_repeat_and_reverse$cold0"(broadcast, $
     let $local_8: ref "core:prelude/string.wado//String";
     let new_used_18: i32;
     let start_19: i32;
-    let f_61: ref "core:prelude/string.wado//String";
-    let $sroa_$f_buf_156: ref "core:prelude/string.wado//String";
+    let self_53: ref "core:prelude/string.wado//String";
+    let x_127: i64;
+    let $sroa_$f_buf_172: ref "core:prelude/string.wado//String";
     $local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(185), used: 0 };
     if @unlikely(local.tee new_used_18(0 + 80) > builtin::array_len($local_8.repr)) {
         cold_path;
@@ -1111,60 +1124,63 @@ fn "simd_shuffle.wado/$test_1_shuffle_may_repeat_and_reverse$cold0"(broadcast, $
     }
     start_19 = $local_8.used;
     $local_8.used = new_used_18;
-    builtin::array_copy<u8>(local.tee $load_2($local_8.repr), start_19, global:simd_shuffle.wado::$const_obj_21, 0, 20);
+    builtin::array_copy<u8>(local.tee $load_2($local_8.repr), start_19, global:simd_shuffle.wado::$const_obj_24, 0, 20);
     new_used_18 = start_19 + 20;
-    builtin::array_copy<u8>($load_2, new_used_18, global:simd_shuffle.wado::$const_obj_68, 0, 38);
+    builtin::array_copy<u8>($load_2, new_used_18, global:simd_shuffle.wado::$const_obj_71, 0, 38);
     new_used_18 = start_19 + 58;
-    builtin::array_copy<u8>($load_2, new_used_18, global:simd_shuffle.wado::$const_obj_19, 0, 4);
+    builtin::array_copy<u8>($load_2, new_used_18, global:simd_shuffle.wado::$const_obj_22, 0, 4);
     new_used_18 = start_19 + 62;
-    builtin::array_copy<u8>($load_2, new_used_18, global:simd_shuffle.wado::$const_obj_18, 0, 17);
+    builtin::array_copy<u8>($load_2, new_used_18, global:simd_shuffle.wado::$const_obj_21, 0, 17);
     start_19 = start_19 + 79;
-    builtin::array_copy<u8>($load_2, start_19, global:simd_shuffle.wado::$const_obj_17, 0, 1);
-    $sroa_$f_buf_156 = $local_8;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(40, $sroa_$f_buf_156);
+    builtin::array_copy<u8>($load_2, start_19, global:simd_shuffle.wado::$const_obj_20, 0, 1);
+    start_19 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar"(local.tee $sroa_$f_buf_172($local_8), 0, 2);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee self_53($sroa_$f_buf_172).repr, start_19, 40_i64, 2);
     if @unlikely(local.tee start_19($local_8.used + 57) > builtin::array_len($local_8.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8, start_19);
     }
     new_used_18 = $local_8.used;
     $local_8.used = start_19;
-    builtin::array_copy<u8>(local.tee $load_2($local_8.repr), new_used_18, global:simd_shuffle.wado::$const_obj_64, 0, 46);
+    builtin::array_copy<u8>(local.tee $load_2($local_8.repr), new_used_18, global:simd_shuffle.wado::$const_obj_67, 0, 46);
     new_used_18 = new_used_18 + 46;
-    builtin::array_copy<u8>($load_2, new_used_18, global:simd_shuffle.wado::$const_obj_63, 0, 11);
-    f_61 = local.tee $sroa_$f_buf_156($local_8);
-    "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$scalar"(struct.new "core:prelude/types.wado//Box<v128>" { value: broadcast }, f_61);
-    if @unlikely(local.tee new_used_18(f_61.used + 4) > builtin::array_len(f_61.repr)) {
+    builtin::array_copy<u8>($load_2, new_used_18, global:simd_shuffle.wado::$const_obj_66, 0, 11);
+    self_53 = local.tee $sroa_$f_buf_172($local_8);
+    "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$scalar"(broadcast, self_53);
+    if @unlikely(local.tee new_used_18(self_53.used + 4) > builtin::array_len(self_53.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_61, new_used_18);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_53, new_used_18);
     }
-    start_19 = f_61.used;
-    f_61.used = new_used_18;
-    builtin::array_copy<u8>(local.tee $load_2(f_61.repr), start_19, global:simd_shuffle.wado::$const_obj_14, 0, 4);
-    if @unlikely(local.tee start_19(f_61.used + 5) > builtin::array_len($load_2)) {
+    start_19 = self_53.used;
+    self_53.used = new_used_18;
+    builtin::array_copy<u8>(local.tee $load_2(self_53.repr), start_19, global:simd_shuffle.wado::$const_obj_17, 0, 4);
+    if @unlikely(local.tee start_19(self_53.used + 5) > builtin::array_len($load_2)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_61, start_19);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_53, start_19);
     }
-    new_used_18 = f_61.used;
-    f_61.used = start_19;
-    builtin::array_copy<u8>(f_61.repr, new_used_18, global:simd_shuffle.wado::$const_obj_13, 0, 5);
+    new_used_18 = self_53.used;
+    self_53.used = start_19;
+    builtin::array_copy<u8>(self_53.repr, new_used_18, global:simd_shuffle.wado::$const_obj_16, 0, 5);
     if @unlikely(local.tee new_used_18($local_8.used + 22) > builtin::array_len($local_8.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8, new_used_18);
     }
     start_19 = $local_8.used;
     $local_8.used = new_used_18;
-    builtin::array_copy<u8>(local.tee $load_2($local_8.repr), start_19, global:simd_shuffle.wado::$const_obj_10, 0, 1);
+    builtin::array_copy<u8>(local.tee $load_2($local_8.repr), start_19, global:simd_shuffle.wado::$const_obj_13, 0, 1);
     start_19 = start_19 + 1;
-    builtin::array_copy<u8>($load_2, start_19, global:simd_shuffle.wado::$const_obj_59, 0, 21);
-    $sroa_$f_buf_156 = $local_8;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($v1, $sroa_$f_buf_156);
+    builtin::array_copy<u8>($load_2, start_19, global:simd_shuffle.wado::$const_obj_62, 0, 21);
+    $sroa_$f_buf_172 = $local_8;
+    start_19 = $v1 < 0;
+    $v1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_127(x_127 = builtin::i64_extend_i32_s($v1); select i64(x_127 < 0_i64, 0_i64 - x_127, x_127)));
+    start_19 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar"($sroa_$f_buf_172, start_19, $v1);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_172.repr, start_19, x_127, $v1);
     if @unlikely(local.tee $v1($local_8.used + 1) > builtin::array_len($local_8.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8, $v1);
     }
     start_19 = $local_8.used;
     $local_8.used = $v1;
-    builtin::array_copy<u8>($local_8.repr, start_19, global:simd_shuffle.wado::$const_obj_10, 0, 1);
+    builtin::array_copy<u8>($local_8.repr, start_19, global:simd_shuffle.wado::$const_obj_13, 0, 1);
     "core:rt/panic"($local_8.repr, $local_8.used);
     unreachable;
 }
@@ -1174,8 +1190,9 @@ fn "simd_shuffle.wado/$test_1_shuffle_may_repeat_and_reverse$cold1"(broadcast, $
     let $local_6: ref "core:prelude/string.wado//String";
     let new_used_18: i32;
     let start_19: i32;
-    let f_61: ref "core:prelude/string.wado//String";
-    let $sroa_$f_buf_156: ref "core:prelude/string.wado//String";
+    let self_53: ref "core:prelude/string.wado//String";
+    let x_127: i64;
+    let $sroa_$f_buf_172: ref "core:prelude/string.wado//String";
     $local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(183), used: 0 };
     if @unlikely(local.tee new_used_18(0 + 80) > builtin::array_len($local_6.repr)) {
         cold_path;
@@ -1183,60 +1200,63 @@ fn "simd_shuffle.wado/$test_1_shuffle_may_repeat_and_reverse$cold1"(broadcast, $
     }
     start_19 = $local_6.used;
     $local_6.used = new_used_18;
-    builtin::array_copy<u8>(local.tee $load_2($local_6.repr), start_19, global:simd_shuffle.wado::$const_obj_21, 0, 20);
+    builtin::array_copy<u8>(local.tee $load_2($local_6.repr), start_19, global:simd_shuffle.wado::$const_obj_24, 0, 20);
     new_used_18 = start_19 + 20;
-    builtin::array_copy<u8>($load_2, new_used_18, global:simd_shuffle.wado::$const_obj_68, 0, 38);
+    builtin::array_copy<u8>($load_2, new_used_18, global:simd_shuffle.wado::$const_obj_71, 0, 38);
     new_used_18 = start_19 + 58;
-    builtin::array_copy<u8>($load_2, new_used_18, global:simd_shuffle.wado::$const_obj_19, 0, 4);
+    builtin::array_copy<u8>($load_2, new_used_18, global:simd_shuffle.wado::$const_obj_22, 0, 4);
     new_used_18 = start_19 + 62;
-    builtin::array_copy<u8>($load_2, new_used_18, global:simd_shuffle.wado::$const_obj_18, 0, 17);
+    builtin::array_copy<u8>($load_2, new_used_18, global:simd_shuffle.wado::$const_obj_21, 0, 17);
     start_19 = start_19 + 79;
-    builtin::array_copy<u8>($load_2, start_19, global:simd_shuffle.wado::$const_obj_17, 0, 1);
-    $sroa_$f_buf_156 = $local_6;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(39, $sroa_$f_buf_156);
+    builtin::array_copy<u8>($load_2, start_19, global:simd_shuffle.wado::$const_obj_20, 0, 1);
+    start_19 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar"(local.tee $sroa_$f_buf_172($local_6), 0, 2);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee self_53($sroa_$f_buf_172).repr, start_19, 39_i64, 2);
     if @unlikely(local.tee start_19($local_6.used + 56) > builtin::array_len($local_6.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, start_19);
     }
     new_used_18 = $local_6.used;
     $local_6.used = start_19;
-    builtin::array_copy<u8>(local.tee $load_2($local_6.repr), new_used_18, global:simd_shuffle.wado::$const_obj_76, 0, 45);
+    builtin::array_copy<u8>(local.tee $load_2($local_6.repr), new_used_18, global:simd_shuffle.wado::$const_obj_79, 0, 45);
     new_used_18 = new_used_18 + 45;
-    builtin::array_copy<u8>($load_2, new_used_18, global:simd_shuffle.wado::$const_obj_63, 0, 11);
-    f_61 = local.tee $sroa_$f_buf_156($local_6);
-    "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$scalar"(struct.new "core:prelude/types.wado//Box<v128>" { value: broadcast }, f_61);
-    if @unlikely(local.tee new_used_18(f_61.used + 4) > builtin::array_len(f_61.repr)) {
+    builtin::array_copy<u8>($load_2, new_used_18, global:simd_shuffle.wado::$const_obj_66, 0, 11);
+    self_53 = local.tee $sroa_$f_buf_172($local_6);
+    "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$scalar"(broadcast, self_53);
+    if @unlikely(local.tee new_used_18(self_53.used + 4) > builtin::array_len(self_53.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_61, new_used_18);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_53, new_used_18);
     }
-    start_19 = f_61.used;
-    f_61.used = new_used_18;
-    builtin::array_copy<u8>(local.tee $load_2(f_61.repr), start_19, global:simd_shuffle.wado::$const_obj_14, 0, 4);
-    if @unlikely(local.tee start_19(f_61.used + 5) > builtin::array_len($load_2)) {
+    start_19 = self_53.used;
+    self_53.used = new_used_18;
+    builtin::array_copy<u8>(local.tee $load_2(self_53.repr), start_19, global:simd_shuffle.wado::$const_obj_17, 0, 4);
+    if @unlikely(local.tee start_19(self_53.used + 5) > builtin::array_len($load_2)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_61, start_19);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_53, start_19);
     }
-    new_used_18 = f_61.used;
-    f_61.used = start_19;
-    builtin::array_copy<u8>(f_61.repr, new_used_18, global:simd_shuffle.wado::$const_obj_13, 0, 5);
+    new_used_18 = self_53.used;
+    self_53.used = start_19;
+    builtin::array_copy<u8>(self_53.repr, new_used_18, global:simd_shuffle.wado::$const_obj_16, 0, 5);
     if @unlikely(local.tee new_used_18($local_6.used + 21) > builtin::array_len($local_6.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, new_used_18);
     }
     start_19 = $local_6.used;
     $local_6.used = new_used_18;
-    builtin::array_copy<u8>(local.tee $load_2($local_6.repr), start_19, global:simd_shuffle.wado::$const_obj_10, 0, 1);
+    builtin::array_copy<u8>(local.tee $load_2($local_6.repr), start_19, global:simd_shuffle.wado::$const_obj_13, 0, 1);
     start_19 = start_19 + 1;
-    builtin::array_copy<u8>($load_2, start_19, global:simd_shuffle.wado::$const_obj_71, 0, 20);
-    $sroa_$f_buf_156 = $local_6;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($v1, $sroa_$f_buf_156);
+    builtin::array_copy<u8>($load_2, start_19, global:simd_shuffle.wado::$const_obj_74, 0, 20);
+    $sroa_$f_buf_172 = $local_6;
+    start_19 = $v1 < 0;
+    $v1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_127(x_127 = builtin::i64_extend_i32_s($v1); select i64(x_127 < 0_i64, 0_i64 - x_127, x_127)));
+    start_19 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar"($sroa_$f_buf_172, start_19, $v1);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_172.repr, start_19, x_127, $v1);
     if @unlikely(local.tee $v1($local_6.used + 1) > builtin::array_len($local_6.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, $v1);
     }
     start_19 = $local_6.used;
     $local_6.used = $v1;
-    builtin::array_copy<u8>($local_6.repr, start_19, global:simd_shuffle.wado::$const_obj_10, 0, 1);
+    builtin::array_copy<u8>($local_6.repr, start_19, global:simd_shuffle.wado::$const_obj_13, 0, 1);
     "core:rt/panic"($local_6.repr, $local_6.used);
     unreachable;
 }
@@ -1246,8 +1266,9 @@ fn "simd_shuffle.wado/$test_2_swizzle_takes_its_indices_at_runtime__and_zeroes_a
     let $local_13: ref "core:prelude/string.wado//String";
     let new_used_23: i32;
     let start_24: i32;
-    let f_66: ref "core:prelude/string.wado//String";
-    let $sroa_$f_buf_161: ref "core:prelude/string.wado//String";
+    let self_58: ref "core:prelude/string.wado//String";
+    let x_132: i64;
+    let $sroa_$f_buf_177: ref "core:prelude/string.wado//String";
     $local_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(167), used: 0 };
     if @unlikely(local.tee new_used_23(0 + 118) > builtin::array_len($local_13.repr)) {
         cold_path;
@@ -1255,63 +1276,66 @@ fn "simd_shuffle.wado/$test_2_swizzle_takes_its_indices_at_runtime__and_zeroes_a
     }
     start_24 = $local_13.used;
     $local_13.used = new_used_23;
-    builtin::array_copy<u8>(local.tee $load_2($local_13.repr), start_24, global:simd_shuffle.wado::$const_obj_21, 0, 20);
+    builtin::array_copy<u8>(local.tee $load_2($local_13.repr), start_24, global:simd_shuffle.wado::$const_obj_24, 0, 20);
     new_used_23 = start_24 + 20;
-    if ref.is_null(global:simd_shuffle.wado::$const_obj_92) {
-        global:simd_shuffle.wado::$const_obj_92 = array.new_data<u8>("$test_2_swizzle_takes_its_indices_at_runtime__and_zeroes_an_out_of_range_one");
+    if ref.is_null(global:simd_shuffle.wado::$const_obj_95) {
+        global:simd_shuffle.wado::$const_obj_95 = array.new_data<u8>("$test_2_swizzle_takes_its_indices_at_runtime__and_zeroes_an_out_of_range_one");
     }
-    builtin::array_copy<u8>($load_2, new_used_23, global:simd_shuffle.wado::$const_obj_92, 0, 76);
+    builtin::array_copy<u8>($load_2, new_used_23, global:simd_shuffle.wado::$const_obj_95, 0, 76);
     new_used_23 = start_24 + 96;
-    builtin::array_copy<u8>($load_2, new_used_23, global:simd_shuffle.wado::$const_obj_19, 0, 4);
+    builtin::array_copy<u8>($load_2, new_used_23, global:simd_shuffle.wado::$const_obj_22, 0, 4);
     new_used_23 = start_24 + 100;
-    builtin::array_copy<u8>($load_2, new_used_23, global:simd_shuffle.wado::$const_obj_18, 0, 17);
+    builtin::array_copy<u8>($load_2, new_used_23, global:simd_shuffle.wado::$const_obj_21, 0, 17);
     start_24 = start_24 + 117;
-    builtin::array_copy<u8>($load_2, start_24, global:simd_shuffle.wado::$const_obj_17, 0, 1);
-    $sroa_$f_buf_161 = $local_13;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(51, $sroa_$f_buf_161);
+    builtin::array_copy<u8>($load_2, start_24, global:simd_shuffle.wado::$const_obj_20, 0, 1);
+    start_24 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar"(local.tee $sroa_$f_buf_177($local_13), 0, 2);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee self_58($sroa_$f_buf_177).repr, start_24, 51_i64, 2);
     if @unlikely(local.tee start_24($local_13.used + 42) > builtin::array_len($local_13.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_13, start_24);
     }
     new_used_23 = $local_13.used;
     $local_13.used = start_24;
-    builtin::array_copy<u8>(local.tee $load_2($local_13.repr), new_used_23, global:simd_shuffle.wado::$const_obj_88, 0, 34);
+    builtin::array_copy<u8>(local.tee $load_2($local_13.repr), new_used_23, global:simd_shuffle.wado::$const_obj_91, 0, 34);
     new_used_23 = new_used_23 + 34;
-    builtin::array_copy<u8>($load_2, new_used_23, global:simd_shuffle.wado::$const_obj_87, 0, 8);
-    f_66 = local.tee $sroa_$f_buf_161($local_13);
-    "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$scalar"(struct.new "core:prelude/types.wado//Box<v128>" { value: picked }, f_66);
-    if @unlikely(local.tee new_used_23(f_66.used + 4) > builtin::array_len(f_66.repr)) {
+    builtin::array_copy<u8>($load_2, new_used_23, global:simd_shuffle.wado::$const_obj_90, 0, 8);
+    self_58 = local.tee $sroa_$f_buf_177($local_13);
+    "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$scalar"(picked, self_58);
+    if @unlikely(local.tee new_used_23(self_58.used + 4) > builtin::array_len(self_58.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_66, new_used_23);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_58, new_used_23);
     }
-    start_24 = f_66.used;
-    f_66.used = new_used_23;
-    builtin::array_copy<u8>(local.tee $load_2(f_66.repr), start_24, global:simd_shuffle.wado::$const_obj_14, 0, 4);
-    if @unlikely(local.tee start_24(f_66.used + 5) > builtin::array_len($load_2)) {
+    start_24 = self_58.used;
+    self_58.used = new_used_23;
+    builtin::array_copy<u8>(local.tee $load_2(self_58.repr), start_24, global:simd_shuffle.wado::$const_obj_17, 0, 4);
+    if @unlikely(local.tee start_24(self_58.used + 5) > builtin::array_len($load_2)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_66, start_24);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_58, start_24);
     }
-    new_used_23 = f_66.used;
-    f_66.used = start_24;
-    builtin::array_copy<u8>(f_66.repr, new_used_23, global:simd_shuffle.wado::$const_obj_13, 0, 5);
+    new_used_23 = self_58.used;
+    self_58.used = start_24;
+    builtin::array_copy<u8>(self_58.repr, new_used_23, global:simd_shuffle.wado::$const_obj_16, 0, 5);
     if @unlikely(local.tee new_used_23($local_13.used + 19) > builtin::array_len($local_13.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_13, new_used_23);
     }
     start_24 = $local_13.used;
     $local_13.used = new_used_23;
-    builtin::array_copy<u8>(local.tee $load_2($local_13.repr), start_24, global:simd_shuffle.wado::$const_obj_10, 0, 1);
+    builtin::array_copy<u8>(local.tee $load_2($local_13.repr), start_24, global:simd_shuffle.wado::$const_obj_13, 0, 1);
     start_24 = start_24 + 1;
-    builtin::array_copy<u8>($load_2, start_24, global:simd_shuffle.wado::$const_obj_83, 0, 18);
-    $sroa_$f_buf_161 = $local_13;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($v1, $sroa_$f_buf_161);
+    builtin::array_copy<u8>($load_2, start_24, global:simd_shuffle.wado::$const_obj_86, 0, 18);
+    $sroa_$f_buf_177 = $local_13;
+    start_24 = $v1 < 0;
+    $v1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_132(x_132 = builtin::i64_extend_i32_s($v1); select i64(x_132 < 0_i64, 0_i64 - x_132, x_132)));
+    start_24 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar"($sroa_$f_buf_177, start_24, $v1);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_177.repr, start_24, x_132, $v1);
     if @unlikely(local.tee $v1($local_13.used + 1) > builtin::array_len($local_13.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_13, $v1);
     }
     start_24 = $local_13.used;
     $local_13.used = $v1;
-    builtin::array_copy<u8>($local_13.repr, start_24, global:simd_shuffle.wado::$const_obj_10, 0, 1);
+    builtin::array_copy<u8>($local_13.repr, start_24, global:simd_shuffle.wado::$const_obj_13, 0, 1);
     "core:rt/panic"($local_13.repr, $local_13.used);
     unreachable;
 }
@@ -1321,8 +1345,9 @@ fn "simd_shuffle.wado/$test_2_swizzle_takes_its_indices_at_runtime__and_zeroes_a
     let $local_11: ref "core:prelude/string.wado//String";
     let new_used_23: i32;
     let start_24: i32;
-    let f_66: ref "core:prelude/string.wado//String";
-    let $sroa_$f_buf_161: ref "core:prelude/string.wado//String";
+    let self_58: ref "core:prelude/string.wado//String";
+    let x_132: i64;
+    let $sroa_$f_buf_177: ref "core:prelude/string.wado//String";
     $local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(176), used: 0 };
     if @unlikely(local.tee new_used_23(0 + 118) > builtin::array_len($local_11.repr)) {
         cold_path;
@@ -1330,63 +1355,66 @@ fn "simd_shuffle.wado/$test_2_swizzle_takes_its_indices_at_runtime__and_zeroes_a
     }
     start_24 = $local_11.used;
     $local_11.used = new_used_23;
-    builtin::array_copy<u8>(local.tee $load_2($local_11.repr), start_24, global:simd_shuffle.wado::$const_obj_21, 0, 20);
+    builtin::array_copy<u8>(local.tee $load_2($local_11.repr), start_24, global:simd_shuffle.wado::$const_obj_24, 0, 20);
     new_used_23 = start_24 + 20;
-    if ref.is_null(global:simd_shuffle.wado::$const_obj_104) {
-        global:simd_shuffle.wado::$const_obj_104 = array.new_data<u8>("$test_2_swizzle_takes_its_indices_at_runtime__and_zeroes_an_out_of_range_one");
+    if ref.is_null(global:simd_shuffle.wado::$const_obj_107) {
+        global:simd_shuffle.wado::$const_obj_107 = array.new_data<u8>("$test_2_swizzle_takes_its_indices_at_runtime__and_zeroes_an_out_of_range_one");
     }
-    builtin::array_copy<u8>($load_2, new_used_23, global:simd_shuffle.wado::$const_obj_104, 0, 76);
+    builtin::array_copy<u8>($load_2, new_used_23, global:simd_shuffle.wado::$const_obj_107, 0, 76);
     new_used_23 = start_24 + 96;
-    builtin::array_copy<u8>($load_2, new_used_23, global:simd_shuffle.wado::$const_obj_19, 0, 4);
+    builtin::array_copy<u8>($load_2, new_used_23, global:simd_shuffle.wado::$const_obj_22, 0, 4);
     new_used_23 = start_24 + 100;
-    builtin::array_copy<u8>($load_2, new_used_23, global:simd_shuffle.wado::$const_obj_18, 0, 17);
+    builtin::array_copy<u8>($load_2, new_used_23, global:simd_shuffle.wado::$const_obj_21, 0, 17);
     start_24 = start_24 + 117;
-    builtin::array_copy<u8>($load_2, start_24, global:simd_shuffle.wado::$const_obj_17, 0, 1);
-    $sroa_$f_buf_161 = $local_11;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(50, $sroa_$f_buf_161);
+    builtin::array_copy<u8>($load_2, start_24, global:simd_shuffle.wado::$const_obj_20, 0, 1);
+    start_24 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar"(local.tee $sroa_$f_buf_177($local_11), 0, 2);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee self_58($sroa_$f_buf_177).repr, start_24, 50_i64, 2);
     if @unlikely(local.tee start_24($local_11.used + 51) > builtin::array_len($local_11.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_11, start_24);
     }
     new_used_23 = $local_11.used;
     $local_11.used = start_24;
-    builtin::array_copy<u8>(local.tee $load_2($local_11.repr), new_used_23, global:simd_shuffle.wado::$const_obj_100, 0, 43);
+    builtin::array_copy<u8>(local.tee $load_2($local_11.repr), new_used_23, global:simd_shuffle.wado::$const_obj_103, 0, 43);
     new_used_23 = new_used_23 + 43;
-    builtin::array_copy<u8>($load_2, new_used_23, global:simd_shuffle.wado::$const_obj_87, 0, 8);
-    f_66 = local.tee $sroa_$f_buf_161($local_11);
-    "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$scalar"(struct.new "core:prelude/types.wado//Box<v128>" { value: picked }, f_66);
-    if @unlikely(local.tee new_used_23(f_66.used + 4) > builtin::array_len(f_66.repr)) {
+    builtin::array_copy<u8>($load_2, new_used_23, global:simd_shuffle.wado::$const_obj_90, 0, 8);
+    self_58 = local.tee $sroa_$f_buf_177($local_11);
+    "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$scalar"(picked, self_58);
+    if @unlikely(local.tee new_used_23(self_58.used + 4) > builtin::array_len(self_58.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_66, new_used_23);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_58, new_used_23);
     }
-    start_24 = f_66.used;
-    f_66.used = new_used_23;
-    builtin::array_copy<u8>(local.tee $load_2(f_66.repr), start_24, global:simd_shuffle.wado::$const_obj_14, 0, 4);
-    if @unlikely(local.tee start_24(f_66.used + 5) > builtin::array_len($load_2)) {
+    start_24 = self_58.used;
+    self_58.used = new_used_23;
+    builtin::array_copy<u8>(local.tee $load_2(self_58.repr), start_24, global:simd_shuffle.wado::$const_obj_17, 0, 4);
+    if @unlikely(local.tee start_24(self_58.used + 5) > builtin::array_len($load_2)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_66, start_24);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_58, start_24);
     }
-    new_used_23 = f_66.used;
-    f_66.used = start_24;
-    builtin::array_copy<u8>(f_66.repr, new_used_23, global:simd_shuffle.wado::$const_obj_13, 0, 5);
+    new_used_23 = self_58.used;
+    self_58.used = start_24;
+    builtin::array_copy<u8>(self_58.repr, new_used_23, global:simd_shuffle.wado::$const_obj_16, 0, 5);
     if @unlikely(local.tee new_used_23($local_11.used + 19) > builtin::array_len($local_11.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_11, new_used_23);
     }
     start_24 = $local_11.used;
     $local_11.used = new_used_23;
-    builtin::array_copy<u8>(local.tee $load_2($local_11.repr), start_24, global:simd_shuffle.wado::$const_obj_10, 0, 1);
+    builtin::array_copy<u8>(local.tee $load_2($local_11.repr), start_24, global:simd_shuffle.wado::$const_obj_13, 0, 1);
     start_24 = start_24 + 1;
-    builtin::array_copy<u8>($load_2, start_24, global:simd_shuffle.wado::$const_obj_95, 0, 18);
-    $sroa_$f_buf_161 = $local_11;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($v1, $sroa_$f_buf_161);
+    builtin::array_copy<u8>($load_2, start_24, global:simd_shuffle.wado::$const_obj_98, 0, 18);
+    $sroa_$f_buf_177 = $local_11;
+    start_24 = $v1 < 0;
+    $v1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_132(x_132 = builtin::i64_extend_i32_s($v1); select i64(x_132 < 0_i64, 0_i64 - x_132, x_132)));
+    start_24 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar"($sroa_$f_buf_177, start_24, $v1);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_177.repr, start_24, x_132, $v1);
     if @unlikely(local.tee $v1($local_11.used + 1) > builtin::array_len($local_11.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_11, $v1);
     }
     start_24 = $local_11.used;
     $local_11.used = $v1;
-    builtin::array_copy<u8>($local_11.repr, start_24, global:simd_shuffle.wado::$const_obj_10, 0, 1);
+    builtin::array_copy<u8>($local_11.repr, start_24, global:simd_shuffle.wado::$const_obj_13, 0, 1);
     "core:rt/panic"($local_11.repr, $local_11.used);
     unreachable;
 }
@@ -1396,8 +1424,9 @@ fn "simd_shuffle.wado/$test_2_swizzle_takes_its_indices_at_runtime__and_zeroes_a
     let $local_9: ref "core:prelude/string.wado//String";
     let new_used_23: i32;
     let start_24: i32;
-    let f_66: ref "core:prelude/string.wado//String";
-    let $sroa_$f_buf_161: ref "core:prelude/string.wado//String";
+    let self_58: ref "core:prelude/string.wado//String";
+    let x_132: i64;
+    let $sroa_$f_buf_177: ref "core:prelude/string.wado//String";
     $local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(174), used: 0 };
     if @unlikely(local.tee new_used_23(0 + 118) > builtin::array_len($local_9.repr)) {
         cold_path;
@@ -1405,65 +1434,90 @@ fn "simd_shuffle.wado/$test_2_swizzle_takes_its_indices_at_runtime__and_zeroes_a
     }
     start_24 = $local_9.used;
     $local_9.used = new_used_23;
-    builtin::array_copy<u8>(local.tee $load_2($local_9.repr), start_24, global:simd_shuffle.wado::$const_obj_21, 0, 20);
+    builtin::array_copy<u8>(local.tee $load_2($local_9.repr), start_24, global:simd_shuffle.wado::$const_obj_24, 0, 20);
     new_used_23 = start_24 + 20;
-    if ref.is_null(global:simd_shuffle.wado::$const_obj_116) {
-        global:simd_shuffle.wado::$const_obj_116 = array.new_data<u8>("$test_2_swizzle_takes_its_indices_at_runtime__and_zeroes_an_out_of_range_one");
+    if ref.is_null(global:simd_shuffle.wado::$const_obj_119) {
+        global:simd_shuffle.wado::$const_obj_119 = array.new_data<u8>("$test_2_swizzle_takes_its_indices_at_runtime__and_zeroes_an_out_of_range_one");
     }
-    builtin::array_copy<u8>($load_2, new_used_23, global:simd_shuffle.wado::$const_obj_116, 0, 76);
+    builtin::array_copy<u8>($load_2, new_used_23, global:simd_shuffle.wado::$const_obj_119, 0, 76);
     new_used_23 = start_24 + 96;
-    builtin::array_copy<u8>($load_2, new_used_23, global:simd_shuffle.wado::$const_obj_19, 0, 4);
+    builtin::array_copy<u8>($load_2, new_used_23, global:simd_shuffle.wado::$const_obj_22, 0, 4);
     new_used_23 = start_24 + 100;
-    builtin::array_copy<u8>($load_2, new_used_23, global:simd_shuffle.wado::$const_obj_18, 0, 17);
+    builtin::array_copy<u8>($load_2, new_used_23, global:simd_shuffle.wado::$const_obj_21, 0, 17);
     start_24 = start_24 + 117;
-    builtin::array_copy<u8>($load_2, start_24, global:simd_shuffle.wado::$const_obj_17, 0, 1);
-    $sroa_$f_buf_161 = $local_9;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(49, $sroa_$f_buf_161);
+    builtin::array_copy<u8>($load_2, start_24, global:simd_shuffle.wado::$const_obj_20, 0, 1);
+    start_24 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar"(local.tee $sroa_$f_buf_177($local_9), 0, 2);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee self_58($sroa_$f_buf_177).repr, start_24, 49_i64, 2);
     if @unlikely(local.tee start_24($local_9.used + 50) > builtin::array_len($local_9.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_9, start_24);
     }
     new_used_23 = $local_9.used;
     $local_9.used = start_24;
-    builtin::array_copy<u8>(local.tee $load_2($local_9.repr), new_used_23, global:simd_shuffle.wado::$const_obj_112, 0, 42);
+    builtin::array_copy<u8>(local.tee $load_2($local_9.repr), new_used_23, global:simd_shuffle.wado::$const_obj_115, 0, 42);
     new_used_23 = new_used_23 + 42;
-    builtin::array_copy<u8>($load_2, new_used_23, global:simd_shuffle.wado::$const_obj_87, 0, 8);
-    f_66 = local.tee $sroa_$f_buf_161($local_9);
-    "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$scalar"(struct.new "core:prelude/types.wado//Box<v128>" { value: picked }, f_66);
-    if @unlikely(local.tee new_used_23(f_66.used + 4) > builtin::array_len(f_66.repr)) {
+    builtin::array_copy<u8>($load_2, new_used_23, global:simd_shuffle.wado::$const_obj_90, 0, 8);
+    self_58 = local.tee $sroa_$f_buf_177($local_9);
+    "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$scalar"(picked, self_58);
+    if @unlikely(local.tee new_used_23(self_58.used + 4) > builtin::array_len(self_58.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_66, new_used_23);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_58, new_used_23);
     }
-    start_24 = f_66.used;
-    f_66.used = new_used_23;
-    builtin::array_copy<u8>(local.tee $load_2(f_66.repr), start_24, global:simd_shuffle.wado::$const_obj_14, 0, 4);
-    if @unlikely(local.tee start_24(f_66.used + 5) > builtin::array_len($load_2)) {
+    start_24 = self_58.used;
+    self_58.used = new_used_23;
+    builtin::array_copy<u8>(local.tee $load_2(self_58.repr), start_24, global:simd_shuffle.wado::$const_obj_17, 0, 4);
+    if @unlikely(local.tee start_24(self_58.used + 5) > builtin::array_len($load_2)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_66, start_24);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_58, start_24);
     }
-    new_used_23 = f_66.used;
-    f_66.used = start_24;
-    builtin::array_copy<u8>(f_66.repr, new_used_23, global:simd_shuffle.wado::$const_obj_13, 0, 5);
+    new_used_23 = self_58.used;
+    self_58.used = start_24;
+    builtin::array_copy<u8>(self_58.repr, new_used_23, global:simd_shuffle.wado::$const_obj_16, 0, 5);
     if @unlikely(local.tee new_used_23($local_9.used + 18) > builtin::array_len($local_9.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_9, new_used_23);
     }
     start_24 = $local_9.used;
     $local_9.used = new_used_23;
-    builtin::array_copy<u8>(local.tee $load_2($local_9.repr), start_24, global:simd_shuffle.wado::$const_obj_10, 0, 1);
+    builtin::array_copy<u8>(local.tee $load_2($local_9.repr), start_24, global:simd_shuffle.wado::$const_obj_13, 0, 1);
     start_24 = start_24 + 1;
-    builtin::array_copy<u8>($load_2, start_24, global:simd_shuffle.wado::$const_obj_107, 0, 17);
-    $sroa_$f_buf_161 = $local_9;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($v1, $sroa_$f_buf_161);
+    builtin::array_copy<u8>($load_2, start_24, global:simd_shuffle.wado::$const_obj_110, 0, 17);
+    $sroa_$f_buf_177 = $local_9;
+    start_24 = $v1 < 0;
+    $v1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_132(x_132 = builtin::i64_extend_i32_s($v1); select i64(x_132 < 0_i64, 0_i64 - x_132, x_132)));
+    start_24 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar"($sroa_$f_buf_177, start_24, $v1);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_177.repr, start_24, x_132, $v1);
     if @unlikely(local.tee $v1($local_9.used + 1) > builtin::array_len($local_9.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_9, $v1);
     }
     start_24 = $local_9.used;
     $local_9.used = $v1;
-    builtin::array_copy<u8>($local_9.repr, start_24, global:simd_shuffle.wado::$const_obj_10, 0, 1);
+    builtin::array_copy<u8>($local_9.repr, start_24, global:simd_shuffle.wado::$const_obj_13, 0, 1);
     "core:rt/panic"($local_9.repr, $local_9.used);
     unreachable;
+}
+
+fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
+    let q: u64;
+    let pair: i32;
+    let tens: i32;
+    digit_count = offset + digit_count;
+    b219: block {
+        l220: loop {
+            break_if b219 (digit_count - offset) < 2;
+            q = val /u 100_i64;
+            tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
+            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
+            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            digit_count = digit_count - 2;
+            val = q;
+            continue l220;
+        };
+    };
+    if digit_count > offset {
+        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+    }
 }
 
 fn "core:prelude/primitive.wado/count_digits_u64"(val) {
@@ -1557,17 +1611,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b240: block {
-        l241: loop {
-            break_if b240 i >= $mv$data$end;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b243: block {
+        l244: loop {
+            break_if b243 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l241;
+            continue l244;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l243: loop {
+        l246: loop {
             ptr_15 = ptr_13 + i;
             count_16 = $mv$data$end - i;
             if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
@@ -1597,7 +1651,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return count_16;
             }
-            continue l243;
+            continue l246;
         };
     };
 }
@@ -1714,88 +1768,86 @@ fn "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$s
     let n_59: i32;
     let new_used_63: i32;
     let start_64: i32;
-    let $licm_value_68: v128;
-    let $tmpl_buf_69: ref "core:prelude/string.wado//String";
+    let $tmpl_buf_68: ref "core:prelude/string.wado//String";
     if @unlikely(local.tee new_used_18(f.used + 7) > builtin::array_len(f.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used_18);
     }
     start_19 = f.used;
     f.used = new_used_18;
-    builtin::array_copy<u8>(f.repr, start_19, global:core:prelude/primitive.wado::$const_obj_119, 0, 7);
+    builtin::array_copy<u8>(f.repr, start_19, global:core:prelude/primitive.wado::$const_obj_126, 0, 7);
     start_19 = 0;
-    $licm_value_68 = self.value;
-    $tmpl_buf_69 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    b266: block {
-        l267: loop {
-            break_if b266 start_19 >= 16;
-            byte_3 = b268: block -> i32 {
-                b269: block {
-                    b270: block {
-                        b271: block {
-                            b272: block {
-                                b273: block {
-                                    b274: block {
-                                        b275: block {
-                                            b276: block {
-                                                b277: block {
-                                                    b278: block {
-                                                        b279: block {
-                                                            b280: block {
-                                                                b281: block {
-                                                                    b282: block {
-                                                                        b283: block {
-                                                                            b284: block {
+    $tmpl_buf_68 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    b269: block {
+        l270: loop {
+            break_if b269 start_19 >= 16;
+            byte_3 = b271: block -> i32 {
+                b272: block {
+                    b273: block {
+                        b274: block {
+                            b275: block {
+                                b276: block {
+                                    b277: block {
+                                        b278: block {
+                                            b279: block {
+                                                b280: block {
+                                                    b281: block {
+                                                        b282: block {
+                                                            b283: block {
+                                                                b284: block {
+                                                                    b285: block {
+                                                                        b286: block {
+                                                                            b287: block {
                                                                                 br_table start_19 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] default=0;
                                                                             };
-                                                                            i8x16.extract_lane_u(15, $licm_value_68);
-                                                                            break b268;
+                                                                            i8x16.extract_lane_u(15, self);
+                                                                            break b271;
                                                                         };
-                                                                        i8x16.extract_lane_u(0, $licm_value_68);
-                                                                        break b268;
+                                                                        i8x16.extract_lane_u(0, self);
+                                                                        break b271;
                                                                     };
-                                                                    i8x16.extract_lane_u(1, $licm_value_68);
-                                                                    break b268;
+                                                                    i8x16.extract_lane_u(1, self);
+                                                                    break b271;
                                                                 };
-                                                                i8x16.extract_lane_u(2, $licm_value_68);
-                                                                break b268;
+                                                                i8x16.extract_lane_u(2, self);
+                                                                break b271;
                                                             };
-                                                            i8x16.extract_lane_u(3, $licm_value_68);
-                                                            break b268;
+                                                            i8x16.extract_lane_u(3, self);
+                                                            break b271;
                                                         };
-                                                        i8x16.extract_lane_u(4, $licm_value_68);
-                                                        break b268;
+                                                        i8x16.extract_lane_u(4, self);
+                                                        break b271;
                                                     };
-                                                    i8x16.extract_lane_u(5, $licm_value_68);
-                                                    break b268;
+                                                    i8x16.extract_lane_u(5, self);
+                                                    break b271;
                                                 };
-                                                i8x16.extract_lane_u(6, $licm_value_68);
-                                                break b268;
+                                                i8x16.extract_lane_u(6, self);
+                                                break b271;
                                             };
-                                            i8x16.extract_lane_u(7, $licm_value_68);
-                                            break b268;
+                                            i8x16.extract_lane_u(7, self);
+                                            break b271;
                                         };
-                                        i8x16.extract_lane_u(8, $licm_value_68);
-                                        break b268;
+                                        i8x16.extract_lane_u(8, self);
+                                        break b271;
                                     };
-                                    i8x16.extract_lane_u(9, $licm_value_68);
-                                    break b268;
+                                    i8x16.extract_lane_u(9, self);
+                                    break b271;
                                 };
-                                i8x16.extract_lane_u(10, $licm_value_68);
-                                break b268;
+                                i8x16.extract_lane_u(10, self);
+                                break b271;
                             };
-                            i8x16.extract_lane_u(11, $licm_value_68);
-                            break b268;
+                            i8x16.extract_lane_u(11, self);
+                            break b271;
                         };
-                        i8x16.extract_lane_u(12, $licm_value_68);
-                        break b268;
+                        i8x16.extract_lane_u(12, self);
+                        break b271;
                     };
-                    i8x16.extract_lane_u(13, $licm_value_68);
-                    break b268;
+                    i8x16.extract_lane_u(13, self);
+                    break b271;
                 };
-                i8x16.extract_lane_u(14, $licm_value_68);
+                i8x16.extract_lane_u(14, self);
             } & 255;
-            $tmpl_buf_69.used = 0;
+            $tmpl_buf_68.used = 0;
             val_i64_31 = builtin::i64_extend_i32_u(byte_3);
             byte_3 = $inline_count_digits_u64_base_10: block -> i32 {
                 if val_i64_31 == 0_i64 {
@@ -1803,36 +1855,36 @@ fn "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$s
                 }
                 break $inline_count_digits_u64_base_10: (((64 - builtin::i32_wrap_i64(builtin::i64_clz(val_i64_31))) - 1) / 4) + 1;
             };
-            offset_35 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($tmpl_buf_69, 0, byte_3);
-            arr = $tmpl_buf_69.repr;
+            offset_35 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($tmpl_buf_68, 0, byte_3);
+            arr = $tmpl_buf_68.repr;
             byte_3 = offset_35 + byte_3;
             if val_i64_31 == 0_i64 {
                 builtin::array_set_u8(arr, offset_35, 48);
             } else {
                 temp = val_i64_31;
-                b287: block {
-                    l288: loop {
-                        break_if b287 temp == 0_i64;
+                b290: block {
+                    l291: loop {
+                        break_if b290 temp == 0_i64;
                         byte_3 = byte_3 - 1;
                         new_used_18 = builtin::i32_wrap_i64(temp & 15_i64);
                         builtin::array_set_u8(arr, byte_3, select i32(new_used_18 < 10, 48 + new_used_18, (97 + new_used_18) - 10) & 255);
                         temp = temp >>u 4_i64;
-                        continue l288;
+                        continue l291;
                     };
                 };
             }
             $inline_core_prelude_string_wado_String__internal_push_string_16: block {
-                break_if $inline_core_prelude_string_wado_String__internal_push_string_16 local.tee n_59($tmpl_buf_69.used) == 0;
+                break_if $inline_core_prelude_string_wado_String__internal_push_string_16 local.tee n_59($tmpl_buf_68.used) == 0;
                 if @unlikely(local.tee new_used_63(f.used + n_59) > builtin::array_len(f.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used_63);
                 }
                 start_64 = f.used;
                 f.used = new_used_63;
-                builtin::array_copy<u8>(f.repr, start_64, $tmpl_buf_69.repr, 0, n_59);
+                builtin::array_copy<u8>(f.repr, start_64, $tmpl_buf_68.repr, 0, n_59);
             };
             start_19 = start_19 + 1;
-            continue l267;
+            continue l270;
         };
     };
     if @unlikely(local.tee start_64(f.used + 1) > builtin::array_len(f.repr)) {
@@ -1879,9 +1931,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     } else {
     }
     new_used_25 = 0;
-    b297: block {
-        l298: loop {
-            break_if b297 new_used_25 >= content_len;
+    b300: block {
+        l301: loop {
+            break_if b300 new_used_25 >= content_len;
             if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
@@ -1890,7 +1942,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
             self.used = is_negative;
             builtin::array_set_u8(self.repr, start_26, 48);
             new_used_25 = new_used_25 + 1;
-            continue l298;
+            continue l301;
         };
     };
     if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
@@ -1921,29 +1973,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     start_26 = self.used;
     self.used = digit_count;
     return start_26;
-}
-
-fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
-    let is_negative: bool;
-    let x: i64;
-    let arr: ref Array<u8>;
-    let i: i32;
-    is_negative = self < 0;
-    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar"(f, is_negative, self);
-    arr = f.repr;
-    is_negative = is_negative + self;
-    i = 0;
-    b304: block {
-        l305: loop {
-            break_if b304 i >= self;
-            is_negative = is_negative - 1;
-            builtin::array_set_u8(arr, is_negative, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
-            x = x /u 10_i64;
-            i = i + 1;
-            continue l305;
-        };
-    };
 }
 
 export fn "simd_shuffle.wado/$cm_export__$test_0_shuffle_names_a_byte_of_either_operand" as "$test_0_shuffle_names_a_byte_of_either_operand"

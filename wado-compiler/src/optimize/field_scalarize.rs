@@ -1823,7 +1823,6 @@ fn walk_block(body: &mut Body, block: BlockId, states: &mut ScalarStates, ctx: &
     body.blocks[block].stmts = new_stmts;
 }
 
-#[allow(clippy::too_many_arguments)]
 fn walk_stmt(
     body: &mut Body,
     block: BlockId,

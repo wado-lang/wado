@@ -1,0 +1,33 @@
+//! The CSS recognizer: a whole stylesheet, or the declarations of a `style`
+//! attribute.
+
+use css3 from "../grammar/css3Lexer.g4"
+    with {
+        generator: {
+            module: "lib:gale",
+            inputs: ["../grammar/css3Parser.g4", "../grammar/css3.highlights.scm"],
+        },
+    };
+use { Highlight } from "./highlight.wado";
+
+fn highlights_of(result: &css3::ParseResult) -> List<Highlight> {
+    let mut visitor = css3::HighlightVisitor::new(&css3::HIGHLIGHT_MAPPING);
+    css3::highlight_walk(&mut visitor, &result.tokens, &result.cst);
+    visitor.hl_cover_unvisited(&result.tokens);
+    let mut out: List<Highlight> = [];
+    for let c of &visitor.captures {
+        out.push(Highlight { start: c.start, end: c.end, class: css3::HIGHLIGHT_MAPPING.capture_classes[c.capture_id] });
+    }
+    return out;
+}
+
+/// The highlight captures of a stylesheet, in source order.
+pub fn stylesheet_highlights<S: AsStrSlice>(source: S) -> List<Highlight> {
+    return highlights_of(&css3::parse_stylesheet(source));
+}
+
+/// The highlight captures of a declaration list, the body of a `style`
+/// attribute, in source order.
+pub fn declarations_highlights<S: AsStrSlice>(source: S) -> List<Highlight> {
+    return highlights_of(&css3::parse_declaration_list(source));
+}

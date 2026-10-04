@@ -1,0 +1,29 @@
+// A marker asks for the impl the derivation rule gives, and beside a written
+// `eq` the rule gives no `Ord`. A newtype over such a type inherits none, so a
+// marker on it is refused for the same reason, naming the type writing `eq`.
+
+struct Name {
+    text: String,
+}
+
+impl Eq for Name {
+    fn eq(&self, other: &Self) -> bool {
+        return self.text.len() == other.text.len();
+    }
+}
+
+impl Ord for Name;
+
+type Alias = Name;
+
+impl Ord for Alias;
+
+test {}
+
+__DATA__
+{
+    "compile_error": ":15:1: analysis error: cannot derive `Ord` for `Name`: `Name` writes `eq`, so no `Ord` is derived for it; write `cmp` beside it",
+    "compile_errors_contains": [
+        "cannot derive `Ord` for `Alias`: `Name` writes `eq`, so no `Ord` is derived for it; write `cmp` beside it"
+    ]
+}
