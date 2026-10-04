@@ -23,8 +23,7 @@ mise run on-task-started   # install project tools
 ### The Cycle
 
 Write the change, commit it, run `/distill` over the whole branch, then test
-once. `/distill` is the last of the editing, so one test run answers for both.
-Run it again after answering review findings, which go through
+once. Run `/distill` again after answering review findings, which go through
 `/code-review-response` however they arrive.
 
 ### Common Development Tasks
@@ -118,13 +117,9 @@ The binary is canonical where they disagree.
 
 ## The CLI
 
-`wado` below is `cargo run --bin wado --`. `wado --help` lists the subcommands;
-the `wado-cli` skill covers the workflows. The ones toolchain work reaches for:
-`compile` (`-O0` … `-O3`, `-Os`; default `-O2`), `check`, `run`, `test`,
-`serve`, `dump` (every stage: AST through WIR), `query` (the language service,
-by position or `MODULE#SYMBOL`), and `format` (rules in `docs/formatter.md`).
-
-Behavior that no `--help` will remind you of:
+`wado` is `cargo run --bin wado --`. `wado --help` lists the subcommands; the
+`wado-cli` skill covers the workflows. Behavior that no `--help` will remind you
+of:
 
 - A program targets a Wasm _world_: `wasi:cli/command` (default), `wasi:http/service`, or the synthetic `test` world, which exports the entry module's `test` blocks and nothing else.
 - The world selects the allocator: `bump` for CLI (never frees), `freelist` for HTTP, `debug` for tests (never reuses freed memory, poisons it with `0xFF`). E2E tests rely on `debug`.

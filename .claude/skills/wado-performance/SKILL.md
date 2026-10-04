@@ -99,8 +99,7 @@ literal binding at every site, and `cold_outline` refuses a region containing a
 
 ## 4. Inlining
 
-Fix the inliner, never the code. The stdlib carries no `#[inline]`: a hint that
-helps marks a case the optimizer misses. When it declines what it should splice,
+Fix the inliner, never the code: no `#[inline]`, no hand-inlining. When it declines what it should splice,
 find the price with `WADO_TRACE=inline` and fix it in `optimize/inline.rs`.
 Never bend source to the current prices (collapsing `let`s, choosing a width,
 splitting to get under the threshold). Raising the threshold wholesale measured

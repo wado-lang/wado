@@ -31,12 +31,6 @@ every world the manifest declares. A named file is checked against the world
 whose `[world]` entry names it, or else the library world, which needs no entry
 point.
 
-## Run
-
-A program reaches only the current directory, or exactly the `--dir` grants once
-any is given, and paths resolve relative to a grant:
-`wado run --dir /tmp/scratch prog.wado Foo.g4` opens `/tmp/scratch/Foo.g4`.
-
 ## Test
 
 ```sh
@@ -78,11 +72,9 @@ positions.
 
 ## Format
 
-`mise run format` formats the workspace. Each package skips `**/generated/**`,
-`**/build/**` and its `[format] exclude`, and `wado-compiler` excludes `tests/**`
-because fixture layouts are part of the tests. Exclusions apply only when
-walking a directory: `wado format -w` on a named fixture file rewrites it.
-Formatter rules are in `docs/formatter.md`.
+Each package skips `**/generated/**`, `**/build/**` and its
+`[format] exclude`; `[format] include` opts a path back in. Rules are in
+`docs/formatter.md`.
 
 ## Publish
 
