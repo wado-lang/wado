@@ -262,7 +262,6 @@ declaration still to be written.
   [WEP: Migration to GC in Components](./wep-2026-03-28-gc-in-components.md)
   plans, shares storage with what it is handed. `#[cm]` implies
   `#[storage(none)]` for every import, which is then false.
-
 - A `&mut` parameter always counts as a write, so `array_get_ref_mut`, which
   only hands out a reference, invalidates what the optimizer knew of the array.
 - A bundled core Wasm asset such as the libm cannot state better than the worst
