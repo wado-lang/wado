@@ -9,7 +9,9 @@ use std::rc::Rc;
 
 use sha2::Digest;
 
-use crate::builtin_facts::{BuiltinFacts, SideEffect, Storage, TrapCheck};
+use crate::builtin_facts::{
+    BuiltinFacts, ParamShape, ReturnShape, SideEffect, Storage, TrapCheck,
+};
 use crate::call_args::CallArgs;
 use crate::canonical::CmCallTarget;
 use crate::compiler_item::CompilerItem;
@@ -23,7 +25,7 @@ use crate::compiler_item::CompilerItems;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{
-    FqTraitName, FqTypeName, INTERNAL_PREFIX, LocalMethodName, NEVER_TYPE_NAME, Receiver, RefKind,
+    FqTraitName, FqTypeName, LocalMethodName, NEVER_TYPE_NAME, Receiver, RefKind,
     TEMPLATE_SHAPE_PREFIX, TypeHead, TypeNameInfo, UNIT_TYPE_NAME, format_type_name,
     mangle_builtin_array_type, mangle_generic_name, mangle_local_item_name, mangle_tuple_type,
 };
@@ -7287,7 +7289,9 @@ pub enum RetainInto<Param> {
 /// How a call reaches the one array element it is an accessor of.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ArrayElementAccess {
+    /// It hands back the element's value.
     Read,
+    /// It hands back a `&mut` to the element.
     Write,
 }
 
@@ -7312,6 +7316,37 @@ pub struct DeclarationShape {
     pub returns_mut_ref: bool,
     /// The declaration returns `!`, so every call ends in a trap.
     pub returns_never: bool,
+}
+
+impl DeclarationShape {
+    /// The shape of a declaration taking `params` and returning `ret`.
+    pub fn new(
+        params: &[ParamShape<'_>],
+        ret: ReturnShape,
+        immediate_params: IndexSet<usize>,
+    ) -> Self {
+        fn positions<B: FromIterator<usize>>(
+            params: &[ParamShape<'_>],
+            keep: impl Fn(&ParamShape<'_>) -> bool,
+        ) -> B {
+            params
+                .iter()
+                .enumerate()
+                .filter(|(_, p)| keep(p))
+                .map(|(pos, _)| pos)
+                .collect()
+        }
+        Self {
+            arity: params.len(),
+            storage_params: positions(params, |p| p.carries_storage),
+            reference_params: positions(params, |p| p.is_reference),
+            mut_params: positions(params, |p| p.is_mut_ref),
+            immediate_params,
+            returns_value: ret.returns_value,
+            returns_mut_ref: ret.is_mut_ref,
+            returns_never: ret.is_never,
+        }
+    }
 }
 
 /// What a bodyless declaration stated, by parameter position, and what that
@@ -7474,11 +7509,10 @@ pub struct DeclarationLookup<'a> {
 impl<'a> DeclarationLookup<'a> {
     /// The `core:builtin` intrinsic this is, plain or monomorphized. A function
     /// declared anywhere else may share the name, a wasm-asset export included.
-    /// So may a function the compiler mints into `core:builtin` when it is the
-    /// entry, which no source declares.
     pub fn intrinsic(self) -> Option<&'a str> {
-        let name = self.generic_name.unwrap_or(self.name);
-        (self.module_source.is_core_builtin() && !name.starts_with(INTERNAL_PREFIX)).then_some(name)
+        self.module_source
+            .is_core_builtin()
+            .then(|| self.generic_name.unwrap_or(self.name))
     }
 }
 
@@ -7510,7 +7544,7 @@ impl<'a> From<&'a FunctionRef> for DeclarationLookup<'a> {
 
 /// One value per body-less declaration, found from a call to it.
 #[derive(Debug, Clone)]
-pub struct DeclarationTable<V>(IndexMap<(ModuleSource, String), V>);
+pub struct DeclarationTable<V>(IndexMap<ModuleSource, IndexMap<String, V>>);
 
 impl<V> Default for DeclarationTable<V> {
     fn default() -> Self {
@@ -7521,26 +7555,36 @@ impl<V> Default for DeclarationTable<V> {
 impl<V> DeclarationTable<V> {
     /// A table over `declarations`, keyed by module and declared name.
     pub fn new(declarations: IndexMap<(ModuleSource, String), V>) -> Self {
-        Self(declarations)
+        let mut by_module: IndexMap<ModuleSource, IndexMap<String, V>> = IndexMap::default();
+        for ((module, name), value) in declarations {
+            by_module.entry(module).or_default().insert(name, value);
+        }
+        Self(by_module)
     }
 
     /// The value for the declaration `call` resolves to, or `None` where there
     /// is none. Keyed by the generic name a monomorphized instance came from,
-    /// which is the name the declaration was snapshot under.
+    /// which is the name the declaration was snapshot under. It allocates
+    /// nothing, since every call a pass visits asks.
     pub fn get<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> Option<&V> {
         let call = call.into();
-        let key = |name: &str| (call.module_source.clone(), name.to_string());
-        if let Some(generic) = call.generic_name
-            && let Some(value) = self.0.get(&key(generic))
-        {
-            return Some(value);
-        }
-        self.0.get(&key(call.name))
+        let module = self.0.get(call.module_source)?;
+        call.generic_name
+            .and_then(|generic| module.get(generic))
+            .or_else(|| module.get(call.name))
     }
 
     /// The same declarations, each mapped to `f` of its value.
     pub fn map<W>(&self, mut f: impl FnMut(&V) -> W) -> DeclarationTable<W> {
-        DeclarationTable(self.0.iter().map(|(k, v)| (k.clone(), f(v))).collect())
+        DeclarationTable(
+            self.0
+                .iter()
+                .map(|(module, names)| {
+                    let names = names.iter().map(|(n, v)| (n.clone(), f(v))).collect();
+                    (module.clone(), names)
+                })
+                .collect(),
+        )
     }
 }
 

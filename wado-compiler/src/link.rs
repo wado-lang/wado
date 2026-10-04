@@ -5,16 +5,15 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::builtin_facts::{ParamShape, ReturnShape};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 #[cfg(debug_assertions)]
 use crate::hashmap::IndexSet;
-use crate::lower::plan::value_copy::place::{is_reference, may_carry_storage};
 use crate::module_source::ModuleSource;
 use crate::package::Package;
 use crate::tir::{
-    BuiltinDeclaration, BuiltinDeclarations, DeclarationShape, ResolvedType, TirFunction, TypeId,
-    TypeTable,
+    BuiltinDeclaration, BuiltinDeclarations, DeclarationShape, TirFunction, TypeTable,
 };
 use crate::wir_build::component_plan;
 use crate::world_registry::TEST_WORLD;
@@ -50,30 +49,19 @@ fn record_declaration(
         "`{}` is a method with a bodyless attribute; key the snapshot by `DefId` first",
         func.name
     );
-    // Read from the type, which is the only thing that says `&mut` here:
-    // `TirParam::is_mut_ref` is filled by `lower::plan`, which runs after link,
-    // so every one of them is still `false`.
-    fn positions<B: FromIterator<usize>>(func: &TirFunction, keep: impl Fn(TypeId) -> bool) -> B {
-        func.params
-            .iter()
-            .enumerate()
-            .filter(|(_, p)| keep(p.type_id))
-            .map(|(pos, _)| pos)
-            .collect()
-    }
-    let returns = type_table.get(func.return_type);
-    let shape = DeclarationShape {
-        arity: func.params.len(),
-        storage_params: positions(func, |t| may_carry_storage(t, type_table)),
-        reference_params: positions(func, |t| is_reference(t, type_table)),
-        mut_params: positions(func, |t| {
-            matches!(type_table.get(t), ResolvedType::MutRef(_))
-        }),
-        immediate_params: func.immediates_by_position().collect(),
-        returns_value: !matches!(returns, ResolvedType::Unit | ResolvedType::Never),
-        returns_mut_ref: matches!(returns, ResolvedType::MutRef(_)),
-        returns_never: matches!(returns, ResolvedType::Never),
-    };
+    // Read from the type, as validation did: `TirParam::is_mut_ref` is filled by
+    // `lower::plan`, which runs after link, so every one of them is still
+    // `false`.
+    let params: Vec<ParamShape<'_>> = func
+        .params
+        .iter()
+        .map(|p| ParamShape::of(&p.name, p.type_id, type_table))
+        .collect();
+    let shape = DeclarationShape::new(
+        &params,
+        ReturnShape::of(func.return_type, type_table),
+        func.immediates_by_position().collect(),
+    );
     out.insert(
         (module_source.clone(), declaration_key(func)),
         BuiltinDeclaration::new(facts, shape),

@@ -22,7 +22,7 @@ use crate::ast::{
     UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WithHandlerExpr,
     WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
 };
-use crate::attribute::{CANONICAL, CM, SIDE_EFFECT, TODO};
+use crate::attribute::{CANONICAL, CM, TODO};
 use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::escape::{quoted, unescape_string};
@@ -1329,7 +1329,7 @@ impl Parser {
 
         let args = if self.check(&TokenKind::LParen) {
             self.advance();
-            let args = self.parse_attr_arg_list(false)?;
+            let args = self.parse_attr_arg_list()?;
             self.expect(&TokenKind::RParen)?;
             args
         } else {
@@ -1357,7 +1357,7 @@ impl Parser {
     /// delimiter. Shared between inner attributes (`#![...]`) and outer
     /// attributes (`#[...]`). Does not consume the closing `)`. An array holds
     /// parameter names where `names`, and text everywhere else.
-    fn parse_attr_arg_list(&mut self, names: bool) -> ParseResult<Vec<AttrArg>> {
+    fn parse_attr_arg_list(&mut self) -> ParseResult<Vec<AttrArg>> {
         let mut args: Vec<AttrArg> = Vec::new();
         loop {
             // `as_ident_name`, so a contextual keyword can be a key.
@@ -1376,6 +1376,10 @@ impl Parser {
                             }
                             TokenKind::LBracket => {
                                 self.advance();
+                                // The first item decides: an array holds strings
+                                // or identifiers, and the attribute's reader
+                                // rejects the kind it does not take.
+                                let names = self.peek_kind().as_ident_name().is_some();
                                 let mut items: Vec<String> = Vec::new();
                                 if !self.check(&TokenKind::RBracket) {
                                     loop {
@@ -1479,7 +1483,7 @@ impl Parser {
 
         let args = if self.check(&TokenKind::LParen) {
             self.advance();
-            let args = self.parse_attr_arg_list(name == SIDE_EFFECT)?;
+            let args = self.parse_attr_arg_list()?;
             self.expect(&TokenKind::RParen)?;
             args
         } else {

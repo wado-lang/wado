@@ -21,7 +21,7 @@ use crate::const_eval::format_float_repr;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::lower::plan::value_copy::place::{
-    is_source_place, may_carry_storage, source_place_subscripts_mut,
+    is_source_place, source_place_subscripts_mut,
 };
 use crate::lower::wide_int_literal::{create_conversion, create_literal, method_ref};
 use crate::module_source::ModuleSource;
@@ -1798,29 +1798,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return None;
         }
         let type_table = self.tysys.type_table.borrow();
-        let is_array = |t: tir::TypeId| {
-            matches!(
-                type_table.get(type_table.peel_refs(t)),
-                tir::ResolvedType::BuiltinArray(_)
-            )
-        };
         let shapes: Vec<ParamShape<'_>> = params
             .iter()
-            .map(|p| ParamShape {
-                name: &p.name,
-                carries_storage: may_carry_storage(p.type_id, &type_table),
-                is_mut_ref: matches!(type_table.get(p.type_id), tir::ResolvedType::MutRef(_)),
-                is_array: is_array(p.type_id),
-                is_integer: type_table.is_integer(p.type_id),
-            })
+            .map(|p| ParamShape::of(&p.name, p.type_id, &type_table))
             .collect();
-        let ret = ReturnShape {
-            returns_value: !matches!(
-                type_table.get(return_type),
-                tir::ResolvedType::Unit | tir::ResolvedType::Never
-            ),
-            is_array: is_array(return_type),
-        };
+        let ret = ReturnShape::of(return_type, &type_table);
         match builtin_facts::read(&func.attrs, &shapes, ret) {
             Ok(Some(facts)) => Some(facts),
             Ok(None) => {

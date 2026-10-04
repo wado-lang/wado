@@ -5,6 +5,8 @@
 use crate::ast::{AttrArg, Attribute};
 use crate::attribute::{SIDE_EFFECT, STORAGE};
 use crate::hashmap::IndexSet;
+use crate::lower::plan::value_copy::place::{is_reference, may_carry_storage};
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// `#[storage(...)]`: what a call's result shares with its arguments, and what
 /// the call keeps of them.
@@ -274,13 +276,16 @@ fn written_checks<P: std::fmt::Display>(checks: &[TrapCheck<P>]) -> Vec<String> 
     keys
 }
 
-/// One parameter as validation reads its type.
+/// One parameter as its type states facts: the signature's half of what a
+/// declaration says about its calls.
 #[derive(Debug, Clone, Copy)]
 pub struct ParamShape<'a> {
     /// The name the attributes call it by.
     pub name: &'a str,
     /// Some instantiation of its type can carry storage.
     pub carries_storage: bool,
+    /// Taken through a reference, so it hands on what it points to.
+    pub is_reference: bool,
     /// Taken by `&mut`.
     pub is_mut_ref: bool,
     /// An `Array<T>`, by value or through a reference.
@@ -289,13 +294,54 @@ pub struct ParamShape<'a> {
     pub is_integer: bool,
 }
 
-/// The return type as validation reads it.
+impl<'a> ParamShape<'a> {
+    /// The parameter `name` of type `ty`.
+    pub fn of(name: &'a str, ty: TypeId, type_table: &TypeTable) -> Self {
+        Self {
+            name,
+            carries_storage: may_carry_storage(ty, type_table),
+            is_reference: is_reference(ty, type_table),
+            is_mut_ref: matches!(type_table.get(ty), ResolvedType::MutRef(_)),
+            is_array: is_array(ty, type_table),
+            is_integer: type_table.is_integer(ty),
+        }
+    }
+}
+
+/// The return type as it states facts.
 #[derive(Debug, Clone, Copy)]
 pub struct ReturnShape {
     /// Neither `()` nor `!`.
     pub returns_value: bool,
+    /// Some instantiation of it can carry storage.
+    pub carries_storage: bool,
     /// An `Array<T>`, by value or through a reference.
     pub is_array: bool,
+    /// A `&mut`.
+    pub is_mut_ref: bool,
+    /// `!`, so every call ends in a trap.
+    pub is_never: bool,
+}
+
+impl ReturnShape {
+    /// The return type `ty`.
+    pub fn of(ty: TypeId, type_table: &TypeTable) -> Self {
+        let resolved = type_table.get(ty);
+        Self {
+            returns_value: !matches!(resolved, ResolvedType::Unit | ResolvedType::Never),
+            carries_storage: may_carry_storage(ty, type_table),
+            is_array: is_array(ty, type_table),
+            is_mut_ref: matches!(resolved, ResolvedType::MutRef(_)),
+            is_never: matches!(resolved, ResolvedType::Never),
+        }
+    }
+}
+
+fn is_array(ty: TypeId, type_table: &TypeTable) -> bool {
+    matches!(
+        type_table.get(type_table.peel_refs(ty)),
+        ResolvedType::BuiltinArray(_)
+    )
 }
 
 /// A malformed attribute: which one, and why.
@@ -480,7 +526,18 @@ impl Reader<'_, '_> {
                 format!("`#[storage({word})]` describes a result, and this returns no value"),
             );
         }
-        if storage.shares_args() && !self.params.iter().any(|p| p.carries_storage) {
+        if storage == Storage::None && self.ret.carries_storage {
+            self.report(
+                STORAGE,
+                "`#[storage(none)]` shares no storage, and this result can carry some: state where it comes from",
+            );
+        }
+        // `stores_args` stores into its `&mut` parameter, which is no source.
+        let sources = self
+            .params
+            .iter()
+            .filter(|p| p.carries_storage && !(storage == Storage::StoresArgs && p.is_mut_ref));
+        if storage.shares_args() && sources.count() == 0 {
             self.report(
                 STORAGE,
                 format!("`#[storage({word})]` relates the call to its arguments' storage, and none can carry any"),
@@ -526,15 +583,18 @@ impl Reader<'_, '_> {
                 {
                     words.insert(word);
                 }
+                // `[]` holds no item to say it is a name, so it parses as strings.
+                AttrArg::KeyArray(key, items)
+                    if items.is_empty() && matches!(key.as_str(), "outside" | "at") =>
+                {
+                    self.report(
+                        SIDE_EFFECT,
+                        format!("`#[side_effect({key} = [])]` names no parameter"),
+                    );
+                }
                 AttrArg::KeyIdentArray(key, items) if matches!(key.as_str(), "outside" | "at") => {
-                    if items.is_empty() {
-                        self.report(
-                            SIDE_EFFECT,
-                            format!("`#[side_effect({key} = [])]` names no parameter"),
-                        );
-                    } else {
-                        arrays.push((key, items));
-                    }
+                    assert!(!items.is_empty(), "the parser reads `[]` as strings");
+                    arrays.push((key, items));
                 }
                 AttrArg::KeyIdent(key, name)
                     if matches!(key.as_str(), "count" | "unset" | "negative") =>
@@ -677,6 +737,7 @@ mod tests {
     const INT: ParamShape<'static> = ParamShape {
         name: "",
         carries_storage: false,
+        is_reference: false,
         is_mut_ref: false,
         is_array: false,
         is_integer: true,
@@ -684,6 +745,7 @@ mod tests {
     const ARRAY: ParamShape<'static> = ParamShape {
         name: "",
         carries_storage: true,
+        is_reference: true,
         is_mut_ref: false,
         is_array: true,
         is_integer: false,
@@ -695,7 +757,15 @@ mod tests {
 
     const UNIT: ReturnShape = ReturnShape {
         returns_value: false,
+        carries_storage: false,
         is_array: false,
+        is_mut_ref: false,
+        is_never: false,
+    };
+    const STRUCT: ReturnShape = ReturnShape {
+        returns_value: true,
+        carries_storage: true,
+        ..UNIT
     };
 
     /// `array_copy`'s declaration.
@@ -816,7 +886,7 @@ mod tests {
             (
                 vec![
                     ident("trap"),
-                    AttrArg::KeyIdentArray("outside".to_string(), Vec::new()),
+                    AttrArg::KeyArray("outside".to_string(), Vec::new()),
                 ],
                 "`#[side_effect(outside = [])]` names no parameter",
             ),
@@ -849,31 +919,57 @@ mod tests {
     fn storage_must_fit_the_signature() {
         let side_effect = attr(SIDE_EFFECT, vec![ident("none")]);
         let ints = [named("a", INT), named("b", INT)];
-        let cases: Vec<(Vec<AttrArg>, &[ParamShape<'static>], &str)> = vec![
+        let only_dst = [
+            named(
+                "dst",
+                ParamShape {
+                    is_mut_ref: true,
+                    ..ARRAY
+                },
+            ),
+            named("i", INT),
+        ];
+        let cases: Vec<(Vec<AttrArg>, &[ParamShape<'static>], ReturnShape, &str)> = vec![
             (
                 vec![ident("fresh")],
                 &ints,
+                UNIT,
                 "`#[storage(fresh)]` describes a result, and this returns no value",
             ),
             (
                 vec![ident("stores_args")],
                 &ints,
+                UNIT,
                 "`#[storage(stores_args)]` relates the call to its arguments' storage, and none can carry any",
+            ),
+            (
+                vec![ident("stores_args")],
+                &only_dst,
+                UNIT,
+                "`#[storage(stores_args)]` relates the call to its arguments' storage, and none can carry any",
+            ),
+            (
+                vec![ident("none")],
+                &ints,
+                STRUCT,
+                "`#[storage(none)]` shares no storage, and this result can carry some: state where it comes from",
             ),
             (
                 vec![ident("none"), key("len", "a")],
                 &ints,
+                UNIT,
                 "`len` goes with `fresh`, `holds_args` or `copies_args`, not `none`",
             ),
             (
                 vec![ident("shared")],
                 &ints,
+                UNIT,
                 "`#[storage(shared)]` is no storage value",
             ),
         ];
-        for (args, params, expected) in cases {
+        for (args, params, ret, expected) in cases {
             let attrs = [attr(STORAGE, args), side_effect.clone()];
-            let faults = messages(read(&attrs, params, UNIT));
+            let faults = messages(read(&attrs, params, ret));
             assert_eq!(
                 faults.first().map(String::as_str),
                 Some(expected),
