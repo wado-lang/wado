@@ -3249,54 +3249,51 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             from_concrete_impl,
             impl_module_source,
             impl_struct_fq,
-        ) = match paired {
-            Some((link, PairedEq { eq, block })) => {
-                let header = &self.tysys.trait_env.impl_headers[&block];
-                (
-                    link,
-                    Some(eq),
-                    Some(block),
-                    self.tysys.impl_is_concrete_instantiation(&header.ty),
-                    header.module.clone(),
-                    self.impl_receiver(header, link),
-                )
+        ) = if let Some((link, PairedEq { eq, block })) = paired {
+            let header = &self.tysys.trait_env.impl_headers[&block];
+            (
+                link,
+                Some(eq),
+                Some(block),
+                self.tysys.impl_is_concrete_instantiation(&header.ty),
+                header.module.clone(),
+                self.impl_receiver(header, link),
+            )
+        } else {
+            // A newtype has no derivation of its own: the one its
+            // representation carries answers.
+            let derive_id = self
+                .tysys
+                .type_table
+                .borrow()
+                .representation_head(base_type_id);
+            if !self.tysys.auto_derive_eligible_kind(derive_id) {
+                return None;
             }
-            None => {
-                // A newtype has no derivation of its own: the one its
-                // representation carries answers.
-                let derive_id = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .representation_head(base_type_id);
-                if !self.tysys.auto_derive_eligible_kind(derive_id) {
-                    return None;
-                }
-                let trait_ = self.tysys.compiler_trait(item)?;
-                if !self.tysys.type_implements_trait(
-                    &self.annotate_ctx,
-                    &self.type_lookup(),
-                    derive_id,
-                    &trait_,
-                ) {
-                    return None;
-                }
-                let home = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(derive_id)
-                    .expect("an auto-derive-eligible type names a head")
-                    .1;
-                (
-                    derive_id,
-                    None,
-                    None,
-                    false,
-                    home,
-                    self.tysys.fq_receiver_head(derive_id),
-                )
+            let trait_ = self.tysys.compiler_trait(item)?;
+            if !self.tysys.type_implements_trait(
+                &self.annotate_ctx,
+                &self.type_lookup(),
+                derive_id,
+                &trait_,
+            ) {
+                return None;
             }
+            let home = self
+                .tysys
+                .type_table
+                .borrow()
+                .nominal_head(derive_id)
+                .expect("an auto-derive-eligible type names a head")
+                .1;
+            (
+                derive_id,
+                None,
+                None,
+                false,
+                home,
+                self.tysys.fq_receiver_head(derive_id),
+            )
         };
         let ref_self_ty = self
             .tysys
