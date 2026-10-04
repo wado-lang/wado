@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791107371810,
+  "lastUpdate": 1791110535688,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -63505,6 +63505,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/86a83bf7fe2015dad3c50941d2f58ca836c99ded"
         },
         "date": 1791107371279,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338887,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "86eadc75d49f92aea8e70942028972d22dd87f4a",
+          "message": "Merge pull request #2264 from wado-lang/ccr-4293f746-rmzst6\n\nfeat(patterns): float ranges and constant bounds in range patterns",
+          "timestamp": "2026-10-04T19:21:48+09:00",
+          "tree_id": "f03dcf509a034d4495e63c9e08489809cdb5de7f",
+          "url": "https://github.com/wado-lang/wado/commit/86eadc75d49f92aea8e70942028972d22dd87f4a"
+        },
+        "date": 1791110534809,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
