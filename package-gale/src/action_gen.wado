@@ -17,7 +17,7 @@ use {
 use { DiagnosticKind, DiagnosticOwner, DiagnosticSite, LoweredGrammar, Op, Rule, RuleCallOp } from "./gir.wado";
 use { GenContext, RuleCaptures } from "./gen_context.wado";
 use { GaleMap } from "./gale_map.wado";
-use { elements_match, follow_forward_args, to_snake_case } from "./gen_util.wado";
+use { elements_match, follow_forward_args, negate_cond, to_snake_case } from "./gen_util.wado";
 use { CallForm, CallStmt, CodeWriter, FnSpec, ImplSpec, ParamSpec, wado } from "lib:wadopoet";
 use {
     AmbiguousNode,
@@ -1193,7 +1193,7 @@ fn gen_predicate_guard(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenCont
         },
     };
     w.begin("if !p.speculating");
-    w.begin(`if !(${cond})`);
+    w.begin(`if ${negate_cond(&cond)}`);
     w.line(`p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);`);
     if current_rule_emits_vals(ctx) {
         w.line("return vals;");

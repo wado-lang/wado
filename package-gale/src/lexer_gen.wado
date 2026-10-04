@@ -16,7 +16,7 @@ use {
     lexer_alias_text,
     NO_MODE,
 } from "./ir.wado";
-use { gen_visibility_comment } from "./gen_util.wado";
+use { gen_visibility_comment, negate_cond } from "./gen_util.wado";
 use { literal_const_name } from "./ident.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec, Vis, char_range_pat, wado } from "lib:wadopoet";
 use {
@@ -1456,7 +1456,7 @@ fn gen_lexer_rule_predicates<S: AsStrSlice>(
             continue;
         }
         if a.kind matches { Predicate } {
-            w.line(`if !(${a.source.text}) { ${fail_action}; }`);
+            w.line(`if ${negate_cond(&a.source.text)} { ${fail_action}; }`);
         }
     }
 }
