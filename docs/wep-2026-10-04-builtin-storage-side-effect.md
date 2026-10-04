@@ -107,7 +107,7 @@ too, so a key has one form.
 
 A range lies within `a` only when its start and its length are both
 non-negative and they end at or before `a`'s length, as the Wasm instructions
-read them unsigned. `unset = a` reads the element where `a`'s range starts.
+read them unsigned.
 
 `outside = [a]` also says the call does not replace `a`. Running out of memory
 is not a trap any condition describes.
