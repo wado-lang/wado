@@ -27,6 +27,7 @@ use {
     Node,
     Rank,
     ValueInfo,
+    absent,
     data_type,
     dims_of,
     element_of,
@@ -540,7 +541,7 @@ fn branch_condition(node: &Node, scope: &Checked) -> Result<(), InferError> {
 /// nothing yet.
 fn checked_branch(node: &Node, attr: String, scope: &Checked, schema: &Schema) -> Result<[Graph, Checked], InferError> {
     let Some(a) = node.attr(attr) else {
-        return Result::Err(attribute_error(node, attr, "is absent and the operator reads it"));
+        return attr_read(node, Result::Err(absent(attr)));
     };
     let Some(graph) = a.graph else {
         return Result::Err(attribute_error(node, attr, "holds no graph, and If branches into one"));
@@ -610,7 +611,7 @@ fn is_layout(op: &String) -> bool {
 fn produced_primitive(node: &Node, primitives: &TreeMap<String, String>) -> Result<Option<String>, InferError> {
     let op = node.op;
     if op == "Cast" {
-        let to = int_attr(node, "to", 0)?;
+        let to = attr_read(node, node.required_int_attr("to"))?;
         return match data_type(to) {
             Some(Float) => Result::Ok(Option::Some(KERNEL_ELEMENT)),
             Some(Int64) => Result::Ok(Option::Some("i64")),
@@ -1035,10 +1036,7 @@ fn joined(
 
 /// The axis `Concat` joins along, resolved against `rank`.
 pub fn concat_axis(node: &Node, rank: i32) -> Result<i32, InferError> {
-    if node.attr("axis") matches { None } {
-        return Result::Err(attribute_error(node, "axis", "is absent and the operator reads it"));
-    }
-    return axis_attr(node, 0, rank, rank - 1);
+    return resolved_axis(node, attr_read(node, node.required_int_attr("axis"))?, rank, rank - 1);
 }
 
 /// The axis `Split` cuts, resolved against `rank`.
@@ -1361,7 +1359,7 @@ pub fn window_of(
         spatial_extents(&static_extents_of(node, &w)?);
     } else {
         if node.attr("kernel_shape") matches { None } {
-            return Result::Err(attribute_error(node, "kernel_shape", "is absent and the operator reads it"));
+            return attr_read(node, Result::Err(absent("kernel_shape")));
         }
         attr_read(node, ints(node, "kernel_shape", spatial.len(), 1))?;
     };
@@ -1529,7 +1527,11 @@ pub fn reduced_axes(node: &Node, known: &TreeMap<String, Known>, rank: i32) -> R
 /// The `axis` attribute, where a negative one counts from `rank` and the
 /// operator reads at most `last`.
 fn axis_attr(node: &Node, fallback: i64, rank: i32, last: i32) -> Result<i32, InferError> {
-    let written = int_attr(node, "axis", fallback)?;
+    return resolved_axis(node, int_attr(node, "axis", fallback)?, rank, last);
+}
+
+/// The `axis` attribute's `written` value, resolved as `axis_attr` resolves it.
+fn resolved_axis(node: &Node, written: i64, rank: i32, last: i32) -> Result<i32, InferError> {
     let resolved = from_end(written, rank as i64);
     if !(0 <= resolved <= last as i64) {
         return Result::Err(attribute_error(node, "axis", `is ${written}, outside rank ${rank}`));

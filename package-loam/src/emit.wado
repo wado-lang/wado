@@ -211,59 +211,55 @@ impl Names {
             }
             reserved.insert(axis);
         }
+        let mut tensors: List<String> = [];
+        for let declared of [&graph.inputs, &graph.initializers] {
+            for let vi of *declared {
+                tensors.push(vi.name);
+            }
+        }
+        scope_tensors(&mut tensors, graph, checked, literals);
+        for let c of carriers {
+            tensors.push(symbol_key(&c.solved.symbol));
+        }
+        // In first-seen order, each tensor once.
+        let mut sanitized = TreeMap::<String, String>::new();
+        for let tensor of tensors {
+            if !sanitized.contains_key(tensor) {
+                sanitized[tensor] = sanitize(&tensor);
+            }
+        }
+        let mut claimed = TreeSet::<String>::new();
+        for let [_, ident] of sanitized.entries() {
+            claimed.insert(*ident);
+        }
         let mut names = Names {
             idents: TreeMap::<String, String>::new(),
             reserved,
         };
         let mut taken = TreeMap::<String, String>::new();
-        for let vi of &graph.inputs {
-            names.take(&mut taken, &vi.name)?;
-        }
-        for let vi of &graph.initializers {
-            names.take(&mut taken, &vi.name)?;
-        }
-        names.take_scope(&mut taken, graph, checked, literals)?;
-        for let c of carriers {
-            names.take(&mut taken, &symbol_key(&c.solved.symbol))?;
+        for let [tensor, ident] of sanitized.entries() {
+            names.take(&mut taken, tensor, *ident, &claimed)?;
         }
         return Result::Ok(names);
     }
 
-    /// The tensors one scope computes and spells, then each branch's. A tensor
-    /// two branches both name is one identifier, bound in each branch's block.
-    fn take_scope(
+    /// Mint `tensor`'s identifier from its sanitized form, `ident`. One the
+    /// generated module already binds is renamed past it, past every form some
+    /// tensor sanitizes to, and past every identifier taken before, so the
+    /// renaming takes no other tensor's.
+    fn take(
         &mut self,
         taken: &mut TreeMap<String, String>,
-        graph: &Graph,
-        checked: &Checked,
-        literals: &List<String>,
+        tensor: &String,
+        ident: String,
+        claimed: &TreeSet<String>,
     ) -> Result<(), EmitError> {
-        for let node of &graph.nodes {
-            for let output of node.outputs {
-                if !checked.known.contains_key(output) {
-                    self.take(taken, &output)?;
-                }
-            }
-        }
-        for let tensor of *literals {
-            self.take(taken, &tensor)?;
-        }
-        for let [branch_graph, branch] of branches_of(graph, checked) {
-            let spelled = literal_tensors(&branch_graph, &branch, &scalar_literals(&branch)).spelled;
-            self.take_scope(taken, &branch_graph, &branch, &spelled)?;
-        }
-        return Result::Ok(());
-    }
-
-    fn take(&mut self, taken: &mut TreeMap<String, String>, tensor: &String) -> Result<(), EmitError> {
-        if self.idents.contains_key(*tensor) {
-            return Result::Ok(());
-        }
-        let mut ident = sanitize(tensor);
-        // A name the generated module already binds is not this tensor's to
-        // take, and a trailing `_` is a name no other rule here produces.
-        while is_bound(&self.reserved, &ident) {
+        let mut ident = ident;
+        if is_bound(&self.reserved, &ident) {
             ident = `${ident}_`;
+            while is_bound(&self.reserved, &ident) || claimed.contains(ident) || taken.contains_key(ident) {
+                ident = `${ident}_`;
+            }
         }
         if let Some(other) = taken.get(ident) {
             builtin::cold_path();
@@ -280,6 +276,23 @@ impl Names {
 
     fn get(&self, tensor: &String) -> String {
         return self.idents.get(*tensor).unwrap();
+    }
+}
+
+/// The tensors one scope computes and spells, then each branch's. A tensor
+/// two branches both name is one identifier, bound in each branch's block.
+fn scope_tensors(tensors: &mut List<String>, graph: &Graph, checked: &Checked, literals: &List<String>) {
+    for let node of &graph.nodes {
+        for let output of node.outputs {
+            if !checked.known.contains_key(output) {
+                tensors.push(output);
+            }
+        }
+    }
+    tensors.extend(literals);
+    for let [branch_graph, branch] of branches_of(graph, checked) {
+        let spelled = literal_tensors(&branch_graph, &branch, &scalar_literals(&branch)).spelled;
+        scope_tensors(tensors, &branch_graph, &branch, &spelled);
     }
 }
 
@@ -512,15 +525,15 @@ impl Symbols {
         for let c of *carriers {
             let Solved { symbol, coefficient, rest, .. } = c.solved;
             let extent = `${names.get(&c.input)}.extents[${c.axis}] as i64`;
-            let mut solved = if rest == Poly::constant(0) {
+            let mut value = if rest == Poly::constant(0) {
                 extent;
             } else {
                 `(${extent} - (${rest.spelled(&symbols.idents)}))`;
             };
             if coefficient != 1 {
-                solved = `${solved} / ${coefficient}`;
+                value = `${value} / ${coefficient}`;
             }
-            symbols.sources[symbol] = if solved == extent { extent } else { `to_extent(${solved}) as i64` };
+            symbols.sources[symbol] = if value == extent { extent } else { `to_extent(${value}) as i64` };
             symbols.idents[symbol] = names.get(&symbol_key(&symbol));
             symbols.order.push(symbol);
             symbols.requires[symbol] = rest.symbols();
@@ -1043,7 +1056,7 @@ fn is_alias(node: &Node, checked: &Checked) -> bool {
     let primitives = &checked.primitives;
     return node.op == "Identity"
         || node.op == "Cast"
-            && !node.int_attr("to", 0).map(|to| data_type(to)) matches { Ok(Some(Int32)) }
+            && !data_type(settled(node.required_int_attr("to"))) matches { Some(Int32) }
             && primitives.get(node.inputs[0]) == primitives.get(node.outputs[0]);
 }
 
@@ -1312,7 +1325,10 @@ fn reduction_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mu
 }
 
 /// The literal operand `index` folds into a closure as: a `Gemm` bias, or an
-/// arithmetic operand whose partner is a tensor it does not widen. `None` reads it as a tensor.
+/// arithmetic operand whose partner is a tensor. The closure maps over the
+/// partner, so the output must carry the partner's axes: a scalar of higher
+/// rank widens it, and an axis of 1 the scalar names apart renames it. `None`
+/// reads it as a tensor.
 fn folded_literal(
     node: &Node,
     index: i32,
@@ -1322,14 +1338,14 @@ fn folded_literal(
     let Some(literal) = scalars.get(node.inputs[index]) else {
         return null;
     };
-    if node.op == "Gemm" {
-        return if index == 2 { Option::Some(literal) } else { null };
-    }
-    if index > 1 || !is_binary_elementwise(&node.op) {
+    let mapped = if node.op == "Gemm" && index == 2 {
+        gemm_product(node, shapes);
+    } else if index <= 1 && is_binary_elementwise(&node.op) && !scalars.contains_key(node.inputs[1 - index]) {
+        shapes[node.inputs[1 - index]];
+    } else {
         return null;
-    }
-    let partner = node.inputs[1 - index];
-    if scalars.contains_key(partner) || shapes[node.inputs[index]].rank() > shapes[partner].rank() {
+    };
+    if axis_list(&mapped) != axis_list(&shapes[node.outputs[0]]) {
         return null;
     }
     return Option::Some(literal);
@@ -1489,8 +1505,8 @@ fn gemm_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> 
     let [alpha, beta, trans_a, trans_b] = settled(gemm_options(node));
     let [a, left] = transposed(&exprs.reference(&node.inputs[0]), &shapes.get(node.inputs[0]).unwrap(), trans_a);
     let [b, right] = transposed(&exprs.reference(&node.inputs[1]), &shapes.get(node.inputs[1]).unwrap(), trans_b);
-    let produced = shapes.get(node.outputs[0]).unwrap();
-    let mut product = product_call(&a, &b, &left, &right, &produced);
+    let product_axes = gemm_product(node, shapes);
+    let mut product = product_call(&a, &b, &left, &right, &product_axes);
     if alpha != 1.0 {
         product = `map(&${product}, |v| v * ${float_literal(alpha)})`;
     }
@@ -1506,7 +1522,19 @@ fn gemm_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> 
         bias = `&map(${bias}, |v| v * ${float_literal(beta)})`;
     }
     let c = shapes.get(node.inputs[2]).unwrap();
-    return Result::Ok(elementwise_call(&`&${product}`, &bias, &produced, &c, &produced, &"x + y"));
+    let produced = shapes.get(node.outputs[0]).unwrap();
+    return Result::Ok(elementwise_call(&`&${product}`, &bias, &product_axes, &c, &produced, &"x + y"));
+}
+
+/// The axes of `Gemm`'s matrix product, which its bias may rename where they
+/// meet at an extent of 1.
+fn gemm_product(node: &Node, shapes: &TreeMap<String, Shape>) -> Shape {
+    let [_, _, trans_a, trans_b] = settled(gemm_options(node));
+    let rows = shapes[node.inputs[0]].axes[if trans_a { 1 } else { 0 }];
+    let cols = shapes[node.inputs[1]].axes[if trans_b { 0 } else { 1 }];
+    return Shape {
+        axes: [rows, cols],
+    };
 }
 
 /// A `Gemm` operand of axes `shape`, and those axes, transposed where `flag` says.

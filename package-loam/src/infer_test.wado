@@ -821,6 +821,14 @@ test "an int64 input keeps its element until Cast makes it a float" {
     assert y_axes(MASK, mask_layout()).unwrap() == "Batch=1,Head=1,Query=1,Key=4";
 }
 
+test "a Cast without `to` stops the build, folded or not" {
+    let runtime = `g (float[2] X) => (float[2] Y) { Y = Cast(X) }`;
+    let folded = `g (float[2] X) => (int64[1] Y) { C = Constant<value_ints = [1]>() Y = Cast(C) }`;
+    for let source of [runtime, folded] {
+        assert y_axes(source, [rule("*", ["A"])]).unwrap_err() == "Y = Cast: attribute to is absent and the operator reads it";
+    }
+}
+
 test "arithmetic on an int64 tensor stops the build" {
     let source = `g (int64[4] M) => (int64[4] Y) {
         Y = Add(M, M)
