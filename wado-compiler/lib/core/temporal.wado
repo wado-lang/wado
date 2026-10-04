@@ -378,11 +378,17 @@ impl Instant {
 
     /// Whole days since the epoch and the nanosecond of that UTC day.
     fn epoch_day_parts(&self) -> [i64, i64] {
-        return [
-            floor_div(self.seconds, SECONDS_PER_DAY),
-            floor_mod(self.seconds, SECONDS_PER_DAY) * NANOSECONDS_PER_SECOND + self.nanoseconds as i64,
-        ];
+        return day_parts(self.seconds, self.nanoseconds);
     }
+}
+
+/// `seconds` and a sub-second part split into whole days and the nanosecond of
+/// the day.
+fn day_parts(seconds: i64, nanoseconds: u32) -> [i64, i64] {
+    return [
+        floor_div(seconds, SECONDS_PER_DAY),
+        floor_mod(seconds, SECONDS_PER_DAY) * NANOSECONDS_PER_SECOND + nanoseconds as i64,
+    ];
 }
 
 /// Reads Temporal's `TemporalInstantString`: a date, a time, and `Z` or an
@@ -482,15 +488,7 @@ fn round_instant(instant: Instant, step: i64, mode: RoundingMode) -> Instant {
     let lower_is_odd = (floor_mod(days, 2) * (NANOSECONDS_PER_DAY / step % 2) + quotient) % 2 == 1;
     let up = rounds_away(unsigned_rounding_mode(mode, false), compare_i64(rest, step - rest), lower_is_odd);
     let rounded = if up { quotient + 1 } else { quotient };
-    return instant_at(days, rounded * step);
-}
-
-/// The instant at `time_of_day` nanoseconds into UTC day `days`.
-fn instant_at(days: i64, time_of_day: i64) -> Instant {
-    return checked_instant(
-        days * SECONDS_PER_DAY + time_of_day / NANOSECONDS_PER_SECOND,
-        time_of_day % NANOSECONDS_PER_SECOND,
-    );
+    return local_instant(days, rounded * step, 0);
 }
 
 impl ZonedDateTime {
@@ -814,11 +812,7 @@ impl ZonedDateTime {
     /// The local reading as days since the epoch and the nanosecond of that
     /// day.
     fn local(&self) -> [i64, i64] {
-        let local_seconds = self.instant.seconds + self.offset_seconds();
-        return [
-            floor_div(local_seconds, SECONDS_PER_DAY),
-            floor_mod(local_seconds, SECONDS_PER_DAY) * NANOSECONDS_PER_SECOND + self.instant.nanoseconds as i64,
-        ];
+        return day_parts(self.instant.seconds + self.offset_seconds(), self.instant.nanoseconds);
     }
 
     fn local_date(&self) -> IsoDate {
@@ -1379,6 +1373,17 @@ fn round_time(time_of_day: i64, increment: i64, unit: Unit, mode: RoundingMode) 
     return [
         floor_div(total, NANOSECONDS_PER_DAY),
         floor_mod(total, NANOSECONDS_PER_DAY),
+    ];
+}
+
+/// Temporal's `AddTime` on a time of day, answering the days it carries and the
+/// time of day it reaches.
+fn add_time(time_of_day: i64, time: TimeDuration) -> [i64, i64] {
+    let nanoseconds = time_of_day % NANOSECONDS_PER_SECOND + time.nanoseconds;
+    let seconds = time_of_day / NANOSECONDS_PER_SECOND + time.seconds + floor_div(nanoseconds, NANOSECONDS_PER_SECOND);
+    return [
+        floor_div(seconds, SECONDS_PER_DAY),
+        floor_mod(seconds, SECONDS_PER_DAY) * NANOSECONDS_PER_SECOND + floor_mod(nanoseconds, NANOSECONDS_PER_SECOND),
     ];
 }
 
@@ -2021,58 +2026,10 @@ fn assign_time_component(duration: Duration, slot: i32, value: i64) -> Duration 
     return Duration { ..duration, seconds: value };
 }
 
-/// Accepts an ISO 8601 duration string.
-struct DurationVisitor {
-}
-
-impl Visitor for DurationVisitor {
-    type Value = Duration;
-
-    fn visit_string<S: AsStrSlice>(&mut self, v: S) -> Result<Duration, DeserializeError> {
-        return Duration::parse(v);
-    }
-
-    fn visit_i64(&mut self, _v: i64) -> Result<Duration, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 duration string", -1));
-    }
-
-    fn visit_u64(&mut self, _v: u64) -> Result<Duration, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 duration string", -1));
-    }
-
-    fn visit_i128(&mut self, _v: i128) -> Result<Duration, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 duration string", -1));
-    }
-
-    fn visit_u128(&mut self, _v: u128) -> Result<Duration, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 duration string", -1));
-    }
-
-    fn visit_f64(&mut self, _v: f64) -> Result<Duration, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 duration string", -1));
-    }
-
-    fn visit_null(&mut self) -> Result<Duration, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 duration string", -1));
-    }
-
-    fn visit_bool(&mut self, _v: bool) -> Result<Duration, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 duration string", -1));
-    }
-
-    fn visit_seq<A: DeserializeSeq>(&mut self, _seq: &mut A) -> Result<Duration, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected duration, found sequence", -1));
-    }
-
-    fn visit_map<A: DeserializeMap>(&mut self, _map: &mut A) -> Result<Duration, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected duration, found map", -1));
-    }
-}
-
 impl Deserialize for Duration {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Duration, DeserializeError> {
-        let mut v = DurationVisitor {};
-        return d.deserialize_any::<DurationVisitor>(&mut v);
+        let text = d.deserialize_string()?;
+        return Duration::from_str(text);
     }
 }
 
@@ -2496,36 +2453,53 @@ fn parse_month_day_spec(text: &StrSlice, p: &mut ParsedIso) -> Result<i32, Deser
 /// seconds and a fraction, all extended or all basic. A leap second reads as
 /// `:59`, as Temporal constrains it.
 fn parse_time(text: &StrSlice, start: i32, p: &mut ParsedIso) -> Result<i32, DeserializeError> {
-    let hour = read_two_digits(text, start)?;
-    let mut i = start + 2;
-    let mut minute: i64 = 0;
-    let mut second: i64 = 0;
-    let mut fraction: i64 = 0;
-    let extended = byte_at(text, i) == b':';
-    if extended || byte_at(text, i).is_ascii_digit() {
+    let clock = read_clock(text, start, true)?;
+    if clock.hour > 23 || clock.minute > 59 || clock.second > 60 {
+        return Result::Err(DeserializeError::invalid_value("the time does not exist", start as i64));
+    }
+    let constrained_second = if clock.second == 60 { 59 } else { clock.second };
+    p.time_of_day = ((clock.hour * 60 + clock.minute) * 60 + constrained_second) * NANOSECONDS_PER_SECOND + clock.fraction;
+    p.has_time = true;
+    return Result::Ok(clock.end);
+}
+
+/// What `read_clock` reads, not yet range-checked.
+struct ClockReading {
+    hour: i64,
+    minute: i64 = 0,
+    second: i64 = 0,
+    /// The fraction of the second, in nanoseconds.
+    fraction: i64 = 0,
+    has_seconds: bool = false,
+    /// The index just past the reading.
+    end: i32,
+}
+
+/// An hour at `start`, then optionally minutes, then with `seconds` optionally
+/// seconds and a fraction, all extended or all basic: the shape a time and a
+/// UTC offset share.
+fn read_clock(text: &StrSlice, start: i32, seconds: bool) -> Result<ClockReading, DeserializeError> {
+    let mut clock = ClockReading { hour: read_two_digits(text, start)?, end: start + 2 };
+    let extended = byte_at(text, clock.end) == b':';
+    if !(extended || byte_at(text, clock.end).is_ascii_digit()) {
+        return Result::Ok(clock);
+    }
+    let mut i = if extended { clock.end + 1 } else { clock.end };
+    clock.minute = read_two_digits(text, i)?;
+    i += 2;
+    let more = if extended { byte_at(text, i) == b':' } else { byte_at(text, i).is_ascii_digit() };
+    if seconds && more {
         if extended {
             i += 1;
         }
-        minute = read_two_digits(text, i)?;
-        i += 2;
-        let has_second = if extended { byte_at(text, i) == b':' } else { byte_at(text, i).is_ascii_digit() };
-        if has_second {
-            if extended {
-                i += 1;
-            }
-            second = read_two_digits(text, i)?;
-            let [nanoseconds, after] = parse_time_fraction(text, i + 2)?;
-            fraction = nanoseconds;
-            i = after;
-        }
+        clock.second = read_two_digits(text, i)?;
+        let [fraction, after] = parse_time_fraction(text, i + 2)?;
+        clock.fraction = fraction;
+        clock.has_seconds = true;
+        i = after;
     }
-    if hour > 23 || minute > 59 || second > 60 {
-        return Result::Err(DeserializeError::invalid_value("the time does not exist", start as i64));
-    }
-    let constrained_second = if second == 60 { 59 } else { second };
-    p.time_of_day = ((hour * 60 + minute) * 60 + constrained_second) * NANOSECONDS_PER_SECOND + fraction;
-    p.has_time = true;
-    return Result::Ok(i);
+    clock.end = i;
+    return Result::Ok(clock);
 }
 
 /// The grammar's optional `TimeFraction` at `i`: a `.` or `,` and one to nine
@@ -2561,36 +2535,12 @@ fn parse_utc_offset(text: &StrSlice, start: i32, sub_minute: bool) -> Result<[i6
     if sign != b'+' && sign != b'-' {
         return Result::Err(DeserializeError::malformed("expected a UTC offset", start as i64));
     }
-    let hour = read_two_digits(text, start + 1)?;
-    let mut i = start + 3;
-    let mut minute: i64 = 0;
-    let mut second: i64 = 0;
-    let mut fraction: i64 = 0;
-    let mut has_seconds = false;
-    let extended = byte_at(text, i) == b':';
-    if extended || byte_at(text, i).is_ascii_digit() {
-        if extended {
-            i += 1;
-        }
-        minute = read_two_digits(text, i)?;
-        i += 2;
-        let more = if extended { byte_at(text, i) == b':' } else { byte_at(text, i).is_ascii_digit() };
-        if sub_minute && more {
-            if extended {
-                i += 1;
-            }
-            second = read_two_digits(text, i)?;
-            let [nanoseconds, after] = parse_time_fraction(text, i + 2)?;
-            fraction = nanoseconds;
-            i = after;
-            has_seconds = true;
-        }
-    }
-    if hour > 23 || minute > 59 || second > 59 {
+    let clock = read_clock(text, start + 1, sub_minute)?;
+    if clock.hour > 23 || clock.minute > 59 || clock.second > 59 {
         return Result::Err(DeserializeError::invalid_value("the UTC offset is out of range", start as i64));
     }
-    let magnitude = ((hour * 60 + minute) * 60 + second) * NANOSECONDS_PER_SECOND + fraction;
-    return Result::Ok([if sign == b'-' { -magnitude } else { magnitude }, i, has_seconds]);
+    let magnitude = ((clock.hour * 60 + clock.minute) * 60 + clock.second) * NANOSECONDS_PER_SECOND + clock.fraction;
+    return Result::Ok([if sign == b'-' { -magnitude } else { magnitude }, clock.end, clock.has_seconds]);
 }
 
 /// The grammar's optional `DateTimeUTCOffset` at `i`; `Z` only with `allow_z`.
@@ -3299,15 +3249,8 @@ impl PlainTime {
     /// do not move a clock.
     pub fn add(&self, duration: &Duration) -> PlainTime {
         let start = self.nanoseconds_since_midnight();
-        let time = duration.validated().time_part();
-        let nanoseconds = start % NANOSECONDS_PER_SECOND + time.nanoseconds;
-        let seconds = start / NANOSECONDS_PER_SECOND + time.seconds + floor_div(nanoseconds, NANOSECONDS_PER_SECOND);
-        return PlainTime::from_nanoseconds_since_midnight(
-            floor_mod(seconds, SECONDS_PER_DAY) * NANOSECONDS_PER_SECOND + floor_mod(
-                nanoseconds,
-                NANOSECONDS_PER_SECOND,
-            ),
-        );
+        let [_, time_of_day] = add_time(start, duration.validated().time_part());
+        return PlainTime::from_nanoseconds_since_midnight(time_of_day);
     }
 
     /// Move back by `duration`, wrapping the same way.
@@ -3382,28 +3325,12 @@ impl PlainDateTime {
     /// days and time in exact time, carrying whole days into the date, then
     /// the years, months, and weeks with a month-end overflow constrained.
     pub fn add(&self, duration: &Duration) -> PlainDateTime {
-        let [days, time_of_day] = self.parts();
+        let [days, start] = self.parts();
         let d = duration.validated();
-        let time = d.time_with_days();
-        let nanoseconds = time_of_day % NANOSECONDS_PER_SECOND + time.nanoseconds;
-        let seconds = time_of_day / NANOSECONDS_PER_SECOND + time.seconds + floor_div(
-            nanoseconds,
-            NANOSECONDS_PER_SECOND,
-        );
-        let date_duration = Duration {
-            years: d.years,
-            months: d.months,
-            weeks: d.weeks,
-            days: floor_div(seconds, SECONDS_PER_DAY),
-        };
+        let [carry, time_of_day] = add_time(start, d.time_with_days());
+        let date_duration = Duration { years: d.years, months: d.months, weeks: d.weeks, days: carry };
         let added = calendar_date_add(&iso_date_from_epoch_days(days), &date_duration);
-        return PlainDateTime::from_parts(
-            added,
-            floor_mod(seconds, SECONDS_PER_DAY) * NANOSECONDS_PER_SECOND + floor_mod(
-                nanoseconds,
-                NANOSECONDS_PER_SECOND,
-            ),
-        );
+        return PlainDateTime::from_parts(added, time_of_day);
     }
 
     /// Move back by `duration`.
@@ -3742,58 +3669,10 @@ impl Serialize for PlainDate {
     }
 }
 
-/// Accepts the Temporal string of a date.
-struct PlainDateVisitor {
-}
-
-impl Visitor for PlainDateVisitor {
-    type Value = PlainDate;
-
-    fn visit_string<S: AsStrSlice>(&mut self, v: S) -> Result<PlainDate, DeserializeError> {
-        return PlainDate::from_str(v);
-    }
-
-    fn visit_i64(&mut self, _v: i64) -> Result<PlainDate, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string", -1));
-    }
-
-    fn visit_u64(&mut self, _v: u64) -> Result<PlainDate, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string", -1));
-    }
-
-    fn visit_i128(&mut self, _v: i128) -> Result<PlainDate, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string", -1));
-    }
-
-    fn visit_u128(&mut self, _v: u128) -> Result<PlainDate, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string", -1));
-    }
-
-    fn visit_f64(&mut self, _v: f64) -> Result<PlainDate, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string", -1));
-    }
-
-    fn visit_null(&mut self) -> Result<PlainDate, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string", -1));
-    }
-
-    fn visit_bool(&mut self, _v: bool) -> Result<PlainDate, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string", -1));
-    }
-
-    fn visit_seq<A: DeserializeSeq>(&mut self, _seq: &mut A) -> Result<PlainDate, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string, found sequence", -1));
-    }
-
-    fn visit_map<A: DeserializeMap>(&mut self, _map: &mut A) -> Result<PlainDate, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date string, found map", -1));
-    }
-}
-
 impl Deserialize for PlainDate {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<PlainDate, DeserializeError> {
-        let mut v = PlainDateVisitor {};
-        return d.deserialize_any::<PlainDateVisitor>(&mut v);
+        let text = d.deserialize_string()?;
+        return PlainDate::from_str(text);
     }
 }
 
@@ -3804,58 +3683,10 @@ impl Serialize for PlainTime {
     }
 }
 
-/// Accepts the Temporal string of a time.
-struct PlainTimeVisitor {
-}
-
-impl Visitor for PlainTimeVisitor {
-    type Value = PlainTime;
-
-    fn visit_string<S: AsStrSlice>(&mut self, v: S) -> Result<PlainTime, DeserializeError> {
-        return PlainTime::from_str(v);
-    }
-
-    fn visit_i64(&mut self, _v: i64) -> Result<PlainTime, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string", -1));
-    }
-
-    fn visit_u64(&mut self, _v: u64) -> Result<PlainTime, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string", -1));
-    }
-
-    fn visit_i128(&mut self, _v: i128) -> Result<PlainTime, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string", -1));
-    }
-
-    fn visit_u128(&mut self, _v: u128) -> Result<PlainTime, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string", -1));
-    }
-
-    fn visit_f64(&mut self, _v: f64) -> Result<PlainTime, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string", -1));
-    }
-
-    fn visit_null(&mut self) -> Result<PlainTime, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string", -1));
-    }
-
-    fn visit_bool(&mut self, _v: bool) -> Result<PlainTime, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string", -1));
-    }
-
-    fn visit_seq<A: DeserializeSeq>(&mut self, _seq: &mut A) -> Result<PlainTime, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string, found sequence", -1));
-    }
-
-    fn visit_map<A: DeserializeMap>(&mut self, _map: &mut A) -> Result<PlainTime, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 time string, found map", -1));
-    }
-}
-
 impl Deserialize for PlainTime {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<PlainTime, DeserializeError> {
-        let mut v = PlainTimeVisitor {};
-        return d.deserialize_any::<PlainTimeVisitor>(&mut v);
+        let text = d.deserialize_string()?;
+        return PlainTime::from_str(text);
     }
 }
 
@@ -3866,61 +3697,10 @@ impl Serialize for PlainDateTime {
     }
 }
 
-/// Accepts the Temporal string of a date-time.
-struct PlainDateTimeVisitor {
-}
-
-impl Visitor for PlainDateTimeVisitor {
-    type Value = PlainDateTime;
-
-    fn visit_string<S: AsStrSlice>(&mut self, v: S) -> Result<PlainDateTime, DeserializeError> {
-        return PlainDateTime::from_str(v);
-    }
-
-    fn visit_i64(&mut self, _v: i64) -> Result<PlainDateTime, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date-time string", -1));
-    }
-
-    fn visit_u64(&mut self, _v: u64) -> Result<PlainDateTime, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date-time string", -1));
-    }
-
-    fn visit_i128(&mut self, _v: i128) -> Result<PlainDateTime, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date-time string", -1));
-    }
-
-    fn visit_u128(&mut self, _v: u128) -> Result<PlainDateTime, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date-time string", -1));
-    }
-
-    fn visit_f64(&mut self, _v: f64) -> Result<PlainDateTime, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date-time string", -1));
-    }
-
-    fn visit_null(&mut self) -> Result<PlainDateTime, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date-time string", -1));
-    }
-
-    fn visit_bool(&mut self, _v: bool) -> Result<PlainDateTime, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date-time string", -1));
-    }
-
-    fn visit_seq<A: DeserializeSeq>(&mut self, _seq: &mut A) -> Result<PlainDateTime, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type(
-            "expected an ISO 8601 date-time string, found sequence",
-            -1,
-        ));
-    }
-
-    fn visit_map<A: DeserializeMap>(&mut self, _map: &mut A) -> Result<PlainDateTime, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 date-time string, found map", -1));
-    }
-}
-
 impl Deserialize for PlainDateTime {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<PlainDateTime, DeserializeError> {
-        let mut v = PlainDateTimeVisitor {};
-        return d.deserialize_any::<PlainDateTimeVisitor>(&mut v);
+        let text = d.deserialize_string()?;
+        return PlainDateTime::from_str(text);
     }
 }
 
@@ -3931,61 +3711,10 @@ impl Serialize for PlainYearMonth {
     }
 }
 
-/// Accepts the Temporal string of a year-month.
-struct PlainYearMonthVisitor {
-}
-
-impl Visitor for PlainYearMonthVisitor {
-    type Value = PlainYearMonth;
-
-    fn visit_string<S: AsStrSlice>(&mut self, v: S) -> Result<PlainYearMonth, DeserializeError> {
-        return PlainYearMonth::from_str(v);
-    }
-
-    fn visit_i64(&mut self, _v: i64) -> Result<PlainYearMonth, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 year-month string", -1));
-    }
-
-    fn visit_u64(&mut self, _v: u64) -> Result<PlainYearMonth, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 year-month string", -1));
-    }
-
-    fn visit_i128(&mut self, _v: i128) -> Result<PlainYearMonth, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 year-month string", -1));
-    }
-
-    fn visit_u128(&mut self, _v: u128) -> Result<PlainYearMonth, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 year-month string", -1));
-    }
-
-    fn visit_f64(&mut self, _v: f64) -> Result<PlainYearMonth, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 year-month string", -1));
-    }
-
-    fn visit_null(&mut self) -> Result<PlainYearMonth, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 year-month string", -1));
-    }
-
-    fn visit_bool(&mut self, _v: bool) -> Result<PlainYearMonth, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 year-month string", -1));
-    }
-
-    fn visit_seq<A: DeserializeSeq>(&mut self, _seq: &mut A) -> Result<PlainYearMonth, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type(
-            "expected an ISO 8601 year-month string, found sequence",
-            -1,
-        ));
-    }
-
-    fn visit_map<A: DeserializeMap>(&mut self, _map: &mut A) -> Result<PlainYearMonth, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 year-month string, found map", -1));
-    }
-}
-
 impl Deserialize for PlainYearMonth {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<PlainYearMonth, DeserializeError> {
-        let mut v = PlainYearMonthVisitor {};
-        return d.deserialize_any::<PlainYearMonthVisitor>(&mut v);
+        let text = d.deserialize_string()?;
+        return PlainYearMonth::from_str(text);
     }
 }
 
@@ -3996,61 +3725,10 @@ impl Serialize for PlainMonthDay {
     }
 }
 
-/// Accepts the Temporal string of a month-day.
-struct PlainMonthDayVisitor {
-}
-
-impl Visitor for PlainMonthDayVisitor {
-    type Value = PlainMonthDay;
-
-    fn visit_string<S: AsStrSlice>(&mut self, v: S) -> Result<PlainMonthDay, DeserializeError> {
-        return PlainMonthDay::from_str(v);
-    }
-
-    fn visit_i64(&mut self, _v: i64) -> Result<PlainMonthDay, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 month-day string", -1));
-    }
-
-    fn visit_u64(&mut self, _v: u64) -> Result<PlainMonthDay, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 month-day string", -1));
-    }
-
-    fn visit_i128(&mut self, _v: i128) -> Result<PlainMonthDay, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 month-day string", -1));
-    }
-
-    fn visit_u128(&mut self, _v: u128) -> Result<PlainMonthDay, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 month-day string", -1));
-    }
-
-    fn visit_f64(&mut self, _v: f64) -> Result<PlainMonthDay, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 month-day string", -1));
-    }
-
-    fn visit_null(&mut self) -> Result<PlainMonthDay, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 month-day string", -1));
-    }
-
-    fn visit_bool(&mut self, _v: bool) -> Result<PlainMonthDay, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 month-day string", -1));
-    }
-
-    fn visit_seq<A: DeserializeSeq>(&mut self, _seq: &mut A) -> Result<PlainMonthDay, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type(
-            "expected an ISO 8601 month-day string, found sequence",
-            -1,
-        ));
-    }
-
-    fn visit_map<A: DeserializeMap>(&mut self, _map: &mut A) -> Result<PlainMonthDay, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected an ISO 8601 month-day string, found map", -1));
-    }
-}
-
 impl Deserialize for PlainMonthDay {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<PlainMonthDay, DeserializeError> {
-        let mut v = PlainMonthDayVisitor {};
-        return d.deserialize_any::<PlainMonthDayVisitor>(&mut v);
+        let text = d.deserialize_string()?;
+        return PlainMonthDay::from_str(text);
     }
 }
 
