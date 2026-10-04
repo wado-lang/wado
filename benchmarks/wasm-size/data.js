@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791118694994,
+  "lastUpdate": 1791124844588,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -63593,6 +63593,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8c6b38820042df3d4a5d8e7549f6d5a1be6ca65e"
         },
         "date": 1791118694045,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338887,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "21cd413f524548ff54892057c6c6c3c08dbb9ca2",
+          "message": "Merge pull request #2268 from wado-lang/benchmark-update-2026-10-04\n\ndocs(benchmark): remeasure on native Ubuntu with wasi-sdk 34",
+          "timestamp": "2026-10-04T23:20:35+09:00",
+          "tree_id": "3b6421123213d87a379998a456e272101ee60baf",
+          "url": "https://github.com/wado-lang/wado/commit/21cd413f524548ff54892057c6c6c3c08dbb9ca2"
+        },
+        "date": 1791124844188,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
