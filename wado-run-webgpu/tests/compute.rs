@@ -90,13 +90,13 @@ fn a_machine_without_an_adapter_is_told_what_to_install() {
 
 /// The names of this machine's adapters, in index order, as the refusal of a
 /// name nothing matches lists them, so no test assumes which GPU or driver is
-/// installed.
+/// installed. Every test that calls it also holds that refusal to its wording.
 fn adapter_names() -> Vec<String> {
     let output = run(&["--gpu-adapter", "no-such-gpu", "app.wado"]);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(!output.status.success());
     let (_, listing) = stderr
-        .split_once("The adapters here:\n")
+        .split_once("no GPU adapter matches 'no-such-gpu'. The adapters here:\n")
         .unwrap_or_else(|| panic!("no listing in stderr: {stderr}"));
     listing
         .lines()
@@ -162,11 +162,6 @@ fn an_index_past_the_last_adapter_is_refused_with_the_adapters_there_are() {
             && stderr.contains("The adapters here:\n  0: "),
         "stderr: {stderr}"
     );
-}
-
-#[test]
-fn an_adapter_name_nothing_matches_is_refused_with_the_names_there_are() {
-    assert!(!adapter_names().is_empty());
 }
 
 /// The runner reads the level itself and hands it to `wado compile`, so the
