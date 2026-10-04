@@ -4,8 +4,7 @@
 
 # core:temporal
 
-Date and time, a faithful implementation of TC39 Temporal under the ISO 8601
-calendar.
+Date and time, a port of ECMA-262 Temporal under the ISO 8601 calendar.
 
 Two types carry an instant — `Instant`, an exact point on the timeline, and
 `ZonedDateTime`, that instant paired with the zone it is read in. Five are
@@ -25,7 +24,8 @@ Where this module departs from the specification, it does so deliberately:
 - Temporal's BigInt epoch nanoseconds are an `i64` second count and a `u32`
   sub-second part, and `epoch_nanoseconds` answers an `i128`. A duration
   component is an exact `i64` rather than a float64; a result that does not
-  fit one (a nanosecond count of more than ~292 years) traps.
+  fit one (a nanosecond count of more than ~292 years, or a microsecond
+  count of more than ~292,000) traps.
 - A RangeError traps, except in a parser, which returns a
   `DeserializeError`. A struct literal bypasses every constructor check, so
   every operation checks its receiver and arguments first.
@@ -190,7 +190,7 @@ the count were positive: `Trunc` rounds toward the past like `Floor`.
 
 Temporal's `toString` (and `toJSON`): the UTC reading with a `Z`, its
 fraction printed as far as the last non-zero digit. This is the serde
-wire form, and an RFC 3339 timestamp.
+wire form, and an RFC 3339 timestamp in the years `0..=9999`.
 
 #### `pub fn to_http_date(&self) -> String`
 
@@ -430,8 +430,9 @@ offset, and the zone annotation, as in
 
 #### `pub fn to_rfc3339(&self) -> String`
 
-RFC 3339: the local date and time and the offset, without the zone
-annotation RFC 9557 adds. `parse_rfc3339` reads it back.
+The local date and time and the offset, without the zone annotation
+RFC 9557 adds: RFC 3339 in the years `0..=9999`, and ISO 8601's expanded
+year outside them. `parse_rfc3339` reads it back.
 
 #### `pub fn to_plain_date(&self) -> PlainDate`
 

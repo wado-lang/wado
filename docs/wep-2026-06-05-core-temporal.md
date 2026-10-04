@@ -96,9 +96,20 @@ pub struct ZonedDateTime {
 
 ### Temporal is the specification
 
-`core:temporal` implements TC39 Temporal as written. A behaviour that differs
-from the specification is a bug, unless this WEP names it as a deliberate
-departure. The departures are these:
+`core:temporal` is a port of Temporal as ECMA-262 specifies it. Where the
+specification moves on from the TC39 proposal this module was ported from
+(`wado-compiler/ref/tc39-temporal.md`), the module follows it. Three principles
+govern the port:
+
+- Within the range an ordinary application uses, the module behaves exactly as
+  the specification says.
+- Wado has no BigInt. A BigInt becomes an `i64` wherever one holds the value,
+  and an `i128` only where nothing narrower does, since `i128` arithmetic is
+  slow.
+- A behaviour that differs from the specification is a bug, unless this WEP
+  names it as a deliberate departure.
+
+The departures are these:
 
 - Temporal's BigInt and float64 numbers are `i64`, as the next section says.
 - A RangeError traps. A parser returns a `DeserializeError` instead, since its
