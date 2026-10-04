@@ -2130,6 +2130,20 @@ WS : ' ' -> skip ;
     assert parses(grammar, "s", ["a b", "b a"]) == "a b => (s (x a b))\nb a => (s (y b a))\n";
 }
 
+test "a predicate fn keeps the line break that ends its body's comment" {
+    let grammar = "grammar T;
+options { language = Wado; }
+s : x EOF ;
+x : {true // always
+}? A | B ;
+A : 'a' ;
+B : 'b' ;
+";
+    let pred = extract_fn_body(&gen_source(grammar), "fn pred_");
+    assert !pred.contains("// always;"), pred;
+    assert parses(grammar, "s", ["a"]) == "a => (s (x a))\n";
+}
+
 test "an action or predicate the emitter runs is not also reported as unhandled" {
     // A driver shows each of these running. The report is only a warning, so a
     // body that runs and is reported anyway fails no driver.
