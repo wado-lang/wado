@@ -9,10 +9,11 @@ Every step runs whether or not the merge conflicts.
 
 ## 1. Merge
 
-Pull the branch first: CI's `tidy` job may have pushed onto it.
+If the branch is on `origin`, merge it first: CI's `tidy` job may have pushed
+onto it.
 
 ```sh
-git pull origin "$(git branch --show-current)"
+git pull --no-rebase origin "$(git branch --show-current)"   # pushed branches only
 git fetch origin main
 git -c merge.conflictstyle=zdiff3 merge origin/main
 ```

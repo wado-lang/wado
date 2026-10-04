@@ -14,9 +14,8 @@ binaryen is not in the mise registry, and mise's `github:` backend gets a 403 in
 a cloud session:
 
 ```sh
-S=$(mktemp -d)
-curl -sSL https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz | tar xz -C $S
-B=$S/binaryen-version_133/bin
+mkdir -p /tmp/binaryen
+curl -sSL https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz | tar xz -C /tmp/binaryen
 ```
 
 Where the mise shim for wasm-tools reports no version, call it under
@@ -25,6 +24,8 @@ Where the mise shim for wasm-tools reports no version, call it under
 ## Pipeline
 
 ```sh
+B=/tmp/binaryen/binaryen-version_133/bin
+S=/tmp/wasm-opt && mkdir -p $S
 FEATURES="--mvp-features --enable-sign-ext --enable-mutable-globals \
   --enable-nontrapping-float-to-int --enable-simd --enable-relaxed-simd \
   --enable-bulk-memory --enable-bulk-memory-opt --enable-call-indirect-overlong \

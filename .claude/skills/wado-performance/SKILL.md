@@ -59,9 +59,9 @@ Also a `Trait::method(…)` call the inliner left in a loop, and bounds-checked
 
 A shape you are about to rewrite by hand in the stdlib is usually one a pass
 exists for: name the pass, read its precondition, and fix it there. Known
-preconditions that have bitten: `sroa` and `multi_value_return` want a direct
-literal binding at every site, and `cold_outline` refuses a region containing a
-`return`.
+preconditions that have bitten: `multi_value_return` needs every call site to be
+`let $tmp = Call(f)` used only through field accesses, and `cold_outline`
+refuses a region containing a `return`.
 
 ## 3. WasmGC Cost Facts
 
@@ -144,6 +144,7 @@ bytes are identical has not moved. Gate on each compile's exit status, since a
 failed one leaves the last round's file behind:
 
 ```sh
+base=$(mise run benchmark-baseline)   # cached: seconds after the first build
 for f in benchmark/*/*.wado; do
   case "$f" in *_schema.wado) continue ;; esac
   world=

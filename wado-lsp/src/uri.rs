@@ -17,9 +17,9 @@ use std::path::{Path, PathBuf};
 
 /// LSP-side URI scheme classification.
 ///
-/// The wado compiler emits the schemes documented at
-/// `wado-lsp/AGENTS.md#bundled-stdlib-content` plus
-/// `WEP 2026-04-12 §"The `kiln:` URI scheme"` for `kiln:` redirects.
+/// The wado compiler emits `file:` for user source, `core:` / `wasi:` for the
+/// bundled stdlib (served through `workspace/textDocumentContent`), and
+/// `kiln:` for redirects (WEP 2026-04-12 §"The `kiln:` URI scheme").
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UriScheme {
     /// `file:` — disk-backed user source.

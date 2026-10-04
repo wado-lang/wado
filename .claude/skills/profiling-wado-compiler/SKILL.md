@@ -20,10 +20,9 @@ Host side only: the compiler, `serve`, `run`, wasmtime. The guest program is
 Linux needs `perf_event_paranoid <= 1` (`echo 1 | sudo tee /proc/sys/kernel/perf_event_paranoid`) and `addr2line` (binutils).
 
 ```sh
-A=.claude/skills/profiling-wado-compiler/scripts
 samply record --save-only --rate 1000 -o /tmp/prof.json -- \
   target/debug/wado test package-gale/tests/driver_rust_test.wado
-node $A/analyze_native_profile.ts /tmp/prof.json   # --top 60, --binary wado-lsp, --under 'fn'
+node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts /tmp/prof.json   # --top 60, --binary wado-lsp, --under 'fn'
 ```
 
 For a server, record it in the background, drive load, then SIGTERM the child,
@@ -64,7 +63,7 @@ cargo build -p wado-cli --bin wado --no-default-features
 cp target/debug/wado /tmp/wado-sysalloc
 valgrind --tool=dhat --num-callers=40 --dhat-out-file=/tmp/dhat.json \
   /tmp/wado-sysalloc compile -O2 hello.wado -o /tmp/out.wasm
-node $A/analyze_dhat.ts /tmp/dhat.json   # --where RE, --not RE, --stacks N
+node .claude/skills/profiling-wado-compiler/scripts/analyze_dhat.ts /tmp/dhat.json   # --where RE, --not RE, --stacks N
 ```
 
 It reports what was live at the heap's peak, by site and by `wado` function.

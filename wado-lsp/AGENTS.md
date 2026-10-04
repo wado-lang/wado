@@ -38,14 +38,17 @@ The protocol: [lsp.md](lsp.md).
 - `file:` URIs are percent-decoded on the way in and re-encoded on the way out,
   and relative imports normalised lexically, since clients key documents by URI
   string.
-- `core:` / `wasi:` sources are served through `workspace/textDocumentContent`;
-  the VS Code extension registers a provider for both schemes.
+- `core:` / `wasi:` sources are served through `workspace/textDocumentContent`,
+  which accepts the rfc3986-normalised `core:/cli` as well as `core:cli`. The VS
+  Code extension registers a provider for both schemes and forces language
+  `wado`, since an opaque URI carries no extension.
 
 ## TODO
 
 Remaining LSP 3.18 kinds:
 
-- [ ] Lifecycle: `client/registerCapability`, `$/setTrace`, `$/cancelRequest`
+- [ ] Lifecycle: `client/registerCapability` / `unregisterCapability`,
+      `$/setTrace` / `$/logTrace`, `$/cancelRequest`
 - [ ] Sync: incremental `didChange`, `willSave`, `willSaveWaitUntil`, `didSave`,
   `didRename`
 - [ ] Pull diagnostics: `textDocument/diagnostic`, `workspace/diagnostic`
@@ -56,11 +59,13 @@ Remaining LSP 3.18 kinds:
 - [ ] Structure: `documentSymbol`, `foldingRange`, `selectionRange`,
   `linkedEditingRange`
 - [ ] Editing: `completion`, `codeAction`, `formatting`, `rangeFormatting`,
-  `onTypeFormatting`, `rename`, `inlineCompletion`, `documentColor`
-- [ ] Workspace: `symbol`, `configuration`, `workspaceFolders`,
+  `onTypeFormatting`, `rename` / `prepareRename`, `inlineCompletion`,
+  `documentColor` / `colorPresentation`
+- [ ] Workspace: `symbol`, `configuration`, `didChangeConfiguration`,
+  `workspaceFolders`,
   `didChangeWatchedFiles` (which caching `dependency_index` across
   requests waits on), `executeCommand`, `applyEdit`, file operations
-- [ ] Window: `showMessage`, `showDocument`, `logMessage`, `workDoneProgress`,
+- [ ] Window: `showMessage` / `showMessageRequest`, `showDocument`, `logMessage`, `workDoneProgress`,
   `telemetry/event`
 
 Definition gaps:
