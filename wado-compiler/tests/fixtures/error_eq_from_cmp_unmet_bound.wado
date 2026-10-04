@@ -1,0 +1,38 @@
+// The `Eq` a written `cmp` gives carries that impl's bounds: `Ranked<T>` is
+// `Eq` exactly where it is `Ord`, whatever its members are.
+
+struct Ranked<T> {
+    rank: T,
+    note: String,
+}
+
+impl<T: Ord> Ord for Ranked<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        return self.rank.cmp(&other.rank);
+    }
+}
+
+struct Opaque {
+    f: fn() -> i32,
+}
+
+fn one() -> i32 {
+    return 1;
+}
+
+fn same<T: Eq>(a: &T, b: &T) -> bool {
+    return a == b;
+}
+
+test {
+    let a = Ranked { rank: Opaque { f: one }, note: "a" };
+    assert same(&a, &a);
+}
+
+__DATA__
+{
+    "compile_error": ":29:12: analysis error: type 'Ranked<Opaque>' does not implement trait 'Eq' required by bound on 'T'",
+    "compile_errors_contains": [
+        "`Ranked<Opaque>` takes `Eq` from its written `cmp`, and does not implement `Ord`"
+    ]
+}

@@ -20,7 +20,9 @@ use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::replace_on_assign_place;
 use super::scope::ScopedBound;
 use super::trait_query::primitive_has_operator;
-use super::types::{FunctionContext, MethodInfo, OperatorImpl, ResolvedTraitMethod, TypeError};
+use super::types::{
+    FunctionContext, MethodInfo, OperatorImpl, ResolvedTraitMethod, TypeError, append_reason_chain,
+};
 use super::tysys::TypeSystem;
 use super::util::bound_param_name;
 use crate::elaborator::reify::{CompoundHoist, collect_compound_hoists};
@@ -387,6 +389,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         if is_comparison {
+            // A newtype's representation would answer `<` as it is, so ask the
+            // chain before it does.
+            if matches!(
+                op,
+                BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
+            ) && self.tysys.ord_withheld_by(left).is_some()
+            {
+                return self.operator_not_implemented(op, left, span);
+            }
             // A type that erases to a scalar is still its own type, so an impl
             // it writes — or inherits from a link below — answers the
             // comparison before the erased form's instruction does.
@@ -462,15 +473,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         lookup_type_id,
                         Some(&ArgClass::Exact(right)),
                     ) else {
-                        let type_name = self.tysys.type_table.borrow().type_name(left);
-                        let op_str = if op == BinaryOp::Eq { "==" } else { "!=" };
-                        let _ = self.emit(TypeError::OperatorNotApplicable {
-                            op: op_str.to_string(),
-                            operands: vec![type_name],
-                            note: Some("type does not implement `Eq`".to_string()),
-                            span,
-                        });
-                        return TypeTable::ERROR;
+                        return self.operator_not_implemented(op, left, span);
                     };
                     // Reify rebuilds the `!` wrapper for `!=`.
                     return self.dispatch_trait_op_method(
@@ -494,21 +497,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         lookup_type_id,
                         None,
                     ) else {
-                        let type_name = self.tysys.type_table.borrow().type_name(left);
-                        let op_str = match op {
-                            BinaryOp::Lt => "<",
-                            BinaryOp::Gt => ">",
-                            BinaryOp::LtEq => "<=",
-                            BinaryOp::GtEq => ">=",
-                            _ => unreachable!(),
-                        };
-                        let _ = self.emit(TypeError::OperatorNotApplicable {
-                            op: op_str.to_string(),
-                            operands: vec![type_name],
-                            note: Some("type does not implement `Ord`".to_string()),
-                            span,
-                        });
-                        return TypeTable::ERROR;
+                        return self.operator_not_implemented(op, left, span);
                     };
                     let call = self.dispatch_trait_op_method(
                         left,
@@ -816,48 +805,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if left_name == right_name {
                     // Both operands share a type that lacks the operator's
                     // trait impl (e.g. `Point - Point` with no `Sub`).
-                    let trait_name: String = match op {
-                        BinaryOp::Add => "Add".to_string(),
-                        BinaryOp::Sub => "Sub".to_string(),
-                        BinaryOp::Mul => "Mul".to_string(),
-                        BinaryOp::Div => "Div".to_string(),
-                        BinaryOp::Mod => "Rem".to_string(),
-                        BinaryOp::BitAnd => "BitAnd".to_string(),
-                        BinaryOp::BitOr => "BitOr".to_string(),
-                        BinaryOp::BitXor => "BitXor".to_string(),
-                        BinaryOp::Shl => "Shl".to_string(),
-                        BinaryOp::Shr => "Shr".to_string(),
-                        BinaryOp::Eq | BinaryOp::NotEq => self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .compiler_trait_name(CompilerItem::Eq)
-                            .to_string(),
-                        BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .compiler_trait_name(CompilerItem::Ord)
-                            .to_string(),
-                        _ => "?".to_string(),
-                    };
-                    let _ = self.emit(TypeError::OperatorNotApplicable {
-                        op: op_char.to_string(),
-                        operands: vec![left_name],
-                        note: Some(format!("type does not implement `{trait_name}`")),
-                        span,
-                    });
-                } else {
-                    // Mixed operand types that cannot combine under this
-                    // operator (e.g. `i32 - List<i32>`). Reported the same
-                    // way regardless of which operand is non-primitive.
-                    let _ = self.emit(TypeError::OperatorNotApplicable {
-                        op: op_char.to_string(),
-                        operands: vec![left_name, right_name],
-                        note: None,
-                        span,
-                    });
+                    return self.operator_not_implemented(op, left, span);
                 }
+                // Mixed operand types that cannot combine under this
+                // operator (e.g. `i32 - List<i32>`). Reported the same
+                // way regardless of which operand is non-primitive.
+                let _ = self.emit(TypeError::OperatorNotApplicable {
+                    op: op_char.to_string(),
+                    operands: vec![left_name, right_name],
+                    note: None,
+                    span,
+                });
                 return TypeTable::ERROR;
             }
         }
@@ -1677,6 +1635,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or_else(|| {
                 self.make_frame_projection_of_trait(operand_type_id, &name, trait_, "Output")
             })
+    }
+
+    /// Report that `left` does not implement the trait `op` dispatches to, with
+    /// the reason chain saying why. Under `#![no_prelude]` the trait is absent,
+    /// and no chain explains its absence.
+    fn operator_not_implemented(&mut self, op: BinaryOp, left: TypeId, span: Span) -> TypeId {
+        let item = operator_compiler_item(&op).expect("`&&` and `||` dispatch to no trait");
+        let trait_name = self
+            .tysys
+            .type_table
+            .borrow()
+            .compiler_trait_name(item)
+            .to_string();
+        let reason = self
+            .tysys
+            .compiler_trait_def(item)
+            .map(|trait_| {
+                self.tysys.trait_unimpl_reason_chain(
+                    &self.annotate_ctx,
+                    &self.type_lookup(),
+                    left,
+                    trait_,
+                    &trait_name,
+                )
+            })
+            .unwrap_or_default();
+        let type_name = self.tysys.type_table.borrow().type_name(left);
+        let _ = self.emit(TypeError::OperatorNotApplicable {
+            op: binary_op_str(op).to_string(),
+            operands: vec![type_name],
+            note: Some(append_reason_chain(
+                format!("type does not implement `{trait_name}`"),
+                &reason,
+            )),
+            span,
+        });
+        TypeTable::ERROR
     }
 
     /// A comparison operator's trait method on `struct_name`, named through

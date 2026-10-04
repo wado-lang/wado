@@ -106,6 +106,36 @@ impl f16 {
         let bits = self.to_bits();
         return bits & F16_EXP == F16_EXP && bits & F16_MANTISSA != 0;
     }
+
+    /// IEEE 754's `==`, on the values widened to f32.
+    pub fn ieee754_eq(&self, other: f16) -> bool {
+        return f32::from(*self).ieee754_eq(f32::from(other));
+    }
+
+    /// IEEE 754's `!=`, on the values widened to f32.
+    pub fn ieee754_ne(&self, other: f16) -> bool {
+        return f32::from(*self).ieee754_ne(f32::from(other));
+    }
+
+    /// IEEE 754's `<`, on the values widened to f32.
+    pub fn ieee754_lt(&self, other: f16) -> bool {
+        return f32::from(*self).ieee754_lt(f32::from(other));
+    }
+
+    /// IEEE 754's `<=`, on the values widened to f32.
+    pub fn ieee754_le(&self, other: f16) -> bool {
+        return f32::from(*self).ieee754_le(f32::from(other));
+    }
+
+    /// IEEE 754's `>`, on the values widened to f32.
+    pub fn ieee754_gt(&self, other: f16) -> bool {
+        return f32::from(*self).ieee754_gt(f32::from(other));
+    }
+
+    /// IEEE 754's `>=`, on the values widened to f32.
+    pub fn ieee754_ge(&self, other: f16) -> bool {
+        return f32::from(*self).ieee754_ge(f32::from(other));
+    }
 }
 
 /// `kept` plus the round-to-nearest-ties-to-even increment for `dropped`'s low
@@ -185,6 +215,36 @@ impl bf16 {
     pub fn is_nan(&self) -> bool {
         let bits = self.to_bits();
         return bits & 0x7F80 == 0x7F80 && bits & 0x007F != 0;
+    }
+
+    /// IEEE 754's `==`, on the values widened to f32.
+    pub fn ieee754_eq(&self, other: bf16) -> bool {
+        return f32::from(*self).ieee754_eq(f32::from(other));
+    }
+
+    /// IEEE 754's `!=`, on the values widened to f32.
+    pub fn ieee754_ne(&self, other: bf16) -> bool {
+        return f32::from(*self).ieee754_ne(f32::from(other));
+    }
+
+    /// IEEE 754's `<`, on the values widened to f32.
+    pub fn ieee754_lt(&self, other: bf16) -> bool {
+        return f32::from(*self).ieee754_lt(f32::from(other));
+    }
+
+    /// IEEE 754's `<=`, on the values widened to f32.
+    pub fn ieee754_le(&self, other: bf16) -> bool {
+        return f32::from(*self).ieee754_le(f32::from(other));
+    }
+
+    /// IEEE 754's `>`, on the values widened to f32.
+    pub fn ieee754_gt(&self, other: bf16) -> bool {
+        return f32::from(*self).ieee754_gt(f32::from(other));
+    }
+
+    /// IEEE 754's `>=`, on the values widened to f32.
+    pub fn ieee754_ge(&self, other: bf16) -> bool {
+        return f32::from(*self).ieee754_ge(f32::from(other));
     }
 }
 

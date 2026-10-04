@@ -406,7 +406,7 @@ test "report_duplicate_field rejects under Error, naming the key as Inspect does
     let role: String = "role";
     let e = report_duplicate_field(DuplicateFieldPolicy::Error, &role).unwrap_err();
     assert e.kind == DeserializeErrorKind::DuplicateField && e.message == `duplicate field: "role"`;
-    assert report_duplicate_field(DuplicateFieldPolicy::Error, &7) matches { Err(e) && e.message == "duplicate field: 7" };
+    assert report_duplicate_field(DuplicateFieldPolicy::Error, &7) matches { Err(int_key) && int_key.message == "duplicate field: 7" };
 }
 
 test "report_duplicate_field continues under Warn" {
@@ -605,5 +605,5 @@ test "an enum or a variant reads its case by discriminant" {
 test "a discriminant no case has is an unknown one" {
     let e = json::from_string::<ReadByDisc<Light>>(`"7"`).unwrap_err();
     assert e.kind == DeserializeErrorKind::UnknownVariant && e.message == "unknown variant discriminant";
-    assert json::from_string::<ReadByDisc<Reading>>(`"7"`) matches { Err(e) && e.kind == DeserializeErrorKind::UnknownVariant };
+    assert json::from_string::<ReadByDisc<Reading>>(`"7"`) matches { Err(variant_err) && variant_err.kind == DeserializeErrorKind::UnknownVariant };
 }

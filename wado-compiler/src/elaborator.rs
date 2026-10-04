@@ -1255,6 +1255,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ) {
             return;
         }
+        if on_bound == OnBoundTrait::Ord
+            && let Some(why) = self.tysys.ord_withheld_note(target_type_id)
+        {
+            let _ = self.emit(types::TypeError::OrdMarkerBesideWrittenEq {
+                type_name: target_type_name.to_string(),
+                why,
+                span,
+            });
+            return;
+        }
         let reason = self.tysys.trait_unimpl_reason_chain(
             &self.annotate_ctx,
             &self.type_lookup(),
@@ -2294,6 +2304,23 @@ impl TypeSystem {
     pub(super) fn variant_of_type(&self, type_id: TypeId) -> Option<&VariantInfo> {
         let def = self.type_def(type_id)?;
         self.data.variant_cases.get(&def)
+    }
+
+    /// Each case's payload type of the variant `ty`, typed at this instance.
+    pub(super) fn case_payload_types(&self, ty: TypeId) -> Option<Vec<TypeId>> {
+        let variant_info = self.variant_of_type(ty)?;
+        let type_args = self
+            .type_table
+            .borrow()
+            .nominal_type_args(ty)
+            .unwrap_or_default();
+        Some(
+            variant_info
+                .cases
+                .iter()
+                .map(|c| self.substitute_type_params(c.payload, &type_args))
+                .collect(),
+        )
     }
 
     /// The enum `type_id` is, or `None` when it is not one. Asks the type for

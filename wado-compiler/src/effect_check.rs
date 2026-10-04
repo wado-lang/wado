@@ -1942,6 +1942,31 @@ pub fn check_purity_semantic(sem: &Semantics) -> Vec<PurityError> {
     out
 }
 
+/// Answers whether an expression performs an effect, for a lint that reports
+/// only an expression that does not.
+pub(crate) struct EffectProbe<'a> {
+    sem: &'a Semantics,
+    state: &'a AnnotateState,
+    data: OwnedEffectData,
+}
+
+impl<'a> EffectProbe<'a> {
+    /// `None` where the elaborator left no state to answer from.
+    pub(crate) fn new(sem: &'a Semantics) -> Option<Self> {
+        let state = sem.state.as_ref()?;
+        let data = OwnedEffectData::build(sem, state, IndexSet::default());
+        Some(Self { sem, state, data })
+    }
+
+    /// Whether evaluating `expr`, written in `module`, performs an effect.
+    pub(crate) fn performs_effect(&self, module: &ModuleSource, expr: &Expr) -> bool {
+        let index = self.data.index();
+        let mut out = Vec::new();
+        PurityWalker::new(self.sem, self.state, &index, module, &mut out).visit_expr(expr);
+        !out.is_empty()
+    }
+}
+
 /// Walk every expression that must be pure, appending violations.
 /// Shared by [`check_purity_semantic`] and [`check_semantics`].
 fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityError>) {
@@ -1952,16 +1977,7 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityE
         if !is_effect_checked(src) {
             continue;
         }
-        let mut walker = PurityWalker {
-            sem,
-            annotations: state.module_semantics.get(src).map(|m| &m.types),
-            index,
-            module_source: src,
-            context: PureContext::DefaultValue,
-            granted: IndexSet::default(),
-            param_types: IndexMap::default(),
-            out: &mut *out,
-        };
+        let mut walker = PurityWalker::new(sem, state, index, src, out);
         for item in &module.items {
             match item {
                 Item::Function(func) => walker.check_defaults(&func.params),
@@ -2033,7 +2049,27 @@ struct PurityWalker<'a> {
     out: &'a mut Vec<PurityError>,
 }
 
-impl PurityWalker<'_> {
+impl<'a> PurityWalker<'a> {
+    /// A walker over `module_source`, outside any `with … do`.
+    fn new(
+        sem: &'a Semantics,
+        state: &'a AnnotateState,
+        index: &'a EffectIndex<'a>,
+        module_source: &'a ModuleSource,
+        out: &'a mut Vec<PurityError>,
+    ) -> Self {
+        Self {
+            sem,
+            annotations: state.module_semantics.get(module_source).map(|m| &m.types),
+            index,
+            module_source,
+            context: PureContext::DefaultValue,
+            granted: IndexSet::default(),
+            param_types: IndexMap::default(),
+            out,
+        }
+    }
+
     fn check(&mut self, context: PureContext, expr: &Expr) {
         self.context = context;
         self.visit_expr(expr);

@@ -3125,24 +3125,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Each case's payload type of the variant `ty`, typed at this instance.
-    pub(super) fn case_payload_types(&self, ty: TypeId) -> Option<Vec<TypeId>> {
-        let variant_info = self.tysys.variant_of_type(ty)?;
-        let type_args = self
-            .tysys
-            .type_table
-            .borrow()
-            .nominal_type_args(ty)
-            .unwrap_or_default();
-        Some(
-            variant_info
-                .cases
-                .iter()
-                .map(|c| self.tysys.substitute_type_params(c.payload, &type_args))
-                .collect(),
-        )
-    }
-
     /// Whether `ty` has no value: `!`, or a type each of whose values would hold one.
     pub(super) fn is_uninhabited(&self, ty: TypeId) -> bool {
         self.is_uninhabited_within(ty, &mut Vec::new())
@@ -3169,7 +3151,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             fields
                 .iter()
                 .any(|&(_, t)| self.is_uninhabited_within(t, open))
-        } else if let Some(payloads) = self.case_payload_types(head) {
+        } else if let Some(payloads) = self.tysys.case_payload_types(head) {
             payloads
                 .iter()
                 .all(|&t| self.is_uninhabited_within(t, open))
@@ -3309,7 +3291,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let variant_info = self.tysys.variant_of_type(scrutinee_type).cloned()?;
         let (index, _) = variant_info.case_named(name)?;
-        let payload_types = self.case_payload_types(scrutinee_type)?;
+        let payload_types = self.tysys.case_payload_types(scrutinee_type)?;
         let cases: Rc<[Case]> = variant_info
             .cases
             .iter()

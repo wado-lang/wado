@@ -550,7 +550,10 @@ fn is_storage_builtin(builtin: CtfeBuiltin) -> bool {
         | CtfeBuiltin::ArrayClonePrefix
         | CtfeBuiltin::ColdPath
         | CtfeBuiltin::Select => true,
-        CtfeBuiltin::I32AsChar | CtfeBuiltin::FloatIsNan | CtfeBuiltin::HeapBase(_) => false,
+        CtfeBuiltin::I32AsChar
+        | CtfeBuiltin::FloatIsNan
+        | CtfeBuiltin::Ieee754Comparison(_)
+        | CtfeBuiltin::HeapBase(_) => false,
     }
 }
 

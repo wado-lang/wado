@@ -146,7 +146,6 @@ pub fn test_selected(original_name: Option<&str>, filters: &[String]) -> bool {
 
 impl Package {
     /// Create a new Package from compilation artifacts (before optimization).
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         entry_module_source: ModuleSource,
         tir_modules: IndexMap<ModuleSource, TirModule>,

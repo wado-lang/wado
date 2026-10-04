@@ -90,8 +90,16 @@ fn collect(
     declares: impl Fn(TraitDeclId, &[MethodId]) -> bool,
 ) -> Candidates {
     let mut found = Candidates::default();
+    // What a declaration withholds, no impl on it answers and no level below
+    // it lends.
+    let mut withheld: Vec<TraitDeclId> = Vec::new();
     for (depth, ty) in chain(program, receiver).iter().enumerate() {
         let depth = u32::try_from(depth).expect("a chain shorter than 2^32");
+        if let SolverType::Decl(head, _) = ty
+            && let Some(def) = program.types.get(head)
+        {
+            withheld.extend(&def.withholds);
+        }
         for (&impl_, def) in &program.impls {
             let Some(trait_) = def.trait_ else {
                 continue;
@@ -100,7 +108,7 @@ fn collect(
                 .impl_methods
                 .get(&impl_)
                 .map_or(&[][..], Vec::as_slice);
-            if !declares(trait_, own) {
+            if withheld.contains(&trait_) || !declares(trait_, own) {
                 continue;
             }
             let Some(trait_args) = impl_applies(program, env, scope, impl_, def, ty) else {
@@ -356,6 +364,7 @@ mod tests {
             WRAPPER,
             TypeDef {
                 newtype_base: Some(decl(POINT)),
+                ..TypeDef::default()
             },
         );
         let found = ask(&p, &ref_to(decl(WRAPPER)));
@@ -393,12 +402,28 @@ mod tests {
             WRAPPER,
             TypeDef {
                 newtype_base: Some(decl(POINT)),
+                ..TypeDef::default()
             },
         );
         let found = ask(&p, &decl(WRAPPER));
         assert_eq!(selected(&found), Some(ImplId(1)));
         assert_eq!(found.in_scope[0].depth, 0);
         assert_eq!(found.in_scope[1].depth, 1);
+    }
+
+    /// A trait the newtype withholds offers no candidate from below it.
+    #[test]
+    fn a_withheld_trait_offers_nothing_from_the_base() {
+        let mut p = program(Builder::default().concrete(TR, decl(POINT)));
+        p.types.insert(
+            WRAPPER,
+            TypeDef {
+                newtype_base: Some(decl(POINT)),
+                withholds: vec![TR],
+            },
+        );
+        assert!(ask(&p, &decl(WRAPPER)).in_scope.is_empty());
+        assert_eq!(selected(&ask(&p, &decl(POINT))), Some(ImplId(0)));
     }
 
     /// The gap the WEP records closed: depth is read off an impl's target too,
@@ -416,6 +441,7 @@ mod tests {
             WRAPPER,
             TypeDef {
                 newtype_base: Some(decl(POINT)),
+                ..TypeDef::default()
             },
         );
         assert_eq!(selected(&ask(&p, &decl(WRAPPER))), Some(ImplId(1)));
@@ -437,6 +463,7 @@ mod tests {
             WRAPPER,
             TypeDef {
                 newtype_base: Some(decl(POINT)),
+                ..TypeDef::default()
             },
         );
         let found = ask(&p, &decl(WRAPPER));
@@ -682,6 +709,7 @@ mod tests {
             WRAPPER,
             TypeDef {
                 newtype_base: Some(decl(WRAPPER)),
+                ..TypeDef::default()
             },
         );
         assert_eq!(ask(&p, &decl(WRAPPER)), Candidates::default());

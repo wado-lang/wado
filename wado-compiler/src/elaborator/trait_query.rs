@@ -41,7 +41,7 @@ use crate::elaborator::trait_env::{
 use crate::elaborator::types::{RequiredTrait, StructFieldInfo, VariantInfo};
 use crate::name::FqTraitName;
 use crate::resolve::{Resolution, Resolutions};
-use crate::synthesis::template::written_impl_reaches;
+use crate::synthesis::template::{comparison_written_alone, written_impl_reaches};
 use crate::tir::{SlotProjections, TraitRef};
 
 /// Proof that a bound was asked and answered no. Its field is private here, so
@@ -931,6 +931,22 @@ impl TypeSystem {
         // Bounded, so a pathologically nested (or cyclic) type cannot produce
         // an unbounded chain.
         while chain.len() < 8 {
+            let written_instead = match tr {
+                OnBoundTrait::Ord => self.ord_withheld_note(type_id),
+                OnBoundTrait::Eq
+                    if self.comparison_written_alone(type_id) == Some(OnBoundTrait::Ord) =>
+                {
+                    Some(format!(
+                        "`{}` takes `Eq` from its written `cmp`, and does not implement `Ord`",
+                        self.type_id_to_string(type_id)
+                    ))
+                }
+                _ => None,
+            };
+            if let Some(why) = written_instead {
+                chain.push(why);
+                break;
+            }
             let resolved = self.type_table.borrow().get(type_id).clone();
             let StructuralConformance::Fails {
                 member: label,
@@ -1137,6 +1153,15 @@ impl TypeSystem {
         }
         if tr == OnBoundTrait::Default {
             return self.is_defaultable_struct(scope, type_id);
+        }
+        match tr {
+            OnBoundTrait::Eq
+                if self.comparison_written_alone(type_id) == Some(OnBoundTrait::Ord) =>
+            {
+                return true;
+            }
+            OnBoundTrait::Ord if self.ord_withheld_by(type_id).is_some() => return false,
+            _ => {}
         }
         let resolved = self.type_table.borrow().get(type_id).clone();
         match &resolved {
@@ -1367,6 +1392,44 @@ impl TypeSystem {
         // `let`-chain lives for the whole body, and the body borrows mutably
         // to record the synthesis request.
         let nominal = self.type_table.borrow().nominal_head(type_id);
+        // A written `eq` leaves `Ord` to be written beside it, whether the
+        // members or a newtype's base would supply one, and a written `cmp`
+        // gives `==` whatever the members are (spec-traits.md §Derivation
+        // Policy).
+        if on_bound == Some(OnBoundTrait::Ord)
+            && wanted.is_empty()
+            && self.ord_withheld_by(type_id).is_some()
+        {
+            return false;
+        }
+        if is_eq
+            && wanted.is_empty()
+            && let Some((_, module_source)) = &nominal
+            && self.comparison_written_alone(type_id) == Some(OnBoundTrait::Ord)
+        {
+            let ord = self
+                .compiler_trait_def(CompilerItem::Ord)
+                .expect("a written `Ord` names the trait");
+            // At the instance's arguments, so the derived impl carries the
+            // written one's bounds.
+            let receiver = self.type_table.borrow().impl_receiver_key(type_id);
+            let holds = self.find_trait_impl_for_type_with_args(
+                ctx,
+                scope,
+                Some(type_id),
+                &receiver,
+                ord,
+                self.impl_position_args(type_id).as_deref(),
+                NewtypePeel::Here,
+                &[],
+            );
+            if holds {
+                self.type_table
+                    .borrow_mut()
+                    .record_bound_driven_synth_request_for(type_id, module_source, &decl);
+            }
+            return holds;
+        }
         // A structural derivation writes no argument, so it answers the trait's
         // declared defaults. A bound writing one needs an impl that writes it.
         if let Some(tr) = on_bound
@@ -1584,6 +1647,55 @@ impl TypeSystem {
             trait_,
             NewtypePeel::Follow,
         )
+    }
+
+    /// [`comparison_written_alone`] for `type_id`.
+    pub(super) fn comparison_written_alone(&self, type_id: TypeId) -> Option<OnBoundTrait> {
+        let tt = self.type_table.borrow();
+        let (written, _) =
+            comparison_written_alone(&self.trait_env, &tt.impl_receiver_key(type_id), &tt)?;
+        OnBoundTrait::of_compiler_item(written)
+    }
+
+    /// The link of `type_id`'s newtype chain, itself included, that leaves it
+    /// no `Ord`: the first writing `eq` at `Self` alone, below every link
+    /// writing an `Ord`. No member derives an `Ord` then, and no base lends one
+    /// (spec-traits.md §Derivation Policy). An `Eq` at another `Rhs` is no
+    /// `==` between two values, so the walk passes it. A primitive's `Ord` is
+    /// the compiler's, so one writing `eq` (`v128`) still has it.
+    pub(super) fn ord_withheld_by(&self, type_id: TypeId) -> Option<TypeId> {
+        let ord = self.compiler_trait_def(CompilerItem::Ord)?;
+        let tt = self.type_table.borrow();
+        let mut link = type_id;
+        loop {
+            if matches!(tt.get(link), ResolvedType::Primitive(_)) {
+                return None;
+            }
+            let key = tt.impl_receiver_key(link);
+            if let Some((CompilerItem::Eq, _)) =
+                comparison_written_alone(&self.trait_env, &key, &tt)
+            {
+                return Some(link);
+            }
+            if self.trait_env.has_any_methodful_impl_by_receiver(&key, ord) {
+                return None;
+            }
+            link = tt.get_newtype_base(link)?;
+        }
+    }
+
+    /// Why `type_id` has no `Ord`, where a written `eq` is the cause. A variant
+    /// derives no `Ord` whatever it writes, so its `eq` is no cause.
+    pub(super) fn ord_withheld_note(&self, type_id: TypeId) -> Option<String> {
+        let link = self.ord_withheld_by(type_id)?;
+        let derives_ord =
+            self.type_table.borrow().reflect_kind(link) != Some(CompilerItem::ReflectVariant);
+        derives_ord.then(|| {
+            format!(
+                "`{}` writes `eq`, so no `Ord` is derived for it; write `cmp` beside it",
+                self.type_id_to_string(link)
+            )
+        })
     }
 
     /// Whether a bound writing `wanted` selects the header — see
@@ -3039,6 +3151,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Whether the right operand is a value of the receiver's own type, and no
+    /// impl written for the receiver answers `trait_` at its defaults, so that
+    /// only a derived impl can answer the pair.
+    fn only_derived_answers_at_self(
+        &self,
+        rhs: Option<&ArgClass>,
+        receiver: TypeId,
+        trait_: DefId,
+    ) -> bool {
+        let Some(&ArgClass::Exact(rhs)) = rhs else {
+            return false;
+        };
+        let table = self.tysys.type_table.borrow();
+        table.type_key(rhs) == table.type_key(receiver)
+            && self
+                .tysys
+                .trait_env
+                .methodful_default_impls_by_receiver(&table.impl_receiver_key(receiver), trait_)
+                .next()
+                .is_none()
+    }
+
     /// Single entry point for resolving a trait method a binary operator
     /// dispatches to (Eq / Ord / Add / … / Shr), returning a fully-populated
     /// [`ResolvedTraitMethod`] with `rhs_type` already substituted so no caller
@@ -3057,7 +3191,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // receiver type absent a `type Output`.
         //
         // Retrying unselected is what leaves a lone `Eq<Self>` impl to
-        // type-check the operand and report a mismatch as one.
+        // type-check the operand and report a mismatch as one. An impl at
+        // another `Rhs` (`Eq<String>`) does not stand for the type's own, so
+        // two values of the type reach the derived one before it.
         let auto_derive = self.tysys.auto_derive_by_trait(trait_);
         let written = rhs
             .and_then(|rhs| {
@@ -3070,6 +3206,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             })
             .or_else(|| {
+                if let Some((item, _)) = auto_derive
+                    && self.only_derived_answers_at_self(rhs, lookup_type_id, trait_)
+                    && let Some(derived) = self.tysys.compiler_trait(item)
+                    && self.tysys.type_implements_trait(
+                        &self.annotate_ctx,
+                        &self.type_lookup(),
+                        lookup_type_id,
+                        &derived,
+                    )
+                {
+                    return None;
+                }
                 self.find_arithmetic_trait_impl(
                     struct_name,
                     lookup_type_id,

@@ -301,7 +301,6 @@ struct Candidate {
 }
 
 /// Collect every eligible forwarding site in `block`.
-#[allow(clippy::too_many_arguments)]
 fn collect_in_block(
     body: &Body,
     block: BlockId,

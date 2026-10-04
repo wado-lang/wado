@@ -1318,6 +1318,7 @@ f64::ieee754_min(x, y) f64::ieee754_max(x, y)  // IEEE's: NaN when either is, on
 f64::clamp(x, lo, hi)                   // a NaN x stays NaN; a NaN bound traps
 
 x.is_nan()     x.is_finite()    // where x is f64 or f32
+x.ieee754_lt(y)  x.ieee754_eq(y)        // IEEE's: false on a NaN (`_ne` true), one instruction
 
 f64::from_str("3.14")                 // Result<f64, ParseFloatError>
 i32::from_str("42")                   // Result<i32, ParseIntError>
