@@ -389,9 +389,9 @@ overlap, which is what `benchmark/ab.ts` decides.
 
 A range with a constant bound other than a primitive's limit is checked for
 nothing its values decide. A NaN constant bound is no error, so `1.0..=LIMIT`
-with `LIMIT` a NaN matches every value from `1.0` up, NaN included. Reversed and empty ranges,
-overlapping arms, and coverage go unreported, and a `match` on an integer needs
-`_` beside such a range even where the arms cover every value.
+with `LIMIT` a NaN matches every value from `1.0` up, NaN included. Reversed
+and empty ranges, overlapping arms, and coverage go unreported, and a `match` on
+an integer needs `_` beside such a range even where the arms cover every value.
 
 A `cmp` written for only some instances of a generic head leaves `==` derived
 from the members there, so at those instances the two can disagree.
