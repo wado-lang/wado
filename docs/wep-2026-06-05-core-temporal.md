@@ -87,12 +87,28 @@ pub struct Instant {
 /// therefore not stored.
 pub struct ZonedDateTime {
     pub instant: Instant,
-    /// IANA time-zone identifier (e.g. `"America/New_York"`) or a fixed UTC
-    /// offset (e.g. `"+09:00"`). Mirrors the Temporal time-zone slot, which is
-    /// also a string after the removal of `Temporal.TimeZone`.
+    /// The time zone identifier as Temporal canonicalizes it: `"UTC"` or a
+    /// fixed offset such as `"+09:00"`. Mirrors the Temporal time-zone slot,
+    /// which is also a string after the removal of `Temporal.TimeZone`.
     pub time_zone: String,
 }
 ```
+
+### Temporal is the specification
+
+`core:temporal` implements TC39 Temporal as written. A behaviour that differs
+from the specification is a bug, unless this WEP names it as a deliberate
+departure. The departures are these:
+
+- Temporal's BigInt and float64 numbers are `i64`, as the next section says.
+- A RangeError traps. A parser returns a `DeserializeError` instead, since its
+  input is data.
+- An options bag is a parameter list with defaults. The options it leaves out
+  are known gaps.
+- A struct literal skips every constructor check. So every operation checks its
+  receiver and arguments first, and traps on a value Temporal could not hold: a
+  date that does not exist, a mixed-sign duration, a zone that is not
+  canonical.
 
 ### No BigInt; `i64` seconds is more than enough
 
@@ -102,7 +118,15 @@ need one: `i64` seconds spans ≈ ±292 billion years, dwarfing Temporal's range
 and `u32` nanoseconds gives full nanosecond resolution. This is exactly the
 shape of `wasi:clocks` `instant`, so host conversion is a field-for-field copy.
 `epoch_nanoseconds` returns `i128`, which covers that whole span without
-truncating.
+truncating. Temporal's range still applies: an instant more than 10^8 days from
+the epoch traps.
+
+A duration component is an exact `i64` where Temporal's is a float64. A time
+duration is a pair of `i64` seconds and nanoseconds rather than an `i128`, since
+`i128` arithmetic is slow. `Duration::total` alone divides in `i128`, so that
+its float is the one nearest the exact quotient. A component that does not fit
+an `i64` traps; only a millisecond, microsecond, or nanosecond count of a span
+longer than about 292 years can do that.
 
 ### ISO 8601 only
 
@@ -119,15 +143,19 @@ _function of_ `instant` + `time_zone`, not stored state. Storing only the instan
 avoids representing redundant, possibly-inconsistent state; the accessors compute
 the local date with Howard Hinnant's `civil_from_days`.
 
-### Fixed UTC offsets only
+### UTC and fixed offsets only
 
-`time_zone` is typed as a string so it can hold an IANA identifier, but only
-`"Z"`, `"UTC"`, and `±HH:MM` are interpretable today. Every operation that needs
-an offset traps on an IANA name; see the gap below.
+No time zone database is bundled, so `"UTC"` is the only available named zone.
+Every `±HH:MM` offset zone is available, as in Temporal. An IANA name is
+storable in a struct literal, and every operation traps on it; see the gap
+below.
 
-`ZonedDateTime::new` canonicalizes the three spellings of UTC to `"Z"`, so
-`"UTC"`, `"z"`, and `"+00:00"` are one value rather than three under the derived
-`Eq`.
+A zone identifier is canonicalized where it enters, as Temporal does: `"utc"`
+becomes `"UTC"`, `"-00:00"` becomes `"+00:00"`, and `"+0930"` becomes
+`"+09:30"`. `"UTC"` and `"+00:00"` stay different zones, as `TimeZoneEquals`
+says. `"Z"` is a designator rather than a zone, so `ZonedDateTime::new` refuses
+it. `Instant::to_zoned_date_time` and `with_time_zone` also take an ISO string,
+and read `Z` in one as `"UTC"`.
 
 ### Ordering is one relation, where Temporal has two
 
@@ -141,19 +169,17 @@ moment, wherever it is read".
 
 ### `Duration` is plain data, and its arithmetic rebalances
 
-Temporal's constructor rejects a duration whose components disagree in sign. A
-Wado struct literal has no constructor to reject anything, so a mixed-sign
-literal is representable: `sign()` reports the largest non-zero component, and
-the ISO 8601 form — which has no spelling for one — asserts rather than
-assuming.
+Temporal's constructor rejects a duration that `IsValidDuration` refuses: mixed
+signs, a year, month, or week count of 2^32 or more, or days and time totalling
+2^53 seconds or more. A Wado struct literal has no constructor, so such a
+literal is representable, and every operation on it traps.
 
-`add` and `subtract` therefore rebalance rather than summing component-wise, as
-Temporal does without a `relativeTo`: they sum the exact nanoseconds, a day
-counting as 24 hours, and re-express the result at the coarser of the two
-operands' top units. Component-wise, `1 hour - 30 minutes` would be
-`{ hours: 1, minutes: -30 }` — arithmetically right, and unrenderable. Years,
-months, and weeks trap there for the same reason they trap in `total` and
-`round`.
+`add` and `subtract` rebalance rather than summing component-wise, as Temporal
+does without a `relativeTo`: they sum the exact time, a day counting as 24
+hours, and balance the result up to the larger of the two operands' largest
+units. Component-wise, `1 hour - 30 minutes` would be
+`{ hours: 1, minutes: -30 }`, which is not a valid duration. Years, months, and
+weeks trap there for the same reason they trap in `total` and `round`.
 
 Field defaults make the literal the ergonomic constructor —
 `Duration { hours: 1, minutes: 30 }` — and the same trick makes Wado's literal
@@ -165,28 +191,26 @@ needed. `constrain` covers the month-end clamp that `with` would apply.
 A date component has no fixed length, so the type that carries a calendar
 position is the one that can resolve it:
 
-| Receiver         | `add` / `subtract` accepts | `until` / `since` measures in     |
-| ---------------- | -------------------------- | --------------------------------- |
-| `Instant`        | hours and below            | hours and below (default: second) |
-| `ZonedDateTime`  | everything                 | everything (default: hour)        |
-| `PlainDate`      | date components            | days and above (default: day)     |
-| `PlainTime`      | time components, wrapping  | hours and below                   |
-| `PlainDateTime`  | everything                 | everything (default: hour)        |
-| `PlainYearMonth` | years and months           | years or months                   |
+| Receiver         | `add` / `subtract` accepts             | `until` / `since` measures in     |
+| ---------------- | -------------------------------------- | --------------------------------- |
+| `Instant`        | hours and below                        | hours and below (default: second) |
+| `ZonedDateTime`  | everything                             | everything (default: hour)        |
+| `PlainDate`      | everything; time folds into whole days | days and above (default: day)     |
+| `PlainTime`      | everything; days and above are ignored | hours and below (default: hour)   |
+| `PlainDateTime`  | everything                             | everything (default: day)         |
+| `PlainYearMonth` | years and months                       | years or months (default: year)   |
 
-Anything outside its row traps with a message naming the type that can do it.
-`until` anchors at the receiver in both directions, so `a.add(a.until(b))` is
-`b` even when `b` is earlier: a backwards month span steps through the months
-the receiver has, not the ones the far end does. `since` is `until` negated, as
-in Temporal, and so does not round-trip.
-Rounding follows the same rule: an `Instant` counts multiples from the epoch, a
-`ZonedDateTime` and a `PlainTime` from local midnight, so a day-aligned unit
-lands on the civil boundary rather than on an epoch multiple.
+The two "everything" rows of the plain types are Temporal's: `PlainDate`
+truncates its time to whole days, and `PlainTime` wraps. Anything outside its
+row traps. `until` anchors at the receiver in both directions, so
+`a.add(a.until(b))` is `b` even when `b` is earlier. `since` is `until` negated,
+as in Temporal.
 
-Two of those traps are stricter than Temporal, deliberately: Temporal folds a
-`PlainDate.add({hours: 25})` into a day and drops the remainder, and lets a
-`PlainTime.add({days: 1})` wrap to the same clock reading. Both are silent about
-a caller who meant the date to move, which only `PlainDateTime` can do.
+Rounding follows Temporal's operations. An `Instant` counts multiples from the
+epoch, as if the count were positive, so `Trunc` rounds toward the past. A
+`ZonedDateTime`, `PlainDateTime`, and `PlainTime` measure the quantity within
+the next larger unit (`RoundTime`), so a half-even tie looks at the parity
+within that unit. A `Duration` rounds with its sign.
 
 ### `now()` rides the effect row
 
@@ -198,24 +222,32 @@ acquiring a WASI import.
 
 ### Text forms
 
-Every type parses and renders its ISO 8601 spelling, and that spelling is the
-serde wire form — `Instant` and `ZonedDateTime` under CBOR's date/time tag 0
-(RFC 8949 §3.4.1) with a bare string in JSON, the rest as plain strings.
-Deserialization of the two instant-bearing types also accepts an epoch-seconds
-number (tag 1 / JSON number), read as UTC. `FromStr` reads the same spellings.
+Every type renders Temporal's `toString`, and `FromStr` reads Temporal's
+RFC 9557 / ISO 8601 grammar for it: basic and extended formats, hour-only
+times, `.` or `,` fractions of up to nine digits, sub-minute offsets, and
+annotations. A `ZonedDateTime` renders as `2023-11-14T22:13:20+09:00[+09:00]`
+and needs the zone annotation to parse. The plain types refuse a calendar other
+than `iso8601`, and an `Instant` sets annotations aside.
 
-Parsing is `FromStr` and nothing else. Each `impl` documents the spelling it
-accepts, and the module's synopsis shows the call.
+The format specifier's precision is Temporal's `fractionalSecondDigits`: it
+truncates to that many digits, and without one the fraction runs to its last
+non-zero digit.
+
+That string is the serde wire form. An `Instant`'s is RFC 3339, so it goes
+under CBOR's date/time tag 0 (RFC 8949 §3.4.1). A `ZonedDateTime`'s carries an
+annotation tag 0 does not admit, so it goes untagged. JSON emits both bare, and
+the rest are plain strings. Deserialization of the two instant-bearing types
+also accepts an epoch-seconds number (tag 1 / JSON number), read as UTC.
+
+`ZonedDateTime` also reads and writes RFC 3339 without the annotation, through
+`parse_rfc3339` and `to_rfc3339`. `Z` reads as the `"UTC"` zone and an offset as
+that offset zone.
 
 `Instant` additionally carries RFC 7231 IMF-fixdate, the form an HTTP `Date`,
 `Expires`, or `Last-Modified` header takes. It renders that form and reads all
 three a recipient must accept: IMF-fixdate, the obsolete RFC 850 (whose
 two-digit year pivots at 70, since a pure parser has no clock to compare
 against), and asctime.
-
-A timestamp's sub-second fraction uses the least of 0, 3, 6, or 9 digits that is
-exact; a duration's trims trailing zeros instead, because that is what ISO 8601
-and Temporal spell for one.
 
 ### Bridging `wasi:clocks`
 
@@ -229,7 +261,7 @@ type. `From` impls both ways bridge them with a field-for-field copy.
 
 ### The IANA time-zone database
 
-`parse_fixed_offset` traps on anything but `"Z"`, `"UTC"`, and `±HH:MM`, so a
+Every operation traps on a zone other than `"UTC"` and `±HH:MM`, so a
 `ZonedDateTime` in `"Asia/Tokyo"` cannot be formatted or read at all. The data
 comes from [`core:icu`](./wep-2026-08-09-core-icu.md), not from a tzdb of this
 module's own and not from WASI. The reason is dedupe and altitude rather than
@@ -311,15 +343,19 @@ a fall-back overlap, so both need Temporal's `disambiguation`
 (`use`/`ignore`/`prefer`/`reject`) options. `hours_in_day` returning a constant
 24 and `days_in_week` returning 7 are the same gap seen from the other side.
 
-### RFC 9557 zone annotations
+### Options Temporal takes and this module does not
 
-Temporal's canonical `ZonedDateTime.toString()` is
-`2023-11-14T22:13:20+09:00[Asia/Tokyo]` — RFC 9557 (IXDTF), an offset plus a
-bracketed zone identifier. `core:temporal` neither emits nor parses the bracket,
-and `parse_rfc3339` collapses the zone to the offset string it saw, so zone
-identity does not survive a round trip. Reconciling a stored offset against what
-the named zone says at that instant needs the zone database above, so this gap is
-downstream of it.
+Each of these is a Temporal option with no parameter here, so the module always
+behaves as Temporal's default would:
+
+- the rounding options of `until` and `since` (`smallestUnit`,
+  `roundingIncrement`, `roundingMode`);
+- `overflow`, which is always `constrain`;
+- `disambiguation` and `offset`, which a fixed offset never needs;
+- the display options of `toString` beyond `fractionalSecondDigits`
+  (`smallestUnit`, `roundingMode`, `calendarName`, `timeZoneName`, `offset`);
+- `with`, `equals`, and `compare` as methods, beyond the derived `Eq` and `Ord`
+  and the literal spread.
 
 ### `relativeTo` for calendar-unit durations
 
@@ -350,12 +386,11 @@ here either.
 ### Test coverage
 
 `temporal_test.wado` covers each type's construction, ordering, text forms,
-accessors, arithmetic, rounding, and serde, plus property round-trips of
-`until` through `add` over random pairs and a sweep of the ISO week anchors
-across -400..=400. There is still no property round-trip of the _text_ forms
-over a wide instant range, no fixture pinning the CBOR tag-0 byte encoding
-beyond the tag itself, and no test at the extremes of the `i64` second range
-where the renderer produces years far outside four digits.
+accessors, arithmetic, rounding, and serde, the range limits, plus property
+round-trips of `until` through `add` over random pairs and a sweep of the ISO
+week anchors across -400..=400. There is still no property round-trip of the
+_text_ forms over a wide instant range, no fixture pinning the CBOR tag-0 byte
+encoding beyond the tag itself, and no run against Test262's Temporal tests.
 
 ## Consequences
 
@@ -366,11 +401,10 @@ where the renderer produces years far outside four digits.
   numeric support.
 - ISO-8601-only is a deliberate limitation, revisited on demand.
 - Until the tz database gap closes, `time_zone` is a string that promises more
-  than the module delivers: an IANA name is storable, and every operation
-  needing the offset traps — rendering and serializing included, since the wire
-  form carries the resolved offset. That is the sharpest edge in the module
-  today.
+  than the module delivers: an IANA name is storable in a literal, and every
+  operation traps on it, rendering and serializing included. That is the
+  sharpest edge in the module today.
 - `PlainMonthDay` stores no reference year, where Temporal keeps an ISO one
-  (1972) so two month-days compare. Wado's derived `Ord` over `(month, day)`
-  gives the same order without the field, at the cost of not round-tripping
-  Temporal's `--MM-DD` reference-year form.
+  (1972). Under ISO 8601 the reference year is always 1972, so the field would
+  carry nothing, and the derived `Ord` over `(month, day)` gives Temporal's
+  order.

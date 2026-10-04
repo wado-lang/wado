@@ -386,11 +386,13 @@ API above.
 
 Typed timestamps map to [`core:temporal`](./wep-2026-06-05-core-temporal.md):
 
-- Encode: both serialize as an RFC 3339 text string, wrapped in the standard
-  date/time tag 0 (RFC 8949 §3.4.1) under CBOR and emitted bare under JSON.
-- Decode: both accept an RFC 3339 string (tag 0 / JSON string) or an
-  epoch-seconds number (tag 1 / JSON number, read as UTC). Tag passthrough
-  (§6.1) makes the tag number advisory, so either tag decodes into either type.
+- Encode: both serialize as their Temporal string. An `Instant`'s is RFC 3339,
+  wrapped in the standard date/time tag 0 (RFC 8949 §3.4.1) under CBOR. A
+  `ZonedDateTime`'s carries an RFC 9557 zone annotation, which tag 0 does not
+  admit, so it goes untagged. JSON emits both bare.
+- Decode: both accept their string (tag 0 / JSON string) or an epoch-seconds
+  number (tag 1 / JSON number, read as UTC). A number outside Temporal's range
+  is an overflow error. Tag passthrough (§6.1) makes the tag number advisory.
 
 The impls are format-agnostic and live in `core:temporal` itself, shared by
 `core:cbor` and `core:json` through a `Serializer::serialize_tag` hook (a no-op
