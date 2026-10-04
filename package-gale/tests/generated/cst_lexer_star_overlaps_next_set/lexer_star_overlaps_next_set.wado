@@ -17,7 +17,7 @@ impl Span {
     }
 }
 
-pub fn push_chars(out: &mut String, chars: &List<char>, start: i32, end: i32) {
+internal fn push_chars(out: &mut String, chars: &List<char>, start: i32, end: i32) {
     let mut bytes = 0;
     for let mut i = start; i < end; i += 1 {
         bytes += chars[i].len_utf8();
@@ -28,13 +28,13 @@ pub fn push_chars(out: &mut String, chars: &List<char>, start: i32, end: i32) {
     }
 }
 
-pub fn chars_text(chars: &List<char>, start: i32, end: i32) -> String {
+internal fn chars_text(chars: &List<char>, start: i32, end: i32) -> String {
     let mut s = String::new();
     push_chars(&mut s, chars, start, end);
     return s;
 }
 
-pub fn push_chars_escaped(out: &mut String, chars: &List<char>, start: i32, end: i32) {
+internal fn push_chars_escaped(out: &mut String, chars: &List<char>, start: i32, end: i32) {
     for let mut i = start; i < end; i += 1 {
         match chars[i] {
             '\n' => out.push_str("\\n"),
@@ -45,7 +45,7 @@ pub fn push_chars_escaped(out: &mut String, chars: &List<char>, start: i32, end:
     }
 }
 
-pub fn kind_set_has(set: &List<i32>, kind: i32) -> bool {
+internal fn kind_set_has(set: &List<i32>, kind: i32) -> bool {
     let w = kind >> 5;
     if w >= set.len() {
         return false;
@@ -53,7 +53,7 @@ pub fn kind_set_has(set: &List<i32>, kind: i32) -> bool {
     return set[w] >> (kind & 31) & 1 == 1;
 }
 
-pub fn with_expected<S: AsStrSlice>(message: S, expected: &List<String>) -> String {
+internal fn with_expected<S: AsStrSlice>(message: S, expected: &List<String>) -> String {
     let n = expected.len();
     if n == 0 {
         return message.to_string();
@@ -71,7 +71,7 @@ pub fn with_expected<S: AsStrSlice>(message: S, expected: &List<String>) -> Stri
     return out;
 }
 
-pub fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
+internal fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
     let mut j = if i < chars.len() { i } else { chars.len() };
     let mut col = 0;
     while j > 0 && chars[j - 1] != '\n' {
@@ -81,7 +81,7 @@ pub fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
     return col;
 }
 
-pub fn line_starts(chars: &List<char>) -> List<i32> {
+internal fn line_starts(chars: &List<char>) -> List<i32> {
     let mut starts: List<i32> = [0];
     for let mut i = 0; i < chars.len(); i += 1 {
         if chars[i] == '\n' {
@@ -91,7 +91,7 @@ pub fn line_starts(chars: &List<char>) -> List<i32> {
     return starts;
 }
 
-pub fn line_col_at(starts: &List<i32>, pos: i32) -> [i32, i32] {
+internal fn line_col_at(starts: &List<i32>, pos: i32) -> [i32, i32] {
     let mut lo = 0;
     let mut hi = starts.len() - 1;
     while lo < hi {
@@ -127,7 +127,7 @@ pub struct TokenStream {
 }
 
 impl TokenStream {
-    pub fn new(chars: &List<char>) -> TokenStream {
+    internal fn new(chars: &List<char>) -> TokenStream {
         let cap = chars.len() / 4 + 1;
         return TokenStream {
             kinds: List::with_capacity(cap),
@@ -148,11 +148,11 @@ impl TokenStream {
         return self.kinds.len();
     }
 
-    pub fn trivia_mark(&self) -> i32 {
+    internal fn trivia_mark(&self) -> i32 {
         return self.triv_kinds.len();
     }
 
-    pub fn push_trivia(&mut self, kind: i32, start: i32, end: i32, channel: i32) {
+    internal fn push_trivia(&mut self, kind: i32, start: i32, end: i32, channel: i32) {
         if self.triv_kinds.len() >= self.triv_kinds.capacity() {
             builtin::cold_path();
             self.triv_kinds.grow();
@@ -169,11 +169,11 @@ impl TokenStream {
         self.triv_chans.push_within_capacity(channel);
     }
 
-    pub fn push_token(&mut self, kind: i32, start: i32, end: i32, triv_lo: i32, triv_hi: i32) {
+    internal fn push_token(&mut self, kind: i32, start: i32, end: i32, triv_lo: i32, triv_hi: i32) {
         self.push_token_flagged(kind, start, end, triv_lo, triv_hi, TokenFlags::none());
     }
 
-    pub fn push_token_flagged(
+    internal fn push_token_flagged(
         &mut self,
         kind: i32,
         start: i32,
@@ -206,7 +206,7 @@ impl TokenStream {
         return idx;
     }
 
-    pub fn push_synthetic(&mut self, expected_kind: i32, at: i32) -> i32 {
+    internal fn push_synthetic(&mut self, expected_kind: i32, at: i32) -> i32 {
         let m = self.trivia_mark();
         return self.push_token_flagged(expected_kind, at, at, m, m, TokenFlags::Synthetic);
     }
@@ -215,11 +215,11 @@ impl TokenStream {
         return self.flags[i];
     }
 
-    pub fn set_flag(&mut self, i: i32, flag: TokenFlags) {
+    internal fn set_flag(&mut self, i: i32, flag: TokenFlags) {
         self.flags[i] |= flag;
     }
 
-    pub fn mark_skipped(&mut self, i: i32) {
+    internal fn mark_skipped(&mut self, i: i32) {
         self.set_flag(i, TokenFlags::Skipped);
     }
 
@@ -329,7 +329,7 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
-    pub fn error<S: AsStrSlice>(
+    internal fn error<S: AsStrSlice>(
         code: DiagnosticCode,
         message: S,
         span: Span,
@@ -382,7 +382,7 @@ fn lex_error_at(tokens: &TokenStream, i: i32) -> Diagnostic {
     );
 }
 
-pub fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagnostic>, max_errors: i32) {
+internal fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagnostic>, max_errors: i32) {
     let mut merged: List<Diagnostic> = [];
     for let mut i = 0; i < tokens.len(); i += 1 {
         if tokens.is_lex_error(i) {
@@ -395,7 +395,7 @@ pub fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagnostic>
     *diagnostics = merged;
 }
 
-pub fn resolve_positions(diagnostics: &mut List<Diagnostic>, chars: &List<char>) {
+internal fn resolve_positions(diagnostics: &mut List<Diagnostic>, chars: &List<char>) {
     if diagnostics.is_empty() {
         return;
     }
@@ -554,7 +554,7 @@ fn bubble_to_parent(stack: &List<i32>, end: &mut List<i32>, flags: &mut List<Nod
     }
 }
 
-pub struct TreeBuilder {
+internal struct TreeBuilder {
     tag: List<EventTag>,
     id: List<i32>,
     offset: List<i32>,
@@ -565,7 +565,7 @@ pub struct TreeBuilder {
 }
 
 impl TreeBuilder {
-    pub fn with_capacity(rows: i32) -> TreeBuilder {
+    internal fn with_capacity(rows: i32) -> TreeBuilder {
         return TreeBuilder {
             tag: List::with_capacity(rows),
             id: List::with_capacity(rows),
@@ -594,27 +594,27 @@ impl TreeBuilder {
         self.alt.push_within_capacity(-1);
     }
 
-    pub fn start_node(&mut self, kind: NodeKind, start: i32) {
+    internal fn start_node(&mut self, kind: NodeKind, start: i32) {
         let row = self.tag.len();
         self.push_row(EventTag::Open, kind as i32, start);
         self.open.push(row);
     }
 
-    pub fn start_error(&mut self, start: i32) {
+    internal fn start_error(&mut self, start: i32) {
         let row = self.tag.len();
         self.push_row(EventTag::Open, K_ERROR as i32, start);
         self.open.push(row);
     }
 
-    pub fn set_alt(&mut self, alt: i32) {
+    internal fn set_alt(&mut self, alt: i32) {
         self.alt[self.open[self.open.len() - 1]] = alt;
     }
 
-    pub fn checkpoint(&self) -> i32 {
+    internal fn checkpoint(&self) -> i32 {
         return self.tag.len();
     }
 
-    pub fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
+    internal fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
         assert self.innermost_open() < checkpoint, "a node wraps only rows finished before it";
         self.tag.insert(checkpoint, EventTag::Open);
         self.id.insert(checkpoint, kind as i32);
@@ -629,7 +629,7 @@ impl TreeBuilder {
         }
     }
 
-    pub fn truncate(&mut self, checkpoint: i32) {
+    internal fn truncate(&mut self, checkpoint: i32) {
         self.tag.truncate(checkpoint);
         self.id.truncate(checkpoint);
         self.offset.truncate(checkpoint);
@@ -645,25 +645,25 @@ impl TreeBuilder {
         }
     }
 
-    pub fn finish_node(&mut self, end: i32) {
+    internal fn finish_node(&mut self, end: i32) {
         let row = self.open[self.open.len() - 1];
         self.push_row(EventTag::Close, self.id[row], end);
         self.last_finished = row;
         let _ = self.open.pop();
     }
 
-    pub fn innermost_open(&self) -> i32 {
+    internal fn innermost_open(&self) -> i32 {
         if self.open.is_empty() {
             return -1;
         }
         return self.open[self.open.len() - 1];
     }
 
-    pub fn node_kind(&self, row: i32) -> NodeKind {
+    internal fn node_kind(&self, row: i32) -> NodeKind {
         return self.id[row] as NodeKind;
     }
 
-    pub fn resume_node(&mut self, row: i32, end: i32) {
+    internal fn resume_node(&mut self, row: i32, end: i32) {
         while self.innermost_open() > row {
             self.finish_node(end);
         }
@@ -675,11 +675,11 @@ impl TreeBuilder {
         self.open.push(row);
     }
 
-    pub fn mark_error(&mut self) {
+    internal fn mark_error(&mut self) {
         self.error_row = self.tag.len();
     }
 
-    pub fn in_error_mode(&self) -> bool {
+    internal fn in_error_mode(&self) -> bool {
         if self.error_row < 0 {
             return false;
         }
@@ -691,7 +691,7 @@ impl TreeBuilder {
         return true;
     }
 
-    pub fn push_open_rule_names(&self, rule_names: &List<String>, out: &mut List<String>) {
+    internal fn push_open_rule_names(&self, rule_names: &List<String>, out: &mut List<String>) {
         for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
             let kind = self.id[self.open[i]];
             if kind != K_ERROR as i32 {
@@ -700,19 +700,19 @@ impl TreeBuilder {
         }
     }
 
-    pub fn token(&mut self, idx: i32) {
+    internal fn token(&mut self, idx: i32) {
         self.push_row(EventTag::Tok, idx, 0);
     }
 
-    pub fn missing(&mut self, syn_idx: i32) {
+    internal fn missing(&mut self, syn_idx: i32) {
         self.push_row(EventTag::Miss, syn_idx, 0);
     }
 
-    pub fn skip(&mut self, idx: i32) {
+    internal fn skip(&mut self, idx: i32) {
         self.push_row(EventTag::Skip, idx, 0);
     }
 
-    pub fn finish(&self) -> CstStore {
+    internal fn finish(&self) -> CstStore {
         let n = self.tag.len();
         let mut end = List::filled(n, 0);
         let mut flags = List::filled(n, NodeFlags::none());
@@ -757,14 +757,14 @@ impl TreeBuilder {
         return CstStore { tag: self.tag, id: self.id, offset: self.offset, alt: self.alt, end, flags, next };
     }
 
-    pub fn render_open(&self, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
+    internal fn render_open(&self, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
         if self.open.len() == 0 {
             return String::new();
         }
         return self.render_from(self.open[self.open.len() - 1], toks, rule_names, token_names);
     }
 
-    pub fn render_at(
+    internal fn render_at(
         &self,
         row: i32,
         toks: &TokenStream,
@@ -777,7 +777,7 @@ impl TreeBuilder {
         return self.render_from(row, toks, rule_names, token_names);
     }
 
-    pub fn open_rule_names(&self, rule_names: &List<String>) -> String {
+    internal fn open_rule_names(&self, rule_names: &List<String>) -> String {
         let mut out = String::from("[");
         for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
             if i < self.open.len() - 1 {
@@ -791,7 +791,7 @@ impl TreeBuilder {
         return out;
     }
 
-    pub fn render_last_finished(
+    internal fn render_last_finished(
         &self,
         toks: &TokenStream,
         rule_names: &List<String>,
@@ -936,33 +936,33 @@ fn emit_lexer_token(
     out.push_str(`${lc.0}:${lc.1}]\n`);
 }
 
-pub global FOLLOW_MAX_DEPTH: i32 = 4;
+internal global FOLLOW_MAX_DEPTH: i32 = 4;
 
-pub global FOLLOW_SLOT_BITS: i64 = 8;
+internal global FOLLOW_SLOT_BITS: i64 = 8;
 
-pub global FOLLOW_ID_MASK: i64 = 127;
+internal global FOLLOW_ID_MASK: i64 = 127;
 
-pub global FOLLOW_OPENS_BIT: i64 = 128;
+internal global FOLLOW_OPENS_BIT: i64 = 128;
 
-pub global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
+internal global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
 
-pub global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
+internal global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
 
-pub global FOLLOW_OPEN_READING: i64 = 0x0100_0000_0000_0000;
+internal global FOLLOW_OPEN_READING: i64 = 0x0100_0000_0000_0000;
 
-pub global FOLLOW_OPEN_FIELD: i64 = ~0x00FF_FFFF_FFFF_FFFF;
+internal global FOLLOW_OPEN_FIELD: i64 = ~0x00FF_FFFF_FFFF_FFFF;
 
-pub global FOLLOW_OPEN_SET_SHIFT: i64 = 57;
+internal global FOLLOW_OPEN_SET_SHIFT: i64 = 57;
 
-pub fn follow_open_mark(cont: i64) -> i64 {
+internal fn follow_open_mark(cont: i64) -> i64 {
     return if cont == 0 { FOLLOW_OPEN_READING } else { cont & FOLLOW_OPEN_FIELD };
 }
 
-pub fn follow_open_set(mask: i64) -> i64 {
+internal fn follow_open_set(mask: i64) -> i64 {
     return FOLLOW_OPEN_READING | (mask & FOLLOW_ID_MASK) << FOLLOW_OPEN_SET_SHIFT;
 }
 
-pub fn follow_open_join(a: i64, b: i64) -> i64 {
+internal fn follow_open_join(a: i64, b: i64) -> i64 {
     if a == 0 || a == b {
         return b;
     }
@@ -972,19 +972,33 @@ pub fn follow_open_join(a: i64, b: i64) -> i64 {
     return FOLLOW_OPEN_READING;
 }
 
-pub fn follow_open_with(cont: i64, open: i64) -> i64 {
+internal fn follow_open_with(cont: i64, open: i64) -> i64 {
     return cont & FOLLOW_CONT_MASK | follow_open_join(follow_open_mark(cont), open);
 }
 
-pub fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+internal fn follow_then(prefix: i64, positions: i64, cont: i64) -> i64 {
+    return (prefix | (cont & FOLLOW_SEQUENCED) << positions * FOLLOW_SLOT_BITS) & FOLLOW_CONT_MASK;
+}
+
+internal fn follow_then_opening(prefix: i64, positions: i64, cont: i64) -> i64 {
+    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+    return (prefix | opened) & FOLLOW_CONT_MASK | follow_open_mark(cont);
+}
+
+internal fn follow_or(prefix: i64, positions: i64, alternative: i64) -> i64 {
+    let opened = (alternative | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+    return (prefix | opened) & FOLLOW_CONT_MASK | alternative & FOLLOW_OPEN_FIELD;
+}
+
+internal fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
     return follow_heads_have(tokens, pos, cont, sets, eof_kind, true);
 }
 
-pub fn follow_resumes(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+internal fn follow_resumes(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
     return follow_heads_have(tokens, pos, cont, sets, eof_kind, false);
 }
 
-pub fn follow_exit_viable(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+internal fn follow_exit_viable(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
     if cont == 0 || follow_yields(tokens, pos, cont, sets, eof_kind) {
         return true;
     }
@@ -1042,7 +1056,7 @@ fn follow_heads_have(
     return false;
 }
 
-pub fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+internal fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
     let mut c = cont & FOLLOW_CONT_MASK;
     let mut depth = 0;
     let mut alive = true;
@@ -1067,48 +1081,48 @@ pub fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<
     }
     return alive && constrained;
 }
-pub global ATN_BASIC: i32 = 1;
-pub global ATN_RULE_START: i32 = 2;
-pub global ATN_RULE_STOP: i32 = 3;
-pub global ATN_BLOCK_START: i32 = 4;
-pub global ATN_BLOCK_END: i32 = 5;
-pub global ATN_STAR_LOOP_ENTRY: i32 = 6;
-pub global ATN_STAR_LOOP_BACK: i32 = 7;
-pub global ATN_PLUS_LOOP_BACK: i32 = 8;
-pub global ATN_LOOP_END: i32 = 9;
+internal global ATN_BASIC: i32 = 1;
+internal global ATN_RULE_START: i32 = 2;
+internal global ATN_RULE_STOP: i32 = 3;
+internal global ATN_BLOCK_START: i32 = 4;
+internal global ATN_BLOCK_END: i32 = 5;
+internal global ATN_STAR_LOOP_ENTRY: i32 = 6;
+internal global ATN_STAR_LOOP_BACK: i32 = 7;
+internal global ATN_PLUS_LOOP_BACK: i32 = 8;
+internal global ATN_LOOP_END: i32 = 9;
 
-pub global ATN_TR_EPSILON: i32 = 0;
-pub global ATN_TR_ATOM: i32 = 1;
-pub global ATN_TR_NOT_ATOM: i32 = 2;
-pub global ATN_TR_WILDCARD: i32 = 3;
-pub global ATN_TR_RULE: i32 = 4;
-pub global ATN_TR_PRECEDENCE: i32 = 5;
+internal global ATN_TR_EPSILON: i32 = 0;
+internal global ATN_TR_ATOM: i32 = 1;
+internal global ATN_TR_NOT_ATOM: i32 = 2;
+internal global ATN_TR_WILDCARD: i32 = 3;
+internal global ATN_TR_RULE: i32 = 4;
+internal global ATN_TR_PRECEDENCE: i32 = 5;
 
-pub struct AtnSim {
-    pub state_kind: List<i32>,
-    pub state_tr_start: List<i32>,
-    pub state_tr_count: List<i32>,
-    pub tr_kind: List<i32>,
-    pub tr_target: List<i32>,
-    pub tr_label: List<i32>,
-    pub tr_follow: List<i32>,
-    pub tr_prec: List<i32>,
-    pub decision_state: List<i32>,
-    pub rule_start: List<i32>,
-    pub rule_nullable: List<bool> = [],
-    pub rule_first: List<List<i32>> = [],
-    pub rule_first_neg: List<List<i32>> = [],
-    pub rule_first_open: List<bool> = [],
-    pub state_cont_nullable: List<bool> = [],
-    pub state_cont_first_start: List<i32> = [],
-    pub state_cont_first_count: List<i32> = [],
-    pub state_cont_neg_start: List<i32> = [],
-    pub state_cont_neg_count: List<i32> = [],
-    pub cont_first_label: List<i32> = [],
-    pub cont_neg_label: List<i32> = [],
-    pub state_cont_first_open: List<bool> = [],
-    pub state_collapse_to: List<i32> = [],
-    pub state_call_prec: List<i32>,
+internal struct AtnSim {
+    internal state_kind: List<i32>,
+    internal state_tr_start: List<i32>,
+    internal state_tr_count: List<i32>,
+    internal tr_kind: List<i32>,
+    internal tr_target: List<i32>,
+    internal tr_label: List<i32>,
+    internal tr_follow: List<i32>,
+    internal tr_prec: List<i32>,
+    internal decision_state: List<i32>,
+    internal rule_start: List<i32>,
+    internal rule_nullable: List<bool> = [],
+    internal rule_first: List<List<i32>> = [],
+    internal rule_first_neg: List<List<i32>> = [],
+    internal rule_first_open: List<bool> = [],
+    internal state_cont_nullable: List<bool> = [],
+    internal state_cont_first_start: List<i32> = [],
+    internal state_cont_first_count: List<i32> = [],
+    internal state_cont_neg_start: List<i32> = [],
+    internal state_cont_neg_count: List<i32> = [],
+    internal cont_first_label: List<i32> = [],
+    internal cont_neg_label: List<i32> = [],
+    internal state_cont_first_open: List<bool> = [],
+    internal state_collapse_to: List<i32> = [],
+    internal state_call_prec: List<i32>,
 }
 
 fn atn_read_u8(bytes: &ByteList, pos: i32) -> i32 {
@@ -1128,7 +1142,7 @@ fn atn_read_u24(bytes: &ByteList, pos: i32) -> i32 {
     return b0 | b1 << 8 | b2 << 16;
 }
 
-pub fn atn_decode(bytes: &ByteList) -> AtnSim {
+internal fn atn_decode(bytes: &ByteList) -> AtnSim {
     let mut p = 0;
     let nrules = atn_read_u16(bytes, p);
     p += 2;
@@ -1344,7 +1358,7 @@ fn latn_closure(
     }
 }
 
-pub fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32, longest: bool) -> i32 {
+internal fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32, longest: bool) -> i32 {
     let mut best = -1;
     let mut stacks = LatnStacks { parent: [], ret: [], ids: HashMap::<i64, i32>::new(LATN_SEED) };
     let mut open: List<i32> = [];
@@ -1432,17 +1446,15 @@ impl Lexer {
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !((chars[pos] matches { ' ' | '\t' })) { return -1; }
+    if !(chars[pos] matches { ' ' | '\t' }) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_0 = pos;
         rep_0: {
             if pos >= chars.len() { break rep_0; }
-            if !((chars[pos] matches { ' ' | '\t' })) { break rep_0; }
+            if !(chars[pos] matches { ' ' | '\t' }) { break rep_0; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_0;
         break;
     }
     return pos;
@@ -1453,290 +1465,108 @@ fn try_ITEM_LINE_CONTENT(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != '-' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_2 = pos;
         rep_2: {
             if pos >= chars.len() { break rep_2; }
-            if !((chars[pos] matches { ' ' | '\t' })) { break rep_2; }
+            if !(chars[pos] matches { ' ' | '\t' }) { break rep_2; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_2;
         break;
     }
     if pos >= chars.len() || chars[pos] != '[' { return -1; }
     pos += 1;
     let mut accept_3: i32 = -1;
     let mut la_reach_3: i32 = -1;
-    let mut la_tot_4: i32 = -1;
-    let peek_save_5 = pos;
-    let mut peek_ok_5 = false;
-    let mut peek_end_5: i32 = -1;
-    peek_5: {
-        if pos >= chars.len() { break peek_5; }
-        if !((chars[pos] matches { 'x' | 'X' | ' ' })) { break peek_5; }
-        pos += 1;
-        loop {
-            let rep_saved_6 = pos;
-            rep_6: {
-                if pos >= chars.len() { break rep_6; }
-                if !((chars[pos] matches { ' ' | '\t' })) { break rep_6; }
-                pos += 1;
-                continue;
-            }
-            pos = rep_saved_6;
-            break;
-        }
-        if pos >= chars.len() || chars[pos] != ']' { break peek_5; }
-        pos += 1;
-        let opt_saved_7 = pos;
-        let mut opt_ok_7 = false;
-        opt_7: {
-            let mut accept_8: i32 = -1;
-            let mut la_reach_8: i32 = -1;
-            if pos >= chars.len() { break opt_7; }
-            if !((chars[pos] matches { ' ' | '\t' })) { break opt_7; }
+    loop {
+        let mut la_tot_4: i32 = -1;
+        let peek_save_5 = pos;
+        let mut peek_ok_5 = false;
+        let mut peek_end_5: i32 = -1;
+        peek_5: {
+            if pos >= chars.len() { break peek_5; }
+            if !(chars[pos] matches { 'x' | 'X' | ' ' }) { break peek_5; }
             pos += 1;
-            let mut la_tot_9: i32 = -1;
-            let peek_save_10 = pos;
-            let mut peek_ok_10 = false;
-            let mut peek_end_10: i32 = -1;
-            peek_10: {
-                if pos >= chars.len() { break peek_10; }
-                if (chars[pos] matches { '\r' | '\n' }) { break peek_10; }
+            loop {
+                rep_6: {
+                    if pos >= chars.len() { break rep_6; }
+                    if !(chars[pos] matches { ' ' | '\t' }) { break rep_6; }
+                    pos += 1;
+                    continue;
+                }
+                break;
+            }
+            if pos >= chars.len() || chars[pos] != ']' { break peek_5; }
+            pos += 1;
+            let opt_saved_7 = pos;
+            let mut opt_ok_7 = false;
+            opt_7: {
+                let mut accept_8: i32 = -1;
+                let mut la_reach_8: i32 = -1;
+                if pos >= chars.len() { break opt_7; }
+                if !(chars[pos] matches { ' ' | '\t' }) { break opt_7; }
                 pos += 1;
                 loop {
-                    let rep_saved_11 = pos;
-                    rep_11: {
-                        if pos >= chars.len() { break rep_11; }
-                        if (chars[pos] matches { '\r' | '\n' }) { break rep_11; }
-                        pos += 1;
-                        continue;
-                    }
-                    pos = rep_saved_11;
-                    break;
-                }
-                peek_end_10 = pos;
-                peek_ok_10 = true;
-            }
-            pos = peek_save_10;
-            if peek_ok_10 {
-                la_tot_9 = peek_end_10;
-            }
-            if la_tot_9 >= 0 && la_tot_9 >= la_reach_8 {
-                la_reach_8 = la_tot_9;
-                accept_8 = pos;
-            }
-            loop {
-                let la_saved_8 = pos;
-                la_rep_8: {
-                    if pos >= chars.len() { break la_rep_8; }
-                    if !((chars[pos] matches { ' ' | '\t' })) { break la_rep_8; }
-                    pos += 1;
-                    let mut la_tot_13: i32 = -1;
-                    let peek_save_14 = pos;
-                    let mut peek_ok_14 = false;
-                    let mut peek_end_14: i32 = -1;
-                    peek_14: {
-                        if pos >= chars.len() { break peek_14; }
-                        if (chars[pos] matches { '\r' | '\n' }) { break peek_14; }
+                    let mut la_tot_9: i32 = -1;
+                    let peek_save_10 = pos;
+                    let mut peek_ok_10 = false;
+                    let mut peek_end_10: i32 = -1;
+                    peek_10: {
+                        if pos >= chars.len() { break peek_10; }
+                        if (chars[pos] matches { '\r' | '\n' }) { break peek_10; }
                         pos += 1;
                         loop {
-                            let rep_saved_15 = pos;
-                            rep_15: {
-                                if pos >= chars.len() { break rep_15; }
-                                if (chars[pos] matches { '\r' | '\n' }) { break rep_15; }
+                            rep_11: {
+                                if pos >= chars.len() { break rep_11; }
+                                if (chars[pos] matches { '\r' | '\n' }) { break rep_11; }
                                 pos += 1;
                                 continue;
                             }
-                            pos = rep_saved_15;
                             break;
                         }
-                        peek_end_14 = pos;
-                        peek_ok_14 = true;
+                        peek_end_10 = pos;
+                        peek_ok_10 = true;
                     }
-                    pos = peek_save_14;
-                    if peek_ok_14 {
-                        la_tot_13 = peek_end_14;
+                    pos = peek_save_10;
+                    if peek_ok_10 {
+                        la_tot_9 = peek_end_10;
                     }
-                    if la_tot_13 >= 0 && la_tot_13 >= la_reach_8 {
-                        la_reach_8 = la_tot_13;
+                    if la_tot_9 >= 0 && la_tot_9 >= la_reach_8 {
+                        la_reach_8 = la_tot_9;
                         accept_8 = pos;
                     }
-                    continue;
+                    let la_saved_8 = pos;
+                    la_rep_8: {
+                        if pos >= chars.len() { break la_rep_8; }
+                        if !(chars[pos] matches { ' ' | '\t' }) { break la_rep_8; }
+                        pos += 1;
+                        continue;
+                    }
+                    pos = la_saved_8;
+                    break;
                 }
-                pos = la_saved_8;
-                break;
-            }
-            if accept_8 < 0 {
-                break opt_7;
-            }
-            pos = accept_8;
-            if pos >= chars.len() { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
-            if (chars[pos] matches { '\r' | '\n' }) { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
-            pos += 1;
-            loop {
-                let rep_saved_17 = pos;
-                rep_17: {
-                    if pos >= chars.len() { break rep_17; }
-                    if (chars[pos] matches { '\r' | '\n' }) { break rep_17; }
-                    pos += 1;
-                    continue;
+                if accept_8 < 0 {
+                    break opt_7;
                 }
-                pos = rep_saved_17;
-                break;
+                pos = la_reach_8;
+                opt_ok_7 = true;
             }
-            opt_ok_7 = true;
+            if !opt_ok_7 { pos = opt_saved_7; }
+            peek_end_5 = pos;
+            peek_ok_5 = true;
         }
-        if !opt_ok_7 { pos = opt_saved_7; }
-        peek_end_5 = pos;
-        peek_ok_5 = true;
-    }
-    pos = peek_save_5;
-    if peek_ok_5 {
-        la_tot_4 = peek_end_5;
-    }
-    if la_tot_4 >= 0 && la_tot_4 >= la_reach_3 {
-        la_reach_3 = la_tot_4;
-        accept_3 = pos;
-    }
-    loop {
+        pos = peek_save_5;
+        if peek_ok_5 {
+            la_tot_4 = peek_end_5;
+        }
+        if la_tot_4 >= 0 && la_tot_4 >= la_reach_3 {
+            la_reach_3 = la_tot_4;
+            accept_3 = pos;
+        }
         let la_saved_3 = pos;
         la_rep_3: {
             if pos >= chars.len() { break la_rep_3; }
-            if !((chars[pos] matches { ' ' | '\t' })) { break la_rep_3; }
+            if !(chars[pos] matches { ' ' | '\t' }) { break la_rep_3; }
             pos += 1;
-            let mut la_tot_19: i32 = -1;
-            let peek_save_20 = pos;
-            let mut peek_ok_20 = false;
-            let mut peek_end_20: i32 = -1;
-            peek_20: {
-                if pos >= chars.len() { break peek_20; }
-                if !((chars[pos] matches { 'x' | 'X' | ' ' })) { break peek_20; }
-                pos += 1;
-                loop {
-                    let rep_saved_21 = pos;
-                    rep_21: {
-                        if pos >= chars.len() { break rep_21; }
-                        if !((chars[pos] matches { ' ' | '\t' })) { break rep_21; }
-                        pos += 1;
-                        continue;
-                    }
-                    pos = rep_saved_21;
-                    break;
-                }
-                if pos >= chars.len() || chars[pos] != ']' { break peek_20; }
-                pos += 1;
-                let opt_saved_22 = pos;
-                let mut opt_ok_22 = false;
-                opt_22: {
-                    let mut accept_23: i32 = -1;
-                    let mut la_reach_23: i32 = -1;
-                    if pos >= chars.len() { break opt_22; }
-                    if !((chars[pos] matches { ' ' | '\t' })) { break opt_22; }
-                    pos += 1;
-                    let mut la_tot_24: i32 = -1;
-                    let peek_save_25 = pos;
-                    let mut peek_ok_25 = false;
-                    let mut peek_end_25: i32 = -1;
-                    peek_25: {
-                        if pos >= chars.len() { break peek_25; }
-                        if (chars[pos] matches { '\r' | '\n' }) { break peek_25; }
-                        pos += 1;
-                        loop {
-                            let rep_saved_26 = pos;
-                            rep_26: {
-                                if pos >= chars.len() { break rep_26; }
-                                if (chars[pos] matches { '\r' | '\n' }) { break rep_26; }
-                                pos += 1;
-                                continue;
-                            }
-                            pos = rep_saved_26;
-                            break;
-                        }
-                        peek_end_25 = pos;
-                        peek_ok_25 = true;
-                    }
-                    pos = peek_save_25;
-                    if peek_ok_25 {
-                        la_tot_24 = peek_end_25;
-                    }
-                    if la_tot_24 >= 0 && la_tot_24 >= la_reach_23 {
-                        la_reach_23 = la_tot_24;
-                        accept_23 = pos;
-                    }
-                    loop {
-                        let la_saved_23 = pos;
-                        la_rep_23: {
-                            if pos >= chars.len() { break la_rep_23; }
-                            if !((chars[pos] matches { ' ' | '\t' })) { break la_rep_23; }
-                            pos += 1;
-                            let mut la_tot_28: i32 = -1;
-                            let peek_save_29 = pos;
-                            let mut peek_ok_29 = false;
-                            let mut peek_end_29: i32 = -1;
-                            peek_29: {
-                                if pos >= chars.len() { break peek_29; }
-                                if (chars[pos] matches { '\r' | '\n' }) { break peek_29; }
-                                pos += 1;
-                                loop {
-                                    let rep_saved_30 = pos;
-                                    rep_30: {
-                                        if pos >= chars.len() { break rep_30; }
-                                        if (chars[pos] matches { '\r' | '\n' }) { break rep_30; }
-                                        pos += 1;
-                                        continue;
-                                    }
-                                    pos = rep_saved_30;
-                                    break;
-                                }
-                                peek_end_29 = pos;
-                                peek_ok_29 = true;
-                            }
-                            pos = peek_save_29;
-                            if peek_ok_29 {
-                                la_tot_28 = peek_end_29;
-                            }
-                            if la_tot_28 >= 0 && la_tot_28 >= la_reach_23 {
-                                la_reach_23 = la_tot_28;
-                                accept_23 = pos;
-                            }
-                            continue;
-                        }
-                        pos = la_saved_23;
-                        break;
-                    }
-                    if accept_23 < 0 {
-                        break opt_22;
-                    }
-                    pos = accept_23;
-                    if pos >= chars.len() { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
-                    if (chars[pos] matches { '\r' | '\n' }) { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
-                    pos += 1;
-                    loop {
-                        let rep_saved_32 = pos;
-                        rep_32: {
-                            if pos >= chars.len() { break rep_32; }
-                            if (chars[pos] matches { '\r' | '\n' }) { break rep_32; }
-                            pos += 1;
-                            continue;
-                        }
-                        pos = rep_saved_32;
-                        break;
-                    }
-                    opt_ok_22 = true;
-                }
-                if !opt_ok_22 { pos = opt_saved_22; }
-                peek_end_20 = pos;
-                peek_ok_20 = true;
-            }
-            pos = peek_save_20;
-            if peek_ok_20 {
-                la_tot_19 = peek_end_20;
-            }
-            if la_tot_19 >= 0 && la_tot_19 >= la_reach_3 {
-                la_reach_3 = la_tot_19;
-                accept_3 = pos;
-            }
             continue;
         }
         pos = la_saved_3;
@@ -1745,123 +1575,7 @@ fn try_ITEM_LINE_CONTENT(chars: &List<char>, start: i32) -> i32 {
     if accept_3 < 0 {
         return -1;
     }
-    pos = accept_3;
-    if pos >= chars.len() { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
-    if !((chars[pos] matches { 'x' | 'X' | ' ' })) { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
-    pos += 1;
-    loop {
-        let rep_saved_34 = pos;
-        rep_34: {
-            if pos >= chars.len() { break rep_34; }
-            if !((chars[pos] matches { ' ' | '\t' })) { break rep_34; }
-            pos += 1;
-            continue;
-        }
-        pos = rep_saved_34;
-        break;
-    }
-    if pos >= chars.len() || chars[pos] != ']' { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
-    pos += 1;
-    let opt_saved_35 = pos;
-    let mut opt_ok_35 = false;
-    opt_35: {
-        let mut accept_36: i32 = -1;
-        let mut la_reach_36: i32 = -1;
-        if pos >= chars.len() { break opt_35; }
-        if !((chars[pos] matches { ' ' | '\t' })) { break opt_35; }
-        pos += 1;
-        let mut la_tot_37: i32 = -1;
-        let peek_save_38 = pos;
-        let mut peek_ok_38 = false;
-        let mut peek_end_38: i32 = -1;
-        peek_38: {
-            if pos >= chars.len() { break peek_38; }
-            if (chars[pos] matches { '\r' | '\n' }) { break peek_38; }
-            pos += 1;
-            loop {
-                let rep_saved_39 = pos;
-                rep_39: {
-                    if pos >= chars.len() { break rep_39; }
-                    if (chars[pos] matches { '\r' | '\n' }) { break rep_39; }
-                    pos += 1;
-                    continue;
-                }
-                pos = rep_saved_39;
-                break;
-            }
-            peek_end_38 = pos;
-            peek_ok_38 = true;
-        }
-        pos = peek_save_38;
-        if peek_ok_38 {
-            la_tot_37 = peek_end_38;
-        }
-        if la_tot_37 >= 0 && la_tot_37 >= la_reach_36 {
-            la_reach_36 = la_tot_37;
-            accept_36 = pos;
-        }
-        loop {
-            let la_saved_36 = pos;
-            la_rep_36: {
-                if pos >= chars.len() { break la_rep_36; }
-                if !((chars[pos] matches { ' ' | '\t' })) { break la_rep_36; }
-                pos += 1;
-                let mut la_tot_41: i32 = -1;
-                let peek_save_42 = pos;
-                let mut peek_ok_42 = false;
-                let mut peek_end_42: i32 = -1;
-                peek_42: {
-                    if pos >= chars.len() { break peek_42; }
-                    if (chars[pos] matches { '\r' | '\n' }) { break peek_42; }
-                    pos += 1;
-                    loop {
-                        let rep_saved_43 = pos;
-                        rep_43: {
-                            if pos >= chars.len() { break rep_43; }
-                            if (chars[pos] matches { '\r' | '\n' }) { break rep_43; }
-                            pos += 1;
-                            continue;
-                        }
-                        pos = rep_saved_43;
-                        break;
-                    }
-                    peek_end_42 = pos;
-                    peek_ok_42 = true;
-                }
-                pos = peek_save_42;
-                if peek_ok_42 {
-                    la_tot_41 = peek_end_42;
-                }
-                if la_tot_41 >= 0 && la_tot_41 >= la_reach_36 {
-                    la_reach_36 = la_tot_41;
-                    accept_36 = pos;
-                }
-                continue;
-            }
-            pos = la_saved_36;
-            break;
-        }
-        if accept_36 < 0 {
-            break opt_35;
-        }
-        pos = accept_36;
-        if pos >= chars.len() { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
-        if (chars[pos] matches { '\r' | '\n' }) { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
-        pos += 1;
-        loop {
-            let rep_saved_45 = pos;
-            rep_45: {
-                if pos >= chars.len() { break rep_45; }
-                if (chars[pos] matches { '\r' | '\n' }) { break rep_45; }
-                pos += 1;
-                continue;
-            }
-            pos = rep_saved_45;
-            break;
-        }
-        opt_ok_35 = true;
-    }
-    if !opt_ok_35 { pos = opt_saved_35; }
+    pos = la_reach_3;
     return pos;
 }
 
@@ -2340,7 +2054,7 @@ impl Parser {
 
 fn _parse_checklist_file__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 0;
-    _parse_item_line(p, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+    _parse_item_line(p, follow_then(FOLLOW_MASK_0, 1, follow));
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
 }

@@ -21,7 +21,7 @@ impl Span {
     }
 }
 
-pub fn push_chars(out: &mut String, chars: &List<char>, start: i32, end: i32) {
+internal fn push_chars(out: &mut String, chars: &List<char>, start: i32, end: i32) {
     let mut bytes = 0;
     for let mut i = start; i < end; i += 1 {
         bytes += chars[i].len_utf8();
@@ -32,13 +32,13 @@ pub fn push_chars(out: &mut String, chars: &List<char>, start: i32, end: i32) {
     }
 }
 
-pub fn chars_text(chars: &List<char>, start: i32, end: i32) -> String {
+internal fn chars_text(chars: &List<char>, start: i32, end: i32) -> String {
     let mut s = String::new();
     push_chars(&mut s, chars, start, end);
     return s;
 }
 
-pub fn push_chars_escaped(out: &mut String, chars: &List<char>, start: i32, end: i32) {
+internal fn push_chars_escaped(out: &mut String, chars: &List<char>, start: i32, end: i32) {
     for let mut i = start; i < end; i += 1 {
         match chars[i] {
             '\n' => out.push_str("\\n"),
@@ -49,7 +49,7 @@ pub fn push_chars_escaped(out: &mut String, chars: &List<char>, start: i32, end:
     }
 }
 
-pub fn kind_set_has(set: &List<i32>, kind: i32) -> bool {
+internal fn kind_set_has(set: &List<i32>, kind: i32) -> bool {
     let w = kind >> 5;
     if w >= set.len() {
         return false;
@@ -57,7 +57,7 @@ pub fn kind_set_has(set: &List<i32>, kind: i32) -> bool {
     return set[w] >> (kind & 31) & 1 == 1;
 }
 
-pub fn with_expected<S: AsStrSlice>(message: S, expected: &List<String>) -> String {
+internal fn with_expected<S: AsStrSlice>(message: S, expected: &List<String>) -> String {
     let n = expected.len();
     if n == 0 {
         return message.to_string();
@@ -75,7 +75,7 @@ pub fn with_expected<S: AsStrSlice>(message: S, expected: &List<String>) -> Stri
     return out;
 }
 
-pub fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
+internal fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
     let mut j = if i < chars.len() { i } else { chars.len() };
     let mut col = 0;
     while j > 0 && chars[j - 1] != '\n' {
@@ -85,7 +85,7 @@ pub fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
     return col;
 }
 
-pub fn line_starts(chars: &List<char>) -> List<i32> {
+internal fn line_starts(chars: &List<char>) -> List<i32> {
     let mut starts: List<i32> = [0];
     for let mut i = 0; i < chars.len(); i += 1 {
         if chars[i] == '\n' {
@@ -95,7 +95,7 @@ pub fn line_starts(chars: &List<char>) -> List<i32> {
     return starts;
 }
 
-pub fn line_col_at(starts: &List<i32>, pos: i32) -> [i32, i32] {
+internal fn line_col_at(starts: &List<i32>, pos: i32) -> [i32, i32] {
     let mut lo = 0;
     let mut hi = starts.len() - 1;
     while lo < hi {
@@ -131,7 +131,7 @@ pub struct TokenStream {
 }
 
 impl TokenStream {
-    pub fn new(chars: &List<char>) -> TokenStream {
+    internal fn new(chars: &List<char>) -> TokenStream {
         let cap = chars.len() / 4 + 1;
         return TokenStream {
             kinds: List::with_capacity(cap),
@@ -152,11 +152,11 @@ impl TokenStream {
         return self.kinds.len();
     }
 
-    pub fn trivia_mark(&self) -> i32 {
+    internal fn trivia_mark(&self) -> i32 {
         return self.triv_kinds.len();
     }
 
-    pub fn push_trivia(&mut self, kind: i32, start: i32, end: i32, channel: i32) {
+    internal fn push_trivia(&mut self, kind: i32, start: i32, end: i32, channel: i32) {
         if self.triv_kinds.len() >= self.triv_kinds.capacity() {
             builtin::cold_path();
             self.triv_kinds.grow();
@@ -173,11 +173,11 @@ impl TokenStream {
         self.triv_chans.push_within_capacity(channel);
     }
 
-    pub fn push_token(&mut self, kind: i32, start: i32, end: i32, triv_lo: i32, triv_hi: i32) {
+    internal fn push_token(&mut self, kind: i32, start: i32, end: i32, triv_lo: i32, triv_hi: i32) {
         self.push_token_flagged(kind, start, end, triv_lo, triv_hi, TokenFlags::none());
     }
 
-    pub fn push_token_flagged(
+    internal fn push_token_flagged(
         &mut self,
         kind: i32,
         start: i32,
@@ -210,7 +210,7 @@ impl TokenStream {
         return idx;
     }
 
-    pub fn push_synthetic(&mut self, expected_kind: i32, at: i32) -> i32 {
+    internal fn push_synthetic(&mut self, expected_kind: i32, at: i32) -> i32 {
         let m = self.trivia_mark();
         return self.push_token_flagged(expected_kind, at, at, m, m, TokenFlags::Synthetic);
     }
@@ -219,11 +219,11 @@ impl TokenStream {
         return self.flags[i];
     }
 
-    pub fn set_flag(&mut self, i: i32, flag: TokenFlags) {
+    internal fn set_flag(&mut self, i: i32, flag: TokenFlags) {
         self.flags[i] |= flag;
     }
 
-    pub fn mark_skipped(&mut self, i: i32) {
+    internal fn mark_skipped(&mut self, i: i32) {
         self.set_flag(i, TokenFlags::Skipped);
     }
 
@@ -333,7 +333,7 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
-    pub fn error<S: AsStrSlice>(
+    internal fn error<S: AsStrSlice>(
         code: DiagnosticCode,
         message: S,
         span: Span,
@@ -386,7 +386,7 @@ fn lex_error_at(tokens: &TokenStream, i: i32) -> Diagnostic {
     );
 }
 
-pub fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagnostic>, max_errors: i32) {
+internal fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagnostic>, max_errors: i32) {
     let mut merged: List<Diagnostic> = [];
     for let mut i = 0; i < tokens.len(); i += 1 {
         if tokens.is_lex_error(i) {
@@ -399,7 +399,7 @@ pub fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagnostic>
     *diagnostics = merged;
 }
 
-pub fn resolve_positions(diagnostics: &mut List<Diagnostic>, chars: &List<char>) {
+internal fn resolve_positions(diagnostics: &mut List<Diagnostic>, chars: &List<char>) {
     if diagnostics.is_empty() {
         return;
     }
@@ -558,7 +558,7 @@ fn bubble_to_parent(stack: &List<i32>, end: &mut List<i32>, flags: &mut List<Nod
     }
 }
 
-pub struct TreeBuilder {
+internal struct TreeBuilder {
     tag: List<EventTag>,
     id: List<i32>,
     offset: List<i32>,
@@ -569,7 +569,7 @@ pub struct TreeBuilder {
 }
 
 impl TreeBuilder {
-    pub fn with_capacity(rows: i32) -> TreeBuilder {
+    internal fn with_capacity(rows: i32) -> TreeBuilder {
         return TreeBuilder {
             tag: List::with_capacity(rows),
             id: List::with_capacity(rows),
@@ -598,27 +598,27 @@ impl TreeBuilder {
         self.alt.push_within_capacity(-1);
     }
 
-    pub fn start_node(&mut self, kind: NodeKind, start: i32) {
+    internal fn start_node(&mut self, kind: NodeKind, start: i32) {
         let row = self.tag.len();
         self.push_row(EventTag::Open, kind as i32, start);
         self.open.push(row);
     }
 
-    pub fn start_error(&mut self, start: i32) {
+    internal fn start_error(&mut self, start: i32) {
         let row = self.tag.len();
         self.push_row(EventTag::Open, K_ERROR as i32, start);
         self.open.push(row);
     }
 
-    pub fn set_alt(&mut self, alt: i32) {
+    internal fn set_alt(&mut self, alt: i32) {
         self.alt[self.open[self.open.len() - 1]] = alt;
     }
 
-    pub fn checkpoint(&self) -> i32 {
+    internal fn checkpoint(&self) -> i32 {
         return self.tag.len();
     }
 
-    pub fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
+    internal fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
         assert self.innermost_open() < checkpoint, "a node wraps only rows finished before it";
         self.tag.insert(checkpoint, EventTag::Open);
         self.id.insert(checkpoint, kind as i32);
@@ -633,7 +633,7 @@ impl TreeBuilder {
         }
     }
 
-    pub fn truncate(&mut self, checkpoint: i32) {
+    internal fn truncate(&mut self, checkpoint: i32) {
         self.tag.truncate(checkpoint);
         self.id.truncate(checkpoint);
         self.offset.truncate(checkpoint);
@@ -649,25 +649,25 @@ impl TreeBuilder {
         }
     }
 
-    pub fn finish_node(&mut self, end: i32) {
+    internal fn finish_node(&mut self, end: i32) {
         let row = self.open[self.open.len() - 1];
         self.push_row(EventTag::Close, self.id[row], end);
         self.last_finished = row;
         let _ = self.open.pop();
     }
 
-    pub fn innermost_open(&self) -> i32 {
+    internal fn innermost_open(&self) -> i32 {
         if self.open.is_empty() {
             return -1;
         }
         return self.open[self.open.len() - 1];
     }
 
-    pub fn node_kind(&self, row: i32) -> NodeKind {
+    internal fn node_kind(&self, row: i32) -> NodeKind {
         return self.id[row] as NodeKind;
     }
 
-    pub fn resume_node(&mut self, row: i32, end: i32) {
+    internal fn resume_node(&mut self, row: i32, end: i32) {
         while self.innermost_open() > row {
             self.finish_node(end);
         }
@@ -679,11 +679,11 @@ impl TreeBuilder {
         self.open.push(row);
     }
 
-    pub fn mark_error(&mut self) {
+    internal fn mark_error(&mut self) {
         self.error_row = self.tag.len();
     }
 
-    pub fn in_error_mode(&self) -> bool {
+    internal fn in_error_mode(&self) -> bool {
         if self.error_row < 0 {
             return false;
         }
@@ -695,7 +695,7 @@ impl TreeBuilder {
         return true;
     }
 
-    pub fn push_open_rule_names(&self, rule_names: &List<String>, out: &mut List<String>) {
+    internal fn push_open_rule_names(&self, rule_names: &List<String>, out: &mut List<String>) {
         for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
             let kind = self.id[self.open[i]];
             if kind != K_ERROR as i32 {
@@ -704,19 +704,19 @@ impl TreeBuilder {
         }
     }
 
-    pub fn token(&mut self, idx: i32) {
+    internal fn token(&mut self, idx: i32) {
         self.push_row(EventTag::Tok, idx, 0);
     }
 
-    pub fn missing(&mut self, syn_idx: i32) {
+    internal fn missing(&mut self, syn_idx: i32) {
         self.push_row(EventTag::Miss, syn_idx, 0);
     }
 
-    pub fn skip(&mut self, idx: i32) {
+    internal fn skip(&mut self, idx: i32) {
         self.push_row(EventTag::Skip, idx, 0);
     }
 
-    pub fn finish(&self) -> CstStore {
+    internal fn finish(&self) -> CstStore {
         let n = self.tag.len();
         let mut end = List::filled(n, 0);
         let mut flags = List::filled(n, NodeFlags::none());
@@ -761,14 +761,14 @@ impl TreeBuilder {
         return CstStore { tag: self.tag, id: self.id, offset: self.offset, alt: self.alt, end, flags, next };
     }
 
-    pub fn render_open(&self, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
+    internal fn render_open(&self, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
         if self.open.len() == 0 {
             return String::new();
         }
         return self.render_from(self.open[self.open.len() - 1], toks, rule_names, token_names);
     }
 
-    pub fn render_at(
+    internal fn render_at(
         &self,
         row: i32,
         toks: &TokenStream,
@@ -781,7 +781,7 @@ impl TreeBuilder {
         return self.render_from(row, toks, rule_names, token_names);
     }
 
-    pub fn open_rule_names(&self, rule_names: &List<String>) -> String {
+    internal fn open_rule_names(&self, rule_names: &List<String>) -> String {
         let mut out = String::from("[");
         for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
             if i < self.open.len() - 1 {
@@ -795,7 +795,7 @@ impl TreeBuilder {
         return out;
     }
 
-    pub fn render_last_finished(
+    internal fn render_last_finished(
         &self,
         toks: &TokenStream,
         rule_names: &List<String>,
@@ -979,33 +979,33 @@ impl LexerView {
     }
 }
 
-pub global FOLLOW_MAX_DEPTH: i32 = 4;
+internal global FOLLOW_MAX_DEPTH: i32 = 4;
 
-pub global FOLLOW_SLOT_BITS: i64 = 8;
+internal global FOLLOW_SLOT_BITS: i64 = 8;
 
-pub global FOLLOW_ID_MASK: i64 = 127;
+internal global FOLLOW_ID_MASK: i64 = 127;
 
-pub global FOLLOW_OPENS_BIT: i64 = 128;
+internal global FOLLOW_OPENS_BIT: i64 = 128;
 
-pub global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
+internal global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
 
-pub global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
+internal global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
 
-pub global FOLLOW_OPEN_READING: i64 = 0x0100_0000_0000_0000;
+internal global FOLLOW_OPEN_READING: i64 = 0x0100_0000_0000_0000;
 
-pub global FOLLOW_OPEN_FIELD: i64 = ~0x00FF_FFFF_FFFF_FFFF;
+internal global FOLLOW_OPEN_FIELD: i64 = ~0x00FF_FFFF_FFFF_FFFF;
 
-pub global FOLLOW_OPEN_SET_SHIFT: i64 = 57;
+internal global FOLLOW_OPEN_SET_SHIFT: i64 = 57;
 
-pub fn follow_open_mark(cont: i64) -> i64 {
+internal fn follow_open_mark(cont: i64) -> i64 {
     return if cont == 0 { FOLLOW_OPEN_READING } else { cont & FOLLOW_OPEN_FIELD };
 }
 
-pub fn follow_open_set(mask: i64) -> i64 {
+internal fn follow_open_set(mask: i64) -> i64 {
     return FOLLOW_OPEN_READING | (mask & FOLLOW_ID_MASK) << FOLLOW_OPEN_SET_SHIFT;
 }
 
-pub fn follow_open_join(a: i64, b: i64) -> i64 {
+internal fn follow_open_join(a: i64, b: i64) -> i64 {
     if a == 0 || a == b {
         return b;
     }
@@ -1015,19 +1015,33 @@ pub fn follow_open_join(a: i64, b: i64) -> i64 {
     return FOLLOW_OPEN_READING;
 }
 
-pub fn follow_open_with(cont: i64, open: i64) -> i64 {
+internal fn follow_open_with(cont: i64, open: i64) -> i64 {
     return cont & FOLLOW_CONT_MASK | follow_open_join(follow_open_mark(cont), open);
 }
 
-pub fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+internal fn follow_then(prefix: i64, positions: i64, cont: i64) -> i64 {
+    return (prefix | (cont & FOLLOW_SEQUENCED) << positions * FOLLOW_SLOT_BITS) & FOLLOW_CONT_MASK;
+}
+
+internal fn follow_then_opening(prefix: i64, positions: i64, cont: i64) -> i64 {
+    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+    return (prefix | opened) & FOLLOW_CONT_MASK | follow_open_mark(cont);
+}
+
+internal fn follow_or(prefix: i64, positions: i64, alternative: i64) -> i64 {
+    let opened = (alternative | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+    return (prefix | opened) & FOLLOW_CONT_MASK | alternative & FOLLOW_OPEN_FIELD;
+}
+
+internal fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
     return follow_heads_have(tokens, pos, cont, sets, eof_kind, true);
 }
 
-pub fn follow_resumes(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+internal fn follow_resumes(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
     return follow_heads_have(tokens, pos, cont, sets, eof_kind, false);
 }
 
-pub fn follow_exit_viable(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+internal fn follow_exit_viable(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
     if cont == 0 || follow_yields(tokens, pos, cont, sets, eof_kind) {
         return true;
     }
@@ -1085,7 +1099,7 @@ fn follow_heads_have(
     return false;
 }
 
-pub fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+internal fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
     let mut c = cont & FOLLOW_CONT_MASK;
     let mut depth = 0;
     let mut alive = true;
@@ -1110,48 +1124,48 @@ pub fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<
     }
     return alive && constrained;
 }
-pub global ATN_BASIC: i32 = 1;
-pub global ATN_RULE_START: i32 = 2;
-pub global ATN_RULE_STOP: i32 = 3;
-pub global ATN_BLOCK_START: i32 = 4;
-pub global ATN_BLOCK_END: i32 = 5;
-pub global ATN_STAR_LOOP_ENTRY: i32 = 6;
-pub global ATN_STAR_LOOP_BACK: i32 = 7;
-pub global ATN_PLUS_LOOP_BACK: i32 = 8;
-pub global ATN_LOOP_END: i32 = 9;
+internal global ATN_BASIC: i32 = 1;
+internal global ATN_RULE_START: i32 = 2;
+internal global ATN_RULE_STOP: i32 = 3;
+internal global ATN_BLOCK_START: i32 = 4;
+internal global ATN_BLOCK_END: i32 = 5;
+internal global ATN_STAR_LOOP_ENTRY: i32 = 6;
+internal global ATN_STAR_LOOP_BACK: i32 = 7;
+internal global ATN_PLUS_LOOP_BACK: i32 = 8;
+internal global ATN_LOOP_END: i32 = 9;
 
-pub global ATN_TR_EPSILON: i32 = 0;
-pub global ATN_TR_ATOM: i32 = 1;
-pub global ATN_TR_NOT_ATOM: i32 = 2;
-pub global ATN_TR_WILDCARD: i32 = 3;
-pub global ATN_TR_RULE: i32 = 4;
-pub global ATN_TR_PRECEDENCE: i32 = 5;
+internal global ATN_TR_EPSILON: i32 = 0;
+internal global ATN_TR_ATOM: i32 = 1;
+internal global ATN_TR_NOT_ATOM: i32 = 2;
+internal global ATN_TR_WILDCARD: i32 = 3;
+internal global ATN_TR_RULE: i32 = 4;
+internal global ATN_TR_PRECEDENCE: i32 = 5;
 
-pub struct AtnSim {
-    pub state_kind: List<i32>,
-    pub state_tr_start: List<i32>,
-    pub state_tr_count: List<i32>,
-    pub tr_kind: List<i32>,
-    pub tr_target: List<i32>,
-    pub tr_label: List<i32>,
-    pub tr_follow: List<i32>,
-    pub tr_prec: List<i32>,
-    pub decision_state: List<i32>,
-    pub rule_start: List<i32>,
-    pub rule_nullable: List<bool> = [],
-    pub rule_first: List<List<i32>> = [],
-    pub rule_first_neg: List<List<i32>> = [],
-    pub rule_first_open: List<bool> = [],
-    pub state_cont_nullable: List<bool> = [],
-    pub state_cont_first_start: List<i32> = [],
-    pub state_cont_first_count: List<i32> = [],
-    pub state_cont_neg_start: List<i32> = [],
-    pub state_cont_neg_count: List<i32> = [],
-    pub cont_first_label: List<i32> = [],
-    pub cont_neg_label: List<i32> = [],
-    pub state_cont_first_open: List<bool> = [],
-    pub state_collapse_to: List<i32> = [],
-    pub state_call_prec: List<i32>,
+internal struct AtnSim {
+    internal state_kind: List<i32>,
+    internal state_tr_start: List<i32>,
+    internal state_tr_count: List<i32>,
+    internal tr_kind: List<i32>,
+    internal tr_target: List<i32>,
+    internal tr_label: List<i32>,
+    internal tr_follow: List<i32>,
+    internal tr_prec: List<i32>,
+    internal decision_state: List<i32>,
+    internal rule_start: List<i32>,
+    internal rule_nullable: List<bool> = [],
+    internal rule_first: List<List<i32>> = [],
+    internal rule_first_neg: List<List<i32>> = [],
+    internal rule_first_open: List<bool> = [],
+    internal state_cont_nullable: List<bool> = [],
+    internal state_cont_first_start: List<i32> = [],
+    internal state_cont_first_count: List<i32> = [],
+    internal state_cont_neg_start: List<i32> = [],
+    internal state_cont_neg_count: List<i32> = [],
+    internal cont_first_label: List<i32> = [],
+    internal cont_neg_label: List<i32> = [],
+    internal state_cont_first_open: List<bool> = [],
+    internal state_collapse_to: List<i32> = [],
+    internal state_call_prec: List<i32>,
 }
 
 fn atn_read_u8(bytes: &ByteList, pos: i32) -> i32 {
@@ -1171,7 +1185,7 @@ fn atn_read_u24(bytes: &ByteList, pos: i32) -> i32 {
     return b0 | b1 << 8 | b2 << 16;
 }
 
-pub fn atn_decode(bytes: &ByteList) -> AtnSim {
+internal fn atn_decode(bytes: &ByteList) -> AtnSim {
     let mut p = 0;
     let nrules = atn_read_u16(bytes, p);
     p += 2;
@@ -1387,7 +1401,7 @@ fn latn_closure(
     }
 }
 
-pub fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32, longest: bool) -> i32 {
+internal fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32, longest: bool) -> i32 {
     let mut best = -1;
     let mut stacks = LatnStacks { parent: [], ret: [], ids: HashMap::<i64, i32>::new(LATN_SEED) };
     let mut open: List<i32> = [];
@@ -1727,14 +1741,12 @@ fn try_LINE_COMMENT(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != '/' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_4 = pos;
         rep_4: {
             if pos >= chars.len() { break rep_4; }
             if (chars[pos] matches { '\r' | '\n' }) { break rep_4; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_4;
         break;
     }
     return pos;
@@ -1753,17 +1765,15 @@ fn try_INT(chars: &List<char>, start: i32) -> i32 {
         alts_5_1: {
             pos = alts_saved_5;
             if pos >= chars.len() { break alts_5_1; }
-            if !((chars[pos] matches { '1'..='9' })) { break alts_5_1; }
+            if !(chars[pos] matches { '1'..='9' }) { break alts_5_1; }
             pos += 1;
             loop {
-                let rep_saved_6 = pos;
                 rep_6: {
                     if pos >= chars.len() { break rep_6; }
-                    if !((chars[pos] matches { '0'..='9' })) { break rep_6; }
+                    if !(chars[pos] matches { '0'..='9' }) { break rep_6; }
                     pos += 1;
                     continue;
                 }
-                pos = rep_saved_6;
                 break;
             }
             break alts_done_5;
@@ -2147,17 +2157,15 @@ fn try_NOT(chars: &List<char>, start: i32) -> i32 {
 fn try_ID(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !((chars[pos] matches { 'A'..='Z' | 'a'..='z' | 'À'..='Ö' | 'Ø'..='ö' | 'ø'..='˿' | 'Ͱ'..='ͽ' | 'Ϳ'..='\u{1fff}' | '\u{200c}'..='\u{200d}' | '⁰'..='\u{218f}' | 'Ⰰ'..='\u{2fef}' | '、'..='\u{d7ff}' | '豈'..='﷏' | 'ﷰ'..='�' })) { return -1; }
+    if !(chars[pos] matches { 'A'..='Z' | 'a'..='z' | 'À'..='Ö' | 'Ø'..='ö' | 'ø'..='˿' | 'Ͱ'..='ͽ' | 'Ϳ'..='\u{1fff}' | '\u{200c}'..='\u{200d}' | '⁰'..='\u{218f}' | 'Ⰰ'..='\u{2fef}' | '、'..='\u{d7ff}' | '豈'..='﷏' | 'ﷰ'..='�' }) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_14 = pos;
         rep_14: {
             if pos >= chars.len() { break rep_14; }
-            if !((chars[pos] matches { '0'..='9' | 'A'..='Z' | '_' | 'a'..='z' | '·' | 'À'..='Ö' | 'Ø'..='ö' | 'ø'..='ͽ' | 'Ϳ'..='\u{1fff}' | '\u{200c}'..='\u{200d}' | '‿'..='⁀' | '⁰'..='\u{218f}' | 'Ⰰ'..='\u{2fef}' | '、'..='\u{d7ff}' | '豈'..='﷏' | 'ﷰ'..='�' })) { break rep_14; }
+            if !(chars[pos] matches { '0'..='9' | 'A'..='Z' | '_' | 'a'..='z' | '·' | 'À'..='Ö' | 'Ø'..='ö' | 'ø'..='ͽ' | 'Ϳ'..='\u{1fff}' | '\u{200c}'..='\u{200d}' | '‿'..='⁀' | '⁰'..='\u{218f}' | 'Ⰰ'..='\u{2fef}' | '、'..='\u{d7ff}' | '豈'..='﷏' | 'ﷰ'..='�' }) { break rep_14; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_14;
         break;
     }
     return pos;
@@ -2166,17 +2174,15 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !((chars[pos] matches { ' ' | '\t' | '\r' | '\n' | '\u{c}' })) { return -1; }
+    if !(chars[pos] matches { ' ' | '\t' | '\r' | '\n' | '\u{c}' }) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_15 = pos;
         rep_15: {
             if pos >= chars.len() { break rep_15; }
-            if !((chars[pos] matches { ' ' | '\t' | '\r' | '\n' | '\u{c}' })) { break rep_15; }
+            if !(chars[pos] matches { ' ' | '\t' | '\r' | '\n' | '\u{c}' }) { break rep_15; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_15;
         break;
     }
     return pos;
@@ -2305,7 +2311,7 @@ fn frag_ESC_SEQUENCE(chars: &List<char>, start: i32) -> i32 {
         alts_21_0: {
             pos = alts_saved_21;
             if pos >= chars.len() { break alts_21_0; }
-            if !((chars[pos] matches { 'b' | 't' | 'n' | 'f' | 'r' | '"' | '\'' | '\\' })) { break alts_21_0; }
+            if !(chars[pos] matches { 'b' | 't' | 'n' | 'f' | 'r' | '"' | '\'' | '\\' }) { break alts_21_0; }
             pos += 1;
             break alts_done_21;
         }
@@ -2376,29 +2382,25 @@ fn frag_UnicodeESC(chars: &List<char>, start: i32) -> i32 {
     let mut opt_ok_24 = false;
     opt_24: {
         if pos >= chars.len() { break opt_24; }
-        if !((chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' })) { break opt_24; }
+        if !(chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' }) { break opt_24; }
         pos += 1;
         let opt_saved_25 = pos;
         let mut opt_ok_25 = false;
         opt_25: {
             if pos >= chars.len() { break opt_25; }
-            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' })) { break opt_25; }
+            if !(chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' }) { break opt_25; }
             pos += 1;
             let opt_saved_26 = pos;
             let mut opt_ok_26 = false;
             opt_26: {
                 if pos >= chars.len() { break opt_26; }
-                if !((chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' })) { break opt_26; }
+                if !(chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' }) { break opt_26; }
                 pos += 1;
-                let opt_saved_27 = pos;
-                let mut opt_ok_27 = false;
                 opt_27: {
                     if pos >= chars.len() { break opt_27; }
-                    if !((chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' })) { break opt_27; }
+                    if !(chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' }) { break opt_27; }
                     pos += 1;
-                    opt_ok_27 = true;
                 }
-                if !opt_ok_27 { pos = opt_saved_27; }
                 opt_ok_26 = true;
             }
             if !opt_ok_26 { pos = opt_saved_26; }
@@ -3391,7 +3393,7 @@ fn scan_options_spec(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         let sp = pos;
         sg_4_done: {
             sg_4: {
-                pos = scan_option(tokens, pos, (FOLLOW_MASK_3 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+                pos = scan_option(tokens, pos, follow_then(FOLLOW_MASK_3, 1, follow));
                 if pos < 0 { break sg_4; }
                 if pos >= tokens.len() || tokens[pos] != TK_SEMI { break sg_4; }
                 pos += 1;
@@ -3424,7 +3426,7 @@ fn scan_option_value(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_2(kind) {
         pos = start + 1;
-        while pos < tokens.len() && tokens[pos] == TK_DOT && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+        while pos < tokens.len() && tokens[pos] == TK_DOT && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
             let sp = pos;
             sg_5_done: {
                 sg_5: {
@@ -3499,7 +3501,7 @@ fn scan_tokens_spec(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     pos += 1;
     if pos < tokens.len() && _kind_set_2(tokens[pos]) {
         let sp = pos;
-        pos = scan_id_list(tokens, pos, (FOLLOW_MASK_9 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+        pos = scan_id_list(tokens, pos, follow_then(FOLLOW_MASK_9, 1, follow));
         if pos < 0 { pos = sp; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RBRACE { return -1; }
@@ -3513,7 +3515,7 @@ fn scan_channels_spec(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     pos += 1;
     if pos < tokens.len() && _kind_set_2(tokens[pos]) {
         let sp = pos;
-        pos = scan_id_list(tokens, pos, (FOLLOW_MASK_9 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+        pos = scan_id_list(tokens, pos, follow_then(FOLLOW_MASK_9, 1, follow));
         if pos < 0 { pos = sp; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RBRACE { return -1; }
@@ -3525,7 +3527,7 @@ fn scan_id_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_2(tokens[pos]) { return -1; }
     pos += 1;
-    while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+    while pos < tokens.len() && tokens[pos] == TK_COMMA && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
         sg_18_done: {
             sg_18: {
@@ -3548,7 +3550,7 @@ fn scan_id_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     pos += 1;
                 }
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if probe_kind == TK_RBRACE && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_19_exit = true; }
+                if probe_kind == TK_RBRACE && follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { dc_19_exit = true; }
             }
             if dc_19_exit { pos = sp; break; }
             pos = dc_19;
@@ -3587,7 +3589,7 @@ fn scan_action_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos >= tokens.len() || tokens[pos] != TK_ACTION { break opt_probe; }
                 pos += 1;
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_10(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { opt_ok = true; }
+                if _kind_set_10(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { opt_ok = true; }
             }
             if opt_ok {
                 cont_done_0 = true;
@@ -3676,9 +3678,9 @@ fn scan_parser_rule_spec(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
 
 fn scan_exception_group(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && tokens[pos] == TK_CATCH && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+    while pos < tokens.len() && tokens[pos] == TK_CATCH && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
-        pos = scan_exception_handler(tokens, pos, follow_open_with((FOLLOW_MASK_16 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow), follow_open_set(FOLLOW_MASK_15)));
+        pos = scan_exception_handler(tokens, pos, follow_open_with(follow_then_opening(FOLLOW_MASK_16, 2, follow), follow_open_set(FOLLOW_MASK_15)));
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -3697,7 +3699,7 @@ fn scan_exception_handler(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_CATCH { return -1; }
     pos += 1;
-    pos = scan_arg_action_block(tokens, pos, (FOLLOW_MASK_12 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+    pos = scan_arg_action_block(tokens, pos, follow_then(FOLLOW_MASK_12, 1, follow));
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_ACTION { return -1; }
     pos += 1;
@@ -3748,14 +3750,14 @@ fn scan_throws_spec(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_THROWS { return -1; }
     pos += 1;
-    pos = scan_qualified_identifier(tokens, pos, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
+    pos = scan_qualified_identifier(tokens, pos, follow_then_opening(FOLLOW_MASK_7, 2, follow));
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+    while pos < tokens.len() && tokens[pos] == TK_COMMA && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
         sg_16_done: {
             sg_16: {
                 pos += 1;
-                pos = scan_qualified_identifier(tokens, pos, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
+                pos = scan_qualified_identifier(tokens, pos, follow_then_opening(FOLLOW_MASK_7, 2, follow));
                 if pos < 0 { break sg_16; }
                 break sg_16_done;
             }
@@ -3791,7 +3793,7 @@ fn scan_rule_modifiers(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_13(tokens[pos]) { return -1; }
     pos += 1;
-    while pos < tokens.len() && _kind_set_13(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+    while pos < tokens.len() && _kind_set_13(tokens[pos]) && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
         pos += 1;
         if pos < 0 { pos = sp; break; }
@@ -3811,7 +3813,7 @@ fn scan_rule_alt_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_labeled_alt(tokens, pos, follow_open_with(follow, follow_open_set(FOLLOW_MASK_17)));
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens[pos] == TK_OR && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+    while pos < tokens.len() && tokens[pos] == TK_OR && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
         sg_14_done: {
             sg_14: {
@@ -3832,7 +3834,7 @@ fn scan_labeled_alt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_alternative(tokens, pos, follow_open_with(follow, follow_open_set(FOLLOW_MASK_18)));
     if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos] == TK_POUND && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+    if pos < tokens.len() && tokens[pos] == TK_POUND && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
         sg_15_done: {
             sg_15: {
@@ -3862,7 +3864,7 @@ fn scan_lexer_rule_spec(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     }
     if pos >= tokens.len() || tokens[pos] != TK_COLON { return -1; }
     pos += 1;
-    pos = scan_lexer_rule_block(tokens, pos, (FOLLOW_MASK_3 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+    pos = scan_lexer_rule_block(tokens, pos, follow_then(FOLLOW_MASK_3, 1, follow));
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
     pos += 1;
@@ -3880,7 +3882,7 @@ fn scan_lexer_alt_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_lexer_alt(tokens, pos, follow_open_with(follow, follow_open_set(FOLLOW_MASK_17)));
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens[pos] == TK_OR && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+    while pos < tokens.len() && tokens[pos] == TK_OR && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
         sg_13_done: {
             sg_13: {
@@ -3948,7 +3950,7 @@ fn scan_lexer_elements(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         try_0: {
             pos = scan_lexer_element(tokens, pos, 0);
             if pos < 0 { break try_0; }
-            while pos < tokens.len() && _kind_set_18(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+            while pos < tokens.len() && _kind_set_18(tokens[pos]) && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
                 let sp = pos;
                 pos = scan_lexer_element(tokens, pos, 0);
                 if pos < 0 { pos = sp; break; }
@@ -4012,7 +4014,7 @@ fn scan_lexer_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LPAREN { return -1; }
     pos += 1;
-    pos = scan_lexer_alt_list(tokens, pos, (FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+    pos = scan_lexer_alt_list(tokens, pos, follow_then(FOLLOW_MASK_22, 1, follow));
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
@@ -4025,7 +4027,7 @@ fn scan_lexer_commands(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     pos += 1;
     pos = scan_lexer_command(tokens, pos);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+    while pos < tokens.len() && tokens[pos] == TK_COMMA && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
         sg_12_done: {
             sg_12: {
@@ -4090,7 +4092,7 @@ fn scan_alt_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_alternative(tokens, pos, follow_open_with(follow, follow_open_set(FOLLOW_MASK_17)));
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens[pos] == TK_OR && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+    while pos < tokens.len() && tokens[pos] == TK_OR && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
         sg_11_done: {
             sg_11: {
@@ -4120,7 +4122,7 @@ fn scan_alternative(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             pos = scan_element(tokens, pos, 0);
             if pos < 0 { break try_0; }
-            while pos < tokens.len() && _kind_set_24(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+            while pos < tokens.len() && _kind_set_24(tokens[pos]) && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
                 let sp = pos;
                 pos = scan_element(tokens, pos, 0);
                 if pos < 0 { pos = sp; break; }
@@ -4183,14 +4185,14 @@ fn scan_predicate_options(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LT { return -1; }
     pos += 1;
-    pos = scan_predicate_option(tokens, pos, (FOLLOW_MASK_7 | ((FOLLOW_MASK_27 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | ((FOLLOW_MASK_27 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK) & FOLLOW_OPEN_FIELD);
+    pos = scan_predicate_option(tokens, pos, follow_or(FOLLOW_MASK_7, 2, follow_then(FOLLOW_MASK_27, 1, follow)));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA {
         let sp = pos;
         sg_7_done: {
             sg_7: {
                 pos += 1;
-                pos = scan_predicate_option(tokens, pos, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
+                pos = scan_predicate_option(tokens, pos, follow_then_opening(FOLLOW_MASK_7, 2, follow));
                 if pos < 0 { break sg_7; }
                 break sg_7_done;
             }
@@ -4412,14 +4414,14 @@ fn scan_block_set(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LPAREN { return -1; }
     pos += 1;
-    pos = scan_set_element(tokens, pos, (FOLLOW_MASK_30 | ((FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | ((FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK) & FOLLOW_OPEN_FIELD);
+    pos = scan_set_element(tokens, pos, follow_or(FOLLOW_MASK_30, 2, follow_then(FOLLOW_MASK_22, 1, follow)));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_OR {
         let sp = pos;
         sg_8_done: {
             sg_8: {
                 pos += 1;
-                pos = scan_set_element(tokens, pos, (FOLLOW_MASK_30 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
+                pos = scan_set_element(tokens, pos, follow_then_opening(FOLLOW_MASK_30, 2, follow));
                 if pos < 0 { break sg_8; }
                 break sg_8_done;
             }
@@ -4475,7 +4477,7 @@ fn scan_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             sg_10: {
                 if pos < tokens.len() && tokens[pos] == TK_OPTIONS {
                     let sp = pos;
-                    pos = scan_options_spec(tokens, pos, (FOLLOW_MASK_31 | (FOLLOW_MASK_14 | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | (FOLLOW_MASK_14) & FOLLOW_OPEN_FIELD);
+                    pos = scan_options_spec(tokens, pos, follow_or(FOLLOW_MASK_31, 2, FOLLOW_MASK_14));
                     if pos < 0 { pos = sp; }
                 }
                 while pos < tokens.len() && tokens[pos] == TK_AT {
@@ -4492,7 +4494,7 @@ fn scan_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_alt_list(tokens, pos, (FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+    pos = scan_alt_list(tokens, pos, follow_then(FOLLOW_MASK_22, 1, follow));
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
@@ -4556,14 +4558,14 @@ fn scan_element_options(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LT { return -1; }
     pos += 1;
-    pos = scan_element_option(tokens, pos, (FOLLOW_MASK_7 | ((FOLLOW_MASK_27 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | ((FOLLOW_MASK_27 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK) & FOLLOW_OPEN_FIELD);
+    pos = scan_element_option(tokens, pos, follow_or(FOLLOW_MASK_7, 2, follow_then(FOLLOW_MASK_27, 1, follow)));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA {
         let sp = pos;
         sg_6_done: {
             sg_6: {
                 pos += 1;
-                pos = scan_element_option(tokens, pos, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
+                pos = scan_element_option(tokens, pos, follow_then_opening(FOLLOW_MASK_7, 2, follow));
                 if pos < 0 { break sg_6; }
                 break sg_6_done;
             }
@@ -4597,7 +4599,7 @@ fn scan_qualified_identifier(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_2(tokens[pos]) { return -1; }
     pos += 1;
-    while pos < tokens.len() && tokens[pos] == TK_DOT && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+    while pos < tokens.len() && tokens[pos] == TK_DOT && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
         sg_3_done: {
             sg_3: {
@@ -4650,11 +4652,11 @@ fn _parse_grammar_spec__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.site = 2;
-    _parse_rules(p, (FOLLOW_MASK_0 | ((FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | ((FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK) & FOLLOW_OPEN_FIELD);
+    _parse_rules(p, follow_or(FOLLOW_MASK_0, 2, follow_then(FOLLOW_MASK_1, 1, follow)));
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
-    while !p.recovering && (p.peek_kind() == TK_MODE) {
+    while !p.recovering && p.peek_kind() == TK_MODE {
         p.site = 3;
-        _parse_mode_spec(p, (FOLLOW_MASK_0 | ((FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | ((FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK) & FOLLOW_OPEN_FIELD);
+        _parse_mode_spec(p, follow_or(FOLLOW_MASK_0, 2, follow_then(FOLLOW_MASK_1, 1, follow)));
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.expect(TK_EOF, &EMPTY_SYNC, true);
@@ -4768,9 +4770,9 @@ fn _parse_prequel_construct(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_options_spec__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_OPTIONS, &SYNC_4, false);
     if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
-    while !p.recovering && (_kind_set_2(p.peek_kind())) {
+    while !p.recovering && _kind_set_2(p.peek_kind()) {
         p.site = 11;
-        _parse_option(p, (FOLLOW_MASK_3 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+        _parse_option(p, follow_then(FOLLOW_MASK_3, 1, follow));
         p.expect(TK_SEMI, &SYNC_4, false);
         if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
     }
@@ -4815,7 +4817,7 @@ fn _parse_option_value__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if _kind_set_2(kind) {
         p.site = 14;
         _parse_identifier(p);
-        while !p.recovering && (p.peek_kind() == TK_DOT) {
+        while !p.recovering && p.peek_kind() == TK_DOT {
             if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
             p.take();
             p.site = 15;
@@ -4857,7 +4859,7 @@ fn _parse_delegate_grammars__inner(p: &mut Parser) -> () {
     p.site = 17;
     _parse_delegate_grammar(p);
     if !kind_set_has(&SYNC_6, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_6, &EXPECTED_6); }
-    while !p.recovering && (p.peek_kind() == TK_COMMA) {
+    while !p.recovering && p.peek_kind() == TK_COMMA {
         p.take();
         p.site = 18;
         _parse_delegate_grammar(p);
@@ -4962,7 +4964,7 @@ fn _parse_tokens_spec__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     if _kind_set_2(p.peek_kind()) {
         p.site = 22;
-        _parse_id_list(p, (FOLLOW_MASK_9 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+        _parse_id_list(p, follow_then(FOLLOW_MASK_9, 1, follow));
     }
     p.expect(TK_RBRACE, &EMPTY_SYNC, true);
     return;
@@ -4984,7 +4986,7 @@ fn _parse_channels_spec__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     if _kind_set_2(p.peek_kind()) {
         p.site = 23;
-        _parse_id_list(p, (FOLLOW_MASK_9 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+        _parse_id_list(p, follow_then(FOLLOW_MASK_9, 1, follow));
     }
     p.expect(TK_RBRACE, &EMPTY_SYNC, true);
     return;
@@ -5035,7 +5037,7 @@ fn _parse_id_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         pos += 1;
                     }
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if probe_kind == TK_RBRACE && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
+                    if probe_kind == TK_RBRACE && follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { decline_dead = true; }
                 }
                 if decline_dead { break; }
             }
@@ -5085,7 +5087,7 @@ fn _parse_action___inner(p: &mut Parser, follow: i64 = 0) -> () {
             if pos >= tokens.len() || tokens[pos] != TK_ACTION { break opt_enter_scan; }
             pos += 1;
             let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if _kind_set_10(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { opt_enter = true; }
+            if _kind_set_10(probe_kind) && follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { opt_enter = true; }
         }
     }
     if opt_enter {
@@ -5178,7 +5180,7 @@ fn _parse_mode_spec__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 30;
     _parse_identifier(p);
     p.expect(TK_SEMI, &SYNC_2, true);
-    while !p.recovering && (_kind_set_11(p.peek_kind())) {
+    while !p.recovering && _kind_set_11(p.peek_kind()) {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.site = 31;
         _parse_lexer_rule_spec(p, 0);
@@ -5198,7 +5200,7 @@ fn _parse_mode_spec(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_rules__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    while !p.recovering && (_kind_set_12(p.peek_kind())) {
+    while !p.recovering && _kind_set_12(p.peek_kind()) {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.site = 32;
         _parse_rule_spec(p, 0);
@@ -5307,7 +5309,7 @@ fn _parse_parser_rule_spec__inner(p: &mut Parser, follow: i64 = 0) -> () {
         _parse_locals_spec(p, 0);
     }
     if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_11, &EXPECTED_11); }
-    while !p.recovering && (_kind_set_15(p.peek_kind())) {
+    while !p.recovering && _kind_set_15(p.peek_kind()) {
         p.site = 40;
         _parse_rule_prequel(p, 0);
         if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_11, &EXPECTED_11); }
@@ -5340,7 +5342,7 @@ fn _parse_exception_group__inner(p: &mut Parser, follow: i64 = 0) -> () {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_exception_handler(tokens, pos, follow_open_with((FOLLOW_MASK_16 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow), follow_open_set(FOLLOW_MASK_15)));
+            pos = scan_exception_handler(tokens, pos, follow_open_with(follow_then_opening(FOLLOW_MASK_16, 2, follow), follow_open_set(FOLLOW_MASK_15)));
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -5353,7 +5355,7 @@ fn _parse_exception_group__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 let _rec_spec = p.speculating;
                 p.speculating = true;
                 p.site = 43;
-                _parse_exception_handler(p, follow_open_with((FOLLOW_MASK_16 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow), follow_open_set(FOLLOW_MASK_15)));
+                _parse_exception_handler(p, follow_open_with(follow_then_opening(FOLLOW_MASK_16, 2, follow), follow_open_set(FOLLOW_MASK_15)));
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
                 p.pos = _rec_pos;
@@ -5362,7 +5364,7 @@ fn _parse_exception_group__inner(p: &mut Parser, follow: i64 = 0) -> () {
             break;
         }
         p.site = 43;
-        _parse_exception_handler(p, follow_open_with((FOLLOW_MASK_16 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow), follow_open_set(FOLLOW_MASK_15)));
+        _parse_exception_handler(p, follow_open_with(follow_then_opening(FOLLOW_MASK_16, 2, follow), follow_open_set(FOLLOW_MASK_15)));
     }
     let mut opt_enter: bool = p.peek_kind() == TK_FINALLY;
     if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
@@ -5397,7 +5399,7 @@ fn _parse_exception_group(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_exception_handler__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_CATCH, &SYNC_2, false);
     p.site = 45;
-    _parse_arg_action_block(p, (FOLLOW_MASK_12 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+    _parse_arg_action_block(p, follow_then(FOLLOW_MASK_12, 1, follow));
     p.site = 46;
     _parse_action_block(p);
     return;
@@ -5484,12 +5486,12 @@ fn _parse_rule_returns(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_throws_spec__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_THROWS, &SYNC_2, false);
     p.site = 51;
-    _parse_qualified_identifier(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
-    while !p.recovering && (p.peek_kind() == TK_COMMA) {
+    _parse_qualified_identifier(p, follow_then_opening(FOLLOW_MASK_7, 2, follow));
+    while !p.recovering && p.peek_kind() == TK_COMMA {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
         p.site = 52;
-        _parse_qualified_identifier(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
+        _parse_qualified_identifier(p, follow_then_opening(FOLLOW_MASK_7, 2, follow));
     }
     return;
 }
@@ -5609,7 +5611,7 @@ fn _parse_rule_block(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_rule_alt_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 58;
     _parse_labeled_alt(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_17)));
-    while !p.recovering && (p.peek_kind() == TK_OR) {
+    while !p.recovering && p.peek_kind() == TK_OR {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
         p.site = 59;
@@ -5632,7 +5634,7 @@ fn _parse_rule_alt_list(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_labeled_alt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 60;
     _parse_alternative(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_18)));
-    if (p.peek_kind() == TK_POUND && _kind_set_2(p.peek_at(1))) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
+    if p.peek_kind() == TK_POUND && _kind_set_2(p.peek_at(1)) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.take();
         p.site = 61;
         _parse_identifier(p);
@@ -5664,7 +5666,7 @@ fn _parse_lexer_rule_spec__inner(p: &mut Parser, follow: i64 = 0) -> () {
     }
     p.expect(TK_COLON, &SYNC_12, false);
     p.site = 63;
-    _parse_lexer_rule_block(p, (FOLLOW_MASK_3 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+    _parse_lexer_rule_block(p, follow_then(FOLLOW_MASK_3, 1, follow));
     p.expect(TK_SEMI, &EMPTY_SYNC, true);
     return;
 }
@@ -5695,7 +5697,7 @@ fn _parse_lexer_rule_block(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_lexer_alt_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 65;
     _parse_lexer_alt(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_17)));
-    while !p.recovering && (p.peek_kind() == TK_OR) {
+    while !p.recovering && p.peek_kind() == TK_OR {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
         p.site = 66;
@@ -5894,7 +5896,7 @@ fn _parse_lexer_element(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_lexer_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_LPAREN, &SYNC_18, false);
     p.site = 75;
-    _parse_lexer_alt_list(p, (FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+    _parse_lexer_alt_list(p, follow_then(FOLLOW_MASK_22, 1, follow));
     p.expect(TK_RPAREN, &EMPTY_SYNC, true);
     return;
 }
@@ -5914,7 +5916,7 @@ fn _parse_lexer_commands__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_RARROW, &SYNC_2, false);
     p.site = 76;
     _parse_lexer_command(p);
-    while !p.recovering && (p.peek_kind() == TK_COMMA) {
+    while !p.recovering && p.peek_kind() == TK_COMMA {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
         p.site = 77;
@@ -6072,7 +6074,7 @@ fn _parse_lexer_command_expr(p: &mut Parser) -> () {
 fn _parse_alt_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 83;
     _parse_alternative(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_17)));
-    while !p.recovering && (p.peek_kind() == TK_OR) {
+    while !p.recovering && p.peek_kind() == TK_OR {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
         p.site = 84;
@@ -6145,7 +6147,7 @@ fn _parse_element__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
         if pos < 0 { break opt_scan; }
         opt_scan_pos = pos;
     }
-    if (opt_scan_pos >= 0) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
+    if opt_scan_pos >= 0 && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.site = 88;
         _parse_ebnf_suffix(p, 0);
     }
@@ -6178,7 +6180,7 @@ fn _parse_element__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
         if pos < 0 { break opt_scan; }
         opt_scan_pos = pos;
     }
-    if (opt_scan_pos >= 0) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
+    if opt_scan_pos >= 0 && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.site = 90;
         _parse_ebnf_suffix(p, 0);
     }
@@ -6278,12 +6280,12 @@ fn _parse_element(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_predicate_options__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_LT, &SYNC_2, false);
     p.site = 94;
-    _parse_predicate_option(p, (FOLLOW_MASK_7 | ((FOLLOW_MASK_27 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | ((FOLLOW_MASK_27 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK) & FOLLOW_OPEN_FIELD);
+    _parse_predicate_option(p, follow_or(FOLLOW_MASK_7, 2, follow_then(FOLLOW_MASK_27, 1, follow)));
     if !kind_set_has(&SYNC_23, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_23, &EXPECTED_23); }
-    while !p.recovering && (p.peek_kind() == TK_COMMA) {
+    while !p.recovering && p.peek_kind() == TK_COMMA {
         p.take();
         p.site = 95;
-        _parse_predicate_option(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
+        _parse_predicate_option(p, follow_then_opening(FOLLOW_MASK_7, 2, follow));
         if !kind_set_has(&SYNC_23, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_23, &EXPECTED_23); }
     }
     p.expect(TK_GT, &EMPTY_SYNC, true);
@@ -6670,12 +6672,12 @@ fn _parse_not_set(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_block_set__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_LPAREN, &SYNC_2, false);
     p.site = 116;
-    _parse_set_element(p, (FOLLOW_MASK_30 | ((FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | ((FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK) & FOLLOW_OPEN_FIELD);
+    _parse_set_element(p, follow_or(FOLLOW_MASK_30, 2, follow_then(FOLLOW_MASK_22, 1, follow)));
     if !kind_set_has(&SYNC_31, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_31, &EXPECTED_31); }
-    while !p.recovering && (p.peek_kind() == TK_OR) {
+    while !p.recovering && p.peek_kind() == TK_OR {
         p.take();
         p.site = 117;
-        _parse_set_element(p, (FOLLOW_MASK_30 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
+        _parse_set_element(p, follow_then_opening(FOLLOW_MASK_30, 2, follow));
         if !kind_set_has(&SYNC_31, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_31, &EXPECTED_31); }
     }
     p.expect(TK_RPAREN, &EMPTY_SYNC, true);
@@ -6809,7 +6811,7 @@ fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
         let mut pos: i32 = p.pos;
         if pos < tokens.len() && tokens[pos] == TK_OPTIONS {
             let sp = pos;
-            pos = scan_options_spec(tokens, pos, (FOLLOW_MASK_31 | (FOLLOW_MASK_14 | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | (FOLLOW_MASK_14) & FOLLOW_OPEN_FIELD);
+            pos = scan_options_spec(tokens, pos, follow_or(FOLLOW_MASK_31, 2, FOLLOW_MASK_14));
             if pos < 0 { pos = sp; }
         }
         while pos < tokens.len() && tokens[pos] == TK_AT {
@@ -6826,10 +6828,10 @@ fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_11, &EXPECTED_11); }
         if p.peek_kind() == TK_OPTIONS {
             p.site = 121;
-            _parse_options_spec(p, (FOLLOW_MASK_31 | (FOLLOW_MASK_14 | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | (FOLLOW_MASK_14) & FOLLOW_OPEN_FIELD);
+            _parse_options_spec(p, follow_or(FOLLOW_MASK_31, 2, FOLLOW_MASK_14));
         }
         if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_11, &EXPECTED_11); }
-        while !p.recovering && (p.peek_kind() == TK_AT) {
+        while !p.recovering && p.peek_kind() == TK_AT {
             p.site = 122;
             _parse_rule_action(p);
             if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_11, &EXPECTED_11); }
@@ -6837,7 +6839,7 @@ fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.expect(TK_COLON, &SYNC_18, false);
     }
     p.site = 123;
-    _parse_alt_list(p, (FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+    _parse_alt_list(p, follow_then(FOLLOW_MASK_22, 1, follow));
     p.expect(TK_RPAREN, &EMPTY_SYNC, true);
     return;
 }
@@ -6983,12 +6985,12 @@ fn _parse_terminal_def(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_element_options__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_LT, &SYNC_2, false);
     p.site = 128;
-    _parse_element_option(p, (FOLLOW_MASK_7 | ((FOLLOW_MASK_27 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | ((FOLLOW_MASK_27 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK) & FOLLOW_OPEN_FIELD);
+    _parse_element_option(p, follow_or(FOLLOW_MASK_7, 2, follow_then(FOLLOW_MASK_27, 1, follow)));
     if !kind_set_has(&SYNC_23, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_23, &EXPECTED_23); }
-    while !p.recovering && (p.peek_kind() == TK_COMMA) {
+    while !p.recovering && p.peek_kind() == TK_COMMA {
         p.take();
         p.site = 129;
-        _parse_element_option(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
+        _parse_element_option(p, follow_then_opening(FOLLOW_MASK_7, 2, follow));
         if !kind_set_has(&SYNC_23, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_23, &EXPECTED_23); }
     }
     p.expect(TK_GT, &EMPTY_SYNC, true);
@@ -7118,7 +7120,7 @@ fn _parse_identifier(p: &mut Parser) -> () {
 fn _parse_qualified_identifier__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 133;
     _parse_identifier(p);
-    while !p.recovering && (p.peek_kind() == TK_DOT) {
+    while !p.recovering && p.peek_kind() == TK_DOT {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
         p.site = 134;
