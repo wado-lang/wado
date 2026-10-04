@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791106076070,
+  "lastUpdate": 1791107371810,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -63461,6 +63461,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8d3ee8df1eb48a261032cd774ff68dfb16227375"
         },
         "date": 1791106075027,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338887,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "86a83bf7fe2015dad3c50941d2f58ca836c99ded",
+          "message": "Merge pull request #2266 from wado-lang/ccr-a353fcd7-xh4hlm\n\nfix(loam): generated modules type-check where broadcasting renames an axis of 1",
+          "timestamp": "2026-10-04T18:07:27+09:00",
+          "tree_id": "44cd323b2657433896958bc7a13e669205f87d55",
+          "url": "https://github.com/wado-lang/wado/commit/86a83bf7fe2015dad3c50941d2f58ca836c99ded"
+        },
+        "date": 1791107371279,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
