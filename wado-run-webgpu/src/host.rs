@@ -218,18 +218,10 @@ fn host(args: &Args, gpu: Gpu) -> Result<Host> {
 /// would otherwise see `request-adapter` answer `none` and have nothing to say
 /// about why. `--gpu-adapter` is settled here too, before anything compiles.
 pub fn gpu(args: &Args) -> Result<Gpu> {
-    let global = Global::new(
-        "wado-run-webgpu",
-        InstanceDescriptor::new_without_display_handle_from_env(),
-        None,
-    );
+    let global = instance();
     let adapters = global.enumerate_adapters(Backends::all());
     if adapters.is_empty() {
-        bail!(
-            "no GPU adapter found. wasi:webgpu needs one, and a driver supplies it: \
-             on Linux install mesa-vulkan-drivers for the lavapipe software adapter, \
-             or set WGPU_BACKEND to pick another backend"
-        );
+        bail!("{NO_ADAPTER}");
     }
     let pinned = args
         .gpu_adapter
@@ -247,12 +239,44 @@ pub fn gpu(args: &Args) -> Result<Gpu> {
     })
 }
 
-/// The one adapter `selector` names.
-fn pin(global: &Global, adapters: &[AdapterId], selector: &AdapterSelector) -> Result<AdapterId> {
-    let infos: Vec<AdapterInfo> = adapters
+const NO_ADAPTER: &str = "no GPU adapter found. wasi:webgpu needs one, and a driver supplies it: \
+     on Linux install mesa-vulkan-drivers for the lavapipe software adapter, \
+     or set WGPU_BACKEND to pick another backend";
+
+/// The wgpu instance over whichever backends the platform and `WGPU_BACKEND`
+/// offer: Vulkan, Metal, D3D12 or GL.
+fn instance() -> Global {
+    Global::new(
+        "wado-run-webgpu",
+        InstanceDescriptor::new_without_display_handle_from_env(),
+        None,
+    )
+}
+
+fn adapter_infos(global: &Global, adapters: &[AdapterId]) -> Vec<AdapterInfo> {
+    adapters
         .iter()
         .map(|&id| global.adapter_get_info(id))
-        .collect();
+        .collect()
+}
+
+/// This machine's adapters under the indices `--gpu-adapter` takes, as the
+/// end of `--help`.
+pub fn adapter_list() -> String {
+    let global = instance();
+    let infos = adapter_infos(&global, &global.enumerate_adapters(Backends::all()));
+    if infos.is_empty() {
+        return format!("GPU adapters: {NO_ADAPTER}\n");
+    }
+    format!(
+        "GPU adapters (--gpu-adapter takes the index):\n  {}\n",
+        listed(&infos, 0..infos.len())
+    )
+}
+
+/// The one adapter `selector` names.
+fn pin(global: &Global, adapters: &[AdapterId], selector: &AdapterSelector) -> Result<AdapterId> {
+    let infos = adapter_infos(global, adapters);
     let all = || listed(&infos, 0..infos.len());
     match selector {
         AdapterSelector::Index(index) => match adapters.get(*index) {

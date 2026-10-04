@@ -7,7 +7,8 @@ use anyhow::{Result, bail};
 use lexopt::Arg::{Long, Short, Value};
 use lexopt::ValueExt as _;
 
-const USAGE: &str = "\
+/// What `--help` prints ahead of the adapter list.
+pub const USAGE: &str = "\
 Run a Wado program on a wasi:webgpu host.
 
 Usage: wado run-webgpu [options] <file.wado|file.wasm> [args...]
@@ -23,7 +24,7 @@ Options:
       --log-level <level>
                          Log level: debug, info, warn, error, off (default: warn)
                          info names the adapter each request-adapter returns
-  -h, --help             Show this help
+  -h, --help             Show this help and this machine's adapter list
   -V, --version          Show the version
 
 Arguments after the input file go to the program.
@@ -125,9 +126,16 @@ pub struct Args {
     pub program_args: Vec<String>,
 }
 
+/// What the command line asks for.
+pub enum Invocation {
+    Run(Args),
+    /// The usage, which the caller completes with this machine's adapters.
+    Help,
+    Version,
+}
+
 impl Args {
-    /// `Ok(None)` when the run is already answered, as `--help` is.
-    pub fn parse<I>(argv: I) -> Result<Option<Self>>
+    pub fn parse<I>(argv: I) -> Result<Invocation>
     where
         I: IntoIterator<Item = OsString>,
     {
@@ -142,14 +150,8 @@ impl Args {
 
         while let Some(arg) = parser.next()? {
             match arg {
-                Short('h') | Long("help") => {
-                    print!("{USAGE}");
-                    return Ok(None);
-                }
-                Short('V') | Long("version") => {
-                    println!("wado-run-webgpu {}", env!("CARGO_PKG_VERSION"));
-                    return Ok(None);
-                }
+                Short('h') | Long("help") => return Ok(Invocation::Help),
+                Short('V') | Long("version") => return Ok(Invocation::Version),
                 // Attached and explicit, as `wado run` takes it: `-O2`.
                 Short('O') => {
                     let Some(level) = parser.optional_value() else {
@@ -195,7 +197,7 @@ impl Args {
             preopens.push(std::env::current_dir()?);
         }
 
-        Ok(Some(Self {
+        Ok(Invocation::Run(Self {
             input,
             opt_level,
             log_level,
@@ -210,12 +212,15 @@ impl Args {
 mod tests {
     use super::*;
 
-    fn try_parse(argv: &[&str]) -> Result<Option<Args>> {
+    fn try_parse(argv: &[&str]) -> Result<Invocation> {
         Args::parse(argv.iter().map(OsString::from))
     }
 
     fn parse(argv: &[&str]) -> Args {
-        try_parse(argv).expect("parsing").expect("a run to make")
+        match try_parse(argv).expect("parsing") {
+            Invocation::Run(run) => run,
+            Invocation::Help | Invocation::Version => panic!("no run to make"),
+        }
     }
 
     #[test]
