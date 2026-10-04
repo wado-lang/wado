@@ -138,8 +138,15 @@ fn the_named_adapter_is_the_one_the_guest_gets_and_info_says_which() {
     let names = adapter_names();
     let name = names
         .iter()
-        .find(|name| names.iter().filter(|other| other == name).count() == 1)
-        .expect("an adapter whose name no other shares");
+        .find(|name| {
+            let needle = name.to_lowercase();
+            names
+                .iter()
+                .filter(|other| other.to_lowercase().contains(&needle))
+                .count()
+                == 1
+        })
+        .expect("an adapter whose name is part of no other's");
     assert_eq!(&adapter_selected_by(&name.to_uppercase()), name);
 }
 
