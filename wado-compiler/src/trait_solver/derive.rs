@@ -1,30 +1,25 @@
 //! Derivation as impl generation: a declaration whose members all satisfy a
 //! structural trait contributes `impl<Pi: Tr, …> Tr for D<P1..Pn>`.
 
-use super::holds::{at_defaults, holds};
+use super::holds::{at_defaults, at_self, holds};
 use super::program::ParamBound;
 use super::program::{
     Declaration, Env, ImplDef, ImplId, ImplOrigin, ParamDef, Program, SolverType, TraitDeclId,
     TypeDeclId,
 };
-use crate::hashmap::{IndexMap, IndexSet};
+use crate::hashmap::IndexSet;
 
 /// Add to `program` the impls of `trait_` that `declarations` derive, in order:
-/// each but those an impl `covers` at every instance of their head.
-pub fn derive(
-    program: &mut Program,
-    trait_: TraitDeclId,
-    declarations: &[Declaration],
-    covers: impl Fn(ImplId, &ImplDef) -> bool,
-) {
+/// each but those another impl reaches at every instance.
+pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declaration]) {
     // An impl at other arguments (`Eq<String>`) leaves the defaults, where a
     // derived impl answers, to derive.
     let has_impl: IndexSet<TypeDeclId> = program
         .impls
-        .iter()
-        .filter(|(_, def)| def.trait_ == Some(trait_) && at_defaults(program, def))
-        .filter_map(|(&id, def)| match &def.target {
-            SolverType::Decl(head, _) if covers(id, def) => Some(*head),
+        .values()
+        .filter(|def| def.trait_ == Some(trait_) && at_defaults(program, def))
+        .filter_map(|def| match &def.target {
+            SolverType::Decl(head, _) if covers_every_instance(def) => Some(*head),
             SolverType::Decl(..)
             | SolverType::Param(_)
             | SolverType::Pack(_)
@@ -33,8 +28,10 @@ pub fn derive(
             | SolverType::Projection { .. } => None,
         })
         .collect();
+    program.traits.entry(trait_).or_default().structural = true;
     let mut standing: Vec<(&Declaration, ImplId, Env)> = Vec::new();
     for decl in declarations {
+        program.declarations.insert(decl.id, decl.clone());
         if has_impl.contains(&decl.id) {
             continue;
         }
@@ -42,7 +39,7 @@ pub fn derive(
         let id = program.push_impl(ImplDef {
             trait_: Some(trait_),
             trait_args: Vec::new(),
-            target: SolverType::Decl(decl.id, (0..decl.params).map(SolverType::Param).collect()),
+            target: SolverType::Decl(decl.id, decl_params(decl)),
             params: bounds.iter().cloned().map(ParamDef::bounded).collect(),
             origin: ImplOrigin::Derived,
         });
@@ -72,79 +69,53 @@ pub fn derive(
     }
 }
 
-/// The written impls of `trait_` at `Self` reaching every instance of a
-/// declaration, by that declaration: `impl Eq for D`, not
-/// `impl Eq<String> for D` nor a marker.
-pub fn written_at_self(
-    program: &Program,
-    trait_: TraitDeclId,
-    covers: impl Fn(ImplId, &ImplDef) -> bool,
-) -> IndexMap<TypeDeclId, ImplId> {
-    program
-        .impls
-        .iter()
-        .filter(|&(&id, def)| {
-            def.trait_ == Some(trait_)
-                && def.origin == ImplOrigin::Written
-                && at_defaults(program, def)
-                && covers(id, def)
-        })
-        .filter_map(|(&id, def)| match def.target {
-            SolverType::Decl(head, _) => Some((head, id)),
-            _ => None,
-        })
-        .collect()
-}
-
-/// The declarations with no `Ord`, by `writes_eq` and `writes_ord` from
-/// [`written_at_self`]: one writing `eq` alone, and a newtype over one with no
-/// `cmp` of its own (spec-traits.md §Derivation Policy).
-pub fn withholding_ord(
-    program: &Program,
-    writes_eq: &IndexMap<TypeDeclId, ImplId>,
-    writes_ord: &IndexMap<TypeDeclId, ImplId>,
-) -> IndexSet<TypeDeclId> {
-    let withholds = |head: TypeDeclId| {
-        let mut seen = IndexSet::default();
-        let mut link = head;
-        while seen.insert(link) && !writes_ord.contains_key(&link) {
-            if writes_eq.contains_key(&link) {
-                return true;
+/// The declaration's own parameters, as its derived impl's target spells them.
+fn decl_params(decl: &Declaration) -> Vec<SolverType> {
+    (0..decl.params)
+        .map(|index| {
+            if decl.variadic && index + 1 == decl.params {
+                SolverType::Pack(index)
+            } else {
+                SolverType::Param(index)
             }
-            let Some(SolverType::Decl(base, _)) = program
-                .types
-                .get(&link)
-                .and_then(|def| def.newtype_base.as_ref())
-            else {
-                return false;
-            };
-            link = *base;
-        }
-        false
-    };
-    writes_eq
-        .keys()
-        .chain(program.types.keys())
-        .copied()
-        .filter(|&head| withholds(head))
+        })
         .collect()
 }
 
-/// Give each of `ords`, written impls of `Ord`, an impl of `eq` at its target
-/// and with its bounds: a written `cmp` gives `==` whatever the members are
-/// (spec-traits.md §Derivation Policy). A marker of `eq` on the same head asks
-/// for that `==`, so it takes the bounds in place of a derived impl. Answers
-/// the impls added or rewritten.
-pub fn derive_eq_from_ord(
-    program: &mut Program,
-    eq: TraitDeclId,
-    ords: impl IntoIterator<Item = ImplId>,
-) -> IndexSet<ImplId> {
-    let mut from_ord = IndexSet::default();
-    for id in ords {
-        let ord = program.impls[&id].clone();
-        let SolverType::Decl(head, _) = &ord.target else {
-            unreachable!("a written impl at `Self` targets a declaration")
+/// Whether `def` reaches every instance of its target's head: the target names
+/// a declaration over distinct parameters.
+fn covers_every_instance(def: &ImplDef) -> bool {
+    let SolverType::Decl(_, args) = &def.target else {
+        return false;
+    };
+    let mut seen = IndexSet::default();
+    args.iter()
+        .all(|arg| {
+            matches!(arg, SolverType::Param(index) | SolverType::Pack(index) if seen.insert(*index))
+        })
+}
+
+/// State the comparison table (spec-traits.md §Derivation Policy): a written
+/// `cmp` gives `==`, and a written `eq` gives no `Ord`. The `==` from `cmp` is
+/// an impl at the target and with the bounds of the written `Ord`, which a
+/// written `eq` or a marker reaching an instance takes the place of. A marker
+/// of `Eq` at a written `Ord`'s target asks for that `==`, so it takes the
+/// `Ord`'s bounds in place of the paired impl. What `Ord` a written `eq`
+/// withholds is [`super::comparison_row`]'s to answer.
+pub fn pair_comparisons(program: &mut Program, eq: TraitDeclId, ord: TraitDeclId) {
+    program.comparisons = Some((eq, ord));
+    let written_ords: Vec<ImplDef> = program
+        .impls
+        .values()
+        .filter(|def| at_self(program, def, ord, &[ImplOrigin::Written]))
+        .cloned()
+        .collect();
+    for written_ord in written_ords {
+        let paired = |origin| ImplDef {
+            trait_: Some(eq),
+            trait_args: Vec::new(),
+            origin,
+            ..written_ord.clone()
         };
         let markers: Vec<ImplId> = program
             .impls
@@ -152,25 +123,17 @@ pub fn derive_eq_from_ord(
             .filter(|(_, def)| {
                 def.trait_ == Some(eq)
                     && def.origin == ImplOrigin::Marker
-                    && matches!(&def.target, SolverType::Decl(h, _) if h == head)
+                    && def.target == written_ord.target
             })
             .map(|(&marker, _)| marker)
             .collect();
-        let eq_from = |origin| ImplDef {
-            trait_: Some(eq),
-            trait_args: Vec::new(),
-            origin,
-            ..ord.clone()
-        };
         if markers.is_empty() {
-            from_ord.insert(program.push_impl(eq_from(ImplOrigin::Derived)));
+            program.push_impl(paired(ImplOrigin::Paired));
         }
         for marker in markers {
-            program.impls[&marker] = eq_from(ImplOrigin::Marker);
-            from_ord.insert(marker);
+            program.impls[&marker] = paired(ImplOrigin::Marker);
         }
     }
-    from_ord
 }
 
 /// The bound each parameter of the derived impl carries: `trait_` where a
@@ -186,6 +149,7 @@ fn derived_bounds(trait_: TraitDeclId, decl: &Declaration) -> Vec<Vec<TraitDeclI
 
 #[cfg(test)]
 mod tests {
+    use super::super::holds::owed;
     use super::super::program::{ArgDefault, ModuleId, TypeDef};
     use super::super::testing::{Builder, bounded, concrete, decl};
     use super::*;
@@ -204,6 +168,7 @@ mod tests {
         Declaration {
             id,
             params,
+            variadic: false,
             members,
             module: HERE,
         }
@@ -227,16 +192,10 @@ mod tests {
         });
     }
 
-    /// An answer for the programs here, whose written impls all reach every
-    /// instance of their heads.
-    fn every_instance(_: ImplId, _: &ImplDef) -> bool {
-        true
-    }
-
     /// The impls `derive` added to `prelude()`, in order.
     fn derived(program: Program, declarations: &[Declaration]) -> Vec<ImplDef> {
         let mut p = program;
-        derive(&mut p, EQ, declarations, every_instance);
+        derive(&mut p, EQ, declarations);
         p.impls
             .values()
             .filter(|def| def.origin == ImplOrigin::Derived)
@@ -328,6 +287,87 @@ mod tests {
         assert_eq!(d[0].params, vec![ParamDef::default()]);
     }
 
+    /// An anonymous struct's head takes its field types as one tuple, and
+    /// derives `impl<..F: Eq> Eq for Anon<..F>`: a shape answers by its fields.
+    #[test]
+    fn a_variadic_shape_derives_over_each_element_of_its_pack() {
+        let shape = Declaration {
+            variadic: true,
+            ..declaration(WRAPPER, 1, vec![SolverType::Pack(0)])
+        };
+        let mut p = prelude();
+        derive(&mut p, EQ, &[shape]);
+        let of = |elems| SolverType::Decl(WRAPPER, vec![SolverType::Tuple(elems)]);
+        let at = |ty: &SolverType| holds(&p, &Env::default(), ty, EQ, HERE).is_some();
+        assert!(at(&of(vec![decl(I32), decl(I32)])));
+        assert!(at(&of(vec![])));
+        assert!(!at(&of(vec![decl(I32), decl(OPAQUE)])));
+    }
+
+    /// The types whose bodies `ty: Eq` owes, after `derive` over `declarations`.
+    fn owed_at(declarations: &[Declaration], ty: &SolverType) -> Vec<SolverType> {
+        let mut p = prelude();
+        derive(&mut p, EQ, declarations);
+        let held = holds(&p, &Env::default(), ty, EQ, HERE).expect("the bound holds");
+        let mut types: Vec<SolverType> = owed(&p, &Env::default(), HERE, held.requests)
+            .into_iter()
+            .map(|request| request.ty)
+            .collect();
+        types.sort();
+        types
+    }
+
+    /// `Wrapper<Point>`'s body compares a `List<Point>`, whose written body
+    /// compares each `Point`: the bound owes `Point`'s body though it asked
+    /// only of `Wrapper`, and the written `List` owes none.
+    #[test]
+    fn a_derived_body_owes_its_members_bodies_through_a_written_impl() {
+        let declarations = [
+            declaration(POINT, 0, vec![decl(I32)]),
+            declaration(
+                WRAPPER,
+                1,
+                vec![SolverType::Decl(LIST, vec![SolverType::Param(0)])],
+            ),
+        ];
+        let wrapper = SolverType::Decl(WRAPPER, vec![decl(POINT)]);
+        assert_eq!(
+            owed_at(&declarations, &wrapper),
+            vec![decl(POINT), wrapper.clone()]
+        );
+    }
+
+    /// `Node` owes its own body once, however often its members reach it.
+    #[test]
+    fn a_recursive_type_owes_its_body_once() {
+        let node = [declaration(
+            NODE,
+            0,
+            vec![SolverType::Decl(OPTION, vec![decl(NODE)])],
+        )];
+        assert_eq!(owed_at(&node, &decl(NODE)), vec![decl(NODE)]);
+    }
+
+    /// A shape's members are its pack's elements, each owing its own body.
+    #[test]
+    fn a_variadic_shape_owes_each_elements_body() {
+        let declarations = [
+            declaration(POINT, 0, vec![decl(I32)]),
+            Declaration {
+                variadic: true,
+                ..declaration(WRAPPER, 1, vec![SolverType::Pack(0)])
+            },
+        ];
+        let shape = SolverType::Decl(
+            WRAPPER,
+            vec![SolverType::Tuple(vec![decl(POINT), decl(I32)])],
+        );
+        assert_eq!(
+            owed_at(&declarations, &shape),
+            vec![decl(POINT), shape.clone()]
+        );
+    }
+
     /// `struct Node { next: Option<Node> }` reaches itself through a member.
     /// Assuming first is what lets it derive; refuting first would not.
     #[test]
@@ -387,12 +427,11 @@ mod tests {
     fn a_written_impl_at_some_instances_leaves_the_rest_derived() {
         let wrapper_of = |arg| SolverType::Decl(WRAPPER, vec![arg]);
         let mut p = prelude();
-        let written = p.push_impl(concrete(EQ, wrapper_of(decl(I32))));
+        p.push_impl(concrete(EQ, wrapper_of(decl(I32))));
         derive(
             &mut p,
             EQ,
             &[declaration(WRAPPER, 1, vec![SolverType::Param(0)])],
-            |id, _| id != written,
         );
         let asked = |ty| holds(&p, &Env::default(), &ty, EQ, HERE).map(|h| h.requests.len());
         assert_eq!(asked(wrapper_of(decl(I32))), Some(0));
@@ -426,66 +465,107 @@ mod tests {
         assert_eq!(targets(&d), vec![decl(POINT)]);
     }
 
+    const ORD: TraitDeclId = TraitDeclId(1);
+
+    fn wrapper_of(arg: SolverType) -> SolverType {
+        SolverType::Decl(WRAPPER, vec![arg])
+    }
+
     /// `impl<T: Ord> Ord for Wrapper<T>` gives `impl<T: Ord> Eq for Wrapper<T>`,
     /// whatever `Wrapper`'s members are.
     #[test]
-    fn eq_from_ord_copies_the_target_and_the_bounds() {
-        const ORD: TraitDeclId = TraitDeclId(1);
+    fn a_written_ord_pairs_an_eq_at_its_target_and_bounds() {
         let mut p = prelude();
-        let wrapper = SolverType::Decl(WRAPPER, vec![SolverType::Param(0)]);
-        let ord = p.push_impl(bounded(ORD, wrapper.clone(), vec![ORD]));
-        let ords = written_at_self(&p, ORD, every_instance);
-        assert_eq!(ords.get(&WRAPPER), Some(&ord));
-        let added = derive_eq_from_ord(&mut p, EQ, ords.values().copied());
-        let eq = &p.impls[added.first().expect("one impl added")];
+        let wrapper = wrapper_of(SolverType::Param(0));
+        p.push_impl(bounded(ORD, wrapper.clone(), vec![ORD]));
+        pair_comparisons(&mut p, EQ, ORD);
+        let paired: Vec<&ImplDef> = p
+            .impls
+            .values()
+            .filter(|def| def.origin == ImplOrigin::Paired)
+            .collect();
         assert_eq!(
-            eq,
-            &ImplDef {
-                origin: ImplOrigin::Derived,
+            paired,
+            vec![&ImplDef {
+                origin: ImplOrigin::Paired,
                 ..bounded(EQ, wrapper, vec![ORD])
-            }
+            }]
         );
     }
 
-    /// A newtype over a declaration writing `eq` alone withholds `Ord` too,
-    /// unless it writes `cmp` itself.
+    /// `impl<T: Ord> Ord for Node<T, i32>` decides `==` at the instances it
+    /// reaches, in place of the members: `Node<Opaque, i32>` has no `==`, as
+    /// `Opaque` writes `eq` and no `cmp`, though the members would give one.
+    /// Every other instance compares its members.
     #[test]
-    fn a_newtype_withholds_what_its_base_does() {
+    fn a_written_ord_at_some_instances_decides_eq_at_those() {
+        let node_of = |a, b| SolverType::Decl(NODE, vec![a, b]);
+        let mut p = prelude();
+        p.push_impl(concrete(EQ, decl(OPAQUE)));
+        p.push_impl(bounded(
+            ORD,
+            node_of(SolverType::Param(0), decl(I32)),
+            vec![ORD],
+        ));
+        p.push_impl(concrete(ORD, decl(I32)));
+        pair_comparisons(&mut p, EQ, ORD);
+        derive(
+            &mut p,
+            EQ,
+            &[declaration(NODE, 2, vec![SolverType::Param(0)])],
+        );
+        let has_eq = |ty| holds(&p, &Env::default(), &ty, EQ, HERE).is_some();
+        assert!(has_eq(node_of(decl(I32), decl(I32))));
+        assert!(!has_eq(node_of(decl(OPAQUE), decl(I32))));
+        assert!(has_eq(node_of(decl(OPAQUE), decl(OPTION))));
+    }
+
+    /// `impl Eq for Wrapper<i32>` withholds `Ord` there and nowhere else, and
+    /// a newtype over `Wrapper<i32>` inherits the withholding unless it writes
+    /// `cmp` itself.
+    #[test]
+    fn a_written_eq_withholds_ord_where_it_reaches() {
         const ALIAS: TypeDeclId = TypeDeclId(7);
         const ORDERED: TypeDeclId = TypeDeclId(8);
-        let mut p = prelude();
-        for (head, base) in [(WRAPPER, POINT), (ALIAS, WRAPPER), (ORDERED, POINT)] {
+        let mut p = Builder::default()
+            .concrete(EQ, decl(I32))
+            .concrete(ORD, decl(I32))
+            .build();
+        for head in [ALIAS, ORDERED] {
             p.types.insert(
                 head,
                 TypeDef {
-                    newtype_base: Some(decl(base)),
-                    ..TypeDef::default()
+                    newtype_base: Some(wrapper_of(decl(I32))),
                 },
             );
         }
-        let writes_eq = [(POINT, ImplId(0))].into_iter().collect();
-        let writes_ord = [(ORDERED, ImplId(1))].into_iter().collect();
-        let withheld = withholding_ord(&p, &writes_eq, &writes_ord);
-        assert_eq!(
-            withheld.into_iter().collect::<Vec<_>>(),
-            vec![POINT, WRAPPER, ALIAS]
+        p.push_impl(concrete(EQ, wrapper_of(decl(I32))));
+        p.push_impl(concrete(ORD, decl(ORDERED)));
+        pair_comparisons(&mut p, EQ, ORD);
+        derive(
+            &mut p,
+            ORD,
+            &[declaration(WRAPPER, 1, vec![SolverType::Param(0)])],
         );
+        let ordered = |ty| holds(&p, &Env::default(), &ty, ORD, HERE).is_some();
+        assert!(!ordered(wrapper_of(decl(I32))));
+        assert!(!ordered(decl(ALIAS)));
+        assert!(ordered(decl(ORDERED)));
+        assert!(ordered(wrapper_of(decl(ORDERED))));
     }
 
     /// `impl<T> Eq for Wrapper<T>;` beside `impl<T: Ord> Ord for Wrapper<T>`
     /// asks for the `==` that `cmp` gives, so it holds where the `Ord` does.
     #[test]
     fn a_marker_beside_a_written_ord_takes_its_bounds() {
-        const ORD: TraitDeclId = TraitDeclId(1);
         let mut p = prelude();
-        let wrapper_of = |arg| SolverType::Decl(WRAPPER, vec![arg]);
-        let ord = p.push_impl(bounded(ORD, wrapper_of(SolverType::Param(0)), vec![ORD]));
+        p.push_impl(bounded(ORD, wrapper_of(SolverType::Param(0)), vec![ORD]));
         let marker = p.push_impl(ImplDef {
             origin: ImplOrigin::Marker,
             ..bounded(EQ, wrapper_of(SolverType::Param(0)), vec![])
         });
-        let added = derive_eq_from_ord(&mut p, EQ, [ord]);
-        assert_eq!(added.into_iter().collect::<Vec<_>>(), vec![marker]);
+        pair_comparisons(&mut p, EQ, ORD);
+        assert!(p.impls.values().all(|def| def.origin != ImplOrigin::Paired));
         assert_eq!(
             p.impls[&marker],
             ImplDef {
@@ -497,6 +577,28 @@ mod tests {
             holds(&p, &Env::default(), &wrapper_of(decl(OPAQUE)), EQ, HERE),
             None
         );
+    }
+
+    /// The `==` a marker beside a written `cmp` asks for calls that `cmp`, so
+    /// it owes no member's body.
+    #[test]
+    fn the_eq_from_cmp_owes_no_members() {
+        let mut p = prelude();
+        p.push_impl(bounded(ORD, wrapper_of(SolverType::Param(0)), vec![ORD]));
+        p.push_impl(ImplDef {
+            origin: ImplOrigin::Marker,
+            ..bounded(EQ, wrapper_of(SolverType::Param(0)), vec![])
+        });
+        p.push_impl(concrete(ORD, decl(I32)));
+        pair_comparisons(&mut p, EQ, ORD);
+        derive(
+            &mut p,
+            EQ,
+            &[declaration(WRAPPER, 1, vec![SolverType::Param(0)])],
+        );
+        let held = holds(&p, &Env::default(), &wrapper_of(decl(I32)), EQ, HERE)
+            .expect("the written `Ord` holds at `i32`");
+        assert!(held.requests.iter().all(|r| !r.structural));
     }
 
     /// A member that reaches a declaration through the marker's impl derives:

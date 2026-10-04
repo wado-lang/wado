@@ -19,7 +19,7 @@ impl Span {
     }
 }
 
-pub fn push_chars(out: &mut String, chars: &List<char>, start: i32, end: i32) {
+internal fn push_chars(out: &mut String, chars: &List<char>, start: i32, end: i32) {
     let mut bytes = 0;
     for let mut i = start; i < end; i += 1 {
         bytes += chars[i].len_utf8();
@@ -30,13 +30,13 @@ pub fn push_chars(out: &mut String, chars: &List<char>, start: i32, end: i32) {
     }
 }
 
-pub fn chars_text(chars: &List<char>, start: i32, end: i32) -> String {
+internal fn chars_text(chars: &List<char>, start: i32, end: i32) -> String {
     let mut s = String::new();
     push_chars(&mut s, chars, start, end);
     return s;
 }
 
-pub fn push_chars_escaped(out: &mut String, chars: &List<char>, start: i32, end: i32) {
+internal fn push_chars_escaped(out: &mut String, chars: &List<char>, start: i32, end: i32) {
     for let mut i = start; i < end; i += 1 {
         match chars[i] {
             '\n' => out.push_str("\\n"),
@@ -47,7 +47,7 @@ pub fn push_chars_escaped(out: &mut String, chars: &List<char>, start: i32, end:
     }
 }
 
-pub fn kind_set_has(set: &List<i32>, kind: i32) -> bool {
+internal fn kind_set_has(set: &List<i32>, kind: i32) -> bool {
     let w = kind >> 5;
     if w >= set.len() {
         return false;
@@ -55,7 +55,7 @@ pub fn kind_set_has(set: &List<i32>, kind: i32) -> bool {
     return set[w] >> (kind & 31) & 1 == 1;
 }
 
-pub fn with_expected<S: AsStrSlice>(message: S, expected: &List<String>) -> String {
+internal fn with_expected<S: AsStrSlice>(message: S, expected: &List<String>) -> String {
     let n = expected.len();
     if n == 0 {
         return message.to_string();
@@ -73,7 +73,7 @@ pub fn with_expected<S: AsStrSlice>(message: S, expected: &List<String>) -> Stri
     return out;
 }
 
-pub fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
+internal fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
     let mut j = if i < chars.len() { i } else { chars.len() };
     let mut col = 0;
     while j > 0 && chars[j - 1] != '\n' {
@@ -83,7 +83,7 @@ pub fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
     return col;
 }
 
-pub fn line_starts(chars: &List<char>) -> List<i32> {
+internal fn line_starts(chars: &List<char>) -> List<i32> {
     let mut starts: List<i32> = [0];
     for let mut i = 0; i < chars.len(); i += 1 {
         if chars[i] == '\n' {
@@ -93,7 +93,7 @@ pub fn line_starts(chars: &List<char>) -> List<i32> {
     return starts;
 }
 
-pub fn line_col_at(starts: &List<i32>, pos: i32) -> [i32, i32] {
+internal fn line_col_at(starts: &List<i32>, pos: i32) -> [i32, i32] {
     let mut lo = 0;
     let mut hi = starts.len() - 1;
     while lo < hi {
@@ -129,7 +129,7 @@ pub struct TokenStream {
 }
 
 impl TokenStream {
-    pub fn new(chars: &List<char>) -> TokenStream {
+    internal fn new(chars: &List<char>) -> TokenStream {
         let cap = chars.len() / 4 + 1;
         return TokenStream {
             kinds: List::with_capacity(cap),
@@ -150,11 +150,11 @@ impl TokenStream {
         return self.kinds.len();
     }
 
-    pub fn trivia_mark(&self) -> i32 {
+    internal fn trivia_mark(&self) -> i32 {
         return self.triv_kinds.len();
     }
 
-    pub fn push_trivia(&mut self, kind: i32, start: i32, end: i32, channel: i32) {
+    internal fn push_trivia(&mut self, kind: i32, start: i32, end: i32, channel: i32) {
         if self.triv_kinds.len() >= self.triv_kinds.capacity() {
             builtin::cold_path();
             self.triv_kinds.grow();
@@ -171,11 +171,11 @@ impl TokenStream {
         self.triv_chans.push_within_capacity(channel);
     }
 
-    pub fn push_token(&mut self, kind: i32, start: i32, end: i32, triv_lo: i32, triv_hi: i32) {
+    internal fn push_token(&mut self, kind: i32, start: i32, end: i32, triv_lo: i32, triv_hi: i32) {
         self.push_token_flagged(kind, start, end, triv_lo, triv_hi, TokenFlags::none());
     }
 
-    pub fn push_token_flagged(
+    internal fn push_token_flagged(
         &mut self,
         kind: i32,
         start: i32,
@@ -208,7 +208,7 @@ impl TokenStream {
         return idx;
     }
 
-    pub fn push_synthetic(&mut self, expected_kind: i32, at: i32) -> i32 {
+    internal fn push_synthetic(&mut self, expected_kind: i32, at: i32) -> i32 {
         let m = self.trivia_mark();
         return self.push_token_flagged(expected_kind, at, at, m, m, TokenFlags::Synthetic);
     }
@@ -217,11 +217,11 @@ impl TokenStream {
         return self.flags[i];
     }
 
-    pub fn set_flag(&mut self, i: i32, flag: TokenFlags) {
+    internal fn set_flag(&mut self, i: i32, flag: TokenFlags) {
         self.flags[i] |= flag;
     }
 
-    pub fn mark_skipped(&mut self, i: i32) {
+    internal fn mark_skipped(&mut self, i: i32) {
         self.set_flag(i, TokenFlags::Skipped);
     }
 
@@ -331,7 +331,7 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
-    pub fn error<S: AsStrSlice>(
+    internal fn error<S: AsStrSlice>(
         code: DiagnosticCode,
         message: S,
         span: Span,
@@ -384,7 +384,7 @@ fn lex_error_at(tokens: &TokenStream, i: i32) -> Diagnostic {
     );
 }
 
-pub fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagnostic>, max_errors: i32) {
+internal fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagnostic>, max_errors: i32) {
     let mut merged: List<Diagnostic> = [];
     for let mut i = 0; i < tokens.len(); i += 1 {
         if tokens.is_lex_error(i) {
@@ -397,7 +397,7 @@ pub fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagnostic>
     *diagnostics = merged;
 }
 
-pub fn resolve_positions(diagnostics: &mut List<Diagnostic>, chars: &List<char>) {
+internal fn resolve_positions(diagnostics: &mut List<Diagnostic>, chars: &List<char>) {
     if diagnostics.is_empty() {
         return;
     }
@@ -556,7 +556,7 @@ fn bubble_to_parent(stack: &List<i32>, end: &mut List<i32>, flags: &mut List<Nod
     }
 }
 
-pub struct TreeBuilder {
+internal struct TreeBuilder {
     tag: List<EventTag>,
     id: List<i32>,
     offset: List<i32>,
@@ -567,7 +567,7 @@ pub struct TreeBuilder {
 }
 
 impl TreeBuilder {
-    pub fn with_capacity(rows: i32) -> TreeBuilder {
+    internal fn with_capacity(rows: i32) -> TreeBuilder {
         return TreeBuilder {
             tag: List::with_capacity(rows),
             id: List::with_capacity(rows),
@@ -596,27 +596,27 @@ impl TreeBuilder {
         self.alt.push_within_capacity(-1);
     }
 
-    pub fn start_node(&mut self, kind: NodeKind, start: i32) {
+    internal fn start_node(&mut self, kind: NodeKind, start: i32) {
         let row = self.tag.len();
         self.push_row(EventTag::Open, kind as i32, start);
         self.open.push(row);
     }
 
-    pub fn start_error(&mut self, start: i32) {
+    internal fn start_error(&mut self, start: i32) {
         let row = self.tag.len();
         self.push_row(EventTag::Open, K_ERROR as i32, start);
         self.open.push(row);
     }
 
-    pub fn set_alt(&mut self, alt: i32) {
+    internal fn set_alt(&mut self, alt: i32) {
         self.alt[self.open[self.open.len() - 1]] = alt;
     }
 
-    pub fn checkpoint(&self) -> i32 {
+    internal fn checkpoint(&self) -> i32 {
         return self.tag.len();
     }
 
-    pub fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
+    internal fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
         assert self.innermost_open() < checkpoint, "a node wraps only rows finished before it";
         self.tag.insert(checkpoint, EventTag::Open);
         self.id.insert(checkpoint, kind as i32);
@@ -631,7 +631,7 @@ impl TreeBuilder {
         }
     }
 
-    pub fn truncate(&mut self, checkpoint: i32) {
+    internal fn truncate(&mut self, checkpoint: i32) {
         self.tag.truncate(checkpoint);
         self.id.truncate(checkpoint);
         self.offset.truncate(checkpoint);
@@ -647,25 +647,25 @@ impl TreeBuilder {
         }
     }
 
-    pub fn finish_node(&mut self, end: i32) {
+    internal fn finish_node(&mut self, end: i32) {
         let row = self.open[self.open.len() - 1];
         self.push_row(EventTag::Close, self.id[row], end);
         self.last_finished = row;
         let _ = self.open.pop();
     }
 
-    pub fn innermost_open(&self) -> i32 {
+    internal fn innermost_open(&self) -> i32 {
         if self.open.is_empty() {
             return -1;
         }
         return self.open[self.open.len() - 1];
     }
 
-    pub fn node_kind(&self, row: i32) -> NodeKind {
+    internal fn node_kind(&self, row: i32) -> NodeKind {
         return self.id[row] as NodeKind;
     }
 
-    pub fn resume_node(&mut self, row: i32, end: i32) {
+    internal fn resume_node(&mut self, row: i32, end: i32) {
         while self.innermost_open() > row {
             self.finish_node(end);
         }
@@ -677,11 +677,11 @@ impl TreeBuilder {
         self.open.push(row);
     }
 
-    pub fn mark_error(&mut self) {
+    internal fn mark_error(&mut self) {
         self.error_row = self.tag.len();
     }
 
-    pub fn in_error_mode(&self) -> bool {
+    internal fn in_error_mode(&self) -> bool {
         if self.error_row < 0 {
             return false;
         }
@@ -693,7 +693,7 @@ impl TreeBuilder {
         return true;
     }
 
-    pub fn push_open_rule_names(&self, rule_names: &List<String>, out: &mut List<String>) {
+    internal fn push_open_rule_names(&self, rule_names: &List<String>, out: &mut List<String>) {
         for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
             let kind = self.id[self.open[i]];
             if kind != K_ERROR as i32 {
@@ -702,19 +702,19 @@ impl TreeBuilder {
         }
     }
 
-    pub fn token(&mut self, idx: i32) {
+    internal fn token(&mut self, idx: i32) {
         self.push_row(EventTag::Tok, idx, 0);
     }
 
-    pub fn missing(&mut self, syn_idx: i32) {
+    internal fn missing(&mut self, syn_idx: i32) {
         self.push_row(EventTag::Miss, syn_idx, 0);
     }
 
-    pub fn skip(&mut self, idx: i32) {
+    internal fn skip(&mut self, idx: i32) {
         self.push_row(EventTag::Skip, idx, 0);
     }
 
-    pub fn finish(&self) -> CstStore {
+    internal fn finish(&self) -> CstStore {
         let n = self.tag.len();
         let mut end = List::filled(n, 0);
         let mut flags = List::filled(n, NodeFlags::none());
@@ -759,14 +759,14 @@ impl TreeBuilder {
         return CstStore { tag: self.tag, id: self.id, offset: self.offset, alt: self.alt, end, flags, next };
     }
 
-    pub fn render_open(&self, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
+    internal fn render_open(&self, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
         if self.open.len() == 0 {
             return String::new();
         }
         return self.render_from(self.open[self.open.len() - 1], toks, rule_names, token_names);
     }
 
-    pub fn render_at(
+    internal fn render_at(
         &self,
         row: i32,
         toks: &TokenStream,
@@ -779,7 +779,7 @@ impl TreeBuilder {
         return self.render_from(row, toks, rule_names, token_names);
     }
 
-    pub fn open_rule_names(&self, rule_names: &List<String>) -> String {
+    internal fn open_rule_names(&self, rule_names: &List<String>) -> String {
         let mut out = String::from("[");
         for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
             if i < self.open.len() - 1 {
@@ -793,7 +793,7 @@ impl TreeBuilder {
         return out;
     }
 
-    pub fn render_last_finished(
+    internal fn render_last_finished(
         &self,
         toks: &TokenStream,
         rule_names: &List<String>,
@@ -998,7 +998,6 @@ fn apply_T_actions(lx: &mut Lexer, start: i32, end: i32) {
     let mut pos = start;
     let la_saved_0 = pos;
     let mut la_reach_0: i32 = -1;
-    let mut la_end_0: i32 = -1;
     let mut la_win_0: i32 = -1;
     let mut la_arm_0_0: i32 = -1;
     la_alt_0_0: {
@@ -1023,22 +1022,15 @@ fn apply_T_actions(lx: &mut Lexer, start: i32, end: i32) {
         pos = la_at_0;
         let mut la_tot_0: i32 = -1;
         let peek_save_1 = pos;
-        let mut peek_ok_1 = false;
-        let mut peek_end_1: i32 = -1;
         peek_1: {
             if pos >= chars.len() { break peek_1; }
-            if !((chars[pos] matches { 'b'..='z' })) { break peek_1; }
+            if !(chars[pos] matches { 'b'..='z' }) { break peek_1; }
             pos += 1;
-            peek_end_1 = pos;
-            peek_ok_1 = true;
+            la_tot_0 = pos;
         }
         pos = peek_save_1;
-        if peek_ok_1 {
-            la_tot_0 = peek_end_1;
-        }
         if la_tot_0 > la_reach_0 {
             la_reach_0 = la_tot_0;
-            la_end_0 = la_at_0;
             la_win_0 = la_i_0;
         }
     }
@@ -1056,7 +1048,7 @@ fn apply_T_actions(lx: &mut Lexer, start: i32, end: i32) {
         lx.hits = 10;
     }
     if pos >= chars.len() { return; }
-    if !((chars[pos] matches { 'b'..='z' })) { return; }
+    if !(chars[pos] matches { 'b'..='z' }) { return; }
     pos += 1;
 }
 
@@ -1073,7 +1065,6 @@ fn try_T(lx: &Lexer, start: i32) -> i32 {
     let mut pos = start;
     let la_saved_2 = pos;
     let mut la_reach_2: i32 = -1;
-    let mut la_end_2: i32 = -1;
     let mut la_win_2: i32 = -1;
     let mut la_arm_2_0: i32 = -1;
     la_alt_2_0: {
@@ -1098,30 +1089,20 @@ fn try_T(lx: &Lexer, start: i32) -> i32 {
         pos = la_at_2;
         let mut la_tot_2: i32 = -1;
         let peek_save_3 = pos;
-        let mut peek_ok_3 = false;
-        let mut peek_end_3: i32 = -1;
         peek_3: {
             if pos >= chars.len() { break peek_3; }
-            if !((chars[pos] matches { 'b'..='z' })) { break peek_3; }
+            if !(chars[pos] matches { 'b'..='z' }) { break peek_3; }
             pos += 1;
-            peek_end_3 = pos;
-            peek_ok_3 = true;
+            la_tot_2 = pos;
         }
         pos = peek_save_3;
-        if peek_ok_3 {
-            la_tot_2 = peek_end_3;
-        }
         if la_tot_2 > la_reach_2 {
             la_reach_2 = la_tot_2;
-            la_end_2 = la_at_2;
             la_win_2 = la_i_2;
         }
     }
     if la_win_2 < 0 { return -1; }
-    pos = la_end_2;
-    if pos >= chars.len() { return -1; }
-    if !((chars[pos] matches { 'b'..='z' })) { return -1; }
-    pos += 1;
+    pos = la_reach_2;
     return pos;
 }
 
@@ -1154,17 +1135,15 @@ fn try_WS(lx: &Lexer, start: i32) -> i32 {
     let chars = &lx.chars;
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !((chars[pos] matches { ' ' | '\t' | '\r' | '\n' })) { return -1; }
+    if !(chars[pos] matches { ' ' | '\t' | '\r' | '\n' }) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_4 = pos;
         rep_4: {
             if pos >= chars.len() { break rep_4; }
-            if !((chars[pos] matches { ' ' | '\t' | '\r' | '\n' })) { break rep_4; }
+            if !(chars[pos] matches { ' ' | '\t' | '\r' | '\n' }) { break rep_4; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_4;
         break;
     }
     return pos;

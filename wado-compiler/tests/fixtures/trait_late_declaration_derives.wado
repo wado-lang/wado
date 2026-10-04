@@ -1,0 +1,75 @@
+// A shape the program meets only in a body — an anonymous struct, a template's
+// type, a struct declared in a body — derives the structural traits from its
+// members like any other declaration, and the solver answers for it
+// (WEP 2026-09-01).
+use { to_string } from "core:json";
+use { Serialize } from "core:serde";
+
+fn same<T: Eq>(a: T, b: T) -> bool {
+    return a == b;
+}
+
+fn less<T: Ord>(a: T, b: T) -> bool {
+    return a < b;
+}
+
+fn json<T: Serialize>(v: &T) -> String {
+    return to_string(v).unwrap();
+}
+
+fn kept<T: ReflectTemplate>(t: T) -> T {
+    return t;
+}
+
+test "an anonymous struct derives from its fields" {
+    let a = { x: 1, name: "a" };
+    let b = { x: 1, name: "a" };
+    assert same(a, b);
+    assert less({ x: 1, y: 2 }, { x: 1, y: 3 });
+    assert json(&{ x: 1 }) == `{"x":1}`;
+}
+
+test "a template's type derives from its holes" {
+    let n = 3;
+    let three = kept`n=${n}`;
+    let equal = same(three, kept`n=${n}`);
+    let n = n + 1;
+    let unequal = !same(three, kept`n=${n}`);
+    assert equal && unequal;
+}
+
+test "a body-local struct derives from its fields" {
+    struct Point {
+        x: i32,
+        y: i32,
+    }
+    assert same(Point { x: 1, y: 2 }, Point { x: 1, y: 2 });
+    assert less(Point { x: 1, y: 2 }, Point { x: 1, y: 3 });
+    assert json(&Point { x: 1, y: 2 }) == `{"x":1,"y":2}`;
+}
+
+test "a body-local struct derives through a sibling, a local newtype and itself" {
+    type Meters = f64;
+    struct Node {
+        len: Meters,
+        tail: Inner,
+        next: Option<Node>,
+    }
+    struct Inner {
+        v: i32,
+    }
+    let a = Node { len: 1.0, tail: Inner { v: 1 }, next: Some(Node { len: 2.0, tail: Inner { v: 2 }, next: null }) };
+    assert same(a, a);
+    assert !same(Node { len: 1.0, tail: Inner { v: 1 }, next: null }, a);
+}
+
+test "a generic body-local struct derives under its parameters' bounds" {
+    struct Boxed<T> {
+        value: T,
+    }
+    assert same(Boxed { value: "a" }, Boxed { value: "a" });
+    assert less(Boxed { value: 1 }, Boxed { value: 2 });
+}
+
+__DATA__
+{"test": {}}

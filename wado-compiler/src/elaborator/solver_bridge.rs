@@ -1,5 +1,5 @@
 //! The lowering from the compiler's tables into the solver's [`Program`], and
-//! the differential checking the solver's answers against the compiler's own.
+//! the solver's answers read back as the compiler keys them.
 
 use crate::ast::Type;
 use crate::compiler_item::CompilerItem;
@@ -8,19 +8,19 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, NEVER_TYPE_NAME, RefKind, TypeHead, UNIT_TYPE_NAME};
 use crate::primitive::PrimitiveType;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{AnonStructId, ResolvedType, TypeId, TypeTable};
 use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
     ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, Selection, SolverType,
-    TraitDeclId, TypeDeclId, TypeDef, bound_candidates, candidates, derive, derive_eq_from_ord,
-    holds_with_args, rank, withholding_ord, written_at_self,
+    TraitDeclId, TypeDeclId, TypeDef, bound_candidates, candidates, comparison_row, derive,
+    holds_with_args, owed, pair_comparisons, rank,
 };
 
 use super::trait_env::{BlanketReceiver, ImplHeader, ImplTargetKey, written_arg_nodes};
 use super::trait_query::{OnBoundTrait, primitive_has_operator};
 use super::tysys::TypeSystem;
 use crate::elaborator::scope;
-use crate::elaborator::types::TypeLookup;
+use crate::elaborator::types::{DataDecls, TypeLookup};
 use crate::resolve::Resolutions;
 use crate::tir::StructDef;
 
@@ -31,13 +31,15 @@ use crate::tir::StructDef;
 enum DeclKey {
     Def(DefId),
     Builtin(String),
-    /// One head for every anonymous struct, its field types as the arguments.
-    /// A literal mints its shape after the program is built, and no impl can
-    /// name one, so what reaches it — a blanket over its `Reflect*` facts —
-    /// reads the same of every shape.
+    /// One head for every anonymous struct, its field types as its one
+    /// argument, a tuple. A literal mints its shape after the program is
+    /// built, and no impl can name one, so what reaches it — its `Reflect*`
+    /// facts, and the structural traits it derives over that tuple — reads the
+    /// same of every shape.
     AnonymousStruct,
-    /// One head for every tagged template literal's type, its hole types as
-    /// the arguments, on the same terms as [`Self::AnonymousStruct`].
+    /// One head for every tagged template literal's type, the fields holding
+    /// its holes as the argument, on the same terms as
+    /// [`Self::AnonymousStruct`].
     TemplateShape,
 }
 
@@ -71,11 +73,10 @@ pub(super) struct Lowering {
     /// and the reflection kind it bounds on. Lookup collects that block for a
     /// derived body, so a `Derived` impl is named to it.
     derivation_source: IndexMap<(TraitDeclId, CompilerItem), DefId>,
-    /// Heads the program names but reads no members of: the anonymous head,
-    /// and a struct declared in a body, whose fields annotate resolves after
-    /// the program is built. `derive` never saw one, so the differential
-    /// skips a question mentioning it.
-    opaque_heads: IndexSet<TypeDeclId>,
+    /// Heads the program names before it knows their members: a struct or
+    /// newtype declared in a body, until annotate resolves its block
+    /// ([`SolverBridge::state_local`]). Only the compiler answers for one.
+    unstated: IndexSet<TypeDeclId>,
 }
 
 /// The spelling a function type's head is keyed by. `fn mut` is a shape of its
@@ -337,7 +338,7 @@ impl Lowering {
                 type_args,
             } => instance(*def, type_args),
             // A literal's shape lowers under the one anonymous head, its field
-            // types as the arguments. A synthetic shape — a closure
+            // types as the argument. A synthetic shape — a closure
             // environment — declares no fields the compiler reflects, so it
             // stays unsaid.
             ResolvedType::Struct {
@@ -345,12 +346,22 @@ impl Lowering {
                 ..
             } => {
                 if let Some(template) = table.template_shape(*shape) {
-                    let holes = template
+                    let fields = template
                         .holes
                         .iter()
-                        .map(|hole| self.type_id(table, hole.ty, param))
+                        .map(|hole| {
+                            let held = self.type_id(table, hole.ty, param)?;
+                            Some(if table.hole_held_by_ref(hole.ty) {
+                                SolverType::Ref {
+                                    is_mut: false,
+                                    inner: Box::new(held),
+                                }
+                            } else {
+                                held
+                            })
+                        })
                         .collect::<Option<Vec<_>>>()?;
-                    return decl(DeclKey::TemplateShape, holes);
+                    return decl(DeclKey::TemplateShape, vec![SolverType::Tuple(fields)]);
                 }
                 if table.anon_struct_is_synthetic(*shape) {
                     return None;
@@ -360,7 +371,7 @@ impl Lowering {
                     .iter()
                     .map(|(_, ty)| self.type_id(table, *ty, param))
                     .collect::<Option<Vec<_>>>()?;
-                decl(DeclKey::AnonymousStruct, fields)
+                decl(DeclKey::AnonymousStruct, vec![SolverType::Tuple(fields)])
             }
             ResolvedType::Enum { def }
             | ResolvedType::Resource { def }
@@ -602,12 +613,10 @@ fn representative(
 /// The newtype declarations with their base types. A `flags` type sits in the
 /// same table and is not one.
 fn newtype_decls<'a>(
-    tysys: &'a TypeSystem,
+    data: &'a DataDecls,
     table: &'a TypeTable,
 ) -> impl Iterator<Item = (DefId, TypeId)> + 'a {
-    tysys
-        .data
-        .newtypes
+    data.newtypes
         .iter()
         .filter_map(|(&def, &id)| match table.get(id) {
             ResolvedType::Newtype { base_type, .. } => Some((def, *base_type)),
@@ -615,11 +624,16 @@ fn newtype_decls<'a>(
         })
 }
 
-/// The solver's view of the whole program, and the differential that checks
-/// its answers against the path in use.
+/// The solver's view of the whole program.
 pub(crate) struct SolverBridge {
     program: Program,
     lowering: Lowering,
+}
+
+impl std::fmt::Debug for SolverBridge {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SolverBridge").finish_non_exhaustive()
+    }
 }
 
 impl SolverBridge {
@@ -659,7 +673,7 @@ impl SolverBridge {
         OnBoundTrait::ReflectTemplate,
     ];
 
-    /// Whether the differential asks about `item`: the lowering states the
+    /// Whether the solver answers about `item`: the lowering states the
     /// structural traits, `Inspect`, the reflection kinds and the operators.
     fn states(item: CompilerItem) -> bool {
         Self::DERIVED.contains(&item)
@@ -704,12 +718,117 @@ impl SolverBridge {
         Self::state_primitive_impls(tysys, &mut lowering, &mut program);
         Self::state_traits(tysys, &mut lowering, &mut program);
         Self::state_scopes(tysys, modules, &mut lowering, &mut program);
-        Self::state_newtype_bases(tysys, &table, &mut lowering, &mut program);
-        Self::derive_all(tysys, &table, &mut lowering, &mut program);
-        Self::name_derived_impls(tysys, &mut lowering, &program);
-        Self::state_reflect_facts(tysys, &table, &lowering, &mut program);
-        Self::state_type_facts(tysys, &table, &lowering, &mut program);
-        Self { program, lowering }
+        if let (Some(eq), Some(ord)) = (
+            Self::derived_trait(tysys, &mut lowering, CompilerItem::Eq),
+            Self::derived_trait(tysys, &mut lowering, CompilerItem::Ord),
+        ) {
+            pair_comparisons(&mut program, eq, ord);
+        }
+        let mut bridge = Self { program, lowering };
+        let shapes = bridge.shapes(modules);
+        bridge.state_declarations(tysys, &tysys.data, &table, shapes, ImplId(0));
+        let heads: Vec<TypeDeclId> = (0..bridge.lowering.decls.len())
+            .map(|id| TypeDeclId(u32::try_from(id).expect("fewer than 2^32 declarations")))
+            .collect();
+        bridge.state_ref_facts(tysys, &table, &heads);
+        bridge
+    }
+
+    /// State the structs and newtypes a block declares, once annotate has
+    /// resolved them. One stated already — a body walked again, standing in
+    /// another module — is left as it is.
+    pub(crate) fn state_local(&mut self, tysys: &TypeSystem, local: &DataDecls, defs: &[DefId]) {
+        let pending: Vec<DefId> = defs
+            .iter()
+            .copied()
+            .filter(|&def| {
+                self.lowering
+                    .unstated
+                    .contains(&self.lowering.declared_type(def))
+            })
+            .collect();
+        if pending.is_empty() {
+            return;
+        }
+        let data = local.restricted_to(&pending);
+        let table = tysys.type_table.borrow();
+        let named_from = self.program.next_impl_id();
+        let stated = self.state_declarations(tysys, &data, &table, Vec::new(), named_from);
+        self.state_ref_facts(tysys, &table, &stated);
+        for head in stated {
+            self.lowering.unstated.shift_remove(&head);
+        }
+    }
+
+    /// The `trait_` a structural item names, interned.
+    fn derived_trait(
+        tysys: &TypeSystem,
+        lowering: &mut Lowering,
+        item: CompilerItem,
+    ) -> Option<TraitDeclId> {
+        Some(lowering.trait_decl(tysys.compiler_trait_def(item)?))
+    }
+
+    /// The two shapes no module declares, as `derive` reads them: an anonymous
+    /// struct's members are its fields and a template's its holes, each one
+    /// tuple argument, so each derives a structural trait where every element
+    /// does. Their reflection kinds hold from every module, since a literal's
+    /// fields and a template's holes are all visible.
+    fn shapes(&self, modules: &[ModuleSource]) -> Vec<(Declaration, OnBoundTrait)> {
+        let module = self
+            .lowering
+            .declared_module(modules.first().expect("a program has a module"));
+        [
+            (self.lowering.anonymous_head(), OnBoundTrait::ReflectStruct),
+            (self.lowering.template_head(), OnBoundTrait::ReflectTemplate),
+        ]
+        .into_iter()
+        .map(|(id, kind)| {
+            let shape = Declaration {
+                id,
+                params: 1,
+                variadic: true,
+                members: vec![SolverType::Pack(0)],
+                module,
+            };
+            (shape, kind)
+        })
+        .collect()
+    }
+
+    /// State what `data` declares, with `shapes` among its structs: newtype
+    /// bases, the impls the declarations derive, their reflection kinds, and
+    /// the facts read off their shape. Answers the heads it stated, each a
+    /// declaration whose members the lowering can say. The impls from
+    /// `named_from` on are `data`'s, a marker among them.
+    fn state_declarations(
+        &mut self,
+        tysys: &TypeSystem,
+        data: &DataDecls,
+        table: &TypeTable,
+        shapes: Vec<(Declaration, OnBoundTrait)>,
+        named_from: ImplId,
+    ) -> Vec<TypeDeclId> {
+        let Self { program, lowering } = self;
+        let mut stated = Self::state_newtype_bases(tysys, data, table, lowering, program);
+        let (mut structs, variants, handles) = Self::declarations(tysys, data, table, lowering);
+        let shape_kinds: Vec<(TypeDeclId, OnBoundTrait)> = shapes
+            .iter()
+            .map(|(shape, kind)| (shape.id, *kind))
+            .collect();
+        structs.extend(shapes.into_iter().map(|(shape, _)| shape));
+        stated.extend(
+            structs
+                .iter()
+                .chain(&variants)
+                .chain(&handles)
+                .map(|decl| decl.id),
+        );
+        Self::derive_all(tysys, lowering, program, structs, variants, handles);
+        Self::name_derived_impls(data, lowering, program, named_from);
+        Self::state_reflect_facts(tysys, data, &shape_kinds, table, lowering, program);
+        Self::state_type_facts(tysys, data, lowering, program);
+        stated
     }
 
     /// The `Reflect*`-bounded value blankets of the structural traits, each
@@ -749,33 +868,45 @@ impl SolverBridge {
     /// lookup collects for its body: the source of its trait at the
     /// declaration's reflection kind. A marker block declares no method, so
     /// lookup never collects it. A trait the compiler derives without a blanket
-    /// (`Eq`, `Ord`) stays unnamed.
-    fn name_derived_impls(tysys: &TypeSystem, lowering: &mut Lowering, program: &Program) {
-        let data = &tysys.data;
-        let kind_of = |def: DefId| {
-            if data.struct_fields.contains_key(&def) {
-                CompilerItem::ReflectStruct
-            } else if data.variant_cases.contains_key(&def) {
-                CompilerItem::ReflectVariant
-            } else if data.enum_cases.contains_key(&def) {
-                CompilerItem::ReflectEnum
-            } else if data.flags_cases.contains_key(&def) {
-                CompilerItem::ReflectFlags
-            } else {
-                CompilerItem::ReflectNewtype
+    /// (`Eq`, `Ord`) stays unnamed. Only the impls from `first` on are `data`'s.
+    fn name_derived_impls(
+        data: &DataDecls,
+        lowering: &mut Lowering,
+        program: &Program,
+        first: ImplId,
+    ) {
+        let kind_of = |key: &DeclKey| match key {
+            DeclKey::Def(def) if data.struct_fields.contains_key(def) => {
+                Some(CompilerItem::ReflectStruct)
             }
+            DeclKey::Def(def) if data.variant_cases.contains_key(def) => {
+                Some(CompilerItem::ReflectVariant)
+            }
+            DeclKey::Def(def) if data.enum_cases.contains_key(def) => {
+                Some(CompilerItem::ReflectEnum)
+            }
+            DeclKey::Def(def) if data.flags_cases.contains_key(def) => {
+                Some(CompilerItem::ReflectFlags)
+            }
+            DeclKey::Def(_) => Some(CompilerItem::ReflectNewtype),
+            DeclKey::AnonymousStruct => Some(CompilerItem::ReflectStruct),
+            DeclKey::TemplateShape => Some(CompilerItem::ReflectTemplate),
+            DeclKey::Builtin(_) => None,
         };
-        for (&id, def) in &program.impls {
+        for (&id, def) in program.impls.iter().filter(|(id, _)| **id >= first) {
             if !matches!(def.origin, ImplOrigin::Derived | ImplOrigin::Marker) {
                 continue;
             }
             let (Some(trait_), SolverType::Decl(head, _)) = (def.trait_, &def.target) else {
                 continue;
             };
-            let Some((DeclKey::Def(decl), _)) = lowering.decls.get_index(head.0 as usize) else {
-                continue;
-            };
-            if let Some(&source) = lowering.derivation_source.get(&(trait_, kind_of(*decl))) {
+            let (key, _) = lowering
+                .decls
+                .get_index(head.0 as usize)
+                .expect("a lowered head is interned");
+            if let Some(&source) =
+                kind_of(key).and_then(|kind| lowering.derivation_source.get(&(trait_, kind)))
+            {
                 lowering.impl_defs.insert(id, source);
             }
         }
@@ -787,10 +918,8 @@ impl SolverBridge {
         for def in tysys.data.declarations() {
             lowering.type_decl(def);
         }
-        let anonymous = lowering.anonymous_struct();
-        lowering.opaque_heads.insert(anonymous);
-        let template = lowering.template_shape();
-        lowering.opaque_heads.insert(template);
+        lowering.anonymous_struct();
+        lowering.template_shape();
         // `type_id` spells a resolved type under these heads whether or not an
         // impl header named one.
         for name in [
@@ -805,15 +934,15 @@ impl SolverBridge {
         {
             lowering.builtin(name);
         }
-        // A struct declared in a body has its identity here and its fields
-        // only once annotate reaches the body.
+        // A struct or newtype declared in a body has its identity here and its
+        // members only once annotate reaches the body.
         let defs = tysys.resolutions.defs();
-        for def in defs
-            .iter()
-            .filter(|&def| matches!(defs.kind(def), DefKind::Struct) && defs.is_function_local(def))
-        {
+        for def in defs.iter().filter(|&def| {
+            matches!(defs.kind(def), DefKind::Struct | DefKind::Newtype)
+                && defs.is_function_local(def)
+        }) {
             let head = lowering.type_decl(def);
-            lowering.opaque_heads.insert(head);
+            lowering.unstated.insert(head);
         }
         for module in modules {
             lowering.module(module);
@@ -968,13 +1097,16 @@ impl SolverBridge {
     }
 
     /// A newtype inherits its base's impls, and a `flags` type its primitive's.
+    /// Answers the heads whose base it stated.
     fn state_newtype_bases(
         tysys: &TypeSystem,
+        data: &DataDecls,
         table: &TypeTable,
         lowering: &mut Lowering,
         program: &mut Program,
-    ) {
+    ) -> Vec<TypeDeclId> {
         let u32_ = SolverType::Decl(lowering.builtin(TypeTable::FLAGS_BASE_NAME), vec![]);
+        let mut stated = Vec::new();
         let mut newtype_base = |head: TypeDeclId, base: SolverType| {
             program.types.insert(
                 head,
@@ -983,13 +1115,14 @@ impl SolverBridge {
                     ..TypeDef::default()
                 },
             );
+            stated.push(head);
         };
-        for (def, base_type) in newtype_decls(tysys, table) {
+        for (def, base_type) in newtype_decls(data, table) {
             if let Some(base) = lowering.type_id(table, base_type, &|_, _| None) {
                 newtype_base(lowering.declared_type(def), base);
             }
         }
-        for (&def, info) in &tysys.data.generic_newtypes {
+        for (&def, info) in &data.generic_newtypes {
             let param = |name: &str| -> Option<ParamKind> {
                 info.type_params
                     .iter()
@@ -1002,65 +1135,33 @@ impl SolverBridge {
                 newtype_base(lowering.declared_type(def), base);
             }
         }
-        for &def in tysys.data.flags_cases.keys() {
+        for &def in data.flags_cases.keys() {
             newtype_base(lowering.declared_type(def), u32_.clone());
         }
+        stated
     }
 
     /// The impls the declarations derive. A variant never derives `Ord`, so
     /// the variants come last and `Ord` stops before them. `Eq` and `Ord`
-    /// derive from each other before from the members: a written `cmp` gives
-    /// `Eq`, and a written `eq` gives no `Ord` (spec-traits.md §Derivation
-    /// Policy).
+    /// derive from each other before from the members, by the impls
+    /// `pair_comparisons` stated: a written `cmp` gives `Eq`, and a written
+    /// `eq` gives no `Ord` (spec-traits.md §Derivation Policy).
     fn derive_all(
         tysys: &TypeSystem,
-        table: &TypeTable,
         lowering: &mut Lowering,
         program: &mut Program,
+        mut declarations: Vec<Declaration>,
+        variants: Vec<Declaration>,
+        handles: Vec<Declaration>,
     ) {
-        let (mut declarations, variants, handles) = Self::declarations(tysys, table, lowering);
         let variants_from = declarations.len();
         declarations.extend(variants);
         let handles_from = declarations.len();
         declarations.extend(handles);
         let traits: Vec<(CompilerItem, TraitDeclId)> = Self::DERIVED
             .into_iter()
-            .filter_map(|item| Some((item, lowering.trait_decl(tysys.compiler_trait_def(item)?))))
+            .filter_map(|item| Some((item, Self::derived_trait(tysys, lowering, item)?)))
             .collect();
-        let trait_of = |item| traits.iter().find(|(i, _)| *i == item).map(|&(_, t)| t);
-        let mut from_cmp: IndexSet<ImplId> = IndexSet::default();
-        // An impl with no block is one the compiler states on a primitive,
-        // whose target writes no argument. One derived from `cmp` copies a
-        // written impl that covers its head.
-        let covers = |from_cmp: &IndexSet<ImplId>, id: ImplId, def: &ImplDef| {
-            if from_cmp.contains(&id) {
-                return true;
-            }
-            if let Some(&block) = lowering.impl_defs.get(&id) {
-                return table.impl_covers_every_instance(block);
-            }
-            assert!(
-                matches!(&def.target, SolverType::Decl(_, args) if args.is_empty()),
-                "a compiler-stated impl targets a head writing no argument"
-            );
-            true
-        };
-        let mut writes_eq = IndexMap::default();
-        if let (Some(eq), Some(ord)) = (trait_of(CompilerItem::Eq), trait_of(CompilerItem::Ord)) {
-            let writes =
-                |trait_| written_at_self(program, trait_, |id, def| covers(&from_cmp, id, def));
-            writes_eq = writes(eq);
-            let writes_ord = writes(ord);
-            for head in withholding_ord(program, &writes_eq, &writes_ord) {
-                program.types.entry(head).or_default().withholds.push(ord);
-            }
-            let ords: Vec<ImplId> = writes_ord
-                .into_iter()
-                .filter(|(head, _)| !writes_eq.contains_key(head))
-                .map(|(_, id)| id)
-                .collect();
-            from_cmp = derive_eq_from_ord(program, eq, ords);
-        }
         for &(item, trait_) in &traits {
             let eligible = match item {
                 CompilerItem::Eq => &declarations[..],
@@ -1070,21 +1171,17 @@ impl SolverBridge {
                 }
                 other => unreachable!("{other:?} is not derived"),
             };
-            let eligible: Vec<Declaration> = eligible
-                .iter()
-                .filter(|d| item != CompilerItem::Ord || !writes_eq.contains_key(&d.id))
-                .cloned()
-                .collect();
-            derive(program, trait_, &eligible, |id, def| {
-                covers(&from_cmp, id, def)
-            });
+            derive(program, trait_, eligible);
         }
     }
 
     /// State each declaration's reflection kinds as facts. A struct's kind
-    /// holds only from the modules that see every field.
+    /// holds only from the modules that see every field; each of `shapes`
+    /// holds its kind from every module.
     fn state_reflect_facts(
         tysys: &TypeSystem,
+        data: &DataDecls,
+        shapes: &[(TypeDeclId, OnBoundTrait)],
         table: &TypeTable,
         lowering: &Lowering,
         program: &mut Program,
@@ -1111,7 +1208,7 @@ impl SolverBridge {
                     program.facts.insert((head, trait_), Fact { visible_from });
                 }
             };
-        for (&def, info) in &tysys.data.struct_fields {
+        for (&def, info) in &data.struct_fields {
             if !eligible(def) {
                 continue;
             }
@@ -1129,23 +1226,17 @@ impl SolverBridge {
                 visible_from,
             );
         }
-        // A literal's fields are all visible, from every module; so are a
-        // template's holes.
-        state(lowering.anonymous_head(), OnBoundTrait::ReflectStruct, None);
-        state(
-            lowering.template_head(),
-            OnBoundTrait::ReflectTemplate,
-            None,
-        );
+        for &(head, kind) in shapes {
+            state(head, kind, None);
+        }
         let of = |kind| move |def: &DefId| (*def, kind);
-        let data = &tysys.data;
         let memberless = data
             .variant_cases
             .keys()
             .map(of(OnBoundTrait::ReflectVariant))
             .chain(data.enum_cases.keys().map(of(OnBoundTrait::ReflectEnum)))
             .chain(data.flags_cases.keys().map(of(OnBoundTrait::ReflectFlags)))
-            .chain(newtype_decls(tysys, table).map(|(def, _)| (def, OnBoundTrait::ReflectNewtype)))
+            .chain(newtype_decls(data, table).map(|(def, _)| (def, OnBoundTrait::ReflectNewtype)))
             .chain(
                 data.generic_newtypes
                     .keys()
@@ -1158,59 +1249,68 @@ impl SolverBridge {
         }
     }
 
-    /// The three remaining things the compiler reads off a type rather than off
-    /// an impl: a plain `enum`'s `Display`, and the `Ref` / `RefMut` identities.
+    /// Two of the things the compiler reads off a type rather than off an
+    /// impl: a plain `enum`'s `Display`, and a defaulted struct's `Default`.
     /// Each is a fact stated of a declaration, so it answers for every instance
     /// and from every module.
     fn state_type_facts(
         tysys: &TypeSystem,
-        table: &TypeTable,
+        data: &DataDecls,
         lowering: &Lowering,
         program: &mut Program,
     ) {
-        let trait_of = |item| {
-            tysys
+        let mut fact = |def: DefId, item| {
+            if let Some(trait_) = tysys
                 .compiler_trait_def(item)
                 .and_then(|def| lowering.known_trait(def))
-        };
-        let (display, ref_, ref_mut) = (
-            trait_of(CompilerItem::Display),
-            trait_of(CompilerItem::Ref),
-            trait_of(CompilerItem::RefMut),
-        );
-        let mut fact = |head: Option<TypeDeclId>, trait_: Option<TraitDeclId>| {
-            if let (Some(head), Some(trait_)) = (head, trait_) {
-                program
-                    .facts
-                    .insert((head, trait_), Fact { visible_from: None });
+            {
+                program.facts.insert(
+                    (lowering.declared_type(def), trait_),
+                    Fact { visible_from: None },
+                );
             }
         };
-        let declared = |def: DefId| Some(lowering.declared_type(def));
 
         // A plain `enum` derives `Display` over the bare case name, so the
         // bound holds before `synthesize_traits` emits the body.
-        for &def in tysys.data.enum_cases.keys() {
-            fact(declared(def), display);
+        for &def in data.enum_cases.keys() {
+            fact(def, CompilerItem::Display);
         }
 
         // A struct every one of whose fields has a default derives `Default`
         // from the defaults alone, so the bound holds with no impl written and
         // with no member's own `Default` asked for. A generic one does not:
         // a default is elaborated against the declaration, not an instance.
-        let default = trait_of(CompilerItem::Default);
-        for (&def, info) in &tysys.data.struct_fields {
+        for (&def, info) in &data.struct_fields {
             if info.auto_derives_default() {
-                fact(declared(def), default);
+                fact(def, CompilerItem::Default);
             }
         }
+    }
 
-        // `Ref` and `RefMut` are what `is_ref_identity` and
-        // `is_ref_mut_identity` read off a type. Each head is asked through a
-        // type standing for it, so the two paths share the one predicate; a
-        // head standing for no type (a trait, a head whose type is minted
-        // later) states nothing.
+    /// The `Ref` / `RefMut` identities of `heads`: what `is_ref_identity` and
+    /// `is_ref_mut_identity` read off a type, stated as facts. Each head is
+    /// asked through a type standing for it, so the two paths share the one
+    /// predicate; a head standing for no type (a trait, a head whose type is
+    /// minted later) states nothing.
+    fn state_ref_facts(&mut self, tysys: &TypeSystem, table: &TypeTable, heads: &[TypeDeclId]) {
+        let lowering = &self.lowering;
+        let trait_of = |item| {
+            tysys
+                .compiler_trait_def(item)
+                .and_then(|def| lowering.known_trait(def))
+        };
+        let (Some(ref_), Some(ref_mut)) =
+            (trait_of(CompilerItem::Ref), trait_of(CompilerItem::RefMut))
+        else {
+            return;
+        };
         let is_variant = |def: DefId| tysys.data.variant_cases.contains_key(&def);
-        for (key, &id) in &lowering.decls {
+        for &head in heads {
+            let (key, _) = lowering
+                .decls
+                .get_index(head.0 as usize)
+                .expect("a stated head is interned");
             let (is_ref, is_ref_mut) = match key {
                 DeclKey::Def(_) | DeclKey::Builtin(_) => {
                     let Some(shape) = representative(tysys, table, lowering.tuple, key) else {
@@ -1226,20 +1326,22 @@ impl SolverBridge {
                 // A template shape is a struct too.
                 DeclKey::AnonymousStruct | DeclKey::TemplateShape => (true, true),
             };
-            if is_ref {
-                fact(Some(TypeDeclId(id)), ref_);
-            }
-            if is_ref_mut {
-                fact(Some(TypeDeclId(id)), ref_mut);
+            for (holds, trait_) in [(is_ref, ref_), (is_ref_mut, ref_mut)] {
+                if holds {
+                    self.program
+                        .facts
+                        .insert((head, trait_), Fact { visible_from: None });
+                }
             }
         }
     }
 
-    /// Every declaration as [`derive`] reads it: structs, plain enums and
-    /// flags, then the variants, then the unrestricted resources. One with a
-    /// member the lowering cannot express is left out.
+    /// Every declaration of `data` as [`derive`] reads it: structs, plain
+    /// enums and flags, then the variants, then the unrestricted resources.
+    /// One with a member the lowering cannot express is left out.
     fn declarations(
         tysys: &TypeSystem,
+        data: &DataDecls,
         table: &TypeTable,
         lowering: &Lowering,
     ) -> (Vec<Declaration>, Vec<Declaration>, Vec<Declaration>) {
@@ -1255,11 +1357,11 @@ impl SolverBridge {
             Some(Declaration {
                 id: lowering.declared_type(def),
                 params: u32::try_from(params).expect("fewer than 2^32 params"),
+                variadic: false,
                 members,
                 module: lowering.declared_module(module),
             })
         };
-        let data = &tysys.data;
         let mut out = Vec::new();
         for (&def, info) in &data.struct_fields {
             out.extend(lowered(
@@ -1382,9 +1484,7 @@ impl SolverBridge {
         }
         let trait_ = self.lowering.known_trait(decl)?;
         let (env, ty) = self.env_for(tysys, ctx, type_id)?;
-        // A head the program names without members is one `derive` never saw,
-        // so only the compiler answers for it.
-        if ty.mentions_decl(&|h| self.lowering.opaque_heads.contains(&h)) {
+        if ty.mentions_decl(&|h| self.lowering.unstated.contains(&h)) {
             return None;
         }
         let module = self.lowering.known_module(scope.current_module_source)?;
@@ -1402,22 +1502,131 @@ impl SolverBridge {
         })
     }
 
-    /// The solver's answer to the question `type_implements_trait` just
-    /// answered; `None` where the lowering states nothing about it.
-    pub(super) fn answer(
+    /// Whether `type_id` satisfies `asked`, with the bodies the answer owes,
+    /// each keyed as synthesis keys one: the head, its module, and the trait.
+    /// `None` where the lowering states nothing about the question.
+    pub(super) fn answer_owing(
         &self,
         tysys: &TypeSystem,
         ctx: &scope::Scope,
         scope: &TypeLookup,
         type_id: TypeId,
         asked: &FqTraitName,
-    ) -> Option<bool> {
+    ) -> Option<Option<Vec<OwedBody>>> {
         let q = self.question(tysys, ctx, scope, type_id, asked)?;
-        Some(holds_with_args(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args).is_some())
+        let Some(held) = holds_with_args(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args)
+        else {
+            return Some(None);
+        };
+        let owed = owed(&self.program, &q.env, q.module, held.requests);
+        let table = tysys.type_table.borrow();
+        let shape_heads = [
+            self.lowering.anonymous_head(),
+            self.lowering.template_head(),
+        ];
+        let mut shapes = Vec::new();
+        if owed
+            .iter()
+            .any(|r| matches!(&r.ty, SolverType::Decl(head, _) if shape_heads.contains(head)))
+        {
+            let names: Vec<String> = ctx.trait_ctx.type_params.keys().cloned().collect();
+            self.shapes_in(&table, type_id, &param_index(&names), &mut shapes);
+        }
+        let defs = tysys.resolutions.defs();
+        let bodies = owed
+            .into_iter()
+            .flat_map(|request| {
+                let trait_ = self.lowering.trait_def_of(request.trait_);
+                let SolverType::Decl(head, _) = &request.ty else {
+                    return Vec::new();
+                };
+                let (key, _) = self
+                    .lowering
+                    .decls
+                    .get_index(head.0 as usize)
+                    .expect("a lowered head is interned");
+                match key {
+                    DeclKey::Def(def) => vec![OwedBody {
+                        head: FqTypeName::declared(defs, *def).head().clone(),
+                        module: table.def_module(*def).clone(),
+                        trait_,
+                    }],
+                    // Two shapes of one field-type list lower alike, so each
+                    // is owed the body.
+                    DeclKey::AnonymousStruct | DeclKey::TemplateShape => shapes
+                        .iter()
+                        .filter(|(lowered, _)| *lowered == request.ty)
+                        .map(|&(_, shape)| OwedBody {
+                            head: table.fq_struct_head(StructDef::Anon(shape)).head().clone(),
+                            module: table.anon_struct_module(shape).clone(),
+                            trait_,
+                        })
+                        .collect(),
+                    DeclKey::Builtin(_) => Vec::new(),
+                }
+            })
+            .collect();
+        Some(Some(bodies))
     }
 
-    /// The impls the order ties for a bound `answer` holds: a bound reaches
-    /// them as a call does, so neither may win by declaration order.
+    /// Each anonymous shape `id` is built over, with its lowering: what a
+    /// body owed at a shape names it by.
+    fn shapes_in(
+        &self,
+        table: &TypeTable,
+        id: TypeId,
+        param: &dyn Fn(&str, u32) -> Option<u32>,
+        out: &mut Vec<(SolverType, AnonStructId)>,
+    ) {
+        let mut each = |ids: &[TypeId]| {
+            for &inner in ids {
+                self.shapes_in(table, inner, param, out);
+            }
+        };
+        match table.get(id) {
+            ResolvedType::Struct {
+                def: StructDef::Anon(shape),
+                ..
+            } => {
+                let shape = *shape;
+                let members: Vec<TypeId> = match table.template_shape(shape) {
+                    Some(template) => template.holes.iter().map(|hole| hole.ty).collect(),
+                    None => table
+                        .anon_struct_fields(shape)
+                        .iter()
+                        .map(|&(_, ty)| ty)
+                        .collect(),
+                };
+                each(&members);
+                if let Some(lowered) = self.lowering.type_id(table, id, param) {
+                    out.push((lowered, shape));
+                }
+            }
+            ResolvedType::Struct {
+                def: StructDef::Decl(_),
+                type_args,
+            }
+            | ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. }
+            | ResolvedType::Newtype { type_args, .. } => each(type_args),
+            ResolvedType::BuiltinArray(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner) => each(&[*inner]),
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                each(params);
+                each(&[*return_type]);
+            }
+            _ => {}
+        }
+    }
+
+    /// The impls the order ties for a bound [`Self::answer_owing`] holds: a
+    /// bound reaches them as a call does, so neither may win by declaration
+    /// order.
     pub(super) fn tied_through_bound(
         &self,
         tysys: &TypeSystem,
@@ -1536,74 +1745,40 @@ impl SolverBridge {
         })
     }
 
+    /// Which of `Eq` and `Ord` is written for `instance` without the other,
+    /// with the block writing it: the row of the comparison table `instance`
+    /// reads, by [`comparison_row`]. A type parameter is rigid, so only an impl
+    /// reaching every instance reaches it.
+    pub(crate) fn comparison_written_alone(
+        &self,
+        table: &TypeTable,
+        instance: TypeId,
+    ) -> Option<(CompilerItem, DefId)> {
+        let (eq, _) = self.program.comparisons?;
+        // A shape the lowering cannot say is one no source names, so no written
+        // impl reaches it.
+        let ty = self
+            .lowering
+            .type_id(table, instance, &|_, index| Some(index))?;
+        let (written, impl_) = comparison_row(&self.program, &ty)?;
+        let item = if written == eq {
+            CompilerItem::Eq
+        } else {
+            CompilerItem::Ord
+        };
+        Some((
+            item,
+            self.impl_def_of(impl_)
+                .expect("a written impl names its block"),
+        ))
+    }
+
     /// The impl block a candidate names: the one it was lowered from, or for a
     /// derived body the `Reflect*` blanket lookup collects for it. `None` for a
     /// body the compiler supplies with no block at all, which is how a
     /// `TraitMethodMatch` says it too.
     fn impl_def_of(&self, impl_: ImplId) -> Option<DefId> {
         self.lowering.impl_defs.get(&impl_).copied()
-    }
-
-    /// What the solver was asked and what it had to answer from, for the
-    /// differential's failure message.
-    pub(super) fn explain(
-        &self,
-        tysys: &TypeSystem,
-        ctx: &scope::Scope,
-        scope: &TypeLookup,
-        type_id: TypeId,
-        asked: &FqTraitName,
-    ) -> String {
-        let Some(q) = self.question(tysys, ctx, scope, type_id, asked) else {
-            return "outside what the lowering states".to_string();
-        };
-        let name_of = |id: u32| -> String {
-            self.lowering
-                .decls
-                .iter()
-                .find(|(_, i)| **i == id)
-                .map_or_else(
-                    || format!("#{id}"),
-                    |(key, _)| match key {
-                        DeclKey::Def(def) => tysys.resolutions.defs().name(*def).to_string(),
-                        DeclKey::Builtin(name) => name.clone(),
-                        DeclKey::AnonymousStruct => "{..}".to_string(),
-                        DeclKey::TemplateShape => "`..`".to_string(),
-                    },
-                )
-        };
-        // Positions are `env_for`'s: every parameter in scope, in order.
-        let env: Vec<(&String, Vec<String>)> = ctx
-            .trait_ctx
-            .type_params
-            .keys()
-            .zip(&q.env.param_bounds)
-            .map(|(name, bounds)| (name, bounds.iter().map(|b| name_of(b.trait_.0)).collect()))
-            .collect();
-        let answer = holds_with_args(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args);
-        let impls: Vec<_> = self
-            .program
-            .impls
-            .iter()
-            .filter(|(_, d)| d.trait_ == Some(q.trait_))
-            .map(|(id, d)| {
-                let head = match &d.target {
-                    SolverType::Decl(head, _) => name_of(head.0),
-                    SolverType::Param(_)
-                    | SolverType::Pack(_)
-                    | SolverType::Ref { .. }
-                    | SolverType::Tuple(_)
-                    | SolverType::Projection { .. } => String::new(),
-                };
-                (id, head, d)
-            })
-            .collect();
-        format!(
-            "lowered as {:?} : {} under {env:?} from {:?}; answer {answer:?}; impls of the trait: {impls:?}",
-            q.ty,
-            name_of(q.trait_.0),
-            q.module,
-        )
     }
 }
 
@@ -1644,6 +1819,13 @@ fn param_index(names: &[String]) -> impl Fn(&str, u32) -> Option<u32> + '_ {
             .position(|n| n == name)
             .map(|p| u32::try_from(p).expect("fewer than 2^32 params"))
     }
+}
+
+/// A body an answer owes, keyed as synthesis keys the request for it.
+pub(super) struct OwedBody {
+    pub(super) head: TypeHead,
+    pub(super) module: ModuleSource,
+    pub(super) trait_: DefId,
 }
 
 /// A `type_implements_trait` question as the solver reads it.
