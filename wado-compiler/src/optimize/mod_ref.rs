@@ -838,9 +838,7 @@ pub(super) fn compute_fn_effects(project: &NirPackage) -> Vec<FnEffect> {
 /// [`compute_fn_effects`] with each body's [`Proofs`], and what each builtin
 /// declared (indexed by `func_id.index()`), for a caller that proves a body
 /// again after changing it.
-pub(super) fn summarize(
-    project: &NirPackage,
-) -> (FnSummaries, Vec<Option<&BuiltinDeclaration>>) {
+pub(super) fn summarize(project: &NirPackage) -> (FnSummaries, Vec<Option<&BuiltinDeclaration>>) {
     use cranelift_entity::EntityRef;
 
     let funcs = &project.functions;

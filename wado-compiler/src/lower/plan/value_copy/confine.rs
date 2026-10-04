@@ -176,9 +176,9 @@ struct Ctx<'a> {
 }
 
 impl Ctx<'_> {
-    /// A body-less callee reads its declaration wherever it comes from — a
-    /// `core:builtin`, a CM import, a Wasm asset — so a monomorphized instance
-    /// absent from the table is found by the generic name link snapshot.
+    /// A body-less callee reads the declaration link snapshot, found by the
+    /// generic name for a monomorphized instance absent from the table. One
+    /// with no snapshot states nothing, so it is opaque.
     fn kind(&self, func: &FunctionRef) -> Kind {
         if let Some(kind) = self.kinds.get(&func.module_source, &func.name) {
             return *kind;

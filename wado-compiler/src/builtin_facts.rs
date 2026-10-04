@@ -154,10 +154,7 @@ impl<P> BuiltinFacts<P> {
 
     /// Whether the call's effects are unknown: `opaque` or `black_box`.
     pub fn is_opaque(&self) -> bool {
-        matches!(
-            self.side_effect,
-            SideEffect::Opaque | SideEffect::BlackBox
-        )
+        matches!(self.side_effect, SideEffect::Opaque | SideEffect::BlackBox)
     }
 
     /// The trap conditions, `None` where the call never traps. `black_box`
