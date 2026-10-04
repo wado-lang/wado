@@ -31,9 +31,10 @@ git diff --cached origin/main -- vendor
 git commit -m "merge origin/main (conflicts unresolved)"
 ```
 
-The `git diff` must print nothing unless the branch bumps a submodule itself. When main bumps a `vendor/*` submodule, the
-merge leaves its checkout at the old commit, and `git add -A` stages that,
-silently reverting main's bump. Restore main's pointer before committing:
+The `git diff` must print nothing unless the branch bumps a submodule itself.
+When main bumps a `vendor/*` submodule, the merge leaves its checkout at the old
+commit, and `git add -A` stages that, silently reverting main's bump. Restore
+main's pointer before committing:
 
 ```sh
 git update-index --cacheinfo 160000,<sha from origin/main>,<path>
