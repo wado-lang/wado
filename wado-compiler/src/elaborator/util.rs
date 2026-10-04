@@ -382,8 +382,9 @@ pub(super) fn float_range(
     .checked()
 }
 
-/// Where a range bound naming a constant names it. The first such bound is the
-/// site annotate records the range's comparisons on, and reify reads them from.
+/// Where a pattern naming a constant names it: the site annotate records the
+/// comparison on, and reify reads it from. A range records on its first
+/// constant bound.
 pub(super) fn constant_bound_site(bound: &Pattern) -> (AstId, Span) {
     match bound {
         Pattern::Ident { id, span, .. } | Pattern::MutIdent { id, span, .. } => (*id, *span),
@@ -637,12 +638,18 @@ pub(super) fn pattern_literal_error(
     type_table: &mut TypeTable,
 ) -> Option<PatternLiteralError> {
     let scrutinee = type_table.peel_refs(scrutinee);
-    if matches!(lit, PatternLiteral::Int { suffix: None, .. })
+    if let PatternLiteral::Int {
+        suffix: None,
+        shown,
+        ..
+    } = lit
         && float_format(scrutinee, type_table).is_some()
     {
-        return Some(PatternLiteralError::Invalid(
-            FLOAT_LITERAL_PATTERN.to_string(),
-        ));
+        let float = type_table.type_name(scrutinee);
+        return Some(PatternLiteralError::Invalid(format!(
+            "`{shown}` is a float on `{float}`, and a float literal is no pattern; \
+             compare it in a guard"
+        )));
     }
     if let Some(expected) = pattern_literal_mismatch(lit, scrutinee, type_table) {
         return Some(PatternLiteralError::Mismatch(expected));

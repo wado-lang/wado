@@ -6,6 +6,7 @@ use crate::ast::{
     Type, WhileStmt, walk_expr, walk_stmt,
 };
 use crate::compiler_host::CompilerHost;
+use crate::elaborator::sig::AssocConstSig;
 use crate::tir::{ResolvedType, TirPattern, TypeId, TypeTable};
 use crate::tir_visitor::remap_local_reads;
 use crate::token::Span;
@@ -1397,6 +1398,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some((alias, ty))
     }
 
+    /// Resolve an associated constant's body where it is read, for the facts
+    /// reify inlines it with. Its names resolve in its declaring module, never
+    /// to a binding of the function it lands in.
+    pub(super) fn resolve_associated_const_body(
+        &mut self,
+        assoc: &AssocConstSig,
+        ctx: &mut FunctionContext,
+    ) {
+        ctx.with_caller_bindings_hidden(|ctx| {
+            self.with_resolving_home(Some(assoc.module.clone()), |s| {
+                s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
+            })
+        });
+    }
+
     /// Resolve the constant `pattern` names, recording its use: an immutable
     /// global, bare or under a namespace, or an associated constant. `None`
     /// where it names none. A case of the scrutinee is asked first by callers.
@@ -1449,13 +1465,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         Some(*name_id),
                         *span,
                     );
-                    // Resolve the const body for its facts; reify inlines it.
-                    let const_module = assoc.module.clone();
-                    ctx.with_caller_bindings_hidden(|ctx| {
-                        self.with_resolving_home(Some(const_module), |s| {
-                            s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
-                        })
-                    });
+                    self.resolve_associated_const_body(&assoc, ctx);
                     return Some(PatternConstant {
                         id: *name_id,
                         shown,

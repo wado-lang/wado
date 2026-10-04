@@ -1121,15 +1121,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(ident.id),
                 ident.span,
             );
-            // Not an l-value. The value is its declaring module's AST, walked
-            // again here, so it travels exactly as a default does and names
-            // none of this function's binders.
-            let const_module = assoc.module.clone();
-            ctx.with_caller_bindings_hidden(|ctx| {
-                self.with_resolving_home(Some(const_module), |s| {
-                    s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
-                })
-            });
+            // Not an l-value.
+            self.resolve_associated_const_body(&assoc, ctx);
             if !ident.type_args_on_prefix {
                 return self.value_without_turbofish(ident, assoc.ty);
             }

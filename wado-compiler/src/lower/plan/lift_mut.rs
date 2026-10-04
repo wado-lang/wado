@@ -152,6 +152,7 @@ impl MutBindingLifter {
                 local_index,
                 type_id,
                 test,
+                ..
             } => {
                 if !self.local_is_mut(*local_index) {
                     return;

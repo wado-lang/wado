@@ -3848,6 +3848,14 @@ fn unparse_condition_into(cond: &Condition, output: &mut String) {
     }
 }
 
+/// One pattern as source.
+#[must_use]
+pub fn unparse_pattern_source(pattern: &Pattern) -> String {
+    let mut output = String::new();
+    unparse_pattern_into(pattern, &mut output);
+    output
+}
+
 fn unparse_pattern_into(pattern: &Pattern, output: &mut String) {
     match pattern {
         Pattern::Ident { name, .. } => output.push_str(name),
@@ -4970,6 +4978,7 @@ impl<'a> TirUnparser<'a> {
                 self.comma_sep_with(" | ", alternatives, TirUnparser::unparse_tir_pattern);
             }
             TirPattern::ConstantValue { expr } => self.unparse_expr(expr),
+            TirPattern::Narrow { shown, .. } if self.source_form => self.output.push_str(shown),
             TirPattern::Narrow {
                 name,
                 type_id,
@@ -4992,18 +5001,9 @@ impl<'a> TirUnparser<'a> {
                 self.output.push_str(if *inclusive { "..=" } else { "..<" });
                 self.output.push_str(&end.to_string());
             }
-            TirPattern::PerInstance { pattern, .. } => match pattern {
-                InstancePattern::Literal(value) => emit_pattern_literal(value, &mut self.output),
-                InstancePattern::Range {
-                    start,
-                    end,
-                    inclusive,
-                } => {
-                    emit_range_bound(start, &mut self.output);
-                    self.output.push_str(if *inclusive { "..=" } else { "..<" });
-                    emit_range_bound(end, &mut self.output);
-                }
-            },
+            TirPattern::PerInstance { pattern, .. } => {
+                emit_instance_pattern(pattern, &mut self.output);
+            }
         }
     }
 
@@ -5443,6 +5443,29 @@ fn emit_pattern_literal(value: &PatternLiteral, output: &mut String) {
         }
         PatternLiteral::Char(c) => output.push_str(&quoted_char(*c)),
         PatternLiteral::Bool(b) => output.push_str(if *b { "true" } else { "false" }),
+    }
+}
+
+/// A literal or range pattern judged per instance, as written.
+#[must_use]
+pub fn unparse_instance_pattern(pattern: &InstancePattern) -> String {
+    let mut output = String::new();
+    emit_instance_pattern(pattern, &mut output);
+    output
+}
+
+fn emit_instance_pattern(pattern: &InstancePattern, output: &mut String) {
+    match pattern {
+        InstancePattern::Literal(value) => emit_pattern_literal(value, output),
+        InstancePattern::Range {
+            start,
+            end,
+            inclusive,
+        } => {
+            emit_range_bound(start, output);
+            output.push_str(if *inclusive { "..=" } else { "..<" });
+            emit_range_bound(end, output);
+        }
     }
 }
 
