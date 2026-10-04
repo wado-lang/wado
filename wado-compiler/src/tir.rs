@@ -1460,11 +1460,17 @@ impl TypeTable {
     /// reference is one, the value where a reference would be a box — a
     /// scalar copy is free and a box is an allocation (WEP 2026-01-10).
     pub fn hole_field_type(&mut self, ty: TypeId) -> TypeId {
-        if self.is_boxed_reference_target(ty) {
-            ty
-        } else {
+        if self.hole_held_by_ref(ty) {
             self.make_ref(ty)
+        } else {
+            ty
         }
+    }
+
+    /// Whether [`Self::hole_field_type`] holds a hole of type `ty` by `&`.
+    #[must_use]
+    pub fn hole_held_by_ref(&self, ty: TypeId) -> bool {
+        !self.is_boxed_reference_target(ty)
     }
 
     /// Whether `ty` is an instance of the compiler struct `item`, as a generic
@@ -6768,9 +6774,9 @@ impl TypeTable {
         }
         let written = &target.args;
         let instance = self.peel_refs(instance);
-        let args = match self.get(instance) {
+        let args = match self.get_unerased(instance) {
             ResolvedType::Struct { type_args, .. } => type_args.clone(),
-            _ => self.nominal_type_args(instance).unwrap_or_default(),
+            _ => self.declared_type_args(instance).unwrap_or_default(),
         };
         self.impl_target_binding(written, &args).is_some()
     }

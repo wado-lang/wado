@@ -556,7 +556,8 @@ Nothing flips at once. The fixture corpus is the drift detector, as
 `verify_arg_synthesis` already uses it for argument synthesis (WEP 2026-07-31):
 a question the solver answers is asserted against the compiler's own path in
 debug builds over every fixture before the compiler's path is retired. `holds`
-still runs that way beside `type_implements_trait`.
+ran that way beside `type_implements_trait` until it answered every question the
+lowering states.
 
 Selection has one candidate set. The order names the impls that answer, each an
 impl block, or for a derived body the `Reflect*` blanket it comes from. Lookup
@@ -637,26 +638,24 @@ name. They share which impls reach the receiver, and nothing after that. Ranks
 order. Each path holds a different amount of the call: a receiver type, an
 operand class, a bound list.
 
-### Derivation is still a query in the compiler
+### The compiler answers what the lowering cannot state
 
-`structural_conformance` still walks a receiver's members at each bound and
-asks the full question of each, and the recursion guard counts the member
-descents to tell a recursive type from an ungrounded cycle. The solver's
-`derive` runs beside it: every declaration is lowered and derived when the
-`Program` is built, and `holds` answers under the differential against
-`type_implements_trait` over every fixture. One receiver the differential skips,
-since only the compiler answers for it: a head the program names without members
-— an anonymous struct, whose shape a literal mints after the `Program` is built,
-and a struct declared in a body, whose fields annotate resolves in that body.
-Such a head reaches a blanket whose bound holds of everything (`Inspect`) or an
-impl written for it, and no `Reflect*` fact or derived impl
-(`trait_local_struct_receiver_blanket.wado`). What is left is the flip:
+The solver answers every bound the lowering states, and the bodies its answer
+owes are what synthesis emits: `owed` closes a structural body over its
+members, since the body calls the trait on each. A late declaration is stated
+when its members are known. An anonymous struct and a template shape lower as
+one variadic declaration each, their fields the pack's elements, and a struct or
+newtype declared in a body is stated when annotate hoists it
+(`trait_late_declaration_derives.wado`).
 
-- [ ] Route the derived bodies through what `holds` reports instead of
-  `record_bound_driven_synth_request_for`, and retire the member walk.
-- [ ] State a late declaration's members when they are known — an anonymous
-  struct at its literal, a body-local struct at its statement — or lower
-  them as the declaration `derive` reads.
+A question the lowering cannot state still falls to `type_implements_trait`'s
+own rules: a bound in scope the lowering cannot spell, or a type it has no way
+to say (an inference variable, a closure environment, a mapped pack). Those
+rules carry a second copy of what the solver states for reflection and
+`Default`. They read an instance's row of the comparison table from the solver,
+as every other phase does, and apply it themselves. They walk no members, so a
+structural trait asked there holds only through an impl. No fixture asks one
+about a structural trait.
 
 ### Specificity is refused, and now has a named cost
 

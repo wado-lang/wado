@@ -5,6 +5,7 @@ use super::program::{
     ArgDefault, AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, ParamBound,
     Program, RefRule, SolverType, TraitDeclId, TypeDeclId,
 };
+use crate::hashmap::IndexSet;
 
 /// A bound that holds, and the bodies its answer owes.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
@@ -47,6 +48,39 @@ pub fn holds_with_args(
         at_itself: None,
     }
     .holds(ty, trait_, args)
+}
+
+/// `requests` with every body they owe in turn: a structural body calls its
+/// trait on each member, so it owes each member's body at the instance. A
+/// recursive type owes its own body once.
+#[must_use]
+pub fn owed(
+    program: &Program,
+    env: &Env,
+    scope: ModuleId,
+    mut requests: Vec<DerivationRequest>,
+) -> Vec<DerivationRequest> {
+    let mut seen = IndexSet::default();
+    let mut owed = Vec::new();
+    while let Some(request) = requests.pop() {
+        if !seen.insert((request.ty.clone(), request.trait_)) {
+            continue;
+        }
+        if request.structural
+            && let SolverType::Decl(head, args) = &request.ty
+            && let Some(decl) = program.declarations.get(head)
+        {
+            for member in decl.members_at(args) {
+                // A marker's bounds are written, so a member may not hold;
+                // that is the marker's error, reported where it is written.
+                if let Some(held) = holds(program, env, &member, request.trait_, scope) {
+                    requests.extend(held.requests);
+                }
+            }
+        }
+        owed.push(request);
+    }
+    owed
 }
 
 /// Whether a bound in force answers `trait_` at `wanted`, comparing what the
@@ -129,12 +163,7 @@ impl Query<'_> {
         if trait_def.is_some_and(|def| def.holds_for_all) {
             return Some(Holds::default());
         }
-        if let SolverType::Decl(head, _) = ty
-            && program
-                .types
-                .get(head)
-                .is_some_and(|def| def.withholds.contains(&trait_))
-        {
+        if withholds(program, trait_, ty) {
             return None;
         }
         let on_ref = trait_def.map_or(RefRule::default(), |def| def.on_ref);
@@ -179,6 +208,7 @@ impl Query<'_> {
                 requests: vec![DerivationRequest {
                     ty: ty.clone(),
                     trait_,
+                    structural: false,
                 }],
                 ..Holds::default()
             });
@@ -237,7 +267,7 @@ impl Query<'_> {
         if !match_target(&def.target, ty, &mut bindings) {
             return None;
         }
-        if def.origin == ImplOrigin::Derived && declared_for(program, implemented, ty) {
+        if reached_by(program, implemented, ty, def.origin.yields_to()) {
             return None;
         }
         let bound_to = |ty: &SolverType| {
@@ -245,10 +275,19 @@ impl Query<'_> {
         };
         let mut requests = match def.origin {
             ImplOrigin::Written => Vec::new(),
-            ImplOrigin::Derived | ImplOrigin::Marker => vec![DerivationRequest {
-                ty: ty.clone(),
-                trait_: implemented,
-            }],
+            ImplOrigin::Derived | ImplOrigin::Marker | ImplOrigin::Paired => {
+                vec![DerivationRequest {
+                    ty: ty.clone(),
+                    trait_: implemented,
+                    // The `==` a written `cmp` gives calls `cmp`, a marker's
+                    // included.
+                    structural: program
+                        .traits
+                        .get(&implemented)
+                        .is_some_and(|t| t.structural)
+                        && !eq_from_cmp(program, implemented, ty),
+                }]
+            }
         };
         let pinned = |index: u32| {
             def.params
@@ -313,17 +352,85 @@ impl Query<'_> {
     }
 }
 
-/// Whether the program declares `trait_` at its defaults for `ty`'s own head,
-/// by an impl or a marker whose target reaches it. A declared impl always wins
-/// over a derived one, which answers only at the defaults.
-fn declared_for(program: &Program, trait_: TraitDeclId, ty: &SolverType) -> bool {
-    program.impls.values().any(|def| {
-        def.trait_ == Some(trait_)
-            && matches!(def.origin, ImplOrigin::Written | ImplOrigin::Marker)
-            && at_defaults(program, def)
-            && matches!(def.target, SolverType::Decl(..))
-            && match_target(&def.target, ty, &mut vec![None; def.params.len()])
-    })
+/// Whether an impl of `trait_` at its defaults from one of `origins` names
+/// `ty`'s own head and reaches it, whatever its bounds. A derived impl answers
+/// only at the defaults, so only an impl there takes its place.
+fn reached_by(
+    program: &Program,
+    trait_: TraitDeclId,
+    ty: &SolverType,
+    origins: &[ImplOrigin],
+) -> bool {
+    !origins.is_empty()
+        && program.impls.values().any(|def| {
+            at_self(program, def, trait_, origins)
+                && match_target(&def.target, ty, &mut vec![None; def.params.len()])
+        })
+}
+
+/// Whether `def` is an impl of `trait_` at its defaults from one of `origins`,
+/// targeting a declaration.
+pub(super) fn at_self(
+    program: &Program,
+    def: &ImplDef,
+    trait_: TraitDeclId,
+    origins: &[ImplOrigin],
+) -> bool {
+    def.trait_ == Some(trait_)
+        && origins.contains(&def.origin)
+        && at_defaults(program, def)
+        && matches!(def.target, SolverType::Decl(..))
+}
+
+/// The trait `ty` has none of, whatever answers it: `Ord`, where a written `eq`
+/// reaches it alone.
+pub(super) fn withheld_at(program: &Program, ty: &SolverType) -> Option<TraitDeclId> {
+    let (eq, ord) = program.comparisons?;
+    row_is(program, ty, eq).then_some(ord)
+}
+
+/// Whether `ty` has no `trait_`, as `withheld_at` says, checking the trait
+/// before the row: the row scans every impl.
+fn withholds(program: &Program, trait_: TraitDeclId, ty: &SolverType) -> bool {
+    program
+        .comparisons
+        .is_some_and(|(eq, ord)| trait_ == ord && row_is(program, ty, eq))
+}
+
+/// Whether `trait_`'s body at `ty` is the `==` a `cmp` written alone gives.
+fn eq_from_cmp(program: &Program, trait_: TraitDeclId, ty: &SolverType) -> bool {
+    program
+        .comparisons
+        .is_some_and(|(eq, ord)| trait_ == eq && row_is(program, ty, ord))
+}
+
+fn row_is(program: &Program, ty: &SolverType, written: TraitDeclId) -> bool {
+    matches!(comparison_row(program, ty), Some((row, _)) if row == written)
+}
+
+/// The row of the comparison table `ty` reads (spec-traits.md §Derivation
+/// Policy): which of `Eq` and `Ord` a written impl reaching `ty` implements
+/// without the other, with that impl. A concrete impl answers before a generic
+/// one, as coherence Rule 1 orders them.
+#[must_use]
+pub fn comparison_row(program: &Program, ty: &SolverType) -> Option<(TraitDeclId, ImplId)> {
+    let (eq, ord) = program.comparisons?;
+    let written = |trait_| {
+        program
+            .impls
+            .iter()
+            .filter(|(_, def)| {
+                at_self(program, def, trait_, &[ImplOrigin::Written])
+                    && match_target(&def.target, ty, &mut vec![None; def.params.len()])
+            })
+            .min_by_key(|(_, def)| !def.params.is_empty())
+            .map(|(&id, _)| id)
+    };
+    match (written(eq), written(ord)) {
+        (Some(id), None) => Some((eq, id)),
+        (None, Some(id)) => Some((ord, id)),
+        _ => None,
+    }
 }
 
 /// One impl applying to one type. `holds` reads the bound it answers; selection
@@ -517,7 +624,7 @@ fn match_target(target: &SolverType, ty: &SolverType, bindings: &mut [Option<Bin
 #[cfg(test)]
 mod tests {
     use super::super::program::{Fact, ParamDef, Pin, TraitDef, TypeDef};
-    use super::super::testing::{Builder, concrete, decl, ref_to};
+    use super::super::testing::{Builder, concrete, decl, generic, ref_to};
     use super::*;
 
     const ALPHA: TraitDeclId = TraitDeclId(0);
@@ -700,6 +807,7 @@ mod tests {
                 requests: vec![DerivationRequest {
                     ty: decl(POINT),
                     trait_: EQ,
+                    structural: false,
                 }],
                 ..Holds::default()
             })
@@ -720,6 +828,7 @@ mod tests {
                 requests: vec![DerivationRequest {
                     ty: list_of(decl(I32)),
                     trait_: ALPHA,
+                    structural: false,
                 }],
                 ..Holds::default()
             })
@@ -874,6 +983,7 @@ mod tests {
         let request = DerivationRequest {
             ty: decl(POINT),
             trait_: EQ,
+            structural: false,
         };
         let p = Builder::default()
             .bounded(BETA, SolverType::Param(0), vec![EQ])
@@ -955,6 +1065,7 @@ mod tests {
                 requests: vec![DerivationRequest {
                     ty: decl(POINT),
                     trait_: EQ,
+                    structural: false,
                 }],
                 ..Holds::default()
             })
@@ -1014,9 +1125,10 @@ mod tests {
             COARSE,
             TypeDef {
                 newtype_base: Some(decl(I32)),
-                withholds: vec![ALPHA],
             },
         );
+        p.comparisons = Some((EQ, ALPHA));
+        p.push_impl(concrete(EQ, decl(COARSE)));
         assert_eq!(holds(&p, &Env::default(), &decl(COARSE), ALPHA, HERE), None);
         assert_eq!(
             holds(&p, &Env::default(), &decl(COARSE), BETA, HERE),
@@ -1024,18 +1136,47 @@ mod tests {
         );
     }
 
-    /// A declaration withholding a trait has none, a marker asking for one
-    /// included.
+    /// A withheld trait is not there, a marker asking for it included; a
+    /// written impl is the one thing that answers it.
     #[test]
-    fn a_marker_does_not_answer_what_the_declaration_withholds() {
+    fn only_a_written_impl_answers_what_is_withheld() {
         let mut p = Builder::default().build();
+        p.comparisons = Some((EQ, ALPHA));
         p.push_impl(ImplDef {
             origin: ImplOrigin::Marker,
             ..concrete(ALPHA, decl(POINT))
         });
         assert!(holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE).is_some());
-        p.types.entry(POINT).or_default().withholds.push(ALPHA);
+        p.push_impl(concrete(EQ, decl(POINT)));
         assert_eq!(holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE), None);
+        p.push_impl(concrete(ALPHA, decl(POINT)));
+        assert!(holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE).is_some());
+    }
+
+    /// Each instance reads its own row, by the written impls reaching it; a
+    /// concrete impl answers before a generic one.
+    #[test]
+    fn each_instance_reads_its_own_comparison_row() {
+        const ORD: TraitDeclId = BETA;
+        let mut p = Builder::default().build();
+        p.comparisons = Some((EQ, ORD));
+        let ord_for_all = p.push_impl(generic(1, concrete(ORD, list_of(SolverType::Param(0)))));
+        p.push_impl(concrete(EQ, list_of(decl(I32))));
+        assert_eq!(
+            comparison_row(&p, &list_of(decl(POINT))),
+            Some((ORD, ord_for_all))
+        );
+        assert_eq!(comparison_row(&p, &list_of(decl(I32))), None);
+        assert_eq!(comparison_row(&p, &ref_to(list_of(decl(POINT)))), None);
+
+        let mut p = Builder::default().build();
+        p.comparisons = Some((EQ, ORD));
+        p.push_impl(generic(1, concrete(EQ, list_of(SolverType::Param(0)))));
+        let eq_for_i32 = p.push_impl(concrete(EQ, list_of(decl(I32))));
+        assert_eq!(
+            comparison_row(&p, &list_of(decl(I32))),
+            Some((EQ, eq_for_i32))
+        );
     }
 
     /// `type MyList<T> = List<T>` inherits at its own arguments.
@@ -1101,6 +1242,7 @@ mod tests {
                 requests: vec![DerivationRequest {
                     ty: decl(DURATION),
                     trait_: ALPHA,
+                    structural: false,
                 }],
                 ..Holds::default()
             })
@@ -1373,6 +1515,7 @@ mod tests {
                 requests: vec![DerivationRequest {
                     ty: decl(POINT),
                     trait_: ALPHA,
+                    structural: false,
                 }],
                 ..Holds::default()
             })

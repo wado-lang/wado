@@ -621,6 +621,15 @@ synthesis and the fold; then the prelude tags and fixtures.
   same static method fails the same way when spelled as a call, and both are
   pinned as `#[TODO]` — `reflect_pack_static_namespace_import_todo.wado` and
   `reflect_pack_blanket_static_todo.wado`.
+- Two shapes that differ only in their holes' source texts
+  (`` tag`${a}` `` and `` tag`${b}` ``, `a` and `b` of one type) are two types
+  with one name. A diagnostic relating them names the same type on both sides.
+- The type has no `Inspect`, though every other type does. An `assert` that
+  captures a template's value fails to compile
+  (``assert id`n=${n}` == id`n=${n}`;``), and the error names the type by its
+  internal symbol (`$tmpl$…`) rather than by the name above. How the value
+  prints is open: as the template it was written as, or as a struct of its
+  holes.
 - The monomorphization-time diagnostics the variadic WEP lists — call site,
   element index, body location — are what a failing tag body reports through,
   and are still open there.

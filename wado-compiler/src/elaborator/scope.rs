@@ -5,7 +5,7 @@
 //! path (WEP 2026-05-26).
 
 use std::borrow::Borrow;
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::hash::Hash;
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
@@ -265,8 +265,6 @@ pub(super) struct TraitCheckFrame {
     /// The arguments the asking bound wrote. Part of the key: the same trait
     /// at two instantiations is two questions.
     pub(super) wanted: Vec<FqTypeName>,
-    /// `Scope::member_edges` when the question was asked.
-    pub(super) member_edges: u32,
 }
 
 /// Per-function annotate-time scope, bundled so queries take one `&Scope`.
@@ -274,13 +272,8 @@ pub(super) struct TraitCheckFrame {
 #[derive(Default)]
 pub(super) struct Scope {
     pub(super) trait_ctx: TraitContext,
-    /// The `(type, trait)` questions open above the current one, each with
-    /// the member edges taken up to it — see `TraitCheckFrame`.
+    /// The `(type, trait)` questions open above the current one.
     pub(super) trait_check_stack: RefCell<Vec<TraitCheckFrame>>,
-    /// How many structural-member descents the open questions have taken. A
-    /// repeated question is grounded only when one of them lies between the
-    /// two askings.
-    pub(super) member_edges: Cell<u32>,
     /// The module that wrote the AST being resolved, while that is not this
     /// one — a default expression taken at a site in another module. Names in
     /// it resolve in their author's module, so this replaces the walk's own
