@@ -1767,8 +1767,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// What a body-less declaration states with `#[storage]` and
-    /// `#[side_effect]`. A `core:builtin` declaration owes both, unless it only
-    /// reserves a name. A Component Model import states neither: the raw call
+    /// `#[side_effect]`. It owes both, unless it only reserves a name. A
+    /// Component Model import states neither: the raw call
     /// its adapter makes carries the facts, the same for every import.
     fn reify_declared_facts(
         &self,

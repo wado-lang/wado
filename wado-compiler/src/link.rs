@@ -19,7 +19,7 @@ use crate::tir::{
 use crate::wir_build::component_plan;
 use crate::world_registry::TEST_WORLD;
 
-/// Snapshot what a `core:builtin` declared about storage, before
+/// Snapshot what a body-less declaration states about a call, before
 /// monomorphization drops the generic declarations the plan phase would read.
 ///
 /// Only a declaration stating `#[storage]` and `#[side_effect]` is snapshot, so
