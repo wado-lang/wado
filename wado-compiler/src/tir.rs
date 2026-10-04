@@ -5825,25 +5825,40 @@ pub enum InstancePattern {
         end: PatternLiteral,
         inclusive: bool,
     },
+    /// A range with a float bound.
+    FloatRange {
+        start: RangeBound,
+        end: RangeBound,
+        inclusive: bool,
+    },
 }
 
-impl InstancePattern {
-    /// This pattern on a scrutinee, unsigned where `is_unsigned`.
-    pub fn lower(&self, is_unsigned: bool) -> TirPattern {
-        match self {
-            InstancePattern::Literal(value) => TirPattern::Literal(value.to_tir(is_unsigned)),
-            InstancePattern::Range {
-                start,
-                end,
-                inclusive,
-            } => TirPattern::Range {
-                start: start.bits(),
-                end: end.bits(),
-                inclusive: *inclusive,
-                is_unsigned,
-            },
-        }
-    }
+/// What a range-pattern bound names: a value of an integer or `char`
+/// scrutinee, or a float, whose value turns on the float type that reads it.
+#[derive(Debug, Clone)]
+pub enum RangeBound {
+    Discrete(PatternLiteral),
+    Float(FloatBound),
+}
+
+/// A float range bound, before a float type rounds it.
+#[derive(Debug, Clone)]
+pub struct FloatBound {
+    pub kind: FloatBoundKind,
+    /// How a diagnostic writes it: `-1.5`, `f64::INFINITY`.
+    pub shown: String,
+}
+
+#[derive(Debug, Clone)]
+pub enum FloatBoundKind {
+    /// The unsigned literal `digits`, negated where `negated`.
+    Literal {
+        digits: String,
+        negated: bool,
+        suffix: Option<NumericSuffix>,
+    },
+    /// The limit `name` of the float type `owner`, as `f64::INFINITY`.
+    Limit { owner: PrimitiveType, name: String },
 }
 
 /// The value a literal pattern or range bound names, before a scrutinee type

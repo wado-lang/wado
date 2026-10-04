@@ -65,6 +65,10 @@ fn nested_ref(o: &Option<f64>) -> i32 {
     };
 }
 
+fn unit<T>(x: T) -> bool {
+    return x matches { 0.0..<1.0 };
+}
+
 test "a float range compares by the float order" {
     assert classify(builtin::black_box(-1.0)) == "negative";
     assert classify(builtin::black_box(-0.0)) == "unit";
@@ -102,6 +106,15 @@ test "a newtype, a payload and a reference read through" {
     assert by_ref(&builtin::black_box(1.0)) == 0;
     assert nested_ref(&builtin::black_box(Option::Some(0.5))) == 1;
     assert nested_ref(&builtin::black_box(Option::Some(1.0))) == 0;
+}
+
+test "a float range on a type parameter means what it does on each instance" {
+    assert unit(builtin::black_box(0.5));
+    assert unit(builtin::black_box(-0.0_f32));
+    assert !unit(builtin::black_box(f32::NAN));
+    assert unit(builtin::black_box(f16::from_f32(0.75)));
+    assert !unit(builtin::black_box(bf16::from_f32(1.0)));
+    assert unit(builtin::black_box(&0.5));
 }
 
 test "if let and matches take a float range" {

@@ -4447,9 +4447,10 @@ pub fn unparse_struct_field(struct_name: &str, field: &StructField) -> String {
 use crate::lexer::is_valid_ident;
 use crate::name::LocalMethodName;
 use crate::tir::{
-    InstancePattern, PatternLiteral, TirBinaryOp, TirBlock, TirEnum, TirExpr, TirExprKind,
-    TirFlags, TirFunction, TirGlobal, TirLiteralPattern, TirLocal, TirModule, TirParam, TirPattern,
-    TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId, TypeTable, receiver_value,
+    FloatBound, FloatBoundKind, InstancePattern, PatternLiteral, RangeBound, TirBinaryOp, TirBlock,
+    TirEnum, TirExpr, TirExprKind, TirFlags, TirFunction, TirGlobal, TirLiteralPattern, TirLocal,
+    TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId,
+    TypeTable, receiver_value,
 };
 
 /// Unparses TIR back to pseudo-Wado source code.
@@ -4995,6 +4996,15 @@ impl<'a> TirUnparser<'a> {
                     self.output.push_str(if *inclusive { "..=" } else { "..<" });
                     emit_pattern_literal(end, &mut self.output);
                 }
+                InstancePattern::FloatRange {
+                    start,
+                    end,
+                    inclusive,
+                } => {
+                    emit_range_bound(start, &mut self.output);
+                    self.output.push_str(if *inclusive { "..=" } else { "..<" });
+                    emit_range_bound(end, &mut self.output);
+                }
             },
         }
     }
@@ -5435,6 +5445,23 @@ fn emit_pattern_literal(value: &PatternLiteral, output: &mut String) {
         }
         PatternLiteral::Char(c) => output.push_str(&quoted_char(*c)),
         PatternLiteral::Bool(b) => output.push_str(if *b { "true" } else { "false" }),
+    }
+}
+
+fn emit_range_bound(bound: &RangeBound, output: &mut String) {
+    match bound {
+        RangeBound::Discrete(value) => emit_pattern_literal(value, output),
+        RangeBound::Float(FloatBound { kind, shown }) => {
+            output.push_str(shown);
+            if let FloatBoundKind::Literal {
+                suffix: Some(suffix),
+                ..
+            } = kind
+            {
+                output.push('_');
+                output.push_str(suffix.as_str());
+            }
+        }
     }
 }
 

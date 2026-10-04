@@ -8,7 +8,10 @@ use crate::elaborator::types::TypeError;
 use crate::escape::{unescape_byte, unescape_char};
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
-use crate::tir::{InstancePattern, PatternLiteral, ResolvedType, TirPattern, TypeId, TypeTable};
+use crate::tir::{
+    FloatBound, FloatBoundKind, InstancePattern, PatternLiteral, RangeBound, ResolvedType, TypeId,
+    TypeTable,
+};
 use crate::token::Span;
 
 /// Why the integer literal `repr` of `magnitude`, negated where `negated`, is no
@@ -74,31 +77,6 @@ pub(super) fn pattern_literal(lit: &Literal) -> Result<PatternLiteral, String> {
     }
 }
 
-/// What a range-pattern bound names: a value of an integer or `char`
-/// scrutinee, or a float, whose value turns on the float type that reads it.
-pub(super) enum RangeBound {
-    Discrete(PatternLiteral),
-    Float(FloatBound),
-}
-
-/// A float range bound, before a float type rounds it.
-pub(super) struct FloatBound {
-    kind: FloatBoundKind,
-    /// How a diagnostic writes it: `-1.5`, `f64::INFINITY`.
-    shown: String,
-}
-
-enum FloatBoundKind {
-    /// The unsigned literal `digits`, negated where `negated`.
-    Literal {
-        digits: String,
-        negated: bool,
-        suffix: Option<NumericSuffix>,
-    },
-    /// The limit `name` of the float type `owner`, as `f64::INFINITY`.
-    Limit { owner: PrimitiveType, name: String },
-}
-
 /// What a range-pattern bound names: a number, byte or char literal, or a
 /// primitive's limit (`i32::MAX`, `f64::INFINITY`). `None` for anything else,
 /// a user constant included.
@@ -154,11 +132,11 @@ pub(super) fn range_bound(
 }
 
 /// A float range pattern, its bounds rounded into the float type that reads it.
-pub(crate) struct FloatRange {
-    pub(crate) format: FloatFormat,
-    pub(crate) start: u64,
-    pub(crate) end: u64,
-    pub(crate) inclusive: bool,
+pub(super) struct FloatRange {
+    pub(super) format: FloatFormat,
+    pub(super) start: u64,
+    pub(super) end: u64,
+    pub(super) inclusive: bool,
 }
 
 impl FloatRange {
@@ -324,13 +302,27 @@ pub(super) fn settles_literal_patterns(type_table: &TypeTable, scrutinee: TypeId
     }
 }
 
-/// `pattern` on `scrutinee`, settled: an unsigned instance compares unsigned.
-pub(crate) fn lower_literal_pattern(
+/// Why `pattern` names no value of the settled `scrutinee`.
+pub(crate) fn instance_pattern_errors(
     pattern: &InstancePattern,
     scrutinee: TypeId,
-    type_table: &TypeTable,
-) -> TirPattern {
-    pattern.lower(type_table.is_unsigned_int(type_table.peel_refs(scrutinee)))
+    type_table: &mut TypeTable,
+) -> Vec<PatternLiteralError> {
+    match pattern {
+        InstancePattern::Literal(value) => pattern_literal_error(value, scrutinee, type_table)
+            .into_iter()
+            .collect(),
+        InstancePattern::Range { start, end, .. } => {
+            range_bound_errors(start, end, scrutinee, type_table)
+        }
+        InstancePattern::FloatRange {
+            start,
+            end,
+            inclusive,
+        } => float_range(start, end, *inclusive, scrutinee, type_table)
+            .err()
+            .unwrap_or_default(),
+    }
 }
 
 /// Why a literal pattern or range bound names no value of the settled
@@ -358,7 +350,7 @@ impl PatternLiteralError {
 }
 
 /// Why `lit` names no value of `scrutinee`.
-pub(crate) fn pattern_literal_error(
+pub(super) fn pattern_literal_error(
     lit: &PatternLiteral,
     scrutinee: TypeId,
     type_table: &mut TypeTable,
@@ -415,7 +407,7 @@ pub(super) fn pattern_literal_mismatch(
 }
 
 /// Why the bounds of a range pattern name no values of `scrutinee`.
-pub(crate) fn range_bound_errors(
+pub(super) fn range_bound_errors(
     start: &PatternLiteral,
     end: &PatternLiteral,
     scrutinee: TypeId,

@@ -4,11 +4,13 @@
 //! settled type is in the elaborator.
 
 use crate::compiler_host::CompilerHost;
+use crate::elaborator::reify::lower_instance_pattern;
 use crate::elaborator::types::TypeError;
-use crate::elaborator::util::{lower_literal_pattern, pattern_literal_error, range_bound_errors};
+use crate::elaborator::util::instance_pattern_errors;
 use crate::flat_package::FlatPackage;
 use crate::logger::{Bail, Logger};
-use crate::tir::{InstancePattern, TirPattern, TypeTable};
+use crate::synthesis::common::alloc_named_local;
+use crate::tir::{TirLocal, TirPattern, TypeTable};
 use crate::tir_visitor::TirMutVisitor;
 
 /// Lower every per-instance pattern, reporting each that names no value of
@@ -21,18 +23,20 @@ pub fn lower_instance_patterns<H: CompilerHost>(
     let mut reported = false;
     for func in &flat.functions {
         let mut func = func.borrow_mut();
-        let module_source = func.module_source.clone();
+        let func = &mut *func;
         let Some(body) = func.body.as_mut() else {
             continue;
         };
         let mut lowering = Lowering {
             type_table: &mut type_table,
+            local_count: &mut func.local_count,
+            locals: &mut func.locals,
             errors: Vec::new(),
         };
         lowering.visit_block(body);
         reported |= !lowering.errors.is_empty();
         for error in lowering.errors {
-            let _ = logger.error_in(&module_source, error);
+            let _ = logger.error_in(&func.module_source, error);
         }
     }
     if reported { Err(Bail) } else { Ok(()) }
@@ -40,6 +44,8 @@ pub fn lower_instance_patterns<H: CompilerHost>(
 
 struct Lowering<'a> {
     type_table: &'a mut TypeTable,
+    local_count: &'a mut u32,
+    locals: &'a mut Vec<TirLocal>,
     errors: Vec<TypeError>,
 }
 
@@ -53,21 +59,21 @@ impl TirMutVisitor for Lowering<'_> {
         else {
             return self.walk_pattern(pattern);
         };
-        let scrutinee_type = *scrutinee_type;
-        let errors = match instance {
-            InstancePattern::Literal(value) => {
-                pattern_literal_error(value, scrutinee_type, self.type_table)
-                    .into_iter()
-                    .collect()
+        let (scrutinee_type, span) = (*scrutinee_type, *span);
+        let errors = instance_pattern_errors(instance, scrutinee_type, self.type_table);
+        if !errors.is_empty() {
+            for error in errors {
+                self.errors
+                    .push(error.at(scrutinee_type, span, self.type_table));
             }
-            InstancePattern::Range { start, end, .. } => {
-                range_bound_errors(start, end, scrutinee_type, self.type_table)
-            }
-        };
-        for error in errors {
-            self.errors
-                .push(error.at(scrutinee_type, *span, self.type_table));
+            return;
         }
-        *pattern = lower_literal_pattern(instance, scrutinee_type, self.type_table);
+        *pattern = lower_instance_pattern(
+            instance,
+            scrutinee_type,
+            self.type_table,
+            |name, ty| alloc_named_local(self.local_count, self.locals, Some(name), ty, false),
+            span,
+        );
     }
 }

@@ -32,7 +32,6 @@ use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
 use super::tysys::TypeSystem;
 use super::util;
-use super::util::RangeBound;
 use crate::ast::{RangeExpr, Visibility};
 use crate::compiler_item::CompilerItem;
 use crate::const_eval::{Value, eval_cast, is_signed_int, prim_of};
@@ -54,7 +53,7 @@ use crate::elaborator::types::{
 use crate::escape::{self, unescape_byte, unescape_char};
 use crate::hashmap;
 use crate::primitive::PrimitiveType;
-use crate::tir::{AnonStructId, StructDef};
+use crate::tir::{AnonStructId, RangeBound, StructDef};
 use std::cell::OnceCell;
 use std::cmp::Ordering;
 use std::rc::Rc;
@@ -3389,7 +3388,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let start = util::range_bound(start, resolutions)?.ok()?;
         let end = util::range_bound(end, resolutions)?.ok()?;
         let inclusive = matches!(kind, ast::RangeKind::Inclusive);
+        // What a pattern on a type parameter names is decided per instance.
+        let settled =
+            util::settles_literal_patterns(&self.tysys.type_table.borrow(), scrutinee_type);
         let (RangeBound::Discrete(start), RangeBound::Discrete(end)) = (&start, &end) else {
+            if !settled {
+                return Some(Pat::Opaque);
+            }
             let range = util::float_range(
                 &start,
                 &end,
@@ -3404,8 +3409,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if util::range_order_error(start, end, inclusive).is_some() {
             return None;
         }
-        // What a pattern on a type parameter names is decided per instance.
-        if !util::settles_literal_patterns(&self.tysys.type_table.borrow(), scrutinee_type) {
+        if !settled {
             return Some(Pat::Opaque);
         }
         let errors = util::range_bound_errors(

@@ -1,0 +1,19 @@
+// A float range on a type parameter is judged on each instance: an integer
+// instance is no float, and a bound may round onto the other in a narrow one.
+
+fn unit<T>(x: T) -> bool {
+    return x matches { 0.0..<1.0 };
+}
+
+fn tight<T>(x: T) -> bool {
+    return x matches { 1.0..=1.0001 };
+}
+
+export fn run() {
+    let _ = unit(1) && tight(1.0) && tight(f16::from_f32(1.0));
+}
+
+__DATA__
+{
+  "compile_error": ":9:12: analysis error: invalid pattern: a float range with equal bounds names one value, as a float literal pattern would; 5:12: pattern mismatch: expected 'a float type', found 'i32'"
+}

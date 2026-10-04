@@ -25,10 +25,11 @@ use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, Receiver, global_init_function, global_name};
 use crate::symbol::SymbolTable;
 use crate::tir::{
-    self as tir, CallArg, GlobalInit, InstancePattern, LetStorage, LocalFrame, ResolvedType,
-    TirBinaryOp, TirBlock, TirEnum, TirEnumCase, TirExpr, TirExprKind, TirFlags, TirFlagsMember,
-    TirFunction, TirGlobal, TirModule, TirNewtype, TirPattern, TirStmt, TirStmtKind, TirStruct,
-    TirTest, TirUnaryOp, TirVariantDecl, TypeId, TypeTable, transpose_tuple_expr,
+    self as tir, CallArg, GlobalInit, InstancePattern, LetStorage, LocalFrame, RangeBound,
+    ResolvedType, TirBinaryOp, TirBlock, TirEnum, TirEnumCase, TirExpr, TirExprKind, TirFlags,
+    TirFlagsMember, TirFunction, TirGlobal, TirModule, TirNewtype, TirPattern, TirStmt,
+    TirStmtKind, TirStruct, TirTest, TirUnaryOp, TirVariantDecl, TypeId, TypeTable,
+    transpose_tuple_expr,
 };
 
 use super::coercion::{
@@ -66,8 +67,8 @@ use crate::elaborator::stmt::{
 use crate::elaborator::trait_query::trait_sig_of_with;
 use crate::elaborator::types::{VarRef, newtype_member_owner};
 use crate::elaborator::util::{
-    RangeBound, float_range, lower_literal_pattern, parse_i128_literal, parse_u128_literal,
-    pattern_literal, range_bound, settles_literal_patterns,
+    FloatRange, float_range, parse_i128_literal, parse_u128_literal, pattern_literal, range_bound,
+    settles_literal_patterns,
 };
 use crate::escape::{
     unescape_byte, unescape_bytes, unescape_char, unescape_string, unescape_template_segment,
@@ -8489,7 +8490,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return ControlFlow::Continue(inner);
         }
         let source = match source_half {
-            Some(half) => self.widen_half(inner, half, span),
+            Some(half) => widen_half(&self.tysys.type_table.borrow(), inner, half, span),
             None => inner,
         };
         let Some(half) = target_half else {
@@ -8524,16 +8525,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ControlFlow::Break(bare_cast(converted, target_type, span))
     }
 
-    /// The exact `f32` that `value`, of the half type `half`, holds.
-    fn widen_half(&self, value: TirExpr, half: PrimitiveType, span: Span) -> TirExpr {
-        let (base, widen) = match half {
-            PrimitiveType::F16 => (TypeTable::F16, CompilerItem::F16Widen),
-            PrimitiveType::Bf16 => (TypeTable::BF16, CompilerItem::Bf16Widen),
-            _ => unreachable!("`{}` is no half", half.as_str()),
-        };
-        self.rt_call(widen, bare_cast(value, base, span), TypeTable::F32, span)
-    }
-
     /// A call of the `core:rt` function `item` on `arg`.
     pub(super) fn rt_call(
         &self,
@@ -8542,18 +8533,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         result_type: TypeId,
         span: Span,
     ) -> TirExpr {
-        let func = {
-            let type_table = self.tysys.type_table.borrow();
-            let (module_source, name) = type_table.compiler_items().require_function(item);
-            FunctionRef {
-                module_source: module_source.clone(),
-                name: name.to_string(),
-                template: None,
-                monomorph_info: None,
-                method_info: None,
-            }
-        };
-        unary_call(func, arg, result_type, span)
+        rt_call(
+            &self.tysys.type_table.borrow(),
+            item,
+            arg,
+            result_type,
+            span,
+        )
     }
 
     /// A cast with a wide integer on either side, `inner` already read through
@@ -8982,10 +8968,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         pattern: InstancePattern,
         scrutinee_type: TypeId,
         site: Span,
+        ctx: &mut FunctionContext,
     ) -> TirPattern {
-        let type_table = self.tysys.type_table.borrow();
+        let mut type_table = self.tysys.type_table.borrow_mut();
         if settles_literal_patterns(&type_table, scrutinee_type) {
-            lower_literal_pattern(&pattern, scrutinee_type, &type_table)
+            lower_instance_pattern(
+                &pattern,
+                scrutinee_type,
+                &mut type_table,
+                |name, ty| ctx.add_local(name, ty, false, None),
+                site,
+            )
         } else {
             TirPattern::PerInstance {
                 pattern,
@@ -9148,94 +9141,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// A float range pattern: the scrutinee held in the local annotate
-    /// reserved, matching where it lies between the bounds. Neither bound is a
-    /// NaN, so IEEE's comparisons answer as the float order does, one
-    /// instruction each. A half compares as the `f32` it widens to exactly.
-    fn reify_float_range(
-        &mut self,
-        start: &RangeBound,
-        end: &RangeBound,
-        inclusive: bool,
-        scrutinee_type: TypeId,
-        span: Span,
-        ctx: &mut FunctionContext,
-    ) -> TirPattern {
-        let range = float_range(
-            start,
-            end,
-            inclusive,
-            scrutinee_type,
-            &mut self.tysys.type_table.borrow_mut(),
-        );
-        let Ok(range) = range else {
-            unreachable!("annotate diagnoses a float range that names no value");
-        };
-        // Lowering peels a reference scrutinee, as match ergonomics reads it.
-        let float_type = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
-        let name = float_range_local_name();
-        let local_index = ctx.add_local(name.clone(), float_type, false, None);
-        let value = TirExpr::new(
-            TirExprKind::Local {
-                index: local_index,
-                name,
-            },
-            float_type,
-            span,
-        );
-        let prim = self.tysys.type_table.borrow().primitive_head(float_type);
-        let (value, operand, width) = match prim {
-            Some(half @ (PrimitiveType::F16 | PrimitiveType::Bf16)) => {
-                (self.widen_half(value, half, span), TypeTable::F32, "f32")
-            }
-            Some(PrimitiveType::F32) => (
-                bare_cast(value, TypeTable::F32, span),
-                TypeTable::F32,
-                "f32",
-            ),
-            Some(PrimitiveType::F64) => (
-                bare_cast(value, TypeTable::F64, span),
-                TypeTable::F64,
-                "f64",
-            ),
-            _ => unreachable!("annotate admits a float range on a float alone"),
-        };
-        let bound = |bits: u64| {
-            let value = range.format.value(bits);
-            TirExpr::new(
-                TirExprKind::FloatLiteral {
-                    value,
-                    repr: value.to_string(),
-                },
-                operand,
-                span,
-            )
-        };
-        let compare = |op: &str, left, right| {
-            builtin_call(
-                &format!("{width}_ieee754_{op}"),
-                vec![left, right],
-                TypeTable::BOOL,
-            )
-        };
-        let below_end = if range.inclusive { "le" } else { "lt" };
-        let test = TirExpr::new(
-            TirExprKind::Binary {
-                op: TirBinaryOp::And,
-                left: Box::new(compare("ge", value.clone(), bound(range.start))),
-                right: Box::new(compare(below_end, value, bound(range.end))),
-            },
-            TypeTable::BOOL,
-            span,
-        );
-        TirPattern::Narrow {
-            name: None,
-            local_index,
-            type_id: float_type,
-            test: Box::new(test),
-        }
-    }
-
     /// `let [a, b] = value;`. Under `let mut`, every binding is mutable: each
     /// local carries its own mutability, which is all a later phase reads.
     fn reify_let_destructure(
@@ -9363,6 +9268,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             InstancePattern::Literal(value),
                             scrutinee_type,
                             site,
+                            ctx,
                         );
                     }
                 };
@@ -9541,10 +9447,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 TirPattern::Or(resolved)
             }
             ast::Pattern::Range {
-                start,
-                end,
-                kind,
-                span,
+                start, end, kind, ..
             } => {
                 let bound = |bound| {
                     range_bound(bound, &self.tysys.resolutions)
@@ -9552,19 +9455,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         .expect("annotate diagnoses a range bound that names no value")
                 };
                 let inclusive = matches!(kind, RangeKind::Inclusive);
-                match (bound(start), bound(end)) {
+                let pattern = match (bound(start), bound(end)) {
                     (RangeBound::Discrete(start), RangeBound::Discrete(end)) => {
-                        let pattern = InstancePattern::Range {
+                        InstancePattern::Range {
                             start,
                             end,
                             inclusive,
-                        };
-                        self.literal_value_pattern(pattern, scrutinee_type, site)
+                        }
                     }
-                    (start, end) => {
-                        self.reify_float_range(&start, &end, inclusive, scrutinee_type, *span, ctx)
-                    }
-                }
+                    (start, end) => InstancePattern::FloatRange {
+                        start,
+                        end,
+                        inclusive,
+                    },
+                };
+                self.literal_value_pattern(pattern, scrutinee_type, site, ctx)
             }
             ast::Pattern::Struct {
                 fields, has_rest, ..
@@ -10576,6 +10481,153 @@ pub(crate) fn default_impl_methods(decl: &InterfaceDecl) -> Vec<ast::Function> {
             ..method.clone()
         })
         .collect()
+}
+
+/// A call of the `core:rt` function `item` on `arg`.
+fn rt_call(
+    type_table: &TypeTable,
+    item: CompilerItem,
+    arg: TirExpr,
+    result_type: TypeId,
+    span: Span,
+) -> TirExpr {
+    let (module_source, name) = type_table.compiler_items().require_function(item);
+    let func = FunctionRef {
+        module_source: module_source.clone(),
+        name: name.to_string(),
+        template: None,
+        monomorph_info: None,
+        method_info: None,
+    };
+    unary_call(func, arg, result_type, span)
+}
+
+/// The exact `f32` that `value`, of the half type `half`, holds.
+fn widen_half(type_table: &TypeTable, value: TirExpr, half: PrimitiveType, span: Span) -> TirExpr {
+    let (base, widen) = match half {
+        PrimitiveType::F16 => (TypeTable::F16, CompilerItem::F16Widen),
+        PrimitiveType::Bf16 => (TypeTable::BF16, CompilerItem::Bf16Widen),
+        _ => unreachable!("`{}` is no half", half.as_str()),
+    };
+    rt_call(
+        type_table,
+        widen,
+        bare_cast(value, base, span),
+        TypeTable::F32,
+        span,
+    )
+}
+
+/// `pattern` on the settled `scrutinee`, which names a value of it: an
+/// unsigned instance compares unsigned, and a float range holds the scrutinee
+/// in the local `add_local` allocates.
+pub(crate) fn lower_instance_pattern(
+    pattern: &InstancePattern,
+    scrutinee: TypeId,
+    type_table: &mut TypeTable,
+    add_local: impl FnOnce(String, TypeId) -> u32,
+    span: Span,
+) -> TirPattern {
+    let is_unsigned = type_table.is_unsigned_int(type_table.peel_refs(scrutinee));
+    match pattern {
+        InstancePattern::Literal(value) => TirPattern::Literal(value.to_tir(is_unsigned)),
+        InstancePattern::Range {
+            start,
+            end,
+            inclusive,
+        } => TirPattern::Range {
+            start: start.bits(),
+            end: end.bits(),
+            inclusive: *inclusive,
+            is_unsigned,
+        },
+        InstancePattern::FloatRange {
+            start,
+            end,
+            inclusive,
+        } => {
+            let Ok(range) = float_range(start, end, *inclusive, scrutinee, type_table) else {
+                unreachable!("the caller reports a float range that names no value");
+            };
+            // Lowering peels a reference scrutinee, as match ergonomics reads it.
+            let float_type = type_table.peel_refs(scrutinee);
+            let local_index = add_local(float_range_local_name(), float_type);
+            float_range_narrow(&range, float_type, local_index, type_table, span)
+        }
+    }
+}
+
+/// A float range holding its scrutinee, of `float_type`, in `local_index`,
+/// matching where it lies between the bounds. Neither bound is a NaN, so IEEE's
+/// comparisons answer as the float order does, one instruction each. A half
+/// compares as the `f32` it widens to exactly.
+fn float_range_narrow(
+    range: &FloatRange,
+    float_type: TypeId,
+    local_index: u32,
+    type_table: &TypeTable,
+    span: Span,
+) -> TirPattern {
+    let value = TirExpr::new(
+        TirExprKind::Local {
+            index: local_index,
+            name: float_range_local_name(),
+        },
+        float_type,
+        span,
+    );
+    let (value, operand, width) = match type_table.primitive_head(float_type) {
+        Some(half @ (PrimitiveType::F16 | PrimitiveType::Bf16)) => (
+            widen_half(type_table, value, half, span),
+            TypeTable::F32,
+            "f32",
+        ),
+        Some(PrimitiveType::F32) => (
+            bare_cast(value, TypeTable::F32, span),
+            TypeTable::F32,
+            "f32",
+        ),
+        Some(PrimitiveType::F64) => (
+            bare_cast(value, TypeTable::F64, span),
+            TypeTable::F64,
+            "f64",
+        ),
+        _ => unreachable!("a float range reads a float"),
+    };
+    let bound = |bits: u64| {
+        let value = range.format.value(bits);
+        TirExpr::new(
+            TirExprKind::FloatLiteral {
+                value,
+                repr: value.to_string(),
+            },
+            operand,
+            span,
+        )
+    };
+    let compare = |op: &str, left, right| {
+        builtin_call(
+            &format!("{width}_ieee754_{op}"),
+            vec![left, right],
+            TypeTable::BOOL,
+        )
+    };
+    let below_end = if range.inclusive { "le" } else { "lt" };
+    let test = TirExpr::new(
+        TirExprKind::Binary {
+            op: TirBinaryOp::And,
+            left: Box::new(compare("ge", value.clone(), bound(range.start))),
+            right: Box::new(compare(below_end, value, bound(range.end))),
+        },
+        TypeTable::BOOL,
+        span,
+    );
+    TirPattern::Narrow {
+        name: None,
+        local_index,
+        type_id: float_type,
+        test: Box::new(test),
+    }
 }
 
 /// A call of `func` on the one argument `arg`.

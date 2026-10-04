@@ -6,7 +6,7 @@ use crate::ast::{
     Type, WhileStmt, walk_expr, walk_stmt,
 };
 use crate::compiler_host::CompilerHost;
-use crate::tir::{ResolvedType, TirPattern, TypeId, TypeTable};
+use crate::tir::{RangeBound, ResolvedType, TirPattern, TypeId, TypeTable};
 use crate::tir_visitor::remap_local_reads;
 use crate::token::Span;
 
@@ -25,7 +25,6 @@ use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
 use crate::elaborator::synth::ArgClass;
 use crate::elaborator::trait_query::assoc_const_owner;
 use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, ParamSlot, StructFieldInfo};
-use crate::elaborator::util::RangeBound;
 use crate::name::{
     constant_pattern_local_name, float_range_local_name, for_body_label, mangle_local_item_name,
     minted_name, namespace_member_alias,
@@ -2298,7 +2297,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let inclusive = matches!(kind, RangeKind::Inclusive);
         let (RangeBound::Discrete(start), RangeBound::Discrete(end)) = (&start, &end) else {
-            if scrutinee_type == TypeTable::ERROR {
+            if !self.settles_literal_patterns(scrutinee_type) {
                 return;
             }
             let range = util::float_range(
