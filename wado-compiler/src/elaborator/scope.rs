@@ -136,7 +136,7 @@ pub(super) struct ImplBindings {
 
 /// Where a generic associated type's declaration is read: the type standing
 /// for the trait's `Self`, and the arguments its parameters take there, one
-/// per parameter — `None` where the site does not know them.
+/// per type parameter — `None` where a bare bound left one unwritten.
 #[derive(Clone, Debug)]
 pub(super) struct FamilySite {
     pub(super) base: TypeId,

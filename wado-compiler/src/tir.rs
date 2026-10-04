@@ -562,9 +562,10 @@ pub enum ResolvedType {
         // Part of the identity, so a projection built under one module's
         // `FromStr` is never answered by another's.
         owning_trait: DefId,
-        /// The arguments `owning_trait` is reached at, one per its parameter:
-        /// `<T as Holder<i32>>::Out` and `<T as Holder<String>>::Out` are two
-        /// types. `None` where the building frame did not know them.
+        /// The arguments `owning_trait` is reached at, one per its type
+        /// parameter: `<T as Holder<i32>>::Out` and `<T as Holder<String>>::Out`
+        /// are two types. `None` where a bare bound (`T: Holder`) left a
+        /// parameter with no default unwritten.
         ///
         /// What the declaration bounds the projection by is read off its
         /// [`AssocTypeSig`] at these, never stored: a projection is built while
@@ -3423,8 +3424,8 @@ impl TypeTable {
 
     /// Whether `a` and `b` project one associated type off one base at one
     /// list of arguments: the same type, whatever bindings each carries from
-    /// the frame that built it. A side whose frame did not know the trait's
-    /// arguments names no other ones.
+    /// the frame that built it. A side reached by a bare bound names no other
+    /// trait arguments.
     pub fn projects_alike(&self, a: TypeId, b: TypeId) -> bool {
         match (self.get(a), self.get(b)) {
             (

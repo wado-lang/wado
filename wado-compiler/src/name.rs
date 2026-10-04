@@ -2849,7 +2849,7 @@ pub struct ProjectionHead {
     owning_trait: DeclaredHead,
     /// The arguments the trait is reached at, part of the identity too:
     /// `Holder<i32>`'s `Out` and `Holder<String>`'s are two types. `None`
-    /// where the projection does not know them.
+    /// where a bare bound left one unwritten.
     trait_args: Option<Vec<FqTypeName>>,
 }
 
@@ -3350,7 +3350,7 @@ pub struct Projected<'n> {
     pub assoc: &'n str,
     /// The trait declaring it.
     pub owning_trait: DefId,
-    /// The arguments the trait is reached at, `None` where unknown.
+    /// The arguments the trait is reached at; see [`ProjectionHead`].
     pub trait_args: Option<&'n [FqTypeName]>,
 }
 
