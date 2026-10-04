@@ -974,17 +974,17 @@ internal fn follow_open_with(cont: i64, open: i64) -> i64 {
     return cont & FOLLOW_CONT_MASK | follow_open_join(follow_open_mark(cont), open);
 }
 
-internal fn follow_then(prefix: i64, positions: i64, cont: i64) -> i64 {
-    return (prefix | (cont & FOLLOW_SEQUENCED) << positions * FOLLOW_SLOT_BITS) & FOLLOW_CONT_MASK;
+internal fn follow_then(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    return (prefix | (cont & FOLLOW_SEQUENCED) << prefix_bits) & FOLLOW_CONT_MASK;
 }
 
-internal fn follow_then_opening(prefix: i64, positions: i64, cont: i64) -> i64 {
-    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_then_opening(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | follow_open_mark(cont);
 }
 
-internal fn follow_or(prefix: i64, positions: i64, alternative: i64) -> i64 {
-    let opened = (alternative | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_or(prefix: i64, prefix_bits: i64, alternative: i64) -> i64 {
+    let opened = (alternative | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | alternative & FOLLOW_OPEN_FIELD;
 }
 
@@ -1120,7 +1120,17 @@ impl<G: Eq> ScanMemo<G> {
         return self.entries[entry].gate_out;
     }
 
-    internal fn put(&mut self, rule: i32, pos: i32, min_prec: i32, follow: i64, cont: i64, gate_in: G, end: i32, gate_out: G) {
+    internal fn put(
+        &mut self,
+        rule: i32,
+        pos: i32,
+        min_prec: i32,
+        follow: i64,
+        cont: i64,
+        gate_in: G,
+        end: i32,
+        gate_out: G,
+    ) {
         self.entries.push(ScanMemoEntry { next: self.heads[pos], rule, min_prec, follow, cont, gate_in, end, gate_out });
         self.heads[pos] = self.entries.len() - 1;
     }
@@ -1813,7 +1823,7 @@ fn scan_expr__walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, min_p
 
 fn _parse_start__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 0;
-    _parse_block(p, follow_then(FOLLOW_MASK_0, 1, follow));
+    _parse_block(p, follow_then(FOLLOW_MASK_0, 8, follow));
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
 }
@@ -1832,7 +1842,7 @@ fn _parse_start(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_LB, &SYNC_0, false);
     p.site = 1;
-    _parse_stmts(p, follow_then(FOLLOW_MASK_1, 1, follow));
+    _parse_stmts(p, follow_then(FOLLOW_MASK_1, 8, follow));
     p.expect(TK_RB, &EMPTY_SYNC, true);
     return;
 }
@@ -1859,7 +1869,7 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
             rep_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                pos = scan_stmt(tokens, pos, &mut p.memo, follow_open_with(follow_then_opening(FOLLOW_MASK_3, 2, follow), follow_open_set(FOLLOW_MASK_2)));
+                pos = scan_stmt(tokens, pos, &mut p.memo, follow_open_with(follow_then_opening(FOLLOW_MASK_3, 16, follow), follow_open_set(FOLLOW_MASK_2)));
                 if pos < 0 { break rep_scan; }
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
@@ -1890,7 +1900,7 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
                     let _rec_spec = p.speculating;
                     p.speculating = true;
                     p.site = 2;
-                    _parse_stmt(p, follow_open_with(follow_then_opening(FOLLOW_MASK_3, 2, follow), follow_open_set(FOLLOW_MASK_2)));
+                    _parse_stmt(p, follow_open_with(follow_then_opening(FOLLOW_MASK_3, 16, follow), follow_open_set(FOLLOW_MASK_2)));
                     p.speculating = _rec_spec;
                     p.recovering = _rec_sav;
                     p.pos = _rec_pos;
@@ -1901,7 +1911,7 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
         }
         _plus_first = false;
         p.site = 2;
-        _parse_stmt(p, follow_open_with(follow_then_opening(FOLLOW_MASK_3, 2, follow), follow_open_set(FOLLOW_MASK_2)));
+        _parse_stmt(p, follow_open_with(follow_then_opening(FOLLOW_MASK_3, 16, follow), follow_open_set(FOLLOW_MASK_2)));
     }
     let mut opt_enter: bool = _kind_set_1(p.peek_kind());
     if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
@@ -1924,11 +1934,11 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn scan_stmts__alt_0(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_stmt(tokens, pos, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_3, 2, follow), follow_open_set(FOLLOW_MASK_2)));
+    pos = scan_stmt(tokens, pos, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_3, 16, follow), follow_open_set(FOLLOW_MASK_2)));
     if pos < 0 { return -1; }
     while pos < tokens.len() && _kind_set_2(tokens[pos]) && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
-        pos = scan_stmt(tokens, pos, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_3, 2, follow), follow_open_set(FOLLOW_MASK_2)));
+        pos = scan_stmt(tokens, pos, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_3, 16, follow), follow_open_set(FOLLOW_MASK_2)));
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
         let dk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };

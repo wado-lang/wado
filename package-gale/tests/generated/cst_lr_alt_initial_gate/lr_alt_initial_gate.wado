@@ -978,7 +978,17 @@ impl<G: Eq> ScanMemo<G> {
         return self.entries[entry].gate_out;
     }
 
-    internal fn put(&mut self, rule: i32, pos: i32, min_prec: i32, follow: i64, cont: i64, gate_in: G, end: i32, gate_out: G) {
+    internal fn put(
+        &mut self,
+        rule: i32,
+        pos: i32,
+        min_prec: i32,
+        follow: i64,
+        cont: i64,
+        gate_in: G,
+        end: i32,
+        gate_out: G,
+    ) {
         self.entries.push(ScanMemoEntry { next: self.heads[pos], rule, min_prec, follow, cont, gate_in, end, gate_out });
         self.heads[pos] = self.entries.len() - 1;
     }
@@ -1593,10 +1603,10 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut Sc
     let start_gate = *gate;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if kind == TK_ID && (gate.no_struct == 0) {
+    if kind == TK_ID && gate.no_struct == 0 {
         pos = start + 1;
         try_1: {
-            if !(gate.no_struct == 0) { break try_1; }
+            if gate.no_struct != 0 { break try_1; }
             return pos;
         }
         return -1;
@@ -1746,7 +1756,7 @@ fn _parse_stmt(p: &mut Parser) -> () {
 fn _parse_e__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
-    if kind == TK_ID && (p.no_struct == 0) {
+    if kind == TK_ID && p.no_struct == 0 {
         p.expect(TK_ID, &SYNC_1, true);
         return;
     } else if kind == TK_LB {

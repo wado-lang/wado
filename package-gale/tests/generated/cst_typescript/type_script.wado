@@ -1018,17 +1018,17 @@ internal fn follow_open_with(cont: i64, open: i64) -> i64 {
     return cont & FOLLOW_CONT_MASK | follow_open_join(follow_open_mark(cont), open);
 }
 
-internal fn follow_then(prefix: i64, positions: i64, cont: i64) -> i64 {
-    return (prefix | (cont & FOLLOW_SEQUENCED) << positions * FOLLOW_SLOT_BITS) & FOLLOW_CONT_MASK;
+internal fn follow_then(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    return (prefix | (cont & FOLLOW_SEQUENCED) << prefix_bits) & FOLLOW_CONT_MASK;
 }
 
-internal fn follow_then_opening(prefix: i64, positions: i64, cont: i64) -> i64 {
-    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_then_opening(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | follow_open_mark(cont);
 }
 
-internal fn follow_or(prefix: i64, positions: i64, alternative: i64) -> i64 {
-    let opened = (alternative | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_or(prefix: i64, prefix_bits: i64, alternative: i64) -> i64 {
+    let opened = (alternative | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | alternative & FOLLOW_OPEN_FIELD;
 }
 
@@ -1164,7 +1164,17 @@ impl<G: Eq> ScanMemo<G> {
         return self.entries[entry].gate_out;
     }
 
-    internal fn put(&mut self, rule: i32, pos: i32, min_prec: i32, follow: i64, cont: i64, gate_in: G, end: i32, gate_out: G) {
+    internal fn put(
+        &mut self,
+        rule: i32,
+        pos: i32,
+        min_prec: i32,
+        follow: i64,
+        cont: i64,
+        gate_in: G,
+        end: i32,
+        gate_out: G,
+    ) {
         self.entries.push(ScanMemoEntry { next: self.heads[pos], rule, min_prec, follow, cont, gate_in, end, gate_out });
         self.heads[pos] = self.entries.len() - 1;
     }
@@ -2621,7 +2631,7 @@ fn try_RegularExpressionLiteral(chars: &List<char>, start: i32) -> i32 with Type
         pos = rep_saved_7;
         break;
     }
-    if !(TypeScriptLexerBase::is_regex_possible(LexerView { chars, start, pos })) { return -1; }
+    if !TypeScriptLexerBase::is_regex_possible(LexerView { chars, start, pos }) { return -1; }
     if pos >= chars.len() || chars[pos] != '/' { return -1; }
     pos += 1;
     loop {
@@ -2674,7 +2684,7 @@ fn try_OpenBrace(chars: &List<char>, start: i32) -> i32 {
 
 fn try_TemplateCloseBrace(chars: &List<char>, start: i32) -> i32 with TypeScriptLexerBase {
     let mut pos = start;
-    if !(TypeScriptLexerBase::is_in_template_string(LexerView { chars, start, pos })) { return -1; }
+    if !TypeScriptLexerBase::is_in_template_string(LexerView { chars, start, pos }) { return -1; }
     if pos >= chars.len() || chars[pos] != '}' { return -1; }
     pos += 1;
     return pos;
@@ -3237,28 +3247,20 @@ fn try_OctalIntegerLiteral(chars: &List<char>, start: i32) -> i32 with TypeScrip
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '0' { return -1; }
     pos += 1;
-    let mut accept_17: i32 = -1;
-    let mut la_reach_17: i32 = -1;
+    let mut la_end_17: i32 = -1;
     if pos >= chars.len() { return -1; }
     if !(chars[pos] matches { '0'..='7' }) { return -1; }
     pos += 1;
     loop {
         let mut la_tot_18: i32 = -1;
         let peek_save_19 = pos;
-        let mut peek_ok_19 = false;
-        let mut peek_end_19: i32 = -1;
         peek_19: {
-            if !(!TypeScriptLexerBase::is_strict_mode(LexerView { chars, start, pos })) { break peek_19; }
-            peek_end_19 = pos;
-            peek_ok_19 = true;
+            if TypeScriptLexerBase::is_strict_mode(LexerView { chars, start, pos }) { break peek_19; }
+            la_tot_18 = pos;
         }
         pos = peek_save_19;
-        if peek_ok_19 {
-            la_tot_18 = peek_end_19;
-        }
-        if la_tot_18 >= 0 && la_tot_18 >= la_reach_17 {
-            la_reach_17 = la_tot_18;
-            accept_17 = pos;
+        if la_tot_18 >= 0 && la_tot_18 >= la_end_17 {
+            la_end_17 = la_tot_18;
         }
         let la_saved_17 = pos;
         la_rep_17: {
@@ -3270,10 +3272,10 @@ fn try_OctalIntegerLiteral(chars: &List<char>, start: i32) -> i32 with TypeScrip
         pos = la_saved_17;
         break;
     }
-    if accept_17 < 0 {
+    if la_end_17 < 0 {
         return -1;
     }
-    pos = la_reach_17;
+    pos = la_end_17;
     return pos;
 }
 
@@ -6107,7 +6109,7 @@ fn scan_type_parameters(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo:
     if pos < tokens.len() && _kind_set_0(tokens[pos]) {
         let sp = pos;
         atn.stack.push(342);
-        pos = scan_type_parameter_list(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_0, 1, follow));
+        pos = scan_type_parameter_list(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_0, 8, follow));
         atn.stack.pop();
         if pos < 0 { pos = sp; }
     }
@@ -6119,7 +6121,7 @@ fn scan_type_parameters(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo:
 fn scan_type_parameter_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(349);
-    pos = scan_type_parameter(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_1, 2, follow));
+    pos = scan_type_parameter(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_1, 16, follow));
     atn.stack.pop();
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_Comma && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
@@ -6128,7 +6130,7 @@ fn scan_type_parameter_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, m
             sg_81: {
                 pos += 1;
                 atn.stack.push(358);
-                pos = scan_type_parameter(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_1, 2, follow));
+                pos = scan_type_parameter(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_1, 16, follow));
                 atn.stack.pop();
                 if pos < 0 { break sg_81; }
                 break sg_81_done;
@@ -6191,7 +6193,7 @@ fn scan_type_arguments(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: 
     if pos < tokens.len() && _kind_set_3(tokens[pos]) {
         let sp = pos;
         atn.stack.push(394);
-        pos = scan_type_argument_list(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_0, 1, follow));
+        pos = scan_type_argument_list(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_0, 8, follow));
         atn.stack.pop();
         if pos < 0 { pos = sp; }
     }
@@ -6203,7 +6205,7 @@ fn scan_type_arguments(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: 
 fn scan_type_argument_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(401);
-    pos = scan_type_argument(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_4, 2, follow));
+    pos = scan_type_argument(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_4, 16, follow));
     atn.stack.pop();
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_Comma && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
@@ -6212,7 +6214,7 @@ fn scan_type_argument_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, me
             sg_56: {
                 pos += 1;
                 atn.stack.push(410);
-                pos = scan_type_argument(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_4, 2, follow));
+                pos = scan_type_argument(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_4, 16, follow));
                 atn.stack.pop();
                 if pos < 0 { break sg_56; }
                 break sg_56_done;
@@ -6353,7 +6355,7 @@ fn scan_primary_type_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
         pos = start + 1;
         try_0: {
             atn.stack.push(465);
-            pos = scan_type_(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_5, 1, follow));
+            pos = scan_type_(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_5, 8, follow));
             atn.stack.pop();
             if pos < 0 { break try_0; }
             if pos >= tokens.len() || tokens[pos] != TK_CloseParen { break try_0; }
@@ -6409,7 +6411,7 @@ fn scan_primary_type_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
         pos = start + 1;
         try_5: {
             atn.stack.push(481);
-            pos = scan_tuple_element_types(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_6, 1, follow));
+            pos = scan_tuple_element_types(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_6, 8, follow));
             atn.stack.pop();
             if pos < 0 { break try_5; }
             if pos >= tokens.len() || tokens[pos] != TK_CloseBracket { break try_5; }
@@ -6440,7 +6442,7 @@ fn scan_primary_type_lr_4(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
     if pos < tokens.len() && _kind_set_7(tokens[pos]) {
         let sp = pos;
         atn.stack.push(511);
-        pos = scan_primary_type(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_6, 1, follow), 0);
+        pos = scan_primary_type(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_6, 8, follow), 0);
         atn.stack.pop();
         if pos < 0 { pos = sp; }
     }
@@ -6533,7 +6535,7 @@ fn scan_type_generic(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &m
     if pos < tokens.len() && tokens[pos] == TK_LessThan {
         let sp = pos;
         atn.stack.push(578);
-        pos = scan_type_generic(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_0, 1, follow));
+        pos = scan_type_generic(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_0, 8, follow));
         atn.stack.pop();
         if pos < 0 { pos = sp; }
     }
@@ -6565,7 +6567,7 @@ fn scan_object_type(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mu
     if pos < tokens.len() && _kind_set_15(tokens[pos]) {
         let sp = pos;
         atn.stack.push(597);
-        pos = scan_type_body(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 1, follow));
+        pos = scan_type_body(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 8, follow));
         atn.stack.pop();
         if pos < 0 { pos = sp; }
     }
@@ -6591,7 +6593,7 @@ fn scan_type_body(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut 
 fn scan_type_member_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(619);
-    pos = scan_type_member(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_11, 2, follow));
+    pos = scan_type_member(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_11, 16, follow));
     atn.stack.pop();
     if pos < 0 { return -1; }
     while pos < tokens.len() && _kind_set_16(tokens[pos]) && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
@@ -6600,7 +6602,7 @@ fn scan_type_member_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo
             sg_120: {
                 pos += 1;
                 atn.stack.push(634);
-                pos = scan_type_member(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_11, 2, follow));
+                pos = scan_type_member(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_11, 16, follow));
                 atn.stack.pop();
                 if pos < 0 { break sg_120; }
                 break sg_120_done;
@@ -6677,7 +6679,7 @@ fn scan_tuple_element_types(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, m
     let scan_start = pos;
     let mut pos = pos;
     atn.stack.push(684);
-    pos = scan_type_(tokens, pos, atn, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_4, 2, follow), follow_open_set(FOLLOW_MASK_14)));
+    pos = scan_type_(tokens, pos, atn, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_4, 16, follow), follow_open_set(FOLLOW_MASK_14)));
     atn.stack.pop();
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_Comma && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
@@ -6686,7 +6688,7 @@ fn scan_tuple_element_types(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, m
             sg_137: {
                 pos += 1;
                 atn.stack.push(693);
-                pos = scan_type_(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_4, 2, follow));
+                pos = scan_type_(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_4, 16, follow));
                 atn.stack.pop();
                 if pos < 0 { break sg_137; }
                 break sg_137_done;
@@ -6954,7 +6956,7 @@ fn scan_parameter_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: 
     } else if _kind_set_37(kind) {
         try_1: {
             atn.stack.push(822);
-            pos = scan_parameter(tokens, pos, atn, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_20, 2, follow), follow_open_set(FOLLOW_MASK_14)));
+            pos = scan_parameter(tokens, pos, atn, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_20, 16, follow), follow_open_set(FOLLOW_MASK_14)));
             atn.stack.pop();
             if pos < 0 { break try_1; }
             while pos < tokens.len() && tokens[pos] == TK_Comma && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
@@ -6963,7 +6965,7 @@ fn scan_parameter_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: 
                     sg_106: {
                         pos += 1;
                         atn.stack.push(831);
-                        pos = scan_parameter(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_20, 2, follow));
+                        pos = scan_parameter(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_20, 16, follow));
                         atn.stack.pop();
                         if pos < 0 { break sg_106; }
                         break sg_106_done;
@@ -7388,7 +7390,7 @@ fn scan_constructor_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
                         sg_72: {
                             pos += 1;
                             atn.stack.push(1050);
-                            pos = scan_function_body(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 1, follow));
+                            pos = scan_function_body(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 8, follow));
                             atn.stack.pop();
                             if pos < 0 { break sg_72; }
                             if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break sg_72; }
@@ -7460,7 +7462,7 @@ fn scan_interface_extends_clause(tokens: &Array<i32>, pos: i32, atn: &mut AtnSta
 fn scan_class_or_interface_type_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1096);
-    pos = scan_type_reference(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_30, 2, follow));
+    pos = scan_type_reference(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_30, 16, follow));
     atn.stack.pop();
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_Comma && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
@@ -7469,7 +7471,7 @@ fn scan_class_or_interface_type_list(tokens: &Array<i32>, pos: i32, atn: &mut At
             sg_73: {
                 pos += 1;
                 atn.stack.push(1105);
-                pos = scan_type_reference(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_30, 2, follow));
+                pos = scan_type_reference(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_30, 16, follow));
                 atn.stack.pop();
                 if pos < 0 { break sg_73; }
                 break sg_73_done;
@@ -7496,7 +7498,7 @@ fn scan_enum_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo
     if pos < tokens.len() && _kind_set_23(tokens[pos]) {
         let sp = pos;
         atn.stack.push(1123);
-        pos = scan_enum_body(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 1, follow));
+        pos = scan_enum_body(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 8, follow));
         atn.stack.pop();
         if pos < 0 { pos = sp; }
     }
@@ -7520,7 +7522,7 @@ fn scan_enum_body(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut 
 fn scan_enum_member_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1139);
-    pos = scan_enum_member(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_31, 2, follow));
+    pos = scan_enum_member(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_31, 16, follow));
     atn.stack.pop();
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_Comma && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
@@ -7529,7 +7531,7 @@ fn scan_enum_member_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo
             sg_110: {
                 pos += 1;
                 atn.stack.push(1148);
-                pos = scan_enum_member(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_31, 2, follow));
+                pos = scan_enum_member(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_31, 16, follow));
                 atn.stack.pop();
                 if pos < 0 { break sg_110; }
                 break sg_110_done;
@@ -7592,7 +7594,7 @@ fn scan_namespace_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState,
     if pos < tokens.len() && _kind_set_46(tokens[pos]) {
         let sp = pos;
         atn.stack.push(1180);
-        pos = scan_statement_list(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 1, follow));
+        pos = scan_statement_list(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 8, follow));
         atn.stack.pop();
         if pos < 0 { pos = sp; }
     }
@@ -7686,7 +7688,7 @@ fn scan_decorator_member_expression_atom(tokens: &Array<i32>, pos: i32, atn: &mu
         pos = start + 1;
         try_2: {
             atn.stack.push(1240);
-            pos = scan_single_expression(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_5, 1, follow), 0);
+            pos = scan_single_expression(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_5, 8, follow), 0);
             atn.stack.pop();
             if pos < 0 { break try_2; }
             if pos >= tokens.len() || tokens[pos] != TK_CloseParen { break try_2; }
@@ -8127,7 +8129,7 @@ fn scan_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut Scan
     if pos < tokens.len() && _kind_set_46(tokens[pos]) {
         let sp = pos;
         atn.stack.push(1372);
-        pos = scan_statement_list(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 1, follow));
+        pos = scan_statement_list(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 8, follow));
         atn.stack.pop();
         if pos < 0 { pos = sp; }
     }
@@ -8313,7 +8315,7 @@ fn scan_import_module_items(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, m
         let sp = pos;
         sg_95_done: {
             sg_95: {
-                pos = scan_import_alias_name(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_14, 1, follow));
+                pos = scan_import_alias_name(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_14, 8, follow));
                 if pos < 0 { break sg_95; }
                 if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_95; }
                 pos += 1;
@@ -8425,7 +8427,7 @@ fn scan_module_export_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, me
 
 fn scan_import_default(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_alias_name(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_14, 1, follow));
+    pos = scan_alias_name(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_14, 8, follow));
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_Comma { return -1; }
     pos += 1;
@@ -8551,7 +8553,7 @@ fn scan_export_module_items(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, m
         let sp = pos;
         sg_86_done: {
             sg_86: {
-                pos = scan_export_alias_name(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_14, 1, follow));
+                pos = scan_export_alias_name(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_14, 8, follow));
                 if pos < 0 { break sg_86; }
                 if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_86; }
                 pos += 1;
@@ -8717,7 +8719,7 @@ fn scan_variable_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, me
 fn scan_variable_declaration_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1689);
-    pos = scan_variable_declaration(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_44, 2, follow));
+    pos = scan_variable_declaration(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_44, 16, follow));
     atn.stack.pop();
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_Comma && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
@@ -8726,7 +8728,7 @@ fn scan_variable_declaration_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnSt
             sg_82: {
                 pos += 1;
                 atn.stack.push(1698);
-                pos = scan_variable_declaration(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_44, 2, follow));
+                pos = scan_variable_declaration(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_44, 16, follow));
                 atn.stack.pop();
                 if pos < 0 { break sg_82; }
                 break sg_82_done;
@@ -9090,13 +9092,13 @@ fn scan_case_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut
 fn scan_case_clauses(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2064);
-    pos = scan_case_clause(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_53, 2, follow));
+    pos = scan_case_clause(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_53, 16, follow));
     atn.stack.pop();
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_Case && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
         atn.stack.push(2064);
-        pos = scan_case_clause(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_53, 2, follow));
+        pos = scan_case_clause(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_53, 16, follow));
         atn.stack.pop();
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
@@ -9292,7 +9294,7 @@ fn scan_function_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, 
                     sg_123: {
                         pos += 1;
                         atn.stack.push(2190);
-                        pos = scan_function_body(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 1, follow));
+                        pos = scan_function_body(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 8, follow));
                         atn.stack.pop();
                         if pos < 0 { break sg_123; }
                         if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break sg_123; }
@@ -9518,7 +9520,7 @@ fn scan_property_member_base(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, 
 fn scan_index_member_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2365);
-    pos = scan_index_signature(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_29, 1, follow));
+    pos = scan_index_signature(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_29, 8, follow));
     atn.stack.pop();
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_SemiColon { return -1; }
@@ -9558,7 +9560,7 @@ fn scan_generator_method(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo
                 if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { break opt_probe; }
                 pos += 1;
                 atn.stack.push(2395);
-                pos = scan_function_body(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 1, follow));
+                pos = scan_function_body(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 8, follow));
                 atn.stack.pop();
                 if pos < 0 { break opt_probe; }
                 if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break opt_probe; }
@@ -9590,7 +9592,7 @@ fn scan_generator_method(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo
     if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
     atn.stack.push(2395);
-    pos = scan_function_body(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 1, follow));
+    pos = scan_function_body(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 8, follow));
     atn.stack.pop();
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
@@ -9626,7 +9628,7 @@ fn scan_generator_function_declaration(tokens: &Array<i32>, pos: i32, atn: &mut 
     if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
     atn.stack.push(2424);
-    pos = scan_function_body(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 1, follow));
+    pos = scan_function_body(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 8, follow));
     atn.stack.pop();
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
@@ -9648,7 +9650,7 @@ fn scan_generator_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo:
             sg_49: {
                 pos += 1;
                 atn.stack.push(2442);
-                pos = scan_generator_definition(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_61, 4, follow));
+                pos = scan_generator_definition(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_61, 32, follow));
                 atn.stack.pop();
                 if pos < 0 { break sg_49; }
                 break sg_49_done;
@@ -9706,7 +9708,7 @@ fn scan_iterator_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: 
             sg_51: {
                 pos += 1;
                 atn.stack.push(2472);
-                pos = scan_iterator_definition(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_62, 3, follow));
+                pos = scan_iterator_definition(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_62, 24, follow));
                 atn.stack.pop();
                 if pos < 0 { break sg_51; }
                 break sg_51_done;
@@ -9763,7 +9765,7 @@ fn scan_iterator_definition(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, m
     if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
     atn.stack.push(2500);
-    pos = scan_function_body(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 1, follow));
+    pos = scan_function_body(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 8, follow));
     atn.stack.pop();
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
@@ -10000,7 +10002,7 @@ fn scan_array_literal(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &
             if pos >= tokens.len() || tokens[pos] != TK_OpenBracket { break sg_63; }
             pos += 1;
             atn.stack.push(2628);
-            pos = scan_element_list(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_6, 1, follow));
+            pos = scan_element_list(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_6, 8, follow));
             atn.stack.pop();
             if pos < 0 { break sg_63; }
             if pos >= tokens.len() || tokens[pos] != TK_CloseBracket { break sg_63; }
@@ -10028,7 +10030,7 @@ fn scan_element_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &m
                 if pos < tokens.len() && _kind_set_92(tokens[pos]) {
                     let sp = pos;
                     atn.stack.push(2642);
-                    pos = scan_array_element(tokens, pos, atn, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_66, 2, follow), follow_open_set(FOLLOW_MASK_14)));
+                    pos = scan_array_element(tokens, pos, atn, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_66, 16, follow), follow_open_set(FOLLOW_MASK_14)));
                     atn.stack.pop();
                     if pos < 0 { pos = sp; }
                 }
@@ -10041,7 +10043,7 @@ fn scan_element_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &m
                                 pos += 1;
                             }
                             atn.stack.push(2653);
-                            pos = scan_array_element(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_66, 2, follow));
+                            pos = scan_array_element(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_66, 16, follow));
                             atn.stack.pop();
                             if pos < 0 { break sg_65; }
                             break sg_65_done;
@@ -10064,7 +10066,7 @@ fn scan_element_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &m
     if pos < tokens.len() && _kind_set_92(tokens[pos]) {
         let sp = pos;
         atn.stack.push(2642);
-        pos = scan_array_element(tokens, pos, atn, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_66, 2, follow), follow_open_set(FOLLOW_MASK_14)));
+        pos = scan_array_element(tokens, pos, atn, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_66, 16, follow), follow_open_set(FOLLOW_MASK_14)));
         atn.stack.pop();
         if pos < 0 { pos = sp; }
         if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !((if pos < tokens.len() { tokens[pos] } else { TK_EOF }) == TK_Comma || follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
@@ -10080,7 +10082,7 @@ fn scan_element_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &m
                     pos += 1;
                 }
                 atn.stack.push(2653);
-                pos = scan_array_element(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_66, 2, follow));
+                pos = scan_array_element(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_66, 16, follow));
                 atn.stack.pop();
                 if pos < 0 { break sg_66; }
                 break sg_66_done;
@@ -10172,7 +10174,7 @@ fn scan_object_literal(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: 
                         sg_62: {
                             pos += 1;
                             atn.stack.push(2699);
-                            pos = scan_property_assignment(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_67, 2, follow));
+                            pos = scan_property_assignment(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_67, 16, follow));
                             atn.stack.pop();
                             if pos < 0 { break sg_62; }
                             break sg_62_done;
@@ -10288,7 +10290,7 @@ fn scan_get_accessor(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &m
     if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
     atn.stack.push(2771);
-    pos = scan_function_body(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 1, follow));
+    pos = scan_function_body(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 8, follow));
     atn.stack.pop();
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
@@ -10316,7 +10318,7 @@ fn scan_set_accessor(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &m
     if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
     atn.stack.push(2790);
-    pos = scan_function_body(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 1, follow));
+    pos = scan_function_body(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 8, follow));
     atn.stack.pop();
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
@@ -10342,7 +10344,7 @@ fn scan_property_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &
         pos = start + 1;
         try_3: {
             atn.stack.push(2808);
-            pos = scan_single_expression(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_6, 1, follow), 0);
+            pos = scan_single_expression(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_6, 8, follow), 0);
             atn.stack.pop();
             if pos < 0 { break try_3; }
             if pos >= tokens.len() || tokens[pos] != TK_CloseBracket { break try_3; }
@@ -10392,7 +10394,7 @@ fn scan_arguments(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut 
 fn scan_argument_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2833);
-    pos = scan_argument(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_71, 2, follow));
+    pos = scan_argument(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_71, 16, follow));
     atn.stack.pop();
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_Comma && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
@@ -10401,7 +10403,7 @@ fn scan_argument_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &
             sg_58: {
                 pos += 1;
                 atn.stack.push(2842);
-                pos = scan_argument(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_71, 2, follow));
+                pos = scan_argument(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_71, 16, follow));
                 atn.stack.pop();
                 if pos < 0 { break sg_58; }
                 break sg_58_done;
@@ -10470,7 +10472,7 @@ fn scan_expression_sequence(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, m
     let scan_start = pos;
     let mut pos = pos;
     atn.stack.push(2863);
-    pos = scan_single_expression(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_72, 2, follow), 0);
+    pos = scan_single_expression(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_72, 16, follow), 0);
     atn.stack.pop();
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_Comma && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
@@ -10479,7 +10481,7 @@ fn scan_expression_sequence(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, m
             sg_79: {
                 pos += 1;
                 atn.stack.push(2872);
-                pos = scan_single_expression(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_72, 2, follow), 0);
+                pos = scan_single_expression(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_72, 16, follow), 0);
                 atn.stack.pop();
                 if pos < 0 { break sg_79; }
                 break sg_79_done;
@@ -10768,7 +10770,7 @@ fn scan_single_expression_lr_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnState
     if pos >= tokens.len() || tokens[pos] != TK_OpenBracket { return -1; }
     pos += 1;
     atn.stack.push(3023);
-    pos = scan_expression_sequence(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_6, 1, follow));
+    pos = scan_expression_sequence(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_6, 8, follow));
     atn.stack.pop();
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_CloseBracket { return -1; }
@@ -11595,7 +11597,7 @@ fn scan_arrow_function_parameters(tokens: &Array<i32>, pos: i32, atn: &mut AtnSt
             if pos < tokens.len() && _kind_set_41(tokens[pos]) {
                 let sp = pos;
                 atn.stack.push(3324);
-                pos = scan_formal_parameter_list(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_5, 1, follow));
+                pos = scan_formal_parameter_list(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_5, 8, follow));
                 atn.stack.pop();
                 if pos < 0 { pos = sp; }
             }
@@ -11679,7 +11681,7 @@ fn scan_template_string_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, 
         pos = start + 1;
         try_1: {
             atn.stack.push(3424);
-            pos = scan_single_expression(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_77, 1, follow), 0);
+            pos = scan_single_expression(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_77, 8, follow), 0);
             atn.stack.pop();
             if pos < 0 { break try_1; }
             if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { break try_1; }
@@ -11858,7 +11860,7 @@ fn _parse_type_parameters__inner(p: &mut Parser, follow: i64 = 0) -> () with Typ
     if _kind_set_0(p.peek_kind()) {
         p.site = 3;
         p.atn_ret_pending = 342;
-        _parse_type_parameter_list(p, follow_then(FOLLOW_MASK_0, 1, follow));
+        _parse_type_parameter_list(p, follow_then(FOLLOW_MASK_0, 8, follow));
     }
     p.expect(TK_MoreThan, &EMPTY_SYNC, true);
     return;
@@ -11882,13 +11884,13 @@ fn _parse_type_parameters(p: &mut Parser, follow: i64 = 0) -> () with TypeScript
 fn _parse_type_parameter_list__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.site = 4;
     p.atn_ret_pending = 349;
-    _parse_type_parameter(p, follow_then_opening(FOLLOW_MASK_1, 2, follow));
+    _parse_type_parameter(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
     while !p.recovering && p.peek_kind() == TK_Comma {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
         p.site = 5;
         p.atn_ret_pending = 358;
-        _parse_type_parameter(p, follow_then_opening(FOLLOW_MASK_1, 2, follow));
+        _parse_type_parameter(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
     }
     return;
 }
@@ -12064,7 +12066,7 @@ fn _parse_type_arguments__inner(p: &mut Parser, follow: i64 = 0) -> () with Type
     if _kind_set_3(p.peek_kind()) {
         p.site = 12;
         p.atn_ret_pending = 394;
-        _parse_type_argument_list(p, follow_then(FOLLOW_MASK_0, 1, follow));
+        _parse_type_argument_list(p, follow_then(FOLLOW_MASK_0, 8, follow));
     }
     p.expect(TK_MoreThan, &EMPTY_SYNC, true);
     return;
@@ -12088,13 +12090,13 @@ fn _parse_type_arguments(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptP
 fn _parse_type_argument_list__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.site = 13;
     p.atn_ret_pending = 401;
-    _parse_type_argument(p, follow_then_opening(FOLLOW_MASK_4, 2, follow));
+    _parse_type_argument(p, follow_then_opening(FOLLOW_MASK_4, 16, follow));
     while !p.recovering && p.peek_kind() == TK_Comma {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
         p.site = 14;
         p.atn_ret_pending = 410;
-        _parse_type_argument(p, follow_then_opening(FOLLOW_MASK_4, 2, follow));
+        _parse_type_argument(p, follow_then_opening(FOLLOW_MASK_4, 16, follow));
     }
     return;
 }
@@ -12411,7 +12413,7 @@ fn _parse_primary_type__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i3
         p.take();
         p.site = 25;
         p.atn_ret_pending = 465;
-        _parse_type_(p, follow_then(FOLLOW_MASK_5, 1, follow));
+        _parse_type_(p, follow_then(FOLLOW_MASK_5, 8, follow));
         p.expect(TK_CloseParen, &SYNC_6, true);
         return;
     }
@@ -12505,7 +12507,7 @@ fn _parse_primary_type__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i3
         p.take();
         p.site = 31;
         p.atn_ret_pending = 481;
-        _parse_tuple_element_types(p, follow_then(FOLLOW_MASK_6, 1, follow));
+        _parse_tuple_element_types(p, follow_then(FOLLOW_MASK_6, 8, follow));
         p.expect(TK_CloseBracket, &SYNC_6, true);
         return;
     }
@@ -12546,7 +12548,7 @@ fn _parse_primary_type__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0
                 p.b.start_node_at(_cp, RK_PRIMARY_TYPE, _start);
                 p.b.set_alt(4);
                 if !p.speculating {
-                    if !(TypeScriptParserBase::not_line_terminator(p)) {
+                    if !TypeScriptParserBase::not_line_terminator(p) {
                         p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);
                         return;
                     }
@@ -12558,7 +12560,7 @@ fn _parse_primary_type__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
                     p.atn.stack.push(511);
-                    pos = scan_primary_type(tokens, pos, &mut p.atn, &mut p.memo, follow_then(FOLLOW_MASK_6, 1, follow), 0);
+                    pos = scan_primary_type(tokens, pos, &mut p.atn, &mut p.memo, follow_then(FOLLOW_MASK_6, 8, follow), 0);
                     p.atn.stack.pop();
                     if pos < 0 { break opt_scan; }
                     opt_scan_pos = pos;
@@ -12566,7 +12568,7 @@ fn _parse_primary_type__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0
                 if opt_scan_pos >= 0 {
                     p.site = 30;
                     p.atn_ret_pending = 511;
-                    _parse_primary_type(p, follow_then(FOLLOW_MASK_6, 1, follow));
+                    _parse_primary_type(p, follow_then(FOLLOW_MASK_6, 8, follow));
                 }
                 p.expect(TK_CloseBracket, &SYNC_6, true);
                 p.b.finish_node(p.last_end());
@@ -12683,7 +12685,7 @@ fn _parse_type_generic__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
     if p.peek_kind() == TK_LessThan {
         p.site = 39;
         p.atn_ret_pending = 578;
-        _parse_type_generic(p, follow_then(FOLLOW_MASK_0, 1, follow));
+        _parse_type_generic(p, follow_then(FOLLOW_MASK_0, 8, follow));
     }
     p.expect(TK_MoreThan, &EMPTY_SYNC, true);
     return;
@@ -12767,7 +12769,7 @@ fn _parse_object_type__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScr
     if _kind_set_15(p.peek_kind()) {
         p.site = 42;
         p.atn_ret_pending = 597;
-        _parse_type_body(p, follow_then(FOLLOW_MASK_9, 1, follow));
+        _parse_type_body(p, follow_then(FOLLOW_MASK_9, 8, follow));
     }
     p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
@@ -12816,7 +12818,7 @@ fn _parse_type_body(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParser
 fn _parse_type_member_list__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.site = 44;
     p.atn_ret_pending = 619;
-    _parse_type_member(p, follow_then_opening(FOLLOW_MASK_11, 2, follow));
+    _parse_type_member(p, follow_then_opening(FOLLOW_MASK_11, 16, follow));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -12829,7 +12831,7 @@ fn _parse_type_member_list__inner(p: &mut Parser, follow: i64 = 0) -> () with Ty
                     if pos >= tokens.len() || !_kind_set_16(tokens[pos]) { break sg_0; }
                     pos += 1;
                     p.atn.stack.push(634);
-                    pos = scan_type_member(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_11, 2, follow));
+                    pos = scan_type_member(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_11, 16, follow));
                     p.atn.stack.pop();
                     if pos < 0 { break sg_0; }
                     break sg_0_done;
@@ -12857,7 +12859,7 @@ fn _parse_type_member_list__inner(p: &mut Parser, follow: i64 = 0) -> () with Ty
         p.expect_set(&SYNC_12, &EXPECTED_12);
         p.site = 45;
         p.atn_ret_pending = 634;
-        _parse_type_member(p, follow_then_opening(FOLLOW_MASK_11, 2, follow));
+        _parse_type_member(p, follow_then_opening(FOLLOW_MASK_11, 16, follow));
     }
     return;
 }
@@ -13062,9 +13064,9 @@ fn _parse_type_member(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPars
 fn _parse_array_type__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.site = 52;
     p.atn_ret_pending = 666;
-    _parse_primary_type(p, follow_then(FOLLOW_MASK_13, 2, follow));
+    _parse_primary_type(p, follow_then(FOLLOW_MASK_13, 16, follow));
     if !p.speculating {
-        if !(TypeScriptParserBase::not_line_terminator(p)) {
+        if !TypeScriptParserBase::not_line_terminator(p) {
             p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);
             return;
         }
@@ -13093,7 +13095,7 @@ fn _parse_tuple_type__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScri
     p.expect(TK_OpenBracket, &SYNC_0, false);
     p.site = 53;
     p.atn_ret_pending = 677;
-    _parse_tuple_element_types(p, follow_then(FOLLOW_MASK_6, 1, follow));
+    _parse_tuple_element_types(p, follow_then(FOLLOW_MASK_6, 8, follow));
     p.expect(TK_CloseBracket, &EMPTY_SYNC, true);
     return;
 }
@@ -13116,7 +13118,7 @@ fn _parse_tuple_type(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParse
 fn _parse_tuple_element_types__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.site = 54;
     p.atn_ret_pending = 684;
-    _parse_type_(p, follow_open_with(follow_then_opening(FOLLOW_MASK_4, 2, follow), follow_open_set(FOLLOW_MASK_14)));
+    _parse_type_(p, follow_open_with(follow_then_opening(FOLLOW_MASK_4, 16, follow), follow_open_set(FOLLOW_MASK_14)));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -13129,7 +13131,7 @@ fn _parse_tuple_element_types__inner(p: &mut Parser, follow: i64 = 0) -> () with
                     if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_2; }
                     pos += 1;
                     p.atn.stack.push(693);
-                    pos = scan_type_(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_4, 2, follow));
+                    pos = scan_type_(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_4, 16, follow));
                     p.atn.stack.pop();
                     if pos < 0 { break sg_2; }
                     break sg_2_done;
@@ -13159,7 +13161,7 @@ fn _parse_tuple_element_types__inner(p: &mut Parser, follow: i64 = 0) -> () with
         p.expect(TK_Comma, &SYNC_0, false);
         p.site = 55;
         p.atn_ret_pending = 693;
-        _parse_type_(p, follow_then_opening(FOLLOW_MASK_4, 2, follow));
+        _parse_type_(p, follow_then_opening(FOLLOW_MASK_4, 16, follow));
     }
     if p.peek_kind() == TK_Comma && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
         p.take();
@@ -13621,7 +13623,7 @@ fn _parse_parameter_list__inner(p: &mut Parser, follow: i64 = 0) -> () with Type
     } else if _kind_set_37(kind) {
         p.site = 74;
         p.atn_ret_pending = 822;
-        _parse_parameter(p, follow_open_with(follow_then_opening(FOLLOW_MASK_20, 2, follow), follow_open_set(FOLLOW_MASK_14)));
+        _parse_parameter(p, follow_open_with(follow_then_opening(FOLLOW_MASK_20, 16, follow), follow_open_set(FOLLOW_MASK_14)));
         loop {
             if p.recovering { break; }
             if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -13634,7 +13636,7 @@ fn _parse_parameter_list__inner(p: &mut Parser, follow: i64 = 0) -> () with Type
                         if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_8; }
                         pos += 1;
                         p.atn.stack.push(831);
-                        pos = scan_parameter(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_20, 2, follow));
+                        pos = scan_parameter(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_20, 16, follow));
                         p.atn.stack.pop();
                         if pos < 0 { break sg_8; }
                         break sg_8_done;
@@ -13679,7 +13681,7 @@ fn _parse_parameter_list__inner(p: &mut Parser, follow: i64 = 0) -> () with Type
             p.expect(TK_Comma, &SYNC_0, false);
             p.site = 75;
             p.atn_ret_pending = 831;
-            _parse_parameter(p, follow_then_opening(FOLLOW_MASK_20, 2, follow));
+            _parse_parameter(p, follow_then_opening(FOLLOW_MASK_20, 16, follow));
         }
         let mut opt_enter: bool = false;
         if p.peek_kind() == TK_Comma {
@@ -13742,13 +13744,13 @@ fn _parse_parameter_list(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptP
 fn _parse_required_parameter_list__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.site = 77;
     p.atn_ret_pending = 850;
-    _parse_required_parameter(p, follow_then_opening(FOLLOW_MASK_20, 2, follow));
+    _parse_required_parameter(p, follow_then_opening(FOLLOW_MASK_20, 16, follow));
     while !p.recovering && p.peek_kind() == TK_Comma {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
         p.site = 78;
         p.atn_ret_pending = 859;
-        _parse_required_parameter(p, follow_then_opening(FOLLOW_MASK_20, 2, follow));
+        _parse_required_parameter(p, follow_then_opening(FOLLOW_MASK_20, 16, follow));
     }
     return;
 }
@@ -14319,7 +14321,7 @@ fn _parse_constructor_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () 
                         if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { break sg_12; }
                         pos += 1;
                         p.atn.stack.push(1050);
-                        pos = scan_function_body(tokens, pos, &mut p.atn, &mut p.memo, follow_then(FOLLOW_MASK_9, 1, follow));
+                        pos = scan_function_body(tokens, pos, &mut p.atn, &mut p.memo, follow_then(FOLLOW_MASK_9, 8, follow));
                         p.atn.stack.pop();
                         if pos < 0 { break sg_12; }
                         if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break sg_12; }
@@ -14346,7 +14348,7 @@ fn _parse_constructor_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () 
             p.expect(TK_OpenBrace, &SYNC_11, false);
             p.site = 108;
             p.atn_ret_pending = 1050;
-            _parse_function_body(p, follow_then(FOLLOW_MASK_9, 1, follow));
+            _parse_function_body(p, follow_then(FOLLOW_MASK_9, 8, follow));
             p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
         } else {
             p.expect(TK_SemiColon, &EMPTY_SYNC, true);
@@ -14445,13 +14447,13 @@ fn _parse_interface_extends_clause(p: &mut Parser, follow: i64 = 0) -> () with T
 fn _parse_class_or_interface_type_list__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.site = 114;
     p.atn_ret_pending = 1096;
-    _parse_type_reference(p, follow_then_opening(FOLLOW_MASK_30, 2, follow));
+    _parse_type_reference(p, follow_then_opening(FOLLOW_MASK_30, 16, follow));
     while !p.recovering && p.peek_kind() == TK_Comma {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
         p.site = 115;
         p.atn_ret_pending = 1105;
-        _parse_type_reference(p, follow_then_opening(FOLLOW_MASK_30, 2, follow));
+        _parse_type_reference(p, follow_then_opening(FOLLOW_MASK_30, 16, follow));
     }
     return;
 }
@@ -14485,7 +14487,7 @@ fn _parse_enum_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () with Ty
     if _kind_set_23(p.peek_kind()) {
         p.site = 117;
         p.atn_ret_pending = 1123;
-        _parse_enum_body(p, follow_then(FOLLOW_MASK_9, 1, follow));
+        _parse_enum_body(p, follow_then(FOLLOW_MASK_9, 8, follow));
     }
     p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
@@ -14534,7 +14536,7 @@ fn _parse_enum_body(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParser
 fn _parse_enum_member_list__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.site = 119;
     p.atn_ret_pending = 1139;
-    _parse_enum_member(p, follow_then_opening(FOLLOW_MASK_31, 2, follow));
+    _parse_enum_member(p, follow_then_opening(FOLLOW_MASK_31, 16, follow));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -14547,7 +14549,7 @@ fn _parse_enum_member_list__inner(p: &mut Parser, follow: i64 = 0) -> () with Ty
                     if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_13; }
                     pos += 1;
                     p.atn.stack.push(1148);
-                    pos = scan_enum_member(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_31, 2, follow));
+                    pos = scan_enum_member(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_31, 16, follow));
                     p.atn.stack.pop();
                     if pos < 0 { break sg_13; }
                     break sg_13_done;
@@ -14574,7 +14576,7 @@ fn _parse_enum_member_list__inner(p: &mut Parser, follow: i64 = 0) -> () with Ty
         p.expect(TK_Comma, &SYNC_0, false);
         p.site = 120;
         p.atn_ret_pending = 1148;
-        _parse_enum_member(p, follow_then_opening(FOLLOW_MASK_31, 2, follow));
+        _parse_enum_member(p, follow_then_opening(FOLLOW_MASK_31, 16, follow));
     }
     return;
 }
@@ -14636,7 +14638,7 @@ fn _parse_namespace_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () wi
     if _kind_set_46(p.peek_kind()) {
         p.site = 124;
         p.atn_ret_pending = 1180;
-        _parse_statement_list(p, follow_then(FOLLOW_MASK_9, 1, follow));
+        _parse_statement_list(p, follow_then(FOLLOW_MASK_9, 8, follow));
     }
     p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
@@ -14699,7 +14701,7 @@ fn _parse_import_alias_declaration__inner(p: &mut Parser, follow: i64 = 0) -> ()
     p.expect(TK_Assign, &SYNC_0, false);
     p.site = 128;
     p.atn_ret_pending = 1208;
-    _parse_namespace_name(p, follow_then(FOLLOW_MASK_29, 1, follow));
+    _parse_namespace_name(p, follow_then(FOLLOW_MASK_29, 8, follow));
     p.expect(TK_SemiColon, &EMPTY_SYNC, true);
     return;
 }
@@ -14826,7 +14828,7 @@ fn _parse_decorator_member_expression__inner_atom(p: &mut Parser, follow: i64 = 
         p.take();
         p.site = 135;
         p.atn_ret_pending = 1240;
-        _parse_single_expression(p, follow_then(FOLLOW_MASK_5, 1, follow));
+        _parse_single_expression(p, follow_then(FOLLOW_MASK_5, 8, follow));
         p.expect(TK_CloseParen, &SYNC_32, true);
         return;
     }
@@ -14911,7 +14913,7 @@ fn _parse_program__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptP
     if _kind_set_46(p.peek_kind()) {
         p.site = 138;
         p.atn_ret_pending = 1264;
-        _parse_source_elements(p, follow_then(FOLLOW_MASK_36, 1, follow));
+        _parse_source_elements(p, follow_then(FOLLOW_MASK_36, 8, follow));
     }
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
@@ -16335,7 +16337,7 @@ fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPar
     if _kind_set_46(p.peek_kind()) {
         p.site = 168;
         p.atn_ret_pending = 1372;
-        _parse_statement_list(p, follow_then(FOLLOW_MASK_9, 1, follow));
+        _parse_statement_list(p, follow_then(FOLLOW_MASK_9, 8, follow));
     }
     p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
@@ -16631,7 +16633,7 @@ fn _parse_import_module_items__inner(p: &mut Parser, follow: i64 = 0) -> () with
             let mut pos: i32 = p.pos;
             sg_15_done: {
                 sg_15: {
-                    pos = scan_import_alias_name(tokens, pos, &mut p.atn, &mut p.memo, follow_then(FOLLOW_MASK_14, 1, follow));
+                    pos = scan_import_alias_name(tokens, pos, &mut p.atn, &mut p.memo, follow_then(FOLLOW_MASK_14, 8, follow));
                     if pos < 0 { break sg_15; }
                     if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_15; }
                     pos += 1;
@@ -16679,7 +16681,7 @@ fn _parse_import_module_items__inner(p: &mut Parser, follow: i64 = 0) -> () with
         if rep_scan_pos < 0 { break; }
         p.site = 181;
         p.atn_ret_pending = 1441;
-        _parse_import_alias_name(p, follow_then(FOLLOW_MASK_14, 1, follow));
+        _parse_import_alias_name(p, follow_then(FOLLOW_MASK_14, 8, follow));
         p.expect(TK_Comma, &SYNC_11, false);
         if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_11, &EXPECTED_11); }
     }
@@ -16830,7 +16832,7 @@ fn _parse_imported_binding(p: &mut Parser) -> () with TypeScriptParserBase {
 fn _parse_import_default__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.site = 186;
     p.atn_ret_pending = 1495;
-    _parse_alias_name(p, follow_then(FOLLOW_MASK_14, 1, follow));
+    _parse_alias_name(p, follow_then(FOLLOW_MASK_14, 8, follow));
     p.expect(TK_Comma, &EMPTY_SYNC, true);
     return;
 }
@@ -17297,7 +17299,7 @@ fn _parse_export_module_items__inner(p: &mut Parser, follow: i64 = 0) -> () with
             let mut pos: i32 = p.pos;
             sg_22_done: {
                 sg_22: {
-                    pos = scan_export_alias_name(tokens, pos, &mut p.atn, &mut p.memo, follow_then(FOLLOW_MASK_14, 1, follow));
+                    pos = scan_export_alias_name(tokens, pos, &mut p.atn, &mut p.memo, follow_then(FOLLOW_MASK_14, 8, follow));
                     if pos < 0 { break sg_22; }
                     if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_22; }
                     pos += 1;
@@ -17345,7 +17347,7 @@ fn _parse_export_module_items__inner(p: &mut Parser, follow: i64 = 0) -> () with
         if rep_scan_pos < 0 { break; }
         p.site = 202;
         p.atn_ret_pending = 1596;
-        _parse_export_alias_name(p, follow_then(FOLLOW_MASK_14, 1, follow));
+        _parse_export_alias_name(p, follow_then(FOLLOW_MASK_14, 8, follow));
         p.expect(TK_Comma, &SYNC_11, false);
         if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_11, &EXPECTED_11); }
     }
@@ -17704,13 +17706,13 @@ fn _parse_variable_statement(p: &mut Parser, follow: i64 = 0) -> () with TypeScr
 fn _parse_variable_declaration_list__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.site = 217;
     p.atn_ret_pending = 1689;
-    _parse_variable_declaration(p, follow_then_opening(FOLLOW_MASK_44, 2, follow));
+    _parse_variable_declaration(p, follow_then_opening(FOLLOW_MASK_44, 16, follow));
     while !p.recovering && p.peek_kind() == TK_Comma {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
         p.site = 218;
         p.atn_ret_pending = 1698;
-        _parse_variable_declaration(p, follow_then_opening(FOLLOW_MASK_44, 2, follow));
+        _parse_variable_declaration(p, follow_then_opening(FOLLOW_MASK_44, 16, follow));
     }
     return;
 }
@@ -17849,7 +17851,7 @@ fn _parse_empty_statement_(p: &mut Parser) -> () with TypeScriptParserBase {
 
 fn _parse_expression_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     if !p.speculating {
-        if !(TypeScriptParserBase::not_open_brace_and_not_function_and_not_interface(p)) {
+        if !TypeScriptParserBase::not_open_brace_and_not_function_and_not_interface(p) {
             p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);
             return;
         }
@@ -18159,7 +18161,7 @@ fn _parse_iteration_statement__inner_alt_6(p: &mut Parser, follow: i64 = 0) -> (
     p.atn_ret_pending = 1893;
     _parse_identifier(p);
     if !p.speculating {
-        if !(TypeScriptParserBase::p(p, "of")) {
+        if !TypeScriptParserBase::p(p, "of") {
             p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);
             return;
         }
@@ -18242,7 +18244,7 @@ fn _parse_iteration_statement__inner_alt_7(p: &mut Parser, follow: i64 = 0) -> (
     p.atn_ret_pending = 1923;
     _parse_identifier(p);
     if !p.speculating {
-        if !(TypeScriptParserBase::p(p, "of")) {
+        if !TypeScriptParserBase::p(p, "of") {
             p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);
             return;
         }
@@ -18457,7 +18459,7 @@ fn _parse_continue_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with 
         pos += 1;
         opt_scan_pos = pos;
     }
-    if opt_scan_pos >= 0 && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) && (_kind_set_1(p.peek_kind()) && (pred_0(p))) {
+    if (opt_scan_pos >= 0) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) && (_kind_set_1(p.peek_kind()) && pred_0(p)) {
         p.site = 262;
         p.atn_ret_pending = 1961;
         _parse_identifier(p);
@@ -18493,7 +18495,7 @@ fn _parse_break_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with Typ
         pos += 1;
         opt_scan_pos = pos;
     }
-    if opt_scan_pos >= 0 && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) && (_kind_set_1(p.peek_kind()) && (pred_0(p))) {
+    if (opt_scan_pos >= 0) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) && (_kind_set_1(p.peek_kind()) && pred_0(p)) {
         p.site = 264;
         p.atn_ret_pending = 1975;
         _parse_identifier(p);
@@ -18531,7 +18533,7 @@ fn _parse_return_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with Ty
         if pos < 0 { break opt_scan; }
         opt_scan_pos = pos;
     }
-    if opt_scan_pos >= 0 && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) && (_kind_set_45(p.peek_kind()) && (pred_0(p))) {
+    if (opt_scan_pos >= 0) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) && (_kind_set_45(p.peek_kind()) && pred_0(p)) {
         p.site = 266;
         p.atn_ret_pending = 1989;
         _parse_expression_sequence(p, 0);
@@ -18570,7 +18572,7 @@ fn _parse_yield_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with Typ
         if pos < 0 { break opt_scan; }
         opt_scan_pos = pos;
     }
-    if opt_scan_pos >= 0 && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) && (_kind_set_45(p.peek_kind()) && (pred_0(p))) {
+    if (opt_scan_pos >= 0) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) && (_kind_set_45(p.peek_kind()) && pred_0(p)) {
         p.site = 268;
         p.atn_ret_pending = 2009;
         _parse_expression_sequence(p, 0);
@@ -18693,7 +18695,7 @@ fn _parse_case_block__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScri
         if p.peek_kind() == TK_Case {
             p.site = 276;
             p.atn_ret_pending = 2057;
-            _parse_case_clauses(p, follow_then(FOLLOW_MASK_9, 1, follow));
+            _parse_case_clauses(p, follow_then(FOLLOW_MASK_9, 8, follow));
         }
     } else if shape_scan_pos_2 >= 0 {
         p.site = 275;
@@ -18729,7 +18731,7 @@ fn _parse_case_clauses__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
         _plus_first = false;
         p.site = 277;
         p.atn_ret_pending = 2064;
-        _parse_case_clause(p, follow_then_opening(FOLLOW_MASK_53, 2, follow));
+        _parse_case_clause(p, follow_then_opening(FOLLOW_MASK_53, 16, follow));
     }
     return;
 }
@@ -18861,7 +18863,7 @@ fn _parse_labelled_statement(p: &mut Parser, follow: i64 = 0) -> () with TypeScr
 fn _parse_throw_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.expect(TK_Throw, &SYNC_0, false);
     if !p.speculating {
-        if !(TypeScriptParserBase::not_line_terminator(p)) {
+        if !TypeScriptParserBase::not_line_terminator(p) {
             p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);
             return;
         }
@@ -19050,7 +19052,7 @@ fn _parse_function_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () wit
         p.take();
         p.site = 296;
         p.atn_ret_pending = 2190;
-        _parse_function_body(p, follow_then(FOLLOW_MASK_9, 1, follow));
+        _parse_function_body(p, follow_then(FOLLOW_MASK_9, 8, follow));
         p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     } else if grp_kind == TK_SemiColon {
         p.take();
@@ -19453,7 +19455,7 @@ fn _parse_property_member_declaration__inner_alt_0(p: &mut Parser, follow: i64 =
     if p.peek_kind() == TK_Assign {
         p.site = 315;
         p.atn_ret_pending = 2303;
-        _parse_initializer(p, follow_then(FOLLOW_MASK_29, 1, follow));
+        _parse_initializer(p, follow_then(FOLLOW_MASK_29, 8, follow));
     }
     p.expect(TK_SemiColon, &EMPTY_SYNC, true);
     return;
@@ -19480,7 +19482,7 @@ fn scan_property_member_declaration__alt_0(tokens: &Array<i32>, pos: i32, atn: &
     if pos < tokens.len() && tokens[pos] == TK_Assign {
         let sp = pos;
         atn.stack.push(2303);
-        pos = scan_initializer(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_29, 1, follow));
+        pos = scan_initializer(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_29, 8, follow));
         atn.stack.pop();
         if pos < 0 { pos = sp; }
     }
@@ -19506,7 +19508,7 @@ fn _parse_property_member_declaration__inner_alt_1(p: &mut Parser, follow: i64 =
         p.take();
         p.site = 319;
         p.atn_ret_pending = 2322;
-        _parse_function_body(p, follow_then(FOLLOW_MASK_9, 1, follow));
+        _parse_function_body(p, follow_then(FOLLOW_MASK_9, 8, follow));
         p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     } else if grp_kind == TK_SemiColon {
         p.take();
@@ -19537,7 +19539,7 @@ fn scan_property_member_declaration__alt_1(tokens: &Array<i32>, pos: i32, atn: &
                     sg_29: {
                         pos += 1;
                         atn.stack.push(2322);
-                        pos = scan_function_body(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 1, follow));
+                        pos = scan_function_body(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 8, follow));
                         atn.stack.pop();
                         if pos < 0 { break sg_29; }
                         if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break sg_29; }
@@ -19803,7 +19805,7 @@ fn _parse_property_member_base(p: &mut Parser, follow: i64 = 0) -> () with TypeS
 fn _parse_index_member_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.site = 325;
     p.atn_ret_pending = 2365;
-    _parse_index_signature(p, follow_then(FOLLOW_MASK_29, 1, follow));
+    _parse_index_signature(p, follow_then(FOLLOW_MASK_29, 8, follow));
     p.expect(TK_SemiColon, &EMPTY_SYNC, true);
     return;
 }
@@ -19853,7 +19855,7 @@ fn _parse_generator_method__inner(p: &mut Parser, follow: i64 = 0) -> () with Ty
             if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { break opt_enter_scan; }
             pos += 1;
             p.atn.stack.push(2395);
-            pos = scan_function_body(tokens, pos, &mut p.atn, &mut p.memo, follow_then(FOLLOW_MASK_9, 1, follow));
+            pos = scan_function_body(tokens, pos, &mut p.atn, &mut p.memo, follow_then(FOLLOW_MASK_9, 8, follow));
             p.atn.stack.pop();
             if pos < 0 { break opt_enter_scan; }
             if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break opt_enter_scan; }
@@ -19865,7 +19867,7 @@ fn _parse_generator_method__inner(p: &mut Parser, follow: i64 = 0) -> () with Ty
     if opt_enter {
         p.expect(TK_Async, &SYNC_0, false);
         if !p.speculating {
-            if !(TypeScriptParserBase::not_line_terminator(p)) {
+            if !TypeScriptParserBase::not_line_terminator(p) {
                 p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);
                 return;
             }
@@ -19889,7 +19891,7 @@ fn _parse_generator_method__inner(p: &mut Parser, follow: i64 = 0) -> () with Ty
     p.expect(TK_OpenBrace, &SYNC_11, false);
     p.site = 328;
     p.atn_ret_pending = 2395;
-    _parse_function_body(p, follow_then(FOLLOW_MASK_9, 1, follow));
+    _parse_function_body(p, follow_then(FOLLOW_MASK_9, 8, follow));
     p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
 }
@@ -19933,7 +19935,7 @@ fn _parse_generator_function_declaration__inner(p: &mut Parser, follow: i64 = 0)
     p.expect(TK_OpenBrace, &SYNC_11, false);
     p.site = 331;
     p.atn_ret_pending = 2424;
-    _parse_function_body(p, follow_then(FOLLOW_MASK_9, 1, follow));
+    _parse_function_body(p, follow_then(FOLLOW_MASK_9, 8, follow));
     p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
 }
@@ -19970,7 +19972,7 @@ fn _parse_generator_block__inner(p: &mut Parser, follow: i64 = 0) -> () with Typ
                     if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_31; }
                     pos += 1;
                     p.atn.stack.push(2442);
-                    pos = scan_generator_definition(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_61, 4, follow));
+                    pos = scan_generator_definition(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_61, 32, follow));
                     p.atn.stack.pop();
                     if pos < 0 { break sg_31; }
                     break sg_31_done;
@@ -19999,7 +20001,7 @@ fn _parse_generator_block__inner(p: &mut Parser, follow: i64 = 0) -> () with Typ
         p.expect(TK_Comma, &SYNC_0, false);
         p.site = 333;
         p.atn_ret_pending = 2442;
-        _parse_generator_definition(p, follow_then_opening(FOLLOW_MASK_61, 4, follow));
+        _parse_generator_definition(p, follow_then_opening(FOLLOW_MASK_61, 32, follow));
         if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_39, &EXPECTED_39); }
     }
     if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_39, &EXPECTED_39); }
@@ -20065,7 +20067,7 @@ fn _parse_iterator_block__inner(p: &mut Parser, follow: i64 = 0) -> () with Type
                     if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_32; }
                     pos += 1;
                     p.atn.stack.push(2472);
-                    pos = scan_iterator_definition(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_62, 3, follow));
+                    pos = scan_iterator_definition(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_62, 24, follow));
                     p.atn.stack.pop();
                     if pos < 0 { break sg_32; }
                     break sg_32_done;
@@ -20094,7 +20096,7 @@ fn _parse_iterator_block__inner(p: &mut Parser, follow: i64 = 0) -> () with Type
         p.expect(TK_Comma, &SYNC_0, false);
         p.site = 336;
         p.atn_ret_pending = 2472;
-        _parse_iterator_definition(p, follow_then_opening(FOLLOW_MASK_62, 3, follow));
+        _parse_iterator_definition(p, follow_then_opening(FOLLOW_MASK_62, 24, follow));
         if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_39, &EXPECTED_39); }
     }
     if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_39, &EXPECTED_39); }
@@ -20137,7 +20139,7 @@ fn _parse_iterator_definition__inner(p: &mut Parser, follow: i64 = 0) -> () with
     p.expect(TK_OpenBrace, &SYNC_11, false);
     p.site = 339;
     p.atn_ret_pending = 2500;
-    _parse_function_body(p, follow_then(FOLLOW_MASK_9, 1, follow));
+    _parse_function_body(p, follow_then(FOLLOW_MASK_9, 8, follow));
     p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
 }
@@ -20220,7 +20222,7 @@ fn _parse_private_identifier(p: &mut Parser) -> () with TypeScriptParserBase {
 fn _parse_formal_parameter_list__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.site = 343;
     p.atn_ret_pending = 2522;
-    _parse_formal_parameter_arg(p, follow_open_with(follow_then_opening(FOLLOW_MASK_64, 2, follow), follow_open_set(FOLLOW_MASK_14)));
+    _parse_formal_parameter_arg(p, follow_open_with(follow_then_opening(FOLLOW_MASK_64, 16, follow), follow_open_set(FOLLOW_MASK_14)));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -20233,7 +20235,7 @@ fn _parse_formal_parameter_list__inner_alt_0(p: &mut Parser, follow: i64 = 0) ->
                     if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_33; }
                     pos += 1;
                     p.atn.stack.push(2531);
-                    pos = scan_formal_parameter_arg(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_64, 2, follow));
+                    pos = scan_formal_parameter_arg(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_64, 16, follow));
                     p.atn.stack.pop();
                     if pos < 0 { break sg_33; }
                     break sg_33_done;
@@ -20278,7 +20280,7 @@ fn _parse_formal_parameter_list__inner_alt_0(p: &mut Parser, follow: i64 = 0) ->
         p.expect(TK_Comma, &SYNC_0, false);
         p.site = 344;
         p.atn_ret_pending = 2531;
-        _parse_formal_parameter_arg(p, follow_then_opening(FOLLOW_MASK_64, 2, follow));
+        _parse_formal_parameter_arg(p, follow_then_opening(FOLLOW_MASK_64, 16, follow));
     }
     let mut opt_enter: bool = false;
     if p.peek_kind() == TK_Comma {
@@ -20319,7 +20321,7 @@ fn _parse_formal_parameter_list__inner_alt_0(p: &mut Parser, follow: i64 = 0) ->
 fn scan_formal_parameter_list__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2522);
-    pos = scan_formal_parameter_arg(tokens, pos, atn, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_64, 2, follow), follow_open_set(FOLLOW_MASK_14)));
+    pos = scan_formal_parameter_arg(tokens, pos, atn, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_64, 16, follow), follow_open_set(FOLLOW_MASK_14)));
     atn.stack.pop();
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_Comma && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
@@ -20328,7 +20330,7 @@ fn scan_formal_parameter_list__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut At
             sg_36: {
                 pos += 1;
                 atn.stack.push(2531);
-                pos = scan_formal_parameter_arg(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_64, 2, follow));
+                pos = scan_formal_parameter_arg(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_64, 16, follow));
                 atn.stack.pop();
                 if pos < 0 { break sg_36; }
                 break sg_36_done;
@@ -20741,7 +20743,7 @@ fn _parse_array_literal__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeS
     p.expect(TK_OpenBracket, &SYNC_7, false);
     p.site = 359;
     p.atn_ret_pending = 2628;
-    _parse_element_list(p, follow_then(FOLLOW_MASK_6, 1, follow));
+    _parse_element_list(p, follow_then(FOLLOW_MASK_6, 8, follow));
     p.expect(TK_CloseBracket, &EMPTY_SYNC, true);
     return;
 }
@@ -20784,7 +20786,7 @@ fn _parse_element_list__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
                     if pos < tokens.len() && _kind_set_92(tokens[pos]) {
                         let sp = pos;
                         p.atn.stack.push(2642);
-                        pos = scan_array_element(tokens, pos, &mut p.atn, &mut p.memo, follow_open_with(follow_then_opening(FOLLOW_MASK_66, 2, follow), follow_open_set(FOLLOW_MASK_14)));
+                        pos = scan_array_element(tokens, pos, &mut p.atn, &mut p.memo, follow_open_with(follow_then_opening(FOLLOW_MASK_66, 16, follow), follow_open_set(FOLLOW_MASK_14)));
                         p.atn.stack.pop();
                         if pos < 0 { pos = sp; }
                     }
@@ -20797,7 +20799,7 @@ fn _parse_element_list__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
                                     pos += 1;
                                 }
                                 p.atn.stack.push(2653);
-                                pos = scan_array_element(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_66, 2, follow));
+                                pos = scan_array_element(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_66, 16, follow));
                                 p.atn.stack.pop();
                                 if pos < 0 { break sg_42; }
                                 break sg_42_done;
@@ -20826,7 +20828,7 @@ fn _parse_element_list__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             p.atn.stack.push(2642);
-            pos = scan_array_element(tokens, pos, &mut p.atn, &mut p.memo, follow_open_with(follow_then_opening(FOLLOW_MASK_66, 2, follow), follow_open_set(FOLLOW_MASK_14)));
+            pos = scan_array_element(tokens, pos, &mut p.atn, &mut p.memo, follow_open_with(follow_then_opening(FOLLOW_MASK_66, 16, follow), follow_open_set(FOLLOW_MASK_14)));
             p.atn.stack.pop();
             if pos < 0 { break opt_scan; }
             opt_scan_pos = pos;
@@ -20836,7 +20838,7 @@ fn _parse_element_list__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
     if opt_enter {
         p.site = 360;
         p.atn_ret_pending = 2642;
-        _parse_array_element(p, follow_open_with(follow_then_opening(FOLLOW_MASK_66, 2, follow), follow_open_set(FOLLOW_MASK_14)));
+        _parse_array_element(p, follow_open_with(follow_then_opening(FOLLOW_MASK_66, 16, follow), follow_open_set(FOLLOW_MASK_14)));
     }
     loop {
         if p.recovering { break; }
@@ -20853,7 +20855,7 @@ fn _parse_element_list__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
                         pos += 1;
                     }
                     p.atn.stack.push(2653);
-                    pos = scan_array_element(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_66, 2, follow));
+                    pos = scan_array_element(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_66, 16, follow));
                     p.atn.stack.pop();
                     if pos < 0 { break sg_43; }
                     break sg_43_done;
@@ -20902,7 +20904,7 @@ fn _parse_element_list__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
         }
         p.site = 361;
         p.atn_ret_pending = 2653;
-        _parse_array_element(p, follow_then_opening(FOLLOW_MASK_66, 2, follow));
+        _parse_array_element(p, follow_then_opening(FOLLOW_MASK_66, 16, follow));
     }
     while !p.recovering && p.peek_kind() == TK_Comma {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -21016,7 +21018,7 @@ fn _parse_object_literal__inner(p: &mut Parser, follow: i64 = 0) -> () with Type
                 sg_44: {
                     pos += 1;
                     p.atn.stack.push(2699);
-                    pos = scan_property_assignment(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_67, 2, follow));
+                    pos = scan_property_assignment(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_67, 16, follow));
                     p.atn.stack.pop();
                     if pos < 0 { break sg_44; }
                     break sg_44_done;
@@ -21047,7 +21049,7 @@ fn _parse_object_literal__inner(p: &mut Parser, follow: i64 = 0) -> () with Type
                         if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_45; }
                         pos += 1;
                         p.atn.stack.push(2699);
-                        pos = scan_property_assignment(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_67, 2, follow));
+                        pos = scan_property_assignment(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_67, 16, follow));
                         p.atn.stack.pop();
                         if pos < 0 { break sg_45; }
                         break sg_45_done;
@@ -21061,7 +21063,7 @@ fn _parse_object_literal__inner(p: &mut Parser, follow: i64 = 0) -> () with Type
             p.expect(TK_Comma, &SYNC_0, false);
             p.site = 365;
             p.atn_ret_pending = 2699;
-            _parse_property_assignment(p, follow_then_opening(FOLLOW_MASK_67, 2, follow));
+            _parse_property_assignment(p, follow_then_opening(FOLLOW_MASK_67, 16, follow));
             if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_39, &EXPECTED_39); }
         }
         if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_39, &EXPECTED_39); }
@@ -21468,7 +21470,7 @@ fn _parse_get_accessor__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
     p.expect(TK_OpenBrace, &SYNC_11, false);
     p.site = 378;
     p.atn_ret_pending = 2771;
-    _parse_function_body(p, follow_then(FOLLOW_MASK_9, 1, follow));
+    _parse_function_body(p, follow_then(FOLLOW_MASK_9, 8, follow));
     p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
 }
@@ -21503,7 +21505,7 @@ fn _parse_set_accessor__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
     p.expect(TK_OpenBrace, &SYNC_11, false);
     p.site = 381;
     p.atn_ret_pending = 2790;
-    _parse_function_body(p, follow_then(FOLLOW_MASK_9, 1, follow));
+    _parse_function_body(p, follow_then(FOLLOW_MASK_9, 8, follow));
     p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
 }
@@ -21543,7 +21545,7 @@ fn _parse_property_name__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeS
         p.take();
         p.site = 384;
         p.atn_ret_pending = 2808;
-        _parse_single_expression(p, follow_then(FOLLOW_MASK_6, 1, follow));
+        _parse_single_expression(p, follow_then(FOLLOW_MASK_6, 8, follow));
         p.expect(TK_CloseBracket, &EMPTY_SYNC, true);
         return;
     }
@@ -21630,7 +21632,7 @@ fn _parse_arguments(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParser
 fn _parse_argument_list__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.site = 386;
     p.atn_ret_pending = 2833;
-    _parse_argument(p, follow_then_opening(FOLLOW_MASK_71, 2, follow));
+    _parse_argument(p, follow_then_opening(FOLLOW_MASK_71, 16, follow));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -21643,7 +21645,7 @@ fn _parse_argument_list__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeS
                     if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_46; }
                     pos += 1;
                     p.atn.stack.push(2842);
-                    pos = scan_argument(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_71, 2, follow));
+                    pos = scan_argument(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_71, 16, follow));
                     p.atn.stack.pop();
                     if pos < 0 { break sg_46; }
                     break sg_46_done;
@@ -21670,7 +21672,7 @@ fn _parse_argument_list__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeS
         p.expect(TK_Comma, &SYNC_0, false);
         p.site = 387;
         p.atn_ret_pending = 2842;
-        _parse_argument(p, follow_then_opening(FOLLOW_MASK_71, 2, follow));
+        _parse_argument(p, follow_then_opening(FOLLOW_MASK_71, 16, follow));
     }
     return;
 }
@@ -21763,7 +21765,7 @@ fn _parse_argument(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserB
 fn _parse_expression_sequence__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.site = 390;
     p.atn_ret_pending = 2863;
-    _parse_single_expression(p, follow_then_opening(FOLLOW_MASK_72, 2, follow));
+    _parse_single_expression(p, follow_then_opening(FOLLOW_MASK_72, 16, follow));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -21776,7 +21778,7 @@ fn _parse_expression_sequence__inner(p: &mut Parser, follow: i64 = 0) -> () with
                     if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_47; }
                     pos += 1;
                     p.atn.stack.push(2872);
-                    pos = scan_single_expression(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_72, 2, follow), 0);
+                    pos = scan_single_expression(tokens, pos, &mut p.atn, &mut p.memo, follow_then_opening(FOLLOW_MASK_72, 16, follow), 0);
                     p.atn.stack.pop();
                     if pos < 0 { break sg_47; }
                     break sg_47_done;
@@ -21803,7 +21805,7 @@ fn _parse_expression_sequence__inner(p: &mut Parser, follow: i64 = 0) -> () with
         p.expect(TK_Comma, &SYNC_0, false);
         p.site = 391;
         p.atn_ret_pending = 2872;
-        _parse_single_expression(p, follow_then_opening(FOLLOW_MASK_72, 2, follow));
+        _parse_single_expression(p, follow_then_opening(FOLLOW_MASK_72, 16, follow));
     }
     return;
 }
@@ -22203,7 +22205,7 @@ fn _parse_single_expression__inner_alt_49(p: &mut Parser, follow: i64 = 0, lr_co
     p.expect(TK_OpenParen, &SYNC_0, false);
     p.site = 473;
     p.atn_ret_pending = 3002;
-    _parse_expression_sequence(p, follow_then(FOLLOW_MASK_5, 1, follow));
+    _parse_expression_sequence(p, follow_then(FOLLOW_MASK_5, 8, follow));
     p.expect(TK_CloseParen, &SYNC_71, true);
     return;
 }
@@ -22213,7 +22215,7 @@ fn scan_single_expression__alt_49(tokens: &Array<i32>, pos: i32, atn: &mut AtnSt
     if pos >= tokens.len() || tokens[pos] != TK_OpenParen { return -1; }
     pos += 1;
     atn.stack.push(3002);
-    pos = scan_expression_sequence(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_5, 1, follow));
+    pos = scan_expression_sequence(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_5, 8, follow));
     atn.stack.pop();
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
@@ -22797,7 +22799,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                     p.expect(TK_OpenBracket, &SYNC_0, false);
                     p.site = 398;
                     p.atn_ret_pending = 3023;
-                    _parse_expression_sequence(p, follow_then(FOLLOW_MASK_6, 1, follow));
+                    _parse_expression_sequence(p, follow_then(FOLLOW_MASK_6, 8, follow));
                     p.expect(TK_CloseBracket, &SYNC_71, true);
                     p.b.finish_node(p.last_end());
                 } else {
@@ -22818,7 +22820,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                         p.expect(TK_OpenBracket, &SYNC_0, false);
                         p.site = 398;
                         p.atn_ret_pending = 3023;
-                        _parse_expression_sequence(p, follow_then(FOLLOW_MASK_6, 1, follow));
+                        _parse_expression_sequence(p, follow_then(FOLLOW_MASK_6, 8, follow));
                         p.expect(TK_CloseBracket, &SYNC_71, true);
                         p.b.finish_node(p.last_end());
                     } else {
@@ -22872,7 +22874,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                             if pos < 0 { break opt_scan; }
                             opt_scan_pos = pos;
                         }
-                        if opt_scan_pos >= 0 && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
+                        if (opt_scan_pos >= 0) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
                             p.site = 403;
                             p.atn_ret_pending = 3047;
                             _parse_type_generic(p, follow);
@@ -22924,7 +22926,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                             if pos < 0 { break opt_scan_2; }
                             opt_scan_pos_2 = pos;
                         }
-                        if opt_scan_pos_2 >= 0 && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
+                        if (opt_scan_pos_2 >= 0) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
                             p.site = 403;
                             p.atn_ret_pending = 3047;
                             _parse_type_generic(p, follow);
@@ -22962,7 +22964,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                             if pos < 0 { break opt_scan_3; }
                             opt_scan_pos_3 = pos;
                         }
-                        if opt_scan_pos_3 >= 0 && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
+                        if (opt_scan_pos_3 >= 0) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
                             p.site = 406;
                             p.atn_ret_pending = 3064;
                             _parse_type_generic(p, follow);
@@ -23002,7 +23004,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                             if pos < 0 { break opt_scan_4; }
                             opt_scan_pos_4 = pos;
                         }
-                        if opt_scan_pos_4 >= 0 && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
+                        if (opt_scan_pos_4 >= 0) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
                             p.site = 406;
                             p.atn_ret_pending = 3064;
                             _parse_type_generic(p, follow);
@@ -23054,7 +23056,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                 p.b.start_node_at(_cp, RK_SINGLE_EXPRESSION, _start);
                 p.b.set_alt(9);
                 if !p.speculating {
-                    if !(TypeScriptParserBase::not_line_terminator(p)) {
+                    if !TypeScriptParserBase::not_line_terminator(p) {
                         p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);
                         return;
                     }
@@ -23072,7 +23074,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                 p.b.start_node_at(_cp, RK_SINGLE_EXPRESSION, _start);
                 p.b.set_alt(10);
                 if !p.speculating {
-                    if !(TypeScriptParserBase::not_line_terminator(p)) {
+                    if !TypeScriptParserBase::not_line_terminator(p) {
                         p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);
                         return;
                     }
@@ -23729,7 +23731,7 @@ fn _parse_anonymous_function__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> ()
     p.expect(TK_OpenBrace, &SYNC_11, false);
     p.site = 488;
     p.atn_ret_pending = 3290;
-    _parse_function_body(p, follow_then(FOLLOW_MASK_9, 1, follow));
+    _parse_function_body(p, follow_then(FOLLOW_MASK_9, 8, follow));
     p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
 }
@@ -23765,7 +23767,7 @@ fn scan_anonymous_function__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnSt
     if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
     atn.stack.push(3290);
-    pos = scan_function_body(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 1, follow));
+    pos = scan_function_body(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 8, follow));
     atn.stack.pop();
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
@@ -23924,7 +23926,7 @@ fn _parse_arrow_function_parameters__inner(p: &mut Parser, follow: i64 = 0) -> (
         if _kind_set_41(p.peek_kind()) {
             p.site = 494;
             p.atn_ret_pending = 3324;
-            _parse_formal_parameter_list(p, follow_then(FOLLOW_MASK_5, 1, follow));
+            _parse_formal_parameter_list(p, follow_then(FOLLOW_MASK_5, 8, follow));
         }
         p.expect(TK_CloseParen, &EMPTY_SYNC, true);
         return;
@@ -23965,7 +23967,7 @@ fn _parse_arrow_function_body__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> (
     p.expect(TK_OpenBrace, &SYNC_11, false);
     p.site = 496;
     p.atn_ret_pending = 3336;
-    _parse_function_body(p, follow_then(FOLLOW_MASK_9, 1, follow));
+    _parse_function_body(p, follow_then(FOLLOW_MASK_9, 8, follow));
     p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
 }
@@ -23975,7 +23977,7 @@ fn scan_arrow_function_body__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnS
     if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
     atn.stack.push(3336);
-    pos = scan_function_body(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 1, follow));
+    pos = scan_function_body(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_9, 8, follow));
     atn.stack.pop();
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
@@ -24153,7 +24155,7 @@ fn _parse_template_string_atom__inner(p: &mut Parser, follow: i64 = 0) -> () wit
         p.take();
         p.site = 501;
         p.atn_ret_pending = 3424;
-        _parse_single_expression(p, follow_then(FOLLOW_MASK_77, 1, follow));
+        _parse_single_expression(p, follow_then(FOLLOW_MASK_77, 8, follow));
         p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC, true);
         return;
     } else if kind == TK_TemplateStringEscapeAtom {
@@ -24245,7 +24247,7 @@ fn _parse_bigint_literal(p: &mut Parser) -> () with TypeScriptParserBase {
 
 fn _parse_getter__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     if !p.speculating {
-        if !(TypeScriptParserBase::n(p, "get")) {
+        if !TypeScriptParserBase::n(p, "get") {
             p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);
             return;
         }
@@ -24276,7 +24278,7 @@ fn _parse_getter(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBas
 
 fn _parse_setter__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     if !p.speculating {
-        if !(TypeScriptParserBase::n(p, "set")) {
+        if !TypeScriptParserBase::n(p, "set") {
             p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);
             return;
         }
@@ -24554,10 +24556,10 @@ fn _parse_eos__inner(p: &mut Parser) -> () with TypeScriptParserBase {
         p.take();
         return;
     }
-    if (pred_15(p)) {
+    if pred_15(p) {
         return;
     }
-    if (pred_16(p)) {
+    if pred_16(p) {
         return;
     }
     p.no_viable(

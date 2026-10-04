@@ -974,17 +974,17 @@ internal fn follow_open_with(cont: i64, open: i64) -> i64 {
     return cont & FOLLOW_CONT_MASK | follow_open_join(follow_open_mark(cont), open);
 }
 
-internal fn follow_then(prefix: i64, positions: i64, cont: i64) -> i64 {
-    return (prefix | (cont & FOLLOW_SEQUENCED) << positions * FOLLOW_SLOT_BITS) & FOLLOW_CONT_MASK;
+internal fn follow_then(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    return (prefix | (cont & FOLLOW_SEQUENCED) << prefix_bits) & FOLLOW_CONT_MASK;
 }
 
-internal fn follow_then_opening(prefix: i64, positions: i64, cont: i64) -> i64 {
-    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_then_opening(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | follow_open_mark(cont);
 }
 
-internal fn follow_or(prefix: i64, positions: i64, alternative: i64) -> i64 {
-    let opened = (alternative | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_or(prefix: i64, prefix_bits: i64, alternative: i64) -> i64 {
+    let opened = (alternative | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | alternative & FOLLOW_OPEN_FIELD;
 }
 
@@ -1630,7 +1630,7 @@ fn _parse_file___inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 0;
     let para = _parse_para(p, FOLLOW_MASK_0);
     p.site = 1;
-    let para_2 = _parse_para(p, follow_then(FOLLOW_MASK_1, 1, follow));
+    let para_2 = _parse_para(p, follow_then(FOLLOW_MASK_1, 8, follow));
     let eof = p.expect(TK_EOF, &EMPTY_SYNC, true);
     if !p.speculating {
         p.emit(`${p.rule_string_tree()}\n`);
@@ -1651,7 +1651,7 @@ fn _parse_file_(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_para__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 2;
-    _parse_para_content(p, follow_then(FOLLOW_MASK_2, 2, follow));
+    _parse_para_content(p, follow_then(FOLLOW_MASK_2, 16, follow));
     p.expect(TK_NL, &SYNC_0, false);
     p.expect(TK_NL, &EMPTY_SYNC, true);
     return;
@@ -1697,7 +1697,7 @@ fn _parse_para_content__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 pos += 1;
                 gd_best = pos;
             }
-        } else if gd_kind == TK_NL && (p.la(2) != TK_NL) {
+        } else if gd_kind == TK_NL && p.la(2) != TK_NL {
             gd_winner = 2;
             gd_scan_3: {
                 let tokens = &p.kinds;

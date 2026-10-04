@@ -1593,14 +1593,14 @@ fn _parse_body__inner(p: &mut Parser) -> () {
     p.expect(TK_LB, &SYNC_1, false);
     if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
     let grp_kind = p.peek_kind();
-    if grp_kind == TK_ID && (p.on == 1) {
+    if grp_kind == TK_ID && p.on == 1 {
         if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
         if p.peek_kind() == TK_ID {
             p.take();
         }
     } else if grp_kind == TK_LP {
         p.take();
-    } else if (p.on == 1) {
+    } else if p.on == 1 {
         if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
         if p.peek_kind() == TK_ID {
             p.take();

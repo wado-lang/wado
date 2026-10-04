@@ -977,7 +977,17 @@ impl<G: Eq> ScanMemo<G> {
         return self.entries[entry].gate_out;
     }
 
-    internal fn put(&mut self, rule: i32, pos: i32, min_prec: i32, follow: i64, cont: i64, gate_in: G, end: i32, gate_out: G) {
+    internal fn put(
+        &mut self,
+        rule: i32,
+        pos: i32,
+        min_prec: i32,
+        follow: i64,
+        cont: i64,
+        gate_in: G,
+        end: i32,
+        gate_out: G,
+    ) {
         self.entries.push(ScanMemoEntry { next: self.heads[pos], rule, min_prec, follow, cont, gate_in, end, gate_out });
         self.heads[pos] = self.entries.len() - 1;
     }
@@ -1881,7 +1891,7 @@ fn _parse_expr__inner_alt_2(p: &mut Parser) -> () {
 
 fn scan_expr__alt_2(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
     let mut pos = pos;
-    if !(gate.no_brace == 0) { return -1; }
+    if gate.no_brace != 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_LB { return -1; }

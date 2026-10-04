@@ -974,17 +974,17 @@ internal fn follow_open_with(cont: i64, open: i64) -> i64 {
     return cont & FOLLOW_CONT_MASK | follow_open_join(follow_open_mark(cont), open);
 }
 
-internal fn follow_then(prefix: i64, positions: i64, cont: i64) -> i64 {
-    return (prefix | (cont & FOLLOW_SEQUENCED) << positions * FOLLOW_SLOT_BITS) & FOLLOW_CONT_MASK;
+internal fn follow_then(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    return (prefix | (cont & FOLLOW_SEQUENCED) << prefix_bits) & FOLLOW_CONT_MASK;
 }
 
-internal fn follow_then_opening(prefix: i64, positions: i64, cont: i64) -> i64 {
-    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_then_opening(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | follow_open_mark(cont);
 }
 
-internal fn follow_or(prefix: i64, positions: i64, alternative: i64) -> i64 {
-    let opened = (alternative | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_or(prefix: i64, prefix_bits: i64, alternative: i64) -> i64 {
+    let opened = (alternative | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | alternative & FOLLOW_OPEN_FIELD;
 }
 
@@ -1120,7 +1120,17 @@ impl<G: Eq> ScanMemo<G> {
         return self.entries[entry].gate_out;
     }
 
-    internal fn put(&mut self, rule: i32, pos: i32, min_prec: i32, follow: i64, cont: i64, gate_in: G, end: i32, gate_out: G) {
+    internal fn put(
+        &mut self,
+        rule: i32,
+        pos: i32,
+        min_prec: i32,
+        follow: i64,
+        cont: i64,
+        gate_in: G,
+        end: i32,
+        gate_out: G,
+    ) {
         self.entries.push(ScanMemoEntry { next: self.heads[pos], rule, min_prec, follow, cont, gate_in, end, gate_out });
         self.heads[pos] = self.entries.len() - 1;
     }

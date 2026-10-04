@@ -974,17 +974,17 @@ internal fn follow_open_with(cont: i64, open: i64) -> i64 {
     return cont & FOLLOW_CONT_MASK | follow_open_join(follow_open_mark(cont), open);
 }
 
-internal fn follow_then(prefix: i64, positions: i64, cont: i64) -> i64 {
-    return (prefix | (cont & FOLLOW_SEQUENCED) << positions * FOLLOW_SLOT_BITS) & FOLLOW_CONT_MASK;
+internal fn follow_then(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    return (prefix | (cont & FOLLOW_SEQUENCED) << prefix_bits) & FOLLOW_CONT_MASK;
 }
 
-internal fn follow_then_opening(prefix: i64, positions: i64, cont: i64) -> i64 {
-    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_then_opening(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | follow_open_mark(cont);
 }
 
-internal fn follow_or(prefix: i64, positions: i64, alternative: i64) -> i64 {
-    let opened = (alternative | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_or(prefix: i64, prefix_bits: i64, alternative: i64) -> i64 {
+    let opened = (alternative | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | alternative & FOLLOW_OPEN_FIELD;
 }
 
@@ -1608,7 +1608,7 @@ fn scan_pair(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_1; }
                 pos += 1;
-                pos = scan_opt_tail(tokens, pos, follow_then_opening(FOLLOW_MASK_2, 2, follow));
+                pos = scan_opt_tail(tokens, pos, follow_then_opening(FOLLOW_MASK_2, 16, follow));
                 if pos < 0 { break sg_1; }
                 break sg_1_done;
             }
@@ -1665,7 +1665,7 @@ fn _parse_s__inner(p: &mut Parser, follow: i64 = 0) -> () {
         gd_scan_2: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_pair(tokens, pos, follow_then(FOLLOW_MASK_1, 1, follow));
+            pos = scan_pair(tokens, pos, follow_then(FOLLOW_MASK_1, 8, follow));
             if pos < 0 { break gd_scan_2; }
             gd_end_2 = pos;
         }
@@ -1675,7 +1675,7 @@ fn _parse_s__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if gd_winner == 1 {
             p.site = 2;
-            _parse_pair(p, follow_then(FOLLOW_MASK_1, 1, follow));
+            _parse_pair(p, follow_then(FOLLOW_MASK_1, 8, follow));
         } else {
             p.site = 0;
             _parse_item(p);
@@ -1715,7 +1715,7 @@ fn _parse_pair__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.site = 5;
         _parse_item(p);
         p.site = 6;
-        _parse_opt_tail(p, follow_then_opening(FOLLOW_MASK_2, 2, follow));
+        _parse_opt_tail(p, follow_then_opening(FOLLOW_MASK_2, 16, follow));
     }
     return;
 }

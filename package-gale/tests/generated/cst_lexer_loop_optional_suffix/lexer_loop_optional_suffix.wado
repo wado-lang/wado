@@ -959,8 +959,7 @@ fn try_NUM(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() { return -1; }
     if !(chars[pos] matches { '0'..='9' }) { return -1; }
     pos += 1;
-    let mut accept_0: i32 = -1;
-    let mut la_reach_0: i32 = -1;
+    let mut la_end_0: i32 = -1;
     loop {
         let mut la_tot_1: i32 = -1;
         let peek_save_2 = pos;
@@ -974,9 +973,8 @@ fn try_NUM(chars: &List<char>, start: i32) -> i32 {
         if !opt_ok_3 { pos = opt_saved_3; }
         la_tot_1 = pos;
         pos = peek_save_2;
-        if la_tot_1 >= 0 && la_tot_1 >= la_reach_0 {
-            la_reach_0 = la_tot_1;
-            accept_0 = pos;
+        if la_tot_1 >= 0 && la_tot_1 >= la_end_0 {
+            la_end_0 = la_tot_1;
         }
         let la_saved_0 = pos;
         la_rep_0: {
@@ -988,10 +986,10 @@ fn try_NUM(chars: &List<char>, start: i32) -> i32 {
         pos = la_saved_0;
         break;
     }
-    if accept_0 < 0 {
+    if la_end_0 < 0 {
         return -1;
     }
-    pos = la_reach_0;
+    pos = la_end_0;
     return pos;
 }
 

@@ -974,17 +974,17 @@ internal fn follow_open_with(cont: i64, open: i64) -> i64 {
     return cont & FOLLOW_CONT_MASK | follow_open_join(follow_open_mark(cont), open);
 }
 
-internal fn follow_then(prefix: i64, positions: i64, cont: i64) -> i64 {
-    return (prefix | (cont & FOLLOW_SEQUENCED) << positions * FOLLOW_SLOT_BITS) & FOLLOW_CONT_MASK;
+internal fn follow_then(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    return (prefix | (cont & FOLLOW_SEQUENCED) << prefix_bits) & FOLLOW_CONT_MASK;
 }
 
-internal fn follow_then_opening(prefix: i64, positions: i64, cont: i64) -> i64 {
-    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_then_opening(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | follow_open_mark(cont);
 }
 
-internal fn follow_or(prefix: i64, positions: i64, alternative: i64) -> i64 {
-    let opened = (alternative | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_or(prefix: i64, prefix_bits: i64, alternative: i64) -> i64 {
+    let opened = (alternative | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | alternative & FOLLOW_OPEN_FIELD;
 }
 
@@ -1690,7 +1690,7 @@ impl Parser {
 
 fn scan_arm(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_pattern(tokens, pos, follow_then(FOLLOW_MASK_2, 2, follow));
+    pos = scan_pattern(tokens, pos, follow_then(FOLLOW_MASK_2, 16, follow));
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_EQGT { return -1; }
     pos += 1;
@@ -1727,14 +1727,14 @@ fn scan_pattern(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 let sp = pos;
                 sg_8_done: {
                     sg_8: {
-                        pos = scan_pattern(tokens, pos, follow_or(FOLLOW_MASK_1, 2, follow_then(FOLLOW_MASK_4, 1, follow)));
+                        pos = scan_pattern(tokens, pos, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_4, 8, follow)));
                         if pos < 0 { break sg_8; }
                         while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                             let sp = pos;
                             sg_9_done: {
                                 sg_9: {
                                     pos += 1;
-                                    pos = scan_pattern(tokens, pos, follow_then_opening(FOLLOW_MASK_1, 2, follow));
+                                    pos = scan_pattern(tokens, pos, follow_then_opening(FOLLOW_MASK_1, 16, follow));
                                     if pos < 0 { break sg_9; }
                                     break sg_9_done;
                                 }
@@ -1781,7 +1781,7 @@ fn scan_path(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn _parse_prog__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 0;
-    _parse_match_expr(p, follow_then(FOLLOW_MASK_0, 1, follow));
+    _parse_match_expr(p, follow_then(FOLLOW_MASK_0, 8, follow));
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
 }
@@ -1813,7 +1813,7 @@ fn _parse_match_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
             sg_0_done: {
                 sg_0: {
                     pos += 1;
-                    pos = scan_arm(tokens, pos, follow_then_opening(FOLLOW_MASK_1, 2, follow));
+                    pos = scan_arm(tokens, pos, follow_then_opening(FOLLOW_MASK_1, 16, follow));
                     if pos < 0 { break sg_0; }
                     break sg_0_done;
                 }
@@ -1841,7 +1841,7 @@ fn _parse_match_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     sg_1: {
                         if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_1; }
                         pos += 1;
-                        pos = scan_arm(tokens, pos, follow_then_opening(FOLLOW_MASK_1, 2, follow));
+                        pos = scan_arm(tokens, pos, follow_then_opening(FOLLOW_MASK_1, 16, follow));
                         if pos < 0 { break sg_1; }
                         break sg_1_done;
                     }
@@ -1853,7 +1853,7 @@ fn _parse_match_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
             if rep_scan_pos < 0 { break; }
             p.expect(TK_LIT_COMMA, &SYNC_4, false);
             p.site = 2;
-            _parse_arm(p, follow_then_opening(FOLLOW_MASK_1, 2, follow));
+            _parse_arm(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
             if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_3, &EXPECTED_3); }
         }
         if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
@@ -1878,7 +1878,7 @@ fn _parse_match_expr(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_arm__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 3;
-    _parse_pattern(p, follow_then(FOLLOW_MASK_2, 2, follow));
+    _parse_pattern(p, follow_then(FOLLOW_MASK_2, 16, follow));
     p.expect(TK_LIT_EQGT, &SYNC_0, false);
     p.expect(TK_IDENT, &EMPTY_SYNC, true);
     return;
@@ -1924,14 +1924,14 @@ fn _parse_pattern__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
         opt_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_pattern(tokens, pos, follow_or(FOLLOW_MASK_1, 2, follow_then(FOLLOW_MASK_4, 1, follow)));
+            pos = scan_pattern(tokens, pos, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_4, 8, follow)));
             if pos < 0 { break opt_scan; }
             while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                 let sp = pos;
                 sg_2_done: {
                     sg_2: {
                         pos += 1;
-                        pos = scan_pattern(tokens, pos, follow_then_opening(FOLLOW_MASK_1, 2, follow));
+                        pos = scan_pattern(tokens, pos, follow_then_opening(FOLLOW_MASK_1, 16, follow));
                         if pos < 0 { break sg_2; }
                         break sg_2_done;
                     }
@@ -1944,12 +1944,12 @@ fn _parse_pattern__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if opt_scan_pos >= 0 {
             p.site = 5;
-            _parse_pattern(p, follow_or(FOLLOW_MASK_1, 2, follow_then(FOLLOW_MASK_4, 1, follow)));
+            _parse_pattern(p, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_4, 8, follow)));
             if !kind_set_has(&SYNC_7, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_7, &EXPECTED_7); }
             while !p.recovering && p.peek_kind() == TK_LIT_COMMA {
                 p.take();
                 p.site = 6;
-                _parse_pattern(p, follow_then_opening(FOLLOW_MASK_1, 2, follow));
+                _parse_pattern(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
                 if !kind_set_has(&SYNC_7, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_7, &EXPECTED_7); }
             }
         }
@@ -1971,14 +1971,14 @@ fn scan_pattern__alt_2(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     let sp = pos;
                     sg_4_done: {
                         sg_4: {
-                            pos = scan_pattern(tokens, pos, follow_or(FOLLOW_MASK_1, 2, follow_then(FOLLOW_MASK_4, 1, follow)));
+                            pos = scan_pattern(tokens, pos, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_4, 8, follow)));
                             if pos < 0 { break sg_4; }
                             while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                 let sp = pos;
                                 sg_5_done: {
                                     sg_5: {
                                         pos += 1;
-                                        pos = scan_pattern(tokens, pos, follow_then_opening(FOLLOW_MASK_1, 2, follow));
+                                        pos = scan_pattern(tokens, pos, follow_then_opening(FOLLOW_MASK_1, 16, follow));
                                         if pos < 0 { break sg_5; }
                                         break sg_5_done;
                                     }
@@ -2042,14 +2042,14 @@ fn _parse_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () {
         opt_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_pattern(tokens, pos, follow_or(FOLLOW_MASK_1, 2, follow_then(FOLLOW_MASK_4, 1, follow)));
+            pos = scan_pattern(tokens, pos, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_4, 8, follow)));
             if pos < 0 { break opt_scan; }
             while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                 let sp = pos;
                 sg_6_done: {
                     sg_6: {
                         pos += 1;
-                        pos = scan_pattern(tokens, pos, follow_then_opening(FOLLOW_MASK_1, 2, follow));
+                        pos = scan_pattern(tokens, pos, follow_then_opening(FOLLOW_MASK_1, 16, follow));
                         if pos < 0 { break sg_6; }
                         break sg_6_done;
                     }
@@ -2062,12 +2062,12 @@ fn _parse_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if opt_scan_pos >= 0 {
             p.site = 7;
-            _parse_pattern(p, follow_or(FOLLOW_MASK_1, 2, follow_then(FOLLOW_MASK_4, 1, follow)));
+            _parse_pattern(p, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_4, 8, follow)));
             if !kind_set_has(&SYNC_7, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_7, &EXPECTED_7); }
             while !p.recovering && p.peek_kind() == TK_LIT_COMMA {
                 p.take();
                 p.site = 8;
-                _parse_pattern(p, follow_then_opening(FOLLOW_MASK_1, 2, follow));
+                _parse_pattern(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
                 if !kind_set_has(&SYNC_7, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_7, &EXPECTED_7); }
             }
         }

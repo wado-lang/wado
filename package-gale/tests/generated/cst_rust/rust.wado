@@ -1021,17 +1021,17 @@ internal fn follow_open_with(cont: i64, open: i64) -> i64 {
     return cont & FOLLOW_CONT_MASK | follow_open_join(follow_open_mark(cont), open);
 }
 
-internal fn follow_then(prefix: i64, positions: i64, cont: i64) -> i64 {
-    return (prefix | (cont & FOLLOW_SEQUENCED) << positions * FOLLOW_SLOT_BITS) & FOLLOW_CONT_MASK;
+internal fn follow_then(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    return (prefix | (cont & FOLLOW_SEQUENCED) << prefix_bits) & FOLLOW_CONT_MASK;
 }
 
-internal fn follow_then_opening(prefix: i64, positions: i64, cont: i64) -> i64 {
-    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_then_opening(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | follow_open_mark(cont);
 }
 
-internal fn follow_or(prefix: i64, positions: i64, alternative: i64) -> i64 {
-    let opened = (alternative | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_or(prefix: i64, prefix_bits: i64, alternative: i64) -> i64 {
+    let opened = (alternative | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | alternative & FOLLOW_OPEN_FIELD;
 }
 
@@ -1167,7 +1167,17 @@ impl<G: Eq> ScanMemo<G> {
         return self.entries[entry].gate_out;
     }
 
-    internal fn put(&mut self, rule: i32, pos: i32, min_prec: i32, follow: i64, cont: i64, gate_in: G, end: i32, gate_out: G) {
+    internal fn put(
+        &mut self,
+        rule: i32,
+        pos: i32,
+        min_prec: i32,
+        follow: i64,
+        cont: i64,
+        gate_in: G,
+        end: i32,
+        gate_out: G,
+    ) {
         self.entries.push(ScanMemoEntry { next: self.heads[pos], rule, min_prec, follow, cont, gate_in, end, gate_out });
         self.heads[pos] = self.entries.len() - 1;
     }
@@ -1888,7 +1898,7 @@ fn try_OUTER_BLOCK_DOC(chars: &List<char>, start: i32) -> i32 {
 
 fn try_SHEBANG(chars: &List<char>, start: i32) -> i32 with RustLexerBase {
     let mut pos = start;
-    if !(RustLexerBase::sof(LexerView { chars, start, pos })) { return -1; }
+    if !RustLexerBase::sof(LexerView { chars, start, pos }) { return -1; }
     opt_10: {
         if pos >= chars.len() || chars[pos] != '\u{feff}' { break opt_10; }
         pos += 1;
@@ -2283,7 +2293,7 @@ fn try_BIN_LITERAL(chars: &List<char>, start: i32) -> i32 {
 
 fn try_FLOAT_LITERAL(chars: &List<char>, start: i32) -> i32 with RustLexerBase {
     let mut pos = start;
-    if !(RustLexerBase::float_literal_possible(LexerView { chars, start, pos })) { return -1; }
+    if !RustLexerBase::float_literal_possible(LexerView { chars, start, pos }) { return -1; }
     let alts_saved_29 = pos;
     let mut alts_best_29 = -1;
     alts_29_0: {
@@ -2292,7 +2302,7 @@ fn try_FLOAT_LITERAL(chars: &List<char>, start: i32) -> i32 with RustLexerBase {
         if pos < 0 { break alts_29_0; }
         if pos >= chars.len() || chars[pos] != '.' { break alts_29_0; }
         pos += 1;
-        if !(RustLexerBase::float_dot_possible(LexerView { chars, start, pos })) { break alts_29_0; }
+        if !RustLexerBase::float_dot_possible(LexerView { chars, start, pos }) { break alts_29_0; }
         if pos > alts_best_29 { alts_best_29 = pos; }
     }
     alts_29_1: {
@@ -4803,7 +4813,7 @@ fn scan_macro_rules_def(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo
     if kind == TK_LPAREN {
         pos = start + 1;
         try_0: {
-            pos = scan_macro_rules(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_7, 2, follow));
+            pos = scan_macro_rules(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_7, 16, follow));
             if pos < 0 { break try_0; }
             if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break try_0; }
             pos += 1;
@@ -4815,7 +4825,7 @@ fn scan_macro_rules_def(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo
     } else if kind == TK_LSQUAREBRACKET {
         pos = start + 1;
         try_1: {
-            pos = scan_macro_rules(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_9, 2, follow));
+            pos = scan_macro_rules(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_9, 16, follow));
             if pos < 0 { break try_1; }
             if pos >= tokens.len() || tokens[pos] != TK_RSQUAREBRACKET { break try_1; }
             pos += 1;
@@ -4827,7 +4837,7 @@ fn scan_macro_rules_def(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo
     } else if kind == TK_LCURLYBRACE {
         pos = start + 1;
         try_2: {
-            pos = scan_macro_rules(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_5, 1, follow));
+            pos = scan_macro_rules(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_5, 8, follow));
             if pos < 0 { break try_2; }
             if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break try_2; }
             pos += 1;
@@ -4840,7 +4850,7 @@ fn scan_macro_rules_def(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo
 
 fn scan_macro_rules(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_macro_rule(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_12, 2, follow), follow_open_set(FOLLOW_MASK_13)));
+    pos = scan_macro_rule(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_12, 16, follow), follow_open_set(FOLLOW_MASK_13)));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_SEMI && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
@@ -4848,7 +4858,7 @@ fn scan_macro_rules(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &m
         sg_218_done: {
             sg_218: {
                 pos += 1;
-                pos = scan_macro_rule(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_12, 2, follow));
+                pos = scan_macro_rule(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_12, 16, follow));
                 if pos < 0 { break sg_218; }
                 break sg_218_done;
             }
@@ -5162,7 +5172,7 @@ fn scan_item(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut Scan
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_17));
+        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_17));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -5550,7 +5560,7 @@ fn scan_use_declaration(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_KW_USE { return -1; }
     pos += 1;
-    pos = scan_use_tree(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_13, 1, follow));
+    pos = scan_use_tree(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_13, 8, follow));
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
     pos += 1;
@@ -5717,7 +5727,7 @@ fn scan_self_param__walk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, mem
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_28));
+        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_28));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -5802,7 +5812,7 @@ fn scan_function_param(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo:
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_29));
+        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_29));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -5923,7 +5933,7 @@ fn scan_type_alias(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mu
         sg_205_done: {
             sg_205: {
                 pos += 1;
-                pos = scan_type_(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_13, 1, follow));
+                pos = scan_type_(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_13, 8, follow));
                 if pos < 0 { break sg_205; }
                 break sg_205_done;
             }
@@ -5996,7 +6006,7 @@ fn scan_struct_struct(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: 
                 if pos < tokens.len() && _kind_set_49(tokens[pos]) {
                     let sp = pos;
                     let sp_gate = *gate;
-                    pos = scan_struct_fields(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_5, 1, follow));
+                    pos = scan_struct_fields(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_5, 8, follow));
                     if pos < 0 {
                         pos = sp;
                         *gate = sp_gate;
@@ -6047,7 +6057,7 @@ fn scan_tuple_struct(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &
     if pos < tokens.len() && tokens[pos] == TK_KW_WHERE {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_where_clause(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_13, 1, follow));
+        pos = scan_where_clause(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_13, 8, follow));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -6060,7 +6070,7 @@ fn scan_tuple_struct(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &
 
 fn scan_struct_fields(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_struct_field(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_31, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+    pos = scan_struct_field(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_31, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
@@ -6068,7 +6078,7 @@ fn scan_struct_fields(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: 
         sg_206_done: {
             sg_206: {
                 pos += 1;
-                pos = scan_struct_field(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_31, 2, follow));
+                pos = scan_struct_field(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_31, 16, follow));
                 if pos < 0 { break sg_206; }
                 break sg_206_done;
             }
@@ -6142,7 +6152,7 @@ fn scan_struct_field(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &
 
 fn scan_tuple_fields(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_tuple_field(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_34, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+    pos = scan_tuple_field(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_34, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
@@ -6150,7 +6160,7 @@ fn scan_tuple_fields(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &
         sg_208_done: {
             sg_208: {
                 pos += 1;
-                pos = scan_tuple_field(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_34, 2, follow));
+                pos = scan_tuple_field(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_34, 16, follow));
                 if pos < 0 { break sg_208; }
                 break sg_208_done;
             }
@@ -6247,7 +6257,7 @@ fn scan_enumeration(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &m
     if pos < tokens.len() && _kind_set_49(tokens[pos]) {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_enum_items(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_5, 1, follow));
+        pos = scan_enum_items(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_5, 8, follow));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -6260,7 +6270,7 @@ fn scan_enumeration(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &m
 
 fn scan_enum_items(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_enum_item(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_31, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+    pos = scan_enum_item(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_31, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
@@ -6268,7 +6278,7 @@ fn scan_enum_items(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mu
         sg_233_done: {
             sg_233: {
                 pos += 1;
-                pos = scan_enum_item(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_31, 2, follow));
+                pos = scan_enum_item(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_31, 16, follow));
                 if pos < 0 { break sg_233; }
                 break sg_233_done;
             }
@@ -6374,7 +6384,7 @@ fn scan_enum_item_tuple(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo
     if pos < tokens.len() && _kind_set_50(tokens[pos]) {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_tuple_fields(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 1, follow));
+        pos = scan_tuple_fields(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 8, follow));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -6392,7 +6402,7 @@ fn scan_enum_item_struct(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, mem
     if pos < tokens.len() && _kind_set_49(tokens[pos]) {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_struct_fields(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_5, 1, follow));
+        pos = scan_struct_fields(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_5, 8, follow));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -6438,7 +6448,7 @@ fn scan_union_(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut Sc
     }
     if pos >= tokens.len() || tokens[pos] != TK_LCURLYBRACE { return -1; }
     pos += 1;
-    pos = scan_struct_fields(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_5, 1, follow));
+    pos = scan_struct_fields(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_5, 8, follow));
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { return -1; }
     pos += 1;
@@ -6461,7 +6471,7 @@ fn scan_constant_item(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: 
         sg_220_done: {
             sg_220: {
                 pos += 1;
-                pos = scan_expression(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_13, 1, follow), 0);
+                pos = scan_expression(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_13, 8, follow), 0);
                 if pos < 0 { break sg_220; }
                 break sg_220_done;
             }
@@ -6496,7 +6506,7 @@ fn scan_static_item(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &m
         sg_192_done: {
             sg_192: {
                 pos += 1;
-                pos = scan_expression(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_13, 1, follow), 0);
+                pos = scan_expression(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_13, 8, follow), 0);
                 if pos < 0 { break sg_192; }
                 break sg_192_done;
             }
@@ -6977,7 +6987,7 @@ fn scan_external_item(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: 
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_39));
+        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_39));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -7119,7 +7129,7 @@ fn scan_generic_param__walk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, 
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_41));
+        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_41));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -7354,7 +7364,7 @@ fn scan_where_clause(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &
         let sp_gate = *gate;
         sg_195_done: {
             sg_195: {
-                pos = scan_where_clause_item(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_26, 1, follow));
+                pos = scan_where_clause_item(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_26, 8, follow));
                 if pos < 0 { break sg_195; }
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_195; }
                 pos += 1;
@@ -7537,7 +7547,7 @@ fn scan_associated_item(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_46));
+        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_46));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -7627,7 +7637,7 @@ fn scan_inner_attribute(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_LSQUAREBRACKET { return -1; }
     pos += 1;
-    pos = scan_attr(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_4, 1, follow));
+    pos = scan_attr(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_4, 8, follow));
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_RSQUAREBRACKET { return -1; }
     pos += 1;
@@ -7640,7 +7650,7 @@ fn scan_outer_attribute(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_LSQUAREBRACKET { return -1; }
     pos += 1;
-    pos = scan_attr(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_4, 1, follow));
+    pos = scan_attr(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_4, 8, follow));
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_RSQUAREBRACKET { return -1; }
     pos += 1;
@@ -7657,7 +7667,7 @@ fn scan_attr(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut Scan
         try_0: {
             if pos >= tokens.len() || tokens[pos] != TK_LPAREN { break try_0; }
             pos += 1;
-            pos = scan_attr(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 1, follow));
+            pos = scan_attr(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 8, follow));
             if pos < 0 { break try_0; }
             if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break try_0; }
             pos += 1;
@@ -7786,7 +7796,7 @@ fn scan_let_statement(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: 
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_49));
+        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_49));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -8135,7 +8145,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo
                         if pos < tokens.len() && _kind_set_55(tokens[pos]) {
                             let sp = pos;
                             let sp_gate = *gate;
-                            pos = scan_array_elements(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_4, 1, follow));
+                            pos = scan_array_elements(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_4, 8, follow));
                             if pos < 0 {
                                 pos = sp;
                                 *gate = sp_gate;
@@ -8157,7 +8167,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo
             if pos < tokens.len() && _kind_set_55(tokens[pos]) {
                 let sp = pos;
                 let sp_gate = *gate;
-                pos = scan_array_elements(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_4, 1, follow));
+                pos = scan_array_elements(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_4, 8, follow));
                 if pos < 0 {
                     pos = sp;
                     *gate = sp_gate;
@@ -8183,7 +8193,7 @@ fn scan_expression_lr_3(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo
     if pos < tokens.len() && _kind_set_55(tokens[pos]) {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_call_params(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 1, follow));
+        pos = scan_call_params(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 8, follow));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -8228,7 +8238,7 @@ fn scan_expression_lr_7(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo
     if pos < tokens.len() && _kind_set_55(tokens[pos]) {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_call_params(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 1, follow));
+        pos = scan_call_params(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 8, follow));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -8244,7 +8254,7 @@ fn scan_expression_lr_8(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo
     if pos >= tokens.len() || tokens[pos] != TK_LSQUAREBRACKET { return -1; }
     pos += 1;
     gate.no_struct = 0;
-    pos = scan_expression(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_4, 1, follow), 0);
+    pos = scan_expression(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_4, 8, follow), 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_RSQUAREBRACKET { return -1; }
     pos += 1;
@@ -8756,12 +8766,12 @@ fn scan_expression_with_block(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if kind == TK_POUND {
         try_0: {
-            pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_51));
+            pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_51));
             if pos < 0 { break try_0; }
             while pos < tokens.len() && tokens[pos] == TK_POUND {
                 let sp = pos;
                 let sp_gate = *gate;
-                pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_51));
+                pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_51));
                 if pos < 0 {
                     pos = sp;
                     *gate = sp_gate;
@@ -8905,7 +8915,7 @@ fn scan_block_expression(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, mem
                 if pos < tokens.len() && _kind_set_98(tokens[pos]) {
                     let sp = pos;
                     let sp_gate = *gate;
-                    pos = scan_statements(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_5, 1, follow));
+                    pos = scan_statements(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_5, 8, follow));
                     if pos < 0 {
                         pos = sp;
                         *gate = sp_gate;
@@ -8927,7 +8937,7 @@ fn scan_block_expression(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, mem
     if pos < tokens.len() && _kind_set_98(tokens[pos]) {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_statements(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_5, 1, follow));
+        pos = scan_statements(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_5, 8, follow));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -9029,7 +9039,7 @@ fn scan_tuple_elements__scoped(tokens: &Array<i32>, pos: i32, gate: &mut ScanGat
     let mut pos = pos;
     sg_164_done: {
         sg_164: {
-            pos = scan_expression(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_26, 1, follow), 0);
+            pos = scan_expression(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_26, 8, follow), 0);
             if pos < 0 { break sg_164; }
             if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_164; }
             pos += 1;
@@ -9042,7 +9052,7 @@ fn scan_tuple_elements__scoped(tokens: &Array<i32>, pos: i32, gate: &mut ScanGat
         let sp_gate = *gate;
         sg_165_done: {
             sg_165: {
-                pos = scan_expression(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_26, 1, follow), 0);
+                pos = scan_expression(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_26, 8, follow), 0);
                 if pos < 0 { break sg_165; }
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_165; }
                 pos += 1;
@@ -9219,7 +9229,7 @@ fn scan_struct_expr_struct(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, m
 
 fn scan_struct_expr_fields(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_struct_expr_field(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_54, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+    pos = scan_struct_expr_field(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_54, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
@@ -9227,7 +9237,7 @@ fn scan_struct_expr_fields(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, m
         sg_144_done: {
             sg_144: {
                 pos += 1;
-                pos = scan_struct_expr_field(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_54, 2, follow));
+                pos = scan_struct_expr_field(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_54, 16, follow));
                 if pos < 0 { break sg_144; }
                 break sg_144_done;
             }
@@ -9324,7 +9334,7 @@ fn scan_struct_expr_field(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, me
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_55));
+        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_55));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -9419,7 +9429,7 @@ fn scan_struct_expr_tuple(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, me
                                 sg_150_done: {
                                     sg_150: {
                                         pos += 1;
-                                        pos = scan_expression(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_52, 2, follow), 0);
+                                        pos = scan_expression(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_52, 16, follow), 0);
                                         if pos < 0 { break sg_150; }
                                         break sg_150_done;
                                     }
@@ -9470,7 +9480,7 @@ fn scan_struct_expr_tuple(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, me
                     sg_152_done: {
                         sg_152: {
                             pos += 1;
-                            pos = scan_expression(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_52, 2, follow), 0);
+                            pos = scan_expression(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_52, 16, follow), 0);
                             if pos < 0 { break sg_152; }
                             break sg_152_done;
                         }
@@ -9542,7 +9552,7 @@ fn scan_enum_expr_struct(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, mem
     if pos < tokens.len() && _kind_set_111(tokens[pos]) {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_enum_expr_fields(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_5, 1, follow));
+        pos = scan_enum_expr_fields(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_5, 8, follow));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -9556,7 +9566,7 @@ fn scan_enum_expr_struct(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, mem
 fn scan_enum_expr_fields(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_enum_expr_field(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_56, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+    pos = scan_enum_expr_field(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_56, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
@@ -9564,7 +9574,7 @@ fn scan_enum_expr_fields(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, mem
         sg_141_done: {
             sg_141: {
                 pos += 1;
-                pos = scan_enum_expr_field(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_56, 2, follow));
+                pos = scan_enum_expr_field(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_56, 16, follow));
                 if pos < 0 { break sg_141; }
                 break sg_141_done;
             }
@@ -9659,7 +9669,7 @@ fn scan_enum_expr_tuple(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo
                     sg_140_done: {
                         sg_140: {
                             pos += 1;
-                            pos = scan_expression(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_52, 2, follow), 0);
+                            pos = scan_expression(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_52, 16, follow), 0);
                             if pos < 0 { break sg_140; }
                             break sg_140_done;
                         }
@@ -9707,7 +9717,7 @@ fn scan_call_params(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &m
 fn scan_call_params__scoped(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_expression(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_52, 2, follow), follow_open_set(FOLLOW_MASK_26)), 0);
+    pos = scan_expression(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_52, 16, follow), follow_open_set(FOLLOW_MASK_26)), 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
@@ -9715,7 +9725,7 @@ fn scan_call_params__scoped(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, 
         sg_162_done: {
             sg_162: {
                 pos += 1;
-                pos = scan_expression(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_52, 2, follow), 0);
+                pos = scan_expression(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_52, 16, follow), 0);
                 if pos < 0 { break sg_162; }
                 break sg_162_done;
             }
@@ -9830,7 +9840,7 @@ fn scan_closure_expression(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, m
 
 fn scan_closure_parameters(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_closure_param(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_58, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+    pos = scan_closure_param(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_58, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
@@ -9838,7 +9848,7 @@ fn scan_closure_parameters(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, m
         sg_137_done: {
             sg_137: {
                 pos += 1;
-                pos = scan_closure_param(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_58, 2, follow));
+                pos = scan_closure_param(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_58, 16, follow));
                 if pos < 0 { break sg_137; }
                 break sg_137_done;
             }
@@ -9884,7 +9894,7 @@ fn scan_closure_param(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: 
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_59));
+        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_59));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -9993,7 +10003,7 @@ fn scan_predicate_loop_expression(tokens: &Array<i32>, pos: i32, gate: &mut Scan
             while pos < tokens.len() && tokens[pos] == TK_ANDAND {
                 let sp = pos;
                 let sp_gate = *gate;
-                pos = scan_let_chain_tail(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_62, 2, FOLLOW_MASK_36));
+                pos = scan_let_chain_tail(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_62, 16, FOLLOW_MASK_36));
                 if pos < 0 {
                     pos = sp;
                     *gate = sp_gate;
@@ -10029,7 +10039,7 @@ fn scan_predicate_pattern_loop_expression(tokens: &Array<i32>, pos: i32, gate: &
             while pos < tokens.len() && tokens[pos] == TK_ANDAND {
                 let sp = pos;
                 let sp_gate = *gate;
-                pos = scan_let_chain_tail(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_62, 2, FOLLOW_MASK_36));
+                pos = scan_let_chain_tail(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_62, 16, FOLLOW_MASK_36));
                 if pos < 0 {
                     pos = sp;
                     *gate = sp_gate;
@@ -10085,7 +10095,7 @@ fn scan_if_expression(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: 
             while pos < tokens.len() && tokens[pos] == TK_ANDAND {
                 let sp = pos;
                 let sp_gate = *gate;
-                pos = scan_let_chain_tail(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_62, 2, FOLLOW_MASK_36));
+                pos = scan_let_chain_tail(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_62, 16, FOLLOW_MASK_36));
                 if pos < 0 {
                     pos = sp;
                     *gate = sp_gate;
@@ -10171,7 +10181,7 @@ fn scan_if_let_expression(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, me
             while pos < tokens.len() && tokens[pos] == TK_ANDAND {
                 let sp = pos;
                 let sp_gate = *gate;
-                pos = scan_let_chain_tail(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_62, 2, FOLLOW_MASK_36));
+                pos = scan_let_chain_tail(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_62, 16, FOLLOW_MASK_36));
                 if pos < 0 {
                     pos = sp;
                     *gate = sp_gate;
@@ -10284,7 +10294,7 @@ fn scan_match_expression(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, mem
                 if pos < tokens.len() && _kind_set_112(tokens[pos]) {
                     let sp = pos;
                     let sp_gate = *gate;
-                    pos = scan_match_arms(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_5, 1, follow));
+                    pos = scan_match_arms(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_5, 8, follow));
                     if pos < 0 {
                         pos = sp;
                         *gate = sp_gate;
@@ -10306,7 +10316,7 @@ fn scan_match_expression(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, mem
     if pos < tokens.len() && _kind_set_112(tokens[pos]) {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_match_arms(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_5, 1, follow));
+        pos = scan_match_arms(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_5, 8, follow));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -10422,7 +10432,7 @@ fn scan_match_arm__walk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_59));
+        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_59));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -10458,12 +10468,12 @@ fn scan_match_arm_guard__alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGat
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_EQ { return -1; }
     pos += 1;
-    pos = scan_expression(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_62, 2, follow), 0);
+    pos = scan_expression(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_62, 16, follow), 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_ANDAND && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_let_chain_tail(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_62, 2, follow));
+        pos = scan_let_chain_tail(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_62, 16, follow));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -10478,12 +10488,12 @@ fn scan_match_arm_guard__alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGat
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_KW_IF { return -1; }
     pos += 1;
-    pos = scan_expression(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_62, 2, follow), 0);
+    pos = scan_expression(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_62, 16, follow), 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_ANDAND && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_let_chain_tail(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_62, 2, follow));
+        pos = scan_let_chain_tail(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_62, 16, follow));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -10516,7 +10526,7 @@ fn scan_pattern(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut S
     if pos < tokens.len() && tokens[pos] == TK_OR {
         pos += 1;
     }
-    pos = scan_pattern_no_top_alt(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_68, 2, follow));
+    pos = scan_pattern_no_top_alt(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_68, 16, follow));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_OR && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
@@ -10524,7 +10534,7 @@ fn scan_pattern(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut S
         sg_118_done: {
             sg_118: {
                 pos += 1;
-                pos = scan_pattern_no_top_alt(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_68, 2, follow));
+                pos = scan_pattern_no_top_alt(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_68, 16, follow));
                 if pos < 0 { break sg_118; }
                 break sg_118_done;
             }
@@ -10929,7 +10939,7 @@ fn scan_struct_pattern(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo:
     if pos < tokens.len() && _kind_set_132(tokens[pos]) {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_struct_pattern_elements(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_5, 1, follow));
+        pos = scan_struct_pattern_elements(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_5, 8, follow));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -10971,7 +10981,7 @@ fn scan_struct_pattern_elements(tokens: &Array<i32>, pos: i32, gate: &mut ScanGa
 
 fn scan_struct_pattern_fields(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_struct_pattern_field(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_73, 2, follow));
+    pos = scan_struct_pattern_field(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_73, 16, follow));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
@@ -10979,7 +10989,7 @@ fn scan_struct_pattern_fields(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
         sg_121_done: {
             sg_121: {
                 pos += 1;
-                pos = scan_struct_pattern_field(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_73, 2, follow));
+                pos = scan_struct_pattern_field(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_73, 16, follow));
                 if pos < 0 { break sg_121; }
                 break sg_121_done;
             }
@@ -11020,7 +11030,7 @@ fn scan_struct_pattern_field(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate,
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_74));
+        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_74));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -11099,7 +11109,7 @@ fn scan_struct_pattern_et_cetera(tokens: &Array<i32>, pos: i32, gate: &mut ScanG
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 3, follow_then(FOLLOW_MASK_71, 1, follow)));
+        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 24, follow_then(FOLLOW_MASK_71, 8, follow)));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -11121,7 +11131,7 @@ fn scan_tuple_struct_pattern(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate,
     if pos < tokens.len() && _kind_set_131(tokens[pos]) {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_tuple_struct_items(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 1, follow));
+        pos = scan_tuple_struct_items(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 8, follow));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -11134,7 +11144,7 @@ fn scan_tuple_struct_pattern(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate,
 
 fn scan_tuple_struct_items(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_pattern(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_75, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+    pos = scan_pattern(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_75, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
@@ -11142,7 +11152,7 @@ fn scan_tuple_struct_items(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, m
         sg_127_done: {
             sg_127: {
                 pos += 1;
-                pos = scan_pattern(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_75, 2, follow));
+                pos = scan_pattern(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_75, 16, follow));
                 if pos < 0 { break sg_127; }
                 break sg_127_done;
             }
@@ -11190,7 +11200,7 @@ fn scan_tuple_pattern(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: 
     if pos < tokens.len() && _kind_set_131(tokens[pos]) {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_tuple_pattern_items(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 1, follow));
+        pos = scan_tuple_pattern_items(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 8, follow));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -11247,7 +11257,7 @@ fn scan_grouped_pattern(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LPAREN { return -1; }
     pos += 1;
-    pos = scan_pattern(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 1, follow));
+    pos = scan_pattern(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 8, follow));
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
@@ -11261,7 +11271,7 @@ fn scan_slice_pattern(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: 
     if pos < tokens.len() && _kind_set_131(tokens[pos]) {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_slice_pattern_items(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_4, 1, follow));
+        pos = scan_slice_pattern_items(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_4, 8, follow));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -11274,7 +11284,7 @@ fn scan_slice_pattern(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: 
 
 fn scan_slice_pattern_items(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_pattern(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_75, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+    pos = scan_pattern(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_75, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
@@ -11282,7 +11292,7 @@ fn scan_slice_pattern_items(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, 
         sg_130_done: {
             sg_130: {
                 pos += 1;
-                pos = scan_pattern(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_75, 2, follow));
+                pos = scan_pattern(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_75, 16, follow));
                 if pos < 0 { break sg_130; }
                 break sg_130_done;
             }
@@ -11537,7 +11547,7 @@ fn scan_parenthesized_type(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, m
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LPAREN { return -1; }
     pos += 1;
-    pos = scan_type_(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 1, follow));
+    pos = scan_type_(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 8, follow));
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
@@ -11555,7 +11565,7 @@ fn scan_tuple_type(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mu
             sg_109: {
                 sg_110_done: {
                     sg_110: {
-                        pos = scan_type_(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_26, 1, follow));
+                        pos = scan_type_(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_26, 8, follow));
                         if pos < 0 { break sg_110; }
                         if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_110; }
                         pos += 1;
@@ -11568,7 +11578,7 @@ fn scan_tuple_type(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mu
                     let sp_gate = *gate;
                     sg_111_done: {
                         sg_111: {
-                            pos = scan_type_(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_26, 1, follow));
+                            pos = scan_type_(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_26, 8, follow));
                             if pos < 0 { break sg_111; }
                             if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_111; }
                             pos += 1;
@@ -11586,7 +11596,7 @@ fn scan_tuple_type(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mu
                 if pos < tokens.len() && _kind_set_48(tokens[pos]) {
                     let sp = pos;
                     let sp_gate = *gate;
-                    pos = scan_type_(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 1, follow));
+                    pos = scan_type_(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 8, follow));
                     if pos < 0 {
                         pos = sp;
                         *gate = sp_gate;
@@ -11614,7 +11624,7 @@ fn scan_array_type(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mu
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
     pos += 1;
-    pos = scan_expression(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_4, 1, follow), 0);
+    pos = scan_expression(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_4, 8, follow), 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_RSQUAREBRACKET { return -1; }
     pos += 1;
@@ -11625,7 +11635,7 @@ fn scan_slice_type(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mu
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LSQUAREBRACKET { return -1; }
     pos += 1;
-    pos = scan_type_(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_4, 1, follow));
+    pos = scan_type_(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_4, 8, follow));
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_RSQUAREBRACKET { return -1; }
     pos += 1;
@@ -11760,7 +11770,7 @@ fn scan_function_parameters_maybe_named_variadic(tokens: &Array<i32>, pos: i32, 
 
 fn scan_maybe_named_function_parameters(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_maybe_named_param(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_77, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+    pos = scan_maybe_named_param(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_77, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
@@ -11768,7 +11778,7 @@ fn scan_maybe_named_function_parameters(tokens: &Array<i32>, pos: i32, gate: &mu
         sg_104_done: {
             sg_104: {
                 pos += 1;
-                pos = scan_maybe_named_param(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_77, 2, follow));
+                pos = scan_maybe_named_param(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_77, 16, follow));
                 if pos < 0 { break sg_104; }
                 break sg_104_done;
             }
@@ -11880,7 +11890,7 @@ fn scan_maybe_named_function_parameters_variadic(tokens: &Array<i32>, pos: i32, 
         let sp_gate = *gate;
         sg_102_done: {
             sg_102: {
-                pos = scan_maybe_named_param(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_26, 1, follow));
+                pos = scan_maybe_named_param(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_26, 8, follow));
                 if pos < 0 { break sg_102; }
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_102; }
                 pos += 1;
@@ -11907,7 +11917,7 @@ fn scan_maybe_named_function_parameters_variadic(tokens: &Array<i32>, pos: i32, 
                 while pos < tokens.len() && tokens[pos] == TK_POUND {
                     let sp = pos;
                     let sp_gate = *gate;
-                    pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 3, follow_then(FOLLOW_MASK_78, 1, follow)));
+                    pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 24, follow_then(FOLLOW_MASK_78, 8, follow)));
                     if pos < 0 {
                         pos = sp;
                         *gate = sp_gate;
@@ -11935,7 +11945,7 @@ fn scan_maybe_named_function_parameters_variadic(tokens: &Array<i32>, pos: i32, 
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 3, follow_then(FOLLOW_MASK_78, 1, follow)));
+        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 24, follow_then(FOLLOW_MASK_78, 8, follow)));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -11991,7 +12001,7 @@ fn scan_impl_trait_type_one_bound(tokens: &Array<i32>, pos: i32, gate: &mut Scan
 fn scan_type_param_bounds(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_type_param_bound(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_79, 2, follow), follow_open_set(FOLLOW_MASK_80)));
+    pos = scan_type_param_bound(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_79, 16, follow), follow_open_set(FOLLOW_MASK_80)));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_PLUS && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
@@ -11999,7 +12009,7 @@ fn scan_type_param_bounds(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, me
         sg_180_done: {
             sg_180: {
                 pos += 1;
-                pos = scan_type_param_bound(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_79, 2, follow));
+                pos = scan_type_param_bound(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_79, 16, follow));
                 if pos < 0 { break sg_180; }
                 break sg_180_done;
             }
@@ -12189,7 +12199,7 @@ fn scan_trait_bound(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &m
                     *gate = sp_gate;
                 }
             }
-            pos = scan_type_path(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 1, follow));
+            pos = scan_type_path(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 8, follow));
             if pos < 0 { break try_1; }
             if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break try_1; }
             pos += 1;
@@ -12330,7 +12340,7 @@ fn scan_path_in_expression(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, m
     if pos < tokens.len() && tokens[pos] == TK_PATHSEP {
         pos += 1;
     }
-    pos = scan_path_expr_segment(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_85, 2, follow));
+    pos = scan_path_expr_segment(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_85, 16, follow));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_PATHSEP && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
@@ -12338,7 +12348,7 @@ fn scan_path_in_expression(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, m
         sg_126_done: {
             sg_126: {
                 pos += 1;
-                pos = scan_path_expr_segment(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_85, 2, follow));
+                pos = scan_path_expr_segment(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_85, 16, follow));
                 if pos < 0 { break sg_126; }
                 break sg_126_done;
             }
@@ -12571,7 +12581,7 @@ fn scan_generic_args_lifetimes(tokens: &Array<i32>, pos: i32, gate: &mut ScanGat
 
 fn scan_generic_args_types(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_type_(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_88, 2, follow));
+    pos = scan_type_(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_88, 16, follow));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
@@ -12579,7 +12589,7 @@ fn scan_generic_args_types(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, m
         sg_96_done: {
             sg_96: {
                 pos += 1;
-                pos = scan_type_(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_88, 2, follow));
+                pos = scan_type_(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_88, 16, follow));
                 if pos < 0 { break sg_96; }
                 break sg_96_done;
             }
@@ -12616,7 +12626,7 @@ fn scan_generic_args_types(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, m
 
 fn scan_generic_args_bindings(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_generic_args_binding(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_89, 2, follow));
+    pos = scan_generic_args_binding(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_89, 16, follow));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
@@ -12624,7 +12634,7 @@ fn scan_generic_args_bindings(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
         sg_94_done: {
             sg_94: {
                 pos += 1;
-                pos = scan_generic_args_binding(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_89, 2, follow));
+                pos = scan_generic_args_binding(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_89, 16, follow));
                 if pos < 0 { break sg_94; }
                 break sg_94_done;
             }
@@ -12672,13 +12682,13 @@ fn scan_generic_args_binding(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate,
 
 fn scan_qualified_path_in_expression(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_qualified_path_type(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_85, 2, follow));
+    pos = scan_qualified_path_type(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_85, 16, follow));
     if pos < 0 { return -1; }
     sg_123_done: {
         sg_123: {
             if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break sg_123; }
             pos += 1;
-            pos = scan_path_expr_segment(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_85, 2, follow));
+            pos = scan_path_expr_segment(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_85, 16, follow));
             if pos < 0 { break sg_123; }
             break sg_123_done;
         }
@@ -12690,7 +12700,7 @@ fn scan_qualified_path_in_expression(tokens: &Array<i32>, pos: i32, gate: &mut S
         sg_124_done: {
             sg_124: {
                 pos += 1;
-                pos = scan_path_expr_segment(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_85, 2, follow));
+                pos = scan_path_expr_segment(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_85, 16, follow));
                 if pos < 0 { break sg_124; }
                 break sg_124_done;
             }
@@ -12718,7 +12728,7 @@ fn scan_qualified_path_type(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, 
         sg_117_done: {
             sg_117: {
                 pos += 1;
-                pos = scan_type_path(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_91, 1, follow));
+                pos = scan_type_path(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_91, 8, follow));
                 if pos < 0 { break sg_117; }
                 break sg_117_done;
             }
@@ -12736,13 +12746,13 @@ fn scan_qualified_path_type(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, 
 
 fn scan_qualified_path_in_type(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_qualified_path_type(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_85, 2, follow));
+    pos = scan_qualified_path_type(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_85, 16, follow));
     if pos < 0 { return -1; }
     sg_114_done: {
         sg_114: {
             if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break sg_114; }
             pos += 1;
-            pos = scan_type_path_segment(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_85, 2, follow));
+            pos = scan_type_path_segment(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_85, 16, follow));
             if pos < 0 { break sg_114; }
             break sg_114_done;
         }
@@ -12754,7 +12764,7 @@ fn scan_qualified_path_in_type(tokens: &Array<i32>, pos: i32, gate: &mut ScanGat
         sg_115_done: {
             sg_115: {
                 pos += 1;
-                pos = scan_type_path_segment(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_85, 2, follow));
+                pos = scan_type_path_segment(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_85, 16, follow));
                 if pos < 0 { break sg_115; }
                 break sg_115_done;
             }
@@ -12794,7 +12804,7 @@ fn scan_type_path(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut
     if pos < tokens.len() && tokens[pos] == TK_PATHSEP {
         pos += 1;
     }
-    pos = scan_type_path_segment(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_85, 2, follow));
+    pos = scan_type_path_segment(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_85, 16, follow));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_PATHSEP && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
@@ -12802,7 +12812,7 @@ fn scan_type_path(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut
         sg_112_done: {
             sg_112: {
                 pos += 1;
-                pos = scan_type_path_segment(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_85, 2, follow));
+                pos = scan_type_path_segment(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_85, 16, follow));
                 if pos < 0 { break sg_112; }
                 break sg_112_done;
             }
@@ -12909,7 +12919,7 @@ fn scan_type_path_fn(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &
 
 fn scan_type_path_inputs(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_type_(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_88, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+    pos = scan_type_(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_88, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
@@ -12917,7 +12927,7 @@ fn scan_type_path_inputs(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, mem
         sg_88_done: {
             sg_88: {
                 pos += 1;
-                pos = scan_type_(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_88, 2, follow));
+                pos = scan_type_(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_88, 16, follow));
                 if pos < 0 { break sg_88; }
                 break sg_88_done;
             }
@@ -12976,7 +12986,7 @@ fn scan_visibility(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mu
                     } else if sgk_194 == TK_KW_IN {
                         sg_194_3: {
                             pos += 1;
-                            pos = scan_simple_path(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 1, follow));
+                            pos = scan_simple_path(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 8, follow));
                             if pos < 0 { break sg_194_3; }
                             break sg_194_done;
                         }
@@ -13581,21 +13591,21 @@ fn _parse_macro_rules_def__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
     if kind == TK_LPAREN {
         p.take();
         p.site = 21;
-        _parse_macro_rules(p, follow_then(FOLLOW_MASK_7, 2, follow));
+        _parse_macro_rules(p, follow_then(FOLLOW_MASK_7, 16, follow));
         p.expect(TK_RPAREN, &SYNC_8, false);
         p.expect(TK_SEMI, &EMPTY_SYNC, true);
         return;
     } else if kind == TK_LSQUAREBRACKET {
         p.take();
         p.site = 22;
-        _parse_macro_rules(p, follow_then(FOLLOW_MASK_9, 2, follow));
+        _parse_macro_rules(p, follow_then(FOLLOW_MASK_9, 16, follow));
         p.expect(TK_RSQUAREBRACKET, &SYNC_8, false);
         p.expect(TK_SEMI, &EMPTY_SYNC, true);
         return;
     } else if kind == TK_LCURLYBRACE {
         p.take();
         p.site = 23;
-        _parse_macro_rules(p, follow_then(FOLLOW_MASK_5, 1, follow));
+        _parse_macro_rules(p, follow_then(FOLLOW_MASK_5, 8, follow));
         p.expect(TK_RCURLYBRACE, &EMPTY_SYNC, true);
         return;
     }
@@ -13620,7 +13630,7 @@ fn _parse_macro_rules_def(p: &mut Parser, follow: i64 = 0) -> () with RustParser
 
 fn _parse_macro_rules__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 24;
-    _parse_macro_rule(p, follow_open_with(follow_then_opening(FOLLOW_MASK_12, 2, follow), follow_open_set(FOLLOW_MASK_13)));
+    _parse_macro_rule(p, follow_open_with(follow_then_opening(FOLLOW_MASK_12, 16, follow), follow_open_set(FOLLOW_MASK_13)));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -13633,7 +13643,7 @@ fn _parse_macro_rules__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
                 sg_0: {
                     if pos >= tokens.len() || tokens[pos] != TK_SEMI { break sg_0; }
                     pos += 1;
-                    pos = scan_macro_rule(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_12, 2, follow));
+                    pos = scan_macro_rule(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_12, 16, follow));
                     if pos < 0 { break sg_0; }
                     break sg_0_done;
                 }
@@ -13662,7 +13672,7 @@ fn _parse_macro_rules__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
         if rep_scan_pos < 0 { break; }
         p.expect(TK_SEMI, &SYNC_0, false);
         p.site = 25;
-        _parse_macro_rule(p, follow_then_opening(FOLLOW_MASK_12, 2, follow));
+        _parse_macro_rule(p, follow_then_opening(FOLLOW_MASK_12, 16, follow));
     }
     if p.peek_kind() == TK_SEMI && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
         p.take();
@@ -14082,7 +14092,7 @@ fn _parse_item__inner(p: &mut Parser) -> () with RustParserBase {
             p.scan_gate.no_struct = p.no_struct;
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_outer_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_17));
+            pos = scan_outer_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_17));
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -14095,7 +14105,7 @@ fn _parse_item__inner(p: &mut Parser) -> () with RustParserBase {
                 let _rec_spec = p.speculating;
                 p.speculating = true;
                 p.site = 47;
-                _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_17));
+                _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_17));
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
                 p.pos = _rec_pos;
@@ -14104,7 +14114,7 @@ fn _parse_item__inner(p: &mut Parser) -> () with RustParserBase {
             break;
         }
         p.site = 47;
-        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_17));
+        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_17));
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
@@ -14678,7 +14688,7 @@ fn _parse_as_clause(p: &mut Parser) -> () with RustParserBase {
 fn _parse_use_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.expect(TK_KW_USE, &SYNC_0, false);
     p.site = 73;
-    _parse_use_tree(p, follow_then(FOLLOW_MASK_13, 1, follow));
+    _parse_use_tree(p, follow_then(FOLLOW_MASK_13, 8, follow));
     p.expect(TK_SEMI, &EMPTY_SYNC, true);
     return;
 }
@@ -14759,7 +14769,7 @@ fn _parse_use_tree__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with Rust
                 sg_1_done: {
                     sg_1: {
                         pos += 1;
-                        pos = scan_use_tree(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_22, 2, follow));
+                        pos = scan_use_tree(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_22, 16, follow));
                         if pos < 0 { break sg_1; }
                         break sg_1_done;
                     }
@@ -14792,7 +14802,7 @@ fn _parse_use_tree__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with Rust
                         sg_2: {
                             if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_2; }
                             pos += 1;
-                            pos = scan_use_tree(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_22, 2, follow));
+                            pos = scan_use_tree(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_22, 16, follow));
                             if pos < 0 { break sg_2; }
                             break sg_2_done;
                         }
@@ -14804,7 +14814,7 @@ fn _parse_use_tree__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with Rust
                 if rep_scan_pos < 0 { break; }
                 p.expect(TK_COMMA, &SYNC_0, false);
                 p.site = 76;
-                _parse_use_tree(p, follow_then_opening(FOLLOW_MASK_22, 2, follow));
+                _parse_use_tree(p, follow_then_opening(FOLLOW_MASK_22, 16, follow));
                 if !kind_set_has(&SYNC_24, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_24, &EXPECTED_24); }
             }
             if !kind_set_has(&SYNC_24, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_24, &EXPECTED_24); }
@@ -14863,7 +14873,7 @@ fn scan_use_tree__alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo
                                 sg_8_done: {
                                     sg_8: {
                                         pos += 1;
-                                        pos = scan_use_tree(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_22, 2, follow));
+                                        pos = scan_use_tree(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_22, 16, follow));
                                         if pos < 0 { break sg_8; }
                                         break sg_8_done;
                                     }
@@ -15149,7 +15159,7 @@ fn _parse_function_parameters__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> (
                 }
                 break opt_enter_scan;
             }
-            pos = scan_function_param(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_open_with(follow_then_opening(FOLLOW_MASK_27, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+            pos = scan_function_param(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_open_with(follow_then_opening(FOLLOW_MASK_27, 16, follow), follow_open_set(FOLLOW_MASK_26)));
             if pos < 0 { break opt_enter_scan; }
             while pos < tokens.len() && tokens[pos] == TK_COMMA {
                 let sp = pos;
@@ -15157,7 +15167,7 @@ fn _parse_function_parameters__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> (
                 sg_11_done: {
                     sg_11: {
                         pos += 1;
-                        pos = scan_function_param(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_27, 2, follow));
+                        pos = scan_function_param(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_27, 16, follow));
                         if pos < 0 { break sg_11; }
                         break sg_11_done;
                     }
@@ -15183,7 +15193,7 @@ fn _parse_function_parameters__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> (
         p.expect(TK_COMMA, &SYNC_0, false);
     }
     p.site = 89;
-    _parse_function_param(p, follow_open_with(follow_then_opening(FOLLOW_MASK_27, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+    _parse_function_param(p, follow_open_with(follow_then_opening(FOLLOW_MASK_27, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -15196,7 +15206,7 @@ fn _parse_function_parameters__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> (
                 sg_12: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_12; }
                     pos += 1;
-                    pos = scan_function_param(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_27, 2, follow));
+                    pos = scan_function_param(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_27, 16, follow));
                     if pos < 0 { break sg_12; }
                     break sg_12_done;
                 }
@@ -15225,7 +15235,7 @@ fn _parse_function_parameters__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> (
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_0, false);
         p.site = 90;
-        _parse_function_param(p, follow_then_opening(FOLLOW_MASK_27, 2, follow));
+        _parse_function_param(p, follow_then_opening(FOLLOW_MASK_27, 16, follow));
     }
     if p.peek_kind() == TK_COMMA && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
         p.take();
@@ -15256,7 +15266,7 @@ fn scan_function_parameters__alt_1(tokens: &Array<i32>, pos: i32, gate: &mut Sca
             let bp_gate = *gate;
             let mut opt_ok: bool = false;
             opt_probe: {
-                pos = scan_function_param(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_27, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+                pos = scan_function_param(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_27, 16, follow), follow_open_set(FOLLOW_MASK_26)));
                 if pos < 0 { break opt_probe; }
                 while pos < tokens.len() && tokens[pos] == TK_COMMA {
                     let sp = pos;
@@ -15264,7 +15274,7 @@ fn scan_function_parameters__alt_1(tokens: &Array<i32>, pos: i32, gate: &mut Sca
                     sg_14_done: {
                         sg_14: {
                             pos += 1;
-                            pos = scan_function_param(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_27, 2, follow));
+                            pos = scan_function_param(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_27, 16, follow));
                             if pos < 0 { break sg_14; }
                             break sg_14_done;
                         }
@@ -15292,7 +15302,7 @@ fn scan_function_parameters__alt_1(tokens: &Array<i32>, pos: i32, gate: &mut Sca
             }
         }
     }
-    pos = scan_function_param(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_27, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+    pos = scan_function_param(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_27, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
@@ -15300,7 +15310,7 @@ fn scan_function_parameters__alt_1(tokens: &Array<i32>, pos: i32, gate: &mut Sca
         sg_15_done: {
             sg_15: {
                 pos += 1;
-                pos = scan_function_param(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_27, 2, follow));
+                pos = scan_function_param(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_27, 16, follow));
                 if pos < 0 { break sg_15; }
                 break sg_15_done;
             }
@@ -15398,7 +15408,7 @@ fn _parse_self_param__inner(p: &mut Parser) -> () with RustParserBase {
             p.scan_gate.no_struct = p.no_struct;
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_outer_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_28));
+            pos = scan_outer_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_28));
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -15411,7 +15421,7 @@ fn _parse_self_param__inner(p: &mut Parser) -> () with RustParserBase {
                 let _rec_spec = p.speculating;
                 p.speculating = true;
                 p.site = 91;
-                _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_28));
+                _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_28));
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
                 p.pos = _rec_pos;
@@ -15420,7 +15430,7 @@ fn _parse_self_param__inner(p: &mut Parser) -> () with RustParserBase {
             break;
         }
         p.site = 91;
-        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_28));
+        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_28));
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
@@ -15551,7 +15561,7 @@ fn _parse_function_param__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
             p.scan_gate.no_struct = p.no_struct;
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_outer_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_29));
+            pos = scan_outer_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_29));
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -15564,7 +15574,7 @@ fn _parse_function_param__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
                 let _rec_spec = p.speculating;
                 p.speculating = true;
                 p.site = 96;
-                _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_29));
+                _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_29));
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
                 p.pos = _rec_pos;
@@ -15573,7 +15583,7 @@ fn _parse_function_param__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
             break;
         }
         p.site = 96;
-        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_29));
+        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_29));
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
@@ -15712,7 +15722,7 @@ fn _parse_type_alias__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
     if p.peek_kind() == TK_EQ && _kind_set_48(p.peek_at(1)) {
         p.take();
         p.site = 105;
-        _parse_type_(p, follow_then(FOLLOW_MASK_13, 1, follow));
+        _parse_type_(p, follow_then(FOLLOW_MASK_13, 8, follow));
     }
     p.expect(TK_SEMI, &EMPTY_SYNC, true);
     return;
@@ -15796,7 +15806,7 @@ fn _parse_struct_struct__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
         if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
         if _kind_set_49(p.peek_kind()) {
             p.site = 111;
-            _parse_struct_fields(p, follow_then(FOLLOW_MASK_5, 1, follow));
+            _parse_struct_fields(p, follow_then(FOLLOW_MASK_5, 8, follow));
         }
         p.expect(TK_RCURLYBRACE, &EMPTY_SYNC, true);
     } else if grp_kind == TK_SEMI {
@@ -15837,7 +15847,7 @@ fn _parse_tuple_struct__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPa
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_KW_WHERE {
         p.site = 115;
-        _parse_where_clause(p, follow_then(FOLLOW_MASK_13, 1, follow));
+        _parse_where_clause(p, follow_then(FOLLOW_MASK_13, 8, follow));
     }
     p.expect(TK_SEMI, &EMPTY_SYNC, true);
     return;
@@ -15856,7 +15866,7 @@ fn _parse_tuple_struct(p: &mut Parser, follow: i64 = 0) -> () with RustParserBas
 
 fn _parse_struct_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 116;
-    _parse_struct_field(p, follow_open_with(follow_then_opening(FOLLOW_MASK_31, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+    _parse_struct_field(p, follow_open_with(follow_then_opening(FOLLOW_MASK_31, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -15869,7 +15879,7 @@ fn _parse_struct_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
                 sg_17: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_17; }
                     pos += 1;
-                    pos = scan_struct_field(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_31, 2, follow));
+                    pos = scan_struct_field(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_31, 16, follow));
                     if pos < 0 { break sg_17; }
                     break sg_17_done;
                 }
@@ -15898,7 +15908,7 @@ fn _parse_struct_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_0, false);
         p.site = 117;
-        _parse_struct_field(p, follow_then_opening(FOLLOW_MASK_31, 2, follow));
+        _parse_struct_field(p, follow_then_opening(FOLLOW_MASK_31, 16, follow));
     }
     if p.peek_kind() == TK_COMMA && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
         p.take();
@@ -15977,7 +15987,7 @@ fn _parse_struct_field(p: &mut Parser, follow: i64 = 0) -> () with RustParserBas
 
 fn _parse_tuple_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 122;
-    _parse_tuple_field(p, follow_open_with(follow_then_opening(FOLLOW_MASK_34, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+    _parse_tuple_field(p, follow_open_with(follow_then_opening(FOLLOW_MASK_34, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -15990,7 +16000,7 @@ fn _parse_tuple_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPa
                 sg_18: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_18; }
                     pos += 1;
-                    pos = scan_tuple_field(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_34, 2, follow));
+                    pos = scan_tuple_field(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_34, 16, follow));
                     if pos < 0 { break sg_18; }
                     break sg_18_done;
                 }
@@ -16019,7 +16029,7 @@ fn _parse_tuple_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPa
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_0, false);
         p.site = 123;
-        _parse_tuple_field(p, follow_then_opening(FOLLOW_MASK_34, 2, follow));
+        _parse_tuple_field(p, follow_then_opening(FOLLOW_MASK_34, 16, follow));
     }
     if p.peek_kind() == TK_COMMA && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
         p.take();
@@ -16111,7 +16121,7 @@ fn _parse_enumeration__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
     if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     if _kind_set_49(p.peek_kind()) {
         p.site = 130;
-        _parse_enum_items(p, follow_then(FOLLOW_MASK_5, 1, follow));
+        _parse_enum_items(p, follow_then(FOLLOW_MASK_5, 8, follow));
     }
     p.expect(TK_RCURLYBRACE, &EMPTY_SYNC, true);
     return;
@@ -16130,7 +16140,7 @@ fn _parse_enumeration(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase
 
 fn _parse_enum_items__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 131;
-    _parse_enum_item(p, follow_open_with(follow_then_opening(FOLLOW_MASK_31, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+    _parse_enum_item(p, follow_open_with(follow_then_opening(FOLLOW_MASK_31, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -16143,7 +16153,7 @@ fn _parse_enum_items__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
                 sg_19: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_19; }
                     pos += 1;
-                    pos = scan_enum_item(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_31, 2, follow));
+                    pos = scan_enum_item(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_31, 16, follow));
                     if pos < 0 { break sg_19; }
                     break sg_19_done;
                 }
@@ -16172,7 +16182,7 @@ fn _parse_enum_items__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_0, false);
         p.site = 132;
-        _parse_enum_item(p, follow_then_opening(FOLLOW_MASK_31, 2, follow));
+        _parse_enum_item(p, follow_then_opening(FOLLOW_MASK_31, 16, follow));
     }
     if p.peek_kind() == TK_COMMA && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
         p.take();
@@ -16303,7 +16313,7 @@ fn _parse_enum_item_tuple__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
     if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
     if _kind_set_50(p.peek_kind()) {
         p.site = 139;
-        _parse_tuple_fields(p, follow_then(FOLLOW_MASK_3, 1, follow));
+        _parse_tuple_fields(p, follow_then(FOLLOW_MASK_3, 8, follow));
     }
     p.expect(TK_RPAREN, &EMPTY_SYNC, true);
     return;
@@ -16325,7 +16335,7 @@ fn _parse_enum_item_struct__inner(p: &mut Parser, follow: i64 = 0) -> () with Ru
     if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     if _kind_set_49(p.peek_kind()) {
         p.site = 140;
-        _parse_struct_fields(p, follow_then(FOLLOW_MASK_5, 1, follow));
+        _parse_struct_fields(p, follow_then(FOLLOW_MASK_5, 8, follow));
     }
     p.expect(TK_RCURLYBRACE, &EMPTY_SYNC, true);
     return;
@@ -16376,7 +16386,7 @@ fn _parse_union___inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBa
     }
     p.expect(TK_LCURLYBRACE, &SYNC_0, false);
     p.site = 145;
-    _parse_struct_fields(p, follow_then(FOLLOW_MASK_5, 1, follow));
+    _parse_struct_fields(p, follow_then(FOLLOW_MASK_5, 8, follow));
     p.expect(TK_RCURLYBRACE, &EMPTY_SYNC, true);
     return;
 }
@@ -16411,7 +16421,7 @@ fn _parse_constant_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
     if p.peek_kind() == TK_EQ && _kind_set_55(p.peek_at(1)) {
         p.take();
         p.site = 148;
-        _parse_expression(p, follow_then(FOLLOW_MASK_13, 1, follow));
+        _parse_expression(p, follow_then(FOLLOW_MASK_13, 8, follow));
     }
     p.expect(TK_SEMI, &EMPTY_SYNC, true);
     return;
@@ -16443,7 +16453,7 @@ fn _parse_static_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
     if p.peek_kind() == TK_EQ && _kind_set_55(p.peek_at(1)) {
         p.take();
         p.site = 151;
-        _parse_expression(p, follow_then(FOLLOW_MASK_13, 1, follow));
+        _parse_expression(p, follow_then(FOLLOW_MASK_13, 8, follow));
     }
     p.expect(TK_SEMI, &EMPTY_SYNC, true);
     return;
@@ -16995,7 +17005,7 @@ fn _parse_external_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
             p.scan_gate.no_struct = p.no_struct;
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_outer_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_39));
+            pos = scan_outer_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_39));
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -17008,7 +17018,7 @@ fn _parse_external_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
                 let _rec_spec = p.speculating;
                 p.speculating = true;
                 p.site = 174;
-                _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_39));
+                _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_39));
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
                 p.pos = _rec_pos;
@@ -17017,7 +17027,7 @@ fn _parse_external_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
             break;
         }
         p.site = 174;
-        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_39));
+        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_39));
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
@@ -17191,7 +17201,7 @@ fn _parse_generic_param__inner(p: &mut Parser) -> () with RustParserBase {
             p.scan_gate.no_struct = p.no_struct;
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_outer_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_41));
+            pos = scan_outer_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_41));
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -17267,7 +17277,7 @@ fn _parse_generic_param__inner(p: &mut Parser) -> () with RustParserBase {
                 let _rec_spec = p.speculating;
                 p.speculating = true;
                 p.site = 181;
-                _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_41));
+                _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_41));
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
                 p.pos = _rec_pos;
@@ -17276,7 +17286,7 @@ fn _parse_generic_param__inner(p: &mut Parser) -> () with RustParserBase {
             break;
         }
         p.site = 181;
-        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_41));
+        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_41));
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
@@ -17458,7 +17468,7 @@ fn _parse_where_clause__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPa
             let mut pos: i32 = p.pos;
             sg_25_done: {
                 sg_25: {
-                    pos = scan_where_clause_item(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_26, 1, follow));
+                    pos = scan_where_clause_item(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_26, 8, follow));
                     if pos < 0 { break sg_25; }
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_25; }
                     pos += 1;
@@ -17494,7 +17504,7 @@ fn _parse_where_clause__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPa
         }
         if rep_scan_pos < 0 { break; }
         p.site = 193;
-        _parse_where_clause_item(p, follow_then(FOLLOW_MASK_26, 1, follow));
+        _parse_where_clause_item(p, follow_then(FOLLOW_MASK_26, 8, follow));
         p.expect(TK_COMMA, &SYNC_0, true);
     }
     let mut opt_enter: bool = _kind_set_48(p.peek_kind());
@@ -17691,7 +17701,7 @@ fn _parse_associated_item__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
             p.scan_gate.no_struct = p.no_struct;
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_outer_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_46));
+            pos = scan_outer_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_46));
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -17704,7 +17714,7 @@ fn _parse_associated_item__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
                 let _rec_spec = p.speculating;
                 p.speculating = true;
                 p.site = 203;
-                _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_46));
+                _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_46));
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
                 p.pos = _rec_pos;
@@ -17713,7 +17723,7 @@ fn _parse_associated_item__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
             break;
         }
         p.site = 203;
-        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_46));
+        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_46));
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
@@ -17805,7 +17815,7 @@ fn _parse_inner_attribute__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
     p.expect(TK_NOT, &SYNC_9, false);
     p.expect(TK_LSQUAREBRACKET, &SYNC_0, false);
     p.site = 209;
-    _parse_attr(p, follow_then(FOLLOW_MASK_4, 1, follow));
+    _parse_attr(p, follow_then(FOLLOW_MASK_4, 8, follow));
     p.expect(TK_RSQUAREBRACKET, &EMPTY_SYNC, true);
     return;
 }
@@ -17825,7 +17835,7 @@ fn _parse_outer_attribute__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
     p.expect(TK_POUND, &SYNC_9, false);
     p.expect(TK_LSQUAREBRACKET, &SYNC_0, false);
     p.site = 210;
-    _parse_attr(p, follow_then(FOLLOW_MASK_4, 1, follow));
+    _parse_attr(p, follow_then(FOLLOW_MASK_4, 8, follow));
     p.expect(TK_RSQUAREBRACKET, &EMPTY_SYNC, true);
     return;
 }
@@ -17848,7 +17858,7 @@ fn _parse_attr__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase
         p.take();
         p.expect(TK_LPAREN, &SYNC_0, false);
         p.site = 211;
-        _parse_attr(p, follow_then(FOLLOW_MASK_3, 1, follow));
+        _parse_attr(p, follow_then(FOLLOW_MASK_3, 8, follow));
         p.expect(TK_RPAREN, &EMPTY_SYNC, true);
         return;
     } else if _kind_set_15(kind) {
@@ -18059,7 +18069,7 @@ fn _parse_let_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     while !p.recovering && p.peek_kind() == TK_POUND {
         p.site = 220;
-        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_49));
+        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_49));
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.expect(TK_KW_LET, &SYNC_0, false);
@@ -18080,7 +18090,7 @@ fn _parse_let_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
         if p.peek_kind() == TK_KW_ELSE && p.peek_at(1) == TK_LCURLYBRACE {
             p.take();
             p.site = 224;
-            _parse_block_expression(p, follow_then(FOLLOW_MASK_13, 1, follow));
+            _parse_block_expression(p, follow_then(FOLLOW_MASK_13, 8, follow));
         }
     }
     p.expect(TK_SEMI, &EMPTY_SYNC, true);
@@ -18100,14 +18110,14 @@ fn _parse_let_statement(p: &mut Parser, follow: i64 = 0) -> () with RustParserBa
 
 fn _parse_expression_statement__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 225;
-    _parse_expression(p, follow_then(FOLLOW_MASK_13, 1, follow));
+    _parse_expression(p, follow_then(FOLLOW_MASK_13, 8, follow));
     p.expect(TK_SEMI, &EMPTY_SYNC, true);
     return;
 }
 
 fn scan_expression_statement__alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_expression(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_13, 1, follow), 0);
+    pos = scan_expression(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_13, 8, follow), 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
     pos += 1;
@@ -18193,7 +18203,7 @@ fn _parse_expression__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with Ru
                 p.scan_gate.no_struct = p.no_struct;
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                pos = scan_outer_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_50));
+                pos = scan_outer_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_50));
                 if pos < 0 { break rep_scan; }
                 if pos <= p.pos { break rep_scan; }
                 let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -18220,7 +18230,7 @@ fn _parse_expression__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with Ru
                     let _rec_spec = p.speculating;
                     p.speculating = true;
                     p.site = 227;
-                    _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_50));
+                    _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_50));
                     p.speculating = _rec_spec;
                     p.recovering = _rec_sav;
                     p.pos = _rec_pos;
@@ -18231,7 +18241,7 @@ fn _parse_expression__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with Ru
         }
         _plus_first = false;
         p.site = 227;
-        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_50));
+        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_50));
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.site = 228;
@@ -18241,12 +18251,12 @@ fn _parse_expression__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with Ru
 
 fn scan_expression__alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_50));
+    pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_50));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_50));
+        pos = scan_outer_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_50));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -18304,7 +18314,7 @@ fn _parse_expression__inner_alt_36(p: &mut Parser, follow: i64 = 0) -> () with R
 }
 
 fn scan_expression__alt_36(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
-    if !(gate.no_struct == 0) { return -1; }
+    if gate.no_struct != 0 { return -1; }
     return scan_struct_expression(tokens, pos, gate, memo, follow);
 }
 
@@ -18316,7 +18326,7 @@ fn _parse_expression__inner_alt_37(p: &mut Parser, follow: i64 = 0) -> () with R
 }
 
 fn scan_expression__alt_37(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
-    if !(gate.no_struct == 0) { return -1; }
+    if gate.no_struct != 0 { return -1; }
     return scan_enumeration_variant_expression(tokens, pos, gate, memo, follow);
 }
 
@@ -18387,7 +18397,7 @@ fn _parse_expression__inner_alt_33(p: &mut Parser, follow: i64 = 0) -> () with R
             p.scan_gate.no_struct = p.no_struct;
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_inner_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_0, 4, FOLLOW_MASK_50));
+            pos = scan_inner_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_0, 32, FOLLOW_MASK_50));
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -18396,7 +18406,7 @@ fn _parse_expression__inner_alt_33(p: &mut Parser, follow: i64 = 0) -> () with R
                 let rep_body_end_gate = p.scan_gate;
                 let mut rep_body_end_ok = false;
                 rep_body_end_scan: {
-                    pos = scan_expression(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_3, 1, follow), 0);
+                    pos = scan_expression(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_3, 8, follow), 0);
                     if pos < 0 { break rep_body_end_scan; }
                     if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break rep_body_end_scan; }
                     pos += 1;
@@ -18416,7 +18426,7 @@ fn _parse_expression__inner_alt_33(p: &mut Parser, follow: i64 = 0) -> () with R
                 let _rec_spec = p.speculating;
                 p.speculating = true;
                 p.site = 285;
-                _parse_inner_attribute(p, follow_or(FOLLOW_MASK_0, 4, FOLLOW_MASK_50));
+                _parse_inner_attribute(p, follow_or(FOLLOW_MASK_0, 32, FOLLOW_MASK_50));
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
                 p.pos = _rec_pos;
@@ -18425,11 +18435,11 @@ fn _parse_expression__inner_alt_33(p: &mut Parser, follow: i64 = 0) -> () with R
             break;
         }
         p.site = 285;
-        _parse_inner_attribute(p, follow_or(FOLLOW_MASK_0, 4, FOLLOW_MASK_50));
+        _parse_inner_attribute(p, follow_or(FOLLOW_MASK_0, 32, FOLLOW_MASK_50));
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.site = 286;
-    _parse_expression(p, follow_then(FOLLOW_MASK_3, 1, follow));
+    _parse_expression(p, follow_then(FOLLOW_MASK_3, 8, follow));
     p.expect(TK_RPAREN, &SYNC_0, true);
     return;
 }
@@ -18442,7 +18452,7 @@ fn scan_expression__alt_33(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, m
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_inner_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_0, 4, FOLLOW_MASK_50));
+        pos = scan_inner_attribute(tokens, pos, gate, memo, follow_or(FOLLOW_MASK_0, 32, FOLLOW_MASK_50));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -18455,7 +18465,7 @@ fn scan_expression__alt_33(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, m
             let rs_27_gate = *gate;
             let mut rs_27_ok = false;
             rsv_27: {
-                pos = scan_expression(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 1, follow), 0);
+                pos = scan_expression(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 8, follow), 0);
                 if pos < 0 { break rsv_27; }
                 if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break rsv_27; }
                 pos += 1;
@@ -18470,7 +18480,7 @@ fn scan_expression__alt_33(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, m
             }
         }
     }
-    pos = scan_expression(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 1, follow), 0);
+    pos = scan_expression(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 8, follow), 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
@@ -18500,7 +18510,7 @@ fn _parse_expression__inner_alt_35(p: &mut Parser, follow: i64 = 0) -> () with R
                     if pos < tokens.len() && _kind_set_55(tokens[pos]) {
                         let sp = pos;
                         let sp_gate = p.scan_gate;
-                        pos = scan_tuple_elements(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_3, 1, follow));
+                        pos = scan_tuple_elements(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_3, 8, follow));
                         if pos < 0 {
                             pos = sp;
                             p.scan_gate = sp_gate;
@@ -18539,7 +18549,7 @@ fn _parse_expression__inner_alt_35(p: &mut Parser, follow: i64 = 0) -> () with R
     if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
     if _kind_set_55(p.peek_kind()) {
         p.site = 290;
-        _parse_tuple_elements(p, follow_then(FOLLOW_MASK_3, 1, follow));
+        _parse_tuple_elements(p, follow_then(FOLLOW_MASK_3, 8, follow));
     }
     p.expect(TK_RPAREN, &SYNC_0, true);
     return;
@@ -18568,7 +18578,7 @@ fn scan_expression__alt_35(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, m
                 if pos < tokens.len() && _kind_set_55(tokens[pos]) {
                     let sp = pos;
                     let sp_gate = *gate;
-                    pos = scan_tuple_elements(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 1, follow));
+                    pos = scan_tuple_elements(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 8, follow));
                     if pos < 0 {
                         pos = sp;
                         *gate = sp_gate;
@@ -18590,7 +18600,7 @@ fn scan_expression__alt_35(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, m
     if pos < tokens.len() && _kind_set_55(tokens[pos]) {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_tuple_elements(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 1, follow));
+        pos = scan_tuple_elements(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 8, follow));
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -18946,7 +18956,7 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
                         if pos < tokens.len() && _kind_set_55(tokens[pos]) {
                             let sp = pos;
                             let sp_gate = p.scan_gate;
-                            pos = scan_array_elements(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_4, 1, follow));
+                            pos = scan_array_elements(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_4, 8, follow));
                             if pos < 0 {
                                 pos = sp;
                                 p.scan_gate = sp_gate;
@@ -18985,7 +18995,7 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
         if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
         if _kind_set_55(p.peek_kind()) {
             p.site = 288;
-            _parse_array_elements(p, follow_then(FOLLOW_MASK_4, 1, follow));
+            _parse_array_elements(p, follow_then(FOLLOW_MASK_4, 8, follow));
         }
         p.expect(TK_RSQUAREBRACKET, &SYNC_0, true);
         return;
@@ -19026,13 +19036,13 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                         p.scan_gate.no_struct = p.no_struct;
                         let tokens = &p.kinds;
                         let mut pos: i32 = p.pos;
-                        pos = scan_call_params(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_3, 1, follow));
+                        pos = scan_call_params(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_3, 8, follow));
                         if pos < 0 { break opt_scan; }
                         opt_scan_pos = pos;
                     }
                     if opt_scan_pos >= 0 {
                         p.site = 233;
-                        _parse_call_params(p, follow_then(FOLLOW_MASK_3, 1, follow));
+                        _parse_call_params(p, follow_then(FOLLOW_MASK_3, 8, follow));
                     }
                     p.expect(TK_RPAREN, &SYNC_0, true);
                     p.b.finish_node(p.last_end());
@@ -19095,13 +19105,13 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                     p.scan_gate.no_struct = p.no_struct;
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
-                    pos = scan_call_params(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_3, 1, follow));
+                    pos = scan_call_params(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_3, 8, follow));
                     if pos < 0 { break opt_scan_2; }
                     opt_scan_pos_2 = pos;
                 }
                 if opt_scan_pos_2 >= 0 {
                     p.site = 240;
-                    _parse_call_params(p, follow_then(FOLLOW_MASK_3, 1, follow));
+                    _parse_call_params(p, follow_then(FOLLOW_MASK_3, 8, follow));
                 }
                 p.expect(TK_RPAREN, &SYNC_0, true);
                 p.b.finish_node(p.last_end());
@@ -19121,7 +19131,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                     p.no_struct = 0;
                 }
                 p.site = 242;
-                _parse_expression(p, follow_then(FOLLOW_MASK_4, 1, follow), 0);
+                _parse_expression(p, follow_then(FOLLOW_MASK_4, 8, follow), 0);
                 p.expect(TK_RSQUAREBRACKET, &SYNC_0, true);
                 p.b.finish_node(p.last_end());
             } else {
@@ -19378,7 +19388,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                     if pos < 0 { break opt_scan_3; }
                     opt_scan_pos_3 = pos;
                 }
-                if opt_scan_pos_3 >= 0 && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
+                if (opt_scan_pos_3 >= 0) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
                     p.site = 272;
                     _parse_expression(p, follow);
                 }
@@ -19514,7 +19524,7 @@ fn _parse_expression_with_block__inner(p: &mut Parser, follow: i64 = 0) -> () wi
                     p.scan_gate.no_struct = p.no_struct;
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
-                    pos = scan_outer_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_51));
+                    pos = scan_outer_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_51));
                     if pos < 0 { break rep_scan; }
                     if pos <= p.pos { break rep_scan; }
                     let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -19541,7 +19551,7 @@ fn _parse_expression_with_block__inner(p: &mut Parser, follow: i64 = 0) -> () wi
                         let _rec_spec = p.speculating;
                         p.speculating = true;
                         p.site = 296;
-                        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_51));
+                        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_51));
                         p.speculating = _rec_spec;
                         p.recovering = _rec_sav;
                         p.pos = _rec_pos;
@@ -19552,7 +19562,7 @@ fn _parse_expression_with_block__inner(p: &mut Parser, follow: i64 = 0) -> () wi
             }
             _plus_first = false;
             p.site = 296;
-            _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_51));
+            _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_51));
             if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
         }
         p.site = 297;
@@ -19719,7 +19729,7 @@ fn _parse_block_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with Ru
                     if pos < tokens.len() && _kind_set_98(tokens[pos]) {
                         let sp = pos;
                         let sp_gate = p.scan_gate;
-                        pos = scan_statements(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_5, 1, follow));
+                        pos = scan_statements(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_5, 8, follow));
                         if pos < 0 {
                             pos = sp;
                             p.scan_gate = sp_gate;
@@ -19758,7 +19768,7 @@ fn _parse_block_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with Ru
     if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     if _kind_set_98(p.peek_kind()) {
         p.site = 308;
-        _parse_statements(p, follow_then(FOLLOW_MASK_5, 1, follow));
+        _parse_statements(p, follow_then(FOLLOW_MASK_5, 8, follow));
     }
     p.expect(TK_RCURLYBRACE, &EMPTY_SYNC, true);
     return;
@@ -20011,7 +20021,7 @@ fn _parse_unsafe_block_expression(p: &mut Parser, follow: i64 = 0) -> () with Ru
 fn _parse_array_elements__inner_alt_0(p: &mut Parser, follow: i64 = 0, vals: ArrayElementsVals = ArrayElementsVals {}) -> ArrayElementsVals with RustParserBase {
     let mut vals = vals;
     p.site = 314;
-    _parse_expression(p, follow_open_with(follow_then_opening(FOLLOW_MASK_52, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+    _parse_expression(p, follow_open_with(follow_then_opening(FOLLOW_MASK_52, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -20024,7 +20034,7 @@ fn _parse_array_elements__inner_alt_0(p: &mut Parser, follow: i64 = 0, vals: Arr
                 sg_30: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_30; }
                     pos += 1;
-                    pos = scan_expression(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_52, 2, follow), 0);
+                    pos = scan_expression(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_52, 16, follow), 0);
                     if pos < 0 { break sg_30; }
                     break sg_30_done;
                 }
@@ -20053,7 +20063,7 @@ fn _parse_array_elements__inner_alt_0(p: &mut Parser, follow: i64 = 0, vals: Arr
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_0, false);
         p.site = 315;
-        _parse_expression(p, follow_then_opening(FOLLOW_MASK_52, 2, follow));
+        _parse_expression(p, follow_then_opening(FOLLOW_MASK_52, 16, follow));
     }
     if p.peek_kind() == TK_COMMA && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
         p.take();
@@ -20063,7 +20073,7 @@ fn _parse_array_elements__inner_alt_0(p: &mut Parser, follow: i64 = 0, vals: Arr
 
 fn scan_array_elements__alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_expression(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_52, 2, follow), follow_open_set(FOLLOW_MASK_26)), 0);
+    pos = scan_expression(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_52, 16, follow), follow_open_set(FOLLOW_MASK_26)), 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
@@ -20071,7 +20081,7 @@ fn scan_array_elements__alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
         sg_31_done: {
             sg_31: {
                 pos += 1;
-                pos = scan_expression(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_52, 2, follow), 0);
+                pos = scan_expression(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_52, 16, follow), 0);
                 if pos < 0 { break sg_31; }
                 break sg_31_done;
             }
@@ -20204,7 +20214,7 @@ fn _parse_tuple_elements__inner(p: &mut Parser, follow: i64 = 0) -> TupleElement
                 let mut pos: i32 = p.pos;
                 sg_33_done: {
                     sg_33: {
-                        pos = scan_expression(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_26, 1, follow), 0);
+                        pos = scan_expression(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_26, 8, follow), 0);
                         if pos < 0 { break sg_33; }
                         if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_33; }
                         pos += 1;
@@ -20242,7 +20252,7 @@ fn _parse_tuple_elements__inner(p: &mut Parser, follow: i64 = 0) -> TupleElement
         }
         _plus_first = false;
         p.site = 318;
-        _parse_expression(p, follow_then(FOLLOW_MASK_26, 1, follow));
+        _parse_expression(p, follow_then(FOLLOW_MASK_26, 8, follow));
         p.expect(TK_COMMA, &SYNC_0, true);
     }
     let mut opt_enter: bool = _kind_set_55(p.peek_kind());
@@ -20477,7 +20487,7 @@ fn _parse_struct_expr_struct(p: &mut Parser, follow: i64 = 0) -> () with RustPar
 
 fn _parse_struct_expr_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 327;
-    _parse_struct_expr_field(p, follow_open_with(follow_then_opening(FOLLOW_MASK_54, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+    _parse_struct_expr_field(p, follow_open_with(follow_then_opening(FOLLOW_MASK_54, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -20490,7 +20500,7 @@ fn _parse_struct_expr_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with 
                 sg_35: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_35; }
                     pos += 1;
-                    pos = scan_struct_expr_field(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_54, 2, follow));
+                    pos = scan_struct_expr_field(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_54, 16, follow));
                     if pos < 0 { break sg_35; }
                     break sg_35_done;
                 }
@@ -20544,7 +20554,7 @@ fn _parse_struct_expr_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with 
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_0, false);
         p.site = 328;
-        _parse_struct_expr_field(p, follow_then_opening(FOLLOW_MASK_54, 2, follow));
+        _parse_struct_expr_field(p, follow_then_opening(FOLLOW_MASK_54, 16, follow));
     }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_COMMA {
@@ -20625,7 +20635,7 @@ fn _parse_struct_expr_field__inner(p: &mut Parser, follow: i64 = 0) -> () with R
             p.scan_gate.no_struct = p.no_struct;
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_outer_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_55));
+            pos = scan_outer_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_55));
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -20638,7 +20648,7 @@ fn _parse_struct_expr_field__inner(p: &mut Parser, follow: i64 = 0) -> () with R
                 let _rec_spec = p.speculating;
                 p.speculating = true;
                 p.site = 330;
-                _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_55));
+                _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_55));
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
                 p.pos = _rec_pos;
@@ -20647,7 +20657,7 @@ fn _parse_struct_expr_field__inner(p: &mut Parser, follow: i64 = 0) -> () with R
             break;
         }
         p.site = 330;
-        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_55));
+        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_55));
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
@@ -20796,7 +20806,7 @@ fn _parse_struct_expr_tuple__inner(p: &mut Parser, follow: i64 = 0) -> () with R
                                     sg_38_done: {
                                         sg_38: {
                                             pos += 1;
-                                            pos = scan_expression(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_52, 2, follow), 0);
+                                            pos = scan_expression(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_52, 16, follow), 0);
                                             if pos < 0 { break sg_38; }
                                             break sg_38_done;
                                         }
@@ -20865,7 +20875,7 @@ fn _parse_struct_expr_tuple__inner(p: &mut Parser, follow: i64 = 0) -> () with R
             sg_39_done: {
                 sg_39: {
                     pos += 1;
-                    pos = scan_expression(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_52, 2, follow), 0);
+                    pos = scan_expression(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_52, 16, follow), 0);
                     if pos < 0 { break sg_39; }
                     break sg_39_done;
                 }
@@ -20898,7 +20908,7 @@ fn _parse_struct_expr_tuple__inner(p: &mut Parser, follow: i64 = 0) -> () with R
                     sg_40: {
                         if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_40; }
                         pos += 1;
-                        pos = scan_expression(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_52, 2, follow), 0);
+                        pos = scan_expression(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_52, 16, follow), 0);
                         if pos < 0 { break sg_40; }
                         break sg_40_done;
                     }
@@ -20910,7 +20920,7 @@ fn _parse_struct_expr_tuple__inner(p: &mut Parser, follow: i64 = 0) -> () with R
             if rep_scan_pos < 0 { break; }
             p.expect(TK_COMMA, &SYNC_0, false);
             p.site = 339;
-            _parse_expression(p, follow_then_opening(FOLLOW_MASK_52, 2, follow));
+            _parse_expression(p, follow_then_opening(FOLLOW_MASK_52, 16, follow));
             if !kind_set_has(&SYNC_61, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_61, &EXPECTED_61); }
         }
         if !kind_set_has(&SYNC_61, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_61, &EXPECTED_61); }
@@ -21008,7 +21018,7 @@ fn _parse_enum_expr_struct__inner(p: &mut Parser, follow: i64 = 0) -> () with Ru
     if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     if _kind_set_111(p.peek_kind()) {
         p.site = 345;
-        _parse_enum_expr_fields(p, follow_then(FOLLOW_MASK_5, 1, follow));
+        _parse_enum_expr_fields(p, follow_then(FOLLOW_MASK_5, 8, follow));
     }
     p.expect(TK_RCURLYBRACE, &EMPTY_SYNC, true);
     return;
@@ -21027,7 +21037,7 @@ fn _parse_enum_expr_struct(p: &mut Parser, follow: i64 = 0) -> () with RustParse
 
 fn _parse_enum_expr_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 346;
-    _parse_enum_expr_field(p, follow_open_with(follow_then_opening(FOLLOW_MASK_56, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+    _parse_enum_expr_field(p, follow_open_with(follow_then_opening(FOLLOW_MASK_56, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -21040,7 +21050,7 @@ fn _parse_enum_expr_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with Ru
                 sg_41: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_41; }
                     pos += 1;
-                    pos = scan_enum_expr_field(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_56, 2, follow));
+                    pos = scan_enum_expr_field(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_56, 16, follow));
                     if pos < 0 { break sg_41; }
                     break sg_41_done;
                 }
@@ -21069,7 +21079,7 @@ fn _parse_enum_expr_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with Ru
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_0, false);
         p.site = 347;
-        _parse_enum_expr_field(p, follow_then_opening(FOLLOW_MASK_56, 2, follow));
+        _parse_enum_expr_field(p, follow_then_opening(FOLLOW_MASK_56, 16, follow));
     }
     if p.peek_kind() == TK_COMMA && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
         p.take();
@@ -21198,7 +21208,7 @@ fn _parse_enum_expr_tuple__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
             sg_42_done: {
                 sg_42: {
                     pos += 1;
-                    pos = scan_expression(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_52, 2, follow), 0);
+                    pos = scan_expression(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_52, 16, follow), 0);
                     if pos < 0 { break sg_42; }
                     break sg_42_done;
                 }
@@ -21231,7 +21241,7 @@ fn _parse_enum_expr_tuple__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
                     sg_43: {
                         if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_43; }
                         pos += 1;
-                        pos = scan_expression(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_52, 2, follow), 0);
+                        pos = scan_expression(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_52, 16, follow), 0);
                         if pos < 0 { break sg_43; }
                         break sg_43_done;
                     }
@@ -21243,7 +21253,7 @@ fn _parse_enum_expr_tuple__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
             if rep_scan_pos < 0 { break; }
             p.expect(TK_COMMA, &SYNC_0, false);
             p.site = 354;
-            _parse_expression(p, follow_then_opening(FOLLOW_MASK_52, 2, follow));
+            _parse_expression(p, follow_then_opening(FOLLOW_MASK_52, 16, follow));
             if !kind_set_has(&SYNC_61, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_61, &EXPECTED_61); }
         }
         if !kind_set_has(&SYNC_61, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_61, &EXPECTED_61); }
@@ -21284,7 +21294,7 @@ fn _parse_call_params__inner(p: &mut Parser, follow: i64 = 0) -> CallParamsVals 
         vals.sv = p.no_struct; p.no_struct = 0;
     }
     p.site = 356;
-    _parse_expression(p, follow_open_with(follow_then_opening(FOLLOW_MASK_52, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+    _parse_expression(p, follow_open_with(follow_then_opening(FOLLOW_MASK_52, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -21297,7 +21307,7 @@ fn _parse_call_params__inner(p: &mut Parser, follow: i64 = 0) -> CallParamsVals 
                 sg_44: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_44; }
                     pos += 1;
-                    pos = scan_expression(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_52, 2, follow), 0);
+                    pos = scan_expression(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_52, 16, follow), 0);
                     if pos < 0 { break sg_44; }
                     break sg_44_done;
                 }
@@ -21326,7 +21336,7 @@ fn _parse_call_params__inner(p: &mut Parser, follow: i64 = 0) -> CallParamsVals 
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_0, false);
         p.site = 357;
-        _parse_expression(p, follow_then_opening(FOLLOW_MASK_52, 2, follow));
+        _parse_expression(p, follow_then_opening(FOLLOW_MASK_52, 16, follow));
     }
     if p.peek_kind() == TK_COMMA && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
         p.take();
@@ -21416,7 +21426,7 @@ fn _parse_closure_expression(p: &mut Parser, follow: i64 = 0) -> () with RustPar
 
 fn _parse_closure_parameters__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 362;
-    _parse_closure_param(p, follow_open_with(follow_then_opening(FOLLOW_MASK_58, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+    _parse_closure_param(p, follow_open_with(follow_then_opening(FOLLOW_MASK_58, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -21429,7 +21439,7 @@ fn _parse_closure_parameters__inner(p: &mut Parser, follow: i64 = 0) -> () with 
                 sg_45: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_45; }
                     pos += 1;
-                    pos = scan_closure_param(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_58, 2, follow));
+                    pos = scan_closure_param(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_58, 16, follow));
                     if pos < 0 { break sg_45; }
                     break sg_45_done;
                 }
@@ -21458,7 +21468,7 @@ fn _parse_closure_parameters__inner(p: &mut Parser, follow: i64 = 0) -> () with 
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_0, false);
         p.site = 363;
-        _parse_closure_param(p, follow_then_opening(FOLLOW_MASK_58, 2, follow));
+        _parse_closure_param(p, follow_then_opening(FOLLOW_MASK_58, 16, follow));
     }
     if p.peek_kind() == TK_COMMA && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
         p.take();
@@ -21486,7 +21496,7 @@ fn _parse_closure_param__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
             p.scan_gate.no_struct = p.no_struct;
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_outer_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_59));
+            pos = scan_outer_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_59));
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -21499,7 +21509,7 @@ fn _parse_closure_param__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
                 let _rec_spec = p.speculating;
                 p.speculating = true;
                 p.site = 364;
-                _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_59));
+                _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_59));
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
                 p.pos = _rec_pos;
@@ -21508,7 +21518,7 @@ fn _parse_closure_param__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
             break;
         }
         p.site = 364;
-        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_59));
+        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_59));
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.site = 365;
@@ -21644,7 +21654,7 @@ fn _parse_predicate_loop_expression__inner(p: &mut Parser, follow: i64 = 0) -> (
             p.scan_gate.no_struct = p.no_struct;
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_let_chain_tail(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_62, 2, FOLLOW_MASK_36));
+            pos = scan_let_chain_tail(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_62, 16, FOLLOW_MASK_36));
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -21657,7 +21667,7 @@ fn _parse_predicate_loop_expression__inner(p: &mut Parser, follow: i64 = 0) -> (
                 let _rec_spec = p.speculating;
                 p.speculating = true;
                 p.site = 374;
-                _parse_let_chain_tail(p, follow_or(FOLLOW_MASK_62, 2, FOLLOW_MASK_36));
+                _parse_let_chain_tail(p, follow_or(FOLLOW_MASK_62, 16, FOLLOW_MASK_36));
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
                 p.pos = _rec_pos;
@@ -21666,7 +21676,7 @@ fn _parse_predicate_loop_expression__inner(p: &mut Parser, follow: i64 = 0) -> (
             break;
         }
         p.site = 374;
-        _parse_let_chain_tail(p, follow_or(FOLLOW_MASK_62, 2, FOLLOW_MASK_36));
+        _parse_let_chain_tail(p, follow_or(FOLLOW_MASK_62, 16, FOLLOW_MASK_36));
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.site = 375;
@@ -21707,7 +21717,7 @@ fn _parse_predicate_pattern_loop_expression__inner(p: &mut Parser, follow: i64 =
             p.scan_gate.no_struct = p.no_struct;
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_let_chain_tail(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_62, 2, FOLLOW_MASK_36));
+            pos = scan_let_chain_tail(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_62, 16, FOLLOW_MASK_36));
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -21720,7 +21730,7 @@ fn _parse_predicate_pattern_loop_expression__inner(p: &mut Parser, follow: i64 =
                 let _rec_spec = p.speculating;
                 p.speculating = true;
                 p.site = 378;
-                _parse_let_chain_tail(p, follow_or(FOLLOW_MASK_62, 2, FOLLOW_MASK_36));
+                _parse_let_chain_tail(p, follow_or(FOLLOW_MASK_62, 16, FOLLOW_MASK_36));
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
                 p.pos = _rec_pos;
@@ -21729,7 +21739,7 @@ fn _parse_predicate_pattern_loop_expression__inner(p: &mut Parser, follow: i64 =
             break;
         }
         p.site = 378;
-        _parse_let_chain_tail(p, follow_or(FOLLOW_MASK_62, 2, FOLLOW_MASK_36));
+        _parse_let_chain_tail(p, follow_or(FOLLOW_MASK_62, 16, FOLLOW_MASK_36));
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.site = 379;
@@ -21812,7 +21822,7 @@ fn _parse_if_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
             p.scan_gate.no_struct = p.no_struct;
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_let_chain_tail(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_62, 2, FOLLOW_MASK_36));
+            pos = scan_let_chain_tail(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_62, 16, FOLLOW_MASK_36));
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -21825,7 +21835,7 @@ fn _parse_if_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
                 let _rec_spec = p.speculating;
                 p.speculating = true;
                 p.site = 384;
-                _parse_let_chain_tail(p, follow_or(FOLLOW_MASK_62, 2, FOLLOW_MASK_36));
+                _parse_let_chain_tail(p, follow_or(FOLLOW_MASK_62, 16, FOLLOW_MASK_36));
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
                 p.pos = _rec_pos;
@@ -21834,7 +21844,7 @@ fn _parse_if_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
             break;
         }
         p.site = 384;
-        _parse_let_chain_tail(p, follow_or(FOLLOW_MASK_62, 2, FOLLOW_MASK_36));
+        _parse_let_chain_tail(p, follow_or(FOLLOW_MASK_62, 16, FOLLOW_MASK_36));
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.site = 385;
@@ -21931,7 +21941,7 @@ fn _parse_if_let_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with R
             p.scan_gate.no_struct = p.no_struct;
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_let_chain_tail(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_62, 2, FOLLOW_MASK_36));
+            pos = scan_let_chain_tail(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_62, 16, FOLLOW_MASK_36));
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -21944,7 +21954,7 @@ fn _parse_if_let_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with R
                 let _rec_spec = p.speculating;
                 p.speculating = true;
                 p.site = 391;
-                _parse_let_chain_tail(p, follow_or(FOLLOW_MASK_62, 2, FOLLOW_MASK_36));
+                _parse_let_chain_tail(p, follow_or(FOLLOW_MASK_62, 16, FOLLOW_MASK_36));
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
                 p.pos = _rec_pos;
@@ -21953,7 +21963,7 @@ fn _parse_if_let_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with R
             break;
         }
         p.site = 391;
-        _parse_let_chain_tail(p, follow_or(FOLLOW_MASK_62, 2, FOLLOW_MASK_36));
+        _parse_let_chain_tail(p, follow_or(FOLLOW_MASK_62, 16, FOLLOW_MASK_36));
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.site = 392;
@@ -22087,7 +22097,7 @@ fn _parse_match_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with Ru
                     if pos < tokens.len() && _kind_set_112(tokens[pos]) {
                         let sp = pos;
                         let sp_gate = p.scan_gate;
-                        pos = scan_match_arms(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_5, 1, follow));
+                        pos = scan_match_arms(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_5, 8, follow));
                         if pos < 0 {
                             pos = sp;
                             p.scan_gate = sp_gate;
@@ -22126,7 +22136,7 @@ fn _parse_match_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with Ru
     if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     if _kind_set_112(p.peek_kind()) {
         p.site = 400;
-        _parse_match_arms(p, follow_then(FOLLOW_MASK_5, 1, follow));
+        _parse_match_arms(p, follow_then(FOLLOW_MASK_5, 8, follow));
     }
     p.expect(TK_RCURLYBRACE, &EMPTY_SYNC, true);
     return;
@@ -22220,14 +22230,14 @@ fn _parse_match_arms(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase 
 
 fn _parse_match_arm_expression__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 405;
-    _parse_expression(p, follow_then(FOLLOW_MASK_26, 1, follow));
+    _parse_expression(p, follow_then(FOLLOW_MASK_26, 8, follow));
     p.expect(TK_COMMA, &EMPTY_SYNC, true);
     return;
 }
 
 fn scan_match_arm_expression__alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_expression(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_26, 1, follow), 0);
+    pos = scan_expression(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_26, 8, follow), 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_COMMA { return -1; }
     pos += 1;
@@ -22310,7 +22320,7 @@ fn _parse_match_arm__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
             p.scan_gate.no_struct = p.no_struct;
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_outer_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_59));
+            pos = scan_outer_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_59));
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -22323,7 +22333,7 @@ fn _parse_match_arm__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
                 let _rec_spec = p.speculating;
                 p.speculating = true;
                 p.site = 407;
-                _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_59));
+                _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_59));
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
                 p.pos = _rec_pos;
@@ -22332,7 +22342,7 @@ fn _parse_match_arm__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
             break;
         }
         p.site = 407;
-        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_59));
+        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_59));
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.site = 408;
@@ -22375,11 +22385,11 @@ fn _parse_match_arm_guard__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () wi
     _parse_pattern(p, FOLLOW_MASK_63);
     p.expect(TK_EQ, &SYNC_0, false);
     p.site = 411;
-    _parse_expression(p, follow_then_opening(FOLLOW_MASK_62, 2, follow));
+    _parse_expression(p, follow_then_opening(FOLLOW_MASK_62, 16, follow));
     while !p.recovering && p.peek_kind() == TK_ANDAND {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.site = 412;
-        _parse_let_chain_tail(p, follow_then_opening(FOLLOW_MASK_62, 2, follow));
+        _parse_let_chain_tail(p, follow_then_opening(FOLLOW_MASK_62, 16, follow));
     }
     return;
 }
@@ -22387,11 +22397,11 @@ fn _parse_match_arm_guard__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () wi
 fn _parse_match_arm_guard__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.expect(TK_KW_IF, &SYNC_0, false);
     p.site = 413;
-    _parse_expression(p, follow_then_opening(FOLLOW_MASK_62, 2, follow));
+    _parse_expression(p, follow_then_opening(FOLLOW_MASK_62, 16, follow));
     while !p.recovering && p.peek_kind() == TK_ANDAND {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.site = 414;
-        _parse_let_chain_tail(p, follow_then_opening(FOLLOW_MASK_62, 2, follow));
+        _parse_let_chain_tail(p, follow_then_opening(FOLLOW_MASK_62, 16, follow));
     }
     return;
 }
@@ -22431,7 +22441,7 @@ fn _parse_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserB
         p.take();
     }
     p.site = 415;
-    _parse_pattern_no_top_alt(p, follow_then_opening(FOLLOW_MASK_68, 2, follow));
+    _parse_pattern_no_top_alt(p, follow_then_opening(FOLLOW_MASK_68, 16, follow));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -22444,7 +22454,7 @@ fn _parse_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserB
                 sg_47: {
                     if pos >= tokens.len() || tokens[pos] != TK_OR { break sg_47; }
                     pos += 1;
-                    pos = scan_pattern_no_top_alt(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_68, 2, follow));
+                    pos = scan_pattern_no_top_alt(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_68, 16, follow));
                     if pos < 0 { break sg_47; }
                     break sg_47_done;
                 }
@@ -22470,7 +22480,7 @@ fn _parse_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserB
         if rep_scan_pos < 0 { break; }
         p.expect(TK_OR, &SYNC_0, false);
         p.site = 416;
-        _parse_pattern_no_top_alt(p, follow_then_opening(FOLLOW_MASK_68, 2, follow));
+        _parse_pattern_no_top_alt(p, follow_then_opening(FOLLOW_MASK_68, 16, follow));
     }
     return;
 }
@@ -22948,14 +22958,14 @@ fn scan_range_pattern__alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate,
 fn _parse_range_pattern__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.b.set_alt(1);
     p.site = 435;
-    _parse_range_pattern_bound(p, follow_then(FOLLOW_MASK_71, 1, follow));
+    _parse_range_pattern_bound(p, follow_then(FOLLOW_MASK_71, 8, follow));
     p.expect(TK_DOTDOT, &EMPTY_SYNC, true);
     return;
 }
 
 fn scan_range_pattern__alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_range_pattern_bound(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_71, 1, follow));
+    pos = scan_range_pattern_bound(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_71, 8, follow));
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_DOTDOT { return -1; }
     pos += 1;
@@ -23187,7 +23197,7 @@ fn _parse_struct_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
     if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     if _kind_set_132(p.peek_kind()) {
         p.site = 441;
-        _parse_struct_pattern_elements(p, follow_then(FOLLOW_MASK_5, 1, follow));
+        _parse_struct_pattern_elements(p, follow_then(FOLLOW_MASK_5, 8, follow));
     }
     p.expect(TK_RCURLYBRACE, &EMPTY_SYNC, true);
     return;
@@ -23309,7 +23319,7 @@ fn _parse_struct_pattern_elements(p: &mut Parser, follow: i64 = 0) -> () with Ru
 
 fn _parse_struct_pattern_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 445;
-    _parse_struct_pattern_field(p, follow_then_opening(FOLLOW_MASK_73, 2, follow));
+    _parse_struct_pattern_field(p, follow_then_opening(FOLLOW_MASK_73, 16, follow));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -23322,7 +23332,7 @@ fn _parse_struct_pattern_fields__inner(p: &mut Parser, follow: i64 = 0) -> () wi
                 sg_51: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_51; }
                     pos += 1;
-                    pos = scan_struct_pattern_field(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_73, 2, follow));
+                    pos = scan_struct_pattern_field(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_73, 16, follow));
                     if pos < 0 { break sg_51; }
                     break sg_51_done;
                 }
@@ -23348,7 +23358,7 @@ fn _parse_struct_pattern_fields__inner(p: &mut Parser, follow: i64 = 0) -> () wi
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_0, false);
         p.site = 446;
-        _parse_struct_pattern_field(p, follow_then_opening(FOLLOW_MASK_73, 2, follow));
+        _parse_struct_pattern_field(p, follow_then_opening(FOLLOW_MASK_73, 16, follow));
     }
     return;
 }
@@ -23373,7 +23383,7 @@ fn _parse_struct_pattern_field__inner(p: &mut Parser, follow: i64 = 0) -> () wit
             p.scan_gate.no_struct = p.no_struct;
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_outer_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_74));
+            pos = scan_outer_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_74));
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -23386,7 +23396,7 @@ fn _parse_struct_pattern_field__inner(p: &mut Parser, follow: i64 = 0) -> () wit
                 let _rec_spec = p.speculating;
                 p.speculating = true;
                 p.site = 447;
-                _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_74));
+                _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_74));
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
                 p.pos = _rec_pos;
@@ -23395,7 +23405,7 @@ fn _parse_struct_pattern_field__inner(p: &mut Parser, follow: i64 = 0) -> () wit
             break;
         }
         p.site = 447;
-        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, FOLLOW_MASK_74));
+        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, FOLLOW_MASK_74));
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
@@ -23504,7 +23514,7 @@ fn _parse_struct_pattern_et_cetera__inner(p: &mut Parser, follow: i64 = 0) -> ()
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     while !p.recovering && p.peek_kind() == TK_POUND {
         p.site = 453;
-        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, follow_then(FOLLOW_MASK_71, 1, follow)));
+        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, follow_then(FOLLOW_MASK_71, 8, follow)));
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.expect(TK_DOTDOT, &EMPTY_SYNC, true);
@@ -23529,7 +23539,7 @@ fn _parse_tuple_struct_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () wit
     if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
     if _kind_set_131(p.peek_kind()) {
         p.site = 455;
-        _parse_tuple_struct_items(p, follow_then(FOLLOW_MASK_3, 1, follow));
+        _parse_tuple_struct_items(p, follow_then(FOLLOW_MASK_3, 8, follow));
     }
     p.expect(TK_RPAREN, &EMPTY_SYNC, true);
     return;
@@ -23548,7 +23558,7 @@ fn _parse_tuple_struct_pattern(p: &mut Parser, follow: i64 = 0) -> () with RustP
 
 fn _parse_tuple_struct_items__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 456;
-    _parse_pattern(p, follow_open_with(follow_then_opening(FOLLOW_MASK_75, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+    _parse_pattern(p, follow_open_with(follow_then_opening(FOLLOW_MASK_75, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -23561,7 +23571,7 @@ fn _parse_tuple_struct_items__inner(p: &mut Parser, follow: i64 = 0) -> () with 
                 sg_52: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_52; }
                     pos += 1;
-                    pos = scan_pattern(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_75, 2, follow));
+                    pos = scan_pattern(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_75, 16, follow));
                     if pos < 0 { break sg_52; }
                     break sg_52_done;
                 }
@@ -23590,7 +23600,7 @@ fn _parse_tuple_struct_items__inner(p: &mut Parser, follow: i64 = 0) -> () with 
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_0, false);
         p.site = 457;
-        _parse_pattern(p, follow_then_opening(FOLLOW_MASK_75, 2, follow));
+        _parse_pattern(p, follow_then_opening(FOLLOW_MASK_75, 16, follow));
     }
     if p.peek_kind() == TK_COMMA && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
         p.take();
@@ -23614,7 +23624,7 @@ fn _parse_tuple_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
     if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
     if _kind_set_131(p.peek_kind()) {
         p.site = 458;
-        _parse_tuple_pattern_items(p, follow_then(FOLLOW_MASK_3, 1, follow));
+        _parse_tuple_pattern_items(p, follow_then(FOLLOW_MASK_3, 8, follow));
     }
     p.expect(TK_RPAREN, &EMPTY_SYNC, true);
     return;
@@ -23633,14 +23643,14 @@ fn _parse_tuple_pattern(p: &mut Parser, follow: i64 = 0) -> () with RustParserBa
 
 fn _parse_tuple_pattern_items__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 459;
-    _parse_pattern(p, follow_then(FOLLOW_MASK_26, 1, follow));
+    _parse_pattern(p, follow_then(FOLLOW_MASK_26, 8, follow));
     p.expect(TK_COMMA, &EMPTY_SYNC, true);
     return;
 }
 
 fn scan_tuple_pattern_items__alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_pattern(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_26, 1, follow));
+    pos = scan_pattern(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_26, 8, follow));
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_COMMA { return -1; }
     pos += 1;
@@ -23656,7 +23666,7 @@ fn scan_tuple_pattern_items__alt_1(tokens: &Array<i32>, pos: i32, gate: &mut Sca
 
 fn _parse_tuple_pattern_items__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 461;
-    _parse_pattern(p, follow_open_with(follow_then_opening(FOLLOW_MASK_75, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+    _parse_pattern(p, follow_open_with(follow_then_opening(FOLLOW_MASK_75, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     if !kind_set_has(&SYNC_77, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_77, &EXPECTED_77); }
     let mut _plus_first = true;
     loop {
@@ -23672,7 +23682,7 @@ fn _parse_tuple_pattern_items__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> (
                     sg_53: {
                         if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_53; }
                         pos += 1;
-                        pos = scan_pattern(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_75, 2, follow));
+                        pos = scan_pattern(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_75, 16, follow));
                         if pos < 0 { break sg_53; }
                         break sg_53_done;
                     }
@@ -23703,7 +23713,7 @@ fn _parse_tuple_pattern_items__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> (
         _plus_first = false;
         p.expect(TK_COMMA, &SYNC_0, false);
         p.site = 462;
-        _parse_pattern(p, follow_then_opening(FOLLOW_MASK_75, 2, follow));
+        _parse_pattern(p, follow_then_opening(FOLLOW_MASK_75, 16, follow));
     }
     if p.peek_kind() == TK_COMMA && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
         p.take();
@@ -23713,13 +23723,13 @@ fn _parse_tuple_pattern_items__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> (
 
 fn scan_tuple_pattern_items__alt_2(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_pattern(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_75, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+    pos = scan_pattern(tokens, pos, gate, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_75, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     if pos < 0 { return -1; }
     sg_54_done: {
         sg_54: {
             if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_54; }
             pos += 1;
-            pos = scan_pattern(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_75, 2, follow));
+            pos = scan_pattern(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_75, 16, follow));
             if pos < 0 { break sg_54; }
             break sg_54_done;
         }
@@ -23731,7 +23741,7 @@ fn scan_tuple_pattern_items__alt_2(tokens: &Array<i32>, pos: i32, gate: &mut Sca
         sg_55_done: {
             sg_55: {
                 pos += 1;
-                pos = scan_pattern(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_75, 2, follow));
+                pos = scan_pattern(tokens, pos, gate, memo, follow_then_opening(FOLLOW_MASK_75, 16, follow));
                 if pos < 0 { break sg_55; }
                 break sg_55_done;
             }
@@ -23852,7 +23862,7 @@ fn _parse_tuple_pattern_items(p: &mut Parser, follow: i64 = 0) -> () with RustPa
 fn _parse_grouped_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.expect(TK_LPAREN, &SYNC_0, false);
     p.site = 463;
-    _parse_pattern(p, follow_then(FOLLOW_MASK_3, 1, follow));
+    _parse_pattern(p, follow_then(FOLLOW_MASK_3, 8, follow));
     p.expect(TK_RPAREN, &EMPTY_SYNC, true);
     return;
 }
@@ -23873,7 +23883,7 @@ fn _parse_slice_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
     if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
     if _kind_set_131(p.peek_kind()) {
         p.site = 464;
-        _parse_slice_pattern_items(p, follow_then(FOLLOW_MASK_4, 1, follow));
+        _parse_slice_pattern_items(p, follow_then(FOLLOW_MASK_4, 8, follow));
     }
     p.expect(TK_RSQUAREBRACKET, &EMPTY_SYNC, true);
     return;
@@ -23892,7 +23902,7 @@ fn _parse_slice_pattern(p: &mut Parser, follow: i64 = 0) -> () with RustParserBa
 
 fn _parse_slice_pattern_items__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 465;
-    _parse_pattern(p, follow_open_with(follow_then_opening(FOLLOW_MASK_75, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+    _parse_pattern(p, follow_open_with(follow_then_opening(FOLLOW_MASK_75, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -23905,7 +23915,7 @@ fn _parse_slice_pattern_items__inner(p: &mut Parser, follow: i64 = 0) -> () with
                 sg_57: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_57; }
                     pos += 1;
-                    pos = scan_pattern(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_75, 2, follow));
+                    pos = scan_pattern(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_75, 16, follow));
                     if pos < 0 { break sg_57; }
                     break sg_57_done;
                 }
@@ -23934,7 +23944,7 @@ fn _parse_slice_pattern_items__inner(p: &mut Parser, follow: i64 = 0) -> () with
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_0, false);
         p.site = 466;
-        _parse_pattern(p, follow_then_opening(FOLLOW_MASK_75, 2, follow));
+        _parse_pattern(p, follow_then_opening(FOLLOW_MASK_75, 16, follow));
     }
     if p.peek_kind() == TK_COMMA && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
         p.take();
@@ -24261,7 +24271,7 @@ fn _parse_type_no_bounds(p: &mut Parser, follow: i64 = 0) -> () with RustParserB
 fn _parse_parenthesized_type__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.expect(TK_LPAREN, &SYNC_0, false);
     p.site = 486;
-    _parse_type_(p, follow_then(FOLLOW_MASK_3, 1, follow));
+    _parse_type_(p, follow_then(FOLLOW_MASK_3, 8, follow));
     p.expect(TK_RPAREN, &EMPTY_SYNC, true);
     return;
 }
@@ -24298,7 +24308,7 @@ fn _parse_tuple_type__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
         let mut pos: i32 = p.pos;
         sg_58_done: {
             sg_58: {
-                pos = scan_type_(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_26, 1, follow));
+                pos = scan_type_(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_26, 8, follow));
                 if pos < 0 { break sg_58; }
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_58; }
                 pos += 1;
@@ -24311,7 +24321,7 @@ fn _parse_tuple_type__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
             let sp_gate = p.scan_gate;
             sg_59_done: {
                 sg_59: {
-                    pos = scan_type_(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_26, 1, follow));
+                    pos = scan_type_(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_26, 8, follow));
                     if pos < 0 { break sg_59; }
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_59; }
                     pos += 1;
@@ -24329,7 +24339,7 @@ fn _parse_tuple_type__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
         if pos < tokens.len() && _kind_set_48(tokens[pos]) {
             let sp = pos;
             let sp_gate = p.scan_gate;
-            pos = scan_type_(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_3, 1, follow));
+            pos = scan_type_(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_3, 8, follow));
             if pos < 0 {
                 pos = sp;
                 p.scan_gate = sp_gate;
@@ -24350,7 +24360,7 @@ fn _parse_tuple_type__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
                     let mut pos: i32 = p.pos;
                     sg_60_done: {
                         sg_60: {
-                            pos = scan_type_(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_26, 1, follow));
+                            pos = scan_type_(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_26, 8, follow));
                             if pos < 0 { break sg_60; }
                             if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_60; }
                             pos += 1;
@@ -24365,14 +24375,14 @@ fn _parse_tuple_type__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
             }
             _plus_first = false;
             p.site = 487;
-            _parse_type_(p, follow_then(FOLLOW_MASK_26, 1, follow));
+            _parse_type_(p, follow_then(FOLLOW_MASK_26, 8, follow));
             p.expect(TK_COMMA, &SYNC_2, false);
             if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_2, &EXPECTED_2); }
         }
         if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
         if _kind_set_48(p.peek_kind()) {
             p.site = 488;
-            _parse_type_(p, follow_then(FOLLOW_MASK_3, 1, follow));
+            _parse_type_(p, follow_then(FOLLOW_MASK_3, 8, follow));
         }
     }
     p.expect(TK_RPAREN, &EMPTY_SYNC, true);
@@ -24396,7 +24406,7 @@ fn _parse_array_type__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
     _parse_type_(p, FOLLOW_MASK_53);
     p.expect(TK_SEMI, &SYNC_0, false);
     p.site = 490;
-    _parse_expression(p, follow_then(FOLLOW_MASK_4, 1, follow));
+    _parse_expression(p, follow_then(FOLLOW_MASK_4, 8, follow));
     p.expect(TK_RSQUAREBRACKET, &EMPTY_SYNC, true);
     return;
 }
@@ -24415,7 +24425,7 @@ fn _parse_array_type(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase 
 fn _parse_slice_type__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.expect(TK_LSQUAREBRACKET, &SYNC_0, false);
     p.site = 491;
-    _parse_type_(p, follow_then(FOLLOW_MASK_4, 1, follow));
+    _parse_type_(p, follow_then(FOLLOW_MASK_4, 8, follow));
     p.expect(TK_RSQUAREBRACKET, &EMPTY_SYNC, true);
     return;
 }
@@ -24630,7 +24640,7 @@ fn _parse_function_parameters_maybe_named_variadic(p: &mut Parser, follow: i64 =
 
 fn _parse_maybe_named_function_parameters__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 503;
-    _parse_maybe_named_param(p, follow_open_with(follow_then_opening(FOLLOW_MASK_77, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+    _parse_maybe_named_param(p, follow_open_with(follow_then_opening(FOLLOW_MASK_77, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -24643,7 +24653,7 @@ fn _parse_maybe_named_function_parameters__inner(p: &mut Parser, follow: i64 = 0
                 sg_61: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_61; }
                     pos += 1;
-                    pos = scan_maybe_named_param(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_77, 2, follow));
+                    pos = scan_maybe_named_param(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_77, 16, follow));
                     if pos < 0 { break sg_61; }
                     break sg_61_done;
                 }
@@ -24672,7 +24682,7 @@ fn _parse_maybe_named_function_parameters__inner(p: &mut Parser, follow: i64 = 0
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_0, false);
         p.site = 504;
-        _parse_maybe_named_param(p, follow_then_opening(FOLLOW_MASK_77, 2, follow));
+        _parse_maybe_named_param(p, follow_then_opening(FOLLOW_MASK_77, 16, follow));
     }
     if p.peek_kind() == TK_COMMA && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
         p.take();
@@ -24788,7 +24798,7 @@ fn _parse_maybe_named_function_parameters_variadic__inner(p: &mut Parser, follow
             let mut pos: i32 = p.pos;
             sg_63_done: {
                 sg_63: {
-                    pos = scan_maybe_named_param(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_26, 1, follow));
+                    pos = scan_maybe_named_param(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_26, 8, follow));
                     if pos < 0 { break sg_63; }
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_63; }
                     pos += 1;
@@ -24810,7 +24820,7 @@ fn _parse_maybe_named_function_parameters_variadic__inner(p: &mut Parser, follow
                     while pos < tokens.len() && tokens[pos] == TK_POUND {
                         let sp = pos;
                         let sp_gate = p.scan_gate;
-                        pos = scan_outer_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_18, 3, follow_then(FOLLOW_MASK_78, 1, follow)));
+                        pos = scan_outer_attribute(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_or(FOLLOW_MASK_18, 24, follow_then(FOLLOW_MASK_78, 8, follow)));
                         if pos < 0 {
                             pos = sp;
                             p.scan_gate = sp_gate;
@@ -24830,7 +24840,7 @@ fn _parse_maybe_named_function_parameters_variadic__inner(p: &mut Parser, follow
         }
         if rep_scan_pos < 0 { break; }
         p.site = 508;
-        _parse_maybe_named_param(p, follow_then(FOLLOW_MASK_26, 1, follow));
+        _parse_maybe_named_param(p, follow_then(FOLLOW_MASK_26, 8, follow));
         p.expect(TK_COMMA, &SYNC_0, false);
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
@@ -24840,7 +24850,7 @@ fn _parse_maybe_named_function_parameters_variadic__inner(p: &mut Parser, follow
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     while !p.recovering && p.peek_kind() == TK_POUND {
         p.site = 510;
-        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 3, follow_then(FOLLOW_MASK_78, 1, follow)));
+        _parse_outer_attribute(p, follow_or(FOLLOW_MASK_18, 24, follow_then(FOLLOW_MASK_78, 8, follow)));
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.expect(TK_DOTDOTDOT, &EMPTY_SYNC, true);
@@ -24949,7 +24959,7 @@ fn _parse_inferred_type(p: &mut Parser) -> () with RustParserBase {
 
 fn _parse_type_param_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 515;
-    _parse_type_param_bound(p, follow_open_with(follow_then_opening(FOLLOW_MASK_79, 2, follow), follow_open_set(FOLLOW_MASK_80)));
+    _parse_type_param_bound(p, follow_open_with(follow_then_opening(FOLLOW_MASK_79, 16, follow), follow_open_set(FOLLOW_MASK_80)));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -24962,7 +24972,7 @@ fn _parse_type_param_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with R
                 sg_64: {
                     if pos >= tokens.len() || tokens[pos] != TK_PLUS { break sg_64; }
                     pos += 1;
-                    pos = scan_type_param_bound(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_79, 2, follow));
+                    pos = scan_type_param_bound(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_79, 16, follow));
                     if pos < 0 { break sg_64; }
                     break sg_64_done;
                 }
@@ -24991,7 +25001,7 @@ fn _parse_type_param_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with R
         if rep_scan_pos < 0 { break; }
         p.expect(TK_PLUS, &SYNC_0, false);
         p.site = 516;
-        _parse_type_param_bound(p, follow_then_opening(FOLLOW_MASK_79, 2, follow));
+        _parse_type_param_bound(p, follow_then_opening(FOLLOW_MASK_79, 16, follow));
     }
     if p.peek_kind() == TK_PLUS && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
         p.take();
@@ -25231,7 +25241,7 @@ fn _parse_trait_bound__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
             _parse_for_lifetimes(p, FOLLOW_MASK_82);
         }
         p.site = 527;
-        _parse_type_path(p, follow_then(FOLLOW_MASK_3, 1, follow));
+        _parse_type_path(p, follow_then(FOLLOW_MASK_3, 8, follow));
         p.expect(TK_RPAREN, &EMPTY_SYNC, true);
         return;
     }
@@ -25458,12 +25468,12 @@ fn _parse_path_in_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with 
         p.take();
     }
     p.site = 533;
-    _parse_path_expr_segment(p, follow_then_opening(FOLLOW_MASK_85, 2, follow));
+    _parse_path_expr_segment(p, follow_then_opening(FOLLOW_MASK_85, 16, follow));
     while !p.recovering && p.peek_kind() == TK_PATHSEP {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
         p.site = 534;
-        _parse_path_expr_segment(p, follow_then_opening(FOLLOW_MASK_85, 2, follow));
+        _parse_path_expr_segment(p, follow_then_opening(FOLLOW_MASK_85, 16, follow));
     }
     return;
 }
@@ -25886,7 +25896,7 @@ fn _parse_generic_args__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () with 
             let mut pos: i32 = p.pos;
             sg_78_done: {
                 sg_78: {
-                    pos = scan_generic_arg(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_26, 1, follow));
+                    pos = scan_generic_arg(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then(FOLLOW_MASK_26, 8, follow));
                     if pos < 0 { break sg_78; }
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_78; }
                     pos += 1;
@@ -25918,7 +25928,7 @@ fn _parse_generic_args__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () with 
         }
         if rep_scan_pos < 0 { break; }
         p.site = 543;
-        _parse_generic_arg(p, follow_then(FOLLOW_MASK_26, 1, follow));
+        _parse_generic_arg(p, follow_then(FOLLOW_MASK_26, 8, follow));
         p.expect(TK_COMMA, &SYNC_0, false);
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
@@ -25941,7 +25951,7 @@ fn scan_generic_args__alt_3(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, 
         let sp_gate = *gate;
         sg_79_done: {
             sg_79: {
-                pos = scan_generic_arg(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_26, 1, follow));
+                pos = scan_generic_arg(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_26, 8, follow));
                 if pos < 0 { break sg_79; }
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_79; }
                 pos += 1;
@@ -26266,7 +26276,7 @@ fn _parse_generic_args_lifetimes(p: &mut Parser, follow: i64 = 0) -> () with Rus
 
 fn _parse_generic_args_types__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 554;
-    _parse_type_(p, follow_then_opening(FOLLOW_MASK_88, 2, follow));
+    _parse_type_(p, follow_then_opening(FOLLOW_MASK_88, 16, follow));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -26279,7 +26289,7 @@ fn _parse_generic_args_types__inner(p: &mut Parser, follow: i64 = 0) -> () with 
                 sg_82: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_82; }
                     pos += 1;
-                    pos = scan_type_(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_88, 2, follow));
+                    pos = scan_type_(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_88, 16, follow));
                     if pos < 0 { break sg_82; }
                     break sg_82_done;
                 }
@@ -26305,7 +26315,7 @@ fn _parse_generic_args_types__inner(p: &mut Parser, follow: i64 = 0) -> () with 
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_0, false);
         p.site = 555;
-        _parse_type_(p, follow_then_opening(FOLLOW_MASK_88, 2, follow));
+        _parse_type_(p, follow_then_opening(FOLLOW_MASK_88, 16, follow));
     }
     return;
 }
@@ -26323,7 +26333,7 @@ fn _parse_generic_args_types(p: &mut Parser, follow: i64 = 0) -> () with RustPar
 
 fn _parse_generic_args_bindings__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 556;
-    _parse_generic_args_binding(p, follow_then_opening(FOLLOW_MASK_89, 2, follow));
+    _parse_generic_args_binding(p, follow_then_opening(FOLLOW_MASK_89, 16, follow));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -26336,7 +26346,7 @@ fn _parse_generic_args_bindings__inner(p: &mut Parser, follow: i64 = 0) -> () wi
                 sg_83: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_83; }
                     pos += 1;
-                    pos = scan_generic_args_binding(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_89, 2, follow));
+                    pos = scan_generic_args_binding(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_89, 16, follow));
                     if pos < 0 { break sg_83; }
                     break sg_83_done;
                 }
@@ -26362,7 +26372,7 @@ fn _parse_generic_args_bindings__inner(p: &mut Parser, follow: i64 = 0) -> () wi
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_0, false);
         p.site = 557;
-        _parse_generic_args_binding(p, follow_then_opening(FOLLOW_MASK_89, 2, follow));
+        _parse_generic_args_binding(p, follow_then_opening(FOLLOW_MASK_89, 16, follow));
     }
     return;
 }
@@ -26400,7 +26410,7 @@ fn _parse_generic_args_binding(p: &mut Parser, follow: i64 = 0) -> () with RustP
 
 fn _parse_qualified_path_in_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 560;
-    _parse_qualified_path_type(p, follow_then_opening(FOLLOW_MASK_85, 2, follow));
+    _parse_qualified_path_type(p, follow_then_opening(FOLLOW_MASK_85, 16, follow));
     if !kind_set_has(&SYNC_91, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_91, &EXPECTED_91); }
     let mut _plus_first = true;
     while !p.recovering && (_plus_first || p.peek_kind() == TK_PATHSEP) {
@@ -26410,7 +26420,7 @@ fn _parse_qualified_path_in_expression__inner(p: &mut Parser, follow: i64 = 0) -
         _plus_first = false;
         p.expect(TK_PATHSEP, &SYNC_0, false);
         p.site = 561;
-        _parse_path_expr_segment(p, follow_then_opening(FOLLOW_MASK_85, 2, follow));
+        _parse_path_expr_segment(p, follow_then_opening(FOLLOW_MASK_85, 16, follow));
     }
     return;
 }
@@ -26434,7 +26444,7 @@ fn _parse_qualified_path_type__inner(p: &mut Parser, follow: i64 = 0) -> () with
     if p.peek_kind() == TK_KW_AS && _kind_set_97(p.peek_at(1)) {
         p.take();
         p.site = 563;
-        _parse_type_path(p, follow_then(FOLLOW_MASK_91, 1, follow));
+        _parse_type_path(p, follow_then(FOLLOW_MASK_91, 8, follow));
     }
     p.expect(TK_GT, &EMPTY_SYNC, true);
     return;
@@ -26453,7 +26463,7 @@ fn _parse_qualified_path_type(p: &mut Parser, follow: i64 = 0) -> () with RustPa
 
 fn _parse_qualified_path_in_type__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 564;
-    _parse_qualified_path_type(p, follow_then_opening(FOLLOW_MASK_85, 2, follow));
+    _parse_qualified_path_type(p, follow_then_opening(FOLLOW_MASK_85, 16, follow));
     if !kind_set_has(&SYNC_91, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_91, &EXPECTED_91); }
     let mut _plus_first = true;
     loop {
@@ -26469,7 +26479,7 @@ fn _parse_qualified_path_in_type__inner(p: &mut Parser, follow: i64 = 0) -> () w
                     sg_84: {
                         if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break sg_84; }
                         pos += 1;
-                        pos = scan_type_path_segment(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_85, 2, follow));
+                        pos = scan_type_path_segment(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_85, 16, follow));
                         if pos < 0 { break sg_84; }
                         break sg_84_done;
                     }
@@ -26497,7 +26507,7 @@ fn _parse_qualified_path_in_type__inner(p: &mut Parser, follow: i64 = 0) -> () w
         _plus_first = false;
         p.expect(TK_PATHSEP, &SYNC_0, false);
         p.site = 565;
-        _parse_type_path_segment(p, follow_then_opening(FOLLOW_MASK_85, 2, follow));
+        _parse_type_path_segment(p, follow_then_opening(FOLLOW_MASK_85, 16, follow));
     }
     return;
 }
@@ -26519,7 +26529,7 @@ fn _parse_type_path__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
         p.take();
     }
     p.site = 566;
-    _parse_type_path_segment(p, follow_then_opening(FOLLOW_MASK_85, 2, follow));
+    _parse_type_path_segment(p, follow_then_opening(FOLLOW_MASK_85, 16, follow));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -26532,7 +26542,7 @@ fn _parse_type_path__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
                 sg_85: {
                     if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break sg_85; }
                     pos += 1;
-                    pos = scan_type_path_segment(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_85, 2, follow));
+                    pos = scan_type_path_segment(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_85, 16, follow));
                     if pos < 0 { break sg_85; }
                     break sg_85_done;
                 }
@@ -26558,7 +26568,7 @@ fn _parse_type_path__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
         if rep_scan_pos < 0 { break; }
         p.expect(TK_PATHSEP, &SYNC_0, false);
         p.site = 567;
-        _parse_type_path_segment(p, follow_then_opening(FOLLOW_MASK_85, 2, follow));
+        _parse_type_path_segment(p, follow_then_opening(FOLLOW_MASK_85, 16, follow));
     }
     return;
 }
@@ -26661,7 +26671,7 @@ fn _parse_type_path_fn(p: &mut Parser, follow: i64 = 0) -> () with RustParserBas
 
 fn _parse_type_path_inputs__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 573;
-    _parse_type_(p, follow_open_with(follow_then_opening(FOLLOW_MASK_88, 2, follow), follow_open_set(FOLLOW_MASK_26)));
+    _parse_type_(p, follow_open_with(follow_then_opening(FOLLOW_MASK_88, 16, follow), follow_open_set(FOLLOW_MASK_26)));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -26674,7 +26684,7 @@ fn _parse_type_path_inputs__inner(p: &mut Parser, follow: i64 = 0) -> () with Ru
                 sg_86: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_86; }
                     pos += 1;
-                    pos = scan_type_(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_88, 2, follow));
+                    pos = scan_type_(tokens, pos, &mut p.scan_gate, &mut p.memo, follow_then_opening(FOLLOW_MASK_88, 16, follow));
                     if pos < 0 { break sg_86; }
                     break sg_86_done;
                 }
@@ -26703,7 +26713,7 @@ fn _parse_type_path_inputs__inner(p: &mut Parser, follow: i64 = 0) -> () with Ru
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_0, false);
         p.site = 574;
-        _parse_type_(p, follow_then_opening(FOLLOW_MASK_88, 2, follow));
+        _parse_type_(p, follow_then_opening(FOLLOW_MASK_88, 16, follow));
     }
     if p.peek_kind() == TK_COMMA && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
         p.take();
@@ -26733,7 +26743,7 @@ fn _parse_visibility__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
         } else if grp_kind == TK_KW_IN {
             p.take();
             p.site = 575;
-            _parse_simple_path(p, follow_then(FOLLOW_MASK_3, 1, follow));
+            _parse_simple_path(p, follow_then(FOLLOW_MASK_3, 8, follow));
         } else {
             p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_94);
         }
@@ -26960,7 +26970,7 @@ fn _parse_macro_punctuation_token(p: &mut Parser) -> () with RustParserBase {
 fn _parse_shl__inner(p: &mut Parser) -> () with RustParserBase {
     p.expect(TK_LT, &SYNC_82, false);
     if !p.speculating {
-        if !(RustParserBase::next_lt(p)) {
+        if !RustParserBase::next_lt(p) {
             p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);
             return;
         }
@@ -26983,7 +26993,7 @@ fn _parse_shl(p: &mut Parser) -> () with RustParserBase {
 fn _parse_shr__inner(p: &mut Parser) -> () with RustParserBase {
     p.expect(TK_GT, &SYNC_88, false);
     if !p.speculating {
-        if !(RustParserBase::next_gt(p)) {
+        if !RustParserBase::next_gt(p) {
             p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);
             return;
         }

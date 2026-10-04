@@ -979,17 +979,17 @@ internal fn follow_open_with(cont: i64, open: i64) -> i64 {
     return cont & FOLLOW_CONT_MASK | follow_open_join(follow_open_mark(cont), open);
 }
 
-internal fn follow_then(prefix: i64, positions: i64, cont: i64) -> i64 {
-    return (prefix | (cont & FOLLOW_SEQUENCED) << positions * FOLLOW_SLOT_BITS) & FOLLOW_CONT_MASK;
+internal fn follow_then(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    return (prefix | (cont & FOLLOW_SEQUENCED) << prefix_bits) & FOLLOW_CONT_MASK;
 }
 
-internal fn follow_then_opening(prefix: i64, positions: i64, cont: i64) -> i64 {
-    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_then_opening(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | follow_open_mark(cont);
 }
 
-internal fn follow_or(prefix: i64, positions: i64, alternative: i64) -> i64 {
-    let opened = (alternative | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_or(prefix: i64, prefix_bits: i64, alternative: i64) -> i64 {
+    let opened = (alternative | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | alternative & FOLLOW_OPEN_FIELD;
 }
 
@@ -3489,18 +3489,12 @@ fn try_Percentage(chars: &List<char>, start: i32) -> i32 {
         pos = la_at_67;
         let mut la_tot_67: i32 = -1;
         let peek_save_73 = pos;
-        let mut peek_ok_73 = false;
-        let mut peek_end_73: i32 = -1;
         peek_73: {
             if pos >= chars.len() || chars[pos] != '%' { break peek_73; }
             pos += 1;
-            peek_end_73 = pos;
-            peek_ok_73 = true;
+            la_tot_67 = pos;
         }
         pos = peek_save_73;
-        if peek_ok_73 {
-            la_tot_67 = peek_end_73;
-        }
         if la_tot_67 > la_reach_67 {
             la_reach_67 = la_tot_67;
             la_win_67 = la_i_67;
@@ -3537,35 +3531,25 @@ fn try_UnicodeRange(chars: &List<char>, start: i32) -> i32 {
         pos += 1;
         if pos >= chars.len() || chars[pos] != '?' { break alts_74_0; }
         pos += 1;
-        let mut accept_75: i32 = -1;
-        let mut la_reach_75: i32 = -1;
+        let mut la_end_75: i32 = -1;
         let mut la_once_75 = false;
         loop {
             let mut la_tot_76: i32 = -1;
             let peek_save_77 = pos;
-            let mut peek_ok_77 = false;
-            let mut peek_end_77: i32 = -1;
             peek_77: {
-                let mut accept_78: i32 = -1;
-                let mut la_reach_78: i32 = -1;
+                let mut la_end_78: i32 = -1;
                 let mut la_once_78 = false;
                 loop {
                     let mut la_tot_79: i32 = -1;
                     let peek_save_80 = pos;
-                    let mut peek_ok_80 = false;
-                    let mut peek_end_80: i32 = -1;
                     peek_80: {
-                        let mut accept_81: i32 = -1;
-                        let mut la_reach_81: i32 = -1;
+                        let mut la_end_81: i32 = -1;
                         let mut la_once_81 = false;
                         loop {
                             let mut la_tot_82: i32 = -1;
                             let peek_save_83 = pos;
-                            let mut peek_ok_83 = false;
-                            let mut peek_end_83: i32 = -1;
                             peek_83: {
-                                let mut accept_84: i32 = -1;
-                                let mut la_reach_84: i32 = -1;
+                                let mut la_end_84: i32 = -1;
                                 let mut la_once_84 = false;
                                 loop {
                                     let mut la_tot_85: i32 = -1;
@@ -3576,9 +3560,8 @@ fn try_UnicodeRange(chars: &List<char>, start: i32) -> i32 {
                                     }
                                     la_tot_85 = pos;
                                     pos = peek_save_86;
-                                    if la_tot_85 >= 0 && la_tot_85 >= la_reach_84 {
-                                        la_reach_84 = la_tot_85;
-                                        accept_84 = pos;
+                                    if la_tot_85 >= 0 && la_tot_85 >= la_end_84 {
+                                        la_end_84 = la_tot_85;
                                     }
                                     if la_once_84 { break; }
                                     la_once_84 = true;
@@ -3591,20 +3574,15 @@ fn try_UnicodeRange(chars: &List<char>, start: i32) -> i32 {
                                     pos = la_saved_84;
                                     break;
                                 }
-                                if accept_84 < 0 {
+                                if la_end_84 < 0 {
                                     break peek_83;
                                 }
-                                pos = la_reach_84;
-                                peek_end_83 = pos;
-                                peek_ok_83 = true;
+                                pos = la_end_84;
+                                la_tot_82 = pos;
                             }
                             pos = peek_save_83;
-                            if peek_ok_83 {
-                                la_tot_82 = peek_end_83;
-                            }
-                            if la_tot_82 >= 0 && la_tot_82 >= la_reach_81 {
-                                la_reach_81 = la_tot_82;
-                                accept_81 = pos;
+                            if la_tot_82 >= 0 && la_tot_82 >= la_end_81 {
+                                la_end_81 = la_tot_82;
                             }
                             if la_once_81 { break; }
                             la_once_81 = true;
@@ -3617,20 +3595,15 @@ fn try_UnicodeRange(chars: &List<char>, start: i32) -> i32 {
                             pos = la_saved_81;
                             break;
                         }
-                        if accept_81 < 0 {
+                        if la_end_81 < 0 {
                             break peek_80;
                         }
-                        pos = la_reach_81;
-                        peek_end_80 = pos;
-                        peek_ok_80 = true;
+                        pos = la_end_81;
+                        la_tot_79 = pos;
                     }
                     pos = peek_save_80;
-                    if peek_ok_80 {
-                        la_tot_79 = peek_end_80;
-                    }
-                    if la_tot_79 >= 0 && la_tot_79 >= la_reach_78 {
-                        la_reach_78 = la_tot_79;
-                        accept_78 = pos;
+                    if la_tot_79 >= 0 && la_tot_79 >= la_end_78 {
+                        la_end_78 = la_tot_79;
                     }
                     if la_once_78 { break; }
                     la_once_78 = true;
@@ -3643,20 +3616,15 @@ fn try_UnicodeRange(chars: &List<char>, start: i32) -> i32 {
                     pos = la_saved_78;
                     break;
                 }
-                if accept_78 < 0 {
+                if la_end_78 < 0 {
                     break peek_77;
                 }
-                pos = la_reach_78;
-                peek_end_77 = pos;
-                peek_ok_77 = true;
+                pos = la_end_78;
+                la_tot_76 = pos;
             }
             pos = peek_save_77;
-            if peek_ok_77 {
-                la_tot_76 = peek_end_77;
-            }
-            if la_tot_76 >= 0 && la_tot_76 >= la_reach_75 {
-                la_reach_75 = la_tot_76;
-                accept_75 = pos;
+            if la_tot_76 >= 0 && la_tot_76 >= la_end_75 {
+                la_end_75 = la_tot_76;
             }
             if la_once_75 { break; }
             la_once_75 = true;
@@ -3669,10 +3637,10 @@ fn try_UnicodeRange(chars: &List<char>, start: i32) -> i32 {
             pos = la_saved_75;
             break;
         }
-        if accept_75 < 0 {
+        if la_end_75 < 0 {
             break alts_74_0;
         }
-        pos = la_reach_75;
+        pos = la_end_75;
         if pos > alts_best_74 { alts_best_74 = pos; }
     }
     alts_74_1: {
@@ -3685,35 +3653,25 @@ fn try_UnicodeRange(chars: &List<char>, start: i32) -> i32 {
         if pos >= chars.len() { break alts_74_1; }
         if !(chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' }) { break alts_74_1; }
         pos += 1;
-        let mut accept_88: i32 = -1;
-        let mut la_reach_88: i32 = -1;
+        let mut la_end_88: i32 = -1;
         let mut la_once_88 = false;
         loop {
             let mut la_tot_89: i32 = -1;
             let peek_save_90 = pos;
-            let mut peek_ok_90 = false;
-            let mut peek_end_90: i32 = -1;
             peek_90: {
-                let mut accept_91: i32 = -1;
-                let mut la_reach_91: i32 = -1;
+                let mut la_end_91: i32 = -1;
                 let mut la_once_91 = false;
                 loop {
                     let mut la_tot_92: i32 = -1;
                     let peek_save_93 = pos;
-                    let mut peek_ok_93 = false;
-                    let mut peek_end_93: i32 = -1;
                     peek_93: {
-                        let mut accept_94: i32 = -1;
-                        let mut la_reach_94: i32 = -1;
+                        let mut la_end_94: i32 = -1;
                         let mut la_once_94 = false;
                         loop {
                             let mut la_tot_95: i32 = -1;
                             let peek_save_96 = pos;
-                            let mut peek_ok_96 = false;
-                            let mut peek_end_96: i32 = -1;
                             peek_96: {
-                                let mut accept_97: i32 = -1;
-                                let mut la_reach_97: i32 = -1;
+                                let mut la_end_97: i32 = -1;
                                 let mut la_once_97 = false;
                                 loop {
                                     let mut la_tot_98: i32 = -1;
@@ -3724,9 +3682,8 @@ fn try_UnicodeRange(chars: &List<char>, start: i32) -> i32 {
                                     }
                                     la_tot_98 = pos;
                                     pos = peek_save_99;
-                                    if la_tot_98 >= 0 && la_tot_98 >= la_reach_97 {
-                                        la_reach_97 = la_tot_98;
-                                        accept_97 = pos;
+                                    if la_tot_98 >= 0 && la_tot_98 >= la_end_97 {
+                                        la_end_97 = la_tot_98;
                                     }
                                     if la_once_97 { break; }
                                     la_once_97 = true;
@@ -3739,20 +3696,15 @@ fn try_UnicodeRange(chars: &List<char>, start: i32) -> i32 {
                                     pos = la_saved_97;
                                     break;
                                 }
-                                if accept_97 < 0 {
+                                if la_end_97 < 0 {
                                     break peek_96;
                                 }
-                                pos = la_reach_97;
-                                peek_end_96 = pos;
-                                peek_ok_96 = true;
+                                pos = la_end_97;
+                                la_tot_95 = pos;
                             }
                             pos = peek_save_96;
-                            if peek_ok_96 {
-                                la_tot_95 = peek_end_96;
-                            }
-                            if la_tot_95 >= 0 && la_tot_95 >= la_reach_94 {
-                                la_reach_94 = la_tot_95;
-                                accept_94 = pos;
+                            if la_tot_95 >= 0 && la_tot_95 >= la_end_94 {
+                                la_end_94 = la_tot_95;
                             }
                             if la_once_94 { break; }
                             la_once_94 = true;
@@ -3765,20 +3717,15 @@ fn try_UnicodeRange(chars: &List<char>, start: i32) -> i32 {
                             pos = la_saved_94;
                             break;
                         }
-                        if accept_94 < 0 {
+                        if la_end_94 < 0 {
                             break peek_93;
                         }
-                        pos = la_reach_94;
-                        peek_end_93 = pos;
-                        peek_ok_93 = true;
+                        pos = la_end_94;
+                        la_tot_92 = pos;
                     }
                     pos = peek_save_93;
-                    if peek_ok_93 {
-                        la_tot_92 = peek_end_93;
-                    }
-                    if la_tot_92 >= 0 && la_tot_92 >= la_reach_91 {
-                        la_reach_91 = la_tot_92;
-                        accept_91 = pos;
+                    if la_tot_92 >= 0 && la_tot_92 >= la_end_91 {
+                        la_end_91 = la_tot_92;
                     }
                     if la_once_91 { break; }
                     la_once_91 = true;
@@ -3791,20 +3738,15 @@ fn try_UnicodeRange(chars: &List<char>, start: i32) -> i32 {
                     pos = la_saved_91;
                     break;
                 }
-                if accept_91 < 0 {
+                if la_end_91 < 0 {
                     break peek_90;
                 }
-                pos = la_reach_91;
-                peek_end_90 = pos;
-                peek_ok_90 = true;
+                pos = la_end_91;
+                la_tot_89 = pos;
             }
             pos = peek_save_90;
-            if peek_ok_90 {
-                la_tot_89 = peek_end_90;
-            }
-            if la_tot_89 >= 0 && la_tot_89 >= la_reach_88 {
-                la_reach_88 = la_tot_89;
-                accept_88 = pos;
+            if la_tot_89 >= 0 && la_tot_89 >= la_end_88 {
+                la_end_88 = la_tot_89;
             }
             if la_once_88 { break; }
             la_once_88 = true;
@@ -3817,10 +3759,10 @@ fn try_UnicodeRange(chars: &List<char>, start: i32) -> i32 {
             pos = la_saved_88;
             break;
         }
-        if accept_88 < 0 {
+        if la_end_88 < 0 {
             break alts_74_1;
         }
-        pos = la_reach_88;
+        pos = la_end_88;
         if pos > alts_best_74 { alts_best_74 = pos; }
     }
     alts_74_2: {
@@ -3836,26 +3778,19 @@ fn try_UnicodeRange(chars: &List<char>, start: i32) -> i32 {
         if pos >= chars.len() { break alts_74_2; }
         if !(chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' }) { break alts_74_2; }
         pos += 1;
-        let mut accept_101: i32 = -1;
-        let mut la_reach_101: i32 = -1;
+        let mut la_end_101: i32 = -1;
         let mut la_once_101 = false;
         loop {
             let mut la_tot_102: i32 = -1;
             let peek_save_103 = pos;
-            let mut peek_ok_103 = false;
-            let mut peek_end_103: i32 = -1;
             peek_103: {
-                let mut accept_104: i32 = -1;
-                let mut la_reach_104: i32 = -1;
+                let mut la_end_104: i32 = -1;
                 let mut la_once_104 = false;
                 loop {
                     let mut la_tot_105: i32 = -1;
                     let peek_save_106 = pos;
-                    let mut peek_ok_106 = false;
-                    let mut peek_end_106: i32 = -1;
                     peek_106: {
-                        let mut accept_107: i32 = -1;
-                        let mut la_reach_107: i32 = -1;
+                        let mut la_end_107: i32 = -1;
                         let mut la_once_107 = false;
                         loop {
                             let mut la_tot_108: i32 = -1;
@@ -3866,9 +3801,8 @@ fn try_UnicodeRange(chars: &List<char>, start: i32) -> i32 {
                             }
                             la_tot_108 = pos;
                             pos = peek_save_109;
-                            if la_tot_108 >= 0 && la_tot_108 >= la_reach_107 {
-                                la_reach_107 = la_tot_108;
-                                accept_107 = pos;
+                            if la_tot_108 >= 0 && la_tot_108 >= la_end_107 {
+                                la_end_107 = la_tot_108;
                             }
                             if la_once_107 { break; }
                             la_once_107 = true;
@@ -3881,20 +3815,15 @@ fn try_UnicodeRange(chars: &List<char>, start: i32) -> i32 {
                             pos = la_saved_107;
                             break;
                         }
-                        if accept_107 < 0 {
+                        if la_end_107 < 0 {
                             break peek_106;
                         }
-                        pos = la_reach_107;
-                        peek_end_106 = pos;
-                        peek_ok_106 = true;
+                        pos = la_end_107;
+                        la_tot_105 = pos;
                     }
                     pos = peek_save_106;
-                    if peek_ok_106 {
-                        la_tot_105 = peek_end_106;
-                    }
-                    if la_tot_105 >= 0 && la_tot_105 >= la_reach_104 {
-                        la_reach_104 = la_tot_105;
-                        accept_104 = pos;
+                    if la_tot_105 >= 0 && la_tot_105 >= la_end_104 {
+                        la_end_104 = la_tot_105;
                     }
                     if la_once_104 { break; }
                     la_once_104 = true;
@@ -3907,20 +3836,15 @@ fn try_UnicodeRange(chars: &List<char>, start: i32) -> i32 {
                     pos = la_saved_104;
                     break;
                 }
-                if accept_104 < 0 {
+                if la_end_104 < 0 {
                     break peek_103;
                 }
-                pos = la_reach_104;
-                peek_end_103 = pos;
-                peek_ok_103 = true;
+                pos = la_end_104;
+                la_tot_102 = pos;
             }
             pos = peek_save_103;
-            if peek_ok_103 {
-                la_tot_102 = peek_end_103;
-            }
-            if la_tot_102 >= 0 && la_tot_102 >= la_reach_101 {
-                la_reach_101 = la_tot_102;
-                accept_101 = pos;
+            if la_tot_102 >= 0 && la_tot_102 >= la_end_101 {
+                la_end_101 = la_tot_102;
             }
             if la_once_101 { break; }
             la_once_101 = true;
@@ -3933,10 +3857,10 @@ fn try_UnicodeRange(chars: &List<char>, start: i32) -> i32 {
             pos = la_saved_101;
             break;
         }
-        if accept_101 < 0 {
+        if la_end_101 < 0 {
             break alts_74_2;
         }
-        pos = la_reach_101;
+        pos = la_end_101;
         if pos > alts_best_74 { alts_best_74 = pos; }
     }
     alts_74_3: {
@@ -3955,17 +3879,13 @@ fn try_UnicodeRange(chars: &List<char>, start: i32) -> i32 {
         if pos >= chars.len() { break alts_74_3; }
         if !(chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' }) { break alts_74_3; }
         pos += 1;
-        let mut accept_111: i32 = -1;
-        let mut la_reach_111: i32 = -1;
+        let mut la_end_111: i32 = -1;
         let mut la_once_111 = false;
         loop {
             let mut la_tot_112: i32 = -1;
             let peek_save_113 = pos;
-            let mut peek_ok_113 = false;
-            let mut peek_end_113: i32 = -1;
             peek_113: {
-                let mut accept_114: i32 = -1;
-                let mut la_reach_114: i32 = -1;
+                let mut la_end_114: i32 = -1;
                 let mut la_once_114 = false;
                 loop {
                     let mut la_tot_115: i32 = -1;
@@ -3976,9 +3896,8 @@ fn try_UnicodeRange(chars: &List<char>, start: i32) -> i32 {
                     }
                     la_tot_115 = pos;
                     pos = peek_save_116;
-                    if la_tot_115 >= 0 && la_tot_115 >= la_reach_114 {
-                        la_reach_114 = la_tot_115;
-                        accept_114 = pos;
+                    if la_tot_115 >= 0 && la_tot_115 >= la_end_114 {
+                        la_end_114 = la_tot_115;
                     }
                     if la_once_114 { break; }
                     la_once_114 = true;
@@ -3991,20 +3910,15 @@ fn try_UnicodeRange(chars: &List<char>, start: i32) -> i32 {
                     pos = la_saved_114;
                     break;
                 }
-                if accept_114 < 0 {
+                if la_end_114 < 0 {
                     break peek_113;
                 }
-                pos = la_reach_114;
-                peek_end_113 = pos;
-                peek_ok_113 = true;
+                pos = la_end_114;
+                la_tot_112 = pos;
             }
             pos = peek_save_113;
-            if peek_ok_113 {
-                la_tot_112 = peek_end_113;
-            }
-            if la_tot_112 >= 0 && la_tot_112 >= la_reach_111 {
-                la_reach_111 = la_tot_112;
-                accept_111 = pos;
+            if la_tot_112 >= 0 && la_tot_112 >= la_end_111 {
+                la_end_111 = la_tot_112;
             }
             if la_once_111 { break; }
             la_once_111 = true;
@@ -4017,10 +3931,10 @@ fn try_UnicodeRange(chars: &List<char>, start: i32) -> i32 {
             pos = la_saved_111;
             break;
         }
-        if accept_111 < 0 {
+        if la_end_111 < 0 {
             break alts_74_3;
         }
-        pos = la_reach_111;
+        pos = la_end_111;
         if pos > alts_best_74 { alts_best_74 = pos; }
     }
     alts_74_4: {
@@ -4042,8 +3956,7 @@ fn try_UnicodeRange(chars: &List<char>, start: i32) -> i32 {
         if pos >= chars.len() { break alts_74_4; }
         if !(chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' }) { break alts_74_4; }
         pos += 1;
-        let mut accept_118: i32 = -1;
-        let mut la_reach_118: i32 = -1;
+        let mut la_end_118: i32 = -1;
         let mut la_once_118 = false;
         loop {
             let mut la_tot_119: i32 = -1;
@@ -4054,9 +3967,8 @@ fn try_UnicodeRange(chars: &List<char>, start: i32) -> i32 {
             }
             la_tot_119 = pos;
             pos = peek_save_120;
-            if la_tot_119 >= 0 && la_tot_119 >= la_reach_118 {
-                la_reach_118 = la_tot_119;
-                accept_118 = pos;
+            if la_tot_119 >= 0 && la_tot_119 >= la_end_118 {
+                la_end_118 = la_tot_119;
             }
             if la_once_118 { break; }
             la_once_118 = true;
@@ -4069,10 +3981,10 @@ fn try_UnicodeRange(chars: &List<char>, start: i32) -> i32 {
             pos = la_saved_118;
             break;
         }
-        if accept_118 < 0 {
+        if la_end_118 < 0 {
             break alts_74_4;
         }
-        pos = la_reach_118;
+        pos = la_end_118;
         if pos > alts_best_74 { alts_best_74 = pos; }
     }
     alts_74_5: {
@@ -4642,18 +4554,12 @@ fn try_UnknownDimension(chars: &List<char>, start: i32) -> i32 {
         pos = la_at_138;
         let mut la_tot_138: i32 = -1;
         let peek_save_144 = pos;
-        let mut peek_ok_144 = false;
-        let mut peek_end_144: i32 = -1;
         peek_144: {
             pos = try_Ident(chars, pos);
             if pos < 0 { break peek_144; }
-            peek_end_144 = pos;
-            peek_ok_144 = true;
+            la_tot_138 = pos;
         }
         pos = peek_save_144;
-        if peek_ok_144 {
-            la_tot_138 = peek_end_144;
-        }
         if la_tot_138 > la_reach_138 {
             la_reach_138 = la_tot_138;
             la_win_138 = la_i_138;
@@ -8742,26 +8648,19 @@ fn frag_Name(chars: &List<char>, start: i32) -> i32 {
 
 fn frag_ZeroToFourZeros(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let mut accept_285: i32 = -1;
-    let mut la_reach_285: i32 = -1;
+    let mut la_end_285: i32 = -1;
     let mut la_once_285 = false;
     loop {
         let mut la_tot_286: i32 = -1;
         let peek_save_287 = pos;
-        let mut peek_ok_287 = false;
-        let mut peek_end_287: i32 = -1;
         peek_287: {
-            let mut accept_288: i32 = -1;
-            let mut la_reach_288: i32 = -1;
+            let mut la_end_288: i32 = -1;
             let mut la_once_288 = false;
             loop {
                 let mut la_tot_289: i32 = -1;
                 let peek_save_290 = pos;
-                let mut peek_ok_290 = false;
-                let mut peek_end_290: i32 = -1;
                 peek_290: {
-                    let mut accept_291: i32 = -1;
-                    let mut la_reach_291: i32 = -1;
+                    let mut la_end_291: i32 = -1;
                     let mut la_once_291 = false;
                     loop {
                         let mut la_tot_292: i32 = -1;
@@ -8772,9 +8671,8 @@ fn frag_ZeroToFourZeros(chars: &List<char>, start: i32) -> i32 {
                         }
                         la_tot_292 = pos;
                         pos = peek_save_293;
-                        if la_tot_292 >= 0 && la_tot_292 >= la_reach_291 {
-                            la_reach_291 = la_tot_292;
-                            accept_291 = pos;
+                        if la_tot_292 >= 0 && la_tot_292 >= la_end_291 {
+                            la_end_291 = la_tot_292;
                         }
                         if la_once_291 { break; }
                         la_once_291 = true;
@@ -8787,20 +8685,15 @@ fn frag_ZeroToFourZeros(chars: &List<char>, start: i32) -> i32 {
                         pos = la_saved_291;
                         break;
                     }
-                    if accept_291 < 0 {
+                    if la_end_291 < 0 {
                         break peek_290;
                     }
-                    pos = la_reach_291;
-                    peek_end_290 = pos;
-                    peek_ok_290 = true;
+                    pos = la_end_291;
+                    la_tot_289 = pos;
                 }
                 pos = peek_save_290;
-                if peek_ok_290 {
-                    la_tot_289 = peek_end_290;
-                }
-                if la_tot_289 >= 0 && la_tot_289 >= la_reach_288 {
-                    la_reach_288 = la_tot_289;
-                    accept_288 = pos;
+                if la_tot_289 >= 0 && la_tot_289 >= la_end_288 {
+                    la_end_288 = la_tot_289;
                 }
                 if la_once_288 { break; }
                 la_once_288 = true;
@@ -8813,20 +8706,15 @@ fn frag_ZeroToFourZeros(chars: &List<char>, start: i32) -> i32 {
                 pos = la_saved_288;
                 break;
             }
-            if accept_288 < 0 {
+            if la_end_288 < 0 {
                 break peek_287;
             }
-            pos = la_reach_288;
-            peek_end_287 = pos;
-            peek_ok_287 = true;
+            pos = la_end_288;
+            la_tot_286 = pos;
         }
         pos = peek_save_287;
-        if peek_ok_287 {
-            la_tot_286 = peek_end_287;
-        }
-        if la_tot_286 >= 0 && la_tot_286 >= la_reach_285 {
-            la_reach_285 = la_tot_286;
-            accept_285 = pos;
+        if la_tot_286 >= 0 && la_tot_286 >= la_end_285 {
+            la_end_285 = la_tot_286;
         }
         if la_once_285 { break; }
         la_once_285 = true;
@@ -8839,10 +8727,10 @@ fn frag_ZeroToFourZeros(chars: &List<char>, start: i32) -> i32 {
         pos = la_saved_285;
         break;
     }
-    if accept_285 < 0 {
+    if la_end_285 < 0 {
         return -1;
     }
-    pos = la_reach_285;
+    pos = la_end_285;
     return pos;
 }
 
@@ -9248,8 +9136,6 @@ fn frag_tail_Time(chars: &List<char>, start: i32) -> i32 {
             pos = la_at_308;
             let mut la_tot_308: i32 = -1;
             let peek_save_314 = pos;
-            let mut peek_ok_314 = false;
-            let mut peek_end_314: i32 = -1;
             peek_314: {
                 let alts_saved_315 = pos;
                 alts_done_315: {
@@ -9315,13 +9201,9 @@ fn frag_tail_Time(chars: &List<char>, start: i32) -> i32 {
                 }
                 pos = frag_tail_S(chars, pos);
                 if pos < 0 { break peek_314; }
-                peek_end_314 = pos;
-                peek_ok_314 = true;
+                la_tot_308 = pos;
             }
             pos = peek_save_314;
-            if peek_ok_314 {
-                la_tot_308 = peek_end_314;
-            }
             if la_tot_308 > la_reach_308 {
                 la_reach_308 = la_tot_308;
                 la_win_308 = la_i_308;
@@ -9387,18 +9269,12 @@ fn frag_tail_Time(chars: &List<char>, start: i32) -> i32 {
             pos = la_at_317;
             let mut la_tot_317: i32 = -1;
             let peek_save_323 = pos;
-            let mut peek_ok_323 = false;
-            let mut peek_end_323: i32 = -1;
             peek_323: {
                 pos = frag_tail_S(chars, pos);
                 if pos < 0 { break peek_323; }
-                peek_end_323 = pos;
-                peek_ok_323 = true;
+                la_tot_317 = pos;
             }
             pos = peek_save_323;
-            if peek_ok_323 {
-                la_tot_317 = peek_end_323;
-            }
             if la_tot_317 > la_reach_317 {
                 la_reach_317 = la_tot_317;
                 la_win_317 = la_i_317;
@@ -9473,8 +9349,6 @@ fn frag_tail_Freq(chars: &List<char>, start: i32) -> i32 {
             pos = la_at_325;
             let mut la_tot_325: i32 = -1;
             let peek_save_331 = pos;
-            let mut peek_ok_331 = false;
-            let mut peek_end_331: i32 = -1;
             peek_331: {
                 let alts_saved_332 = pos;
                 alts_done_332: {
@@ -9540,13 +9414,9 @@ fn frag_tail_Freq(chars: &List<char>, start: i32) -> i32 {
                 }
                 pos = frag_tail_Z(chars, pos);
                 if pos < 0 { break peek_331; }
-                peek_end_331 = pos;
-                peek_ok_331 = true;
+                la_tot_325 = pos;
             }
             pos = peek_save_331;
-            if peek_ok_331 {
-                la_tot_325 = peek_end_331;
-            }
             if la_tot_325 > la_reach_325 {
                 la_reach_325 = la_tot_325;
                 la_win_325 = la_i_325;
@@ -9612,8 +9482,6 @@ fn frag_tail_Freq(chars: &List<char>, start: i32) -> i32 {
             pos = la_at_334;
             let mut la_tot_334: i32 = -1;
             let peek_save_340 = pos;
-            let mut peek_ok_340 = false;
-            let mut peek_end_340: i32 = -1;
             peek_340: {
                 let alts_saved_341 = pos;
                 alts_done_341: {
@@ -9741,13 +9609,9 @@ fn frag_tail_Freq(chars: &List<char>, start: i32) -> i32 {
                 }
                 pos = frag_tail_Z(chars, pos);
                 if pos < 0 { break peek_340; }
-                peek_end_340 = pos;
-                peek_ok_340 = true;
+                la_tot_334 = pos;
             }
             pos = peek_save_340;
-            if peek_ok_340 {
-                la_tot_334 = peek_end_340;
-            }
             if la_tot_334 > la_reach_334 {
                 la_reach_334 = la_tot_334;
                 la_win_334 = la_i_334;
@@ -9822,8 +9686,6 @@ fn frag_tail_Resolution(chars: &List<char>, start: i32) -> i32 {
             pos = la_at_346;
             let mut la_tot_346: i32 = -1;
             let peek_save_352 = pos;
-            let mut peek_ok_352 = false;
-            let mut peek_end_352: i32 = -1;
             peek_352: {
                 let alts_saved_353 = pos;
                 alts_done_353: {
@@ -9935,13 +9797,9 @@ fn frag_tail_Resolution(chars: &List<char>, start: i32) -> i32 {
                 }
                 pos = frag_tail_I(chars, pos);
                 if pos < 0 { break peek_352; }
-                peek_end_352 = pos;
-                peek_ok_352 = true;
+                la_tot_346 = pos;
             }
             pos = peek_save_352;
-            if peek_ok_352 {
-                la_tot_346 = peek_end_352;
-            }
             if la_tot_346 > la_reach_346 {
                 la_reach_346 = la_tot_346;
                 la_win_346 = la_i_346;
@@ -10007,8 +9865,6 @@ fn frag_tail_Resolution(chars: &List<char>, start: i32) -> i32 {
             pos = la_at_357;
             let mut la_tot_357: i32 = -1;
             let peek_save_363 = pos;
-            let mut peek_ok_363 = false;
-            let mut peek_end_363: i32 = -1;
             peek_363: {
                 let alts_saved_364 = pos;
                 alts_done_364: {
@@ -10166,13 +10022,9 @@ fn frag_tail_Resolution(chars: &List<char>, start: i32) -> i32 {
                 }
                 pos = frag_tail_M(chars, pos);
                 if pos < 0 { break peek_363; }
-                peek_end_363 = pos;
-                peek_ok_363 = true;
+                la_tot_357 = pos;
             }
             pos = peek_save_363;
-            if peek_ok_363 {
-                la_tot_357 = peek_end_363;
-            }
             if la_tot_357 > la_reach_357 {
                 la_reach_357 = la_tot_357;
                 la_win_357 = la_i_357;
@@ -10238,8 +10090,6 @@ fn frag_tail_Resolution(chars: &List<char>, start: i32) -> i32 {
             pos = la_at_370;
             let mut la_tot_370: i32 = -1;
             let peek_save_376 = pos;
-            let mut peek_ok_376 = false;
-            let mut peek_end_376: i32 = -1;
             peek_376: {
                 let alts_saved_377 = pos;
                 alts_done_377: {
@@ -10413,13 +10263,9 @@ fn frag_tail_Resolution(chars: &List<char>, start: i32) -> i32 {
                 }
                 pos = frag_tail_X(chars, pos);
                 if pos < 0 { break peek_376; }
-                peek_end_376 = pos;
-                peek_ok_376 = true;
+                la_tot_370 = pos;
             }
             pos = peek_save_376;
-            if peek_ok_376 {
-                la_tot_370 = peek_end_376;
-            }
             if la_tot_370 > la_reach_370 {
                 la_reach_370 = la_tot_370;
                 la_win_370 = la_i_370;
@@ -10494,8 +10340,6 @@ fn frag_tail_Angle(chars: &List<char>, start: i32) -> i32 {
             pos = la_at_384;
             let mut la_tot_384: i32 = -1;
             let peek_save_390 = pos;
-            let mut peek_ok_390 = false;
-            let mut peek_end_390: i32 = -1;
             peek_390: {
                 let alts_saved_391 = pos;
                 alts_done_391: {
@@ -10591,13 +10435,9 @@ fn frag_tail_Angle(chars: &List<char>, start: i32) -> i32 {
                 }
                 pos = frag_tail_G(chars, pos);
                 if pos < 0 { break peek_390; }
-                peek_end_390 = pos;
-                peek_ok_390 = true;
+                la_tot_384 = pos;
             }
             pos = peek_save_390;
-            if peek_ok_390 {
-                la_tot_384 = peek_end_390;
-            }
             if la_tot_384 > la_reach_384 {
                 la_reach_384 = la_tot_384;
                 la_win_384 = la_i_384;
@@ -10663,8 +10503,6 @@ fn frag_tail_Angle(chars: &List<char>, start: i32) -> i32 {
             pos = la_at_395;
             let mut la_tot_395: i32 = -1;
             let peek_save_401 = pos;
-            let mut peek_ok_401 = false;
-            let mut peek_end_401: i32 = -1;
             peek_401: {
                 let alts_saved_402 = pos;
                 alts_done_402: {
@@ -10776,13 +10614,9 @@ fn frag_tail_Angle(chars: &List<char>, start: i32) -> i32 {
                 }
                 pos = frag_tail_D(chars, pos);
                 if pos < 0 { break peek_401; }
-                peek_end_401 = pos;
-                peek_ok_401 = true;
+                la_tot_395 = pos;
             }
             pos = peek_save_401;
-            if peek_ok_401 {
-                la_tot_395 = peek_end_401;
-            }
             if la_tot_395 > la_reach_395 {
                 la_reach_395 = la_tot_395;
                 la_win_395 = la_i_395;
@@ -10848,8 +10682,6 @@ fn frag_tail_Angle(chars: &List<char>, start: i32) -> i32 {
             pos = la_at_406;
             let mut la_tot_406: i32 = -1;
             let peek_save_412 = pos;
-            let mut peek_ok_412 = false;
-            let mut peek_end_412: i32 = -1;
             peek_412: {
                 let alts_saved_413 = pos;
                 alts_done_413: {
@@ -11023,13 +10855,9 @@ fn frag_tail_Angle(chars: &List<char>, start: i32) -> i32 {
                 }
                 pos = frag_tail_D(chars, pos);
                 if pos < 0 { break peek_412; }
-                peek_end_412 = pos;
-                peek_ok_412 = true;
+                la_tot_406 = pos;
             }
             pos = peek_save_412;
-            if peek_ok_412 {
-                la_tot_406 = peek_end_412;
-            }
             if la_tot_406 > la_reach_406 {
                 la_reach_406 = la_tot_406;
                 la_win_406 = la_i_406;
@@ -11095,8 +10923,6 @@ fn frag_tail_Angle(chars: &List<char>, start: i32) -> i32 {
             pos = la_at_419;
             let mut la_tot_419: i32 = -1;
             let peek_save_425 = pos;
-            let mut peek_ok_425 = false;
-            let mut peek_end_425: i32 = -1;
             peek_425: {
                 let alts_saved_426 = pos;
                 alts_done_426: {
@@ -11286,13 +11112,9 @@ fn frag_tail_Angle(chars: &List<char>, start: i32) -> i32 {
                 }
                 pos = frag_tail_N(chars, pos);
                 if pos < 0 { break peek_425; }
-                peek_end_425 = pos;
-                peek_ok_425 = true;
+                la_tot_419 = pos;
             }
             pos = peek_save_425;
-            if peek_ok_425 {
-                la_tot_419 = peek_end_425;
-            }
             if la_tot_419 > la_reach_419 {
                 la_reach_419 = la_tot_419;
                 la_win_419 = la_i_419;
@@ -12369,8 +12191,6 @@ fn frag_tail_AbsLength(chars: &List<char>, start: i32) -> i32 {
             pos = la_at_466;
             let mut la_tot_466: i32 = -1;
             let peek_save_472 = pos;
-            let mut peek_ok_472 = false;
-            let mut peek_end_472: i32 = -1;
             peek_472: {
                 let alts_saved_473 = pos;
                 alts_done_473: {
@@ -12436,13 +12256,9 @@ fn frag_tail_AbsLength(chars: &List<char>, start: i32) -> i32 {
                 }
                 pos = frag_tail_X(chars, pos);
                 if pos < 0 { break peek_472; }
-                peek_end_472 = pos;
-                peek_ok_472 = true;
+                la_tot_466 = pos;
             }
             pos = peek_save_472;
-            if peek_ok_472 {
-                la_tot_466 = peek_end_472;
-            }
             if la_tot_466 > la_reach_466 {
                 la_reach_466 = la_tot_466;
                 la_win_466 = la_i_466;
@@ -12508,8 +12324,6 @@ fn frag_tail_AbsLength(chars: &List<char>, start: i32) -> i32 {
             pos = la_at_475;
             let mut la_tot_475: i32 = -1;
             let peek_save_481 = pos;
-            let mut peek_ok_481 = false;
-            let mut peek_end_481: i32 = -1;
             peek_481: {
                 let alts_saved_482 = pos;
                 alts_done_482: {
@@ -12559,13 +12373,9 @@ fn frag_tail_AbsLength(chars: &List<char>, start: i32) -> i32 {
                 }
                 pos = frag_tail_M(chars, pos);
                 if pos < 0 { break peek_481; }
-                peek_end_481 = pos;
-                peek_ok_481 = true;
+                la_tot_475 = pos;
             }
             pos = peek_save_481;
-            if peek_ok_481 {
-                la_tot_475 = peek_end_481;
-            }
             if la_tot_475 > la_reach_475 {
                 la_reach_475 = la_tot_475;
                 la_win_475 = la_i_475;
@@ -12631,8 +12441,6 @@ fn frag_tail_AbsLength(chars: &List<char>, start: i32) -> i32 {
             pos = la_at_484;
             let mut la_tot_484: i32 = -1;
             let peek_save_490 = pos;
-            let mut peek_ok_490 = false;
-            let mut peek_end_490: i32 = -1;
             peek_490: {
                 let alts_saved_491 = pos;
                 alts_done_491: {
@@ -12698,13 +12506,9 @@ fn frag_tail_AbsLength(chars: &List<char>, start: i32) -> i32 {
                 }
                 pos = frag_tail_M(chars, pos);
                 if pos < 0 { break peek_490; }
-                peek_end_490 = pos;
-                peek_ok_490 = true;
+                la_tot_484 = pos;
             }
             pos = peek_save_490;
-            if peek_ok_490 {
-                la_tot_484 = peek_end_490;
-            }
             if la_tot_484 > la_reach_484 {
                 la_reach_484 = la_tot_484;
                 la_win_484 = la_i_484;
@@ -12770,8 +12574,6 @@ fn frag_tail_AbsLength(chars: &List<char>, start: i32) -> i32 {
             pos = la_at_493;
             let mut la_tot_493: i32 = -1;
             let peek_save_499 = pos;
-            let mut peek_ok_499 = false;
-            let mut peek_end_499: i32 = -1;
             peek_499: {
                 let alts_saved_500 = pos;
                 alts_done_500: {
@@ -12837,13 +12639,9 @@ fn frag_tail_AbsLength(chars: &List<char>, start: i32) -> i32 {
                 }
                 pos = frag_tail_N(chars, pos);
                 if pos < 0 { break peek_499; }
-                peek_end_499 = pos;
-                peek_ok_499 = true;
+                la_tot_493 = pos;
             }
             pos = peek_save_499;
-            if peek_ok_499 {
-                la_tot_493 = peek_end_499;
-            }
             if la_tot_493 > la_reach_493 {
                 la_reach_493 = la_tot_493;
                 la_win_493 = la_i_493;
@@ -12909,8 +12707,6 @@ fn frag_tail_AbsLength(chars: &List<char>, start: i32) -> i32 {
             pos = la_at_502;
             let mut la_tot_502: i32 = -1;
             let peek_save_508 = pos;
-            let mut peek_ok_508 = false;
-            let mut peek_end_508: i32 = -1;
             peek_508: {
                 let alts_saved_509 = pos;
                 alts_done_509: {
@@ -12976,13 +12772,9 @@ fn frag_tail_AbsLength(chars: &List<char>, start: i32) -> i32 {
                 }
                 pos = frag_tail_T(chars, pos);
                 if pos < 0 { break peek_508; }
-                peek_end_508 = pos;
-                peek_ok_508 = true;
+                la_tot_502 = pos;
             }
             pos = peek_save_508;
-            if peek_ok_508 {
-                la_tot_502 = peek_end_508;
-            }
             if la_tot_502 > la_reach_502 {
                 la_reach_502 = la_tot_502;
                 la_win_502 = la_i_502;
@@ -13048,8 +12840,6 @@ fn frag_tail_AbsLength(chars: &List<char>, start: i32) -> i32 {
             pos = la_at_511;
             let mut la_tot_511: i32 = -1;
             let peek_save_517 = pos;
-            let mut peek_ok_517 = false;
-            let mut peek_end_517: i32 = -1;
             peek_517: {
                 let alts_saved_518 = pos;
                 alts_done_518: {
@@ -13115,13 +12905,9 @@ fn frag_tail_AbsLength(chars: &List<char>, start: i32) -> i32 {
                 }
                 pos = frag_tail_C(chars, pos);
                 if pos < 0 { break peek_517; }
-                peek_end_517 = pos;
-                peek_ok_517 = true;
+                la_tot_511 = pos;
             }
             pos = peek_save_517;
-            if peek_ok_517 {
-                la_tot_511 = peek_end_517;
-            }
             if la_tot_511 > la_reach_511 {
                 la_reach_511 = la_tot_511;
                 la_win_511 = la_i_511;
@@ -13187,18 +12973,12 @@ fn frag_tail_AbsLength(chars: &List<char>, start: i32) -> i32 {
             pos = la_at_520;
             let mut la_tot_520: i32 = -1;
             let peek_save_526 = pos;
-            let mut peek_ok_526 = false;
-            let mut peek_end_526: i32 = -1;
             peek_526: {
                 pos = frag_tail_Q(chars, pos);
                 if pos < 0 { break peek_526; }
-                peek_end_526 = pos;
-                peek_ok_526 = true;
+                la_tot_520 = pos;
             }
             pos = peek_save_526;
-            if peek_ok_526 {
-                la_tot_520 = peek_end_526;
-            }
             if la_tot_520 > la_reach_520 {
                 la_reach_520 = la_tot_520;
                 la_win_520 = la_i_520;
@@ -13273,8 +13053,6 @@ fn frag_tail_FontRelative(chars: &List<char>, start: i32) -> i32 {
             pos = la_at_528;
             let mut la_tot_528: i32 = -1;
             let peek_save_534 = pos;
-            let mut peek_ok_534 = false;
-            let mut peek_end_534: i32 = -1;
             peek_534: {
                 let alts_saved_535 = pos;
                 alts_done_535: {
@@ -13324,13 +13102,9 @@ fn frag_tail_FontRelative(chars: &List<char>, start: i32) -> i32 {
                 }
                 pos = frag_tail_M(chars, pos);
                 if pos < 0 { break peek_534; }
-                peek_end_534 = pos;
-                peek_ok_534 = true;
+                la_tot_528 = pos;
             }
             pos = peek_save_534;
-            if peek_ok_534 {
-                la_tot_528 = peek_end_534;
-            }
             if la_tot_528 > la_reach_528 {
                 la_reach_528 = la_tot_528;
                 la_win_528 = la_i_528;
@@ -13396,8 +13170,6 @@ fn frag_tail_FontRelative(chars: &List<char>, start: i32) -> i32 {
             pos = la_at_537;
             let mut la_tot_537: i32 = -1;
             let peek_save_543 = pos;
-            let mut peek_ok_543 = false;
-            let mut peek_end_543: i32 = -1;
             peek_543: {
                 let alts_saved_544 = pos;
                 alts_done_544: {
@@ -13447,13 +13219,9 @@ fn frag_tail_FontRelative(chars: &List<char>, start: i32) -> i32 {
                 }
                 pos = frag_tail_X(chars, pos);
                 if pos < 0 { break peek_543; }
-                peek_end_543 = pos;
-                peek_ok_543 = true;
+                la_tot_537 = pos;
             }
             pos = peek_save_543;
-            if peek_ok_543 {
-                la_tot_537 = peek_end_543;
-            }
             if la_tot_537 > la_reach_537 {
                 la_reach_537 = la_tot_537;
                 la_win_537 = la_i_537;
@@ -13519,8 +13287,6 @@ fn frag_tail_FontRelative(chars: &List<char>, start: i32) -> i32 {
             pos = la_at_546;
             let mut la_tot_546: i32 = -1;
             let peek_save_552 = pos;
-            let mut peek_ok_552 = false;
-            let mut peek_end_552: i32 = -1;
             peek_552: {
                 let alts_saved_553 = pos;
                 alts_done_553: {
@@ -13570,13 +13336,9 @@ fn frag_tail_FontRelative(chars: &List<char>, start: i32) -> i32 {
                 }
                 pos = frag_tail_H(chars, pos);
                 if pos < 0 { break peek_552; }
-                peek_end_552 = pos;
-                peek_ok_552 = true;
+                la_tot_546 = pos;
             }
             pos = peek_save_552;
-            if peek_ok_552 {
-                la_tot_546 = peek_end_552;
-            }
             if la_tot_546 > la_reach_546 {
                 la_reach_546 = la_tot_546;
                 la_win_546 = la_i_546;
@@ -13642,8 +13404,6 @@ fn frag_tail_FontRelative(chars: &List<char>, start: i32) -> i32 {
             pos = la_at_555;
             let mut la_tot_555: i32 = -1;
             let peek_save_561 = pos;
-            let mut peek_ok_561 = false;
-            let mut peek_end_561: i32 = -1;
             peek_561: {
                 let alts_saved_562 = pos;
                 alts_done_562: {
@@ -13755,13 +13515,9 @@ fn frag_tail_FontRelative(chars: &List<char>, start: i32) -> i32 {
                 }
                 pos = frag_tail_M(chars, pos);
                 if pos < 0 { break peek_561; }
-                peek_end_561 = pos;
-                peek_ok_561 = true;
+                la_tot_555 = pos;
             }
             pos = peek_save_561;
-            if peek_ok_561 {
-                la_tot_555 = peek_end_561;
-            }
             if la_tot_555 > la_reach_555 {
                 la_reach_555 = la_tot_555;
                 la_win_555 = la_i_555;
@@ -13836,8 +13592,6 @@ fn frag_tail_ViewportRelative(chars: &List<char>, start: i32) -> i32 {
             pos = la_at_567;
             let mut la_tot_567: i32 = -1;
             let peek_save_573 = pos;
-            let mut peek_ok_573 = false;
-            let mut peek_end_573: i32 = -1;
             peek_573: {
                 let alts_saved_574 = pos;
                 alts_done_574: {
@@ -13903,13 +13657,9 @@ fn frag_tail_ViewportRelative(chars: &List<char>, start: i32) -> i32 {
                 }
                 pos = frag_tail_W(chars, pos);
                 if pos < 0 { break peek_573; }
-                peek_end_573 = pos;
-                peek_ok_573 = true;
+                la_tot_567 = pos;
             }
             pos = peek_save_573;
-            if peek_ok_573 {
-                la_tot_567 = peek_end_573;
-            }
             if la_tot_567 > la_reach_567 {
                 la_reach_567 = la_tot_567;
                 la_win_567 = la_i_567;
@@ -13975,8 +13725,6 @@ fn frag_tail_ViewportRelative(chars: &List<char>, start: i32) -> i32 {
             pos = la_at_576;
             let mut la_tot_576: i32 = -1;
             let peek_save_582 = pos;
-            let mut peek_ok_582 = false;
-            let mut peek_end_582: i32 = -1;
             peek_582: {
                 let alts_saved_583 = pos;
                 alts_done_583: {
@@ -14042,13 +13790,9 @@ fn frag_tail_ViewportRelative(chars: &List<char>, start: i32) -> i32 {
                 }
                 pos = frag_tail_H(chars, pos);
                 if pos < 0 { break peek_582; }
-                peek_end_582 = pos;
-                peek_ok_582 = true;
+                la_tot_576 = pos;
             }
             pos = peek_save_582;
-            if peek_ok_582 {
-                la_tot_576 = peek_end_582;
-            }
             if la_tot_576 > la_reach_576 {
                 la_reach_576 = la_tot_576;
                 la_win_576 = la_i_576;
@@ -14114,8 +13858,6 @@ fn frag_tail_ViewportRelative(chars: &List<char>, start: i32) -> i32 {
             pos = la_at_585;
             let mut la_tot_585: i32 = -1;
             let peek_save_591 = pos;
-            let mut peek_ok_591 = false;
-            let mut peek_end_591: i32 = -1;
             peek_591: {
                 let alts_saved_592 = pos;
                 alts_done_592: {
@@ -14305,13 +14047,9 @@ fn frag_tail_ViewportRelative(chars: &List<char>, start: i32) -> i32 {
                 }
                 pos = frag_tail_N(chars, pos);
                 if pos < 0 { break peek_591; }
-                peek_end_591 = pos;
-                peek_ok_591 = true;
+                la_tot_585 = pos;
             }
             pos = peek_save_591;
-            if peek_ok_591 {
-                la_tot_585 = peek_end_591;
-            }
             if la_tot_585 > la_reach_585 {
                 la_reach_585 = la_tot_585;
                 la_win_585 = la_i_585;
@@ -14377,8 +14115,6 @@ fn frag_tail_ViewportRelative(chars: &List<char>, start: i32) -> i32 {
             pos = la_at_598;
             let mut la_tot_598: i32 = -1;
             let peek_save_604 = pos;
-            let mut peek_ok_604 = false;
-            let mut peek_end_604: i32 = -1;
             peek_604: {
                 let alts_saved_605 = pos;
                 alts_done_605: {
@@ -14552,13 +14288,9 @@ fn frag_tail_ViewportRelative(chars: &List<char>, start: i32) -> i32 {
                 }
                 pos = frag_tail_X(chars, pos);
                 if pos < 0 { break peek_604; }
-                peek_end_604 = pos;
-                peek_ok_604 = true;
+                la_tot_598 = pos;
             }
             pos = peek_save_604;
-            if peek_ok_604 {
-                la_tot_598 = peek_end_604;
-            }
             if la_tot_598 > la_reach_598 {
                 la_reach_598 = la_tot_598;
                 la_win_598 = la_i_598;
@@ -17208,7 +16940,7 @@ fn scan_media_query_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
         let sp = pos;
         sg_76_done: {
             sg_76: {
-                pos = scan_media_query(tokens, pos, follow_open_with(follow_then_opening(FOLLOW_MASK_10, 2, follow), follow_open_set(FOLLOW_MASK_8)));
+                pos = scan_media_query(tokens, pos, follow_open_with(follow_then_opening(FOLLOW_MASK_10, 16, follow), follow_open_set(FOLLOW_MASK_8)));
                 if pos < 0 { break sg_76; }
                 while pos < tokens.len() && tokens[pos] == TK_Comma && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
                     let sp = pos;
@@ -17217,7 +16949,7 @@ fn scan_media_query_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
                             pos += 1;
                             pos = scan_ws(tokens, pos, FOLLOW_MASK_7);
                             if pos < 0 { break sg_77; }
-                            pos = scan_media_query(tokens, pos, follow_then_opening(FOLLOW_MASK_10, 2, follow));
+                            pos = scan_media_query(tokens, pos, follow_then_opening(FOLLOW_MASK_10, 16, follow));
                             if pos < 0 { break sg_77; }
                             break sg_77_done;
                         }
@@ -17273,7 +17005,7 @@ fn scan_media_query(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                         if pos < 0 { break opt_probe; }
                         if pos >= tokens.len() || !_kind_set_3(tokens[pos]) { break opt_probe; }
                         pos += 1;
-                        pos = scan_ws(tokens, pos, follow_then_opening(FOLLOW_MASK_13, 2, follow));
+                        pos = scan_ws(tokens, pos, follow_then_opening(FOLLOW_MASK_13, 16, follow));
                         if pos < 0 { break opt_probe; }
                         while pos < tokens.len() && tokens[pos] == TK_And {
                             let sp = pos;
@@ -17282,7 +17014,7 @@ fn scan_media_query(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                                     pos += 1;
                                     pos = scan_ws(tokens, pos, FOLLOW_MASK_14);
                                     if pos < 0 { break sg_71; }
-                                    pos = scan_media_expression(tokens, pos, follow_then_opening(FOLLOW_MASK_13, 2, follow));
+                                    pos = scan_media_expression(tokens, pos, follow_then_opening(FOLLOW_MASK_13, 16, follow));
                                     if pos < 0 { break sg_71; }
                                     break sg_71_done;
                                 }
@@ -17301,7 +17033,7 @@ fn scan_media_query(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             if pos < 0 { break try_0; }
             if pos >= tokens.len() || !_kind_set_3(tokens[pos]) { break try_0; }
             pos += 1;
-            pos = scan_ws(tokens, pos, follow_then_opening(FOLLOW_MASK_13, 2, follow));
+            pos = scan_ws(tokens, pos, follow_then_opening(FOLLOW_MASK_13, 16, follow));
             if pos < 0 { break try_0; }
             while pos < tokens.len() && tokens[pos] == TK_And && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
                 let sp = pos;
@@ -17310,7 +17042,7 @@ fn scan_media_query(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                         pos += 1;
                         pos = scan_ws(tokens, pos, FOLLOW_MASK_14);
                         if pos < 0 { break sg_72; }
-                        pos = scan_media_expression(tokens, pos, follow_then_opening(FOLLOW_MASK_13, 2, follow));
+                        pos = scan_media_expression(tokens, pos, follow_then_opening(FOLLOW_MASK_13, 16, follow));
                         if pos < 0 { break sg_72; }
                         break sg_72_done;
                     }
@@ -17336,7 +17068,7 @@ fn scan_media_query(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         return -1;
     } else if kind == TK_OpenParen {
         try_1: {
-            pos = scan_media_expression(tokens, pos, follow_then_opening(FOLLOW_MASK_13, 2, follow));
+            pos = scan_media_expression(tokens, pos, follow_then_opening(FOLLOW_MASK_13, 16, follow));
             if pos < 0 { break try_1; }
             while pos < tokens.len() && tokens[pos] == TK_And && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
                 let sp = pos;
@@ -17345,7 +17077,7 @@ fn scan_media_query(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                         pos += 1;
                         pos = scan_ws(tokens, pos, FOLLOW_MASK_14);
                         if pos < 0 { break sg_74; }
-                        pos = scan_media_expression(tokens, pos, follow_then_opening(FOLLOW_MASK_13, 2, follow));
+                        pos = scan_media_expression(tokens, pos, follow_then_opening(FOLLOW_MASK_13, 16, follow));
                         if pos < 0 { break sg_74; }
                         break sg_74_done;
                     }
@@ -17471,7 +17203,7 @@ fn scan_pseudo_page(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn scan_selector_group(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_selector(tokens, pos, follow_then_opening(FOLLOW_MASK_18, 2, follow));
+    pos = scan_selector(tokens, pos, follow_then_opening(FOLLOW_MASK_18, 16, follow));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_Comma && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
@@ -17480,7 +17212,7 @@ fn scan_selector_group(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 pos += 1;
                 pos = scan_ws(tokens, pos, FOLLOW_MASK_19);
                 if pos < 0 { break sg_59; }
-                pos = scan_selector(tokens, pos, follow_then_opening(FOLLOW_MASK_18, 2, follow));
+                pos = scan_selector(tokens, pos, follow_then_opening(FOLLOW_MASK_18, 16, follow));
                 if pos < 0 { break sg_59; }
                 break sg_59_done;
             }
@@ -17497,7 +17229,7 @@ fn scan_selector(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_simple_selector_sequence(tokens, pos, follow_open_with(follow, follow_open_set(FOLLOW_MASK_20)));
     if pos < 0 { return -1; }
-    pos = scan_ws(tokens, pos, follow_then_opening(FOLLOW_MASK_21, 2, follow));
+    pos = scan_ws(tokens, pos, follow_then_opening(FOLLOW_MASK_21, 16, follow));
     if pos < 0 { return -1; }
     while pos < tokens.len() && _kind_set_19(tokens[pos]) && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
@@ -17507,7 +17239,7 @@ fn scan_selector(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos < 0 { break sg_60; }
                 pos = scan_simple_selector_sequence(tokens, pos, follow_open_with(follow, follow_open_set(FOLLOW_MASK_8)));
                 if pos < 0 { break sg_60; }
-                pos = scan_ws(tokens, pos, follow_then_opening(FOLLOW_MASK_21, 2, follow));
+                pos = scan_ws(tokens, pos, follow_then_opening(FOLLOW_MASK_21, 16, follow));
                 if pos < 0 { break sg_60; }
                 break sg_60_done;
             }
@@ -17753,7 +17485,7 @@ fn scan_universal(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut cont_done_0 = false;
     if pos < tokens.len() && _kind_set_20(tokens[pos]) {
         let sp = pos;
-        pos = scan_type_namespace_prefix(tokens, pos, follow_then(FOLLOW_MASK_23, 1, follow));
+        pos = scan_type_namespace_prefix(tokens, pos, follow_then(FOLLOW_MASK_23, 8, follow));
         if pos < 0 {
             pos = sp;
         } else {
@@ -17815,7 +17547,7 @@ fn scan_attrib(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                             if pos < 0 { break sg_68; }
                             if pos >= tokens.len() || !_kind_set_24(tokens[pos]) { break sg_68; }
                             pos += 1;
-                            pos = scan_ws(tokens, pos, follow_then(FOLLOW_MASK_25, 1, follow));
+                            pos = scan_ws(tokens, pos, follow_then(FOLLOW_MASK_25, 8, follow));
                             if pos < 0 { break sg_68; }
                             break sg_68_done;
                         }
@@ -17844,7 +17576,7 @@ fn scan_attrib(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos < 0 { break sg_69; }
                 if pos >= tokens.len() || !_kind_set_24(tokens[pos]) { break sg_69; }
                 pos += 1;
-                pos = scan_ws(tokens, pos, follow_then(FOLLOW_MASK_25, 1, follow));
+                pos = scan_ws(tokens, pos, follow_then(FOLLOW_MASK_25, 8, follow));
                 if pos < 0 { break sg_69; }
                 break sg_69_done;
             }
@@ -17887,7 +17619,7 @@ fn scan_functional_pseudo(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
     pos += 1;
     pos = scan_ws(tokens, pos, FOLLOW_MASK_26);
     if pos < 0 { return -1; }
-    pos = scan_expression(tokens, pos, follow_then(FOLLOW_MASK_16, 1, follow));
+    pos = scan_expression(tokens, pos, follow_then(FOLLOW_MASK_16, 8, follow));
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
     pos += 1;
@@ -17931,7 +17663,7 @@ fn scan_negation(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     pos = scan_negation_arg(tokens, pos, 0);
     if pos < 0 { return -1; }
-    pos = scan_ws(tokens, pos, follow_then(FOLLOW_MASK_16, 1, follow));
+    pos = scan_ws(tokens, pos, follow_then(FOLLOW_MASK_16, 8, follow));
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
     pos += 1;
@@ -19235,7 +18967,7 @@ fn scan_supports_declaration_condition(tokens: &Array<i32>, pos: i32, follow: i6
     pos += 1;
     pos = scan_ws(tokens, pos, FOLLOW_MASK_17);
     if pos < 0 { return -1; }
-    pos = scan_declaration(tokens, pos, follow_then(FOLLOW_MASK_16, 1, follow));
+    pos = scan_declaration(tokens, pos, follow_then(FOLLOW_MASK_16, 8, follow));
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
     pos += 1;
@@ -19284,7 +19016,7 @@ fn scan_url(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             if pos < 0 { break try_0; }
             if pos >= tokens.len() || tokens[pos] != TK_String_ { break try_0; }
             pos += 1;
-            pos = scan_ws(tokens, pos, follow_then(FOLLOW_MASK_16, 1, follow));
+            pos = scan_ws(tokens, pos, follow_then(FOLLOW_MASK_16, 8, follow));
             if pos < 0 { break try_0; }
             if pos >= tokens.len() || tokens[pos] != TK_CloseParen { break try_0; }
             pos += 1;
@@ -19332,7 +19064,7 @@ fn scan_calc(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn scan_calc_sum(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_calc_product(tokens, pos, follow_then_opening(FOLLOW_MASK_42, 2, follow));
+    pos = scan_calc_product(tokens, pos, follow_then_opening(FOLLOW_MASK_42, 16, follow));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_Space && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
@@ -19349,7 +19081,7 @@ fn scan_calc_sum(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 pos += 1;
                 pos = scan_ws(tokens, pos, FOLLOW_MASK_41);
                 if pos < 0 { break sg_45; }
-                pos = scan_calc_product(tokens, pos, follow_then_opening(FOLLOW_MASK_42, 2, follow));
+                pos = scan_calc_product(tokens, pos, follow_then_opening(FOLLOW_MASK_42, 16, follow));
                 if pos < 0 { break sg_45; }
                 break sg_45_done;
             }
@@ -19526,11 +19258,11 @@ fn scan_keyframes_rule(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
-    pos = scan_ws(tokens, pos, follow_or(FOLLOW_MASK_46, 2, FOLLOW_MASK_28));
+    pos = scan_ws(tokens, pos, follow_or(FOLLOW_MASK_46, 16, FOLLOW_MASK_28));
     if pos < 0 { return -1; }
     while pos < tokens.len() && _kind_set_69(tokens[pos]) {
         let sp = pos;
-        pos = scan_keyframe_block(tokens, pos, follow_or(FOLLOW_MASK_46, 2, FOLLOW_MASK_28));
+        pos = scan_keyframe_block(tokens, pos, follow_or(FOLLOW_MASK_46, 16, FOLLOW_MASK_28));
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -19571,7 +19303,7 @@ fn scan_keyframe_selector(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_69(tokens[pos]) { return -1; }
     pos += 1;
-    pos = scan_ws(tokens, pos, follow_then_opening(FOLLOW_MASK_47, 2, follow));
+    pos = scan_ws(tokens, pos, follow_then_opening(FOLLOW_MASK_47, 16, follow));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_Comma && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
@@ -19582,7 +19314,7 @@ fn scan_keyframe_selector(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
                 if pos < 0 { break sg_42; }
                 if pos >= tokens.len() || !_kind_set_69(tokens[pos]) { break sg_42; }
                 pos += 1;
-                pos = scan_ws(tokens, pos, follow_then_opening(FOLLOW_MASK_47, 2, follow));
+                pos = scan_ws(tokens, pos, follow_then_opening(FOLLOW_MASK_47, 16, follow));
                 if pos < 0 { break sg_42; }
                 break sg_42_done;
             }
@@ -19654,11 +19386,11 @@ fn scan_font_feature_values_rule(tokens: &Array<i32>, pos: i32, follow: i64 = 0)
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
-    pos = scan_ws(tokens, pos, follow_or(FOLLOW_MASK_49, 2, FOLLOW_MASK_28));
+    pos = scan_ws(tokens, pos, follow_or(FOLLOW_MASK_49, 16, FOLLOW_MASK_28));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_AtKeyword {
         let sp = pos;
-        pos = scan_feature_value_block(tokens, pos, follow_or(FOLLOW_MASK_49, 2, FOLLOW_MASK_28));
+        pos = scan_feature_value_block(tokens, pos, follow_or(FOLLOW_MASK_49, 16, FOLLOW_MASK_28));
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -20616,7 +20348,7 @@ fn _parse_media_query_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
             let mut pos: i32 = p.pos;
             sg_11_done: {
                 sg_11: {
-                    pos = scan_media_query(tokens, pos, follow_open_with(follow_then_opening(FOLLOW_MASK_10, 2, follow), follow_open_set(FOLLOW_MASK_8)));
+                    pos = scan_media_query(tokens, pos, follow_open_with(follow_then_opening(FOLLOW_MASK_10, 16, follow), follow_open_set(FOLLOW_MASK_8)));
                     if pos < 0 { break sg_11; }
                     while pos < tokens.len() && tokens[pos] == TK_Comma && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
                         let sp = pos;
@@ -20625,7 +20357,7 @@ fn _parse_media_query_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
                                 pos += 1;
                                 pos = scan_ws(tokens, pos, FOLLOW_MASK_7);
                                 if pos < 0 { break sg_12; }
-                                pos = scan_media_query(tokens, pos, follow_then_opening(FOLLOW_MASK_10, 2, follow));
+                                pos = scan_media_query(tokens, pos, follow_then_opening(FOLLOW_MASK_10, 16, follow));
                                 if pos < 0 { break sg_12; }
                                 break sg_12_done;
                             }
@@ -20646,7 +20378,7 @@ fn _parse_media_query_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
     }
     if opt_enter {
         p.site = 42;
-        _parse_media_query(p, follow_open_with(follow_then_opening(FOLLOW_MASK_10, 2, follow), follow_open_set(FOLLOW_MASK_8)));
+        _parse_media_query(p, follow_open_with(follow_then_opening(FOLLOW_MASK_10, 16, follow), follow_open_set(FOLLOW_MASK_8)));
         loop {
             if p.recovering { break; }
             if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -20660,7 +20392,7 @@ fn _parse_media_query_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         pos += 1;
                         pos = scan_ws(tokens, pos, FOLLOW_MASK_7);
                         if pos < 0 { break sg_13; }
-                        pos = scan_media_query(tokens, pos, follow_then_opening(FOLLOW_MASK_10, 2, follow));
+                        pos = scan_media_query(tokens, pos, follow_then_opening(FOLLOW_MASK_10, 16, follow));
                         if pos < 0 { break sg_13; }
                         break sg_13_done;
                     }
@@ -20674,7 +20406,7 @@ fn _parse_media_query_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
             p.site = 43;
             _parse_ws(p, FOLLOW_MASK_7);
             p.site = 44;
-            _parse_media_query(p, follow_then_opening(FOLLOW_MASK_10, 2, follow));
+            _parse_media_query(p, follow_then_opening(FOLLOW_MASK_10, 16, follow));
         }
     }
     p.site = 45;
@@ -20709,7 +20441,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 if pos < 0 { break opt_enter_scan; }
                 if pos >= tokens.len() || !_kind_set_3(tokens[pos]) { break opt_enter_scan; }
                 pos += 1;
-                pos = scan_ws(tokens, pos, follow_then_opening(FOLLOW_MASK_13, 2, follow));
+                pos = scan_ws(tokens, pos, follow_then_opening(FOLLOW_MASK_13, 16, follow));
                 if pos < 0 { break opt_enter_scan; }
                 while pos < tokens.len() && tokens[pos] == TK_And {
                     let sp = pos;
@@ -20718,7 +20450,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: i64 = 0) -> () {
                             pos += 1;
                             pos = scan_ws(tokens, pos, FOLLOW_MASK_14);
                             if pos < 0 { break sg_14; }
-                            pos = scan_media_expression(tokens, pos, follow_then_opening(FOLLOW_MASK_13, 2, follow));
+                            pos = scan_media_expression(tokens, pos, follow_then_opening(FOLLOW_MASK_13, 16, follow));
                             if pos < 0 { break sg_14; }
                             break sg_14_done;
                         }
@@ -20739,7 +20471,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.site = 47;
         _parse_media_type(p);
         p.site = 48;
-        _parse_ws(p, follow_then_opening(FOLLOW_MASK_13, 2, follow));
+        _parse_ws(p, follow_then_opening(FOLLOW_MASK_13, 16, follow));
         loop {
             if p.recovering { break; }
             if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -20753,7 +20485,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         pos += 1;
                         pos = scan_ws(tokens, pos, FOLLOW_MASK_14);
                         if pos < 0 { break sg_15; }
-                        pos = scan_media_expression(tokens, pos, follow_then_opening(FOLLOW_MASK_13, 2, follow));
+                        pos = scan_media_expression(tokens, pos, follow_then_opening(FOLLOW_MASK_13, 16, follow));
                         if pos < 0 { break sg_15; }
                         break sg_15_done;
                     }
@@ -20780,12 +20512,12 @@ fn _parse_media_query__inner(p: &mut Parser, follow: i64 = 0) -> () {
             p.site = 49;
             _parse_ws(p, FOLLOW_MASK_14);
             p.site = 50;
-            _parse_media_expression(p, follow_then_opening(FOLLOW_MASK_13, 2, follow));
+            _parse_media_expression(p, follow_then_opening(FOLLOW_MASK_13, 16, follow));
         }
         return;
     } else if kind == TK_OpenParen {
         p.site = 51;
-        _parse_media_expression(p, follow_then_opening(FOLLOW_MASK_13, 2, follow));
+        _parse_media_expression(p, follow_then_opening(FOLLOW_MASK_13, 16, follow));
         loop {
             if p.recovering { break; }
             if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -20799,7 +20531,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         pos += 1;
                         pos = scan_ws(tokens, pos, FOLLOW_MASK_14);
                         if pos < 0 { break sg_16; }
-                        pos = scan_media_expression(tokens, pos, follow_then_opening(FOLLOW_MASK_13, 2, follow));
+                        pos = scan_media_expression(tokens, pos, follow_then_opening(FOLLOW_MASK_13, 16, follow));
                         if pos < 0 { break sg_16; }
                         break sg_16_done;
                     }
@@ -20826,7 +20558,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: i64 = 0) -> () {
             p.site = 52;
             _parse_ws(p, FOLLOW_MASK_14);
             p.site = 53;
-            _parse_media_expression(p, follow_then_opening(FOLLOW_MASK_13, 2, follow));
+            _parse_media_expression(p, follow_then_opening(FOLLOW_MASK_13, 16, follow));
         }
         return;
     }
@@ -20979,14 +20711,14 @@ fn _parse_pseudo_page(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_selector_group__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 71;
-    _parse_selector(p, follow_then_opening(FOLLOW_MASK_18, 2, follow));
+    _parse_selector(p, follow_then_opening(FOLLOW_MASK_18, 16, follow));
     while !p.recovering && p.peek_kind() == TK_Comma {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
         p.site = 72;
         _parse_ws(p, FOLLOW_MASK_19);
         p.site = 73;
-        _parse_selector(p, follow_then_opening(FOLLOW_MASK_18, 2, follow));
+        _parse_selector(p, follow_then_opening(FOLLOW_MASK_18, 16, follow));
     }
     return;
 }
@@ -21006,7 +20738,7 @@ fn _parse_selector__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 74;
     _parse_simple_selector_sequence(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_20)));
     p.site = 75;
-    _parse_ws(p, follow_then_opening(FOLLOW_MASK_21, 2, follow));
+    _parse_ws(p, follow_then_opening(FOLLOW_MASK_21, 16, follow));
     while !p.recovering && _kind_set_19(p.peek_kind()) {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.site = 76;
@@ -21014,7 +20746,7 @@ fn _parse_selector__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.site = 77;
         _parse_simple_selector_sequence(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_8)));
         p.site = 78;
-        _parse_ws(p, follow_then_opening(FOLLOW_MASK_21, 2, follow));
+        _parse_ws(p, follow_then_opening(FOLLOW_MASK_21, 16, follow));
     }
     return;
 }
@@ -21286,7 +21018,7 @@ fn _parse_universal__inner(p: &mut Parser, follow: i64 = 0) -> () {
         opt_enter_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_type_namespace_prefix(tokens, pos, follow_then(FOLLOW_MASK_23, 1, follow));
+            pos = scan_type_namespace_prefix(tokens, pos, follow_then(FOLLOW_MASK_23, 8, follow));
             if pos < 0 { break opt_enter_scan; }
             if pos >= tokens.len() || tokens[pos] != TK_Multiply { break opt_enter_scan; }
             pos += 1;
@@ -21296,7 +21028,7 @@ fn _parse_universal__inner(p: &mut Parser, follow: i64 = 0) -> () {
     }
     if opt_enter {
         p.site = 97;
-        _parse_type_namespace_prefix(p, follow_then(FOLLOW_MASK_23, 1, follow));
+        _parse_type_namespace_prefix(p, follow_then(FOLLOW_MASK_23, 8, follow));
     }
     p.expect(TK_Multiply, &EMPTY_SYNC, true);
     return;
@@ -21356,7 +21088,7 @@ fn _parse_attrib__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         if pos < 0 { break sg_17; }
                         if pos >= tokens.len() || !_kind_set_24(tokens[pos]) { break sg_17; }
                         pos += 1;
-                        pos = scan_ws(tokens, pos, follow_then(FOLLOW_MASK_25, 1, follow));
+                        pos = scan_ws(tokens, pos, follow_then(FOLLOW_MASK_25, 8, follow));
                         if pos < 0 { break sg_17; }
                         break sg_17_done;
                     }
@@ -21389,7 +21121,7 @@ fn _parse_attrib__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || !_kind_set_24(tokens[pos]) { break opt_scan; }
         pos += 1;
-        pos = scan_ws(tokens, pos, follow_then(FOLLOW_MASK_25, 1, follow));
+        pos = scan_ws(tokens, pos, follow_then(FOLLOW_MASK_25, 8, follow));
         if pos < 0 { break opt_scan; }
         opt_scan_pos = pos;
     }
@@ -21409,7 +21141,7 @@ fn _parse_attrib__inner(p: &mut Parser, follow: i64 = 0) -> () {
             p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_18);
         }
         p.site = 105;
-        _parse_ws(p, follow_then(FOLLOW_MASK_25, 1, follow));
+        _parse_ws(p, follow_then(FOLLOW_MASK_25, 8, follow));
     }
     p.expect(TK_CloseBracket, &EMPTY_SYNC, true);
     return;
@@ -21462,7 +21194,7 @@ fn _parse_functional_pseudo__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 108;
     _parse_ws(p, FOLLOW_MASK_26);
     p.site = 109;
-    _parse_expression(p, follow_then(FOLLOW_MASK_16, 1, follow));
+    _parse_expression(p, follow_then(FOLLOW_MASK_16, 8, follow));
     p.expect(TK_CloseParen, &EMPTY_SYNC, true);
     return;
 }
@@ -21520,7 +21252,7 @@ fn _parse_negation__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 113;
     _parse_negation_arg(p, 0);
     p.site = 114;
-    _parse_ws(p, follow_then(FOLLOW_MASK_16, 1, follow));
+    _parse_ws(p, follow_then(FOLLOW_MASK_16, 8, follow));
     p.expect(TK_CloseParen, &EMPTY_SYNC, true);
     return;
 }
@@ -23397,7 +23129,7 @@ fn _parse_supports_condition_in_parens__inner_alt_0(p: &mut Parser, follow: i64 
     p.site = 251;
     _parse_supports_condition(p, 0);
     p.site = 252;
-    _parse_ws(p, follow_then(FOLLOW_MASK_16, 1, follow));
+    _parse_ws(p, follow_then(FOLLOW_MASK_16, 8, follow));
     p.expect(TK_CloseParen, &EMPTY_SYNC, true);
     return;
 }
@@ -23410,7 +23142,7 @@ fn scan_supports_condition_in_parens__alt_0(tokens: &Array<i32>, pos: i32, follo
     if pos < 0 { return -1; }
     pos = scan_supports_condition(tokens, pos, 0);
     if pos < 0 { return -1; }
-    pos = scan_ws(tokens, pos, follow_then(FOLLOW_MASK_16, 1, follow));
+    pos = scan_ws(tokens, pos, follow_then(FOLLOW_MASK_16, 8, follow));
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
     pos += 1;
@@ -23670,7 +23402,7 @@ fn _parse_supports_declaration_condition__inner(p: &mut Parser, follow: i64 = 0)
     p.site = 270;
     _parse_ws(p, FOLLOW_MASK_17);
     p.site = 271;
-    _parse_declaration(p, follow_then(FOLLOW_MASK_16, 1, follow));
+    _parse_declaration(p, follow_then(FOLLOW_MASK_16, 8, follow));
     p.expect(TK_CloseParen, &EMPTY_SYNC, true);
     return;
 }
@@ -23725,7 +23457,7 @@ fn _parse_url__inner(p: &mut Parser, follow: i64 = 0) -> () {
         _parse_ws(p, FOLLOW_MASK_4);
         p.expect(TK_String_, &SYNC_31, false);
         p.site = 275;
-        _parse_ws(p, follow_then(FOLLOW_MASK_16, 1, follow));
+        _parse_ws(p, follow_then(FOLLOW_MASK_16, 8, follow));
         p.expect(TK_CloseParen, &EMPTY_SYNC, true);
         return;
     } else if kind == TK_Url {
@@ -23800,7 +23532,7 @@ fn _parse_calc(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_calc_sum__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 282;
-    _parse_calc_product(p, follow_then_opening(FOLLOW_MASK_42, 2, follow));
+    _parse_calc_product(p, follow_then_opening(FOLLOW_MASK_42, 16, follow));
     while !p.recovering && p.peek_kind() == TK_Space {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
@@ -23814,7 +23546,7 @@ fn _parse_calc_sum__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.site = 285;
         _parse_ws(p, FOLLOW_MASK_41);
         p.site = 286;
-        _parse_calc_product(p, follow_then_opening(FOLLOW_MASK_42, 2, follow));
+        _parse_calc_product(p, follow_then_opening(FOLLOW_MASK_42, 16, follow));
     }
     return;
 }
@@ -24159,11 +23891,11 @@ fn _parse_keyframes_rule__inner(p: &mut Parser, follow: i64 = 0) -> () {
     _parse_ws(p, FOLLOW_MASK_9);
     p.expect(TK_OpenBrace, &SYNC_9, false);
     p.site = 320;
-    _parse_ws(p, follow_or(FOLLOW_MASK_46, 2, FOLLOW_MASK_28));
+    _parse_ws(p, follow_or(FOLLOW_MASK_46, 16, FOLLOW_MASK_28));
     if !kind_set_has(&SYNC_9, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_9, &EXPECTED_9); }
     while !p.recovering && _kind_set_69(p.peek_kind()) {
         p.site = 321;
-        _parse_keyframe_block(p, follow_or(FOLLOW_MASK_46, 2, FOLLOW_MASK_28));
+        _parse_keyframe_block(p, follow_or(FOLLOW_MASK_46, 16, FOLLOW_MASK_28));
         if !kind_set_has(&SYNC_9, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_9, &EXPECTED_9); }
     }
     p.expect(TK_CloseBrace, &SYNC_0, true);
@@ -24215,7 +23947,7 @@ fn _parse_keyframe_selector__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_42, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_42, &EXPECTED_42); }
     p.expect_set(&SYNC_42, &EXPECTED_42);
     p.site = 327;
-    _parse_ws(p, follow_then_opening(FOLLOW_MASK_47, 2, follow));
+    _parse_ws(p, follow_then_opening(FOLLOW_MASK_47, 16, follow));
     while !p.recovering && p.peek_kind() == TK_Comma {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
@@ -24224,7 +23956,7 @@ fn _parse_keyframe_selector__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if !kind_set_has(&SYNC_42, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_42, &EXPECTED_42); }
         p.expect_set(&SYNC_42, &EXPECTED_42);
         p.site = 329;
-        _parse_ws(p, follow_then_opening(FOLLOW_MASK_47, 2, follow));
+        _parse_ws(p, follow_then_opening(FOLLOW_MASK_47, 16, follow));
     }
     return;
 }
@@ -24312,11 +24044,11 @@ fn _parse_font_feature_values_rule__inner(p: &mut Parser, follow: i64 = 0) -> ()
     _parse_ws(p, FOLLOW_MASK_9);
     p.expect(TK_OpenBrace, &SYNC_9, false);
     p.site = 343;
-    _parse_ws(p, follow_or(FOLLOW_MASK_49, 2, FOLLOW_MASK_28));
+    _parse_ws(p, follow_or(FOLLOW_MASK_49, 16, FOLLOW_MASK_28));
     if !kind_set_has(&SYNC_9, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_9, &EXPECTED_9); }
     while !p.recovering && p.peek_kind() == TK_AtKeyword {
         p.site = 344;
-        _parse_feature_value_block(p, follow_or(FOLLOW_MASK_49, 2, FOLLOW_MASK_28));
+        _parse_feature_value_block(p, follow_or(FOLLOW_MASK_49, 16, FOLLOW_MASK_28));
         if !kind_set_has(&SYNC_9, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_9, &EXPECTED_9); }
     }
     p.expect(TK_CloseBrace, &SYNC_0, true);

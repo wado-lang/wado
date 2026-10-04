@@ -1001,27 +1001,21 @@ fn apply_A_actions(lx: &mut Lexer, start: i32, end: i32) {
     pos += 1;
     let la_start_0 = pos;
     let mut accept_0: i32 = -1;
-    let mut la_reach_0: i32 = -1;
+    let mut la_end_0: i32 = -1;
     if pos >= chars.len() { return; }
     if (chars[pos] matches { 'b' }) { return; }
     pos += 1;
     loop {
         let mut la_tot_1: i32 = -1;
         let peek_save_2 = pos;
-        let mut peek_ok_2 = false;
-        let mut peek_end_2: i32 = -1;
         peek_2: {
             if pos >= chars.len() || chars[pos] != 'c' { break peek_2; }
             pos += 1;
-            peek_end_2 = pos;
-            peek_ok_2 = true;
+            la_tot_1 = pos;
         }
         pos = peek_save_2;
-        if peek_ok_2 {
-            la_tot_1 = peek_end_2;
-        }
-        if la_tot_1 >= 0 && la_tot_1 >= la_reach_0 {
-            la_reach_0 = la_tot_1;
+        if la_tot_1 >= 0 && la_tot_1 >= la_end_0 {
+            la_end_0 = la_tot_1;
             accept_0 = pos;
         }
         let la_saved_0 = pos;
@@ -1034,7 +1028,7 @@ fn apply_A_actions(lx: &mut Lexer, start: i32, end: i32) {
         pos = la_saved_0;
         break;
     }
-    if accept_0 < 0 {
+    if la_end_0 < 0 {
         return;
     }
     pos = la_start_0;
@@ -1093,27 +1087,21 @@ fn apply_E_actions(lx: &mut Lexer, start: i32, end: i32) {
     pos += 1;
     let la_start_5 = pos;
     let mut accept_5: i32 = -1;
-    let mut la_reach_5: i32 = -1;
+    let mut la_end_5: i32 = -1;
     if pos >= chars.len() { return; }
     if (chars[pos] matches { 'b' }) { return; }
     pos += 1;
     loop {
         let mut la_tot_6: i32 = -1;
         let peek_save_7 = pos;
-        let mut peek_ok_7 = false;
-        let mut peek_end_7: i32 = -1;
         peek_7: {
             if pos >= chars.len() || chars[pos] != 'c' { break peek_7; }
             pos += 1;
-            peek_end_7 = pos;
-            peek_ok_7 = true;
+            la_tot_6 = pos;
         }
         pos = peek_save_7;
-        if peek_ok_7 {
-            la_tot_6 = peek_end_7;
-        }
-        if la_tot_6 >= 0 && la_tot_6 >= la_reach_5 {
-            la_reach_5 = la_tot_6;
+        if la_tot_6 >= 0 && la_tot_6 >= la_end_5 {
+            la_end_5 = la_tot_6;
             accept_5 = pos;
         }
         let la_saved_5 = pos;
@@ -1126,7 +1114,7 @@ fn apply_E_actions(lx: &mut Lexer, start: i32, end: i32) {
         pos = la_saved_5;
         break;
     }
-    if accept_5 < 0 {
+    if la_end_5 < 0 {
         return;
     }
     pos = la_start_5;
@@ -1181,29 +1169,21 @@ fn try_A(lx: &Lexer, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'a' { return -1; }
     pos += 1;
-    let mut accept_10: i32 = -1;
-    let mut la_reach_10: i32 = -1;
+    let mut la_end_10: i32 = -1;
     if pos >= chars.len() { return -1; }
     if (chars[pos] matches { 'b' }) { return -1; }
     pos += 1;
     loop {
         let mut la_tot_11: i32 = -1;
         let peek_save_12 = pos;
-        let mut peek_ok_12 = false;
-        let mut peek_end_12: i32 = -1;
         peek_12: {
             if pos >= chars.len() || chars[pos] != 'c' { break peek_12; }
             pos += 1;
-            peek_end_12 = pos;
-            peek_ok_12 = true;
+            la_tot_11 = pos;
         }
         pos = peek_save_12;
-        if peek_ok_12 {
-            la_tot_11 = peek_end_12;
-        }
-        if la_tot_11 >= 0 && la_tot_11 >= la_reach_10 {
-            la_reach_10 = la_tot_11;
-            accept_10 = pos;
+        if la_tot_11 >= 0 && la_tot_11 >= la_end_10 {
+            la_end_10 = la_tot_11;
         }
         let la_saved_10 = pos;
         la_rep_10: {
@@ -1215,10 +1195,10 @@ fn try_A(lx: &Lexer, start: i32) -> i32 {
         pos = la_saved_10;
         break;
     }
-    if accept_10 < 0 {
+    if la_end_10 < 0 {
         return -1;
     }
-    pos = la_reach_10;
+    pos = la_end_10;
     return pos;
 }
 
@@ -1251,29 +1231,21 @@ fn try_E(lx: &Lexer, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'e' { return -1; }
     pos += 1;
-    let mut accept_14: i32 = -1;
-    let mut la_reach_14: i32 = -1;
+    let mut la_end_14: i32 = -1;
     if pos >= chars.len() { return -1; }
     if (chars[pos] matches { 'b' }) { return -1; }
     pos += 1;
     loop {
         let mut la_tot_15: i32 = -1;
         let peek_save_16 = pos;
-        let mut peek_ok_16 = false;
-        let mut peek_end_16: i32 = -1;
         peek_16: {
             if pos >= chars.len() || chars[pos] != 'c' { break peek_16; }
             pos += 1;
-            peek_end_16 = pos;
-            peek_ok_16 = true;
+            la_tot_15 = pos;
         }
         pos = peek_save_16;
-        if peek_ok_16 {
-            la_tot_15 = peek_end_16;
-        }
-        if la_tot_15 >= 0 && la_tot_15 >= la_reach_14 {
-            la_reach_14 = la_tot_15;
-            accept_14 = pos;
+        if la_tot_15 >= 0 && la_tot_15 >= la_end_14 {
+            la_end_14 = la_tot_15;
         }
         let la_saved_14 = pos;
         la_rep_14: {
@@ -1285,10 +1257,10 @@ fn try_E(lx: &Lexer, start: i32) -> i32 {
         pos = la_saved_14;
         break;
     }
-    if accept_14 < 0 {
+    if la_end_14 < 0 {
         return -1;
     }
-    pos = la_reach_14;
+    pos = la_end_14;
     return pos;
 }
 

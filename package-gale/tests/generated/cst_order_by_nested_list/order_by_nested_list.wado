@@ -974,17 +974,17 @@ internal fn follow_open_with(cont: i64, open: i64) -> i64 {
     return cont & FOLLOW_CONT_MASK | follow_open_join(follow_open_mark(cont), open);
 }
 
-internal fn follow_then(prefix: i64, positions: i64, cont: i64) -> i64 {
-    return (prefix | (cont & FOLLOW_SEQUENCED) << positions * FOLLOW_SLOT_BITS) & FOLLOW_CONT_MASK;
+internal fn follow_then(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    return (prefix | (cont & FOLLOW_SEQUENCED) << prefix_bits) & FOLLOW_CONT_MASK;
 }
 
-internal fn follow_then_opening(prefix: i64, positions: i64, cont: i64) -> i64 {
-    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_then_opening(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | follow_open_mark(cont);
 }
 
-internal fn follow_or(prefix: i64, positions: i64, alternative: i64) -> i64 {
-    let opened = (alternative | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_or(prefix: i64, prefix_bits: i64, alternative: i64) -> i64 {
+    let opened = (alternative | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | alternative & FOLLOW_OPEN_FIELD;
 }
 
@@ -1686,7 +1686,7 @@ fn scan_order_by(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn scan_order_by_clause(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_path(tokens, pos, follow_then(FOLLOW_MASK_2, 1, follow));
+    pos = scan_path(tokens, pos, follow_then(FOLLOW_MASK_2, 8, follow));
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_DIRECTION { return -1; }
     pos += 1;
@@ -1702,14 +1702,14 @@ fn scan_path(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn scan_expr(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_atom(tokens, pos, follow_then_opening(FOLLOW_MASK_3, 2, follow));
+    pos = scan_atom(tokens, pos, follow_then_opening(FOLLOW_MASK_3, 16, follow));
     if pos < 0 { return -1; }
     while pos < tokens.len() && _kind_set_2(tokens[pos]) && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
         sg_3_done: {
             sg_3: {
                 pos += 1;
-                pos = scan_atom(tokens, pos, follow_then_opening(FOLLOW_MASK_3, 2, follow));
+                pos = scan_atom(tokens, pos, follow_then_opening(FOLLOW_MASK_3, 16, follow));
                 if pos < 0 { break sg_3; }
                 break sg_3_done;
             }
@@ -1745,7 +1745,7 @@ fn scan_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     } else if kind == TK_LPAREN {
         pos = start + 1;
         try_1: {
-            pos = scan_expr(tokens, pos, follow_then(FOLLOW_MASK_5, 1, follow));
+            pos = scan_expr(tokens, pos, follow_then(FOLLOW_MASK_5, 8, follow));
             if pos < 0 { break try_1; }
             if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break try_1; }
             pos += 1;
@@ -1758,7 +1758,7 @@ fn scan_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn _parse_s__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 0;
-    _parse_order_by(p, follow_then(FOLLOW_MASK_0, 1, follow));
+    _parse_order_by(p, follow_then(FOLLOW_MASK_0, 8, follow));
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
 }
@@ -1776,7 +1776,7 @@ fn _parse_s(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_order_by__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 2;
-    _parse_order_by_clause(p, follow_then_opening(FOLLOW_MASK_1, 2, follow));
+    _parse_order_by_clause(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -1788,7 +1788,7 @@ fn _parse_order_by__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
                 sg_0: {
                     if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_0; }
                     pos += 1;
-                    pos = scan_order_by(tokens, pos, follow_then_opening(FOLLOW_MASK_1, 2, follow));
+                    pos = scan_order_by(tokens, pos, follow_then_opening(FOLLOW_MASK_1, 16, follow));
                     if pos < 0 { break sg_0; }
                     break sg_0_done;
                 }
@@ -1813,21 +1813,21 @@ fn _parse_order_by__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
         if rep_scan_pos < 0 { break; }
         p.expect(TK_LIT_COMMA, &SYNC_0, false);
         p.site = 3;
-        _parse_order_by(p, follow_then_opening(FOLLOW_MASK_1, 2, follow));
+        _parse_order_by(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
     }
     return;
 }
 
 fn scan_order_by__alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_order_by_clause(tokens, pos, follow_then_opening(FOLLOW_MASK_1, 2, follow));
+    pos = scan_order_by_clause(tokens, pos, follow_then_opening(FOLLOW_MASK_1, 16, follow));
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
         sg_1_done: {
             sg_1: {
                 pos += 1;
-                pos = scan_order_by(tokens, pos, follow_then_opening(FOLLOW_MASK_1, 2, follow));
+                pos = scan_order_by(tokens, pos, follow_then_opening(FOLLOW_MASK_1, 16, follow));
                 if pos < 0 { break sg_1; }
                 break sg_1_done;
             }
@@ -1896,7 +1896,7 @@ fn _parse_order_by(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_order_by_clause__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 4;
-    _parse_path(p, follow_then(FOLLOW_MASK_2, 1, follow));
+    _parse_path(p, follow_then(FOLLOW_MASK_2, 8, follow));
     p.expect(TK_DIRECTION, &EMPTY_SYNC, true);
     return;
 }
@@ -1926,12 +1926,12 @@ fn _parse_path(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 6;
-    _parse_atom(p, follow_then_opening(FOLLOW_MASK_3, 2, follow));
+    _parse_atom(p, follow_then_opening(FOLLOW_MASK_3, 16, follow));
     while !p.recovering && _kind_set_2(p.peek_kind()) {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
         p.site = 7;
-        _parse_atom(p, follow_then_opening(FOLLOW_MASK_3, 2, follow));
+        _parse_atom(p, follow_then_opening(FOLLOW_MASK_3, 16, follow));
     }
     return;
 }
@@ -1961,7 +1961,7 @@ fn _parse_atom__inner(p: &mut Parser, follow: i64 = 0) -> () {
     } else if kind == TK_LPAREN {
         p.take();
         p.site = 8;
-        _parse_expr(p, follow_then(FOLLOW_MASK_5, 1, follow));
+        _parse_expr(p, follow_then(FOLLOW_MASK_5, 8, follow));
         p.expect(TK_RPAREN, &EMPTY_SYNC, true);
         return;
     }

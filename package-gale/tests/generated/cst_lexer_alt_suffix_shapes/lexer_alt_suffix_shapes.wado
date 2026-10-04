@@ -1029,19 +1029,13 @@ fn try_B(chars: &List<char>, start: i32) -> i32 {
         pos = la_at_3;
         let mut la_tot_3: i32 = -1;
         let peek_save_4 = pos;
-        let mut peek_ok_4 = false;
-        let mut peek_end_4: i32 = -1;
         peek_4: {
             if pos >= chars.len() { break peek_4; }
             if !(chars[pos] matches { 'r' }) { break peek_4; }
             pos += 1;
-            peek_end_4 = pos;
-            peek_ok_4 = true;
+            la_tot_3 = pos;
         }
         pos = peek_save_4;
-        if peek_ok_4 {
-            la_tot_3 = peek_end_4;
-        }
         if la_tot_3 > la_reach_3 {
             la_reach_3 = la_tot_3;
             la_win_3 = la_i_3;
@@ -1079,8 +1073,6 @@ fn try_C(chars: &List<char>, start: i32) -> i32 {
         pos = la_at_5;
         let mut la_tot_5: i32 = -1;
         let peek_save_6 = pos;
-        let mut peek_ok_6 = false;
-        let mut peek_end_6: i32 = -1;
         peek_6: {
             let alts_saved_7 = pos;
             alts_done_7: {
@@ -1100,13 +1092,9 @@ fn try_C(chars: &List<char>, start: i32) -> i32 {
                 }
                 break peek_6;
             }
-            peek_end_6 = pos;
-            peek_ok_6 = true;
+            la_tot_5 = pos;
         }
         pos = peek_save_6;
-        if peek_ok_6 {
-            la_tot_5 = peek_end_6;
-        }
         if la_tot_5 > la_reach_5 {
             la_reach_5 = la_tot_5;
             la_win_5 = la_i_5;
@@ -1119,15 +1107,12 @@ fn try_C(chars: &List<char>, start: i32) -> i32 {
 
 fn try_D(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let mut accept_8: i32 = -1;
-    let mut la_reach_8: i32 = -1;
+    let mut la_end_8: i32 = -1;
     if pos >= chars.len() || chars[pos] != 'd' { return -1; }
     pos += 1;
     loop {
         let mut la_tot_9: i32 = -1;
         let peek_save_10 = pos;
-        let mut peek_ok_10 = false;
-        let mut peek_end_10: i32 = -1;
         peek_10: {
             opt_11: {
                 if pos >= chars.len() || chars[pos] != 'e' { break opt_11; }
@@ -1135,16 +1120,11 @@ fn try_D(chars: &List<char>, start: i32) -> i32 {
             }
             if pos >= chars.len() || chars[pos] != 'd' { break peek_10; }
             pos += 1;
-            peek_end_10 = pos;
-            peek_ok_10 = true;
+            la_tot_9 = pos;
         }
         pos = peek_save_10;
-        if peek_ok_10 {
-            la_tot_9 = peek_end_10;
-        }
-        if la_tot_9 >= 0 && la_tot_9 >= la_reach_8 {
-            la_reach_8 = la_tot_9;
-            accept_8 = pos;
+        if la_tot_9 >= 0 && la_tot_9 >= la_end_8 {
+            la_end_8 = la_tot_9;
         }
         let la_saved_8 = pos;
         la_rep_8: {
@@ -1155,10 +1135,10 @@ fn try_D(chars: &List<char>, start: i32) -> i32 {
         pos = la_saved_8;
         break;
     }
-    if accept_8 < 0 {
+    if la_end_8 < 0 {
         return -1;
     }
-    pos = la_reach_8;
+    pos = la_end_8;
     return pos;
 }
 
@@ -1198,18 +1178,12 @@ fn try_E(chars: &List<char>, start: i32) -> i32 {
         pos = la_at_12;
         let mut la_tot_12: i32 = -1;
         let peek_save_13 = pos;
-        let mut peek_ok_13 = false;
-        let mut peek_end_13: i32 = -1;
         peek_13: {
             if pos >= chars.len() || chars[pos] != 'h' { break peek_13; }
             pos += 1;
-            peek_end_13 = pos;
-            peek_ok_13 = true;
+            la_tot_12 = pos;
         }
         pos = peek_save_13;
-        if peek_ok_13 {
-            la_tot_12 = peek_end_13;
-        }
         if la_tot_12 > la_reach_12 {
             la_reach_12 = la_tot_12;
             la_win_12 = la_i_12;
@@ -1249,18 +1223,12 @@ fn try_G(chars: &List<char>, start: i32) -> i32 {
         pos = la_at_14;
         let mut la_tot_14: i32 = -1;
         let peek_save_15 = pos;
-        let mut peek_ok_15 = false;
-        let mut peek_end_15: i32 = -1;
         peek_15: {
             if pos >= chars.len() || chars[pos] != 'l' { break peek_15; }
             pos += 1;
-            peek_end_15 = pos;
-            peek_ok_15 = true;
+            la_tot_14 = pos;
         }
         pos = peek_save_15;
-        if peek_ok_15 {
-            la_tot_14 = peek_end_15;
-        }
         if la_tot_14 > la_reach_14 {
             la_reach_14 = la_tot_14;
             la_win_14 = la_i_14;
@@ -1298,18 +1266,12 @@ fn try_K(chars: &List<char>, start: i32) -> i32 {
         pos = la_at_16;
         let mut la_tot_16: i32 = -1;
         let peek_save_17 = pos;
-        let mut peek_ok_17 = false;
-        let mut peek_end_17: i32 = -1;
         peek_17: {
             if pos >= chars.len() || chars[pos] != 'v' { break peek_17; }
             pos += 1;
-            peek_end_17 = pos;
-            peek_ok_17 = true;
+            la_tot_16 = pos;
         }
         pos = peek_save_17;
-        if peek_ok_17 {
-            la_tot_16 = peek_end_17;
-        }
         if la_tot_16 > la_reach_16 {
             la_reach_16 = la_tot_16;
             la_win_16 = la_i_16;

@@ -974,17 +974,17 @@ internal fn follow_open_with(cont: i64, open: i64) -> i64 {
     return cont & FOLLOW_CONT_MASK | follow_open_join(follow_open_mark(cont), open);
 }
 
-internal fn follow_then(prefix: i64, positions: i64, cont: i64) -> i64 {
-    return (prefix | (cont & FOLLOW_SEQUENCED) << positions * FOLLOW_SLOT_BITS) & FOLLOW_CONT_MASK;
+internal fn follow_then(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    return (prefix | (cont & FOLLOW_SEQUENCED) << prefix_bits) & FOLLOW_CONT_MASK;
 }
 
-internal fn follow_then_opening(prefix: i64, positions: i64, cont: i64) -> i64 {
-    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_then_opening(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | follow_open_mark(cont);
 }
 
-internal fn follow_or(prefix: i64, positions: i64, alternative: i64) -> i64 {
-    let opened = (alternative | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_or(prefix: i64, prefix_bits: i64, alternative: i64) -> i64 {
+    let opened = (alternative | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | alternative & FOLLOW_OPEN_FIELD;
 }
 
@@ -1634,7 +1634,7 @@ impl Parser {
 
 fn _parse_start__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 0;
-    _parse_list(p, follow_then(FOLLOW_MASK_0, 1, follow));
+    _parse_list(p, follow_then(FOLLOW_MASK_0, 8, follow));
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
 }
@@ -1655,7 +1655,7 @@ fn _parse_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if _kind_set_0(p.peek_kind()) {
         p.site = 1;
-        _parse_elems(p, follow_then(FOLLOW_MASK_1, 1, follow));
+        _parse_elems(p, follow_then(FOLLOW_MASK_1, 8, follow));
     }
     p.expect(TK_RBRACK, &EMPTY_SYNC, true);
     return;
@@ -1674,12 +1674,12 @@ fn _parse_list(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_elems__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 2;
-    _parse_alt(p, follow_then_opening(FOLLOW_MASK_2, 2, follow));
+    _parse_alt(p, follow_then_opening(FOLLOW_MASK_2, 16, follow));
     while !p.recovering && p.peek_kind() == TK_COMMA {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
         p.site = 3;
-        _parse_alt(p, follow_then_opening(FOLLOW_MASK_2, 2, follow));
+        _parse_alt(p, follow_then_opening(FOLLOW_MASK_2, 16, follow));
     }
     return;
 }
@@ -1697,12 +1697,12 @@ fn _parse_elems(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_alt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 4;
-    _parse_item(p, follow_then_opening(FOLLOW_MASK_3, 2, follow));
+    _parse_item(p, follow_then_opening(FOLLOW_MASK_3, 16, follow));
     while !p.recovering && p.peek_kind() == TK_PIPE {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
         p.site = 5;
-        _parse_item(p, follow_then_opening(FOLLOW_MASK_3, 2, follow));
+        _parse_item(p, follow_then_opening(FOLLOW_MASK_3, 16, follow));
     }
     return;
 }
@@ -1726,7 +1726,7 @@ fn _parse_item__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
         if p.peek_kind() == TK_ID {
             p.site = 6;
-            _parse_fields(p, follow_then(FOLLOW_MASK_4, 1, follow));
+            _parse_fields(p, follow_then(FOLLOW_MASK_4, 8, follow));
         }
         p.expect(TK_RBRACE, &EMPTY_SYNC, true);
         return;

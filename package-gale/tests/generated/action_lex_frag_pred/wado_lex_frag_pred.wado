@@ -963,28 +963,20 @@ fn try_KW(chars: &List<char>, start: i32) -> i32 {
     let mut alts_best_0 = -1;
     alts_0_0: {
         pos = alts_saved_0;
-        let mut accept_1: i32 = -1;
-        let mut la_reach_1: i32 = -1;
+        let mut la_end_1: i32 = -1;
         if pos >= chars.len() { break alts_0_0; }
         if !(chars[pos] matches { 'a'..='z' }) { break alts_0_0; }
         pos += 1;
         loop {
             let mut la_tot_2: i32 = -1;
             let peek_save_3 = pos;
-            let mut peek_ok_3 = false;
-            let mut peek_end_3: i32 = -1;
             peek_3: {
                 if !( chars_text(chars, start, pos) == "cat" ) { break peek_3; }
-                peek_end_3 = pos;
-                peek_ok_3 = true;
+                la_tot_2 = pos;
             }
             pos = peek_save_3;
-            if peek_ok_3 {
-                la_tot_2 = peek_end_3;
-            }
-            if la_tot_2 >= 0 && la_tot_2 >= la_reach_1 {
-                la_reach_1 = la_tot_2;
-                accept_1 = pos;
+            if la_tot_2 >= 0 && la_tot_2 >= la_end_1 {
+                la_end_1 = la_tot_2;
             }
             let la_saved_1 = pos;
             la_rep_1: {
@@ -996,10 +988,10 @@ fn try_KW(chars: &List<char>, start: i32) -> i32 {
             pos = la_saved_1;
             break;
         }
-        if accept_1 < 0 {
+        if la_end_1 < 0 {
             break alts_0_0;
         }
-        pos = la_reach_1;
+        pos = la_end_1;
         if pos > alts_best_0 { alts_best_0 = pos; }
     }
     alts_0_1: {

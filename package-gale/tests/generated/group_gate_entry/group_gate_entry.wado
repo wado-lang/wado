@@ -1523,9 +1523,9 @@ fn _parse_opt__inner(p: &mut Parser) -> () {
             if probe_kind == TK_EOF { opt_enter = true; }
         }
     }
-    if opt_enter && ((p.peek_kind() == TK_A && (pred_0(p))) || (p.peek_kind() == TK_B)) {
+    if opt_enter && ((p.peek_kind() == TK_A && pred_0(p)) || (p.peek_kind() == TK_B)) {
         let grp_kind = p.peek_kind();
-        if grp_kind == TK_A && (pred_0(p)) {
+        if grp_kind == TK_A && pred_0(p) {
             p.expect(TK_A, &SYNC_1, false);
         } else if grp_kind == TK_B {
             p.take();
@@ -1555,7 +1555,7 @@ fn _parse_star__inner(p: &mut Parser) -> () {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
         let gd_kind = p.peek_kind();
-        if gd_kind == TK_A && (pred_0(p)) {
+        if gd_kind == TK_A && pred_0(p) {
             gd_winner = 0;
             gd_scan: {
                 let tokens = &p.kinds;
@@ -1614,9 +1614,9 @@ fn _parse_star(p: &mut Parser) -> () {
 fn _parse_nongreedy__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     while p.peek_kind() == TK_B {
-        if !((p.peek_kind() == TK_A && (pred_0(p))) || (p.peek_kind() == TK_B)) { break; }
+        if !((p.peek_kind() == TK_A && pred_0(p)) || (p.peek_kind() == TK_B)) { break; }
         let grp_kind = p.peek_kind();
-        if grp_kind == TK_A && (pred_0(p)) {
+        if grp_kind == TK_A && pred_0(p) {
             p.expect(TK_A, &SYNC_0, false);
         } else if grp_kind == TK_B {
             p.take();
@@ -1646,7 +1646,7 @@ fn _parse_list_label__inner(p: &mut Parser) -> () {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
         let gd_kind = p.peek_kind();
-        if gd_kind == TK_A && (pred_0(p)) {
+        if gd_kind == TK_A && pred_0(p) {
             gd_winner = 0;
             gd_scan: {
                 let tokens = &p.kinds;
@@ -1767,7 +1767,7 @@ fn _parse_solo_star__inner(p: &mut Parser) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        if !(p.peek_kind() == TK_A && (pred_0(p))) { break; }
+        if !(p.peek_kind() == TK_A && pred_0(p)) { break; }
         p.expect(TK_A, &SYNC_3, false);
         p.expect(TK_B, &SYNC_1, false);
         if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_1, &EXPECTED_1); }
@@ -1801,7 +1801,7 @@ fn _parse_solo_opt__inner(p: &mut Parser) -> () {
             opt_enter = true;
         }
     }
-    if opt_enter && (p.peek_kind() == TK_A && (pred_0(p))) {
+    if opt_enter && (p.peek_kind() == TK_A && pred_0(p)) {
         p.expect(TK_A, &SYNC_1, false);
     }
     p.expect(TK_A, &EMPTY_SYNC, true);
@@ -1824,7 +1824,7 @@ fn _parse_shape_opt__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_A {
         if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
-        if p.peek_kind() == TK_A && p.peek_at(1) == TK_B && p.peek_at(2) == TK_A && (pred_0(p)) {
+        if p.peek_kind() == TK_A && p.peek_at(1) == TK_B && p.peek_at(2) == TK_A && pred_0(p) {
             p.site = 0;
             _parse_ra(p);
             if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
@@ -1832,7 +1832,7 @@ fn _parse_shape_opt__inner(p: &mut Parser) -> () {
                 p.take();
             }
             p.expect(TK_A, &SYNC_1, false);
-        } else if p.peek_kind() == TK_A && p.peek_at(1) == TK_A && (pred_0(p)) {
+        } else if p.peek_kind() == TK_A && p.peek_at(1) == TK_A && pred_0(p) {
             p.site = 0;
             _parse_ra(p);
             p.expect(TK_A, &SYNC_1, false);

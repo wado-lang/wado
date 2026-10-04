@@ -1539,7 +1539,7 @@ fn _parse_tok(p: &mut Parser) -> () {
 fn _parse_gated__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
-    if grp_kind == TK_A && (pred_1(p)) {
+    if grp_kind == TK_A && pred_1(p) {
         p.expect(TK_A, &SYNC_2, false);
         if !p.speculating {
              p.emit("x") 
@@ -1573,7 +1573,7 @@ fn _parse_plus_gated__inner(p: &mut Parser) -> () {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
         let gd_kind = p.peek_kind();
-        if gd_kind == TK_A && (pred_1(p)) {
+        if gd_kind == TK_A && pred_1(p) {
             gd_winner = 0;
             gd_scan: {
                 let tokens = &p.kinds;
@@ -1681,7 +1681,7 @@ fn _parse_plus_solo__inner(p: &mut Parser) -> () {
             }
             if rep_scan_pos < 0 { break; }
         }
-        if !(p.peek_kind() == TK_A && (pred_1(p))) {
+        if !(p.peek_kind() == TK_A && pred_1(p)) {
             if _plus_first { p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC); }
             break;
         }

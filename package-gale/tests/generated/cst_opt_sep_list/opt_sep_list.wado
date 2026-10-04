@@ -974,17 +974,17 @@ internal fn follow_open_with(cont: i64, open: i64) -> i64 {
     return cont & FOLLOW_CONT_MASK | follow_open_join(follow_open_mark(cont), open);
 }
 
-internal fn follow_then(prefix: i64, positions: i64, cont: i64) -> i64 {
-    return (prefix | (cont & FOLLOW_SEQUENCED) << positions * FOLLOW_SLOT_BITS) & FOLLOW_CONT_MASK;
+internal fn follow_then(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    return (prefix | (cont & FOLLOW_SEQUENCED) << prefix_bits) & FOLLOW_CONT_MASK;
 }
 
-internal fn follow_then_opening(prefix: i64, positions: i64, cont: i64) -> i64 {
-    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_then_opening(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | follow_open_mark(cont);
 }
 
-internal fn follow_or(prefix: i64, positions: i64, alternative: i64) -> i64 {
-    let opened = (alternative | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_or(prefix: i64, prefix_bits: i64, alternative: i64) -> i64 {
+    let opened = (alternative | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | alternative & FOLLOW_OPEN_FIELD;
 }
 
@@ -1589,7 +1589,7 @@ impl Parser {
 
 fn _parse_prog__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 0;
-    _parse_list(p, follow_then(FOLLOW_MASK_0, 1, follow));
+    _parse_list(p, follow_then(FOLLOW_MASK_0, 8, follow));
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
 }
@@ -1631,7 +1631,7 @@ fn _parse_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         opt_scan_pos = pos;
     }
-    if opt_scan_pos >= 0 && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
+    if (opt_scan_pos >= 0) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.site = 1;
         _parse_arm(p);
         loop {
@@ -1679,7 +1679,7 @@ fn _parse_list(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 3;
-    _parse_wrapped(p, follow_then(FOLLOW_MASK_0, 1, follow));
+    _parse_wrapped(p, follow_then(FOLLOW_MASK_0, 8, follow));
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
 }

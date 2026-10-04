@@ -974,17 +974,17 @@ internal fn follow_open_with(cont: i64, open: i64) -> i64 {
     return cont & FOLLOW_CONT_MASK | follow_open_join(follow_open_mark(cont), open);
 }
 
-internal fn follow_then(prefix: i64, positions: i64, cont: i64) -> i64 {
-    return (prefix | (cont & FOLLOW_SEQUENCED) << positions * FOLLOW_SLOT_BITS) & FOLLOW_CONT_MASK;
+internal fn follow_then(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    return (prefix | (cont & FOLLOW_SEQUENCED) << prefix_bits) & FOLLOW_CONT_MASK;
 }
 
-internal fn follow_then_opening(prefix: i64, positions: i64, cont: i64) -> i64 {
-    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_then_opening(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | follow_open_mark(cont);
 }
 
-internal fn follow_or(prefix: i64, positions: i64, alternative: i64) -> i64 {
-    let opened = (alternative | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_or(prefix: i64, prefix_bits: i64, alternative: i64) -> i64 {
+    let opened = (alternative | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | alternative & FOLLOW_OPEN_FIELD;
 }
 
@@ -2772,7 +2772,7 @@ fn _parse_expr_or_assign__inner_alt_0(p: &mut Parser, follow: i64 = 0, vals: Exp
     vals._span_lo_expr = p.pos;
     p.site = 1;
     p.atn_ret_pending = 20;
-    let expr = _parse_expr(p, follow_then(FOLLOW_MASK_0, 1, follow));
+    let expr = _parse_expr(p, follow_then(FOLLOW_MASK_0, 8, follow));
     vals._span_hi_expr = p.pos - 1;
     p.expect(TK_LIT_PLUSPLUS, &EMPTY_SYNC, true);
     if !p.speculating {
@@ -2784,7 +2784,7 @@ fn _parse_expr_or_assign__inner_alt_0(p: &mut Parser, follow: i64 = 0, vals: Exp
 fn scan_expr_or_assign__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(20);
-    pos = scan_expr(tokens, pos, atn, follow_then(FOLLOW_MASK_0, 1, follow));
+    pos = scan_expr(tokens, pos, atn, follow_then(FOLLOW_MASK_0, 8, follow));
     atn.stack.pop();
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUSPLUS { return -1; }

@@ -974,17 +974,17 @@ internal fn follow_open_with(cont: i64, open: i64) -> i64 {
     return cont & FOLLOW_CONT_MASK | follow_open_join(follow_open_mark(cont), open);
 }
 
-internal fn follow_then(prefix: i64, positions: i64, cont: i64) -> i64 {
-    return (prefix | (cont & FOLLOW_SEQUENCED) << positions * FOLLOW_SLOT_BITS) & FOLLOW_CONT_MASK;
+internal fn follow_then(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    return (prefix | (cont & FOLLOW_SEQUENCED) << prefix_bits) & FOLLOW_CONT_MASK;
 }
 
-internal fn follow_then_opening(prefix: i64, positions: i64, cont: i64) -> i64 {
-    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_then_opening(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | follow_open_mark(cont);
 }
 
-internal fn follow_or(prefix: i64, positions: i64, alternative: i64) -> i64 {
-    let opened = (alternative | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_or(prefix: i64, prefix_bits: i64, alternative: i64) -> i64 {
+    let opened = (alternative | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | alternative & FOLLOW_OPEN_FIELD;
 }
 
@@ -3026,7 +3026,7 @@ fn scan_expression_lr_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follo
             if pos >= tokens.len() || tokens[pos] != TK_AND { break sg_2; }
             pos += 1;
             atn.stack.push(22);
-            pos = scan_expression(tokens, pos, atn, follow_then_opening(FOLLOW_MASK_0, 2, follow), 0);
+            pos = scan_expression(tokens, pos, atn, follow_then_opening(FOLLOW_MASK_0, 16, follow), 0);
             atn.stack.pop();
             if pos < 0 { break sg_2; }
             break sg_2_done;
@@ -3039,7 +3039,7 @@ fn scan_expression_lr_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follo
             sg_3: {
                 pos += 1;
                 atn.stack.push(22);
-                pos = scan_expression(tokens, pos, atn, follow_then_opening(FOLLOW_MASK_0, 2, follow), 0);
+                pos = scan_expression(tokens, pos, atn, follow_then_opening(FOLLOW_MASK_0, 16, follow), 0);
                 atn.stack.pop();
                 if pos < 0 { break sg_3; }
                 break sg_3_done;
@@ -3059,7 +3059,7 @@ fn scan_expression_lr_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follo
             if pos >= tokens.len() || tokens[pos] != TK_OR { break sg_4; }
             pos += 1;
             atn.stack.push(32);
-            pos = scan_expression(tokens, pos, atn, follow_then_opening(FOLLOW_MASK_1, 2, follow), 0);
+            pos = scan_expression(tokens, pos, atn, follow_then_opening(FOLLOW_MASK_1, 16, follow), 0);
             atn.stack.pop();
             if pos < 0 { break sg_4; }
             break sg_4_done;
@@ -3072,7 +3072,7 @@ fn scan_expression_lr_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follo
             sg_5: {
                 pos += 1;
                 atn.stack.push(32);
-                pos = scan_expression(tokens, pos, atn, follow_then_opening(FOLLOW_MASK_1, 2, follow), 0);
+                pos = scan_expression(tokens, pos, atn, follow_then_opening(FOLLOW_MASK_1, 16, follow), 0);
                 atn.stack.pop();
                 if pos < 0 { break sg_5; }
                 break sg_5_done;
@@ -3141,7 +3141,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                 p.expect(TK_AND, &SYNC_0, false);
                 p.site = 2;
                 p.atn_ret_pending = 22;
-                _parse_expression(p, follow_then_opening(FOLLOW_MASK_0, 2, follow));
+                _parse_expression(p, follow_then_opening(FOLLOW_MASK_0, 16, follow));
             }
             loop {
                 if p.recovering { break; }
@@ -3155,7 +3155,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                             if pos >= tokens.len() || tokens[pos] != TK_AND { break sg_0; }
                             pos += 1;
                             p.atn.stack.push(22);
-                            pos = scan_expression(tokens, pos, &mut p.atn, follow_then_opening(FOLLOW_MASK_0, 2, follow), 0);
+                            pos = scan_expression(tokens, pos, &mut p.atn, follow_then_opening(FOLLOW_MASK_0, 16, follow), 0);
                             p.atn.stack.pop();
                             if pos < 0 { break sg_0; }
                             break sg_0_done;
@@ -3169,7 +3169,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                 p.expect(TK_AND, &SYNC_0, false);
                 p.site = 2;
                 p.atn_ret_pending = 22;
-                _parse_expression(p, follow_then_opening(FOLLOW_MASK_0, 2, follow));
+                _parse_expression(p, follow_then_opening(FOLLOW_MASK_0, 16, follow));
             }
             p.b.finish_node(p.last_end());
         } else if _atn_alt == 1 {
@@ -3179,7 +3179,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                 p.expect(TK_OR, &SYNC_0, false);
                 p.site = 4;
                 p.atn_ret_pending = 32;
-                _parse_expression(p, follow_then_opening(FOLLOW_MASK_1, 2, follow));
+                _parse_expression(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
             }
             loop {
                 if p.recovering { break; }
@@ -3193,7 +3193,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                             if pos >= tokens.len() || tokens[pos] != TK_OR { break sg_1; }
                             pos += 1;
                             p.atn.stack.push(32);
-                            pos = scan_expression(tokens, pos, &mut p.atn, follow_then_opening(FOLLOW_MASK_1, 2, follow), 0);
+                            pos = scan_expression(tokens, pos, &mut p.atn, follow_then_opening(FOLLOW_MASK_1, 16, follow), 0);
                             p.atn.stack.pop();
                             if pos < 0 { break sg_1; }
                             break sg_1_done;
@@ -3207,7 +3207,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                 p.expect(TK_OR, &SYNC_0, false);
                 p.site = 4;
                 p.atn_ret_pending = 32;
-                _parse_expression(p, follow_then_opening(FOLLOW_MASK_1, 2, follow));
+                _parse_expression(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
             }
             p.b.finish_node(p.last_end());
         } else {

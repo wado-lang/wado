@@ -974,17 +974,17 @@ internal fn follow_open_with(cont: i64, open: i64) -> i64 {
     return cont & FOLLOW_CONT_MASK | follow_open_join(follow_open_mark(cont), open);
 }
 
-internal fn follow_then(prefix: i64, positions: i64, cont: i64) -> i64 {
-    return (prefix | (cont & FOLLOW_SEQUENCED) << positions * FOLLOW_SLOT_BITS) & FOLLOW_CONT_MASK;
+internal fn follow_then(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    return (prefix | (cont & FOLLOW_SEQUENCED) << prefix_bits) & FOLLOW_CONT_MASK;
 }
 
-internal fn follow_then_opening(prefix: i64, positions: i64, cont: i64) -> i64 {
-    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_then_opening(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
+    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | follow_open_mark(cont);
 }
 
-internal fn follow_or(prefix: i64, positions: i64, alternative: i64) -> i64 {
-    let opened = (alternative | FOLLOW_OPENS_BIT) << positions * FOLLOW_SLOT_BITS;
+internal fn follow_or(prefix: i64, prefix_bits: i64, alternative: i64) -> i64 {
+    let opened = (alternative | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | alternative & FOLLOW_OPEN_FIELD;
 }
 
@@ -3114,7 +3114,7 @@ fn scan_pe_lr_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 =
             if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { break sg_1; }
             pos += 1;
             atn.stack.push(99);
-            pos = scan_pe(tokens, pos, atn, follow_then_opening(FOLLOW_MASK_2, 2, follow), 0);
+            pos = scan_pe(tokens, pos, atn, follow_then_opening(FOLLOW_MASK_2, 16, follow), 0);
             atn.stack.pop();
             if pos < 0 { break sg_1; }
             break sg_1_done;
@@ -3127,7 +3127,7 @@ fn scan_pe_lr_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 =
             sg_2: {
                 pos += 1;
                 atn.stack.push(99);
-                pos = scan_pe(tokens, pos, atn, follow_then_opening(FOLLOW_MASK_2, 2, follow), 0);
+                pos = scan_pe(tokens, pos, atn, follow_then_opening(FOLLOW_MASK_2, 16, follow), 0);
                 atn.stack.pop();
                 if pos < 0 { break sg_2; }
                 break sg_2_done;
@@ -3419,7 +3419,7 @@ fn _parse_se(p: &mut Parser, min_prec: i32 = 0) -> () {
 fn _parse_plus__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 9;
     p.atn_ret_pending = 81;
-    _parse_pe(p, follow_then(FOLLOW_MASK_0, 1, follow));
+    _parse_pe(p, follow_then(FOLLOW_MASK_0, 8, follow));
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
 }
@@ -3470,7 +3470,7 @@ fn _parse_pe__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
                 p.expect(TK_LIT_PLUS, &SYNC_4, false);
                 p.site = 11;
                 p.atn_ret_pending = 99;
-                _parse_pe(p, follow_then_opening(FOLLOW_MASK_2, 2, follow));
+                _parse_pe(p, follow_then_opening(FOLLOW_MASK_2, 16, follow));
             }
             loop {
                 if p.recovering { break; }
@@ -3484,7 +3484,7 @@ fn _parse_pe__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
                             if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { break sg_0; }
                             pos += 1;
                             p.atn.stack.push(99);
-                            pos = scan_pe(tokens, pos, &mut p.atn, follow_then_opening(FOLLOW_MASK_2, 2, follow), 0);
+                            pos = scan_pe(tokens, pos, &mut p.atn, follow_then_opening(FOLLOW_MASK_2, 16, follow), 0);
                             p.atn.stack.pop();
                             if pos < 0 { break sg_0; }
                             break sg_0_done;
@@ -3498,7 +3498,7 @@ fn _parse_pe__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
                 p.expect(TK_LIT_PLUS, &SYNC_4, false);
                 p.site = 11;
                 p.atn_ret_pending = 99;
-                _parse_pe(p, follow_then_opening(FOLLOW_MASK_2, 2, follow));
+                _parse_pe(p, follow_then_opening(FOLLOW_MASK_2, 16, follow));
             }
             p.b.finish_node(p.last_end());
         } else {
@@ -3527,7 +3527,7 @@ fn _parse_pe(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
 fn _parse_range__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 12;
     p.atn_ret_pending = 106;
-    _parse_re(p, follow_then(FOLLOW_MASK_0, 1, follow));
+    _parse_re(p, follow_then(FOLLOW_MASK_0, 8, follow));
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
 }
@@ -3585,7 +3585,7 @@ fn _parse_re__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
                     if pos < 0 { break opt_scan; }
                     opt_scan_pos = pos;
                 }
-                if opt_scan_pos >= 0 && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
+                if (opt_scan_pos >= 0) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
                     p.site = 14;
                     p.atn_ret_pending = 123;
                     _parse_re(p, follow);
