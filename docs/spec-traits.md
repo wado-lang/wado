@@ -475,6 +475,103 @@ test {
 
 Here `Builder` must implement `CollectionBuilder` with matching `Element` and `Output` types. The `Type = ConcreteType` syntax constrains associated types of the bound trait to specific types.
 
+### Generic Associated Types
+
+An associated type may declare type parameters of its own. It then names a
+family of types, one for each list of arguments. A projection supplies the
+arguments: `S::Buf<i32>` and `Self::Buf<E>`.
+
+<!-- {"fixture":"generic_assoc_type.wado","assert":false} -->
+
+```wado
+trait Store with () {
+    type Buf<E>;
+
+    fn filled<E>(&self, n: i32, value: E) -> Self::Buf<E>;
+    fn count<E>(&self, buf: &Self::Buf<E>) -> i32;
+}
+
+struct Lists {}
+
+impl Store for Lists {
+    type Buf<E> = List<E>;
+
+    fn filled<E>(&self, n: i32, value: E) -> List<E> {
+        return List::<E>::filled(n, value);
+    }
+
+    fn count<E>(&self, buf: &List<E>) -> i32 {
+        return buf.len();
+    }
+}
+```
+
+A projection writes as many arguments as the associated type declares, so
+`S::Buf` alone names no type. Two projections of one associated type off one
+type parameter are one type exactly when their arguments are, so a call infers
+`E` from `S::Buf<i32>`:
+
+<!-- {"fixture":"generic_assoc_type.wado"} -->
+
+```wado
+fn both<S: Store>(s: &S) -> [S::Buf<i32>, S::Buf<String>] {
+    return [s.filled(2, 7), s.filled(3, "x")];
+}
+
+fn total<S: Store>(s: &S) -> i32 {
+    let [ints, strs] = both(s);
+    return s.count(&ints) + s.count(&strs);
+}
+
+test "a projection's arguments pick the member of the family" {
+    let l = Lists {};
+    let [ints, strs] = both(&l);
+    assert ints == [7, 7] as List<i32>;
+    assert strs == ["x", "x", "x"] as List<String>;
+}
+```
+
+An impl binds the family with the parameters the trait declares: as many, and
+each with the bounds the trait gives the parameter at that position. The names
+are the impl's own. Each parameter is a plain type parameter. A pack, an effect
+parameter, or a default is an error, since a projection writes one type per
+parameter.
+
+A bound on a parameter (`type Buf<E: Elem>`) is in scope in the impl's binding,
+and every projection's argument must satisfy it. A bound on the associated type
+itself (`type Buf<E: Elem>: Len`) holds of every member of the family. The
+impl's binding must satisfy it under the parameter bounds alone, and a generic
+body relies on it:
+
+<!-- {"fixture":"generic_assoc_type_bounds.wado"} -->
+
+```wado
+trait Store with () {
+    type Buf<E: Elem>: Len;
+
+    fn hold<E: Elem>(&self, items: List<E>) -> Self::Buf<E>;
+}
+
+struct Weigher {}
+
+impl Store for Weigher {
+    type Buf<E: Elem> = Weighed<E>;
+
+    fn hold<E: Elem>(&self, items: List<E>) -> Weighed<E> {
+        return Weighed { items };
+    }
+}
+
+fn measure<S: Store, E: Elem>(s: &S, items: List<E>) -> i32 {
+    let held: S::Buf<E> = s.hold(items);
+    return held.len();
+}
+
+test "the type's own bound answers for each member of the family" {
+    assert measure(&Weigher {}, [3, 4] as List<i32>) == 7;
+}
+```
+
 ### Blanket Implementations
 
 A blanket impl provides a trait implementation for all types that satisfy a given bound:

@@ -226,7 +226,7 @@ traitMember
     ;
 
 traitMemberBody
-    : 'type' name (':' traitBounds)? ';'
+    : 'type' name genericParams? (':' traitBounds)? ';'
     | functionDecl
     ;
 
@@ -239,7 +239,7 @@ implMember
     ;
 
 implMemberBody
-    : 'type' name '=' typeRef ';'
+    : 'type' name genericParams? '=' typeRef ';'
     | '..' ('trap' | 'forward')
     | 'export' 'async'? 'fn' funcSig
     | ('pub' | 'internal')? implPubMember

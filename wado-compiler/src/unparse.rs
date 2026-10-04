@@ -3,11 +3,11 @@
 // Converts AST back to canonical source code with comments.
 
 use crate::ast::{
-    AssertStmt, AssignExpr, AssociatedConst, AstId, AstVisitor, AttrArg, AttrItem, AttrObject,
-    AttrValue, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr,
-    CastExpr, ChainedComparison, ClosureExpr, ComparisonChainExpr, CompoundAssignExpr,
-    CompoundAssignOp, Condition, ConditionElement, EnumCase, EnumDecl, Expr, ExprStmt,
-    FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function, FunctionType, GenericParam,
+    AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeDecl, AstId, AstVisitor, AttrArg,
+    AttrItem, AttrObject, AttrValue, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt,
+    BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison, ClosureExpr, ComparisonChainExpr,
+    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, EnumCase, EnumDecl, Expr,
+    ExprStmt, FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function, FunctionType, GenericParam,
     GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute,
     InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt, Literal, LiteralMember,
     LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, Newtype, Param, Pattern,
@@ -4180,6 +4180,18 @@ pub fn unparse_trait_header(t: &TraitDecl) -> String {
         unparse_trait_bounds_into(&t.supertraits, &mut out);
     }
     unparse_trait_head_into(&t.head, &mut out);
+    out
+}
+
+/// A trait's associated type as declared, without `type` or the `;`:
+/// `Buf<E: Elem>: Len`.
+pub fn unparse_assoc_type_decl(decl: &AssociatedTypeDecl) -> String {
+    let mut out = decl.name.clone();
+    unparse_generic_params_into(&decl.type_params, &mut out);
+    if !decl.bounds.is_empty() {
+        out.push_str(": ");
+        unparse_trait_bounds_into(&decl.bounds, &mut out);
+    }
     out
 }
 
