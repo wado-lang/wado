@@ -1858,6 +1858,15 @@ test "ZonedDateTime deserializes a number through the Instant visitor, in UTC" {
     assert from_string::<ZonedDateTime>("{}") matches { Err(_) };
 }
 
+test "a duration led by microseconds renders from the seconds component" {
+    assert `${Duration { microseconds: 5 }}` == "PT0.000005S";
+}
+
+#[expect_trap]
+test "ZonedDateTime::new refuses text that is no zone identifier" {
+    let _ = ZonedDateTime::new(Instant::EPOCH, "!");
+}
+
 #[expect_trap]
 test "a duration component of i64::MIN, which has no negation, traps" {
     let _ = Duration { nanoseconds: i64::MIN }.negated();
