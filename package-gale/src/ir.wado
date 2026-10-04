@@ -901,8 +901,8 @@ pub struct AltAction {
     pub before_index: i32,
 }
 
-/// Push every action and predicate written in `alt`, nested blocks included,
-/// in source order.
+/// Push every action and predicate written in `alt`: its own, then those in
+/// the blocks nested in its elements.
 pub fn push_alt_actions(alt: &Alternative, out: &mut List<&AltAction>) {
     for let a of &alt.actions {
         out.push(a);

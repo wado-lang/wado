@@ -614,10 +614,10 @@ pub fn negate_cond<S: AsStrSlice>(cond: S) -> String {
     let c = cond.to_string();
     let mut chars: List<char> = c.chars().collect();
     let n = chars.len();
-    if operand_end(&chars, 0) == n {
+    let lhs = operand_end(&chars, 0);
+    if lhs == n {
         return if chars[0] == '!' { collect_range(&chars, 1, n) } else { `!${c}` };
     }
-    let lhs = operand_end(&chars, 0);
     if is_equality_at(&chars, lhs) && operand_end(&chars, lhs + 4) == n {
         chars[lhs + 1] = if chars[lhs + 1] == '=' { '!' } else { '=' };
         return collect_range(&chars, 0, n);
