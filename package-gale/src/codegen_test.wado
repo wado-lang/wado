@@ -2849,7 +2849,7 @@ WS : [ \\t\\r\\n]+ -> skip ;
 ");
     assert out.contains("let _sd_p_0 = "), `the grammar must reach a tournament: ${out}`;
     assert !out.contains("else { -1 }"), `the gate is tested twice: ${out}`;
-    assert out.contains("if !(gate.no_struct == 0) { return -1; }"), `the candidate scan tests the gate: ${out}`;
+    assert out.contains("if gate.no_struct != 0 { return -1; }"), `the candidate scan tests the gate: ${out}`;
 }
 
 test "a single-token rule with a gated alternative keeps the gate in its scan" {
@@ -2897,7 +2897,7 @@ global STRATEGY_MARKERS: List<StrategyMarker> = [
     },
     StrategyMarker {
         reported: "lookahead-aware: the inner can eat",
-        emitted: "let mut accept_",
+        emitted: "let mut la_end_",
     },
     StrategyMarker {
         reported: "non-greedy: min-match loop",

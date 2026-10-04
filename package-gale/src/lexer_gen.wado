@@ -3411,9 +3411,8 @@ fn lexer_element_can_consume_simple(elem: &LexerElement) -> bool {
 /// Emit a greedy `Plus` / `Star` whose inner can consume the suffix's
 /// first character, in single-pass forward DFA style. At every
 /// position where the loop could stop, the suffix is peeked, and
-/// `accept_<id>` keeps the stop through which the rule reaches furthest;
-/// once the inner stops matching the cursor moves to where the suffix peeked
-/// from that stop ended. This is the standard lexer
+/// `la_end_<id>` keeps the furthest the rule reaches through any stop;
+/// once the inner stops matching the cursor moves there. This is the standard lexer
 /// longest-match algorithm (NFA→DFA with accept-state tracking),
 /// performed without any try-fail-retry backtracking.
 ///
@@ -3435,17 +3434,18 @@ fn gen_lexer_repeat_lookahead_aware<S: AsStrSlice>(
     replay: bool,
 ) {
     let id = w.next_id();
-    let accept_var = `accept_${id}`;
-    let reach_var = `la_reach_${id}`;
+    let reach_var = `la_end_${id}`;
+    // Which stop won only matters to the replay walk, which re-runs up to it.
+    let accept_var: Option<String> = if replay { Option::Some(`accept_${id}`) } else { null };
     let loop_label = `la_rep_${id}`;
     // The scan settles where the loop stops, so on the replay path it evaluates
     // the predicates the match evaluated (`probe_ea`); the walk below does not.
     let pea = probe_ea(replay, ea);
 
-    if replay {
+    if let Some(accept) = &accept_var {
         w.line(`let la_start_${id} = pos;`);
+        w.line(`let mut ${accept}: i32 = -1;`);
     }
-    w.line(`let mut ${accept_var}: i32 = -1;`);
     w.line(`let mut ${reach_var}: i32 = -1;`);
 
     // Plus: the first iteration is mandatory and may not be skipped.
@@ -3460,7 +3460,7 @@ fn gen_lexer_repeat_lookahead_aware<S: AsStrSlice>(
 
     // Forward scan: every stop the loop reaches peeks the suffix, zero
     // iterations included, and once the inner can no longer match the cursor
-    // resumes from the stop `accept_<id>` kept. The suffix is emitted at this
+    // ends where the suffix from the best stop reached. The suffix is emitted at this
     // one peek site, so nested lookahead-aware repeats grow the matcher
     // linearly rather than doubling it per nesting level.
     w.begin("loop");
@@ -3478,48 +3478,50 @@ fn gen_lexer_repeat_lookahead_aware<S: AsStrSlice>(
     w.line("break;");
     w.end();
 
-    w.begin(`if ${accept_var} < 0`);
+    w.begin(`if ${reach_var} < 0`);
     w.line(`${fail_action};`);
     w.end();
 
-    if replay {
+    if let Some(accept) = &accept_var {
         // The accept position alone says how many iterations the match kept.
         assert lexer_element_one_path(&rep.element), "a lookahead-aware repeat's inner matches each iteration along one path";
         w.line(`pos = la_start_${id};`);
-        gen_lexer_replay_to(w, &rep.element, inner, all_rules, &accept_var, ci, hm);
+        gen_lexer_replay_to(w, &rep.element, inner, all_rules, accept, ci, hm);
         gen_lexer_alt_seq(w, alt, plan, from, all_rules, fail_action, ci, ea, hm, /*replay=*/ true);
         return;
     }
-    // The peek that kept `accept_var` matched the suffix from there to
-    // `reach_var`, predicates included, and with no actions to run that match
-    // is the commit.
+    // The winning peek matched the suffix through to `reach_var`, predicates
+    // included, and with no actions to run that match is the commit.
     w.line(`pos = ${reach_var};`);
 }
 
-/// Peek the suffix from where a lookahead-aware repeat could stop, and keep
-/// this stop in `accept_var` when the rule reaches at least as far through it
-/// as through any earlier one. Maximal munch is over the whole rule: the latest
-/// stop is not the furthest reach once the suffix can match empty (`[0-9_]*
-/// ('_' 'u8')?` on `255_u8` stops at `255`, not `255_`). A tie keeps the later
-/// stop, which is the greedy loop's preference.
-fn gen_lexer_repeat_stop_peek<S: AsStrSlice, S1: AsStrSlice>(
+/// Peek the suffix from where a lookahead-aware repeat could stop, and keep its
+/// end in `reach_var` (this stop in `accept_var`, where given) when the rule
+/// reaches at least as far through it as through any earlier one. Maximal
+/// munch is over the whole rule: the latest stop is not the furthest reach once
+/// the suffix can match empty (`[0-9_]* ('_' 'u8')?` on `255_u8` stops at
+/// `255`, not `255_`). A tie keeps the later stop, which is the greedy loop's
+/// preference.
+fn gen_lexer_repeat_stop_peek(
     w: &mut CodeWriter,
     alt: &LexerAlternative,
     plan: &LexerSeqPlan,
     from: i32,
     all_rules: &List<LexerRule>,
-    accept_var: S,
-    reach_var: S1,
+    accept_var: &Option<String>,
+    reach_var: &String,
     ci: bool,
     ea: bool,
     hm: bool,
 ) {
     let tot = `la_tot_${w.next_id()}`;
     w.line(`let mut ${tot}: i32 = -1;`);
-    gen_lexer_suffix_peek(w, alt, plan, from, all_rules, &tot, ci, ea, hm, /*record_end=*/ true);
-    w.begin(`if ${tot} >= 0 && ${tot} >= ${reach_var}`);
-    w.line(`${reach_var} = ${tot};`);
-    w.line(`${accept_var} = pos;`);
+    gen_lexer_suffix_peek(w, alt, plan, from, all_rules, &tot, ci, ea, hm);
+    w.begin(`if ${tot} >= 0 && ${tot} >= ${*reach_var}`);
+    w.line(`${*reach_var} = ${tot};`);
+    if let Some(accept) = accept_var {
+        w.line(`${*accept} = pos;`);
+    }
     w.end();
 }
 
@@ -3604,7 +3606,6 @@ fn gen_lexer_alts_lookahead_aware<S: AsStrSlice>(
         ci,
         probe_ea(replay, ea),
         hm,
-        /*record_end=*/ true,
     );
     // Strict `>` over arms in source order gives ANTLR4's tie-break.
     w.begin(`if la_tot_${id} > la_reach_${id}`);
@@ -3634,57 +3635,40 @@ fn gen_lexer_alts_lookahead_aware<S: AsStrSlice>(
     w.end();
 }
 
-/// Emit a save / try-suffix / restore block that records a position in
-/// `accept_var` iff the suffix would match starting here. Pos is restored
-/// unconditionally so the surrounding forward scan continues without
-/// committing the peeked suffix.
+/// Emit a save / try-suffix / restore block that sets `end_var` to where the
+/// suffix ends when it matches from here: how far the whole rule reaches
+/// through this point. Pos is restored unconditionally, so the surrounding scan
+/// continues without consuming the peeked suffix.
 ///
-/// The suffix is the sequence's own steps from `from`, predicates included,
-/// which is also what the commit runs: what a peek proves is what the commit
-/// then does, and neither can pick a strategy the sequence would not have.
-///
-/// `record_end` picks which position: a repeat wants where the suffix would
-/// START, to resume its cursor there; an alternation wants where it would END,
-/// which is how far the whole rule reaches through the arm being scored.
+/// The suffix is the sequence's own steps from `from`, predicates included, so
+/// the peek cannot pick a strategy the sequence would not have; off the replay
+/// path its end is where the sequence ends.
 fn gen_lexer_suffix_peek<S: AsStrSlice>(
     w: &mut CodeWriter,
     alt: &LexerAlternative,
     plan: &LexerSeqPlan,
     from: i32,
     all_rules: &List<LexerRule>,
-    accept_var: S,
+    end_var: S,
     ci: bool,
     ea: bool,
     hm: bool,
-    record_end: bool = false,
 ) {
     let id = w.next_id();
     let save_var = `peek_save_${id}`;
-    let matched_var = `peek_ok_${id}`;
-    let end_var = `peek_end_${id}`;
     let label = `peek_${id}`;
     w.line(`let ${save_var} = pos;`);
     if lexer_suffix_always_matches(alt, plan, from) {
         gen_lexer_alt_seq(w, alt, plan, from, all_rules, "unreachable()", ci, ea, hm, /*replay=*/ false);
-        w.line(`${accept_var} = ${if record_end { "pos" } else { save_var }};`);
+        w.line(`${end_var} = pos;`);
         w.line(`pos = ${save_var};`);
         return;
     }
-    w.line(`let mut ${matched_var} = false;`);
-    if record_end {
-        w.line(`let mut ${end_var}: i32 = -1;`);
-    }
     w.begin(`${label}:`);
     gen_lexer_alt_seq(w, alt, plan, from, all_rules, `break ${label}`, ci, ea, hm, /*replay=*/ false);
-    if record_end {
-        w.line(`${end_var} = pos;`);
-    }
-    w.line(`${matched_var} = true;`);
+    w.line(`${end_var} = pos;`);
     w.end();
     w.line(`pos = ${save_var};`);
-    w.begin(`if ${matched_var}`);
-    w.line(`${accept_var} = ${if record_end { end_var } else { save_var }};`);
-    w.end();
 }
 
 /// Whether the steps of `alt` from `from` on match wherever they start: greedy

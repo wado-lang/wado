@@ -346,7 +346,7 @@ pub struct GenContext {
 /// grammar rather than from registration, so a condition rendered before its
 /// predicate is registered names the same fn.
 fn predicate_fn_owners(parser_rules: &List<ParserRule>) -> GaleMap<i32, i32> {
-    let mut actions: List<AltAction> = [];
+    let mut actions: List<&AltAction> = [];
     for let rule of parser_rules {
         for let alt of &rule.alternatives {
             push_alt_actions(alt, &mut actions);

@@ -903,16 +903,16 @@ pub struct AltAction {
 
 /// Push every action and predicate written in `alt`, nested blocks included,
 /// in source order.
-pub fn push_alt_actions(alt: &Alternative, out: &mut List<AltAction>) {
+pub fn push_alt_actions(alt: &Alternative, out: &mut List<&AltAction>) {
     for let a of &alt.actions {
-        out.push(*a);
+        out.push(a);
     }
     for let e of &alt.elements {
         push_element_actions(e, out);
     }
 }
 
-fn push_element_actions(elem: &Element, out: &mut List<AltAction>) {
+fn push_element_actions(elem: &Element, out: &mut List<&AltAction>) {
     match elem {
         Group(g) => {
             for let alt of &g.alternatives {

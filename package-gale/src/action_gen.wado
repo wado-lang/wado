@@ -17,7 +17,7 @@ use {
 use { DiagnosticKind, DiagnosticOwner, DiagnosticSite, LoweredGrammar, Op, Rule, RuleCallOp } from "./gir.wado";
 use { GenContext, RuleCaptures } from "./gen_context.wado";
 use { GaleMap } from "./gale_map.wado";
-use { elements_match, follow_forward_args, negate_cond, to_snake_case } from "./gen_util.wado";
+use { and_operand, elements_match, follow_forward_args, negate_cond, to_snake_case } from "./gen_util.wado";
 use { CallForm, CallStmt, CodeWriter, FnSpec, ImplSpec, ParamSpec, wado } from "lib:wadopoet";
 use {
     AmbiguousNode,
@@ -332,7 +332,7 @@ fn collect_rule_action_ids(rule: &ParserRule, out: &mut List<i32>) {
     if let Some(a) = &rule.after_action {
         out.push(a.action_id);
     }
-    let mut actions: List<AltAction> = [];
+    let mut actions: List<&AltAction> = [];
     for let alt of &rule.alternatives {
         push_alt_actions(alt, &mut actions);
     }
@@ -1071,18 +1071,10 @@ pub fn emit_alt_exit(w: &mut CodeWriter, ctx: &GenContext) {
     w.line(if emits_vals { `break ${label}: vals;` } else { `break ${label};` });
 }
 
-/// Join predicate conditions into one short-circuit `(c0) && (c1)` guard.
+/// Join predicate conditions into one short-circuit `c0 && c1` guard, each
+/// parenthesized only where `&&` would bind to part of it.
 pub fn join_gate_conds(conds: &List<String>) -> String {
-    let mut out = String::new();
-    for let mut i = 0; i < conds.len(); i += 1 {
-        if i > 0 {
-            out.push_str(" && ");
-        }
-        out.push('(');
-        out.push_str(&conds[i]);
-        out.push(')');
-    }
-    return out;
+    return conds.iter_ref().map(|c| and_operand(c)).collect().join(" && ");
 }
 
 /// Emit one action body under the identity translator (`language = Wado`):

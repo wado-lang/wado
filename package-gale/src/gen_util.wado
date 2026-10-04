@@ -3,6 +3,7 @@ use { FOLLOW_PARAM, symbol_char_names, char_hex_name } from "./ident.wado";
 use { CodeWriter } from "lib:wadopoet";
 use { unwrap_label } from "./lr_util.wado";
 use { is_id_continue_char } from "./g4/scan.wado";
+use { collect_range } from "./text.wado";
 pub use { escape_ident, escape_case, to_pascal_case, to_snake_case, to_lower } from "./ident.wado";
 
 /// Emit a `// rule visibility: <name> (ignored by codegen, matches ANTLR4)`
@@ -530,14 +531,14 @@ pub fn follow_forward_args() -> String {
 /// element before it.
 pub fn follow_composed<S: AsStrSlice>(prefix: S, positions: i32, opens: bool) -> String {
     let helper = if opens { "follow_then_opening" } else { "follow_then" };
-    return `${helper}(${prefix}, ${positions}, ${FOLLOW_PARAM})`;
+    return `${helper}(${prefix}, ${positions * FOLLOW_SLOT_BITS}, ${FOLLOW_PARAM})`;
 }
 
 /// `prefix` or `alternative`, each read from the gate's position. Unlike the
 /// forwarded half in `follow_composed`, `alternative` is spelled here, so every
 /// reading it opens already begins at the gate and keeps its mark.
 pub fn follow_alternative<S: AsStrSlice, S1: AsStrSlice>(prefix: S, positions: i32, alternative: S1) -> String {
-    return `follow_or(${prefix}, ${positions}, ${alternative})`;
+    return `follow_or(${prefix}, ${positions * FOLLOW_SLOT_BITS}, ${alternative})`;
 }
 
 /// `cont` with one more reading the slots cannot hold, `open` being
@@ -614,12 +615,12 @@ pub fn negate_cond<S: AsStrSlice>(cond: S) -> String {
     let mut chars: List<char> = c.chars().collect();
     let n = chars.len();
     if operand_end(&chars, 0) == n {
-        return if chars[0] == '!' { chars_from(&chars, 1) } else { `!${c}` };
+        return if chars[0] == '!' { collect_range(&chars, 1, n) } else { `!${c}` };
     }
     let lhs = operand_end(&chars, 0);
     if is_equality_at(&chars, lhs) && operand_end(&chars, lhs + 4) == n {
         chars[lhs + 1] = if chars[lhs + 1] == '=' { '!' } else { '=' };
-        return chars_from(&chars, 0);
+        return collect_range(&chars, 0, n);
     }
     return `!(${c})`;
 }
@@ -725,14 +726,6 @@ fn spaced_operator_at(chars: &List<char>, at: i32, first: char, second: char) ->
         && chars[at + 1] == first
         && chars[at + 2] == second
         && chars[at + 3] == ' ';
-}
-
-fn chars_from(chars: &List<char>, from: i32) -> String {
-    let mut s = String::new();
-    for let mut i = from; i < chars.len(); i += 1 {
-        s.push(chars[i]);
-    }
-    return s;
 }
 
 /// The index past the string or char literal opening at `start`, or -1 where
