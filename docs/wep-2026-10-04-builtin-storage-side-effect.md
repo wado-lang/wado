@@ -26,8 +26,8 @@ Two attributes replace the four: `#[storage(...)]` and `#[side_effect(...)]`.
 
 - Every body-less declaration in `core:builtin` carries both.
 - Each appears once on a declaration, and a key appears once in an attribute.
-- Neither takes new syntax. The one grammar change is that an attribute array
-  may hold identifiers as well as strings.
+- The one change to the syntax is that an attribute array may hold identifiers
+  as well as strings.
 
 `#[immediate(...)]` says how an argument is encoded, not what the call does. It
 is not part of this design.
@@ -36,21 +36,21 @@ is not part of this design.
 
 The first argument is one of five values:
 
-| Value          | Meaning                                                          | Example                                                  |
-| -------------- | ---------------------------------------------------------------- | -------------------------------------------------------- |
-| `none`         | The call shares no storage and keeps none                        | `i32_and`, `i32_load`                                    |
-| `fresh`        | The result is new storage and holds nothing it was handed        | `array_new`                                              |
-| `part_of_args` | The result is an argument's storage, or part of it               | `array_get_ref`                                          |
-| `holds_args`   | The result is new storage that holds what the arguments hold     | `select`, `variant_case_construct`, `array_clone_prefix` |
-| `stores_args`  | The call stores what the arguments hold into the `&mut` argument | `array_set`, `array_copy`                                |
+| Value          | Meaning                                                          | Example                                        |
+| -------------- | ---------------------------------------------------------------- | ---------------------------------------------- |
+| `none`         | The call shares no storage and keeps none                        | `i32_and`, `i32_load`                          |
+| `fresh`        | The result is new storage and holds nothing it was handed        | `array_new`                                    |
+| `part_of_args` | The result is an argument's storage, or part of it               | `array_get_ref`, `select`, `black_box`         |
+| `holds_args`   | The result is new storage that holds what the arguments hold     | `variant_case_construct`, `array_clone_prefix` |
+| `stores_args`  | The call stores what the arguments hold into the `&mut` argument | `array_set`, `array_copy`                      |
 
 The attribute names no parameter. The types say which ones it means:
 
 - Only a parameter whose type can carry storage counts. `select`'s `cond: bool`
   and `array_get_ref`'s `idx: i32` do not.
 - The destination of `stores_args` is the one `&mut` parameter.
-- A by-value parameter contributes itself. `select` returns one of its
-  operands, so its result is a new value that holds what the operand holds.
+- A by-value parameter contributes itself. `select` hands back one of its two
+  operands, so its `part_of_args` result may be part of either.
 - A reference parameter contributes what it points to, so `array_copy` stores
   the elements of `src`.
 
@@ -81,8 +81,9 @@ or `write` beside it.
 `builtin::black_box`, which a test or a benchmark uses to keep the work it
 measures from being folded away. The optimizer never deletes, moves or merges
 such a call, and never computes its result from the operand. Its storage is
-still stated, `#[storage(holds_args)]`, because where a value is copied depends
-on what the result holds, not on what the optimizer may assume about it.
+still stated, `#[storage(part_of_args)]`, because where a value is copied
+depends on what the result shares, not on what the optimizer may assume about
+it.
 
 ### Trap Conditions
 
@@ -95,7 +96,7 @@ traps.
 | `outside`  | `[a, …]` | The range does not lie within array `a`        |
 | `at`       | `[p, …]` | Paired with `outside`: the range starts at `p` |
 | `len`      | `p`      | Every range in `outside` has `p` elements      |
-| `unset`    | `a`      | The element read from array `a` holds no value |
+| `unset`    | `a`      | The element of `a` at its `at` holds no value  |
 | `negative` | `p`      | `p` is below zero                              |
 
 `outside` and `at` are arrays of the same length, and the i-th entries pair up.
@@ -103,6 +104,10 @@ Without `at`, every range starts at 0. Without `len`, every range has 1
 element. One key per condition and arrays for the ranges let `array_copy` state
 its two ranges without repeating a key. A single range is written as an array
 too, so a key has one form.
+
+A range lies within `a` only when its start and its length are both
+non-negative and they end at or before `a`'s length, as the Wasm instructions
+read them unsigned. `unset = a` reads the element where `a`'s range starts.
 
 `outside = [a]` also says the call does not replace `a`. Running out of memory
 is not a trap any condition describes.
@@ -134,6 +139,13 @@ pub fn i32_load(addr: i32) -> i32;
 A trap condition that follows from a Wasm instruction is still written in the
 attribute. The alternative is a table inside the compiler, which holds the same
 facts where no reader of the declaration sees them.
+
+### Minted Builtins
+
+A builtin the compiler calls without a source call, such as
+`array_clone_shallow`, is declared in `core:builtin` like any other and carries
+both attributes. A call to a builtin with no declaration is a compiler bug,
+since no other place holds its facts.
 
 ### Canonical Builtins
 
@@ -182,27 +194,33 @@ fact.
 - `at` or `len` in `#[side_effect]` without `outside`, or `outside` and `at`
   arrays of different lengths.
 - A name in a key that is not a parameter of the declaration.
+- `unset` naming an array that is not in `outside`.
 - `outside` or `unset` naming a parameter that is not an array, or `negative`
   or `len` naming one that is not an integer.
 - `len` in `#[storage]` beside a value other than `fresh` or `holds_args`.
 - `stores_args` on a declaration without exactly one `&mut` parameter.
+- `fresh`, `part_of_args` or `holds_args` on a declaration that returns `()`.
+- `part_of_args`, `holds_args` or `stores_args` on a declaration with no
+  parameter that can carry storage.
 
 ## Roadmap
 
 The steps land as one change. Validation comes first, so its errors list every
 declaration still to be written.
 
-- [ ] Accept identifiers in an attribute array.
+- [ ] Accept identifiers in an attribute array, print them back in the
+  formatter, and test both in `tests/format.rs`.
 - [ ] Parse `#[storage]` and `#[side_effect]` into one record per declaration,
   and validate them as Decision says.
-- [ ] Write both attributes on every `core:builtin` declaration, and remove the
-  four old attributes.
+- [ ] Write both attributes on every `core:builtin` declaration, declare every
+  minted builtin there, and remove the four old attributes.
 - [ ] Write both attributes on the declaration of every core Wasm import, and
   derive both from `#[cm(...)]` for the raw call of every Component Model
   import.
 - [ ] Point every reader of `#[result]`, `#[retain]`, `#[trap]`,
   `#[linear_memory]`, and of host calls recognized by `#[canonical]`, at
-  that record.
+  that record. The copy planner's special case for `select` goes with it,
+  since `part_of_args` over every storage parameter states it.
 - [ ] Move the rules into `spec-attributes.md`, replacing the four sections,
   and update what `spec-effects.md` and `spec-memory.md` say about
   `#[retain]` and `#[result]`.
