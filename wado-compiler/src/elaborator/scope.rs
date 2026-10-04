@@ -109,7 +109,7 @@ impl BoundSelf {
 /// impl whose bindings are being resolved, so one naming a sibling written
 /// after it (`type Ints = Self::Buf<i32>;` before `type Buf<E>`) resolves that
 /// one first. One value, so a frame leaving them behind leaves both.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub(super) struct AssocBindings {
     pub(super) resolved: IndexMap<String, TypeId>,
     pub(super) pending: Option<Rc<ImplBindings>>,
@@ -125,9 +125,11 @@ impl AssocBindings {
 
 /// An impl's associated-type bindings and where they are read; see
 /// [`AssocBindings::pending`].
-#[derive(Debug)]
 pub(super) struct ImplBindings {
     pub(super) site: Option<(DefId, FamilySite)>,
+    /// The impl's frame, its bindings left out, which each binding is
+    /// resolved in.
+    pub(super) frame: TraitContext,
     pub(super) bindings: Vec<ast::AssociatedTypeBinding>,
     /// What each is bound to once resolved, shared by every scope the
     /// resolution nests, which each restore their own frame on leaving.
@@ -1052,10 +1054,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         impl_block: &ast::ImplBlock,
     ) -> Vec<(String, TypeId)> {
         let site = self.impl_family_site(impl_block);
+        let mut frame = self.annotate_ctx.trait_ctx.clone();
+        frame.assoc_type_bindings = AssocBindings::default();
         self.annotate_ctx.trait_ctx.assoc_type_bindings = AssocBindings {
             resolved: IndexMap::default(),
             pending: Some(Rc::new(ImplBindings {
                 site,
+                frame,
                 bindings: impl_block.associated_types.clone(),
                 resolved: RefCell::default(),
             })),
@@ -1094,7 +1099,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             {
                 return None;
             }
-            let type_id = self.resolve_assoc_binding(pending.site.as_ref(), binding);
+            // In the impl's frame, whoever names it: an asking binding's own
+            // family parameters are not this one's.
+            let type_id = {
+                let mut impl_frame = self.enter_inherited_type_param_scope();
+                impl_frame.annotate_ctx.trait_ctx = pending.frame.clone();
+                impl_frame.annotate_ctx.trait_ctx.assoc_type_bindings = AssocBindings {
+                    resolved: IndexMap::default(),
+                    pending: Some(Rc::clone(&pending)),
+                };
+                impl_frame.resolve_assoc_binding(pending.site.as_ref(), binding)
+            };
             self.annotate_ctx.impl_binding_stack.shift_remove(name);
             pending
                 .resolved

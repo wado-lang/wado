@@ -2786,6 +2786,7 @@ pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> nam
             written_type_arg(inner, resolutions).with_reference(name::RefKind::Mut)
         }
         ast::Type::Tuple(elems) => name::FqTypeName::tuple(nested(elems)),
+        ast::Type::TypePackSpread(name, _) => name::FqTypeName::pack_spread(name),
         // Spelled by the whole shape, matching the resolved form: the two
         // sides of a lookup have to render one type one way.
         ast::Type::Function(ft) => {

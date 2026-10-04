@@ -739,6 +739,9 @@ pub struct AssocTypeSig {
     /// projection's trait arguments fill. `None` for one the frame binds to no
     /// type.
     pub trait_params: Vec<Option<TypeId>>,
+    /// The default each of [`Self::trait_params`] declares, read in the trait
+    /// frame: `Self` and the parameters before it are its slots.
+    pub trait_param_defaults: Vec<Option<TypeId>>,
     /// The associated type's own parameters, in declaration order.
     pub params: Vec<TypeId>,
     /// The bounds each of [`Self::params`] declares.
@@ -781,13 +784,28 @@ pub enum InstanceKey {
 /// beyond the declared defaults: `impl Add for Cm` and `impl Add<Inch> for Cm`
 /// both give `Output`.
 #[derive(Debug, Clone, Default)]
-struct AssocAnswers(Vec<(Vec<TypeId>, TypeId)>);
+struct AssocAnswers(Vec<AssocAnswer>);
+
+/// One impl's answer: the trait arguments its header writes, which a bare
+/// bound tells apart by their absence, and those with the trait's defaults
+/// filled, which a projection reached at full arguments compares.
+#[derive(Debug, Clone, Default)]
+struct AssocAnswer {
+    written: Vec<TypeId>,
+    filled: Option<Vec<TypeId>>,
+    answer: TypeId,
+}
 
 impl AssocAnswers {
-    fn insert(&mut self, args: Vec<TypeId>, answer: TypeId) {
-        match self.0.iter_mut().find(|(written, _)| *written == args) {
-            Some(slot) => slot.1 = answer,
-            None => self.0.push((args, answer)),
+    fn insert(&mut self, written: Vec<TypeId>, filled: Option<Vec<TypeId>>, answer: TypeId) {
+        let entry = AssocAnswer {
+            written,
+            filled,
+            answer,
+        };
+        match self.0.iter_mut().find(|slot| slot.written == entry.written) {
+            Some(slot) => *slot = entry,
+            None => self.0.push(entry),
         }
     }
 
@@ -799,14 +817,19 @@ impl AssocAnswers {
     }
 
     /// The answer of the impl reached at `trait_args`, where they are known
-    /// and an impl writes exactly them; else [`Self::bare`].
+    /// and an impl's, defaults filled, are exactly them; else [`Self::bare`].
     fn at(&self, table: &TypeTable, trait_args: Option<&[TypeId]>) -> Option<TypeId> {
         trait_args
             .and_then(|wanted| {
                 self.0
                     .iter()
-                    .find(|(written, _)| table.same_types(written, wanted))
-                    .map(|(_, answer)| *answer)
+                    .find(|entry| {
+                        entry
+                            .filled
+                            .as_deref()
+                            .is_some_and(|filled| table.same_types(filled, wanted))
+                    })
+                    .map(|entry| entry.answer)
             })
             .or_else(|| self.bare())
     }
@@ -816,7 +839,19 @@ impl AssocAnswers {
     fn tagged(&self) -> impl Iterator<Item = (bool, TypeId)> + Clone {
         self.0
             .iter()
-            .map(|(args, answer)| (args.is_empty(), *answer))
+            .map(|entry| (entry.written.is_empty(), entry.answer))
+    }
+
+    /// Every type the answers hold: the answers and the arguments filing them.
+    fn types(&self) -> impl Iterator<Item = TypeId> + '_ {
+        self.0.iter().flat_map(|entry| {
+            entry
+                .written
+                .iter()
+                .chain(entry.filled.iter().flatten())
+                .copied()
+                .chain([entry.answer])
+        })
     }
 }
 
@@ -2029,32 +2064,31 @@ impl TypeTable {
             .copied()
     }
 
+    /// Every type the registries answer each associated type with, and the
+    /// trait arguments each answer is filed under, by declaring trait and name.
+    fn registered_answers(&self) -> IndexMap<(DefId, String), Vec<TypeId>> {
+        let concrete = self
+            .assoc_type_resolutions
+            .iter()
+            .map(|(key, answers)| ((key.trait_decl, key.assoc_name.clone()), answers));
+        let generic = self
+            .generic_assoc_type_defs
+            .iter()
+            .map(|(key, answers)| ((key.trait_decl, key.assoc_name.clone()), answers));
+        let mut out: IndexMap<(DefId, String), Vec<TypeId>> = IndexMap::default();
+        for (key, answers) in concrete.chain(generic) {
+            out.entry(key).or_default().extend(answers.types());
+        }
+        out
+    }
+
     /// Remove all type entries whose `TypeId` is not in `keep`. Erased entries
     /// become `None` holes rather than being renumbered away, so surviving ids
     /// keep their indices, and the intern map and secondary indices are rebuilt.
     /// `get(id)` must not panic for a surviving id, so `keep` is implicitly
     /// closed under `redirects` and stale redirect entries are dropped.
-    /// Every type the registries answer `<_ as owning_trait>::assoc_name` with,
-    /// and the trait arguments each answer is filed under.
-    fn registered_answers(&self, owning_trait: DefId, assoc_name: &str) -> Vec<TypeId> {
-        let concrete = self
-            .assoc_type_resolutions
-            .iter()
-            .filter(|(key, _)| key.trait_decl == owning_trait && key.assoc_name == assoc_name)
-            .map(|(_, answers)| answers);
-        let generic = self
-            .generic_assoc_type_defs
-            .iter()
-            .filter(|(key, _)| key.trait_decl == owning_trait && key.assoc_name == assoc_name)
-            .map(|(_, answers)| answers);
-        concrete
-            .chain(generic)
-            .flat_map(|answers| answers.0.iter())
-            .flat_map(|(args, answer)| args.iter().copied().chain([*answer]))
-            .collect()
-    }
-
     pub fn retain(&mut self, keep: &IndexSet<TypeId>) {
+        let registered = self.registered_answers();
         // Implicit closure under `redirects`: every kept id whose `get`
         // result lives at a different id must keep that target alive too.
         let mut effective_keep: IndexSet<TypeId> = keep.clone();
@@ -2120,9 +2154,15 @@ impl TypeTable {
                         components.push(*param_id);
                         components.extend(projection_arguments(args, trait_args));
                         components.extend(assoc_type_bindings.iter().map(|(_, t)| *t));
-                        // What a substitution will answer it with: a family
-                        // an impl binds is reached through no other type.
-                        components.extend(self.registered_answers(*owning_trait, assoc_name));
+                        // What a substitution will answer a family's
+                        // projection with: the binding over the family's own
+                        // parameters, which no instantiated type reaches.
+                        if !args.is_empty()
+                            && let Some(answers) =
+                                registered.get(&(*owning_trait, assoc_name.clone()))
+                        {
+                            components.extend(answers.iter().copied());
+                        }
                     }
                     ResolvedType::Primitive(_)
                     | ResolvedType::Unit
@@ -3561,6 +3601,7 @@ impl TypeTable {
         assoc_name: String,
         resolved_id: TypeId,
     ) {
+        let filled = self.filled_trait_args(&trait_ref, &assoc_name, concrete_id);
         self.assoc_type_resolutions
             .entry(AssocTypeKey {
                 receiver: self.instance_key(concrete_id),
@@ -3568,7 +3609,44 @@ impl TypeTable {
                 assoc_name,
             })
             .or_default()
-            .insert(trait_ref.args, resolved_id);
+            .insert(trait_ref.args, filled, resolved_id);
+    }
+
+    /// `trait_ref`'s arguments with the trait's defaults filled where it
+    /// leaves them out, read with `Self` the `receiver`. `None` where the
+    /// trait's signature for `assoc_name` is not built, or a parameter it
+    /// leaves out has no default.
+    fn filled_trait_args(
+        &mut self,
+        trait_ref: &TraitRef,
+        assoc_name: &str,
+        receiver: TypeId,
+    ) -> Option<Vec<TypeId>> {
+        let sig = Rc::clone(self.assoc_type_sig(trait_ref.decl, assoc_name)?);
+        let slot_of = |table: &Self, param: TypeId| {
+            table
+                .param_slot(param)
+                .expect("a trait frame's parameters are slots")
+        };
+        let mut frame: IndexMap<u32, TypeId> =
+            IndexMap::from_iter([(slot_of(self, sig.self_param), receiver)]);
+        let mut filled = Vec::with_capacity(sig.trait_params.len());
+        for (index, (param, default)) in sig
+            .trait_params
+            .iter()
+            .zip(&sig.trait_param_defaults)
+            .enumerate()
+        {
+            let arg = match trait_ref.args.get(index) {
+                Some(&arg) => arg,
+                None => self.substitute_type_params((*default)?, &frame),
+            };
+            if let Some(param) = param {
+                frame.insert(slot_of(self, *param), arg);
+            }
+            filled.push(arg);
+        }
+        Some(filled)
     }
 
     /// The [`InstanceKey`] of `id`.
@@ -3707,7 +3785,7 @@ impl TypeTable {
                 assoc_name,
             })
             .or_default()
-            .insert(trait_ref.args, type_param_id);
+            .insert(trait_ref.args, None, type_param_id);
     }
 
     /// The generic definition of `assoc_name` on `base_decl`, together with
@@ -3774,16 +3852,23 @@ impl TypeTable {
             .iter()
             .filter(|(key, _)| key.target_decl == base_decl)
             .flat_map(|(key, answers)| {
-                answers.0.iter().map(move |(args, def_id)| {
+                answers.0.iter().map(move |entry| {
                     (
-                        TraitRef::new(key.trait_decl, args.clone()),
+                        TraitRef::new(key.trait_decl, entry.written.clone()),
                         key.assoc_name.clone(),
-                        *def_id,
+                        entry.answer,
                     )
                 })
             })
             .collect();
-        for (trait_ref, assoc_name, def_id) in defs {
+        for (written, assoc_name, def_id) in defs {
+            // The header's arguments are written over the impl's parameters too.
+            let args = written
+                .args
+                .iter()
+                .map(|&arg| self.substitute_type_params(arg, substitution))
+                .collect();
+            let trait_ref = TraitRef::new(written.decl, args);
             let resolved = self.substitute_type_params(def_id, substitution);
             if self.binding_is_concrete(resolved) {
                 self.register_assoc_type_resolution(concrete_id, trait_ref, assoc_name, resolved);

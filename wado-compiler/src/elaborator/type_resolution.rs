@@ -1,5 +1,7 @@
 //! AST Type to `TypeId` resolution.
 
+use std::sync::Arc;
+
 use crate::ast::{AstId, Type};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;
@@ -1238,11 +1240,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         assoc: &str,
         args: &[TypeId],
     ) -> TypeId {
-        let decl = self
-            .tysys
-            .trait_env
+        let trait_env = Arc::clone(&self.tysys.trait_env);
+        let decl = trait_env
             .assoc_type_decl(&owning_trait, assoc)
-            .cloned()
             .expect("the trait a projection is built under declares its associated type");
         assert_eq!(
             args.len(),

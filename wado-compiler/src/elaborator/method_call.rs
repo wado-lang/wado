@@ -251,10 +251,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|param| param.name.clone())
                 .zip(args.iter().copied()),
         );
-        decl.bounds
+        let carried: Vec<ScopedBound> = decl
+            .bounds
             .iter()
             .filter(|bound| {
                 bound.names_a_trait()
+                    && self.tysys.resolutions.bound_decl(bound).is_some()
                     && !bound.type_args.iter().any(|ty| declaring.reads_unknown(ty))
             })
             .map(|bound| {
@@ -264,7 +266,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .retain(|binding| !declaring.reads_unknown(&binding.ty));
                 ScopedBound::new(bound, written_self).in_space(space.clone())
             })
-            .collect()
+            .collect();
+        drop(tt);
+        // The bounds the signature reads in the trait's own frame are these,
+        // which a method's lookup reads as written: both say one set of traits.
+        let read: Vec<Option<DefId>> = carried
+            .iter()
+            .map(|scoped| self.tysys.resolutions.bound_decl(&scoped.bound))
+            .collect();
+        let derived: Vec<Option<DefId>> = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .projection_bounds(ty)
+            .expect("a projection's signature is built before a method is looked up on it")
+            .iter()
+            .map(|bound| Some(bound.decl))
+            .collect();
+        assert_eq!(
+            read, derived,
+            "a projection's bounds read alike as written and as typed"
+        );
+        carried
     }
 
     /// What the call `call` selected through a declared bound, where the walk

@@ -1820,9 +1820,12 @@ impl TypeSystem {
         let slots = ImplParamSlots::of(&header.ty, &header.type_params);
         let at_receiver: Vec<FqTypeName> = {
             let table = self.type_table.borrow();
+            // A pack's slot is where its spread stands in the target, not one
+            // receiver argument, so it stays open.
             let settled: IndexMap<FqTypeName, FqTypeName> = header
                 .type_params
                 .iter()
+                .filter(|param| !param.is_pack)
                 .filter_map(|param| {
                     let &arg = type_args?.get(slots.of_name(&param.name)? as usize)?;
                     (!table.awaits_inference(arg))

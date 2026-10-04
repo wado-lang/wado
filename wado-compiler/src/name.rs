@@ -2970,6 +2970,20 @@ impl FqTypeName {
         })
     }
 
+    /// The pack `name` spread in a tuple (`..T` in `[..T]`): any run of the
+    /// tuple's elements, none included.
+    #[must_use]
+    pub fn pack_spread(name: &str) -> Self {
+        Self::binder(&format!("..{name}"))
+    }
+
+    /// Whether this is a [`Self::pack_spread`].
+    #[must_use]
+    pub fn is_pack_spread(&self) -> bool {
+        self.binder_name()
+            .is_some_and(|name| name.starts_with(".."))
+    }
+
     /// The receiver parameter `name` of the `impl` block `def` declares (`T` in
     /// `impl<T: Bound> Trait for T`). The one way to build this name, so no two
     /// callers can build two.
@@ -3147,13 +3161,34 @@ impl FqTypeName {
         if open(other) {
             return self.reference.starts_with(&other.reference);
         }
-        self.reference == other.reference
-            && self.head == other.head
-            && self.args.len() == other.args.len()
-            && self
-                .args
+        if self.reference != other.reference || self.head != other.head {
+            return false;
+        }
+        // A spread stands for a run of a tuple's elements, so it lines the
+        // two up from both ends.
+        let spread = |name: &FqTypeName| name.args.iter().position(FqTypeName::is_pack_spread);
+        let (with, without) = match (spread(self), spread(other)) {
+            (Some(at), _) => ((self, at), other),
+            (None, Some(at)) => ((other, at), self),
+            (None, None) => {
+                return self.args.len() == other.args.len()
+                    && self
+                        .args
+                        .iter()
+                        .zip(&other.args)
+                        .all(|(a, b)| a.unifies_with(b));
+            }
+        };
+        let ((spread_side, at), plain) = (with, without);
+        let after = spread_side.args.len() - at - 1;
+        plain.args.len() >= at + after
+            && spread_side.args[..at]
                 .iter()
-                .zip(&other.args)
+                .zip(&plain.args[..at])
+                .all(|(a, b)| a.unifies_with(b))
+            && spread_side.args[at + 1..]
+                .iter()
+                .zip(&plain.args[plain.args.len() - after..])
                 .all(|(a, b)| a.unifies_with(b))
     }
 

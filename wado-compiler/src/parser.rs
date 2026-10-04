@@ -3864,7 +3864,7 @@ impl Parser {
                 TokenKind::ColonColon => {
                     // Check if this is turbofish (:: followed by <)
                     // Peek at the token after ::
-                    let checkpoint = self.pos;
+                    let checkpoint = self.checkpoint();
                     self.advance(); // consume ::
                     if self.check(&TokenKind::Lt) {
                         let callee_span = expr.span();
@@ -3927,7 +3927,7 @@ impl Parser {
                         }
                     } else {
                         // Not turbofish, backtrack
-                        self.pos = checkpoint;
+                        self.restore(checkpoint);
                         break;
                     }
                 }

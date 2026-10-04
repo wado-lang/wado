@@ -1049,13 +1049,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let trait_id = self.tysys.resolutions.defs().ast_id(owning_trait);
         let (mut scope, self_param, _) =
             self.enter_trait_frame(trait_id, &header.name, header.span, &header.type_params);
-        let trait_params: Vec<Option<TypeId>> = header
+        let type_params: Vec<&ast::GenericParam> = header
             .type_params
             .iter()
             .filter(|param| param.fills_impl_slot())
+            .collect();
+        let trait_params: Vec<Option<TypeId>> = type_params
+            .iter()
             .map(|param| {
                 let binder = scope.annotate_ctx.trait_ctx.type_params.get(&param.name)?;
                 Some(binder.type_id)
+            })
+            .collect();
+        let trait_param_defaults: Vec<Option<TypeId>> = type_params
+            .iter()
+            .map(|param| {
+                param
+                    .default
+                    .as_ref()
+                    .map(|default| scope.resolve_type(default))
             })
             .collect();
         scope.with_assoc_params(owning_trait, assoc, &decl.type_params, None, |e| {
@@ -1064,6 +1076,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 assoc_name: assoc.to_string(),
                 self_param,
                 trait_params,
+                trait_param_defaults,
                 params: e.family_params(owning_trait, assoc),
                 param_bounds: e.family_param_bounds(owning_trait, assoc, &decl.type_params),
                 bounds: e.trait_refs_of(&decl.bounds),
