@@ -644,19 +644,15 @@ asks the full question of each, and the recursion guard counts the member
 descents to tell a recursive type from an ungrounded cycle. The solver's
 `derive` runs beside it: every declaration is lowered and derived when the
 `Program` is built, and `holds` answers under the differential against
-`type_implements_trait` over every fixture. One receiver the differential skips,
-since only the compiler answers for it: a head the program names without members
-— an anonymous struct, whose shape a literal mints after the `Program` is built,
-and a struct declared in a body, whose fields annotate resolves in that body.
-Such a head reaches a blanket whose bound holds of everything (`Inspect`) or an
-impl written for it, and no `Reflect*` fact or derived impl
-(`trait_local_struct_receiver_blanket.wado`). What is left is the flip:
+`type_implements_trait` over every fixture. A late declaration is stated when
+its members are known. An anonymous struct and a template shape lower as one
+variadic declaration each, their fields the pack's elements, so `derive` reads
+them once for every shape a literal mints. A struct or newtype declared in a
+body is stated when annotate hoists it (`trait_late_declaration_derives.wado`).
+What is left is the flip:
 
 - [ ] Route the derived bodies through what `holds` reports instead of
   `record_bound_driven_synth_request_for`, and retire the member walk.
-- [ ] State a late declaration's members when they are known — an anonymous
-  struct at its literal, a body-local struct at its statement — or lower
-  them as the declaration `derive` reads.
 
 ### Specificity is refused, and now has a named cost
 

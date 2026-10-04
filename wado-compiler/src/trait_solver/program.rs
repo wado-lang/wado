@@ -307,6 +307,10 @@ pub struct Declaration {
     /// How many type parameters the declaration takes; a member may mention
     /// them as [`SolverType::Param`] by position.
     pub params: u32,
+    /// Whether the last parameter is a pack, which a member mentions as
+    /// [`SolverType::Pack`]: a shape's members are its arguments, one tuple
+    /// of them.
+    pub variadic: bool,
     /// Every field of a struct, or every payload of a variant.
     pub members: Vec<SolverType>,
     pub module: ModuleId,
@@ -368,9 +372,16 @@ pub struct Env {
 }
 
 impl Program {
+    /// The id the next [`Self::push_impl`] gives: every id from it on is an
+    /// impl added after this call.
+    #[must_use]
+    pub fn next_impl_id(&self) -> ImplId {
+        ImplId(self.impls.last().map_or(0, |(last, _)| last.0 + 1))
+    }
+
     /// Add one impl at the id after the last.
     pub fn push_impl(&mut self, def: ImplDef) -> ImplId {
-        let id = ImplId(self.impls.last().map_or(0, |(last, _)| last.0 + 1));
+        let id = self.next_impl_id();
         let declared = |p: &SolverType| match p {
             SolverType::Param(index) | SolverType::Pack(index) => {
                 (*index as usize) < def.params.len()

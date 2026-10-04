@@ -1406,10 +1406,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
         // Every declaration is resolved, so the solver reads them all at once.
         // Selection asks it, so it is built in every profile.
-        state.tysys.solver = Some(Rc::new(SolverBridge::build(
+        state.tysys.solver = Some(Rc::new(RefCell::new(SolverBridge::build(
             &state.tysys,
             &state.sorted_sources,
-        )));
+        ))));
 
         // Imported globals: a `use`-brought global's type is the declaring
         // module's declaration fact, so it is filled here — once every decl

@@ -691,7 +691,7 @@ impl TypeSystem {
         // one path that reads arguments (WEP 2026-09-01).
         if !wanted.is_empty()
             && let Some(bridge) = self.solver.as_ref()
-            && let Some(answer) = bridge.answer(self, ctx, scope, type_id, trait_)
+            && let Some(answer) = bridge.borrow().answer(self, ctx, scope, type_id, trait_)
         {
             return answer;
         }
@@ -820,6 +820,7 @@ impl TypeSystem {
         let Some(bridge) = self.solver.as_ref() else {
             return;
         };
+        let bridge = bridge.borrow();
         let Some(actual) = bridge.answer(self, ctx, scope, type_id, trait_) else {
             return;
         };
@@ -2712,7 +2713,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         if self.check_and_register_bound(type_arg, trait_) {
             let tied = self.tysys.solver.as_ref().map_or_else(Vec::new, |bridge| {
-                bridge.tied_through_bound(
+                bridge.borrow().tied_through_bound(
                     &self.tysys,
                     &self.annotate_ctx,
                     &self.type_lookup(),

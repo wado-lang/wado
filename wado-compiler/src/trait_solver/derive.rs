@@ -37,7 +37,7 @@ pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declar
         let id = program.push_impl(ImplDef {
             trait_: Some(trait_),
             trait_args: Vec::new(),
-            target: SolverType::Decl(decl.id, (0..decl.params).map(SolverType::Param).collect()),
+            target: SolverType::Decl(decl.id, decl_params(decl)),
             params: bounds.iter().cloned().map(ParamDef::bounded).collect(),
             origin: ImplOrigin::Derived,
         });
@@ -67,6 +67,19 @@ pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declar
     }
 }
 
+/// The declaration's own parameters, as its derived impl's target spells them.
+fn decl_params(decl: &Declaration) -> Vec<SolverType> {
+    (0..decl.params)
+        .map(|index| {
+            if decl.variadic && index + 1 == decl.params {
+                SolverType::Pack(index)
+            } else {
+                SolverType::Param(index)
+            }
+        })
+        .collect()
+}
+
 /// Whether `def` reaches every instance of its target's head: the target names
 /// a declaration over distinct parameters.
 fn covers_every_instance(def: &ImplDef) -> bool {
@@ -75,7 +88,9 @@ fn covers_every_instance(def: &ImplDef) -> bool {
     };
     let mut seen = IndexSet::default();
     args.iter()
-        .all(|arg| matches!(arg, SolverType::Param(index) if seen.insert(*index)))
+        .all(|arg| {
+            matches!(arg, SolverType::Param(index) | SolverType::Pack(index) if seen.insert(*index))
+        })
 }
 
 /// State the comparison table (spec-traits.md §Derivation Policy) as impls,
@@ -160,6 +175,7 @@ mod tests {
         Declaration {
             id,
             params,
+            variadic: false,
             members,
             module: HERE,
         }
@@ -276,6 +292,23 @@ mod tests {
     fn a_parameter_no_member_mentions_is_unbounded() {
         let d = derived(prelude(), &[declaration(WRAPPER, 1, vec![decl(I32)])]);
         assert_eq!(d[0].params, vec![ParamDef::default()]);
+    }
+
+    /// An anonymous struct's head takes its field types as one tuple, and
+    /// derives `impl<..F: Eq> Eq for Anon<..F>`: a shape answers by its fields.
+    #[test]
+    fn a_variadic_shape_derives_over_each_element_of_its_pack() {
+        let shape = Declaration {
+            variadic: true,
+            ..declaration(WRAPPER, 1, vec![SolverType::Pack(0)])
+        };
+        let mut p = prelude();
+        derive(&mut p, EQ, &[shape]);
+        let of = |elems| SolverType::Decl(WRAPPER, vec![SolverType::Tuple(elems)]);
+        let at = |ty: &SolverType| holds(&p, &Env::default(), ty, EQ, HERE).is_some();
+        assert!(at(&of(vec![decl(I32), decl(I32)])));
+        assert!(at(&of(vec![])));
+        assert!(!at(&of(vec![decl(I32), decl(OPAQUE)])));
     }
 
     /// `struct Node { next: Option<Node> }` reaches itself through a member.

@@ -60,8 +60,9 @@ pub(crate) struct TypeSystem {
     /// The solver's view of the program, built once every declaration is
     /// resolved and `None` until then. Selection asks it in every profile, so
     /// that a debug and a release build cannot choose different impls
-    /// (WEP 2026-09-01).
-    pub(crate) solver: Option<Rc<SolverBridge>>,
+    /// (WEP 2026-09-01). A body's own declarations reach it as annotate
+    /// resolves them, so it is shared mutable state, as the type table is.
+    pub(crate) solver: Option<Rc<RefCell<SolverBridge>>>,
 
     /// Registries the elaborator queries. The Component-Model
     /// `WorldRegistry` is built by the same `CmInterfaceRegistry::build_from_stdlib`
