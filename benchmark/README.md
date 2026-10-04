@@ -273,33 +273,13 @@ reference SQL highlighters:
 Labels here name the highlighter rather than the language: this benchmark is
 about what a browser would run.
 
-<<<<<<< HEAD
-| Implementation                | Throughput |   ms/iter | vs best |
-| ----------------------------- | ---------: | --------: | ------- |
-| **Gale** (Wado)               | 12.33 MB/s |  1.080 ms | 1.00x   |
-| Prism.js                      | 11.36 MB/s |  1.173 ms | 1.09x   |
-| Lezer (CodeMirror)            |  4.65 MB/s |  2.864 ms | 2.65x   |
-| tree-sitter (Rust native)     |  4.46 MB/s |  2.986 ms | 2.76x   |
-| tree-sitter (web-tree-sitter) |  2.71 MB/s |  4.917 ms | 4.55x   |
-| Shiki (JS engine)             |  1.03 MB/s | 12.889 ms | 11.93x  |
-||||||| 1a4af575a31
-| Implementation                | Throughput |   ms/iter | vs best |
-| ----------------------------- | ---------: | --------: | ------- |
-| **Gale** (Wado)               | 13.22 MB/s |  1.007 ms | 1.00x   |
-| Prism.js                      | 12.25 MB/s |  1.088 ms | 1.08x   |
-| Lezer (CodeMirror)            |  5.12 MB/s |  2.602 ms | 2.58x   |
-| tree-sitter (Rust native)     |  4.75 MB/s |  2.804 ms | 2.78x   |
-| tree-sitter (web-tree-sitter) |  2.96 MB/s |  4.505 ms | 4.47x   |
-| Shiki (JS engine)             |  1.10 MB/s | 12.066 ms | 11.98x  |
-=======
 | Implementation                | Throughput |  ms/iter | vs best |
 | ----------------------------- | ---------: | -------: | ------- |
-| **Gale** (Wado)               | 13.22 MB/s | 1.007 ms | 1.00x   |
-| Prism.js                      | 12.25 MB/s | 1.088 ms | 1.08x   |
-| Lezer (CodeMirror)            |  5.12 MB/s | 2.602 ms | 2.58x   |
-| tree-sitter (Rust native)     |  4.75 MB/s | 2.804 ms | 2.78x   |
-| tree-sitter (web-tree-sitter) |  2.96 MB/s | 4.505 ms | 4.47x   |
->>>>>>> origin/main
+| **Gale** (Wado)               | 12.33 MB/s | 1.080 ms | 1.00x   |
+| Prism.js                      | 11.36 MB/s | 1.173 ms | 1.09x   |
+| Lezer (CodeMirror)            |  4.65 MB/s | 2.864 ms | 2.65x   |
+| tree-sitter (Rust native)     |  4.46 MB/s | 2.986 ms | 2.76x   |
+| tree-sitter (web-tree-sitter) |  2.71 MB/s | 4.917 ms | 4.55x   |
 
 Every highlighter parses the corpus without errors: a highlighter that gives up
 on a region skips the work of colouring it, so the constructs two of them
