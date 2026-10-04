@@ -34,15 +34,16 @@ is not part of this design.
 
 ### `#[storage(...)]`
 
-The first argument is one of five values:
+The first argument is one of six values:
 
-| Value          | Meaning                                                          | Example                                        |
-| -------------- | ---------------------------------------------------------------- | ---------------------------------------------- |
-| `none`         | The call shares no storage and keeps none                        | `i32_and`, `i32_load`                          |
-| `fresh`        | The result is new storage and holds nothing it was handed        | `array_new`                                    |
-| `part_of_args` | The result is an argument's storage, or part of it               | `array_get_ref`, `select`, `black_box`         |
-| `holds_args`   | The result is new storage that holds what the arguments hold     | `variant_case_construct`, `array_clone_prefix` |
-| `stores_args`  | The call stores what the arguments hold into the `&mut` argument | `array_set`, `array_copy`                      |
+| Value          | Meaning                                                           | Example                                        |
+| -------------- | ----------------------------------------------------------------- | ---------------------------------------------- |
+| `none`         | The call shares no storage and keeps none                         | `i32_and`, `i32_load`                          |
+| `fresh`        | The result is new storage and holds nothing it was handed         | `array_new`                                    |
+| `part_of_args` | The result is an argument's storage, or part of it                | `array_get_ref`, `select`, `black_box`         |
+| `holds_args`   | The result is new storage that holds what the arguments hold      | `variant_case_construct`, `array_clone_prefix` |
+| `stores_args`  | The call stores what the arguments hold into the `&mut` argument  | `array_set`, `array_copy`                      |
+| `opaque`       | The optimizer assumes nothing about what the call shares or keeps |                                                |
 
 The attribute names no parameter. The types say which ones it means:
 
@@ -55,6 +56,11 @@ The attribute names no parameter. The types say which ones it means:
   operands, so its `part_of_args` result may be part of either.
 - A reference parameter contributes what it points to, so `array_copy` stores
   the elements of `src`.
+
+`opaque` is for a call whose storage the other values cannot state, such as
+one that keeps an argument where neither the result nor a `&mut` parameter
+reaches. Like `opaque` in `#[side_effect]`, it lists nothing, so it stays true
+whatever the call does.
 
 `len = p` says the returned array holds `p` elements. It goes with `fresh` and
 `holds_args`, the two values whose result is new storage.
@@ -69,20 +75,20 @@ The bare identifiers are:
 | `trap`      | The call may trap                                                |
 | `read`      | The call reads linear memory                                     |
 | `write`     | The call writes linear memory                                    |
-| `host`      | The call reaches code the compiler cannot see                    |
+| `opaque`    | The call reaches code the compiler cannot see                    |
 | `hint`      | The call computes nothing, but its position is what it means     |
 | `black_box` | The optimizer may assume nothing about the operand or the result |
 
 A write through a `&mut` parameter is not listed, since the type states it.
 
-`host` lists nothing of what the callee does. The optimizer assumes nothing
+`opaque` lists nothing of what the callee does. The optimizer assumes nothing
 about it, so whatever the callee turns out to do, the attribute stays true.
 
 A fact the attribute leaves out is a fact the call does not have. A call with no
 `trap` never traps. A wrong attribute miscompiles as wrong code does, so
 validation checks the form of an attribute and never second-guesses its facts.
 
-`none`, `host` and `black_box` each stand alone. `black_box` exists for
+`none`, `opaque` and `black_box` each stand alone. `black_box` exists for
 `builtin::black_box`, which a test or a benchmark uses to keep the work it
 measures from being folded away. The optimizer never deletes, moves or merges
 such a call, and never computes its result from the operand. Its storage is
@@ -168,8 +174,9 @@ since no other place holds its facts.
 
 ### Canonical Builtins
 
-A `#[canonical(...)]` builtin is a body-less `core:builtin` declaration like any
-other and carries both attributes. Its name says what it is imported as, not
+A `#[canonical(...)]` declaration in `core:builtin` is a body-less builtin like
+any other and carries both attributes. A `#[canonical("wasm:<path>", …)]`
+declaration the compiler writes for a core Wasm asset follows the next section. Its name says what it is imported as, not
 what the call does.
 
 ### Core Wasm Imports
@@ -177,22 +184,23 @@ what the call does.
 A function imported from a core `.wasm` / `.wat` asset is opaque: the compiler
 sees none of its body. The declaration the compiler writes for it carries both
 attributes: `#[storage(none)]`, since it exchanges only scalars, and
-`#[side_effect(host)]`. `realloc`, an export of the `"mem"` core module,
+`#[side_effect(opaque)]`. `realloc`, an export of the `"mem"` core module,
 carries the same.
 
 ### Component Model Imports
 
-`#[cm(...)]` implies both attributes, and the same values hold for every
-Component Model import. That one rule is why the compiler needs no table to
-answer for them.
+A Component Model import is declared by `#[cm(...)]` on an interface operation,
+a resource method or a world function. The adapter the compiler synthesizes for
+it makes a raw import call, and that raw call carries both attributes, with the
+same values for every import. That one rule is why the compiler needs no table
+to answer for them.
 
-The facts belong to the raw import call inside the synthesized adapter, not to
-the interface operation a program calls. An operation dispatches to a handler
+The facts belong to the raw call, never to the operation a program calls. An operation dispatches to a handler
 when one is installed, and the handler's own body states what it does.
 
 - The adapter lowers every argument to flat scalars and linear memory, and
   lifts the result back. The raw call shares no storage: `#[storage(none)]`.
-- The callee is opaque: `#[side_effect(host)]`. That covers the adapter's
+- The callee is opaque: `#[side_effect(opaque)]`. That covers the adapter's
   stores before the raw call and loads after it, which the optimizer sees on
   both sides.
 
@@ -206,7 +214,7 @@ fact.
   method requirement, or on a declaration carrying `#[cm(...)]`.
 - A second `#[storage]` or `#[side_effect]` on one declaration.
 - A repeated key, or an unknown value, identifier or key.
-- `none`, `host` or `black_box` beside anything else in `#[side_effect]`.
+- `none`, `opaque` or `black_box` beside anything else in `#[side_effect]`.
 - A condition key without `trap`.
 - `at` or `count` without `outside`, or `outside` and `at`
   arrays of different lengths.
@@ -257,9 +265,12 @@ declaration still to be written.
 
 - A Component Model import that passes GC references at the boundary, as
   [WEP: Migration to GC in Components](./wep-2026-03-28-gc-in-components.md)
-  plans, shares storage with what it is handed. `#[cm]` implies
-  `#[storage(none)]` for every import, which is then false.
+  plans, shares storage with what it is handed. The raw call of every import
+  carries `#[storage(none)]`, which is then false.
+- How far a write through a `&mut` parameter reaches is not stated: the
+  referent's own slots, or everything the referent reaches. heap_effect limits
+  an array builtin's write to the array, by the builtin's name.
 - A `&mut` parameter always counts as a write, so `array_get_ref_mut`, which
   only hands out a reference, invalidates what the optimizer knew of the array.
-- A bundled core Wasm asset such as the libm is declared `host`, so a call to it
+- A bundled core Wasm asset such as the libm is declared `opaque`, so a call to it
   is never hoisted, merged or deleted.
