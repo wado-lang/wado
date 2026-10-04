@@ -31,7 +31,8 @@ cargo build --profile profiling --bin wado    # benchmark-oriented
 cargo build --bin wado                        # dev-iteration-oriented
 
 # 2. Record under load with samply (cargo install samply)
-samply record --save-only --rate 1000 -o /tmp/prof.json -- \
+mkdir -p scratchpad   # git-ignored, per worktree
+samply record --save-only --rate 1000 -o scratchpad/prof.json -- \
   target/profiling/wado serve --addr 127.0.0.1:8080 app.wado &
 SAMPLY_PID=$!
 # ... drive load (e.g. oha against benchmark/http_routing) ...
@@ -41,7 +42,7 @@ SAMPLY_PID=$!
 kill -TERM "$(pgrep -P "$SAMPLY_PID" | head -1)"; wait "$SAMPLY_PID"
 
 # 4. Analyze
-node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts /tmp/prof.json
+node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts scratchpad/prof.json
 ```
 
 Symbols resolve against the path the profile recorded, not the binary that
@@ -55,12 +56,12 @@ there is nothing to drive — samply records until the child exits, so
 just invoke it directly:
 
 ```sh
-samply record --save-only --rate 1000 -o /tmp/prof.json -- \
+samply record --save-only --rate 1000 -o scratchpad/prof.json -- \
   target/debug/wado test package-gale/tests/driver_rust_test.wado
 ```
 
 Interactive call tree (and correct kernel symbols):
-`samply load /tmp/prof.json` opens a browser-based call-tree UI. The
+`samply load scratchpad/prof.json` opens a browser-based call-tree UI. The
 CLI analyzer below is for grep-able, transcript-friendly summaries.
 
 The analyzer is a TypeScript script run directly by Node.js (>= 23.6,
@@ -115,20 +116,20 @@ Common invocations:
 
 ```sh
 # Default: top 30, auto-symbolicator
-node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts /tmp/prof.json
+node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts scratchpad/prof.json
 
 # Wider view; force Linux symbolicator even on macOS
 node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts \
-  /tmp/prof.json --top 60 --symbolicator addr2line
+  scratchpad/prof.json --top 60 --symbolicator addr2line
 
 # Profile a different binary, or a copy of `wado` aside for an A/B arm:
 # `--binary` names the file the Rust-only views keep
 node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts \
-  /tmp/prof.json --binary wado-lsp
+  scratchpad/prof.json --binary wado-lsp
 
 # Split one function's inclusive cost by the frames it calls
 node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts \
-  /tmp/prof.json --under 'container_sroa::movers_of'
+  scratchpad/prof.json --under 'container_sroa::movers_of'
 ```
 
 ## Memory
@@ -159,10 +160,10 @@ so the next build does not replace it:
 
 ```sh
 cargo build -p wado-cli --bin wado --no-default-features
-cp target/debug/wado /tmp/wado-sysalloc
-valgrind --tool=dhat --num-callers=40 --dhat-out-file=/tmp/dhat.json \
-  /tmp/wado-sysalloc compile -O2 hello.wado -o /tmp/out.wasm
-node .claude/skills/profiling-wado-compiler/scripts/analyze_dhat.ts /tmp/dhat.json
+cp target/debug/wado scratchpad/wado-sysalloc
+valgrind --tool=dhat --num-callers=40 --dhat-out-file=scratchpad/dhat.json \
+  scratchpad/wado-sysalloc compile -O2 hello.wado -o scratchpad/out.wasm
+node .claude/skills/profiling-wado-compiler/scripts/analyze_dhat.ts scratchpad/dhat.json
 ```
 
 DHAT runs about 10× slower than native. Its default of 12 frames cuts off the

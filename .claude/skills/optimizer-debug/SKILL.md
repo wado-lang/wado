@@ -17,10 +17,13 @@ All three are env-var-driven so they work uniformly across `wado compile`,
 
 ## Quick recipes
 
+The recipes write to `scratchpad/` (git-ignored, per worktree); `mkdir -p
+scratchpad` first.
+
 ### Which pass changed the IR?
 
 ```sh
-WADO_LIST_PASSES=1 cargo run --bin wado --quiet -- compile -O1 file.wado -o /tmp/out.wasm 2>&1 | grep '\[pass\]'
+WADO_LIST_PASSES=1 cargo run --bin wado --quiet -- compile -O1 file.wado -o scratchpad/out.wasm 2>&1 | grep '\[pass\]'
 ```
 
 Prints every pass name in execution order. Lets you correlate the order
@@ -31,10 +34,10 @@ under your `-Ox` choice.
 
 ```sh
 WADO_DUMP_PASS_AFTER=wir/sroa_multi_value_returns \
-  cargo run --bin wado --quiet -- compile -O1 file.wado -o /tmp/out.wasm 2>/tmp/after.log
+  cargo run --bin wado --quiet -- compile -O1 file.wado -o scratchpad/out.wasm 2>scratchpad/after.log
 ```
 
-`/tmp/after.log` holds the full WIR (or NIR, depending on the pass) right
+`scratchpad/after.log` holds the full WIR (or NIR, depending on the pass) right
 after the named pass, framed by `=== WIR after <name> ===` /
 `=== end WIR after <name> ===` (NIR passes use `=== NIR after <name> ===`).
 
@@ -42,7 +45,7 @@ after the named pass, framed by `=== WIR after <name> ===` /
 
 ```sh
 WADO_DUMP_PASS_BEFORE=wir/sroa_multi_value_returns \
-  cargo run --bin wado --quiet -- compile -O1 file.wado -o /tmp/out.wasm 2>/tmp/before.log
+  cargo run --bin wado --quiet -- compile -O1 file.wado -o scratchpad/out.wasm 2>scratchpad/before.log
 ```
 
 Same framing, before the pass runs. `diff` the two logs to see exactly
@@ -54,13 +57,13 @@ The variables accept a comma-separated list:
 
 ```sh
 WADO_DUMP_PASS_AFTER=nir/inline,wir/sroa_multi_value_returns \
-  cargo run --bin wado --quiet -- compile -O1 file.wado -o /tmp/out.wasm 2>/tmp/dump.log
+  cargo run --bin wado --quiet -- compile -O1 file.wado -o scratchpad/out.wasm 2>scratchpad/dump.log
 ```
 
 ### Bisect by skipping a pass
 
 ```sh
-WADO_SKIP_PASS=nir/cse cargo run --bin wado --quiet -- compile -O3 file.wado -o /tmp/out.wasm
+WADO_SKIP_PASS=nir/cse cargo run --bin wado --quiet -- compile -O3 file.wado -o scratchpad/out.wasm
 ```
 
 Same comma-separated list as `WADO_DUMP_PASS_*`, with one extra
@@ -88,7 +91,7 @@ For developer-only messages from inside a pass. The crate denies `eprintln!`,
 so use `compiler_trace!`, which writes to the sink the host installed:
 
 ```sh
-WADO_TRACE=sroa_return cargo run --bin wado --quiet -- compile -O1 file.wado -o /tmp/out.wasm 2>&1 | grep '\[sroa_return\]'
+WADO_TRACE=sroa_return cargo run --bin wado --quiet -- compile -O1 file.wado -o scratchpad/out.wasm 2>&1 | grep '\[sroa_return\]'
 ```
 
 Output is framed `[target] message`. Targets are passed verbatim to
@@ -172,7 +175,7 @@ Walk the pass pipeline like this:
 2. List the passes that run at the failing `-Ox` level:
 
    ```sh
-   WADO_LIST_PASSES=1 cargo run --bin wado --quiet -- compile -O1 fixture.wado -o /tmp/out.wasm 2>&1 | grep '\[pass\]'
+   WADO_LIST_PASSES=1 cargo run --bin wado --quiet -- compile -O1 fixture.wado -o scratchpad/out.wasm 2>&1 | grep '\[pass\]'
    ```
 3. Bisect: pick a pass roughly mid-pipeline, dump after it, and check
    whether the IR is already broken. If it is, the bug is at or before

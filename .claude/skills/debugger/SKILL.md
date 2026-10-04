@@ -22,17 +22,18 @@ cargo build --profile debugger --bin wado
 ## Usage
 
 ```sh
-cat > /tmp/gdb_commands.txt << 'EOF'
+mkdir -p scratchpad   # git-ignored, per worktree
+cat > scratchpad/gdb_commands.txt << 'EOF'
 file ./target/debugger/wado
 set pagination off
 break wado-compiler/src/codegen.rs:5985
-run compile -o /tmp/out.wasm example/hello.wado
+run compile -o scratchpad/out.wasm example/hello.wado
 info locals
 print *expr
 bt 5
 quit
 EOF
-rust-gdb --batch -x /tmp/gdb_commands.txt
+rust-gdb --batch -x scratchpad/gdb_commands.txt
 ```
 
 ## Ask one question per run, not one per build
@@ -77,8 +78,8 @@ block silently truncates the rest of the run — check the tail of the output fo
 file and grep it; the DWO-loading noise otherwise buries the hits:
 
 ```sh
-rust-gdb --batch -x /tmp/gdb_commands.txt > /tmp/gdb.log 2>&1
-grep -a '^\$[0-9]* = ' /tmp/gdb.log | sort -u
+rust-gdb --batch -x scratchpad/gdb_commands.txt > scratchpad/gdb.log 2>&1
+grep -a '^\$[0-9]* = ' scratchpad/gdb.log | sort -u
 ```
 
 ## When a guard beats a breakpoint
