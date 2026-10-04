@@ -17,8 +17,7 @@ All three are env-var-driven so they work uniformly across `wado compile`,
 
 ## Quick recipes
 
-The recipes write to `scratchpad/` (git-ignored, per worktree); `mkdir -p
-scratchpad` first.
+The recipes write to `scratchpad/` (git-ignored, per worktree); `mkdir -p scratchpad` first.
 
 ### Which pass changed the IR?
 

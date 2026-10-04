@@ -46,8 +46,6 @@ deny() {
     exit 0
 }
 
-# An empty list means the skill's format changed under this parser; checking
-# nothing would let every title through unnoticed.
 [[ -n "$types" ]] || deny "pr-conventions.sh parsed no title types from $skill; fix the hook or the skill's list."
 
 cc_regex="^(${types})(\([^)]+\))?!?: .+"
