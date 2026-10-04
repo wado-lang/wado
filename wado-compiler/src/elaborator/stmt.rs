@@ -1422,7 +1422,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .expect("the resolver answers only an immutable global");
                 self.record_reference_to_decl(*id, global, *name_span);
                 Some(PatternConstant {
-                    id: Some(*id),
+                    id: *id,
                     shown: name.clone(),
                     ty,
                 })
@@ -1446,7 +1446,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         MemberOwner::Written(variant_qualifier.as_ref()),
                         variant_name,
                         ImplMemberKind::AssociatedConstant,
-                        *name_id,
+                        Some(*name_id),
                         *span,
                     );
                     // Resolve the const body for its facts; reify inlines it.
@@ -1464,9 +1464,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 let (alias, ty) =
                     self.namespaced_constant(variant_qualifier.as_ref(), variant_name)?;
-                if let Some(id) = *name_id {
-                    self.record_item_reference_by_name(id, &alias);
-                }
+                self.record_item_reference_by_name(*name_id, &alias);
                 Some(PatternConstant {
                     id: *name_id,
                     shown,
@@ -1633,7 +1631,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &Pattern::Variant {
                             variant_name: name.clone(),
                             variant_qualifier: None,
-                            name_id: Some(*id),
+                            name_id: *id,
                             name_span: *name_span,
                             bindings: vec![],
                             span,
@@ -1733,15 +1731,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // namespaced global binds nothing: it matches by value.
                     if let Some(constant) = self.resolve_pattern_constant(pattern, ctx) {
                         self.typecheck(constant.ty, scrutinee_type, *span);
-                        if let Some(id) = constant.id {
-                            self.resolve_constant_pattern(
-                                id,
-                                &constant,
-                                scrutinee_type,
-                                ctx,
-                                *span,
-                            );
-                        }
+                        self.resolve_constant_pattern(
+                            constant.id,
+                            &constant,
+                            scrutinee_type,
+                            ctx,
+                            *span,
+                        );
                         return Vec::new();
                     }
 
@@ -1802,9 +1798,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             enum_info.find_case(normalized_variant_name).cloned()
                         {
                             // Record pattern's case-name identifier -> enum case decl
-                            if let Some(id) = name_id {
-                                self.record_reference_to_def(*id, case_data.ast_id);
-                            }
+                            self.record_reference_to_def(*name_id, case_data.ast_id);
                             // Enum case carries no payload — no binding.
                             return Vec::new();
                         }
@@ -1836,14 +1830,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Record use->def for the variant case name in the pattern
                 // (e.g., `Some` in `Some(x)`). Points at the case declaration's
                 // span so LSP jump-to-def from the pattern lands on the case decl.
-                if let Some(id) = name_id
-                    && let Some(case_ast_id) = self
-                        .tysys
-                        .variant_of_type(scrutinee_type)
-                        .and_then(|info| info.case_named(normalized_variant_name))
-                        .map(|(_, case)| case.ast_id)
+                if let Some(case_ast_id) = self
+                    .tysys
+                    .variant_of_type(scrutinee_type)
+                    .and_then(|info| info.case_named(normalized_variant_name))
+                    .map(|(_, case)| case.ast_id)
                 {
-                    self.record_reference_to_def(*id, case_ast_id);
+                    self.record_reference_to_def(*name_id, case_ast_id);
                 }
 
                 // The cases belong to the structure the scrutinee wraps, so the
@@ -3398,7 +3391,7 @@ pub(super) fn remap_pattern_local(pattern: &mut TirPattern, from: u32, to: u32) 
 /// A constant a pattern names: its name's reference site, how it is written,
 /// and its type.
 struct PatternConstant {
-    id: Option<AstId>,
+    id: AstId,
     shown: String,
     ty: TypeId,
 }

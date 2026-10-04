@@ -387,10 +387,7 @@ pub(super) fn float_range(
 pub(super) fn constant_bound_site(bound: &Pattern) -> (AstId, Span) {
     match bound {
         Pattern::Ident { id, span, .. } | Pattern::MutIdent { id, span, .. } => (*id, *span),
-        Pattern::Variant { name_id, span, .. } => (
-            name_id.expect("the parser gives every name in a pattern a reference site"),
-            *span,
-        ),
+        Pattern::Variant { name_id, span, .. } => (*name_id, *span),
         _ => unreachable!("only a name names a constant"),
     }
 }

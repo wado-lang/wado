@@ -1050,9 +1050,7 @@ pub fn walk_pattern<V: AstVisitor>(v: &mut V, pat: &Pattern) {
             bindings,
             ..
         } => {
-            if let Some(id) = name_id {
-                v.visit_id(*id, *name_span);
-            }
+            v.visit_id(*name_id, *name_span);
             // `Type::CONST` / `Type::Case` in pattern position: the qualifier
             // is a reference site like any written type, so the walk answers
             // for it rather than leaving the consumer to split the spelling
@@ -3691,9 +3689,7 @@ pub enum Pattern {
         /// `AstId` of the variant-name identifier in the pattern. Used to
         /// record use→def references for LSP navigation (cursor on `Some`
         /// inside a match arm jumps to the case's declaration site).
-        /// `None` for elaborator-synthesized patterns that do not originate in
-        /// source (e.g., None-coercion from `null`).
-        name_id: Option<AstId>,
+        name_id: AstId,
         /// Span of the variant-name identifier (not the whole pattern).
         name_span: Span,
         bindings: Vec<Pattern>,

@@ -9179,7 +9179,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// held in the local annotate reserved, matching where the call holds.
     fn compare_constant_by_eq(
         &mut self,
-        pattern_id: Option<AstId>,
+        pattern_id: AstId,
         pattern: TirPattern,
         scrutinee_type: TypeId,
         ctx: &mut FunctionContext,
@@ -9187,7 +9187,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let TirPattern::ConstantValue { expr: constant } = &pattern else {
             return pattern;
         };
-        let Some(dispatch) = pattern_id.and_then(|id| self.ann_operator_dispatch(id)) else {
+        let Some(dispatch) = self.ann_operator_dispatch(pattern_id) else {
             return pattern;
         };
         let span = constant.span;
@@ -9264,12 +9264,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     }
                     if let Some(constant) = self.reify_pattern_constant(pattern, ctx) {
                         let const_pat = self.constant_value_pattern(constant, scrutinee_type);
-                        return self.compare_constant_by_eq(
-                            Some(*id),
-                            const_pat,
-                            scrutinee_type,
-                            ctx,
-                        );
+                        return self.compare_constant_by_eq(*id, const_pat, scrutinee_type, ctx);
                     }
                 }
                 let local_index = ctx.add_local_at(
