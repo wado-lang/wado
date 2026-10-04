@@ -35,7 +35,7 @@ SAMPLY_PID=$!
 kill -TERM "$(pgrep -P "$SAMPLY_PID" | head -1)"; wait "$SAMPLY_PID"
 ```
 
- `samply load` opens the call tree in a browser.
+`samply load` opens the call tree in a browser.
 
 The analyzer weights by CPU, not wall-clock, and reports CPU by library, the
 top self and inclusive frames (all, and `wado` only), syscall and allocator cost
