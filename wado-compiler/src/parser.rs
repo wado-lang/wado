@@ -1356,8 +1356,8 @@ impl Parser {
     /// Parse a comma-separated list of attribute arguments up to the closing
     /// delimiter. Shared between inner attributes (`#![...]`) and outer
     /// attributes (`#[...]`). Does not consume the closing `)`. An array holds
-    /// parameter names where `names_params`, and text everywhere else.
-    fn parse_attr_arg_list(&mut self, names_params: bool) -> ParseResult<Vec<AttrArg>> {
+    /// parameter names where `names`, and text everywhere else.
+    fn parse_attr_arg_list(&mut self, names: bool) -> ParseResult<Vec<AttrArg>> {
         let mut args: Vec<AttrArg> = Vec::new();
         loop {
             // `as_ident_name`, so a contextual keyword can be a key.
@@ -1376,7 +1376,6 @@ impl Parser {
                             }
                             TokenKind::LBracket => {
                                 self.advance();
-                                let names = names_params;
                                 let mut items: Vec<String> = Vec::new();
                                 if !self.check(&TokenKind::RBracket) {
                                     loop {
