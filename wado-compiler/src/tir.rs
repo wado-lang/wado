@@ -23,7 +23,7 @@ use crate::compiler_item::CompilerItems;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{
-    FqTraitName, FqTypeName, LocalMethodName, NEVER_TYPE_NAME, Receiver, RefKind,
+    FqTraitName, FqTypeName, INTERNAL_PREFIX, LocalMethodName, NEVER_TYPE_NAME, Receiver, RefKind,
     TEMPLATE_SHAPE_PREFIX, TypeHead, TypeNameInfo, UNIT_TYPE_NAME, format_type_name,
     mangle_builtin_array_type, mangle_generic_name, mangle_local_item_name, mangle_tuple_type,
 };
@@ -7448,10 +7448,11 @@ pub struct DeclarationLookup<'a> {
 impl<'a> DeclarationLookup<'a> {
     /// The `core:builtin` intrinsic this is, plain or monomorphized. A function
     /// declared anywhere else may share the name, a wasm-asset export included.
+    /// So may a function the compiler mints into `core:builtin` when it is the
+    /// entry, which no source declares.
     pub fn intrinsic(self) -> Option<&'a str> {
-        self.module_source
-            .is_core_builtin()
-            .then(|| self.generic_name.unwrap_or(self.name))
+        let name = self.generic_name.unwrap_or(self.name);
+        (self.module_source.is_core_builtin() && !name.starts_with(INTERNAL_PREFIX)).then_some(name)
     }
 }
 
