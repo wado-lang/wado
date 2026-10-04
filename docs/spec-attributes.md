@@ -730,7 +730,9 @@ other fact:
 - `fresh`, `part_of_args`, `holds_args` or `copies_args` on a declaration that
   returns `()` or `!`.
 - `part_of_args`, `holds_args`, `copies_args` or `stores_args` on a declaration
-  with no parameter that can carry storage.
+  with no parameter that can carry storage. The `&mut` parameter `stores_args`
+  stores into does not count.
+- `none` on a declaration whose result can carry storage.
 
 Rationale: [WEP: Builtin Storage and Side-Effect
 Attributes](./wep-2026-10-04-builtin-storage-side-effect.md).
