@@ -59,8 +59,9 @@ The attribute names no parameter. The types say which ones it means:
 
 `opaque` is for a call whose storage the other values cannot state, such as
 one that keeps an argument where neither the result nor a `&mut` parameter
-reaches. Like `opaque` in `#[side_effect]`, it lists nothing, so it stays true
-whatever the call does.
+reaches. `opaque` in either attribute lists nothing, so it stays true whatever
+the call does. A call into code the compiler cannot see is `opaque` in
+`#[side_effect]`.
 
 `len = p` says the returned array holds `p` elements. It goes with `fresh` and
 `holds_args`, the two values whose result is new storage.
@@ -75,14 +76,11 @@ The bare identifiers are:
 | `trap`      | The call may trap                                                |
 | `read`      | The call reads linear memory                                     |
 | `write`     | The call writes linear memory                                    |
-| `opaque`    | The call reaches code the compiler cannot see                    |
+| `opaque`    | The optimizer assumes nothing about what the call does           |
 | `hint`      | The call computes nothing, but its position is what it means     |
 | `black_box` | The optimizer may assume nothing about the operand or the result |
 
 A write through a `&mut` parameter is not listed, since the type states it.
-
-`opaque` lists nothing of what the callee does. The optimizer assumes nothing
-about it, so whatever the callee turns out to do, the attribute stays true.
 
 A fact the attribute leaves out is a fact the call does not have. A call with no
 `trap` never traps. A wrong attribute miscompiles as wrong code does, so
