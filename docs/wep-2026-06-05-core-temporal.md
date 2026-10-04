@@ -257,10 +257,10 @@ The format specifier's precision is Temporal's `fractionalSecondDigits`: it
 truncates to that many digits, and without one the fraction runs to its last
 non-zero digit.
 
-That string is the serde wire form. An `Instant`'s is RFC 3339 in the years
-0000 to 9999, so there it goes under CBOR's date/time tag 0 (RFC 8949 §3.4.1).
-An expanded year is not RFC 3339, so it goes untagged. A `ZonedDateTime`'s
-carries an annotation tag 0 does not admit, so it goes untagged. JSON emits both bare, and
+That string is the serde wire form. An `Instant` string is RFC 3339 in the
+years 0000 to 9999, so there it goes under CBOR's date/time tag 0 (RFC 8949
+§3.4.1). An expanded year is not RFC 3339, so it goes untagged. A
+`ZonedDateTime` string carries an annotation tag 0 does not admit, so it goes untagged. JSON emits both bare, and
 the rest are plain strings. Deserialization of the two instant-bearing types
 also accepts an epoch-seconds number (tag 1 / JSON number), read as UTC.
 

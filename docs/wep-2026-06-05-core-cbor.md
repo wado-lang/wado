@@ -386,10 +386,10 @@ API above.
 
 Typed timestamps map to [`core:temporal`](./wep-2026-06-05-core-temporal.md):
 
-- Encode: both serialize as their Temporal string. An `Instant`'s is RFC 3339
-  in the years 0000 to 9999, and there CBOR wraps it in the standard date/time
+- Encode: both serialize as their Temporal string. An `Instant` string is RFC
+  3339 in the years 0000 to 9999, and there CBOR wraps it in the standard date/time
   tag 0 (RFC 8949 §3.4.1). An expanded year such as `+275760` is not RFC 3339,
-  so it goes untagged. A `ZonedDateTime`'s carries an RFC 9557 zone annotation,
+  so it goes untagged. A `ZonedDateTime` string carries an RFC 9557 zone annotation,
   which tag 0 does not admit, so it goes untagged. JSON emits both bare.
 - Decode: both accept their string (tag 0 / JSON string) or an epoch-seconds
   number (tag 1 / JSON number, read as UTC). A number outside Temporal's range
