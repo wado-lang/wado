@@ -42,7 +42,7 @@ use crate::elaborator::types::{RequiredTrait, StructFieldInfo, VariantInfo};
 use crate::name::FqTraitName;
 use crate::resolve::{Resolution, Resolutions};
 use crate::synthesis::template::{comparison_written_alone, written_impl_reaches};
-use crate::tir::{AssocTypeSig, SlotProjections, TraitRef};
+use crate::tir::{AssocTypeSig, ProjectionAnswer, SlotProjections, TraitRef};
 use crate::unparse::unparse_generic_params_into;
 
 /// Proof that a bound was asked and answered no. Its field is private here, so
@@ -452,20 +452,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         binding: &ast::AssociatedTypeBinding,
     ) {
         // A header whose trait arguments name no type is reported as such, and
-        // a declared bound reading them has nothing to be compared at.
-        if site.trait_args.is_none() {
-            return;
-        }
-        let declared = self.param_bounds_at(owning_trait, &decl.name, site, &sig.params);
-        let written: Vec<Vec<TraitRef>> =
-            self.with_assoc_params(owning_trait, &decl.name, &binding.type_params, None, |e| {
-                e.family_param_bounds(owning_trait, &decl.name, &binding.type_params)
+        // a declared bound reading them has nothing to be compared at; the
+        // count needs no arguments.
+        let agrees = decl.type_params.len() == binding.type_params.len()
+            && (site.trait_args.is_none() || {
+                let declared = self.param_bounds_at(owning_trait, &decl.name, site, &sig.params);
+                let written: Vec<Vec<TraitRef>> = self.with_assoc_params(
+                    owning_trait,
+                    &decl.name,
+                    &binding.type_params,
+                    None,
+                    |e| e.family_param_bounds(owning_trait, &decl.name, &binding.type_params),
+                );
+                let table = self.tysys.type_table.borrow();
+                let same = |a: &TraitRef, b: &TraitRef| {
+                    a.decl == b.decl && table.same_types(&a.args, &b.args)
+                };
+                declared.iter().zip(&written).all(|(d, w)| {
+                    d.len() == w.len() && d.iter().all(|bound| w.iter().any(|b| same(bound, b)))
+                })
             });
-        let agrees = declared.len() == binding.type_params.len()
-            && declared
-                .iter()
-                .zip(&written)
-                .all(|(d, w)| d.len() == w.len() && d.iter().all(|bound| w.contains(bound)));
         if agrees {
             return;
         }
@@ -2220,31 +2226,68 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// receiver carries the caller's bindings and instantiating the recorded
     /// one would not. A generic associated type's answer is its family, over
     /// its own parameters, which each projection's arguments then fill.
+    ///
+    /// The trait `bound` names is reached at the arguments `slots` give it, so
+    /// of two bounds on it (`Holder<i32> + Holder<String>`) the one answering
+    /// is the one read.
     fn trait_assoc_answers(
         &mut self,
         assoc_types: &[DeclaredAssocType],
         self_type_id: TypeId,
-    ) -> Vec<(DefId, String, TypeId)> {
-        let self_name = match self.tysys.type_table.borrow().get(self_type_id) {
-            ResolvedType::TypeParam { name, .. } => name.clone(),
-            _ => String::new(),
-        };
+        bound: DefId,
+        slots: &IndexMap<u32, TypeId>,
+    ) -> Vec<ProjectionAnswer> {
+        let self_name = self.tysys.binder_name(self_type_id).unwrap_or_default();
+        let bound_args = self.trait_args_of_slots(bound, slots);
         let mut answers = Vec::with_capacity(assoc_types.len());
         for (declaring, decl) in assoc_types {
-            let known = self.frame_projection(self_type_id, &self_name, &decl.name);
+            let trait_args = if *declaring == bound {
+                bound_args.clone()
+            } else {
+                self.trait_args_for(self_type_id, &self_name, *declaring)
+            };
+            let known = trait_args
+                .as_deref()
+                .and_then(|args| {
+                    self.frame_projection_of_trait(&self_name, *declaring, Some(args), &decl.name)
+                })
+                .or_else(|| self.frame_projection(self_type_id, &self_name, &decl.name));
             let answer = known.unwrap_or_else(|| {
                 let open = self.family_params(*declaring, &decl.name);
-                self.make_frame_projection_of_trait(
-                    self_type_id,
-                    &self_name,
-                    *declaring,
-                    &decl.name,
-                    &open,
-                )
+                let site = FamilySite {
+                    base: self_type_id,
+                    trait_args,
+                };
+                self.make_projection_at(site, &self_name, *declaring, &decl.name, &open)
             });
-            answers.push((*declaring, decl.name.clone(), answer));
+            answers.push(ProjectionAnswer::at_any(
+                *declaring,
+                decl.name.clone(),
+                answer,
+            ));
         }
         answers
+    }
+
+    /// The arguments `slots`, a bound's instantiation of the trait `decl`,
+    /// give its parameters in order. `None` where one takes no slot (an
+    /// effect) or the bound left it unfilled.
+    fn trait_args_of_slots(
+        &self,
+        decl: DefId,
+        slots: &IndexMap<u32, TypeId>,
+    ) -> Option<Vec<TypeId>> {
+        // Slot 0 is `Self`; each type parameter takes the next, in order.
+        let params = self.tysys.trait_decl_type_params_of(&decl)?;
+        (1..)
+            .zip(params.iter())
+            .map(|(slot, param)| {
+                param
+                    .is_real_type_param()
+                    .then(|| slots.get(&slot).copied())
+                    .flatten()
+            })
+            .collect()
     }
 
     /// The space `elaborated`'s written types are read in: empty for a bound the
@@ -2390,8 +2433,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<Vec<TypeId>> {
         let decl = candidate.decl;
         let (sig, trait_assoc_types) = self.trait_method_of(&decl, method_name)?;
-        let answers = self.trait_assoc_answers(&trait_assoc_types, self_type_id);
         let slots = self.bound_slots_in_space(candidate, self_type_id);
+        let answers = self.trait_assoc_answers(&trait_assoc_types, self_type_id, decl, &slots);
         let instantiated = sig.decl.instantiate_slots_with(
             &self.tysys.type_table,
             &slots,
@@ -2532,10 +2575,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             e.trait_named_with_resolved_args(fq_trait_name, &bound, &pick)
         });
 
-        let answers = self.trait_assoc_answers(&trait_assoc_types, self_type_id);
         let slots = self.in_space(&space, |e| {
             e.bound_slots(&bound, decl, self_type_id, written_self)
         });
+        let answers = self.trait_assoc_answers(&trait_assoc_types, self_type_id, decl, &slots);
         let fq_trait_name = self
             .tysys
             .trait_named_from_slots(fq_trait_name, &bound, &slots);

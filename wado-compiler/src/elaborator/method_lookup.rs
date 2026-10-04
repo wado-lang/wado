@@ -15,8 +15,8 @@ use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName, TUPLE_TYPE_NAME};
 use crate::tir::{
-    FunctionRef, ResolvedType, SlotProjections, SubstitutionContext, TargetBinding, TemplateId,
-    TypeId, TypeTable, positional_substitution,
+    FunctionRef, ProjectionAnswer, ResolvedType, SlotProjections, SubstitutionContext,
+    TargetBinding, TemplateId, TypeId, TypeTable, positional_substitution,
 };
 use crate::token::Span;
 
@@ -2138,7 +2138,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let own_assoc = impl_sig
                     .associated_types
                     .iter()
-                    .map(|(name, &ty)| (trait_decl, name.clone(), ty))
+                    .map(|(name, &ty)| ProjectionAnswer::at_any(trait_decl, name.clone(), ty))
                     .collect();
                 let instantiated = default_method.sig.decl.instantiate_slots_with(
                     tt,

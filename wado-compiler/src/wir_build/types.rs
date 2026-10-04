@@ -1181,13 +1181,18 @@ fn normalized_projection_name(type_table: &TypeTable, type_id: TypeId) -> FqType
         assoc_name,
         args,
         owning_trait,
+        trait_args,
         ..
     } = type_table.get(type_id)
     else {
         return type_table.fq_type_name(type_id);
     };
-    let Some(family) = type_table.resolve_assoc_type_qualified(*param_id, owning_trait, assoc_name)
-    else {
+    let Some(family) = type_table.resolve_assoc_type_qualified(
+        *param_id,
+        owning_trait,
+        trait_args.as_deref(),
+        assoc_name,
+    ) else {
         return type_table.fq_type_name(type_id);
     };
     let args: Vec<FqTypeName> = args

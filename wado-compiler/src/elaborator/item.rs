@@ -21,7 +21,7 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::infer_hole::InferHoleTable;
-use super::scope::{BinderInScope, Scope, ScopedBound, TypeParamScope, param_decl};
+use super::scope::{BinderInScope, Scope, ScopedBound, TraitContext, TypeParamScope, param_decl};
 use super::sig::{DeclSig, MethodSig};
 use super::trait_query::SelfBinding;
 use super::types::{FunctionContext, TypeError};
@@ -1005,19 +1005,40 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &mut self,
         owning_trait: DefId,
         assoc: &str,
-    ) -> Option<AssocTypeSig> {
+    ) -> Option<Rc<AssocTypeSig>> {
         if let Some(sig) = self
             .tysys
             .type_table
             .borrow()
             .assoc_type_sig(owning_trait, assoc)
         {
-            return Some(sig.clone());
+            return Some(Rc::clone(sig));
         }
         let key = (owning_trait, assoc.to_string());
         if !self.annotate_ctx.assoc_sig_stack.insert(key.clone()) {
             return None;
         }
+        // Read where the trait is written, whoever asks first: neither the
+        // asking frame's bounds nor its module's imports reach it.
+        let home = self.tysys.resolutions.defs().module(owning_trait).clone();
+        let sig = self.with_module_perspective_for(&home, |e| {
+            let mut clean = e.enter_inherited_type_param_scope();
+            clean.annotate_ctx.trait_ctx = TraitContext::default();
+            clean.build_assoc_type_sig(owning_trait, assoc)
+        });
+        self.annotate_ctx.assoc_sig_stack.shift_remove(&key);
+        let sig = Rc::new(sig);
+        self.tysys.type_table.borrow_mut().register_assoc_type_sig(
+            owning_trait,
+            assoc.to_string(),
+            Rc::clone(&sig),
+        );
+        Some(sig)
+    }
+
+    /// [`Self::assoc_type_sig`] resolved in a frame holding nothing but the
+    /// trait's own.
+    fn build_assoc_type_sig(&mut self, owning_trait: DefId, assoc: &str) -> AssocTypeSig {
         let header = self
             .tysys
             .trait_env
@@ -1041,7 +1062,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Some(binder.type_id)
             })
             .collect();
-        let sig = scope.with_assoc_params(owning_trait, assoc, &decl.type_params, None, |e| {
+        scope.with_assoc_params(owning_trait, assoc, &decl.type_params, None, |e| {
             AssocTypeSig {
                 owning_trait,
                 assoc_name: assoc.to_string(),
@@ -1051,15 +1072,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 param_bounds: e.family_param_bounds(owning_trait, assoc, &decl.type_params),
                 bounds: e.trait_refs_of(&decl.bounds),
             }
-        });
-        drop(scope);
-        self.annotate_ctx.assoc_sig_stack.shift_remove(&key);
-        self.tysys.type_table.borrow_mut().register_assoc_type_sig(
-            owning_trait,
-            assoc.to_string(),
-            sig.clone(),
-        );
-        Some(sig)
+        })
     }
 
     /// The bounds each of `written`, the parameters of `owning_trait`'s

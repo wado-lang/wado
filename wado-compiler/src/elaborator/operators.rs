@@ -1614,11 +1614,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let _local_index = ctx.add_local(name, type_id, false, None);
     }
 
-    /// `T::Output` for an operator applied to a type parameter — what the
-    /// frame's bound pins it to (`T: Mul<Output = T>`), else the projection
-    /// under that same trait, since `T: Add + Mul` declares `Output` twice.
-    /// Any other operand takes what the method was typed to return at its
-    /// bound, `typed`: a projection's `Output` is the one its bound carries.
+    /// `Output` for an operator dispatched through a bound: what the method
+    /// was typed to return at the bound that answered, `typed`, which reads
+    /// that bound's own `Output` (`T: Mul<Output = T>`) at its arguments.
     fn operator_output_type(
         &mut self,
         operand_type_id: TypeId,
@@ -1631,20 +1629,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !self.tysys.trait_env.declares_assoc_type(&trait_, "Output") {
             return operand_type_id;
         }
-        let Some(name) = self.tysys.binder_name(operand_type_id) else {
-            // `Output = Self::Size` names the operand's own projection again,
-            // which is the operand, whatever bindings the bound's frame carried.
-            let table = self.tysys.type_table.borrow();
-            return if table.projects_alike(typed, operand_type_id) {
-                operand_type_id
-            } else {
-                typed
-            };
-        };
-        self.frame_projection_of_trait(&name, trait_, "Output")
-            .unwrap_or_else(|| {
-                self.make_frame_projection_of_trait(operand_type_id, &name, trait_, "Output", &[])
-            })
+        // `Output = Self::Size` names the operand's own projection again,
+        // which is the operand, whatever bindings the bound's frame carried.
+        let table = self.tysys.type_table.borrow();
+        if table.projects_alike(typed, operand_type_id) {
+            operand_type_id
+        } else {
+            typed
+        }
     }
 
     /// Report that `left` does not implement the trait `op` dispatches to, with

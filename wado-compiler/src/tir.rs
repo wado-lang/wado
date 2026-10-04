@@ -795,12 +795,12 @@ impl AssocAnswers {
 
     /// The answer of the impl reached at `trait_args`, where they are known
     /// and an impl writes exactly them; else [`Self::bare`].
-    fn at(&self, trait_args: Option<&[TypeId]>) -> Option<TypeId> {
+    fn at(&self, table: &TypeTable, trait_args: Option<&[TypeId]>) -> Option<TypeId> {
         trait_args
             .and_then(|wanted| {
                 self.0
                     .iter()
-                    .find(|(written, _)| written == wanted)
+                    .find(|(written, _)| table.same_types(written, wanted))
                     .map(|(_, answer)| *answer)
             })
             .or_else(|| self.bare())
@@ -903,7 +903,10 @@ pub struct TypeTable {
     generic_assoc_type_defs: IndexMap<GenericAssocTypeKey, AssocAnswers>,
     /// What each trait declares of its associated types, by declaring trait and
     /// name. See [`AssocTypeSig`].
-    assoc_type_sigs: IndexMap<(DefId, String), AssocTypeSig>,
+    assoc_type_sigs: IndexMap<DefId, IndexMap<String, Rc<AssocTypeSig>>>,
+    /// What [`Self::projection_bounds`] answered for each projection, which
+    /// depends on nothing but the interned projection.
+    projection_bounds_cache: IndexMap<TypeId, Rc<[TraitRef]>>,
     /// Erasure redirects: set by `erase_newtypes_and_flags()`.
     /// After erasure, `get(id)` for any erased `TypeId` returns the base type.
     /// Newtype → ultimate base type; Flags → u32.
@@ -1092,6 +1095,7 @@ impl TypeTable {
             assoc_type_resolutions: IndexMap::default(),
             generic_assoc_type_defs: IndexMap::default(),
             assoc_type_sigs: IndexMap::default(),
+            projection_bounds_cache: IndexMap::default(),
             redirects: TypeMap::default(),
             box_payload_types: TypeMap::default(),
             struct_name_index: IndexMap::default(),
@@ -1218,6 +1222,15 @@ impl TypeTable {
                 .and_then(|ty| self.intern_map.get(ty).copied())
                 .unwrap_or(resolved),
         )
+    }
+
+    /// Whether `a` and `b` name one list of types, position by position.
+    #[must_use]
+    pub fn same_types(&self, a: &[TypeId], b: &[TypeId]) -> bool {
+        a.len() == b.len()
+            && a.iter()
+                .zip(b)
+                .all(|(&x, &y)| self.type_key(x) == self.type_key(y))
     }
 
     /// True when `id` resolves to the never type `!`, through any newtype. An
@@ -3283,15 +3296,21 @@ impl TypeTable {
         &mut self,
         owning_trait: DefId,
         assoc_name: String,
-        sig: AssocTypeSig,
+        sig: Rc<AssocTypeSig>,
     ) {
-        self.assoc_type_sigs.insert((owning_trait, assoc_name), sig);
+        self.assoc_type_sigs
+            .entry(owning_trait)
+            .or_default()
+            .insert(assoc_name, sig);
     }
 
     /// What `owning_trait` declares of its associated type `assoc_name`.
-    pub fn assoc_type_sig(&self, owning_trait: DefId, assoc_name: &str) -> Option<&AssocTypeSig> {
-        self.assoc_type_sigs
-            .get(&(owning_trait, assoc_name.to_string()))
+    pub fn assoc_type_sig(
+        &self,
+        owning_trait: DefId,
+        assoc_name: &str,
+    ) -> Option<&Rc<AssocTypeSig>> {
+        self.assoc_type_sigs.get(&owning_trait)?.get(assoc_name)
     }
 
     /// `refs`, written in `sig`'s trait frame, at a site: `Self` standing for
@@ -3395,16 +3414,16 @@ impl TypeTable {
                     ..
                 },
             ) => {
-                base_a == base_b
+                self.type_key(*base_a) == self.type_key(*base_b)
                     && name_a == name_b
-                    && args_a == args_b
+                    && self.same_types(args_a, args_b)
                     && trait_a == trait_b
                     && match (trait_args_a, trait_args_b) {
-                        (Some(x), Some(y)) => x == y,
+                        (Some(x), Some(y)) => self.same_types(x, y),
                         _ => true,
                     }
             }
-            _ => a == b,
+            _ => self.type_key(a) == self.type_key(b),
         }
     }
 
@@ -3412,7 +3431,10 @@ impl TypeTable {
     /// read at it: `Self` its base, the trait's parameters its trait arguments,
     /// the family's its arguments. `None` while its signature is still being
     /// built, which a reader inside that build meets.
-    pub fn projection_bounds(&mut self, id: TypeId) -> Option<Vec<TraitRef>> {
+    pub fn projection_bounds(&mut self, id: TypeId) -> Option<Rc<[TraitRef]>> {
+        if let Some(bounds) = self.projection_bounds_cache.get(&id) {
+            return Some(Rc::clone(bounds));
+        }
         let ResolvedType::AssocTypeProjection {
             param_id,
             assoc_name,
@@ -3427,8 +3449,12 @@ impl TypeTable {
                 self.get(id)
             );
         };
-        let sig = self.assoc_type_sig(owning_trait, &assoc_name)?.clone();
-        Some(self.instantiate_trait_refs(&sig, &sig.bounds, param_id, trait_args.as_deref(), &args))
+        let sig = Rc::clone(self.assoc_type_sig(owning_trait, &assoc_name)?);
+        let bounds: Rc<[TraitRef]> = self
+            .instantiate_trait_refs(&sig, &sig.bounds, param_id, trait_args.as_deref(), &args)
+            .into();
+        self.projection_bounds_cache.insert(id, Rc::clone(&bounds));
+        Some(bounds)
     }
 
     /// What `<base as owning_trait>::assoc_name<args>` is, for a `base` that
@@ -3478,7 +3504,7 @@ impl TypeTable {
             return Some(resolved);
         }
         if let Some(resolved) =
-            self.resolve_assoc_type_qualified(concrete, owning_trait, assoc_name)
+            self.resolve_assoc_type_qualified(concrete, owning_trait, trait_args, assoc_name)
         {
             return Some(resolved);
         }
@@ -3567,7 +3593,7 @@ impl TypeTable {
                     trait_decl: *trait_key,
                     assoc_name: assoc_name.to_string(),
                 })?
-                .at(trait_args)
+                .at(self, trait_args)
         })
     }
 
@@ -3596,10 +3622,11 @@ impl TypeTable {
         &self,
         concrete_id: TypeId,
         owning_trait: &DefId,
+        trait_args: Option<&[TypeId]>,
         assoc_name: &str,
     ) -> Option<TypeId> {
         if let Some(resolved) =
-            self.resolve_assoc_type_of_trait(concrete_id, owning_trait, assoc_name)
+            self.resolve_assoc_type_of_trait_at(concrete_id, owning_trait, trait_args, assoc_name)
         {
             return Some(resolved);
         }
@@ -4219,10 +4246,15 @@ impl TypeTable {
                     && let Some(answer) = leaves.projections.get(&slot).and_then(|answers| {
                         answers
                             .iter()
-                            .find(|(trait_, name, _)| {
-                                *trait_ == owning_trait && *name == assoc_name
+                            .find(|answer| {
+                                answer.owning_trait == owning_trait
+                                    && answer.assoc_name == assoc_name
+                                    && match (&answer.trait_args, &new_trait_args) {
+                                        (Some(x), Some(y)) => self.same_types(x, y),
+                                        _ => true,
+                                    }
                             })
-                            .map(|(_, _, type_id)| *type_id)
+                            .map(|answer| answer.answer)
                     })
                 {
                     return self.instantiate_family(owning_trait, &assoc_name, answer, &new_args);
@@ -5128,20 +5160,26 @@ impl TypeTable {
                 assoc_name,
                 args,
                 owning_trait,
+                trait_args,
                 ..
             } => {
                 let base = type_name(*param_id);
-                let args = if args.is_empty() {
-                    String::new()
-                } else {
-                    let names: Vec<String> = args.iter().map(|a| type_name(*a)).collect();
-                    format!("<{}>", names.join(", "))
+                let listed = |ids: &[TypeId]| {
+                    if ids.is_empty() {
+                        String::new()
+                    } else {
+                        let names: Vec<String> = ids.iter().map(|a| type_name(*a)).collect();
+                        format!("<{}>", names.join(", "))
+                    }
                 };
-                // The owning trait is part of a projection's identity, so two
-                // that differ only there render the same without it.
+                let args = listed(args);
+                // The owning trait and its arguments are part of a
+                // projection's identity, so two that differ only there render
+                // the same without them.
                 if qualified {
                     let owner = self.head_name(*owning_trait, true);
-                    format!("<{base} as {owner}>::{assoc_name}{args}")
+                    let at = trait_args.as_deref().map(listed).unwrap_or_default();
+                    format!("<{base} as {owner}{at}>::{assoc_name}{args}")
                 } else {
                     format!("{base}::{assoc_name}{args}")
                 }
@@ -5573,12 +5611,14 @@ impl TypeTable {
                 assoc_name,
                 args,
                 owning_trait,
+                trait_args,
                 ..
             } => FqTypeName::projection(
                 self.fq_type_name_spelled(*param_id, unboxed),
                 assoc_name,
                 &self.defs,
                 *owning_trait,
+                trait_args.as_ref().map(|given| args_of(given)),
             )
             .with_args(args_of(args)),
             // Shapes that name no declaration — packs, `Unknown`. They carry no
@@ -6819,14 +6859,38 @@ pub struct TirTypeParam {
 }
 
 /// What a use site knows about the associated types projected from a slot,
-/// beyond the type filling it: slot index → `[(declaring trait,
-/// associated-type name, what it means here)]`.
+/// beyond the type filling it: slot index → the answers it gives.
 ///
 /// The companion of the slot substitution in
 /// [`TypeTable::substitute_type_params_with`]. A declaration resolves
 /// `Self::Item` in its own frame, where it can only be a projection; what it
 /// stands for is written at the use site (`I: IntoIterator<Item = u8>`).
-pub type SlotProjections = IndexMap<u32, Vec<(DefId, String, TypeId)>>;
+pub type SlotProjections = IndexMap<u32, Vec<ProjectionAnswer>>;
+
+/// What a use site says one projection off a slot is.
+#[derive(Debug, Clone)]
+pub struct ProjectionAnswer {
+    pub owning_trait: DefId,
+    /// The arguments the trait is reached at, where the bound answering wrote
+    /// them: `H: Holder<i32, Out = A> + Holder<String, Out = B>` answers
+    /// `Out` twice. `None` answers it at any.
+    pub trait_args: Option<Vec<TypeId>>,
+    pub assoc_name: String,
+    pub answer: TypeId,
+}
+
+impl ProjectionAnswer {
+    /// `<_ as owning_trait>::assoc_name` is `answer`, at whatever arguments.
+    #[must_use]
+    pub fn at_any(owning_trait: DefId, assoc_name: String, answer: TypeId) -> Self {
+        Self {
+            owning_trait,
+            trait_args: None,
+            assoc_name,
+            answer,
+        }
+    }
+}
 
 static NO_PARAMS: IndexMap<u32, TypeId> = IndexMap::with_hasher(FxBuildHasher);
 static NO_VARS: IndexMap<InferVarId, TypeId> = IndexMap::with_hasher(FxBuildHasher);
@@ -9135,7 +9199,10 @@ mod tests {
     }
 
     fn answer_item(trait_: DefId, answer: TypeId) -> SlotProjections {
-        SlotProjections::from_iter([(0, vec![(trait_, "Item".to_string(), answer)])])
+        SlotProjections::from_iter([(
+            0,
+            vec![ProjectionAnswer::at_any(trait_, "Item".to_string(), answer)],
+        )])
     }
 
     /// An answer is for one trait's associated type: another trait declaring

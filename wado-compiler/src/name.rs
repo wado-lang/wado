@@ -2835,15 +2835,22 @@ pub enum TypeHead {
     /// `Builtin("[]")` carrying arguments would render as.
     Tuple,
     /// An associated type of another name (`T::Base`), answering a type once
-    /// the base is concrete.
-    Projection {
-        base: Box<FqTypeName>,
-        assoc: String,
-        /// The trait declaring `assoc`, part of the identity: two traits
-        /// declaring one name on a type bind it to different types
-        /// (WEP-2026-08-12).
-        owning_trait: DeclaredHead,
-    },
+    /// the base is concrete. Boxed, since every name carries a head.
+    Projection(Box<ProjectionHead>),
+}
+
+/// What [`TypeHead::Projection`] projects off.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ProjectionHead {
+    base: FqTypeName,
+    assoc: String,
+    /// The trait declaring `assoc`, part of the identity: two traits declaring
+    /// one name on a type bind it to different types (WEP-2026-08-12).
+    owning_trait: DeclaredHead,
+    /// The arguments the trait is reached at, part of the identity too:
+    /// `Holder<i32>`'s `Out` and `Holder<String>`'s are two types. `None`
+    /// where the projection does not know them.
+    trait_args: Option<Vec<FqTypeName>>,
 }
 
 impl TypeHead {
@@ -2868,8 +2875,8 @@ impl TypeHead {
             Self::Shape { name, .. }
             | Self::ParamBucket { name, .. }
             | Self::Builtin(name)
-            | Self::Binder { name, .. }
-            | Self::Projection { assoc: name, .. } => name,
+            | Self::Binder { name, .. } => name,
+            Self::Projection(head) => &head.assoc,
             Self::Tuple => TUPLE_TYPE_NAME,
         }
     }
@@ -2884,8 +2891,8 @@ impl TypeHead {
             Self::Shape { name, .. }
             | Self::ParamBucket { name, .. }
             | Self::Builtin(name)
-            | Self::Binder { name, .. }
-            | Self::Projection { assoc: name, .. } => name,
+            | Self::Binder { name, .. } => name,
+            Self::Projection(head) => &head.assoc,
             Self::Tuple => TUPLE_TYPE_NAME,
         }
     }
@@ -3003,12 +3010,19 @@ impl FqTypeName {
     /// The associated type `assoc` of `base`, as `owning_trait` declares it
     /// (`T::Base`).
     #[must_use]
-    pub fn projection(base: FqTypeName, assoc: &str, defs: &DefTable, owning_trait: DefId) -> Self {
-        Self::of_head_kind(TypeHead::Projection {
-            base: Box::new(base),
+    pub fn projection(
+        base: FqTypeName,
+        assoc: &str,
+        defs: &DefTable,
+        owning_trait: DefId,
+        trait_args: Option<Vec<FqTypeName>>,
+    ) -> Self {
+        Self::of_head_kind(TypeHead::Projection(Box::new(ProjectionHead {
+            base,
             assoc: assoc.to_string(),
             owning_trait: DeclaredHead::new(defs, owning_trait),
-        })
+            trait_args,
+        })))
     }
 
     /// A tuple of `elems`, spelled `[a,b]`.
@@ -3098,7 +3112,14 @@ impl FqTypeName {
     pub fn mentions_binder(&self) -> bool {
         let head_mentions = match &self.head {
             TypeHead::Binder { .. } => true,
-            TypeHead::Projection { base, .. } => base.mentions_binder(),
+            TypeHead::Projection(head) => {
+                head.base.mentions_binder()
+                    || head
+                        .trait_args
+                        .iter()
+                        .flatten()
+                        .any(FqTypeName::mentions_binder)
+            }
             _ => false,
         };
         head_mentions || self.args.iter().any(FqTypeName::mentions_binder)
@@ -3113,7 +3134,7 @@ impl FqTypeName {
     pub fn unifies_with(&self, other: &FqTypeName) -> bool {
         let open = |name: &FqTypeName| match &name.head {
             TypeHead::Binder { owner, .. } => !owner.as_ref().is_some_and(BinderOwner::is_family),
-            TypeHead::Projection { .. } => true,
+            TypeHead::Projection(_) => true,
             TypeHead::Declared(_)
             | TypeHead::Shape { .. }
             | TypeHead::ParamBucket { .. }
@@ -3136,16 +3157,16 @@ impl FqTypeName {
                 .all(|(a, b)| a.unifies_with(b))
     }
 
-    /// The base, associated-type name, and declaring trait this projects off,
-    /// `None` for any other shape.
+    /// What this projects off, `None` for any other shape.
     #[must_use]
-    pub fn projected(&self) -> Option<(&FqTypeName, &str, DefId)> {
+    pub fn projected(&self) -> Option<Projected<'_>> {
         match &self.head {
-            TypeHead::Projection {
-                base,
-                assoc,
-                owning_trait,
-            } => Some((base, assoc, owning_trait.def())),
+            TypeHead::Projection(head) => Some(Projected {
+                base: &head.base,
+                assoc: &head.assoc,
+                owning_trait: head.owning_trait.def(),
+                trait_args: head.trait_args.as_deref(),
+            }),
             _ => None,
         }
     }
@@ -3186,16 +3207,19 @@ impl FqTypeName {
                 Some(owner) => out.push_str(&format!("{name}#{}", owner.rendered())),
                 None => out.push_str(name),
             },
-            TypeHead::Projection {
-                base,
-                assoc,
-                owning_trait,
-            } => out.push_str(&format!(
-                "{}::{assoc}#{}/{}",
-                base.to_mangled(),
-                owning_trait.module(),
-                owning_trait.rendered()
-            )),
+            TypeHead::Projection(head) => {
+                out.push_str(&format!(
+                    "{}::{}#{}/{}",
+                    head.base.to_mangled(),
+                    head.assoc,
+                    head.owning_trait.module(),
+                    head.owning_trait.rendered()
+                ));
+                if let Some(trait_args) = head.trait_args.as_ref().filter(|args| !args.is_empty()) {
+                    let args: Vec<String> = trait_args.iter().map(FqTypeName::to_mangled).collect();
+                    out.push_str(&format!("[{}]", args.join(",")));
+                }
+            }
             TypeHead::Tuple => unreachable!("handled above"),
         }
         if !self.args.is_empty() {
@@ -3258,18 +3282,19 @@ impl FqTypeName {
     }
 
     /// This name rebuilt with `at` applied to each name it holds: its type
-    /// arguments and a projection's base, never the head's own spelling.
+    /// arguments and a projection's base and trait arguments, never the
+    /// head's own spelling.
     fn descend(&self, at: &impl Fn(&FqTypeName) -> FqTypeName) -> FqTypeName {
         let head = match &self.head {
-            TypeHead::Projection {
-                base,
-                assoc,
-                owning_trait,
-            } => TypeHead::Projection {
-                base: Box::new(at(base)),
-                assoc: assoc.clone(),
-                owning_trait: owning_trait.clone(),
-            },
+            TypeHead::Projection(projected) => TypeHead::Projection(Box::new(ProjectionHead {
+                base: at(&projected.base),
+                assoc: projected.assoc.clone(),
+                owning_trait: projected.owning_trait.clone(),
+                trait_args: projected
+                    .trait_args
+                    .as_ref()
+                    .map(|args| args.iter().map(at).collect()),
+            })),
             head => head.clone(),
         };
         FqTypeName {
@@ -3292,8 +3317,8 @@ impl FqTypeName {
             out.push_str(&mangle_tuple_type(&args));
             return out;
         }
-        if let TypeHead::Projection { base, assoc, .. } = &self.head {
-            out.push_str(&format!("{}::{assoc}", base.to_display()));
+        if let TypeHead::Projection(head) = &self.head {
+            out.push_str(&format!("{}::{}", head.base.to_display(), head.assoc));
         } else {
             out.push_str(self.head.name());
         }
@@ -3315,6 +3340,14 @@ impl std::fmt::Display for FqTypeName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.to_mangled())
     }
+}
+
+/// What a projection name projects off; see [`FqTypeName::projected`].
+pub struct Projected<'n> {
+    pub base: &'n FqTypeName,
+    pub assoc: &'n str,
+    pub owning_trait: DefId,
+    pub trait_args: Option<&'n [FqTypeName]>,
 }
 
 /// The item a binder belongs to: the `impl` block a blanket's receiver binder

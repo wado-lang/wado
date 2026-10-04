@@ -3,7 +3,7 @@
 use crate::ast::{AstId, Type};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;
-use crate::tir::{ResolvedType, SlotProjections, TypeId, TypeTable};
+use crate::tir::{ProjectionAnswer, ResolvedType, SlotProjections, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
@@ -1235,7 +1235,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// [`Self::make_frame_projection_of_trait`] at a `site` already read.
-    fn make_projection_at(
+    pub(super) fn make_projection_at(
         &mut self,
         site: FamilySite,
         base_name: &str,
@@ -1308,15 +1308,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         base: TypeId,
         written: &[TypeId],
     ) -> FamilySite {
-        let args: Vec<TypeId> = self
-            .param_space_of(owner, written)
-            .into_iter()
-            .map(|(_, arg)| arg)
-            .collect();
-        let known = args.iter().all(|&arg| arg != TypeTable::UNKNOWN);
         FamilySite {
             base,
-            trait_args: known.then_some(args),
+            trait_args: self.trait_args_at(owner, base, written),
         }
     }
 
@@ -1347,49 +1341,125 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
                 .collect();
         }
-        let written: Vec<TypeId> = if let Some((bound, space)) = self
+        if let Some((bound, space)) = self
             .bound_closure_of(base_name)
             .unwrap_or_default()
             .into_iter()
             .find(|(bound, _)| self.trait_decl_of(bound) == Some(owner))
         {
-            let type_args = bound.type_args.clone();
-            self.in_bound_frame(&bound, &space, |e| {
-                type_args.iter().map(|ty| e.resolve_type(ty)).collect()
-            })
-        } else {
-            if !matches!(
-                self.tysys.type_table.borrow().get(base),
-                ResolvedType::AssocTypeProjection { .. }
-            ) {
-                return None;
-            }
-            let bounds = self.tysys.type_table.borrow_mut().projection_bounds(base)?;
-            bounds.into_iter().find(|bound| bound.decl == owner)?.args
+            return self.bound_trait_args(base, &bound, &space, owner);
+        }
+        self.projection_base_trait_args(base, owner)
+    }
+
+    /// The arguments the bound `owner` on `base`, written in `space`, reaches
+    /// its trait at, defaults filled. `None` where one names no type.
+    fn bound_trait_args(
+        &mut self,
+        base: TypeId,
+        bound: &ScopedBound,
+        space: &ParamSpace,
+        owner: DefId,
+    ) -> Option<Vec<TypeId>> {
+        let type_args = bound.bound.type_args.clone();
+        let written: Vec<TypeId> = self.in_bound_frame(bound, space, |e| {
+            type_args.iter().map(|ty| e.resolve_type(ty)).collect()
+        });
+        self.trait_args_at(owner, base, &written)
+    }
+
+    /// `owner` reached on `base` at `written`, defaults filling the rest. A
+    /// default is written in the trait, where `Self` is `base`. `None` where an
+    /// argument names no type.
+    fn trait_args_at(
+        &mut self,
+        owner: DefId,
+        base: TypeId,
+        written: &[TypeId],
+    ) -> Option<Vec<TypeId>> {
+        let bounded = SelfBinding {
+            type_id: base,
+            declaring_trait: Some(owner),
         };
-        self.family_site(owner, base, &written).trait_args
+        let args: Vec<TypeId> = self.under_self_binding(Some(bounded), |e| {
+            e.param_space_of(owner, written)
+                .into_iter()
+                .map(|(_, arg)| arg)
+                .collect()
+        });
+        args.iter()
+            .all(|&arg| arg != TypeTable::UNKNOWN)
+            .then_some(args)
+    }
+
+    /// The arguments the declaration of the projection `base` reaches `owner`
+    /// at, through the bound it puts on `base`. `None` where `base` is no
+    /// projection, or that bound reads a trait argument `base` does not know.
+    fn projection_base_trait_args(&mut self, base: TypeId, owner: DefId) -> Option<Vec<TypeId>> {
+        let ResolvedType::AssocTypeProjection {
+            owning_trait,
+            assoc_name,
+            trait_args,
+            ..
+        } = self.tysys.type_table.borrow().get(base).clone()
+        else {
+            return None;
+        };
+        let sig = self.assoc_type_sig(owning_trait, &assoc_name)?;
+        let written = sig.bounds.iter().find(|bound| bound.decl == owner)?;
+        if trait_args.is_none()
+            && self
+                .tysys
+                .type_table
+                .borrow()
+                .reads_trait_params(&sig, written)
+        {
+            return None;
+        }
+        let bounds = self.tysys.type_table.borrow_mut().projection_bounds(base)?;
+        let at = bounds
+            .iter()
+            .find(|bound| bound.decl == owner)?
+            .args
+            .clone();
+        self.trait_args_at(owner, base, &at)
     }
 
     /// [`Self::frame_projection`] scoped to one trait, so a second bound
     /// declaring the same name never answers for it: `T: Mul<Output = T>`
-    /// answers `T::Output` where a bare `T: Mul` leaves it abstract.
+    /// answers `T::Output` where a bare `T: Mul` leaves it abstract. Reached
+    /// at `trait_args`, only the bound written at them answers:
+    /// `H: Holder<i32, Out = A> + Holder<String, Out = B>` is two answers.
     pub(super) fn frame_projection_of_trait(
         &mut self,
         base_name: &str,
         trait_: DefId,
+        trait_args: Option<&[TypeId]>,
         assoc: &str,
     ) -> Option<TypeId> {
-        let (written, space, scoped) =
-            self.bound_closure_of(base_name)?
-                .into_iter()
-                .find_map(|(bound, space)| {
-                    (self.trait_decl_of(&bound) == Some(trait_))
-                        .then(|| bound.assoc_types.iter().find(|b| b.name == assoc).cloned())
-                        .flatten()
-                        .map(|binding| (binding.ty, space, bound))
-                })?;
-        let resolved = self.in_bound_frame(&scoped, &space, |e| e.resolve_type(&written));
-        (resolved != TypeTable::UNKNOWN).then_some(resolved)
+        let base = self
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .get(base_name)?
+            .type_id;
+        for (bound, space) in self.bound_closure_of(base_name)? {
+            if self.trait_decl_of(&bound) != Some(trait_) {
+                continue;
+            }
+            let Some(binding) = bound.assoc_types.iter().find(|b| b.name == assoc).cloned() else {
+                continue;
+            };
+            if let Some(wanted) = trait_args {
+                let at = self.bound_trait_args(base, &bound, &space, trait_);
+                if !at.is_some_and(|at| self.tysys.type_table.borrow().same_types(&at, wanted)) {
+                    continue;
+                }
+            }
+            let resolved = self.in_bound_frame(&bound, &space, |e| e.resolve_type(&binding.ty));
+            return (resolved != TypeTable::UNKNOWN).then_some(resolved);
+        }
+        None
     }
 
     /// `ty` with each projection over this frame's parameters answered by its
@@ -1398,7 +1468,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.annotate_ctx.trait_ctx.type_param_bounds.is_empty() {
             return ty;
         }
-        let asked: Vec<(u32, String, DefId, String)> = {
+        let asked: Vec<(u32, String, ProjectionAnswer)> = {
             let table = self.tysys.type_table.borrow();
             let binders = &self.annotate_ctx.trait_ctx.type_params;
             table
@@ -1408,6 +1478,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let ResolvedType::AssocTypeProjection {
                         param_id,
                         owning_trait,
+                        trait_args,
                         assoc_name,
                         ..
                     } = table.get(p)
@@ -1419,18 +1490,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     // A callee's parameter the substitution left behind may
                     // share a name with one of this frame's binders.
-                    (binders.get(name)?.type_id == *param_id)
-                        .then(|| (*index, name.clone(), *owning_trait, assoc_name.clone()))
+                    let asked = ProjectionAnswer {
+                        owning_trait: *owning_trait,
+                        trait_args: trait_args.clone(),
+                        assoc_name: assoc_name.clone(),
+                        answer: TypeTable::UNKNOWN,
+                    };
+                    (binders.get(name)?.type_id == *param_id).then(|| (*index, name.clone(), asked))
                 })
                 .collect()
         };
         let mut answers = SlotProjections::default();
-        for (slot, base_name, trait_, assoc) in asked {
-            if let Some(answer) = self.frame_projection_of_trait(&base_name, trait_, &assoc) {
-                answers
-                    .entry(slot)
-                    .or_default()
-                    .push((trait_, assoc, answer));
+        for (slot, base_name, mut asked) in asked {
+            if let Some(answer) = self.frame_projection_of_trait(
+                &base_name,
+                asked.owning_trait,
+                asked.trait_args.as_deref(),
+                &asked.assoc_name,
+            ) {
+                asked.answer = answer;
+                answers.entry(slot).or_default().push(asked);
             }
         }
         if answers.is_empty() {
