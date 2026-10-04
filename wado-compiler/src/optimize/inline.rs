@@ -940,7 +940,10 @@ fn has_safepoint(
                     SafepointCall::Always => true,
                     SafepointCall::Never => false,
                     SafepointCall::IfResultHoldsReference => {
-                        arena_query::holds_reference(self.type_table, self.body.exprs[e].type_id)
+                        let ty = self.body.exprs[e].type_id;
+                        // A builtin hands a tuple back as multiple values.
+                        !self.type_table.is_tuple(ty)
+                            &&arena_query::holds_reference(self.type_table, ty)
                     }
                 },
                 ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => true,
