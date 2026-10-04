@@ -22,9 +22,10 @@ use crate::world_registry::TEST_WORLD;
 /// Snapshot what a `core:builtin` declared about storage, before
 /// monomorphization drops the generic declarations the plan phase would read.
 ///
-/// Every body-less declaration is snapshot, not only `core:builtin`'s: a CM
-/// import or a `.wasm` / `.wat` asset declares the same way, and each is keyed
-/// by its module so two of a name stay apart.
+/// Only a declaration stating `#[storage]` and `#[side_effect]` is snapshot, so
+/// a reader finding none knows nothing here says what the call does: a CM
+/// import's raw call states its facts instead. Each is keyed by its module so
+/// two of a name stay apart.
 fn record_declaration(
     func: &TirFunction,
     module_source: &ModuleSource,
@@ -34,49 +35,48 @@ fn record_declaration(
     if func.body.is_some() {
         return;
     }
-    // A call re-homes a method's key to the impl block's module, so only a free
-    // function is found again under the module declaring it. A reader takes the
-    // absent method as one it knows nothing about.
-    if func.method_info.is_some() {
+    let Some(facts) = func.declared_by_position() else {
         assert!(
-            func.declared.is_none() && func.immediates.is_empty(),
-            "`{}` is a method with a bodyless attribute; key the snapshot by `DefId` first",
+            func.immediates.is_empty(),
+            "`{}` states `#[immediate]` without `#[storage]` and `#[side_effect]`",
             func.name
         );
         return;
-    }
+    };
+    // A call re-homes a method's key to the impl block's module, so only a free
+    // function is found again under the module declaring it.
+    assert!(
+        func.method_info.is_none(),
+        "`{}` is a method with a bodyless attribute; key the snapshot by `DefId` first",
+        func.name
+    );
     // Read from the type, which is the only thing that says `&mut` here:
     // `TirParam::is_mut_ref` is filled by `lower::plan`, which runs after link,
     // so every one of them is still `false`.
-    let positions = |keep: &dyn Fn(TypeId) -> bool| {
+    fn positions<B: FromIterator<usize>>(func: &TirFunction, keep: impl Fn(TypeId) -> bool) -> B {
         func.params
             .iter()
             .enumerate()
             .filter(|(_, p)| keep(p.type_id))
             .map(|(pos, _)| pos)
-            .collect::<Vec<_>>()
-    };
+            .collect()
+    }
     let returns = type_table.get(func.return_type);
     let shape = DeclarationShape {
         arity: func.params.len(),
-        storage_params: positions(&|t| may_carry_storage(t, type_table)),
-        reference_params: positions(&|t| is_reference(t, type_table))
-            .into_iter()
-            .collect(),
-        mut_params: positions(&|t| matches!(type_table.get(t), ResolvedType::MutRef(_)))
-            .into_iter()
-            .collect(),
+        storage_params: positions(func, |t| may_carry_storage(t, type_table)),
+        reference_params: positions(func, |t| is_reference(t, type_table)),
+        mut_params: positions(func, |t| {
+            matches!(type_table.get(t), ResolvedType::MutRef(_))
+        }),
         immediate_params: func.immediates_by_position().collect(),
         returns_value: !matches!(returns, ResolvedType::Unit | ResolvedType::Never),
         returns_mut_ref: matches!(returns, ResolvedType::MutRef(_)),
         returns_never: matches!(returns, ResolvedType::Never),
     };
-    // Every bodyless free function is snapshot, not only one carrying an
-    // attribute: a reader asking what this call does with an argument must be
-    // able to tell "it says it keeps nothing" from "nothing here says".
     out.insert(
         (module_source.clone(), declaration_key(func)),
-        BuiltinDeclaration::new(func.declared_by_position(), shape),
+        BuiltinDeclaration::new(facts, shape),
     );
 }
 

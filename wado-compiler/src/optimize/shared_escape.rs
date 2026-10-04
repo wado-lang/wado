@@ -313,7 +313,7 @@ impl<'a> SharedEscape<'a> {
         // refused.
         let reference = DeclarationLookup::from(callee);
         let declarations = &self.project.builtin_declarations;
-        if declarations.facts(reference).is_none() {
+        if declarations.get(reference).is_none() {
             return ArgClauses::REFUSED;
         }
         // Keeping what a reference `p` points to leaves `p` alone and re-homes

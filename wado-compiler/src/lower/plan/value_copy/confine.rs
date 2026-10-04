@@ -590,13 +590,13 @@ fn carries_identity(type_id: TypeId, type_table: &TypeTable) -> bool {
         )
 }
 
-/// Whether the elements of the array `type_id` refers to carry an identity: an
-/// array of plain data hands on nothing. Every builtin keeping what a reference
-/// points to takes an array there.
+/// Whether what the reference `type_id` points to hands on an identity: an
+/// array's elements, or any other referent itself. Plain data hands on nothing.
 fn holds_identity(type_id: TypeId, type_table: &TypeTable) -> bool {
-    match type_table.get(type_table.peel_refs(type_id)) {
+    let referent = type_table.peel_refs(type_id);
+    match type_table.get(referent) {
         ResolvedType::BuiltinArray(element) => carries_identity(*element, type_table),
-        other => unreachable!("a builtin keeps what a non-array operand points to: {other:?}"),
+        _ => carries_identity(referent, type_table),
     }
 }
 

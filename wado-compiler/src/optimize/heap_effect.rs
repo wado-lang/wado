@@ -15,7 +15,7 @@ use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind,
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 use crate::tir::{
-    BuiltinDeclaration, DeclarationLookup, ResolvedType, RetainInto, RetainSpec, ReturnConvention,
+    BuiltinDeclaration, ResolvedType, RetainInto, RetainSpec, ReturnConvention,
     TypeId, TypeKey, TypeTable,
 };
 
@@ -809,14 +809,12 @@ fn classify_callee(f: &NirFunction, project: &NirPackage) -> Callee {
     if f.body.is_some() {
         return Callee::Body;
     }
-    let reference = DeclarationLookup::from(f);
-    if reference.intrinsic().is_none() {
-        return Callee::Opaque;
+    match project.builtin_declarations.get(f) {
+        Some(declaration) if !declaration.facts.is_opaque() => {
+            Callee::Builtin(Box::new(declaration.clone()))
+        }
+        _ => Callee::Opaque,
     }
-    let Some(declaration) = project.builtin_declarations.get(reference) else {
-        return Callee::Opaque;
-    };
-    Callee::Builtin(Box::new(declaration.clone()))
 }
 
 /// `ty` without its references and newtypes: the object a handle names.
@@ -1577,7 +1575,8 @@ impl HeapFrame {
                     s.writes.record_meet(prov, &t.writes.through_args, &reach);
                 }
                 Target::Builtin(declaration) => {
-                    let touched = builtin_touches(effects, ty, declaration.ranges_over(j));
+                    let touched =
+                        builtin_touches(effects, ty, declaration.ranged_params.contains(&j));
                     s.reads.record(prov, &touched);
                     if declaration.mut_params.contains(&j) {
                         s.writes.record(prov, &touched);
@@ -1723,7 +1722,11 @@ impl HeapFrame {
                 }
                 Target::Builtin(declaration) => {
                     (effect == Effect::Read || declaration.mut_params.contains(&j))
-                        && keys.meets(&builtin_touches(effects, ty, declaration.ranges_over(j)))
+                        && keys.meets(&builtin_touches(
+                            effects,
+                            ty,
+                            declaration.ranged_params.contains(&j),
+                        ))
                 }
                 Target::Opaque => keys.meets(&effects.reach(ty)),
             }

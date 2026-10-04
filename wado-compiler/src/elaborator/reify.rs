@@ -1815,7 +1815,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             })
             .collect();
         let ret = ReturnShape {
-            is_unit: matches!(type_table.get(return_type), tir::ResolvedType::Unit),
+            returns_value: !matches!(
+                type_table.get(return_type),
+                tir::ResolvedType::Unit | tir::ResolvedType::Never
+            ),
             is_array: is_array(return_type),
         };
         match builtin_facts::read(&func.attrs, &shapes, ret) {

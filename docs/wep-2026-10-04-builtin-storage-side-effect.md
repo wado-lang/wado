@@ -236,7 +236,8 @@ fact.
   declaration that does not return an array, or naming a parameter that is not
   an integer.
 - `stores_args` on a declaration without exactly one `&mut` parameter.
-- `fresh`, `part_of_args` or `holds_args` on a declaration that returns `()`.
+- `fresh`, `part_of_args` or `holds_args` on a declaration that returns `()` or
+  `!`.
 - `part_of_args`, `holds_args` or `stores_args` on a declaration with no
   parameter that can carry storage.
 

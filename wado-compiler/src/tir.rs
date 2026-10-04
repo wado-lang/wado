@@ -7317,10 +7317,8 @@ pub struct DeclarationShape {
 pub struct BuiltinDeclaration {
     /// How many parameters the declaration takes.
     pub arity: usize,
-    /// What `#[storage]` and `#[side_effect]` state. `None` for a declaration
-    /// that states nothing: a Component Model import, whose raw call carries
-    /// the facts instead.
-    pub facts: Option<BuiltinFacts<usize>>,
+    /// What `#[storage]` and `#[side_effect]` state.
+    pub facts: BuiltinFacts<usize>,
     /// The convention the storage implies, `None` where it implies none.
     pub returns: Option<ReturnConvention>,
     /// What the call keeps beyond it, as the storage implies.
@@ -7329,6 +7327,9 @@ pub struct BuiltinDeclaration {
     /// the caller's storage through. Snapshot here because the bodyless
     /// declaration keeps no parameters past lowering.
     pub mut_params: IndexSet<usize>,
+    /// The arrays `outside` names: the call reaches their elements and nothing
+    /// they reach.
+    pub ranged_params: IndexSet<usize>,
     /// `#[immediate(...)]` positions, lowered to a Wasm immediate. Codegen
     /// reads the argument's literal value, so nothing may rewrite it into a
     /// load.
@@ -7341,14 +7342,11 @@ pub struct BuiltinDeclaration {
 
 impl BuiltinDeclaration {
     /// The declaration `facts` make of a signature shaped as `shape`.
-    pub fn new(facts: Option<BuiltinFacts<usize>>, shape: DeclarationShape) -> Self {
-        let storage = facts.as_ref().map(|f| f.storage);
-        let returns = match storage {
-            None | Some(Storage::Opaque) => None,
-            Some(Storage::PartOfArgs) => {
-                Some(ReturnConvention::PartOf(shape.storage_params.clone()))
-            }
-            Some(Storage::None | Storage::Fresh | Storage::HoldsArgs | Storage::StoresArgs) => {
+    pub fn new(facts: BuiltinFacts<usize>, shape: DeclarationShape) -> Self {
+        let returns = match facts.storage {
+            Storage::Opaque => None,
+            Storage::PartOfArgs => Some(ReturnConvention::PartOf(shape.storage_params.clone())),
+            Storage::None | Storage::Fresh | Storage::HoldsArgs | Storage::StoresArgs => {
                 Some(ReturnConvention::Owned)
             }
         };
@@ -7357,13 +7355,13 @@ impl BuiltinDeclaration {
             elements: shape.reference_params.contains(&source),
             into,
         };
-        let retains = match storage {
-            Some(Storage::HoldsArgs) => shape
+        let retains = match facts.storage {
+            Storage::HoldsArgs => shape
                 .storage_params
                 .iter()
                 .map(|&p| retain(p, RetainInto::Result))
                 .collect(),
-            Some(Storage::StoresArgs) => {
+            Storage::StoresArgs => {
                 let dst = *shape
                     .mut_params
                     .first()
@@ -7375,7 +7373,7 @@ impl BuiltinDeclaration {
                     .map(|&p| retain(p, RetainInto::Param(dst)))
                     .collect()
             }
-            Some(Storage::Opaque) => shape
+            Storage::Opaque => shape
                 .storage_params
                 .iter()
                 .map(|&source| RetainSpec {
@@ -7384,36 +7382,38 @@ impl BuiltinDeclaration {
                     into: RetainInto::Anywhere,
                 })
                 .collect(),
-            None | Some(Storage::None | Storage::Fresh | Storage::PartOfArgs) => Vec::new(),
+            Storage::None | Storage::Fresh | Storage::PartOfArgs => Vec::new(),
         };
-        let element_access = facts.as_ref().and_then(|facts| {
-            let [
+        let element_access = match facts
+            .trap_checks()
+            .iter()
+            .filter(|check| matches!(check, TrapCheck::Outside { .. }))
+            .collect::<Vec<_>>()[..]
+        {
+            [
                 TrapCheck::Outside {
                     array,
                     at: Some(_),
                     count: None,
                 },
-            ] = facts
-                .trap_checks()
-                .iter()
-                .filter(|check| matches!(check, TrapCheck::Outside { .. }))
-                .collect::<Vec<_>>()[..]
-            else {
-                return None;
-            };
-            let access = if shape.returns_mut_ref {
-                ArrayElementAccess::Write
-            } else {
-                ArrayElementAccess::Read
-            };
-            shape.returns_value.then_some((*array, access))
-        });
+            ] if shape.returns_value => {
+                let access = if shape.returns_mut_ref {
+                    ArrayElementAccess::Write
+                } else {
+                    ArrayElementAccess::Read
+                };
+                Some((*array, access))
+            }
+            _ => None,
+        };
+        let ranged_params = facts.ranged_arrays().copied().collect();
         Self {
             arity: shape.arity,
             facts,
             returns,
             retains,
             mut_params: shape.mut_params,
+            ranged_params,
             immediate_params: shape.immediate_params,
             element_access,
             never_returns: shape.returns_never,
@@ -7422,26 +7422,15 @@ impl BuiltinDeclaration {
 
     /// Whether the call returns new storage: `fresh` or `holds_args`.
     pub fn allocates(&self) -> bool {
-        self.facts
-            .as_ref()
-            .is_some_and(|facts| facts.storage.returns_new_storage())
+        self.facts.storage.returns_new_storage()
     }
 
-    /// Whether the call writes no struct field: its storage is stated, and
-    /// every `&mut` parameter is an array it ranges over.
+    /// Whether the call writes no struct field: its storage and effects are
+    /// stated, and every `&mut` parameter is an array it ranges over.
     pub fn writes_no_field(&self) -> bool {
-        self.facts
-            .as_ref()
-            .is_some_and(|facts| facts.storage != Storage::Opaque)
-            && self.mut_params.iter().all(|&p| self.ranges_over(p))
-    }
-
-    /// Whether the call states `outside = [pos]`: it reaches the elements of
-    /// that array and nothing they reach.
-    pub fn ranges_over(&self, pos: usize) -> bool {
-        self.facts
-            .as_ref()
-            .is_some_and(|facts| facts.ranged_arrays().any(|&array| array == pos))
+        self.facts.storage != Storage::Opaque
+            && !self.facts.is_opaque()
+            && self.mut_params.is_subset(&self.ranged_params)
     }
 }
 
@@ -7547,9 +7536,7 @@ impl DeclarationTable<BuiltinDeclaration> {
     /// the elements a reference points to still answers `true` here, so a
     /// caller asking about reachable storage must read the retain specs itself.
     ///
-    /// A call with no snapshot answers `false`. Link takes one for every
-    /// bodyless free function, so the gap is a method, whose key would not be
-    /// this one — never a declaration that simply had nothing to say.
+    /// A call with no snapshot answers `false`: nothing here says what it does.
     pub fn reads_param<'a>(&self, call: impl Into<DeclarationLookup<'a>>, pos: usize) -> bool {
         self.get(call.into()).is_some_and(|d| {
             !d.mut_params.contains(&pos)
@@ -7567,14 +7554,6 @@ impl DeclarationTable<BuiltinDeclaration> {
         self.get(call.into())
             .map(|d| d.immediate_params.clone())
             .unwrap_or_default()
-    }
-
-    /// What `call` states with `#[storage]` and `#[side_effect]`.
-    pub fn facts<'a>(
-        &self,
-        call: impl Into<DeclarationLookup<'a>>,
-    ) -> Option<&BuiltinFacts<usize>> {
-        self.get(call.into())?.facts.as_ref()
     }
 
     /// The array parameter whose one element `call` reaches, and how.

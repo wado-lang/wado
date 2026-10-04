@@ -152,6 +152,14 @@ impl<P> BuiltinFacts<P> {
         }
     }
 
+    /// Whether the call's effects are unknown: `opaque` or `black_box`.
+    pub fn is_opaque(&self) -> bool {
+        matches!(
+            self.side_effect,
+            SideEffect::Opaque | SideEffect::BlackBox
+        )
+    }
+
     /// The trap conditions, `None` where the call never traps. `black_box`
     /// hands its operand back, which cannot trap.
     pub fn trap(&self) -> Option<&Trap<P>> {
@@ -272,7 +280,8 @@ pub struct ParamShape<'a> {
 /// The return type as validation reads it.
 #[derive(Debug, Clone, Copy)]
 pub struct ReturnShape {
-    pub is_unit: bool,
+    /// Neither `()` nor `!`.
+    pub returns_value: bool,
     pub is_array: bool,
 }
 
@@ -449,10 +458,10 @@ impl Reader<'_, '_> {
                 );
             }
         }
-        if storage.describes_result() && self.ret.is_unit {
+        if storage.describes_result() && !self.ret.returns_value {
             self.report(
                 STORAGE,
-                format!("`#[storage({word})]` describes a result, and this returns `()`"),
+                format!("`#[storage({word})]` describes a result, and this returns no value"),
             );
         }
         if storage.shares_args() && !self.params.iter().any(|p| p.carries_storage) {
@@ -525,7 +534,7 @@ impl Reader<'_, '_> {
         }
 
         if let Some(alone) = ALONE.iter().find(|word| words.contains(*word))
-            && args.len() > 1
+            && words.len() + arrays.len() + names.len() > 1
         {
             self.report(
                 SIDE_EFFECT,
@@ -662,7 +671,7 @@ mod tests {
     }
 
     const UNIT: ReturnShape = ReturnShape {
-        is_unit: true,
+        returns_value: false,
         is_array: false,
     };
 
@@ -757,6 +766,10 @@ mod tests {
                 "`#[side_effect]` names `trap` twice",
             ),
             (
+                vec![ident("none"), ident("none")],
+                "`#[side_effect]` names `none` twice",
+            ),
+            (
                 vec![ident("trap"), key("outside", "dst")],
                 "`#[side_effect(outside = …)]` takes `[p, …]`",
             ),
@@ -795,7 +808,7 @@ mod tests {
             (
                 vec![ident("fresh")],
                 &ints,
-                "`#[storage(fresh)]` describes a result, and this returns `()`",
+                "`#[storage(fresh)]` describes a result, and this returns no value",
             ),
             (
                 vec![ident("stores_args")],

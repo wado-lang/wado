@@ -4,7 +4,7 @@
 //! of a builtin whose trap conditions all hold, and the divergence of a
 //! loop that runs out.
 
-use crate::builtin_facts::{BuiltinFacts, Trap, TrapCheck};
+use crate::builtin_facts::{Trap, TrapCheck};
 use crate::const_eval;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
@@ -14,18 +14,7 @@ use crate::nir_arena::{
 use crate::nir_value_graph::ValueKind;
 use crate::optimize::arena_query::{binary_parts, local_written_by, operand_local, storage_root};
 use crate::primitive::PrimitiveType;
-use crate::tir::{ResolvedType, TypeTable};
-
-/// What a bodyless builtin declared, as a call to it is read here.
-#[derive(Debug, Clone, Copy)]
-pub(super) struct Builtin<'a> {
-    /// What `#[storage]` and `#[side_effect]` state.
-    pub facts: &'a BuiltinFacts<usize>,
-    /// The positions it takes by `&mut`.
-    pub mut_params: &'a IndexSet<usize>,
-    /// It returns new storage.
-    pub allocates: bool,
-}
+use crate::tir::{BuiltinDeclaration, ResolvedType, TypeTable};
 
 /// The builtin calls in one body whose every trap condition holds, each
 /// with the callee its checks were proven against.
@@ -67,7 +56,7 @@ const MAX_DEPTH: u32 = 16;
 pub(super) fn analyze<'b>(
     body: &Body,
     types: &TypeTable,
-    builtin: impl Fn(FuncId) -> Option<Builtin<'b>>,
+    builtin: impl Fn(FuncId) -> Option<&'b BuiltinDeclaration>,
 ) -> Bounds {
     let mut scan = Scan {
         body,
@@ -97,7 +86,7 @@ struct Scan<'a, F> {
     out: Bounds,
 }
 
-impl<'b, F: Fn(FuncId) -> Option<Builtin<'b>>> Scan<'_, F> {
+impl<'b, F: Fn(FuncId) -> Option<&'b BuiltinDeclaration>> Scan<'_, F> {
     fn count_writes(&mut self) {
         let body = self.body;
         // A builtin checking an array's bounds does not rebind that array, so
@@ -123,7 +112,7 @@ impl<'b, F: Fn(FuncId) -> Option<Builtin<'b>>> Scan<'_, F> {
                 if let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind
                     && let Some(builtin) = (self.builtin)(*func_id)
                 {
-                    for &pos in builtin.facts.ranged_arrays() {
+                    for &pos in &builtin.ranged_params {
                         if let Some(Operand::Expr(arr)) = args.get(pos).map(|a| a.expr) {
                             element_writes.insert(arr);
                         }
@@ -402,7 +391,9 @@ impl<'b, F: Fn(FuncId) -> Option<Builtin<'b>>> Scan<'_, F> {
                 op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
                 expr,
             } => self.fresh(*expr, depth + 1),
-            ExprKind::Call { func_id, .. } => (self.builtin)(*func_id).is_some_and(|b| b.allocates),
+            ExprKind::Call { func_id, .. } => {
+                (self.builtin)(*func_id).is_some_and(BuiltinDeclaration::allocates)
+            }
             ExprKind::StructLiteral { .. }
             | ExprKind::TupleLiteral { .. }
             | ExprKind::ArrayLiteral { .. }

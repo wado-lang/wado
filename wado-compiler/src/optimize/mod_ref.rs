@@ -15,9 +15,9 @@ use crate::nir_package::NirPackage;
 use crate::optimize::arena_query::{
     expr_node_may_trap_typed, field_receiver_nonnull, operand_values_may_trap, unary_may_trap,
 };
-use crate::optimize::bounds::{self, Builtin, Proofs};
+use crate::optimize::bounds::{self, Proofs};
 use crate::optimize::inline::recursive_scc_members;
-use crate::tir::{BuiltinDeclarations, DeclarationLookup, TypeTable};
+use crate::tir::{BuiltinDeclaration, BuiltinDeclarations, DeclarationLookup, TypeTable};
 
 /// Read / write flags for a single state channel (e.g., GC heap or
 /// linear memory).
@@ -733,12 +733,9 @@ impl FnEffect {
 fn leaf_effect<'a>(
     f: &NirFunction,
     declarations: &'a BuiltinDeclarations,
-) -> (FnEffect, Option<Builtin<'a>>) {
+) -> (FnEffect, Option<&'a BuiltinDeclaration>) {
     let lookup = DeclarationLookup::from(f);
-    let declared = declarations
-        .get(lookup)
-        .and_then(|d| d.facts.as_ref().map(|facts| (d, facts)));
-    let Some((declaration, facts)) = declared else {
+    let Some(declaration) = declarations.get(lookup) else {
         assert!(
             lookup.intrinsic().is_none(),
             "a call to builtin `{}` has no declaration to read its facts from",
@@ -746,7 +743,7 @@ fn leaf_effect<'a>(
         );
         return (FnEffect::opaque(), None);
     };
-    let effect = match &facts.side_effect {
+    let effect = match &declaration.facts.side_effect {
         SideEffect::Opaque => FnEffect::opaque(),
         SideEffect::BlackBox => FnEffect {
             pinned: true,
@@ -767,17 +764,12 @@ fn leaf_effect<'a>(
             ..FnEffect::default()
         },
     };
-    let builtin = Builtin {
-        facts,
-        mut_params: &declaration.mut_params,
-        allocates: declaration.allocates(),
-    };
-    (effect, Some(builtin))
+    (effect, Some(declaration))
 }
 
 /// Each bodyless function's summary and, for a builtin, what it declared,
 /// indexed by `func_id.index()`. A function with a body is left pure here.
-fn leaf_effects(project: &NirPackage) -> (Vec<FnEffect>, Vec<Option<Builtin<'_>>>) {
+fn leaf_effects(project: &NirPackage) -> (Vec<FnEffect>, Vec<Option<&BuiltinDeclaration>>) {
     let funcs = &project.functions;
     let mut effects = vec![FnEffect::default(); funcs.len()];
     let mut builtins = vec![None; funcs.len()];
@@ -846,7 +838,9 @@ pub(super) fn compute_fn_effects(project: &NirPackage) -> Vec<FnEffect> {
 /// [`compute_fn_effects`] with each body's [`Proofs`], and what each builtin
 /// declared (indexed by `func_id.index()`), for a caller that proves a body
 /// again after changing it.
-pub(super) fn summarize(project: &NirPackage) -> (FnSummaries, Vec<Option<Builtin<'_>>>) {
+pub(super) fn summarize(
+    project: &NirPackage,
+) -> (FnSummaries, Vec<Option<&BuiltinDeclaration>>) {
     use cranelift_entity::EntityRef;
 
     let funcs = &project.functions;
