@@ -41,17 +41,9 @@ use crate::elaborator::trait_env::{
 use crate::elaborator::types::{RequiredTrait, StructFieldInfo, VariantInfo};
 use crate::name::FqTraitName;
 use crate::resolve::{Resolution, Resolutions};
-<<<<<<< HEAD
-use crate::synthesis::template::{comparison_written_alone, written_impl_reaches};
+use crate::synthesis::template::{PairedEq, eq_from_written_cmp, written_impl_reaches};
 use crate::tir::{AssocTypeSig, ProjectionAnswer, SlotProjections, TraitRef};
 use crate::unparse::unparse_generic_params_into;
-||||||| 21cd413f524
-use crate::synthesis::template::{comparison_written_alone, written_impl_reaches};
-use crate::tir::{SlotProjections, TraitRef};
-=======
-use crate::synthesis::template::{PairedEq, eq_from_written_cmp, written_impl_reaches};
-use crate::tir::{SlotProjections, TraitRef};
->>>>>>> origin/main
 
 /// Proof that a bound was asked and answered no. Its field is private here, so
 /// [`TypeError::TraitBoundNotSatisfied`] can be raised from nowhere else.
