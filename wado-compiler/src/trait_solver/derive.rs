@@ -95,32 +95,22 @@ fn covers_every_instance(def: &ImplDef) -> bool {
         })
 }
 
-/// State the comparison table (spec-traits.md §Derivation Policy) as impls,
-/// each at the target and with the bounds of the written impl it pairs with:
-/// a written `cmp` gives `==`, and a written `eq` gives no `Ord`. Which row an
-/// instance reads is then the precedence between impls reaching it: a written
-/// `eq` or a marker takes the place of the `==` from `cmp`, and only a written
-/// `cmp` lifts the withholding. A marker of `Eq` at a written `Ord`'s target
-/// asks for that `==`, so it takes the `Ord`'s bounds in place of the paired
-/// impl.
+/// State the comparison table (spec-traits.md §Derivation Policy): a written
+/// `cmp` gives `==`, and a written `eq` gives no `Ord`. The `==` from `cmp` is
+/// an impl at the target and with the bounds of the written `Ord`, which a
+/// written `eq` or a marker reaching an instance takes the place of. A marker
+/// of `Eq` at a written `Ord`'s target asks for that `==`, so it takes the
+/// `Ord`'s bounds in place of the paired impl. What `Ord` a written `eq`
+/// withholds is [`super::comparison_row`]'s to answer.
 pub fn pair_comparisons(program: &mut Program, eq: TraitDeclId, ord: TraitDeclId) {
-    let written = |program: &Program, trait_| -> Vec<ImplDef> {
-        program
-            .impls
-            .values()
-            .filter(|def| at_self(program, def, trait_, &[ImplOrigin::Written]))
-            .cloned()
-            .collect()
-    };
-    for written_eq in written(program, eq) {
-        program.push_impl(ImplDef {
-            trait_: Some(ord),
-            trait_args: Vec::new(),
-            origin: ImplOrigin::Withheld,
-            ..written_eq
-        });
-    }
-    for written_ord in written(program, ord) {
+    program.comparisons = Some((eq, ord));
+    let written_ords: Vec<ImplDef> = program
+        .impls
+        .values()
+        .filter(|def| at_self(program, def, ord, &[ImplOrigin::Written]))
+        .cloned()
+        .collect();
+    for written_ord in written_ords {
         let paired = |origin| ImplDef {
             trait_: Some(eq),
             trait_args: Vec::new(),
@@ -587,6 +577,28 @@ mod tests {
             holds(&p, &Env::default(), &wrapper_of(decl(OPAQUE)), EQ, HERE),
             None
         );
+    }
+
+    /// The `==` a marker beside a written `cmp` asks for calls that `cmp`, so
+    /// it owes no member's body.
+    #[test]
+    fn the_eq_from_cmp_owes_no_members() {
+        let mut p = prelude();
+        p.push_impl(bounded(ORD, wrapper_of(SolverType::Param(0)), vec![ORD]));
+        p.push_impl(ImplDef {
+            origin: ImplOrigin::Marker,
+            ..bounded(EQ, wrapper_of(SolverType::Param(0)), vec![])
+        });
+        p.push_impl(concrete(ORD, decl(I32)));
+        pair_comparisons(&mut p, EQ, ORD);
+        derive(
+            &mut p,
+            EQ,
+            &[declaration(WRAPPER, 1, vec![SolverType::Param(0)])],
+        );
+        let held = holds(&p, &Env::default(), &wrapper_of(decl(I32)), EQ, HERE)
+            .expect("the written `Ord` holds at `i32`");
+        assert!(held.requests.iter().all(|r| !r.structural));
     }
 
     /// A member that reaches a declaration through the marker's impl derives:

@@ -407,7 +407,8 @@ mod tests {
         assert_eq!(found.in_scope[1].depth, 1);
     }
 
-    /// A trait the newtype withholds offers no candidate from below it.
+    /// A trait the newtype withholds, by writing the other comparison trait
+    /// alone, offers no candidate from below it.
     #[test]
     fn a_withheld_trait_offers_nothing_from_the_base() {
         let mut p = program(Builder::default().concrete(TR, decl(POINT)));
@@ -417,11 +418,14 @@ mod tests {
                 newtype_base: Some(decl(POINT)),
             },
         );
-        p.push_impl(ImplDef {
-            origin: ImplOrigin::Withheld,
-            ..concrete(TR, decl(WRAPPER))
-        });
-        assert!(ask(&p, &decl(WRAPPER)).in_scope.is_empty());
+        p.comparisons = Some((OTHER, TR));
+        p.push_impl(concrete(OTHER, decl(WRAPPER)));
+        assert!(
+            ask(&p, &decl(WRAPPER))
+                .in_scope
+                .iter()
+                .all(|c| c.trait_ != TR)
+        );
         assert_eq!(selected(&ask(&p, &decl(POINT))), Some(ImplId(0)));
     }
 

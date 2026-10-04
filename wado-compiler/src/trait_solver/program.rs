@@ -192,10 +192,6 @@ pub enum ImplOrigin {
     /// the `Eq` a written `cmp` gives. Owes the body as `Derived` does, and
     /// yields only to a written impl or a marker.
     Paired,
-    /// A written `eq` withholding `Ord` where it reaches: no impl answers there
-    /// but a written one (spec-traits.md §Derivation Policy). Answers nothing
-    /// itself.
-    Withheld,
 }
 
 impl ImplOrigin {
@@ -204,7 +200,7 @@ impl ImplOrigin {
     #[must_use]
     pub fn yields_to(self) -> &'static [Self] {
         match self {
-            Self::Written | Self::Marker | Self::Withheld => &[],
+            Self::Written | Self::Marker => &[],
             Self::Paired => &[Self::Written, Self::Marker],
             Self::Derived => &[Self::Written, Self::Marker, Self::Paired],
         }
@@ -389,6 +385,9 @@ pub struct Program {
     pub tuple: Option<TypeDeclId>,
     /// Each declaration's members, which a structural body owes the bodies of.
     pub declarations: IndexMap<TypeDeclId, Declaration>,
+    /// `Eq` and `Ord`, the pair the comparison table relates. Set by
+    /// [`super::pair_comparisons`].
+    pub comparisons: Option<(TraitDeclId, TraitDeclId)>,
 }
 
 /// The bounds in force where a question was asked: a generic body's `T: Tr`

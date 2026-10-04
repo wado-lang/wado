@@ -163,7 +163,7 @@ impl Query<'_> {
         if trait_def.is_some_and(|def| def.holds_for_all) {
             return Some(Holds::default());
         }
-        if withheld(program, trait_, ty) {
+        if withheld_at(program, ty) == Some(trait_) {
             return None;
         }
         let on_ref = trait_def.map_or(RefRule::default(), |def| def.on_ref);
@@ -258,9 +258,6 @@ impl Query<'_> {
     fn impl_answers(&mut self, id: ImplId, def: &ImplDef, ty: &SolverType) -> Option<Answer> {
         let program = self.program;
         let implemented = def.trait_?;
-        if def.origin == ImplOrigin::Withheld {
-            return None;
-        }
         // A value blanket answers no reference; `&T` reaches it through the
         // pointee.
         if matches!(def.target, SolverType::Param(_)) && matches!(ty, SolverType::Ref { .. }) {
@@ -282,15 +279,15 @@ impl Query<'_> {
                 vec![DerivationRequest {
                     ty: ty.clone(),
                     trait_: implemented,
-                    // The `==` paired with a written `cmp` calls `cmp`.
-                    structural: def.origin != ImplOrigin::Paired
-                        && program
-                            .traits
-                            .get(&implemented)
-                            .is_some_and(|t| t.structural),
+                    // The `==` a written `cmp` gives calls `cmp`, a marker's
+                    // included.
+                    structural: program
+                        .traits
+                        .get(&implemented)
+                        .is_some_and(|t| t.structural)
+                        && !eq_from_cmp(program, implemented, ty),
                 }]
             }
-            ImplOrigin::Withheld => unreachable!("a withholding impl answers nothing"),
         };
         let pinned = |index: u32| {
             def.params
@@ -385,35 +382,27 @@ pub(super) fn at_self(
         && matches!(def.target, SolverType::Decl(..))
 }
 
-/// Whether `ty` has no `trait_`, whatever answers it: a withholding impl
-/// reaches it and no written one does.
-fn withheld(program: &Program, trait_: TraitDeclId, ty: &SolverType) -> bool {
-    reached_by(program, trait_, ty, &[ImplOrigin::Withheld])
-        && !reached_by(program, trait_, ty, &[ImplOrigin::Written])
+/// The trait `ty` has none of, whatever answers it: `Ord`, where a written `eq`
+/// reaches it alone.
+pub(super) fn withheld_at(program: &Program, ty: &SolverType) -> Option<TraitDeclId> {
+    let (eq, ord) = program.comparisons?;
+    matches!(comparison_row(program, ty), Some((written, _)) if written == eq).then_some(ord)
 }
 
-/// The traits [`withheld`] at `ty`.
-pub(super) fn withheld_at(program: &Program, ty: &SolverType) -> Vec<TraitDeclId> {
-    program
-        .impls
-        .values()
-        .filter(|def| def.origin == ImplOrigin::Withheld)
-        .filter_map(|def| def.trait_)
-        .filter(|&trait_| withheld(program, trait_, ty))
-        .collect()
+/// Whether `trait_`'s body at `ty` is the `==` a `cmp` written alone gives.
+fn eq_from_cmp(program: &Program, trait_: TraitDeclId, ty: &SolverType) -> bool {
+    program.comparisons.is_some_and(|(eq, ord)| {
+        trait_ == eq && matches!(comparison_row(program, ty), Some((written, _)) if written == ord)
+    })
 }
 
 /// The row of the comparison table `ty` reads (spec-traits.md §Derivation
-/// Policy): which of `eq` and `ord` a written impl reaching `ty` implements
+/// Policy): which of `Eq` and `Ord` a written impl reaching `ty` implements
 /// without the other, with that impl. A concrete impl answers before a generic
 /// one, as coherence Rule 1 orders them.
 #[must_use]
-pub fn comparison_row(
-    program: &Program,
-    eq: TraitDeclId,
-    ord: TraitDeclId,
-    ty: &SolverType,
-) -> Option<(TraitDeclId, ImplId)> {
+pub fn comparison_row(program: &Program, ty: &SolverType) -> Option<(TraitDeclId, ImplId)> {
+    let (eq, ord) = program.comparisons?;
     let written = |trait_| {
         program
             .impls
@@ -1126,7 +1115,8 @@ mod tests {
                 newtype_base: Some(decl(I32)),
             },
         );
-        p.push_impl(withholding(ALPHA, decl(COARSE)));
+        p.comparisons = Some((EQ, ALPHA));
+        p.push_impl(concrete(EQ, decl(COARSE)));
         assert_eq!(holds(&p, &Env::default(), &decl(COARSE), ALPHA, HERE), None);
         assert_eq!(
             holds(&p, &Env::default(), &decl(COARSE), BETA, HERE),
@@ -1139,12 +1129,13 @@ mod tests {
     #[test]
     fn only_a_written_impl_answers_what_is_withheld() {
         let mut p = Builder::default().build();
+        p.comparisons = Some((EQ, ALPHA));
         p.push_impl(ImplDef {
             origin: ImplOrigin::Marker,
             ..concrete(ALPHA, decl(POINT))
         });
         assert!(holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE).is_some());
-        p.push_impl(withholding(ALPHA, decl(POINT)));
+        p.push_impl(concrete(EQ, decl(POINT)));
         assert_eq!(holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE), None);
         p.push_impl(concrete(ALPHA, decl(POINT)));
         assert!(holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE).is_some());
@@ -1156,32 +1147,27 @@ mod tests {
     fn each_instance_reads_its_own_comparison_row() {
         const ORD: TraitDeclId = BETA;
         let mut p = Builder::default().build();
+        p.comparisons = Some((EQ, ORD));
         let ord_for_all = p.push_impl(generic(
             1,
             concrete(ORD, list_of(SolverType::Param(0))),
         ));
         p.push_impl(concrete(EQ, list_of(decl(I32))));
         assert_eq!(
-            comparison_row(&p, EQ, ORD, &list_of(decl(POINT))),
+            comparison_row(&p, &list_of(decl(POINT))),
             Some((ORD, ord_for_all))
         );
-        assert_eq!(comparison_row(&p, EQ, ORD, &list_of(decl(I32))), None);
-        assert_eq!(comparison_row(&p, EQ, ORD, &ref_to(list_of(decl(POINT)))), None);
+        assert_eq!(comparison_row(&p, &list_of(decl(I32))), None);
+        assert_eq!(comparison_row(&p, &ref_to(list_of(decl(POINT)))), None);
 
         let mut p = Builder::default().build();
+        p.comparisons = Some((EQ, ORD));
         p.push_impl(generic(1, concrete(EQ, list_of(SolverType::Param(0)))));
-        let eq_for_i32_first = p.push_impl(concrete(EQ, list_of(decl(I32))));
+        let eq_for_i32 = p.push_impl(concrete(EQ, list_of(decl(I32))));
         assert_eq!(
-            comparison_row(&p, EQ, ORD, &list_of(decl(I32))),
-            Some((EQ, eq_for_i32_first))
+            comparison_row(&p, &list_of(decl(I32))),
+            Some((EQ, eq_for_i32))
         );
-    }
-
-    fn withholding(trait_: TraitDeclId, target: SolverType) -> ImplDef {
-        ImplDef {
-            origin: ImplOrigin::Withheld,
-            ..concrete(trait_, target)
-        }
     }
 
     /// `type MyList<T> = List<T>` inherits at its own arguments.

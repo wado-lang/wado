@@ -628,8 +628,6 @@ fn newtype_decls<'a>(
 pub(crate) struct SolverBridge {
     program: Program,
     lowering: Lowering,
-    /// `Eq` and `Ord`, the traits the comparison table pairs.
-    comparisons: Option<(TraitDeclId, TraitDeclId)>,
 }
 
 impl std::fmt::Debug for SolverBridge {
@@ -720,16 +718,13 @@ impl SolverBridge {
         Self::state_primitive_impls(tysys, &mut lowering, &mut program);
         Self::state_traits(tysys, &mut lowering, &mut program);
         Self::state_scopes(tysys, modules, &mut lowering, &mut program);
-        let comparisons = Self::derived_trait(tysys, &mut lowering, CompilerItem::Eq)
-            .zip(Self::derived_trait(tysys, &mut lowering, CompilerItem::Ord));
-        if let Some((eq, ord)) = comparisons {
+        if let (Some(eq), Some(ord)) = (
+            Self::derived_trait(tysys, &mut lowering, CompilerItem::Eq),
+            Self::derived_trait(tysys, &mut lowering, CompilerItem::Ord),
+        ) {
             pair_comparisons(&mut program, eq, ord);
         }
-        let mut bridge = Self {
-            program,
-            lowering,
-            comparisons,
-        };
+        let mut bridge = Self { program, lowering };
         let shapes = bridge.shapes(modules);
         bridge.state_declarations(tysys, &tysys.data, &table, shapes, ImplId(0));
         let heads: Vec<TypeDeclId> = (0..bridge.lowering.decls.len())
@@ -814,9 +809,7 @@ impl SolverBridge {
         shapes: Vec<(Declaration, OnBoundTrait)>,
         named_from: ImplId,
     ) -> Vec<TypeDeclId> {
-        let Self {
-            program, lowering, ..
-        } = self;
+        let Self { program, lowering } = self;
         let mut stated = Self::state_newtype_bases(tysys, data, table, lowering, program);
         let (mut structs, variants, handles) = Self::declarations(tysys, data, table, lowering);
         let shape_kinds: Vec<(TypeDeclId, OnBoundTrait)> = shapes
@@ -1761,13 +1754,13 @@ impl SolverBridge {
         table: &TypeTable,
         instance: TypeId,
     ) -> Option<(CompilerItem, DefId)> {
-        let (eq, ord) = self.comparisons?;
+        let (eq, _) = self.program.comparisons?;
         // A shape the lowering cannot say is one no source names, so no written
         // impl reaches it.
         let ty = self
             .lowering
             .type_id(table, instance, &|_, index| Some(index))?;
-        let (written, impl_) = comparison_row(&self.program, eq, ord, &ty)?;
+        let (written, impl_) = comparison_row(&self.program, &ty)?;
         let item = if written == eq {
             CompilerItem::Eq
         } else {
