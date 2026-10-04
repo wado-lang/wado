@@ -16,9 +16,10 @@ Options:
   -O<level>              Optimization level: 0, 1, 2, 3 or s (default: 2)
       --dir <path>       Preopen a directory (repeatable; default: the current one)
       --no-dir           Drop that default
-      --gpu-adapter <name>
-                         Give the program the one adapter whose name contains
-                         <name> (case-insensitive), whatever it requests
+      --gpu-adapter <index|name>
+                         Give the program one adapter, whatever it requests:
+                         an integer is its index in the adapter list, anything
+                         else a case-insensitive part of its name
       --log-level <level>
                          Log level: debug, info, warn, error, off (default: warn)
                          info names the adapter each request-adapter returns
@@ -96,14 +97,28 @@ impl LogLevel {
     }
 }
 
+/// How `--gpu-adapter` names the one adapter every `request-adapter` returns.
+#[derive(PartialEq, Eq, Debug)]
+pub enum AdapterSelector {
+    /// The position in the order the adapters are enumerated and listed.
+    Index(usize),
+    /// A case-insensitive substring of the adapter's name.
+    Name(String),
+}
+
+impl AdapterSelector {
+    fn parse(value: String) -> Self {
+        value.parse().map_or(Self::Name(value), Self::Index)
+    }
+}
+
 /// One run, as the command line asks for it.
 pub struct Args {
     /// The `.wado` source or `.wasm` component to run.
     pub input: PathBuf,
     pub opt_level: OptLevel,
     pub log_level: LogLevel,
-    /// A case-insensitive substring of the one adapter's name.
-    pub gpu_adapter: Option<String>,
+    pub gpu_adapter: Option<AdapterSelector>,
     /// Empty means preopen nothing, which `--no-dir` also asks for.
     pub preopens: Vec<PathBuf>,
     /// The arguments after the input file, which belong to the program.
@@ -153,7 +168,9 @@ impl Args {
                     };
                     log_level = parsed;
                 }
-                Long("gpu-adapter") => gpu_adapter = Some(parser.value()?.string()?),
+                Long("gpu-adapter") => {
+                    gpu_adapter = Some(AdapterSelector::parse(parser.value()?.string()?));
+                }
                 Long("dir") => preopens.push(PathBuf::from(parser.value()?)),
                 Long("no-dir") => no_dir = true,
                 // Everything after the input file, flags included, is the
@@ -234,14 +251,15 @@ mod tests {
     }
 
     #[test]
-    fn a_gpu_adapter_is_named_by_a_value() {
+    fn a_gpu_adapter_is_an_index_when_an_integer_and_a_name_otherwise() {
+        let adapter = |value: &str| parse(&["--gpu-adapter", value, "app.wado"]).gpu_adapter;
         assert_eq!(parse(&["app.wado"]).gpu_adapter, None);
+        assert_eq!(adapter("1"), Some(AdapterSelector::Index(1)));
         assert_eq!(
-            parse(&["--gpu-adapter", "nvidia", "app.wado"])
-                .gpu_adapter
-                .as_deref(),
-            Some("nvidia")
+            adapter("nvidia"),
+            Some(AdapterSelector::Name("nvidia".to_owned()))
         );
+        assert_eq!(adapter("-1"), Some(AdapterSelector::Name("-1".to_owned())));
         assert!(try_parse(&["--gpu-adapter"]).is_err());
     }
 

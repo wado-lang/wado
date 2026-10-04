@@ -19,7 +19,7 @@ use wgpu_core::id::AdapterId;
 use wgpu_core::instance::RequestAdapterOptions;
 use wgpu_types::{AdapterInfo, Backends, InstanceDescriptor, PowerPreference, RequestAdapterError};
 
-use crate::args::{Args, LogLevel, OptLevel};
+use crate::args::{AdapterSelector, Args, LogLevel, OptLevel};
 
 /// The wgpu instance every `wasi:webgpu` call draws on, and the adapter
 /// `--gpu-adapter` hands every `request-adapter`.
@@ -233,8 +233,8 @@ pub fn gpu(args: &Args) -> Result<Gpu> {
     }
     let pinned = args
         .gpu_adapter
-        .as_deref()
-        .map(|name| pin(&global, &adapters, name))
+        .as_ref()
+        .map(|selector| pin(&global, &adapters, selector))
         .transpose()?;
     for id in adapters {
         if pinned != Some(id) {
@@ -247,33 +247,47 @@ pub fn gpu(args: &Args) -> Result<Gpu> {
     })
 }
 
-/// The one adapter whose name contains `name`, ignoring case.
-fn pin(global: &Global, adapters: &[AdapterId], name: &str) -> Result<AdapterId> {
-    let needle = name.to_lowercase();
+/// The one adapter `selector` names.
+fn pin(global: &Global, adapters: &[AdapterId], selector: &AdapterSelector) -> Result<AdapterId> {
     let infos: Vec<AdapterInfo> = adapters
         .iter()
         .map(|&id| global.adapter_get_info(id))
         .collect();
-    let matching: Vec<usize> = (0..infos.len())
-        .filter(|&i| infos[i].name.to_lowercase().contains(&needle))
-        .collect();
-    match *matching.as_slice() {
-        [only] => Ok(adapters[only]),
-        [] => bail!(
-            "no GPU adapter matches '{name}'. The adapters here:\n  {}",
-            listed(&infos)
-        ),
-        [..] => bail!(
-            "'{name}' matches more than one GPU adapter:\n  {}",
-            listed(matching.iter().map(|&i| &infos[i]))
-        ),
+    let all = || listed(&infos, 0..infos.len());
+    match selector {
+        AdapterSelector::Index(index) => match adapters.get(*index) {
+            Some(&id) => Ok(id),
+            None => bail!(
+                "no GPU adapter at index {index}. The adapters here:\n  {}",
+                all()
+            ),
+        },
+        AdapterSelector::Name(name) => {
+            let needle = name.to_lowercase();
+            let matching: Vec<usize> = (0..infos.len())
+                .filter(|&i| infos[i].name.to_lowercase().contains(&needle))
+                .collect();
+            match *matching.as_slice() {
+                [only] => Ok(adapters[only]),
+                [] => bail!(
+                    "no GPU adapter matches '{name}'. The adapters here:\n  {}",
+                    all()
+                ),
+                [..] => bail!(
+                    "'{name}' matches more than one GPU adapter; name one by its index:\n  {}",
+                    listed(&infos, matching)
+                ),
+            }
+        }
     }
 }
 
-fn listed<'a>(infos: impl IntoIterator<Item = &'a AdapterInfo>) -> String {
-    infos
+/// The adapters at `indices`, one per line, each under the index
+/// `--gpu-adapter` takes.
+fn listed(infos: &[AdapterInfo], indices: impl IntoIterator<Item = usize>) -> String {
+    indices
         .into_iter()
-        .map(describe)
+        .map(|i| format!("{i}: {}", describe(&infos[i])))
         .collect::<Vec<_>>()
         .join("\n  ")
 }
