@@ -353,6 +353,17 @@ export function payloadCommand(input: string): string {
   }
 }
 
+/** The PreToolUse hook output denying the call, with `reason` shown to the model. */
+export function denial(reason: string): string {
+  return JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "deny",
+      permissionDecisionReason: reason,
+    },
+  });
+}
+
 export async function readStdin(): Promise<string> {
   let input = "";
   for await (const chunk of process.stdin) input += chunk;

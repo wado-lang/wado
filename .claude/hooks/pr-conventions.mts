@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { type Command, commands, payloadCommand, readStdin } from "./shell-commands.mts";
+import { type Command, commands, denial, payloadCommand, readStdin } from "./shell-commands.mts";
 
 const SKILL = join(dirname(fileURLToPath(import.meta.url)), "../skills/pull-request/SKILL.md");
 
@@ -80,13 +80,11 @@ if (import.meta.main) {
   } catch (error) {
     decision = { allow: false, reason: `pr-conventions.mts failed (${(error as Error).message}), so the call is denied.` };
   }
-  if (decision) {
+  if (decision?.allow) {
     process.stdout.write(
-      JSON.stringify({
-        hookSpecificOutput: decision.allow
-          ? { hookEventName: "PreToolUse", additionalContext: decision.context }
-          : { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: decision.reason },
-      }),
+      JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", additionalContext: decision.context } }),
     );
+  } else if (decision) {
+    process.stdout.write(denial(decision.reason));
   }
 }
