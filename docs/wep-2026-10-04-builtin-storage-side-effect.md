@@ -141,9 +141,11 @@ pub fn i32_load(addr: i32) -> i32;
 
 ### Where the Facts Live
 
-A trap condition that follows from a Wasm instruction is still written in the
-attribute. The alternative is a table inside the compiler, which holds the same
-facts where no reader of the declaration sees them.
+The compiler learns what a builtin does from its attributes alone. A table
+hardcoded inside the compiler, keyed by a builtin's name, is forbidden: it holds
+the same facts where no reader of the declaration sees them. So a trap
+condition that follows from a Wasm instruction is still written in the
+attribute.
 
 ### Minted Builtins
 
