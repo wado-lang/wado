@@ -5,6 +5,7 @@ use super::program::{
     ArgDefault, AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, ParamBound,
     Program, RefRule, SolverType, TraitDeclId, TypeDeclId,
 };
+use crate::hashmap::IndexSet;
 
 /// A bound that holds, and the bodies its answer owes.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
@@ -47,6 +48,39 @@ pub fn holds_with_args(
         at_itself: None,
     }
     .holds(ty, trait_, args)
+}
+
+/// `requests` with every body they owe in turn: a structural body calls its
+/// trait on each member, so it owes each member's body at the instance. A
+/// recursive type owes its own body once.
+#[must_use]
+pub fn owed(
+    program: &Program,
+    env: &Env,
+    scope: ModuleId,
+    mut requests: Vec<DerivationRequest>,
+) -> Vec<DerivationRequest> {
+    let mut seen = IndexSet::default();
+    let mut owed = Vec::new();
+    while let Some(request) = requests.pop() {
+        if !seen.insert((request.ty.clone(), request.trait_)) {
+            continue;
+        }
+        if request.structural
+            && let SolverType::Decl(head, args) = &request.ty
+            && let Some(decl) = program.declarations.get(head)
+        {
+            for member in decl.members_at(args) {
+                // A marker's bounds are written, so a member may not hold;
+                // that is the marker's error, reported where it is written.
+                if let Some(held) = holds(program, env, &member, request.trait_, scope) {
+                    requests.extend(held.requests);
+                }
+            }
+        }
+        owed.push(request);
+    }
+    owed
 }
 
 /// Whether a bound in force answers `trait_` at `wanted`, comparing what the
@@ -174,6 +208,7 @@ impl Query<'_> {
                 requests: vec![DerivationRequest {
                     ty: ty.clone(),
                     trait_,
+                    structural: false,
                 }],
                 ..Holds::default()
             });
@@ -247,6 +282,7 @@ impl Query<'_> {
                 vec![DerivationRequest {
                     ty: ty.clone(),
                     trait_: implemented,
+                    structural: def.origin != ImplOrigin::Paired,
                 }]
             }
             ImplOrigin::Withheld => unreachable!("a withholding impl answers nothing"),
@@ -736,6 +772,7 @@ mod tests {
                 requests: vec![DerivationRequest {
                     ty: decl(POINT),
                     trait_: EQ,
+                    structural: false,
                 }],
                 ..Holds::default()
             })
@@ -756,6 +793,7 @@ mod tests {
                 requests: vec![DerivationRequest {
                     ty: list_of(decl(I32)),
                     trait_: ALPHA,
+                    structural: false,
                 }],
                 ..Holds::default()
             })
@@ -910,6 +948,7 @@ mod tests {
         let request = DerivationRequest {
             ty: decl(POINT),
             trait_: EQ,
+            structural: false,
         };
         let p = Builder::default()
             .bounded(BETA, SolverType::Param(0), vec![EQ])
@@ -991,6 +1030,7 @@ mod tests {
                 requests: vec![DerivationRequest {
                     ty: decl(POINT),
                     trait_: EQ,
+                    structural: true,
                 }],
                 ..Holds::default()
             })
@@ -1146,6 +1186,7 @@ mod tests {
                 requests: vec![DerivationRequest {
                     ty: decl(DURATION),
                     trait_: ALPHA,
+                    structural: true,
                 }],
                 ..Holds::default()
             })
@@ -1418,6 +1459,7 @@ mod tests {
                 requests: vec![DerivationRequest {
                     ty: decl(POINT),
                     trait_: ALPHA,
+                    structural: false,
                 }],
                 ..Holds::default()
             })

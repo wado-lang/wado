@@ -316,12 +316,33 @@ pub struct Declaration {
     pub module: ModuleId,
 }
 
+impl Declaration {
+    /// The members at the instance whose arguments are `args`: a pack member
+    /// is each element of the tuple its argument is.
+    #[must_use]
+    pub fn members_at(&self, args: &[SolverType]) -> Vec<SolverType> {
+        assert_eq!(args.len(), self.params as usize, "an instance argues every parameter");
+        let arg = |index: u32| Some(args[index as usize].clone());
+        self.members
+            .iter()
+            .flat_map(|member| match (member, member.map_params(&arg)) {
+                (SolverType::Pack(_), Some(SolverType::Tuple(elems))) => elems,
+                (_, Some(at)) => vec![at],
+                (_, None) => unreachable!("every parameter is argued"),
+            })
+            .collect()
+    }
+}
+
 /// A body the answer depends on: "this type satisfies `Eq`" is also "emit `Eq`
 /// for this type". An answer that arrives without its requests loses the body.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct DerivationRequest {
     pub ty: SolverType,
     pub trait_: TraitDeclId,
+    /// Whether the body is the structural one, which calls `trait_` on each
+    /// member and so owes each member's body in turn ([`super::owed`]).
+    pub structural: bool,
 }
 
 /// A declaration's own reflection kind, stated of the declaration and answering
@@ -359,6 +380,8 @@ pub struct Program {
     /// both sides lower to [`SolverType::Tuple`] rather than to a `Decl`, and a
     /// fact stated of that declaration needs this to reach an instance.
     pub tuple: Option<TypeDeclId>,
+    /// Each declaration's members, which a structural body owes the bodies of.
+    pub declarations: IndexMap<TypeDeclId, Declaration>,
 }
 
 /// The bounds in force where a question was asked: a generic body's `T: Tr`

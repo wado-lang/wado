@@ -8,11 +8,11 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, NEVER_TYPE_NAME, RefKind, TypeHead, UNIT_TYPE_NAME};
 use crate::primitive::PrimitiveType;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{AnonStructId, ResolvedType, TypeId, TypeTable};
 use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
     ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, Selection, SolverType,
-    TraitDeclId, TypeDeclId, TypeDef, bound_candidates, candidates, derive, holds_with_args,
+    TraitDeclId, TypeDeclId, TypeDef, bound_candidates, candidates, derive, holds_with_args, owed,
     pair_comparisons, rank,
 };
 
@@ -1497,6 +1497,118 @@ impl SolverBridge {
         })
     }
 
+    /// Whether `type_id` satisfies `asked`, with the bodies the answer owes,
+    /// each keyed as synthesis keys one: the head, its module, and the trait.
+    /// `None` where the lowering states nothing about the question.
+    pub(super) fn answer_owing(
+        &self,
+        tysys: &TypeSystem,
+        ctx: &scope::Scope,
+        scope: &TypeLookup,
+        type_id: TypeId,
+        asked: &FqTraitName,
+    ) -> Option<Option<Vec<OwedBody>>> {
+        let q = self.question(tysys, ctx, scope, type_id, asked)?;
+        let Some(held) = holds_with_args(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args)
+        else {
+            return Some(None);
+        };
+        let table = tysys.type_table.borrow();
+        let names: Vec<String> = ctx.trait_ctx.type_params.keys().cloned().collect();
+        let mut shapes = Vec::new();
+        self.shapes_in(&table, type_id, &param_index(&names), &mut shapes);
+        let defs = tysys.resolutions.defs();
+        let bodies = owed(&self.program, &q.env, q.module, held.requests)
+            .into_iter()
+            .flat_map(|request| {
+                let trait_ = self.lowering.trait_def_of(request.trait_);
+                let SolverType::Decl(head, _) = &request.ty else {
+                    return Vec::new();
+                };
+                let (key, _) = self
+                    .lowering
+                    .decls
+                    .get_index(head.0 as usize)
+                    .expect("a lowered head is interned");
+                match key {
+                    DeclKey::Def(def) => vec![OwedBody {
+                        head: FqTypeName::declared(defs, *def).head().clone(),
+                        module: table.def_module(*def).clone(),
+                        trait_,
+                    }],
+                    // Two shapes of one field-type list lower alike, so each
+                    // is owed the body.
+                    DeclKey::AnonymousStruct | DeclKey::TemplateShape => shapes
+                        .iter()
+                        .filter(|(lowered, _)| *lowered == request.ty)
+                        .map(|&(_, shape)| OwedBody {
+                            head: table.fq_struct_head(StructDef::Anon(shape)).head().clone(),
+                            module: table.anon_struct_module(shape).clone(),
+                            trait_,
+                        })
+                        .collect(),
+                    DeclKey::Builtin(_) => Vec::new(),
+                }
+            })
+            .collect();
+        Some(Some(bodies))
+    }
+
+    /// Each anonymous shape `id` is built over, with its lowering: what a
+    /// body owed at a shape names it by.
+    fn shapes_in(
+        &self,
+        table: &TypeTable,
+        id: TypeId,
+        param: &dyn Fn(&str, u32) -> Option<u32>,
+        out: &mut Vec<(SolverType, AnonStructId)>,
+    ) {
+        let mut each = |ids: &[TypeId]| {
+            for &inner in ids {
+                self.shapes_in(table, inner, param, out);
+            }
+        };
+        match table.get(id) {
+            ResolvedType::Struct {
+                def: StructDef::Anon(shape),
+                ..
+            } => {
+                let shape = *shape;
+                let members: Vec<TypeId> = match table.template_shape(shape) {
+                    Some(template) => template.holes.iter().map(|hole| hole.ty).collect(),
+                    None => table
+                        .anon_struct_fields(shape)
+                        .iter()
+                        .map(|&(_, ty)| ty)
+                        .collect(),
+                };
+                each(&members);
+                if let Some(lowered) = self.lowering.type_id(table, id, param) {
+                    out.push((lowered, shape));
+                }
+            }
+            ResolvedType::Struct {
+                def: StructDef::Decl(_),
+                type_args,
+            }
+            | ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. }
+            | ResolvedType::Newtype { type_args, .. } => each(type_args),
+            ResolvedType::BuiltinArray(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner) => each(&[*inner]),
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                each(params);
+                each(&[*return_type]);
+            }
+            _ => {}
+        }
+    }
+
     /// The solver's answer to the question `type_implements_trait` just
     /// answered; `None` where the lowering states nothing about it.
     pub(super) fn answer(
@@ -1739,6 +1851,13 @@ fn param_index(names: &[String]) -> impl Fn(&str, u32) -> Option<u32> + '_ {
             .position(|n| n == name)
             .map(|p| u32::try_from(p).expect("fewer than 2^32 params"))
     }
+}
+
+/// A body an answer owes, keyed as synthesis keys the request for it.
+pub(super) struct OwedBody {
+    pub(super) head: TypeHead,
+    pub(super) module: ModuleSource,
+    pub(super) trait_: DefId,
 }
 
 /// A `type_implements_trait` question as the solver reads it.

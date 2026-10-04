@@ -30,6 +30,7 @@ pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declar
         .collect();
     let mut standing: Vec<(&Declaration, ImplId, Env)> = Vec::new();
     for decl in declarations {
+        program.declarations.insert(decl.id, decl.clone());
         if has_impl.contains(&decl.id) {
             continue;
         }
@@ -157,6 +158,7 @@ fn derived_bounds(trait_: TraitDeclId, decl: &Declaration) -> Vec<Vec<TraitDeclI
 
 #[cfg(test)]
 mod tests {
+    use super::super::holds::owed;
     use super::super::program::{ArgDefault, ModuleId, TypeDef};
     use super::super::testing::{Builder, bounded, concrete, decl};
     use super::*;
@@ -309,6 +311,67 @@ mod tests {
         assert!(at(&of(vec![decl(I32), decl(I32)])));
         assert!(at(&of(vec![])));
         assert!(!at(&of(vec![decl(I32), decl(OPAQUE)])));
+    }
+
+    /// The types whose bodies `ty: Eq` owes, after `derive` over `declarations`.
+    fn owed_at(declarations: &[Declaration], ty: &SolverType) -> Vec<SolverType> {
+        let mut p = prelude();
+        derive(&mut p, EQ, declarations);
+        let held = holds(&p, &Env::default(), ty, EQ, HERE).expect("the bound holds");
+        let mut types: Vec<SolverType> = owed(&p, &Env::default(), HERE, held.requests)
+            .into_iter()
+            .map(|request| request.ty)
+            .collect();
+        types.sort();
+        types
+    }
+
+    /// `Wrapper<Point>`'s body compares a `List<Point>`, whose written body
+    /// compares each `Point`: the bound owes `Point`'s body though it asked
+    /// only of `Wrapper`, and the written `List` owes none.
+    #[test]
+    fn a_derived_body_owes_its_members_bodies_through_a_written_impl() {
+        let declarations = [
+            declaration(POINT, 0, vec![decl(I32)]),
+            declaration(
+                WRAPPER,
+                1,
+                vec![SolverType::Decl(LIST, vec![SolverType::Param(0)])],
+            ),
+        ];
+        let wrapper = SolverType::Decl(WRAPPER, vec![decl(POINT)]);
+        assert_eq!(
+            owed_at(&declarations, &wrapper),
+            vec![decl(POINT), wrapper.clone()]
+        );
+    }
+
+    /// `Node` owes its own body once, however often its members reach it.
+    #[test]
+    fn a_recursive_type_owes_its_body_once() {
+        let node = [declaration(
+            NODE,
+            0,
+            vec![SolverType::Decl(OPTION, vec![decl(NODE)])],
+        )];
+        assert_eq!(owed_at(&node, &decl(NODE)), vec![decl(NODE)]);
+    }
+
+    /// A shape's members are its pack's elements, each owing its own body.
+    #[test]
+    fn a_variadic_shape_owes_each_elements_body() {
+        let declarations = [
+            declaration(POINT, 0, vec![decl(I32)]),
+            Declaration {
+                variadic: true,
+                ..declaration(WRAPPER, 1, vec![SolverType::Pack(0)])
+            },
+        ];
+        let shape = SolverType::Decl(WRAPPER, vec![SolverType::Tuple(vec![decl(POINT), decl(I32)])]);
+        assert_eq!(
+            owed_at(&declarations, &shape),
+            vec![decl(POINT), shape.clone()]
+        );
     }
 
     /// `struct Node { next: Option<Node> }` reaches itself through a member.

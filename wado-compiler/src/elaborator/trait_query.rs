@@ -687,13 +687,19 @@ impl TypeSystem {
             return false;
         };
         let wanted = trait_.args();
-        // Where a written argument decides, the answer is the solver's — the
-        // one path that reads arguments (WEP 2026-09-01).
-        if !wanted.is_empty()
-            && let Some(bridge) = self.solver.as_ref()
-            && let Some(answer) = bridge.borrow().answer(self, ctx, scope, type_id, trait_)
+        // The answer is the solver's wherever the lowering states the
+        // question, and so are the bodies it owes (WEP 2026-09-01).
+        if let Some(bridge) = self.solver.as_ref()
+            && let Some(answer) = bridge
+                .borrow()
+                .answer_owing(self, ctx, scope, type_id, trait_)
         {
-            return answer;
+            let holds = answer.is_some();
+            let mut table = self.type_table.borrow_mut();
+            for body in answer.into_iter().flatten() {
+                table.record_bound_driven_synth_request(&body.head, &body.module, &body.trait_);
+            }
+            return holds;
         }
         let resolved = self.type_table.borrow().get(type_id).clone();
         let result = Self::asking(ctx, type_id, decl, wanted, || {
