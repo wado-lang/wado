@@ -6,7 +6,7 @@ use crate::ast::{
     Type, WhileStmt, walk_expr, walk_stmt,
 };
 use crate::compiler_host::CompilerHost;
-use crate::tir::{RangeBound, ResolvedType, TirPattern, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TirPattern, TypeId, TypeTable};
 use crate::tir_visitor::remap_local_reads;
 use crate::token::Span;
 
@@ -21,13 +21,14 @@ use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::float_literal::FloatFormat;
 use crate::elaborator::orchestration::first_infer_span;
+use crate::elaborator::reify::lower_instance_pattern;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
 use crate::elaborator::synth::ArgClass;
 use crate::elaborator::trait_query::assoc_const_owner;
 use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, ParamSlot, StructFieldInfo};
 use crate::name::{
-    constant_pattern_local_name, float_range_local_name, for_body_label, mangle_local_item_name,
-    minted_name, namespace_member_alias,
+    constant_pattern_local_name, for_body_label, mangle_local_item_name, minted_name,
+    namespace_member_alias,
 };
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
@@ -2260,10 +2261,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let _ = self.emit(error);
     }
 
-    /// Report a range pattern (`0..<10`, `'a'..='z'` or `0.0..<1.0`) whose
-    /// bounds name no values of `scrutinee_type`. Range patterns bind nothing
-    /// and reify rebuilds the real pattern, so no pattern node is produced
-    /// here; a float range reserves the local reify holds its scrutinee in.
+    /// Report a range pattern (`0..<10`, `'a'..='z'` or `0.0..<1.0`) that names
+    /// no values of `scrutinee_type`. Range patterns bind nothing and reify
+    /// rebuilds the real pattern, so no pattern node is produced here; lowering
+    /// a settled one reserves the local a float range holds its scrutinee in.
     fn resolve_range_pattern(
         &mut self,
         start: &Pattern,
@@ -2273,66 +2274,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         span: Span,
     ) {
-        let resolutions = &self.tysys.resolutions;
-        let (Some(start), Some(end)) = (
-            util::range_bound(start, resolutions),
-            util::range_bound(end, resolutions),
-        ) else {
-            let _ = self.emit(TypeError::InvalidPattern {
-                message:
-                    "range pattern bounds must be number or char literals or a primitive's limit"
-                        .to_string(),
-                span,
-            });
-            return;
-        };
-        let (start, end) = match (start, end) {
-            (Ok(start), Ok(end)) => (start, end),
-            (start, end) => {
-                for message in [start.err(), end.err()].into_iter().flatten() {
+        let inclusive = matches!(kind, RangeKind::Inclusive);
+        let pattern = match util::range_pattern(start, end, inclusive, &self.tysys.resolutions) {
+            Some(Ok(pattern)) => pattern,
+            Some(Err(messages)) => {
+                for message in messages {
                     let _ = self.emit(TypeError::InvalidPattern { message, span });
                 }
                 return;
             }
-        };
-        let inclusive = matches!(kind, RangeKind::Inclusive);
-        let (RangeBound::Discrete(start), RangeBound::Discrete(end)) = (&start, &end) else {
-            if !self.settles_literal_patterns(scrutinee_type) {
+            None => {
+                let _ = self.emit(TypeError::InvalidPattern {
+                    message:
+                        "range pattern bounds must be number or char literals or a primitive's limit"
+                            .to_string(),
+                    span,
+                });
                 return;
             }
-            let range = util::float_range(
-                &start,
-                &end,
-                inclusive,
-                scrutinee_type,
-                &mut self.tysys.type_table.borrow_mut(),
-            );
-            match range {
-                Ok(_) => {
-                    let float_type = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
-                    ctx.add_local(float_range_local_name(), float_type, false, None);
-                }
-                Err(errors) => {
-                    for error in errors {
-                        self.emit_pattern_literal_error(error, scrutinee_type, span);
-                    }
-                }
-            }
-            return;
         };
-        if self.settles_literal_patterns(scrutinee_type) {
-            let errors = util::range_bound_errors(
-                start,
-                end,
+        let errors = if self.settles_literal_patterns(scrutinee_type) {
+            lower_instance_pattern(
+                &pattern,
                 scrutinee_type,
                 &mut self.tysys.type_table.borrow_mut(),
-            );
-            for error in errors {
-                self.emit_pattern_literal_error(error, scrutinee_type, span);
-            }
-        }
-        if let Some(message) = util::range_order_error(start, end, inclusive) {
-            let _ = self.emit(TypeError::InvalidPattern { message, span });
+                |name, ty| ctx.add_local(name, ty, false, None),
+                span,
+            )
+            .err()
+            .unwrap_or_default()
+        } else {
+            util::unsettled_pattern_errors(&pattern)
+        };
+        for error in errors {
+            self.emit_pattern_literal_error(error, scrutinee_type, span);
         }
     }
 

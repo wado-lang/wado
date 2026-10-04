@@ -16,6 +16,7 @@ use crate::attribute::{
 };
 use crate::call_args::CallArgs;
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
+use crate::const_eval::format_float_repr;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::lower::plan::value_copy::ownership::owes_return_convention;
@@ -25,11 +26,10 @@ use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, Receiver, global_init_function, global_name};
 use crate::symbol::SymbolTable;
 use crate::tir::{
-    self as tir, CallArg, GlobalInit, InstancePattern, LetStorage, LocalFrame, RangeBound,
-    ResolvedType, TirBinaryOp, TirBlock, TirEnum, TirEnumCase, TirExpr, TirExprKind, TirFlags,
-    TirFlagsMember, TirFunction, TirGlobal, TirModule, TirNewtype, TirPattern, TirStmt,
-    TirStmtKind, TirStruct, TirTest, TirUnaryOp, TirVariantDecl, TypeId, TypeTable,
-    transpose_tuple_expr,
+    self as tir, CallArg, GlobalInit, InstancePattern, LetStorage, LocalFrame, ResolvedType,
+    TirBinaryOp, TirBlock, TirEnum, TirEnumCase, TirExpr, TirExprKind, TirFlags, TirFlagsMember,
+    TirFunction, TirGlobal, TirModule, TirNewtype, TirPattern, TirStmt, TirStmtKind, TirStruct,
+    TirTest, TirUnaryOp, TirVariantDecl, TypeId, TypeTable, transpose_tuple_expr,
 };
 
 use super::coercion::{
@@ -67,8 +67,8 @@ use crate::elaborator::stmt::{
 use crate::elaborator::trait_query::trait_sig_of_with;
 use crate::elaborator::types::{VarRef, newtype_member_owner};
 use crate::elaborator::util::{
-    FloatRange, float_range, parse_i128_literal, parse_u128_literal, pattern_literal, range_bound,
-    settles_literal_patterns,
+    FloatRange, PatternLiteralError, SettledPattern, parse_i128_literal, parse_u128_literal,
+    pattern_literal, range_pattern, settle_instance_pattern, settles_literal_patterns,
 };
 use crate::escape::{
     unescape_byte, unescape_bytes, unescape_char, unescape_string, unescape_template_segment,
@@ -3492,7 +3492,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // lets `-f bare-asserts` (see `lower::bare_asserts`) replace assertion
         // failures with a bare trap, dropping this diagnostic without touching
         // explicit `panic(...)` calls. It behaves identically to `panic`.
-        let panic_call = self.rt_call(
+        let panic_call = rt_call(
+            &self.tysys.type_table.borrow(),
             CompilerItem::AssertFailed,
             template_tir,
             TypeTable::NEVER,
@@ -8521,25 +8522,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         };
         let arg = self.lower_cast(source, via, span);
-        let converted = self.rt_call(item, arg, base, span);
+        let converted = rt_call(&self.tysys.type_table.borrow(), item, arg, base, span);
         ControlFlow::Break(bare_cast(converted, target_type, span))
-    }
-
-    /// A call of the `core:rt` function `item` on `arg`.
-    pub(super) fn rt_call(
-        &self,
-        item: CompilerItem,
-        arg: TirExpr,
-        result_type: TypeId,
-        span: Span,
-    ) -> TirExpr {
-        rt_call(
-            &self.tysys.type_table.borrow(),
-            item,
-            arg,
-            result_type,
-            span,
-        )
     }
 
     /// A cast with a wide integer on either side, `inner` already read through
@@ -8972,13 +8956,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirPattern {
         let mut type_table = self.tysys.type_table.borrow_mut();
         if settles_literal_patterns(&type_table, scrutinee_type) {
-            lower_instance_pattern(
+            let lowered = lower_instance_pattern(
                 &pattern,
                 scrutinee_type,
                 &mut type_table,
                 |name, ty| ctx.add_local(name, ty, false, None),
                 site,
-            )
+            );
+            let Ok(lowered) = lowered else {
+                unreachable!(
+                    "annotate reports a pattern naming no value, so reify skips the module"
+                );
+            };
+            lowered
         } else {
             TirPattern::PerInstance {
                 pattern,
@@ -9449,26 +9439,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Pattern::Range {
                 start, end, kind, ..
             } => {
-                let bound = |bound| {
-                    range_bound(bound, &self.tysys.resolutions)
-                        .and_then(Result::ok)
-                        .expect("annotate diagnoses a range bound that names no value")
-                };
                 let inclusive = matches!(kind, RangeKind::Inclusive);
-                let pattern = match (bound(start), bound(end)) {
-                    (RangeBound::Discrete(start), RangeBound::Discrete(end)) => {
-                        InstancePattern::Range {
-                            start,
-                            end,
-                            inclusive,
-                        }
-                    }
-                    (start, end) => InstancePattern::FloatRange {
-                        start,
-                        end,
-                        inclusive,
-                    },
-                };
+                let pattern = range_pattern(start, end, inclusive, &self.tysys.resolutions)
+                    .and_then(Result::ok)
+                    .expect("annotate diagnoses a range bound that names no value");
                 self.literal_value_pattern(pattern, scrutinee_type, site, ctx)
             }
             ast::Pattern::Struct {
@@ -10484,7 +10458,7 @@ pub(crate) fn default_impl_methods(decl: &InterfaceDecl) -> Vec<ast::Function> {
 }
 
 /// A call of the `core:rt` function `item` on `arg`.
-fn rt_call(
+pub(super) fn rt_call(
     type_table: &TypeTable,
     item: CompilerItem,
     arg: TirExpr,
@@ -10518,43 +10492,38 @@ fn widen_half(type_table: &TypeTable, value: TirExpr, half: PrimitiveType, span:
     )
 }
 
-/// `pattern` on the settled `scrutinee`, which names a value of it: an
-/// unsigned instance compares unsigned, and a float range holds the scrutinee
-/// in the local `add_local` allocates.
+/// `pattern` on the settled `scrutinee`, or why it names no value of it. A
+/// float range holds the scrutinee in the local `add_local` allocates, so
+/// annotate, lowering the same pattern, reserves the local reify takes.
 pub(crate) fn lower_instance_pattern(
     pattern: &InstancePattern,
     scrutinee: TypeId,
     type_table: &mut TypeTable,
     add_local: impl FnOnce(String, TypeId) -> u32,
     span: Span,
-) -> TirPattern {
-    let is_unsigned = type_table.is_unsigned_int(type_table.peel_refs(scrutinee));
-    match pattern {
-        InstancePattern::Literal(value) => TirPattern::Literal(value.to_tir(is_unsigned)),
-        InstancePattern::Range {
-            start,
-            end,
-            inclusive,
-        } => TirPattern::Range {
-            start: start.bits(),
-            end: end.bits(),
-            inclusive: *inclusive,
-            is_unsigned,
+) -> Result<TirPattern, Vec<PatternLiteralError>> {
+    Ok(
+        match settle_instance_pattern(pattern, scrutinee, type_table)? {
+            SettledPattern::Literal(value) => TirPattern::Literal(value),
+            SettledPattern::Range {
+                start,
+                end,
+                inclusive,
+                is_unsigned,
+            } => TirPattern::Range {
+                start,
+                end,
+                inclusive,
+                is_unsigned,
+            },
+            SettledPattern::Float(range) => {
+                // Lowering peels a reference scrutinee, as match ergonomics reads it.
+                let float_type = type_table.peel_refs(scrutinee);
+                let local_index = add_local(float_range_local_name(), float_type);
+                float_range_narrow(&range, float_type, local_index, type_table, span)
+            }
         },
-        InstancePattern::FloatRange {
-            start,
-            end,
-            inclusive,
-        } => {
-            let Ok(range) = float_range(start, end, *inclusive, scrutinee, type_table) else {
-                unreachable!("the caller reports a float range that names no value");
-            };
-            // Lowering peels a reference scrutinee, as match ergonomics reads it.
-            let float_type = type_table.peel_refs(scrutinee);
-            let local_index = add_local(float_range_local_name(), float_type);
-            float_range_narrow(&range, float_type, local_index, type_table, span)
-        }
-    }
+    )
 }
 
 /// A float range holding its scrutinee, of `float_type`, in `local_index`,
@@ -10599,7 +10568,7 @@ fn float_range_narrow(
         TirExpr::new(
             TirExprKind::FloatLiteral {
                 value,
-                repr: value.to_string(),
+                repr: format_float_repr(value),
             },
             operand,
             span,

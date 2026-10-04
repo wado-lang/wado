@@ -6,7 +6,6 @@
 use crate::compiler_host::CompilerHost;
 use crate::elaborator::reify::lower_instance_pattern;
 use crate::elaborator::types::TypeError;
-use crate::elaborator::util::instance_pattern_errors;
 use crate::flat_package::FlatPackage;
 use crate::logger::{Bail, Logger};
 use crate::synthesis::common::alloc_named_local;
@@ -60,20 +59,21 @@ impl TirMutVisitor for Lowering<'_> {
             return self.walk_pattern(pattern);
         };
         let (scrutinee_type, span) = (*scrutinee_type, *span);
-        let errors = instance_pattern_errors(instance, scrutinee_type, self.type_table);
-        if !errors.is_empty() {
-            for error in errors {
-                self.errors
-                    .push(error.at(scrutinee_type, span, self.type_table));
-            }
-            return;
-        }
-        *pattern = lower_instance_pattern(
+        let lowered = lower_instance_pattern(
             instance,
             scrutinee_type,
             self.type_table,
             |name, ty| alloc_named_local(self.local_count, self.locals, Some(name), ty, false),
             span,
         );
+        match lowered {
+            Ok(lowered) => *pattern = lowered,
+            Err(errors) => {
+                for error in errors {
+                    self.errors
+                        .push(error.at(scrutinee_type, span, self.type_table));
+                }
+            }
+        }
     }
 }

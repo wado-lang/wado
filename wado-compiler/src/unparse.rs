@@ -4970,10 +4970,17 @@ impl<'a> TirUnparser<'a> {
                 self.comma_sep_with(" | ", alternatives, TirUnparser::unparse_tir_pattern);
             }
             TirPattern::ConstantValue { expr } => self.unparse_expr(expr),
-            TirPattern::Narrow { name, type_id, .. } => {
+            TirPattern::Narrow {
+                name,
+                type_id,
+                test,
+                ..
+            } => {
                 self.output.push_str(name.as_deref().unwrap_or("_"));
                 self.output.push_str(": ");
                 self.output.push_str(&self.type_table.type_name(*type_id));
+                self.output.push_str(" && ");
+                self.unparse_expr(test);
             }
             TirPattern::Range {
                 start,

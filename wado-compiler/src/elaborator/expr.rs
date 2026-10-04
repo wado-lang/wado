@@ -53,7 +53,7 @@ use crate::elaborator::types::{
 use crate::escape::{self, unescape_byte, unescape_char};
 use crate::hashmap;
 use crate::primitive::PrimitiveType;
-use crate::tir::{AnonStructId, RangeBound, StructDef};
+use crate::tir::{AnonStructId, StructDef};
 use std::cell::OnceCell;
 use std::cmp::Ordering;
 use std::rc::Rc;
@@ -3384,49 +3384,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scrutinee_type: TypeId,
     ) -> Option<Pat> {
         // Bad or empty bounds were reported where the pattern was resolved.
-        let resolutions = &self.tysys.resolutions;
-        let start = util::range_bound(start, resolutions)?.ok()?;
-        let end = util::range_bound(end, resolutions)?.ok()?;
         let inclusive = matches!(kind, ast::RangeKind::Inclusive);
+        let pattern = util::range_pattern(start, end, inclusive, &self.tysys.resolutions)?.ok()?;
         // What a pattern on a type parameter names is decided per instance.
-        let settled =
-            util::settles_literal_patterns(&self.tysys.type_table.borrow(), scrutinee_type);
-        let (RangeBound::Discrete(start), RangeBound::Discrete(end)) = (&start, &end) else {
-            if !settled {
-                return Some(Pat::Opaque);
-            }
-            let range = util::float_range(
-                &start,
-                &end,
-                inclusive,
-                scrutinee_type,
-                &mut self.tysys.type_table.borrow_mut(),
-            )
-            .ok()?;
-            let (lo, hi) = range.keys();
-            return self.tysys.exh_int(lo, hi, scrutinee_type);
-        };
-        if util::range_order_error(start, end, inclusive).is_some() {
-            return None;
+        if !util::settles_literal_patterns(&self.tysys.type_table.borrow(), scrutinee_type) {
+            return util::unsettled_pattern_errors(&pattern)
+                .is_empty()
+                .then_some(Pat::Opaque);
         }
-        if !settled {
-            return Some(Pat::Opaque);
-        }
-        let errors = util::range_bound_errors(
-            start,
-            end,
+        let settled = util::settle_instance_pattern(
+            &pattern,
             scrutinee_type,
             &mut self.tysys.type_table.borrow_mut(),
-        );
-        if !errors.is_empty() {
-            return None;
-        }
-        let hi = if inclusive {
-            end.bits()
-        } else {
-            end.bits() - 1
-        };
-        self.tysys.exh_int(start.bits(), hi, scrutinee_type)
+        )
+        .ok()?;
+        let (lo, hi) = settled.range_keys();
+        self.tysys.exh_int(lo, hi, scrutinee_type)
     }
 
     fn format_missing_cases(cases: &[String]) -> String {

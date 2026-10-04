@@ -5844,11 +5844,13 @@ pub enum RangeBound {
 /// A float range bound, before a float type rounds it.
 #[derive(Debug, Clone)]
 pub struct FloatBound {
+    /// What the bound is written as.
     pub kind: FloatBoundKind,
     /// How a diagnostic writes it: `-1.5`, `f64::INFINITY`.
     pub shown: String,
 }
 
+/// A float range bound as written: a literal or a float type's limit.
 #[derive(Debug, Clone)]
 pub enum FloatBoundKind {
     /// The unsigned literal `digits`, negated where `negated`.
