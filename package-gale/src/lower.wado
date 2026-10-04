@@ -2157,10 +2157,10 @@ fn repeat_inner_admits(inner: &Element, inner_first: &List<String>, ctx: &mut Ge
     return admits_or_untestable(inner_first);
 }
 
-/// A repeat's entry admits, widened for a greedy `b?` whose `b` matches empty:
+/// A repeat's `body_admits`, widened for a greedy `b?` whose `b` matches empty:
 /// entering is the preferred alternative, so what follows the `?` enters too.
 /// An inexact follow set is left out, for `group_empty_alt_admits`'s reason.
-fn optional_entry_admits(
+fn repeat_body_admits(
     rep: &RepeatElement,
     inner_first: &List<String>,
     outer_follow: &List<String>,
@@ -2168,7 +2168,7 @@ fn optional_entry_admits(
     ctx: &mut GenContext,
 ) -> Admits {
     let admits = repeat_inner_admits(&rep.element, inner_first, ctx);
-    if rep.non_greedy || !(rep.kind matches { Optional }) || !follow_is_exact || outer_follow.is_empty() {
+    if rep.non_greedy || !rep.kind matches { Optional } || !follow_is_exact || outer_follow.is_empty() {
         return admits;
     }
     let mut visiting: List<String> = [];
@@ -3731,7 +3731,7 @@ fn lower_repeat_op<S: AsStrSlice>(
         caller_follow_second: [],
         body_scannable,
         body_has_field,
-        body_admits: optional_entry_admits(rep, &inner_first, outer_follow, follow_is_exact, ctx),
+        body_admits: repeat_body_admits(rep, &inner_first, outer_follow, follow_is_exact, ctx),
         body_is_single_alt_group,
         body_second_position_first,
         body_shape,
