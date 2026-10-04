@@ -34,13 +34,13 @@ WASM_CLANG=""
 if command -v clang >/dev/null 2>&1; then
     SDK_DIR="$(cd "$(dirname "$(command -v clang)")/.." 2>/dev/null && pwd)"
     if [ -d "$SDK_DIR/share/wasi-sysroot" ]; then
-        WASM_CLANG="clang --target=wasm32-wasi --sysroot=$SDK_DIR/share/wasi-sysroot"
+        WASM_CLANG="clang --target=wasm32-wasip1 --sysroot=$SDK_DIR/share/wasi-sysroot"
     fi
 fi
 
 # 2. System clang + apt wasi-sysroot (Linux)
 if [ -z "$WASM_CLANG" ] && command -v clang >/dev/null 2>&1 && command -v wasm-ld >/dev/null 2>&1 && [ -d "/usr/share/wasi-sysroot" ]; then
-    WASM_CLANG="clang --target=wasm32-wasi --sysroot=/usr/share/wasi-sysroot"
+    WASM_CLANG="clang --target=wasm32-wasip1 --sysroot=/usr/share/wasi-sysroot"
 fi
 
 # 3. Homebrew (macOS)
@@ -50,7 +50,7 @@ if [ -z "$WASM_CLANG" ] && [ "$(uname)" = "Darwin" ]; then
     WASI_SYSROOT="/opt/homebrew/opt/wasi-libc/share/wasi-sysroot"
     WASI_RUNTIMES="/opt/homebrew/opt/wasi-runtimes/share/wasi-runtimes"
     if [ -x "$LLVM_PATH/bin/clang" ] && [ -x "$LLD_PATH/bin/wasm-ld" ] && [ -d "$WASI_SYSROOT" ] && [ -d "$WASI_RUNTIMES" ]; then
-        WASM_CLANG="PATH=$LLD_PATH/bin:$PATH $LLVM_PATH/bin/clang --target=wasm32-wasi --sysroot=$WASI_SYSROOT -resource-dir $WASI_RUNTIMES"
+        WASM_CLANG="PATH=$LLD_PATH/bin:$PATH $LLVM_PATH/bin/clang --target=wasm32-wasip1 --sysroot=$WASI_SYSROOT -resource-dir $WASI_RUNTIMES"
     fi
 fi
 
