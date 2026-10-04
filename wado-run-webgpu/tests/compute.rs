@@ -140,21 +140,30 @@ fn adapter_selected_by(selector: &str) -> String {
     name_of(line.lines().next().unwrap())
 }
 
+/// A name selects the adapter it is part of, and only when it is part of one.
+/// Which half runs depends on the machine: every name is part of another on
+/// one with two GPUs of a model and nothing else.
 #[test]
-fn the_named_adapter_is_the_one_the_guest_gets_and_info_says_which() {
+fn a_name_selects_the_one_adapter_it_is_part_of_and_refuses_more() {
     let names = adapter_names();
-    let name = names
-        .iter()
-        .find(|name| {
-            let needle = name.to_lowercase();
-            names
-                .iter()
-                .filter(|other| other.to_lowercase().contains(&needle))
-                .count()
-                == 1
-        })
-        .expect("an adapter whose name is part of no other's");
-    assert_eq!(&adapter_selected_by(&name.to_uppercase()), name);
+    let matching = |name: &str| {
+        let needle = name.to_lowercase();
+        names
+            .iter()
+            .filter(|other| other.to_lowercase().contains(&needle))
+            .count()
+    };
+    if let Some(name) = names.iter().find(|name| matching(name) == 1) {
+        assert_eq!(&adapter_selected_by(&name.to_uppercase()), name);
+    } else {
+        let output = run(&["--gpu-adapter", &names[0], "app.wado"]);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success());
+        assert!(
+            stderr.contains("matches more than one GPU adapter; name one by its index"),
+            "stderr: {stderr}"
+        );
+    }
 }
 
 /// An index tells apart adapters a name cannot, two of one model among them.
