@@ -1,11 +1,11 @@
 ---
 name: on-task-done
-description: "Task-completion flow: `/cr` (an xhigh `/code-review` answered with `/code-review-response`, which ends with `/distill`), update docs (spec/cheatsheet/compiler/optimizer), then run `mise run on-task-done` (build, clippy-fix, golden + format fixtures, doc-stdlib, format, tests; the longest task there is) and commit its generated changes. Invoke ONLY when the user asks for it by name or explicitly asks to run the completion flow — never on your own initiative, and not because a task looks finished."
+description: "Task-completion flow: `/cr` (a `/code-review` answered with `/code-review-response`, which ends with `/distill`), update docs (spec/cheatsheet/compiler/optimizer), then run `mise run on-task-done` (build, clippy-fix, golden + format fixtures, doc-stdlib, format, tests; the longest task there is) and commit its generated changes. Invoke ONLY when the user asks for it by name or explicitly asks to run the completion flow — never on your own initiative, and not because a task looks finished."
 ---
 
 # Overview
 
-First, review the branch with `/cr`: an `xhigh` review, answered with
+First, review the branch with `/cr`: a review answered with
 `/code-review-response`, which ends with `/distill`.
 
 Then update docs if applicable:
