@@ -48,7 +48,7 @@ The protocol: [lsp.md](lsp.md).
 Remaining LSP 3.18 kinds:
 
 - [ ] Lifecycle: `client/registerCapability` / `unregisterCapability`,
-      `$/setTrace` / `$/logTrace`, `$/cancelRequest`
+  `$/setTrace` / `$/logTrace`, `$/cancelRequest`
 - [ ] Sync: incremental `didChange`, `willSave`, `willSaveWaitUntil`, `didSave`,
   `didRename`
 - [ ] Pull diagnostics: `textDocument/diagnostic`, `workspace/diagnostic`
