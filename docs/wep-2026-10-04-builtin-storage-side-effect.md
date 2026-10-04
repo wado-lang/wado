@@ -109,13 +109,13 @@ it.
 any of them, the conditions listed are the only ones under which the call
 traps.
 
-| Key        | Form     | Traps when                                     |
-| ---------- | -------- | ---------------------------------------------- |
-| `outside`  | `[a, …]` | The range does not lie within array `a`        |
-| `at`       | `[p, …]` | Paired with `outside`: the range starts at `p` |
-| `count`    | `p`      | Every range in `outside` has `p` elements      |
-| `unset`    | `a`      | The element of `a` at its `at` holds no value  |
-| `negative` | `p`      | `p` is below zero                              |
+| Key        | Form     | Meaning                                          |
+| ---------- | -------- | ------------------------------------------------ |
+| `outside`  | `[a, …]` | Traps unless the range lies within array `a`     |
+| `at`       | `[p, …]` | Paired with `outside`: the range starts at `p`   |
+| `count`    | `p`      | Every range in `outside` has `p` elements        |
+| `unset`    | `a`      | Traps if the element of `a` at its `at` is unset |
+| `negative` | `p`      | Traps if `p` is below zero                       |
 
 `outside` and `at` are arrays of the same length, and the i-th entries pair up.
 Without `at`, every range starts at 0. Without `count`, every range has 1
@@ -125,9 +125,7 @@ too, so a key has one form.
 
 A range lies within `a` only when its start and its count are both
 non-negative and they end at or before `a`'s length, as the Wasm instructions
-read them unsigned.
-
-`outside = [a]` also says the call does not replace `a`.
+read them unsigned. `outside = [a]` also says the call does not replace `a`.
 
 A call that states `outside = [a], at = [i]` without `count` and returns a value
 is an element accessor: it reaches the one element of `a` at `i`. It writes
