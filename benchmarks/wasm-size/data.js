@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791124844588,
+  "lastUpdate": 1791141069511,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -63657,6 +63657,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 338887,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c6cd46a13ba9e1f9253112444e0d08ea041ab93b",
+          "message": "Merge pull request #2269 from wado-lang/ccr-a3029628-fx4egu\n\nperf(gale): emit lexer lookahead linearly and keep runtime helpers internal",
+          "timestamp": "2026-10-05T03:50:31+09:00",
+          "tree_id": "3d304168eebf3c6356ab32761098f5c02b7578b7",
+          "url": "https://github.com/wado-lang/wado/commit/c6cd46a13ba9e1f9253112444e0d08ea041ab93b"
+        },
+        "date": 1791141068772,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338523,
             "unit": "bytes"
           }
         ]
