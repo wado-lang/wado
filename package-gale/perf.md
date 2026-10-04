@@ -9,6 +9,9 @@ three parts:
 - **Tried and didn't pan out** — measured dead-ends and non-levers, kept so we
   don't repeat them.
 
+A lever that landed is history, which `git log` keeps. Cut its entry to the cost
+that stays open, or delete it.
+
 Wado-wide performance rules — the WasmGC cost model, what decides adoption, and
 the measured dead-ends — live in the `wado-performance` skill; this file keeps
 what is true of Gale specifically.

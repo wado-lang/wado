@@ -82,11 +82,22 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 - Name an item, don't spell out its path: a `crate::` or `super::` path belongs in a `use` item at the top of the module, never inline where the item is read. A `pub(in …)` is exempt: it names a scope rather than reading an item, and Rust admits no import there. `mise run check-rust-paths` gates this in CI. The corpus carries no inline path, so the baseline `scripts/rust-inline-paths.json` is empty and any file that gains one fails. The detector is Wado (`package-gale/tools/rust_inline_paths.wado`) and parses with the Gale Rust grammar, so the grammar decides what counts as a path. `scripts/check-rust-paths.sh <file.rs>…` lists what a file carries.
 - Perform red/green TDD.
 - A compiler bug is always P0 — no exceptions. The instant you suspect one, stop all other work, and as the top priority write a minimal reproducible e2e fixture and fix it.
+- A compiler rule that blocks a stdlib edit is a compiler bug until shown otherwise. Never route around it: widening a modifier until the build passed once shipped a public-API regression, and moving per-instance state into a `global mut` shares it across every instance. Compare the parallel paths; the one that handles the case differently is usually the bug.
 - A pre-existing issue must be fixed, with TDD when practical.
 - Use plain `cargo build` / `cargo run` / `cargo test` (the `dev` profile) for iteration. `Cargo.toml` raises `opt-level` on `wado-compiler`, `wado-dev-tools`, and deps so dev-build runtime is close to release for the parts that matter. `--release` is only for distributing binaries.
 - Merge origin/main only through the `git-upstream-sync` skill, conflicts or not; a clean merge still ends with its sanity check.
 - A failure that shows only in CI is usually not the environment: a pull request's test jobs run on the branch merged with `main`, not on the branch head. Sync first with the `git-upstream-sync` skill and reproduce on the merged tree before suspecting anything else. `tidy` is the exception, checking out the head ref.
+- A CI-only per-test timeout in a test that reads `wasi:clocks` (`core:temporal_test.wado` most often) is runner slowness, not the branch. `wado test -O2 -p 1 --format tap <file>` times it locally against its budget.
+- An unexplained failure points at the measurement as often as at the change. Before reverting or calling it a design problem, re-derive it another way: run the exact command by hand, then suspect shell quoting (zsh does not word-split `$VAR`), a stale binary, a suite that aborted before the crate you care about, and a pipeline whose status came from the wrong stage.
+- A change that keeps exposing pre-existing bugs in other passes is fuzzing the compiler, not overreaching. Fix each with its own fixture and commit; never narrow the change to stop finding them.
+- The fix is what the finding names. A new rule invented to soften the fix's side effect is a design decision: propose it with the trade-off and let the user pick.
+- Bound an input nobody would supply with one constant where it enters, not a parameter threaded through the call chain to model it.
+- Verify what the change can reach. A test-only addition runs those tests, not the whole suite.
+- Keep wall-clock seconds out of committed comments and docs; write the ratio. The machine that measured them is the fastest one, so the number is wrong everywhere else. A benchmark table names its machine and is the exception.
 - Test the language from an e2e fixture: a `.wado` file in `wado-compiler/tests/fixtures/`, expectations in its `__DATA__` section. Nearly everything the language does is stated there, diagnostics included. A fixture states a rejection two ways. `{"compile_error": "…"}` matches the whole report, so writing `":4:13: parse error: …"` pins the position as well as the message. `{"compile_error_codes": ["INVALID_SYNTAX"]}` names the `Code` it was raised under. Kiln is the exception: a generator runs against the filesystem, which a fixture cannot set up.
+- Test a stdlib function from the `*_test.wado` beside its module under `wado-compiler/lib/`, not from a new e2e fixture. A fixture is for what the compiler does.
+- A regression fixture's shape is what reproduces its bug. When a harness (EMI, the goldens) cannot classify one, fix the harness, never the fixture.
+- Where Wado reads a binary input, it reads a text form of it too (`.wat` beside `.wasm`, `.onnxtext` beside `.onnx`), so the repository commits something with a readable diff. A new format joins the same pipeline, and the binary is canonical where the two disagree.
 - Write an integration test only for what no fixture can state — the CLI, the loader, `dump` output, a host API. Put it in `tests/integration/` and declare it in that directory's `main.rs`. A file dropped directly in `tests/` becomes its own target, and each one statically links the compiler and wasmtime for another ~150 MB.
 - Run `/code-review-response` to answer any review finding, whoever the reviewer is and however it reaches you. A finding arriving as a pull request event is one, and handling it straight from the event skips every step the skill ends with.
 - Run `/distill` once a piece of work is done, and again after answering review findings. An extra run costs nothing, so run it the moment you wonder whether you should. §"The Cycle" says where it sits.
@@ -101,6 +112,10 @@ modules while tuples follow TypeScript.
 @docs/cheatsheet.md is the quick reference. For the detailed specification read
 `docs/spec-*.md` (one file per area, indexed in `docs/README.md`), or the WEP
 that proposed a feature at `docs/wep-*.md`.
+
+`wado doc core:prelude` states every stdlib signature. Read it rather than
+guessing where a `&` goes, which differs per method, or hand-rolling a walk over
+`chars()` that `split_once`, `find` or `strip_prefix` already does.
 
 ## Repository Map
 

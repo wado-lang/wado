@@ -80,6 +80,15 @@ A gap does not say how to close it. Whoever comes to it should think from zero.
 A written approach anchors them to what its writer saw before the problem was
 understood.
 
+A WEP for a question still open gets no Decision for the open part and no
+Roadmap. Decision records what is built, and the open choices go under Known
+gaps. A comparison with another language is welcome, and its useful half is
+what that language's users complain about.
+
+Work set aside for something that paid more is deferred, not dead. Say what it
+lost to and keep the shape of the work, so whoever returns starts from the
+design. A measured dead end is the other thing, and reads as one.
+
 No "out of scope" section: an unfinished mechanism is a known gap. A deliberate
 omission goes in Decision.
 
