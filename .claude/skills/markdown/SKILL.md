@@ -29,6 +29,9 @@ serves that.
 
 - A measured figure belongs in the table that holds its measurement, not in
   prose beside it: the table gets refreshed and the prose does not.
+- A table whose refresh you cannot see is a reason to find how it was measured,
+  not to delete it. Name the command beside the table; deleting a measurement
+  loses a fact.
 - Name the shape to grep for, not how many sites there are. A count goes stale
   with the next site.
 
