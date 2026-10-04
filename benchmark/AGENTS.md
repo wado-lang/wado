@@ -38,6 +38,7 @@ mise run zlib          # compression (zlib-rs native vs Wado)
 # parsing
 mise run sqlite-parse       # SQLite parsing (Gale vs sqlparser-rs vs ANTLR4 Java, same SQLite.g4)
 mise run syntax-highlight   # syntax highlighting (Gale vs tree-sitter)
+mise run gale-highlight-html  # HTML with embedded CSS/JS (Gale vs tree-sitter, Prism)
 mise run gale-gen           # Gale generator vs ANTLR4 over the same .g4
 
 # application server

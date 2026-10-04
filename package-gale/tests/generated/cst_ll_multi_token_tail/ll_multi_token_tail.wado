@@ -1615,7 +1615,7 @@ fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
             if rep_scan_pos >= 0 {
                 let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-                if !(decline_kind == TK_X) {
+                if !(decline_kind == TK_X || follow == 0 && decline_kind == TK_EOF && !(rep_scan_pos == p.pos + 3 && p.kinds[p.pos] == TK_X && p.kinds[p.pos + 1] == TK_Y && p.kinds[p.pos + 2] == TK_Z)) {
                     let mut decline_dead: bool = false;
                     decline_scan: {
                         let tokens = &p.kinds;

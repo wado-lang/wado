@@ -1,0 +1,64 @@
+//! The capture every grammar's highlight is reduced to, and the renderer that
+//! turns a merged list of them into HTML.
+
+/// One highlighted run: characters `[start, end)` of the source carry `class`.
+pub struct Highlight {
+    pub start: i32,
+    pub end: i32,
+    pub class: String,
+}
+
+/// Shifts `captures` by `offset` characters and appends them to `out`, so a
+/// region highlighted on its own lands where it sits in the whole page.
+pub fn push_shifted(out: &mut List<Highlight>, captures: &List<Highlight>, offset: i32) {
+    for let c of captures {
+        out.push(Highlight { start: c.start + offset, end: c.end + offset, class: c.class });
+    }
+}
+
+fn push_escaped(out: &mut String, c: char) {
+    match c {
+        '&' => out.push_str("&amp;"),
+        '<' => out.push_str("&lt;"),
+        '>' => out.push_str("&gt;"),
+        '"' => out.push_str("&quot;"),
+        _ => out.push(c),
+    }
+}
+
+fn push_escaped_upto(out: &mut String, chars: &List<char>, at: &mut i32, end: i32) {
+    while *at < end {
+        push_escaped(out, chars[*at]);
+        *at += 1;
+    }
+}
+
+/// Renders `chars` as HTML: each capture becomes a `<span class="...">`, the
+/// text between them is escaped. `captures` are in source order and disjoint.
+/// Captures of one class that touch share a span: a template literal is a
+/// token per character.
+pub fn render_html(chars: &List<char>, captures: &List<Highlight>) -> String {
+    let mut out = String::with_capacity(chars.len() * 5);
+    let mut at = 0;
+    let mut open: Option<String> = null;
+    for let cap of captures {
+        assert cap.start >= at, "captures overlap";
+        let extends = cap.start == at && open matches { Some(class) && class == cap.class };
+        if !extends {
+            if open matches { Some(_) } {
+                out.push_str("</span>");
+            }
+            push_escaped_upto(&mut out, chars, &mut at, cap.start);
+            out.push_str("<span class=\"");
+            out.push_str(&cap.class);
+            out.push_str("\">");
+            open = Option::Some(cap.class);
+        }
+        push_escaped_upto(&mut out, chars, &mut at, cap.end);
+    }
+    if open matches { Some(_) } {
+        out.push_str("</span>");
+    }
+    push_escaped_upto(&mut out, chars, &mut at, chars.len());
+    return out;
+}

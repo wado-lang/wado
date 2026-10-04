@@ -278,7 +278,7 @@ wado run -O2 $WADO_BENCH_FLAGS sqlite_parse/sqlite_parse.wado
 """
 
 [tasks.syntax-highlight]
-description = "Run syntax-highlight benchmark (Gale vs tree-sitter native + JS highlighters: Prism, Lezer, web-tree-sitter, Shiki)"
+description = "Run syntax-highlight benchmark (Gale vs tree-sitter native + JS highlighters: Prism, Lezer, web-tree-sitter)"
 run = """
 #!/usr/bin/env bash
 set -e
@@ -298,6 +298,30 @@ node syntax_highlight/syntax_highlight.js
 
 echo "=== Wado (Gale) ==="
 wado run -O2 $WADO_BENCH_FLAGS syntax_highlight/syntax_highlight.wado
+"""
+
+[tasks.gale-highlight-html]
+description = "Run gale-highlight-html benchmark (HTML with embedded CSS/JS: Gale vs tree-sitter native + Prism)"
+run = """
+#!/usr/bin/env bash
+set -e
+source ./wado.sh
+dir=../package-gale-highlight-html/benchmark
+
+echo "=== Compiling tree-sitter benchmark ==="
+cargo build --release --manifest-path $dir/Cargo.toml --quiet
+
+echo "=== Installing JS highlighter dependencies ==="
+npm install --prefix $dir --silent --no-audit --no-fund
+
+echo "=== tree-sitter (Rust native) ==="
+$dir/target/release/tree_sitter_html_bench
+
+echo "=== JavaScript highlighters (Node.js) ==="
+node $dir/highlighters.js
+
+echo "=== Wado (Gale) ==="
+wado run -O2 $WADO_BENCH_FLAGS $dir/gale_html.wado
 """
 
 [tasks.gale-gen]

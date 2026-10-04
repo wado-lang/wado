@@ -43,6 +43,7 @@ use {
     RepeatElement,
     RepeatKind,
     GroupElement,
+    peel_labels,
 } from "./ir.wado";
 use {
     alt_class,
@@ -2114,7 +2115,7 @@ fn scan_group_lenient(alts: &List<Alternative>, ctx: &mut GenContext) -> bool {
 fn scan_group_is_decidable(alts: &List<Alternative>, ctx: &mut GenContext) -> bool {
     for let alt of alts {
         for let e of &alt.elements {
-            if !peel_repeat_body_label(e) matches { RuleRef(_) | TokenRef(_) | Literal(_) } {
+            if !peel_labels(e) matches { RuleRef(_) | TokenRef(_) | Literal(_) } {
                 return false;
             }
             let mut visiting: List<String> = [];
@@ -2176,7 +2177,7 @@ fn lower_scan_repeat(
     // optional shape, breaking `( (a)? b )?`-style cases).
     if !rep.non_greedy {
         if let Optional = rep.kind {
-            if let Group(g) = peel_repeat_body_label(&rep.element) {
+            if let Group(g) = peel_labels(&rep.element) {
                 if g.alternatives.len() == 1
                     && has_nested_optional_in_alt(&g.alternatives[0])
                     && !alt_has_variable_repeat(&g.alternatives[0])
@@ -3544,7 +3545,7 @@ fn lower_repeat_op<S: AsStrSlice>(
     // Every shape decision below reads the body the op was lowered from, not
     // the label wrapping it — a label changes a repeat's typing, never its
     // shape. Positional reads (`first_of_element`, scannability) take either.
-    let body_elem = peel_repeat_body_label(&rep.element);
+    let body_elem = peel_labels(&rep.element);
 
     // Pre-compute the inner's first set; used both by the strategy
     // decision (mask subtraction / suppression) and by the
@@ -3717,7 +3718,7 @@ fn lower_repeat_op<S: AsStrSlice>(
 /// disambiguation `compute_non_greedy_condition` emits: when the inner is a single-alt `Group` of ≥ 2 elements,
 /// returns `first_of_elements_from(&elements, 1)`; otherwise `[]`.
 fn compute_body_second_position_first(elem: &Element, ctx: &mut GenContext) -> List<String> {
-    if let Group(g) = peel_repeat_body_label(elem) {
+    if let Group(g) = peel_labels(elem) {
         if g.alternatives.len() == 1 && g.alternatives[0].elements.len() >= 2 {
             return ctx.first_of_elements_from(&g.alternatives[0].elements, 1);
         }
@@ -4202,7 +4203,7 @@ fn atn_asked_kinds(
     let Repeat(rep) = repeat else {
         panic("a loop's exit stamps are read at the loop");
     };
-    let refused = match peel_repeat_body_label(&rep.element) {
+    let refused = match peel_labels(&rep.element) {
         Wildcard(_) => [] as List<String>,
         Not(ne) => collect_excluded_kinds(&ne.element),
         _ => {
@@ -4465,20 +4466,6 @@ fn repeat_inner_is_list_label(elem: &Element) -> bool {
         return lab.list;
     }
     return false;
-}
-
-/// The surface element a Repeat's body op was lowered from. A Repeat supplies
-/// the `List<>` typing itself, so both label forms lose their wrapper on the op
-/// side — the list form explicitly below, the scalar form inside
-/// `lower_label_op`'s `rebind_op_field`. Every reader that pairs the body op
-/// with its surface element peels through this, or the two disagree about the
-/// shape.
-pub fn peel_repeat_body_label(elem: &Element) -> &Element {
-    let mut cur = elem;
-    while let Label(lab) = cur {
-        cur = &lab.element;
-    }
-    return cur;
 }
 
 /// Outer struct field base name for a Repeat. `Star` / `Plus`

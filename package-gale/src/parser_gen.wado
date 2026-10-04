@@ -13,6 +13,7 @@ use {
     GroupElement,
     AltAction,
     ActionSource,
+    peel_labels,
 } from "./ir.wado";
 use {
     group_field_base_name,
@@ -202,13 +203,7 @@ use {
     expect_set_call,
     kind_bitset_words,
 } from "./kind_set_gen.wado";
-use {
-    group_alt_classes,
-    non_greedy_exit_by_atn,
-    non_greedy_static_undecided,
-    peel_repeat_body_label,
-    rebind_op_field,
-} from "./lower.wado";
+use { group_alt_classes, non_greedy_exit_by_atn, non_greedy_static_undecided, rebind_op_field } from "./lower.wado";
 
 /// Append the defaulted runtime FOLLOW-continuation argument to a
 /// parse/scan/LR function signature, BEFORE any `min_prec` so a
@@ -721,14 +716,24 @@ fn gen_scan_function_named<S: AsStrSlice>(
 
     // Only a left-recursive rule climbs precedence, so only its `scan_X`
     // declares `min_prec`.
-    ctx.begin_ref_frame();
-    let mut f = FnSpec::new(fn_name);
+    let memoized = ctx.scan_memo() && ctx.rule_is_rescanned(ctx.current_rule_index());
+    let walk_name = if memoized { `${fn_name}__walk` } else { fn_name.to_string() };
+    let mut f = FnSpec::new(&walk_name);
     add_scan_params(&mut f, ctx);
     f.set_return_type("i32");
-    // A gate scope's `__scoped` body is called by name from its wrapper.
-    if f.name == scan_fn_name(&rule.snake_name) {
+    // A gate scope's `__scoped` body is called by name from its wrapper, and so
+    // is a memo's walk.
+    let prunable = fn_name.to_string() == scan_fn_name(&rule.snake_name);
+    if memoized {
+        let mut entry = f;
+        if prunable {
+            entry.set_prunable();
+        }
+        gen_scan_memo_wrapper(w, ctx, &entry, fn_name, &walk_name, false, false);
+    } else if prunable {
         f.set_prunable();
     }
+    ctx.begin_ref_frame();
     f.emit_begin(w);
 
     if rule.alternatives.len() == 1 {
@@ -864,7 +869,7 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
     }
     f2.set_return_type("i32");
     if ctx.scan_memo() {
-        gen_scan_memo_wrapper(w, ctx, &f2, fn_name, &walk_name, mid_operand_gated);
+        gen_scan_memo_wrapper(w, ctx, &f2, fn_name, &walk_name, true, mid_operand_gated);
     }
     ctx.begin_ref_frame();
     f2.emit_begin(w);
@@ -884,13 +889,14 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
 
 /// `scan_X` as the memo in front of its walk, which `walk` declares: the key is
 /// every argument the walk reads, and the answer is the end and the gate the
-/// walk leaves.
+/// walk leaves. `climbs` says the walk takes a left-recursive rule's `min_prec`.
 fn gen_scan_memo_wrapper<S: AsStrSlice, S1: AsStrSlice>(
     w: &mut CodeWriter,
     ctx: &mut GenContext,
     walk: &FnSpec,
     name: S,
     walk_name: S1,
+    climbs: bool,
     mid_operand_gated: bool,
 ) {
     ctx.begin_ref_frame();
@@ -901,7 +907,8 @@ fn gen_scan_memo_wrapper<S: AsStrSlice, S1: AsStrSlice>(
     let gate = if gated { `*${SCAN_GATE_HANDLE}` } else { "()" };
     let follow = if ctx.current_rule_reads_follow() { follow_forward_args() } else { "0" };
     let cont = if mid_operand_gated { "lr_cont" } else { "0" };
-    let key = `${ctx.current_rule_index()}, pos, min_prec, ${follow}, ${cont}`;
+    let prec = if climbs { "min_prec" } else { "0" };
+    let key = `${ctx.current_rule_index()}, pos, ${prec}, ${follow}, ${cont}`;
     w.line(`let memo_at = ${SCAN_MEMO_HANDLE}.find(${key}, &${gate});`);
     w.begin("if memo_at >= 0");
     if gated {
@@ -915,9 +922,12 @@ fn gen_scan_memo_wrapper<S: AsStrSlice, S1: AsStrSlice>(
     if ctx.needs_atn() {
         w.line(`let memo_callers = ${ctx.atn_state_path()}.hide_callers();`);
     }
-    w.line(`let memo_end = ${walk_name}(tokens, pos${scan_trailing_args(ctx, true)}, min_prec${lr_cont_forward(
-        mid_operand_gated,
-    )});`);
+    let walk_args = if climbs {
+        `${scan_trailing_args(ctx, true)}, min_prec${lr_cont_forward(mid_operand_gated)}`;
+    } else {
+        scan_trailing_args(ctx);
+    };
+    w.line(`let memo_end = ${walk_name}(tokens, pos${walk_args});`);
     let put = `${SCAN_MEMO_HANDLE}.put(${key}, memo_gate, memo_end, ${gate});`;
     if ctx.needs_atn() {
         w.line(`if !${ctx.atn_state_path()}.reveal_callers(memo_callers) { ${put} }`);
@@ -2011,10 +2021,10 @@ fn scan_non_greedy_probe_decides(re: &ScanRepeatElement, ctx: &mut GenContext) -
 }
 
 /// Scan-side twin of `optional_probe_decides` — same conjuncts off the mirror
-/// stamps, so the two sides answer identically.
+/// stamps, so the two sides answer identically. A shape lookahead is not a
+/// repeat on this side, so it never asks.
 fn scan_optional_probe_decides(re: &ScanRepeatElement, ctx: &mut GenContext) -> bool {
-    return re.body matches { RuleCall(_) | Token(_) | Wildcard | Excluded(_) }
-        && re.body_scannable
+    return re.body_scannable
         && re.probe_contested
         && probe_decides(&re.continuation_scan, re.continuation_scannable, ctx);
 }
@@ -2221,7 +2231,14 @@ fn gen_scan_iteration(w: &mut CodeWriter, re: &ScanRepeatElement, admits: &Admit
     // what let `A* A`'s scan eat both tokens and score -1 for input the parse
     // accepts, and the next duty added would repeat it.
     if repeat_body_implied_by_guard(&re.body, admits) && re.duties.is_empty() {
-        w.line("pos += 1;");
+        // The guard proved one kind, so the step either moves or stays on EOF,
+        // where a loop would come round to the same token forever.
+        let advance = scan_advance(&admits_kinds(admits), ctx);
+        if !advance.is_empty() {
+            w.line(advance);
+        } else if looping {
+            w.line("break;");
+        }
         return;
     }
     gen_scan_mark(w, ctx, "sp");
@@ -2264,7 +2281,13 @@ fn gen_scan_decline_stranded(
     }
     let gc = ctx.next_scan_group();
     gen_kind_read(w, `dk_${gc}`, "tokens", "pos");
-    let can_continue = decline_continue_check(loop_first, duties, `dk_${gc}`, ctx);
+    let can_continue = `${decline_continue_check(loop_first, duties, `dk_${gc}`, ctx)} || ${decline_ends_input_check(
+        `dk_${gc}`,
+        "tokens",
+        "sp",
+        "pos",
+        ctx,
+    )}`;
     w.begin(`if !(${can_continue})`);
     gen_scan_mark(w, ctx, `dc_${gc}`);
     w.line(`let mut dc_${gc}_exit = false;`);
@@ -2516,6 +2539,21 @@ fn known_within(known: &List<List<String>>, kinds: &List<String>) -> bool {
     return !known.is_empty() && !known[0].contains_str("TK_EOF") && proves(&known[0], kinds);
 }
 
+/// The step past a token matched out of `kinds`. Where the grammar writes an EOF
+/// after the rule, a competitor ending just before EOF leaves it to that
+/// continuation, so matching it here makes the alternative no longer: the two
+/// tie, and the jar takes the first. Where none follows (a start rule),
+/// matching EOF is what the competitor cannot do, and it counts.
+fn scan_advance(kinds: &List<String>, ctx: &mut GenContext) -> String {
+    if !kinds.contains_str("TK_EOF") || !ctx.current_rule_precedes_eof_token() {
+        return "pos += 1;";
+    }
+    if kinds.len() == 1 {
+        return "";
+    }
+    return "if tokens[pos] != TK_EOF { pos += 1; }";
+}
+
 /// One token out of `kinds`: a single set test rather than an arm per token.
 fn gen_scan_token_set<S: AsStrSlice>(
     w: &mut CodeWriter,
@@ -2530,11 +2568,14 @@ fn gen_scan_token_set<S: AsStrSlice>(
         return;
     }
     if lenient {
-        w.line(`if pos < tokens.len() && ${ctx.kind_check_str(kinds, "tokens[pos]")} { pos += 1; }`);
+        w.line(`if pos < tokens.len() && ${ctx.kind_check_str(kinds, "tokens[pos]")} { ${scan_advance(kinds, ctx)} }`);
         return;
     }
     w.line(`if pos >= tokens.len() || ${ctx.kind_negate_check_str(kinds, "tokens[pos]")} { ${fail_stmt} }`);
-    w.line("pos += 1;");
+    let advance = scan_advance(kinds, ctx);
+    if !advance.is_empty() {
+        w.line(advance);
+    }
 }
 
 /// `gen_scan_token_set` where a miss sets `pos = -1`.
@@ -2544,7 +2585,10 @@ fn gen_scan_token_set_assign(w: &mut CodeWriter, kinds: &List<String>, ctx: &mut
         return;
     }
     w.line(
-        `if pos >= tokens.len() || ${ctx.kind_negate_check_str(kinds, "tokens[pos]")} { pos = -1; } else { pos += 1; }`,
+        `if pos >= tokens.len() || ${ctx.kind_negate_check_str(kinds, "tokens[pos]")} { pos = -1; } else { ${scan_advance(
+            kinds,
+            ctx,
+        )} }`,
     );
 }
 
@@ -4933,7 +4977,7 @@ fn gen_op_inner_for_storable_repeat(
     let entry = open_group_entry(w, elem, ctx, entry);
     assert proven.is_empty() || entry matches { Guaranteed }, "only an entry that emits nothing keeps what its guard proved";
     let op = &rep_op.body;
-    let unwrapped_elem = peel_repeat_body_label(elem);
+    let unwrapped_elem = peel_labels(elem);
     return match rep_op.body_shape {
         LeafRuleCall | LeafOther => gen_op_leaf(w, op, ctx, name_counts, proven),
         StorableGroup => gen_op_storable_group_inner(
@@ -5127,6 +5171,11 @@ fn gen_op_storable_optional(
         );
         return;
     }
+    if optional_probe_decides(rep_op, ctx) {
+        let verdict = gen_optional_probe_verdict(w, rep_op, ctx, name_counts);
+        gen_op_storable_optional_with_first(w, rep_op, inner_elem, ctx, &verdict);
+        return;
+    }
 
     return match &rep_op.strategy {
         OptionalLookahead(s) => gen_op_storable_optional_with_first(
@@ -5315,6 +5364,11 @@ fn gen_op_transparent_optional(
         ));
         return;
     }
+    if optional_probe_decides(rep_op, ctx) {
+        let verdict = gen_optional_probe_verdict(w, rep_op, ctx, name_counts);
+        gen_op_transparent_optional_with_cond(w, g_op, g_elem, &rep.element, ctx, &verdict);
+        return;
+    }
 
     return match &rep_op.strategy {
         OptionalShapeLookahead(_) => panic(
@@ -5438,7 +5492,7 @@ fn any_alt_gated(branches: &List<DecisionBranch>) -> bool {
 /// The alternatives of a repeat's group body, or `null` when the body is not a
 /// group (a leaf or a rule call has no per-alternative gate).
 fn repeat_body_group_alts(inner: &Element) -> Option<&List<Alternative>> {
-    if let Group(g) = peel_repeat_body_label(inner) {
+    if let Group(g) = peel_labels(inner) {
         return Option::Some(&g.alternatives);
     }
     return null;
@@ -6175,7 +6229,7 @@ fn gen_op_repeat_optional_group(
     } else {
         panic("gen_op_repeat_optional_group: lower marked a Group body_shape but body op is not Op::Group");
     };
-    let g_elem = if let Group(g) = peel_repeat_body_label(&rep.element) {
+    let g_elem = if let Group(g) = peel_labels(&rep.element) {
         g;
     } else {
         panic("gen_op_repeat_optional_group: surface element is not Element::Group");
@@ -6308,10 +6362,12 @@ fn continuation_resumes_at<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     return `(${ctx.kind_check_str(&kinds, &kind)} || ${caller_resumes})`;
 }
 
-/// Whether the probe decides this greedy `?` over a leaf body. Any leaf: a
-/// token contests a continuation as a rule call does (`A? . C` on `a c`).
+/// Whether the probe decides this greedy `?`. Any body: a token contests a
+/// continuation as a rule call does (`A? . C` on `a c`), and so does a group
+/// (`(S | ID)? m` on `f()`). A shape lookahead decides by its own signatures,
+/// which the scan side reads instead of a repeat.
 fn optional_probe_decides(r: &RepeatOp, ctx: &mut GenContext) -> bool {
-    return r.body_shape matches { LeafRuleCall | LeafOther }
+    return !r.strategy matches { OptionalShapeLookahead(_) }
         && r.body_scannable
         && r.probe_contested
         && probe_decides(&r.continuation_scan, r.continuation_scannable, ctx);
@@ -6329,6 +6385,24 @@ fn probe_decides(continuation: &List<ScanElement>, continuation_scannable: bool,
 /// yield by itself: ANTLR4 enters wherever entering stays viable, and the
 /// probe asks exactly that.
 fn gen_optional_probe_entry(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
+    let verdict = gen_optional_probe_verdict(w, r, ctx, nc);
+    w.begin(`if ${verdict}`);
+    if r.body matches { Group(_) } {
+        gen_op(w, &r.body, ctx, nc);
+    } else {
+        let mut body_nc: List<[String, i32]> = [];
+        gen_op_leaf(w, &r.body, ctx, &mut body_nc);
+    }
+    w.end();
+}
+
+/// Declares and computes the probe's verdict on entering `r`, and names it.
+fn gen_optional_probe_verdict(
+    w: &mut CodeWriter,
+    r: &RepeatOp,
+    ctx: &mut GenContext,
+    nc: &mut List<[String, i32]>,
+) -> String {
     let verdict = dedup_name("opt_enter", nc);
     w.line(`let mut ${verdict}: bool = false;`);
     w.begin(`if ${repeat_guard_cond(&r.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)}`);
@@ -6344,10 +6418,7 @@ fn gen_optional_probe_entry(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenConte
         &r.probe_viable,
     );
     w.end();
-    w.begin(`if ${verdict}`);
-    let mut body_nc: List<[String, i32]> = [];
-    gen_op_leaf(w, &r.body, ctx, &mut body_nc);
-    w.end();
+    return verdict;
 }
 
 /// Greedy-Optional leaf body: `if [!gate &&] cond { <body> }`.
@@ -6853,7 +6924,13 @@ fn gen_rep_decline_stranded<S: AsStrSlice>(
     let dead_end = dedup_name("decline_dead", nc);
     w.begin(`if ${scan_pos} >= 0`);
     gen_kind_read(w, &cont_kind, "p.kinds", scan_pos);
-    let can_continue = decline_continue_check(body_admits, duties, &cont_kind, ctx);
+    let can_continue = `${decline_continue_check(body_admits, duties, &cont_kind, ctx)} || ${decline_ends_input_check(
+        &cont_kind,
+        "p.kinds",
+        "p.pos",
+        scan_pos,
+        ctx,
+    )}`;
     w.begin(`if !(${can_continue})`);
     w.line(`let mut ${dead_end}: bool = false;`);
     gen_viability_probe(
@@ -7097,6 +7174,41 @@ fn gen_kind_read<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(w: &mut CodeWrit
 /// The kind at `at` as an expression, EOF past the end.
 fn kind_at<S: AsStrSlice, S1: AsStrSlice>(stream: S, at: S1) -> String {
     return `if ${at} < ${stream}.len() { ${stream}[${at}] } else { TK_EOF }`;
+}
+
+/// Whether an iteration from `start` to `end` that ends the input is kept with
+/// no continuation from the caller to ask. Exiting instead is viable only where
+/// the iteration's tokens can follow the rule and end the input, as `;` can
+/// after `list` in `s : list ';' EOF`; the jar keeps every other such iteration.
+/// The grammar answers that statically up to `INPUT_END_MAX_LEN` tokens
+/// (`current_rule_input_end`), and a longer iteration is kept.
+fn decline_ends_input_check<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3: AsStrSlice>(
+    end_kind: S,
+    stream: S1,
+    start: S2,
+    end: S3,
+    ctx: &mut GenContext,
+) -> String {
+    let unknown = if ctx.current_rule_reads_follow() { `${FOLLOW_PARAM} == 0 && ` } else { "" };
+    let ends_input = `${unknown}${end_kind} == TK_EOF`;
+    let mut exits: List<String> = [];
+    let by_len = ctx.current_rule_input_end();
+    for let n of 1..=by_len.len() {
+        let positions = &by_len[n - 1];
+        if positions.is_empty() {
+            continue;
+        }
+        let mut clause = `${end} == ${start} + ${n}`;
+        for let d of 0..<n {
+            let at = if d == 0 { `${stream}[${start}]` } else { `${stream}[${start} + ${d}]` };
+            clause.push_str(` && ${ctx.kind_check_str(&positions[d], &at)}`);
+        }
+        exits.push(clause);
+    }
+    if exits.is_empty() {
+        return ends_input;
+    }
+    return `${ends_input} && !(${exits.join(" || ")})`;
 }
 
 /// Whether the token after an iteration lets the walk go on without declining:
