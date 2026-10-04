@@ -4,6 +4,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Result, bail};
+use tokio::task::spawn_blocking;
 use wasi_webgpu_wasmtime::wasi::webgpu::webgpu::{
     Gpu as GuestGpu, GpuQueue as GuestGpuQueue, GpuRequestAdapterOptions,
 };
@@ -154,15 +155,16 @@ pub async fn run(component: &Path, args: &Args, gpu: Gpu) -> Result<()> {
         // The host crate's version awaits a wgpu callback but polls no device,
         // so wgpu never fires it and the guest waits forever. A blocking poll
         // returns once every submission has finished, which is what the call
-        // waits for.
+        // waits for. It runs off the store, whose other guest tasks it would
+        // otherwise stall.
         linker.instance(&interface)?.func_wrap_concurrent(
             "[method]gpu-queue.on-submitted-work-done",
             |accessor: &Accessor<Host>, (_queue,): (Resource<GuestGpuQueue>,)| {
                 Box::pin(async move {
-                    accessor.with(|mut access| {
-                        access.get().gpu.instance.poll_all_devices(true)?;
-                        Ok(())
-                    })
+                    let instance =
+                        accessor.with(|mut access| Arc::clone(&access.get().gpu.instance));
+                    spawn_blocking(move || instance.poll_all_devices(true)).await??;
+                    Ok(())
                 })
             },
         )?;
