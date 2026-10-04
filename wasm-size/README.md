@@ -21,30 +21,30 @@ Compares WebAssembly binary sizes across different languages.
 
 ## Results
 
-Measured 2026-09-07 with rustc 1.98.0, Zig 0.16.0, and wasi-sdk 33.0. Sizes
-are toolchain- but not host-dependent, so a row whose toolchain has not moved
-does not need remeasuring. Moonbit (0.1.20260920, `peter-jerry-ye/wasi`
-0.25.0) was remeasured on 2026-09-29, and Wado on 2026-10-02.
+Measured 2026-10-04 with rustc 1.98.1, Zig 0.16.0, wasi-sdk 34.0, and Moonbit
+0.1.20260920 (`peter-jerry-ye/wasi` 0.25.0). Sizes are toolchain- but not
+host-dependent, so a row whose toolchain has not moved does not need
+remeasuring.
 
 ### hello_world
 
 | Language | Size (bytes) |
 | -------- | -----------: |
 | wado     |        1,873 |
-| c        |        3,076 |
+| c        |        4,195 |
 | moonbit  |        9,313 |
 | zig      |       32,248 |
-| rust     |       40,097 |
+| rust     |       40,080 |
 
 ### pi_approx
 
 | Language | Size (bytes) |
 | -------- | -----------: |
 | wado     |        6,250 |
-| c        |       16,786 |
+| c        |       17,988 |
 | moonbit  |       23,593 |
 | zig      |       38,054 |
-| rust     |       59,315 |
+| rust     |       59,314 |
 
 ### zlib
 
@@ -53,9 +53,9 @@ Reads gzip data from stdin and decompresses it.
 | Language | Size (bytes) | Notes                                  |
 | -------- | -----------: | -------------------------------------- |
 | wado     |       20,610 | stdin + gzip decompress (core:zlib)    |
-| c        |       33,439 | stdin + gzip decompress (zlib 1.3.1)   |
+| c        |       34,571 | stdin + gzip decompress (zlib 1.3.1)   |
 | zig      |       48,300 | stdin + gzip decompress (std.compress) |
-| rust     |       89,609 | stdin + gzip decompress (zlib-rs)      |
+| rust     |       89,592 | stdin + gzip decompress (zlib-rs)      |
 
 ### sqlite_highlight
 
@@ -63,8 +63,8 @@ Reads SQL from stdin and writes syntax-highlighted HTML to stdout.
 
 | Language | Size (bytes) | Notes                                       |
 | -------- | -----------: | ------------------------------------------- |
-| wado     |      279,969 | Gale-generated highlighter from `SQLite.g4` |
-| rust     |    3,484,487 | tree-sitter + tree-sitter-sequel            |
+| wado     |      338,887 | Gale-generated highlighter from `SQLite.g4` |
+| rust     |    3,484,281 | tree-sitter + tree-sitter-sequel            |
 
 ## Usage
 
