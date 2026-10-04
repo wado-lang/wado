@@ -49,6 +49,19 @@ impl<'a> From<&'a FunctionRef> for DeclarationLookup<'a> {
     }
 }
 
+impl<'a> From<&'a NirFunction> for DeclarationLookup<'a> {
+    fn from(func: &'a NirFunction) -> Self {
+        Self {
+            module_source: &func.module_source,
+            name: &func.name,
+            generic_name: func
+                .monomorph_info
+                .as_ref()
+                .map(|m| m.generic_name.as_str()),
+        }
+    }
+}
+
 impl FunctionRef {
     /// Create a `FunctionRef` by extracting metadata from a resolved `NirFunction`.
     pub fn from_resolved(func: &NirFunction, module_source: ModuleSource) -> Self {

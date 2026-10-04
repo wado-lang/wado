@@ -1274,11 +1274,7 @@ fn element_accessors(project: &NirPackage) -> IndexSet<FuncId> {
         .iter()
         .filter_map(|f| {
             let f = f.borrow();
-            let reference = FunctionRef::from_resolved(&f, f.module_source.clone());
-            let accessor = project
-                .builtin_declarations
-                .element_access(&reference)
-                .is_some();
+            let accessor = project.builtin_declarations.element_access(&*f).is_some();
             accessor.then(|| f.id.expect("func_id assigned at lower"))
         })
         .collect()

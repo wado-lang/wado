@@ -41,7 +41,7 @@ impl Storage {
     }
 
     /// Whether the result is new storage, the values `len` goes with.
-    fn returns_new_storage(self) -> bool {
+    pub fn returns_new_storage(self) -> bool {
         matches!(self, Self::Fresh | Self::HoldsArgs)
     }
 
@@ -112,20 +112,6 @@ pub struct BuiltinFacts<P> {
     /// `len = p`: the returned array holds `p` elements.
     pub len: Option<P>,
     pub side_effect: SideEffect<P>,
-}
-
-impl BuiltinFacts<String> {
-    /// The facts of a call into code the compiler cannot see that exchanges
-    /// only scalars: a core Wasm import, and the raw call of a Component Model
-    /// import.
-    #[must_use]
-    pub fn opaque_import() -> Self {
-        Self {
-            storage: Storage::None,
-            len: None,
-            side_effect: SideEffect::Opaque,
-        }
-    }
 }
 
 impl<P> BuiltinFacts<P> {
@@ -226,6 +212,15 @@ impl<P> BuiltinFacts<P> {
             Some(Trap::Only(checks)) => checks,
             Some(Trap::Anywhere | Trap::Never) | None => &[],
         }
+    }
+
+    /// The arrays `outside` names: the call reaches their elements in range,
+    /// and leaves the arrays themselves in place.
+    pub fn ranged_arrays(&self) -> impl Iterator<Item = &P> {
+        self.trap_checks().iter().filter_map(|check| match check {
+            TrapCheck::Outside { array, .. } => Some(array),
+            TrapCheck::Negative(_) | TrapCheck::Unset(_) => None,
+        })
     }
 }
 

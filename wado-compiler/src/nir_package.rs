@@ -250,10 +250,9 @@ impl NirPackage {
                 let f = f.borrow();
                 // Bodied only: an extern stub's `return_type` is not an id this
                 // table resolves.
-                let reference = FunctionRef::from_resolved(&f, f.module_source.clone());
                 let writes_no_slot = self
                     .builtin_declarations
-                    .get(&reference)
+                    .get(&*f)
                     .is_some_and(BuiltinDeclaration::writes_no_field)
                     || f.is_value_copy()
                     || (f.body.is_some() && type_table.is_never(f.return_type));

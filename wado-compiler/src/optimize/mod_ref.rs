@@ -7,7 +7,6 @@
 use crate::builtin_facts::{SideEffect, Trap};
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
-use crate::nir;
 use crate::nir::{FuncId, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
@@ -18,7 +17,7 @@ use crate::optimize::arena_query::{
 };
 use crate::optimize::bounds::{self, Builtin, Proofs};
 use crate::optimize::inline::recursive_scc_members;
-use crate::tir::{BuiltinDeclarations, TypeTable};
+use crate::tir::{BuiltinDeclarations, DeclarationLookup, TypeTable};
 
 /// Read / write flags for a single state channel (e.g., GC heap or
 /// linear memory).
@@ -735,13 +734,13 @@ fn leaf_effect<'a>(
     f: &NirFunction,
     declarations: &'a BuiltinDeclarations,
 ) -> (FnEffect, Option<Builtin<'a>>) {
-    let fref = nir::FunctionRef::from_resolved(f, f.module_source.clone());
+    let lookup = DeclarationLookup::from(f);
     let declared = declarations
-        .get(&fref)
+        .get(lookup)
         .and_then(|d| d.facts.as_ref().map(|facts| (d, facts)));
     let Some((declaration, facts)) = declared else {
         assert!(
-            fref.intrinsic().is_none(),
+            lookup.intrinsic().is_none(),
             "a call to builtin `{}` has no declaration to read its facts from",
             f.name
         );

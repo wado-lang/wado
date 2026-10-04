@@ -27,19 +27,6 @@ pub(super) struct Builtin<'a> {
     pub allocates: bool,
 }
 
-impl Builtin<'_> {
-    /// Positions of arrays whose bounds the call checks, and so leaves in place.
-    fn checked_arrays(&self) -> impl Iterator<Item = usize> + '_ {
-        self.facts
-            .trap_checks()
-            .iter()
-            .filter_map(|check| match check {
-                TrapCheck::Outside { array, .. } => Some(*array),
-                TrapCheck::Negative(_) | TrapCheck::Unset(_) => None,
-            })
-    }
-}
-
 /// The builtin calls in one body whose every trap condition holds, each
 /// with the callee its checks were proven against.
 #[derive(Debug, Default)]
@@ -136,7 +123,7 @@ impl<'b, F: Fn(FuncId) -> Option<Builtin<'b>>> Scan<'_, F> {
                 if let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind
                     && let Some(builtin) = (self.builtin)(*func_id)
                 {
-                    for pos in builtin.checked_arrays() {
+                    for &pos in builtin.facts.ranged_arrays() {
                         if let Some(Operand::Expr(arr)) = args.get(pos).map(|a| a.expr) {
                             element_writes.insert(arr);
                         }

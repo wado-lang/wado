@@ -596,7 +596,7 @@ fn carries_identity(type_id: TypeId, type_table: &TypeTable) -> bool {
 fn holds_identity(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_table.peel_refs(type_id)) {
         ResolvedType::BuiltinArray(element) => carries_identity(*element, type_table),
-        other => unreachable!("`elements_of` names a non-array operand: {other:?}"),
+        other => unreachable!("a builtin keeps what a non-array operand points to: {other:?}"),
     }
 }
 

@@ -10,13 +10,13 @@ use crate::graph::strongly_connected_components;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::is_closure_call_name;
-use crate::nir::{FuncId, FunctionRef, NirFunction, NirUnaryOp};
+use crate::nir::{FuncId, NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 use crate::tir::{
-    BuiltinDeclaration, ResolvedType, RetainInto, RetainSpec, ReturnConvention, TypeId, TypeKey,
-    TypeTable,
+    BuiltinDeclaration, DeclarationLookup, ResolvedType, RetainInto, RetainSpec, ReturnConvention,
+    TypeId, TypeKey, TypeTable,
 };
 
 use super::arena_query::holds_reference;
@@ -809,11 +809,11 @@ fn classify_callee(f: &NirFunction, project: &NirPackage) -> Callee {
     if f.body.is_some() {
         return Callee::Body;
     }
-    let reference = FunctionRef::from_resolved(f, f.module_source.clone());
+    let reference = DeclarationLookup::from(f);
     if reference.intrinsic().is_none() {
         return Callee::Opaque;
     }
-    let Some(declaration) = project.builtin_declarations.get(&reference) else {
+    let Some(declaration) = project.builtin_declarations.get(reference) else {
         return Callee::Opaque;
     };
     Callee::Builtin(Box::new(declaration.clone()))

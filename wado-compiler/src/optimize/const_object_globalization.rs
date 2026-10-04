@@ -156,11 +156,9 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         .functions
         .iter()
         .map(|f| {
-            let f = f.borrow();
-            let reference = nir::FunctionRef::from_resolved(&f, f.module_source.clone());
             project
                 .builtin_declarations
-                .element_access(&reference)
+                .element_access(&*f.borrow())
                 .map(|(_, access)| access)
         })
         .collect();
@@ -169,11 +167,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
     let immediate_params: Vec<IndexSet<usize>> = project
         .functions
         .iter()
-        .map(|f| {
-            let f = f.borrow();
-            let reference = nir::FunctionRef::from_resolved(&f, f.module_source.clone());
-            project.builtin_declarations.immediate_params(&reference)
-        })
+        .map(|f| project.builtin_declarations.immediate_params(&*f.borrow()))
         .collect();
     let shared_escape = SharedEscape::new(project);
     let gate = Gate {

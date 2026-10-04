@@ -618,8 +618,8 @@ fn wasm_core_val_type_name(ty: WasmCoreValType) -> &'static str {
 
 /// Synthesize Wado source declaring one extern `pub fn` per export of a wasm
 /// asset, each carrying `#[canonical("<namespace>", "<export>")]` so the existing
-/// import lowering picks the call up, and the facts of an opaque import. Emitted as text and fed back through the
-/// regular parse/bind pipeline. The identifiers are the wat export names
+/// import lowering picks the call up, and the facts of an opaque import. Emitted
+/// as text and fed back through the regular parse/bind pipeline. The identifiers are the wat export names
 /// verbatim, so a re-exporter's `pub use { libm_sin, … }` lines up.
 fn synthesize_wasm_bindings_source(namespace: &str, exports: &[WasmExportSig]) -> String {
     use std::fmt::Write;

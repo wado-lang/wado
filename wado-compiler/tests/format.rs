@@ -3812,7 +3812,7 @@ fn test_format_keeps_parens_around_a_handler_closure_body() {
     }
 }
 
-/// `#[result(part_of = p)]` names a parameter, so the value stays an
+/// `#[side_effect(negative = p)]` names a parameter, so the value stays an
 /// identifier while `#[param(name = "...")]` keeps its quotes.
 #[test]
 fn test_format_keeps_an_attribute_identifier_value_unquoted() {
@@ -3820,14 +3820,12 @@ fn test_format_keeps_an_attribute_identifier_value_unquoted() {
         "#[param(name = \"build.id\")]\n",
         "global BUILD_ID: String = \"dev\";\n",
         "\n",
-        "#[result(part_of = xs)]\n",
-        "fn first(xs: &List<i32>) -> i32 {\n",
-        "    return xs[0];\n",
-        "}\n"
+        "#[side_effect(trap, negative = n)]\n",
+        "pub fn make(n: i32) -> i32;\n"
     );
     let formatted = wado_compiler::format(source).expect("format failed");
     assert!(
-        formatted.contains("#[result(part_of = xs)]"),
+        formatted.contains("#[side_effect(trap, negative = n)]"),
         "expected the parameter name to stay unquoted, got:\n{formatted}"
     );
     assert!(

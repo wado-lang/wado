@@ -7409,14 +7409,12 @@ impl BuiltinDeclaration {
             never_returns: shape.returns_never,
         }
     }
-}
 
-impl BuiltinDeclaration {
     /// Whether the call returns new storage: `fresh` or `holds_args`.
     pub fn allocates(&self) -> bool {
         self.facts
             .as_ref()
-            .is_some_and(|facts| matches!(facts.storage, Storage::Fresh | Storage::HoldsArgs))
+            .is_some_and(|facts| facts.storage.returns_new_storage())
     }
 
     /// Whether the call writes no struct field: its storage is stated, and
@@ -7431,12 +7429,9 @@ impl BuiltinDeclaration {
     /// Whether the call states `outside = [pos]`: it reaches the elements of
     /// that array and nothing they reach.
     pub fn ranges_over(&self, pos: usize) -> bool {
-        self.facts.as_ref().is_some_and(|facts| {
-            facts
-                .trap_checks()
-                .iter()
-                .any(|check| matches!(check, TrapCheck::Outside { array, .. } if *array == pos))
-        })
+        self.facts
+            .as_ref()
+            .is_some_and(|facts| facts.ranged_arrays().any(|&array| array == pos))
     }
 }
 
