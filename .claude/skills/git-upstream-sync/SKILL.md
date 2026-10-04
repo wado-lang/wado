@@ -12,7 +12,11 @@ merge conflicts: a clean merge still ends with the sanity check.
 
 ### 1. Fetch and merge with zdiff3
 
+Pull the branch's own remote first. CI's `tidy` job may have pushed a
+`chore: tidy` commit onto it, and a push after the sync would then be rejected.
+
 ```sh
+git pull origin "$(git branch --show-current)"
 git fetch origin main
 git -c merge.conflictstyle=zdiff3 merge origin/main
 ```
@@ -23,7 +27,17 @@ If the merge produces conflicts, **commit the conflict markers without resolving
 
 ```sh
 git add -A
+git diff --cached origin/main -- vendor
 git commit -m "merge origin/main (conflicts unresolved)"
+```
+
+The `git diff` must print nothing unless the branch bumps a submodule itself. When main bumps a `vendor/*` submodule, the
+merge leaves its checkout at the old commit, and `git add -A` stages that,
+silently reverting main's bump. Restore main's pointer before committing:
+
+```sh
+git update-index --cacheinfo 160000,<sha from origin/main>,<path>
+git submodule update --init --recommend-shallow <path>
 ```
 
 ### 3. Resolve conflicts

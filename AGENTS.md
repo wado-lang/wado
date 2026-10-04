@@ -54,12 +54,22 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 ## Tooling
 
 - Make every edit with the editing tools. They refuse a match that is not unique and a file the session has not read, and the harness tracks what they wrote, so each edit is checkable.
-- Run a long job (`mise run test`, `test-wado`, `update-golden-fixtures`) in the background, one per invocation: the harness announces the end of a job it owns.
+- Run a long job (`mise run test`, `test-wado`, `update-golden-fixtures`) in the background, one per invocation, and stop: the harness announces the end of a job it owns. Never start a second heavy job while one runs, chained or as a separate task; two at once run out of memory or starve each other of CPU.
 - `test`, `test-wado`, `test-stdlib` and `test-gale-o2` refuse to start while another of the same is running, naming the holder's pid — where `flock` exists; `scripts/exclusive.sh` says so on stderr and runs unlocked where it does not. Abandoning a job does not stop it, so restarting after an edit means killing that pid first.
 - Redirect a job's output to a file and read the file, so what you did not anticipate is still there.
-- Have the job record its own completion — `cmd > run.log 2>&1 && s=0 || s=$?; echo "exit=$s" >> run.log` — and wait for it with `until grep -q "^exit=" run.log; do sleep 30; done`. The `&&`/`||` is what writes the marker on a failure too, which `set -e` would otherwise exit before.
+- Have the job record its own completion — `cmd > run.log 2>&1 && s=0 || s=$?; echo "exit=$s" >> run.log` — and read the marker once the harness announces the end. The `&&`/`||` is what writes the marker on a failure too, which `set -e` would otherwise exit before. Never wait with an `until … sleep` loop: it outlives the tool timeout as a background job of its own, and each one re-issued stacks another.
+- A run that looks hung is usually starved, not dead. `ps -eo pid,lstart,etime,pcpu,args` shows what else holds the cores, an abandoned run of your own included.
 - A generated file carries `-diff` in `.gitattributes`, so `git diff`, `git show` and `git log -p` report it as changed without printing it, and the sources stay readable. Regenerate and commit those; do not read them. `--text` prints one where you do want it. `rg` reads them like any other file; `git grep` calls them binary.
+  On an internal pull request the `tidy` job regenerates them, along with clippy and format, and pushes `chore: tidy` onto the branch, so leaving them stale costs nothing. The branch then moves without you: pull it before pushing.
 - `git diff <base> -- $(scripts/changed-sources.sh)` narrows further, to the changed paths themselves: a stat line or a rename for a generated or vendored file is gone too.
+
+## Git
+
+- Commit each finished unit and push it, without asking. A unit stands on its own: if splitting two changes would leave a broken commit between them, they are one commit. Never commit onto `main`; branch first.
+- Open a pull request only when the user asks for one. Related pieces usually go into one pull request.
+- Read the whole `git diff` before committing. Trimming a comment tends to keep the abstract statement and cut the concrete half, which is backwards: a clause that names a pass, a type, a literal, or the bug behind the code stays.
+- Fix a defect found during a task on the branch in hand, not on a side branch or worktree.
+- Delete the local branches `git branch --merged main` lists without asking, then `git remote prune origin`. A branch checked out in a worktree goes only once that worktree is clean. Never delete one `--no-merged` lists.
 
 ## General Rules
 
