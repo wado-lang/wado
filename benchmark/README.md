@@ -2,8 +2,8 @@
 
 Performance comparison of Wado (Wasm/wasmtime) against native compilers.
 
-Environment: Wado 2026-10-04, wasmtime 49.0.0, gcc 13.3.0, wasi-sdk 33.0,
-rustc 1.98.0, Node.js v26.7.0, Bun 1.3.14, Linux x86_64.
+Environment: Wado 2026-10-04, wasmtime 49.0.0, gcc 15.2.0, wasi-sdk 33.0,
+rustc 1.98.1, Node.js v26.7.0, Bun 1.3.14, Ubuntu 26.04 x86_64 (Linux 7.0).
 
 Throughput is work per second (higher is better), with per-iteration time in
 parentheses. Native rows are optimized builds (C `gcc -O3`, Rust release, Wado
