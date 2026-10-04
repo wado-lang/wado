@@ -109,7 +109,9 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     pass.end();
     encoder.copy_buffer_to_buffer(&storage, null, &readback, null, Option::Some(bytes));
     let commands = encoder.finish(Option::Some(GpuCommandBufferDescriptor { label: null }));
-    device.queue().submit([&commands]);
+    let queue = device.queue();
+    queue.submit([&commands]);
+    queue.on_submitted_work_done().wait();
 
     let Ok(_) = readback.map_async(GpuMapMode::Read, null, null).wait() else {
         println("map failed");
