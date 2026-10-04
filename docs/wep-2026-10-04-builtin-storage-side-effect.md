@@ -24,7 +24,7 @@ reader then guesses.
 
 Two attributes replace the four: `#[storage(...)]` and `#[side_effect(...)]`.
 
-- Every body-less declaration in `core:builtin` carries both.
+- Every body-less declaration carries both, unless it carries `#[cm(...)]`.
 - Each appears once on a declaration, and a key appears once in an attribute.
 - The one change to the syntax is that an attribute array may hold identifiers
   as well as strings.
@@ -218,8 +218,9 @@ when one is installed, and the handler's own body states what it does.
 Each of these is an error. A malformed attribute is never read as some other
 fact.
 
-- A body-less `core:builtin` declaration missing either attribute, unless it is
-  `#[unavailable]`: it is never called, so it has no facts to state.
+- A body-less declaration missing either attribute, unless it carries
+  `#[cm(...)]` or is `#[unavailable]`, which is never called and so has no
+  facts to state.
 - Either attribute on a function with a body, on a `trait` or `interface`
   method requirement, or on a declaration carrying `#[cm(...)]`.
 - A second `#[storage]` or `#[side_effect]` on one declaration.

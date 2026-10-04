@@ -1824,21 +1824,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         match builtin_facts::read(&func.attrs, &shapes, ret) {
             Ok(Some(facts)) => Some(facts),
             Ok(None) => {
-                if self.current_module_source.is_core_builtin() {
-                    let _ = self.logger.error_in(
-                        &self.current_module_source,
-                        Diagnostic {
-                            severity: Severity::Error,
-                            code: Code::StorageAttr,
-                            message: format!(
-                                "`{}` has no body, so it states what a call does: \
-                                 declare #[storage(...)] and #[side_effect(...)]",
-                                func.name
-                            ),
-                            span: Some(DiagnosticSpan::from_span(&func.name_span, None)),
-                        },
-                    );
-                }
+                let _ = self.logger.error_in(
+                    &self.current_module_source,
+                    Diagnostic {
+                        severity: Severity::Error,
+                        code: Code::StorageAttr,
+                        message: format!(
+                            "`{}` has no body, so it states what a call does: \
+                             declare #[storage(...)] and #[side_effect(...)]",
+                            func.name
+                        ),
+                        span: Some(DiagnosticSpan::from_span(&func.name_span, None)),
+                    },
+                );
                 None
             }
             Err(faults) => {

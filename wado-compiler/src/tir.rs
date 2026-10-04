@@ -9,7 +9,7 @@ use std::rc::Rc;
 
 use sha2::Digest;
 
-use crate::builtin_facts::{BuiltinFacts, Storage, TrapCheck};
+use crate::builtin_facts::{BuiltinFacts, SideEffect, Storage, TrapCheck};
 use crate::call_args::CallArgs;
 use crate::canonical::CmCallTarget;
 use crate::compiler_item::CompilerItem;
@@ -7427,6 +7427,13 @@ impl BuiltinDeclaration {
     /// Whether the call returns new storage: `fresh` or `holds_args`.
     pub fn allocates(&self) -> bool {
         self.facts.storage.returns_new_storage()
+    }
+
+    /// Whether the call may store where neither its result nor a `&mut`
+    /// argument shows.
+    pub fn stores_unseen(&self) -> bool {
+        self.facts.storage == Storage::Opaque
+            || matches!(self.facts.side_effect, SideEffect::Opaque)
     }
 
     /// Whether the call writes nothing itself: it hands back part of an

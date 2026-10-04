@@ -96,7 +96,7 @@ Beyond a name, parameters and a return type, an operation declares nothing else.
 - A body on an `async` operation. A call to it evaluates to an `AsyncCall`, which a plain body does not produce.
 - A `self` receiver. An operation is called as `Effect::op(args)`, with no receiver to bind it to.
 - A `with` clause. A call demands only the operation's interface, so one would let a default perform a capability its caller never declared. A default has to be performable wherever it is dispatched, which means code that performs no effects, or `#[ambient]` code.
-- A `#[storage(...)]` attribute. An operation dispatches to a handler, whose own body states what it keeps, so one here would constrain call sites on a promise the handler never makes.
+- A `#[storage(...)]` or `#[side_effect(...)]` attribute. An operation dispatches to a handler, whose own body states what it keeps and does, so one here would constrain call sites on a promise the handler never makes.
 - Type parameters. An operation dispatches to one handler method, not to one per instantiation.
 
 ### Async Operations

@@ -687,9 +687,9 @@ call it makes shares no storage and is opaque, the same for every import.
 Each of these is an error, and a malformed attribute is never read as some
 other fact:
 
-- A body-less `core:builtin` declaration missing either attribute, unless it is
-  [`#[unavailable]`](#unavailablereason): it is never called, so it has no
-  facts to state.
+- A body-less declaration missing either attribute, unless it carries
+  `#[cm(...)]` or is [`#[unavailable]`](#unavailablereason), which is never
+  called and so has no facts to state.
 - Either attribute on a function with a body, on a `trait` or `interface`
   method requirement, or on a declaration carrying `#[cm(...)]`.
 - A second `#[storage]` or `#[side_effect]` on one declaration.
