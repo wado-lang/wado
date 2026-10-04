@@ -13,7 +13,7 @@ Each `cargo llvm-cov` that is not `report` runs the whole test suite again, so
 run the tests once and read every report from that run:
 
 ```sh
-mkdir -p scratchpad
+cargo llvm-cov clean --workspace   # a stale profile would merge into this run
 cargo llvm-cov --no-report -p wado-compiler
 cargo llvm-cov report --html                                   # target/llvm-cov/html/
 cargo llvm-cov report --json --output-path scratchpad/cov.json

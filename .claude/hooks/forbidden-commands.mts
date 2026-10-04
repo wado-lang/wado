@@ -10,7 +10,7 @@ const FORBIDDEN = [
     reason:
       "sed, awk, perl, python and python3 are forbidden (AGENTS.md > Tooling): a rewrite keeps" +
       " matching where it was not aimed. Edit with the editing tools, one call per change" +
-      " site; script in Node.js.",
+      " site; script anything else in Node.js.",
   },
   {
     pattern: /^(nohup|setsid|disown)$/,

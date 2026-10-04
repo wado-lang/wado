@@ -36,8 +36,10 @@ specification.
 | xoshiro256++ |  187 M |  762 M |
 | SHISHUA      |  185 M | 1.65 G |
 
-PCG64 is not a candidate. Its 128-bit state is a `u128`, which is a GC type in
-Wado, so every output allocates.
+PCG64 was not measured. Written over a `u128` state it allocates on every
+output, since `u128` is a GC type in Wado. Written over two `u64` halves with
+`builtin::i64_mul_wide_u` and `builtin::i64_add128`, as `fpfmt.wado` does its
+128-bit arithmetic, it would not, and that form is open.
 
 ## Decision
 

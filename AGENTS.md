@@ -33,9 +33,9 @@ mise run on-task-started   # install project tools
 Write the change, commit it, invoke the `/distill` skill, then test. `/distill`
 is the last of the editing rather than a phase after it, so one full test run at
 the end answers for the change and for what `/distill` edited. A run on either
-side of it is the same hour spent twice.
+side of it is the same full run spent twice.
 
-Having invoked `/distill` on this branch an hour ago is not a reason to skip the
+Having invoked `/distill` on this branch earlier is not a reason to skip the
 next one. The scope is the whole branch every time, and what the commits since
 then made stale is spread across everything the branch touched.
 
@@ -86,7 +86,6 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 - A failure that shows only in CI is usually not the environment: a pull request's test jobs run on the branch merged with `main`, not on the branch head. Sync first with the `git-upstream-sync` skill and reproduce on the merged tree before suspecting anything else. `tidy` is the exception, checking out the head ref.
 - Test the language from an e2e fixture: a `.wado` file in `wado-compiler/tests/fixtures/`, expectations in its `__DATA__` section. Nearly everything the language does is stated there, diagnostics included. A fixture states a rejection two ways. `{"compile_error": "…"}` matches the whole report, so writing `":4:13: parse error: …"` pins the position as well as the message. `{"compile_error_codes": ["INVALID_SYNTAX"]}` names the `Code` it was raised under. Kiln is the exception: a generator runs against the filesystem, which a fixture cannot set up.
 - Write an integration test only for what no fixture can state — the CLI, the loader, `dump` output, a host API. Put it in `tests/integration/` and declare it in that directory's `main.rs`. A file dropped directly in `tests/` becomes its own target, and each one statically links the compiler and wasmtime for another ~150 MB.
-- Test a stdlib function from the `*_test.wado` beside its module under `wado-compiler/lib/`, not from a new e2e fixture.
 - A regression fixture's shape is its point: when a harness cannot classify one, fix the harness, not the fixture.
 - Run what the change can reach, not more: a test-only addition does not need the full suite.
 - An unexplained failure indicts the measurement as often as the change: re-run the exact command by hand before believing it, and never revert a design over one. zsh does not word-split `$VAR`, so a flag list in one variable reaches a command as one argument.
@@ -106,7 +105,7 @@ modules while tuples follow TypeScript.
 that proposed a feature at `docs/wep-*.md`. `wado doc <module>` (`core:prelude`,
 say) states that module's signatures; read it rather than guess.
 
-Avoid committing a binary: its diff is unreadable. Where a text form means the
+As a principle, do not commit a binary: its diff is unreadable. Where a text form means the
 same, commit that instead (`.wat` for `.wasm`, `.onnxtext` for `.onnx`).
 
 ## Repository Map

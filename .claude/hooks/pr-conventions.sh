@@ -10,9 +10,9 @@
 #   - The skill body is surfaced as the description reminder.
 #
 # An invalid title is denied with the conventions; a valid title is allowed and
-# the conventions are injected as a reminder. If the skill file is missing the
-# hook allows. If the file is there but its `## Title` section lists no types,
-# the hook denies: the list's format changed under this parser.
+# the conventions are injected as a reminder. A missing skill file, or a
+# `## Title` section with no types, is denied: the source of truth moved or
+# changed under this parser, and checking nothing would pass every title.
 
 set -euo pipefail
 
@@ -29,8 +29,13 @@ allow() {
     exit 0
 }
 
-# Fail open if the source of truth is unavailable.
-[[ -f "$skill" ]] || allow ""
+deny() {
+    jq -nc --arg r "$1" \
+        '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}}'
+    exit 0
+}
+
+[[ -f "$skill" ]] || deny "pr-conventions.sh cannot find $skill; fix the hook's path."
 
 # Conventions surfaced to the model = the skill body (frontmatter stripped).
 conventions=$(awk '/^---$/{c++; next} c>=2' "$skill")
@@ -39,12 +44,6 @@ conventions=$(awk '/^---$/{c++; next} c>=2' "$skill")
 # `## Title` section only, so a bullet elsewhere never becomes a type.
 types=$(awk '/^## /{in_title=($0 == "## Title"); next} in_title' "$skill" \
     | sed -nE 's/^- `([a-z]+)!?`.*/\1/p' | sort -u | paste -sd'|' -)
-
-deny() {
-    jq -nc --arg r "$1" \
-        '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}}'
-    exit 0
-}
 
 [[ -n "$types" ]] || deny "pr-conventions.sh parsed no title types from $skill; fix the hook or the skill's list."
 

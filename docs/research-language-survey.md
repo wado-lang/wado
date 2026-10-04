@@ -99,9 +99,9 @@ against everything the language can be asked to express.
 Then measure how much of that program had to reach below the language:
 
 ```sh
-find <stdlib> -name '*.<ext>' > /tmp/files
-xargs grep -l '<privileged prefix>' < /tmp/files | wc -l   # numerator
-wc -l < /tmp/files                                         # denominator
+find <stdlib> -name '*.<ext>' > scratchpad/files
+xargs grep -l '<privileged prefix>' < scratchpad/files | wc -l   # numerator
+wc -l < scratchpad/files                                         # denominator
 ```
 
 Both counts have to come off the same list, or the ratio is measuring two

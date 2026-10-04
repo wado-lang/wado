@@ -31,7 +31,6 @@ cargo build --profile profiling --bin wado    # benchmark-oriented
 cargo build --bin wado                        # dev-iteration-oriented
 
 # 2. Record under load with samply (cargo install samply)
-mkdir -p scratchpad   # git-ignored, per worktree
 samply record --save-only --rate 1000 -o scratchpad/prof.json -- \
   target/profiling/wado serve --addr 127.0.0.1:8080 app.wado &
 SAMPLY_PID=$!

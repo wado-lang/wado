@@ -22,14 +22,13 @@ cargo build --profile debugger --bin wado
 ## Usage
 
 ```sh
-mkdir -p scratchpad   # git-ignored, per worktree
 cat > scratchpad/gdb_commands.txt << 'EOF'
 file ./target/debugger/wado
 set pagination off
-break wado-compiler/src/codegen.rs:5985
+break wado-compiler/src/codegen/emit.rs:749
 run compile -o scratchpad/out.wasm example/hello.wado
 info locals
-print *expr
+print func.name
 bt 5
 quit
 EOF
@@ -42,7 +41,7 @@ A breakpoint that fires thousands of times and gets `grep`ed answers one
 question and costs a rebuild for the next. Make the breakpoint itself select:
 
 ```
-break wado-compiler/src/wir_build/calls.rs:131 if name.length == 3 && $_memeq(name.data_ptr, "foo", 3)
+break wado-compiler/src/wir_build/calls.rs:27 if $_streq(name->data_ptr, "…")
 break …/func_inst.rs:2052
 commands
 silent
@@ -66,9 +65,8 @@ print *expr
 print info.struct_name
 ```
 
-To compare a `&str` `s` inside a breakpoint condition, check its length and its
-bytes: `s.length == 3 && $_memeq(s.data_ptr, "lit", 3)`. `$_streq` reads up to
-a NUL, which a Rust string slice does not end with, so it misses a match.
+`$_streq(s->data_ptr, "lit")` is the way to compare one inside a breakpoint
+condition.
 
 ## Batch runs
 

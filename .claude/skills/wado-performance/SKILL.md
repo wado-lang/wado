@@ -301,8 +301,8 @@ cbor-twitter deserialize -2.9% and -1.2% where release said +0.3%. Every row tha
 moved is a deserialize or a CST build, which is what allocates. Iterate on
 dev, then settle any row whose work is building an object graph on release.
 
-Scratch files below go in `scratchpad/`: it is git-ignored and per worktree, so
-concurrent sessions do not overwrite each other's. `mkdir -p scratchpad` first.
+Scratch files below go in `scratchpad/`. A path handed to the harness, which
+runs from `benchmark/`, must be absolute.
 
 ### A/B-ing a compiler change
 
@@ -322,6 +322,8 @@ A change to the compiler needs two compilers. `benchmark-baseline` builds
 `origin/main`'s once and caches it under that commit; `WADO_BIN` then runs it
 through _this_ tree's harness, so only the compiler differs — the baseline's own
 `benchmark/` would put the branch's harness changes inside the comparison too.
+The task fetches `origin/main` each time it runs, so resolve `base` once and
+use it for every step of one comparison: a moved main is another compiler.
 
 ```sh
 base=$(mise run benchmark-baseline)   # slow the first time, cached after
@@ -373,8 +375,7 @@ Keep the world one `--world=…` token: zsh does not word-split an expansion, so
 two words in a variable reach `wado` as a single flag it rejects.
 
 ```sh
-base=$(mise run benchmark-baseline)
-mkdir -p scratchpad
+# $base: the baseline resolved for the timing rounds above
 for f in benchmark/*/*.wado; do
   case "$f" in *_schema.wado) continue ;; esac
   world=
@@ -406,7 +407,7 @@ apart, and the reference rows only catch drift big enough to cross a range. Loop
 that one benchmark back to back and check the ranking holds pair by pair.
 
 ```sh
-base=$(mise run benchmark-baseline)
+# $base: the same baseline as above
 for i in 1 2 3 4 5; do
   "$base" run -O2 benchmark/sieve/sieve.wado
   target/release/wado run -O2 benchmark/sieve/sieve.wado
@@ -423,23 +424,24 @@ unset, so swapping an arm's `.wado` files into the tree invalidates
 two full rebuilds per alternating round, and they are the wall clock rather than
 the benchmark.
 
-Build one binary per arm first. The baseline's binary embeds `origin/main`'s
-stdlib, and a release build of the branch embeds its own, so the tree is never
-swapped:
+Build one binary per arm first, from the same compiler source with `lib/` at the
+branch's fork point and at `HEAD`, so `lib/` is all that differs. `git restore`
+removes a file the source tree lacks, so neither binary embeds a stdlib
+belonging to neither arm. It overwrites uncommitted edits under `lib/`, so
+commit them first.
 
 ```sh
-base=$(mise run benchmark-baseline)
-cargo build --release --bin wado --quiet
-mkdir -p scratchpad && cp target/release/wado scratchpad/wado-head
+fork=$(git merge-base origin/main HEAD)
+git restore --source="$fork" --worktree -- wado-compiler/lib
+cargo build --release --bin wado --quiet && cp target/release/wado scratchpad/wado-base
+git restore --source=HEAD --worktree -- wado-compiler/lib
+cargo build --release --bin wado --quiet && cp target/release/wado scratchpad/wado-head
 for r in 1 2 3; do
-  for bin in "$base" scratchpad/wado-head; do
-    WADO_BIN=$bin mise run benchmark-json-catalog
+  for arm in base head; do
+    WADO_BIN="$PWD/scratchpad/wado-$arm" mise run benchmark-json-catalog
   done
 done
 ```
-
-A branch that changes the compiler as well puts both changes in this
-comparison; measure the compiler change on its own first.
 
 The tree's sources stop mattering once the binaries exist, so a round costs what
 the benchmark costs. Rounds are cheap enough then to run six or ten of them,

@@ -17,7 +17,7 @@ If the branch is on `origin`, pull it first: CI's `tidy` job may have pushed
 merge recorded, so the next `git add -A` does not stage a stale checkout.
 
 ```sh
-git pull --no-rebase origin "$(git branch --show-current)"   # pushed branches only
+git pull --no-rebase   # from the branch's upstream; pushed branches only
 git fetch origin main
 git -c merge.conflictstyle=zdiff3 merge origin/main
 git submodule update --recommend-shallow

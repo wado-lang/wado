@@ -26,7 +26,7 @@ mise run on-task-started
 ## Procedure
 
 1. Run `mise run benchmark-all` **three times**, each to its own log in
-   `scratchpad/` (git-ignored, per worktree), then pick per row with
+   `scratchpad/`, then pick per row with
    `node benchmark/pick.ts scratchpad/run{1,2,3}.log` (throttling
    only ever slows things down). Use that tool rather than reading the logs by
    eye: it keys rows by (task, implementation, phase) and selects on ms/iter, so
@@ -54,7 +54,6 @@ issues, so an arm costs a benchmark run rather than a release rebuild:
 
 ```sh
 set -e  # a failed arm would leave pick.ts choosing among the rest
-mkdir -p scratchpad
 for t in 13 20 32; do
   WADO_BENCH_FLAGS="--optimize-inline-threshold $t" mise run benchmark-all > scratchpad/thr$t.log 2>&1
 done

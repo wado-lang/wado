@@ -59,7 +59,7 @@ Reproduce (guest self-time profile, and the collector split for GC cost):
 
 ```sh
 cd benchmark
-wado run --no-cache --profile guest,/tmp/p.json,1 -O2 syntax_highlight/syntax_highlight.wado
+wado run --no-cache --profile guest,../scratchpad/p.json,1 -O2 syntax_highlight/syntax_highlight.wado
 wado run --collector null   -O2 syntax_highlight/syntax_highlight.wado   # no GC
 wado run --collector copying -O2 syntax_highlight/syntax_highlight.wado   # default
 ```

@@ -70,7 +70,6 @@ After running benchmarks, update `README.md` with the new results. Use the `/ben
 Run the suite three times, capturing each to a log, then use `pick.ts` to select the best of the runs per row (best of three absorbs cloud-VM noise):
 
 ```sh
-mkdir -p ../scratchpad   # git-ignored, per worktree
 for i in 1 2 3; do mise run all > ../scratchpad/run$i.log 2>&1; done
 node pick.ts ../scratchpad/run{1,2,3}.log
 ```
