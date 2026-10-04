@@ -12,8 +12,7 @@ compute, filesystem, and `wasi:http/service` programs.
 ## Requirements
 
 - Node 26+, for stable JSPI. The repo pins it; outside the repo `node` may be a
-  system Node 22, whose JSPI fails (`WebAssembly.Suspending is not a
-  constructor`).
+  system Node 22, whose JSPI fails (`WebAssembly.Suspending is not a constructor`).
 - Compile with `-f no-wide-arithmetic`. No V8 implements wide arithmetic, which
   float formatting and `i128` emit, so without it the module fails with
   `invalid numeric opcode: 0xfc16` (or transpile refuses it). The flag lowers

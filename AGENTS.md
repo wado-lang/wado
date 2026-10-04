@@ -6,7 +6,7 @@ This document describes how to develop the Wado compiler toolchain.
 
 - Succinctly — say and write the least that fully conveys the point.
 - Fix-forward — fix the cause of a defect and move forward; never backtrack.
-- Fix the class — a defect is one instance; fix what admits the class.
+- Fix the class — a defect is one instance; fix what admits the class. An input nobody would supply is bounded by one constant where it enters, not modelled.
 - A compiler bug is P0. The instant you suspect one, stop all other work, write a minimal e2e fixture, and fix it. A compiler rule that blocks an edit is a suspect, not an obstacle to route around.
 - Design is the user's call. A rule invented to soften a fix's side effect is a design decision: propose it with the trade-off.
 - Red/green TDD. A pre-existing issue is fixed too.

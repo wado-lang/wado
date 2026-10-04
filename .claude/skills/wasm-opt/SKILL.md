@@ -58,11 +58,11 @@ decompression faster on Node while compression stayed flat. Each remains
 something wasm-opt removes and Wado does not:
 
 - [ ] Duplicate function types: `-O2` keeps about half, most of the rest going
-      with the functions it inlines.
+  with the functions it inlines.
 - [ ] Set sinking: `simplify-locals` moves a `local.set` into its one read.
 - [ ] Control-flow shape: `-O2` turns `block`/`br_if`/`return` into `if`/`else`.
 - [ ] Single-caller inlining, whatever the callee's size (`inflate_fast`).
 - [ ] Identical functions at `-O2`: the outlined `$cold0` bounds check of
-      `List<T>::index_value` / `index_assign` per element type, `i32`'s
-      `Display::fmt` and `Inspect::inspect`, and `param_spec` clones whose
-      bindings differ.
+  `List<T>::index_value` / `index_assign` per element type, `i32`'s
+  `Display::fmt` and `Inspect::inspect`, and `param_spec` clones whose
+  bindings differ.

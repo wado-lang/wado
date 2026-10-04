@@ -17,8 +17,7 @@ Host side only: the compiler, `serve`, `run`, wasmtime. The guest program is
 
 ## CPU
 
-Linux needs `perf_event_paranoid <= 1` (`echo 1 | sudo tee
-/proc/sys/kernel/perf_event_paranoid`) and `addr2line` (binutils).
+Linux needs `perf_event_paranoid <= 1` (`echo 1 | sudo tee /proc/sys/kernel/perf_event_paranoid`) and `addr2line` (binutils).
 
 ```sh
 A=.claude/skills/profiling-wado-compiler/scripts
@@ -28,8 +27,7 @@ node $A/analyze_native_profile.ts /tmp/prof.json   # --top 60, --binary wado-lsp
 ```
 
 For a server, record it in the background, drive load, then SIGTERM the child,
-not samply: `kill -TERM "$(pgrep -P "$SAMPLY_PID" | head -1)"; wait
-"$SAMPLY_PID"`. `samply load` opens the call tree in a browser.
+not samply: `kill -TERM "$(pgrep -P "$SAMPLY_PID" | head -1)"; wait "$SAMPLY_PID"`. `samply load` opens the call tree in a browser.
 
 The analyzer weights by CPU, not wall-clock, and reports CPU by library, the
 top self and inclusive frames (all, and `wado` only), syscall and allocator cost

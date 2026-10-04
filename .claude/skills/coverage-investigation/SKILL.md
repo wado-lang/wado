@@ -22,13 +22,13 @@ level.
 
 ## Close a Gap
 
-| Gap                     | Action                                         |
-| ----------------------- | ---------------------------------------------- |
-| Dead code               | Delete it                                      |
-| A language feature      | An e2e fixture                                 |
-| An error path           | A `compile_error` fixture                      |
-| An optimizer path       | A `wir_expect:O2` / `wir_not_expect:O2` fixture |
-| Inspect/Display output  | A template with `${x:?}`                       |
+| Gap                    | Action                                          |
+| ---------------------- | ----------------------------------------------- |
+| Dead code              | Delete it                                       |
+| A language feature     | An e2e fixture                                  |
+| An error path          | A `compile_error` fixture                       |
+| An optimizer path      | A `wir_expect:O2` / `wir_not_expect:O2` fixture |
+| Inspect/Display output | A template with `${x:?}`                        |
 
 A fixture is named for the language feature it exercises (`closure_nested.wado`,
 not `codegen_closure.wado`), joins an existing prefix group where one fits, and

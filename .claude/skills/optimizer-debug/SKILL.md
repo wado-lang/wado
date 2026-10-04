@@ -11,12 +11,12 @@ runs, isolate one pass.
 
 ## The Hooks
 
-| Variable                       | Effect                                                         |
-| ------------------------------ | -------------------------------------------------------------- |
-| `WADO_LIST_PASSES=1`           | Prints `[pass] <name>` for each pass run, in order             |
-| `WADO_DUMP_PASS_BEFORE=<pass>` | Dumps the IR before it, framed `=== WIR before <name> ===`     |
-| `WADO_DUMP_PASS_AFTER=<pass>`  | The same, after it                                             |
-| `WADO_SKIP_PASS=<pass>[@N]`    | Skips it; `@N` only on the Nth fixed-point invocation          |
+| Variable                       | Effect                                                                     |
+| ------------------------------ | -------------------------------------------------------------------------- |
+| `WADO_LIST_PASSES=1`           | Prints `[pass] <name>` for each pass run, in order                         |
+| `WADO_DUMP_PASS_BEFORE=<pass>` | Dumps the IR before it, framed `=== WIR before <name> ===`                 |
+| `WADO_DUMP_PASS_AFTER=<pass>`  | The same, after it                                                         |
+| `WADO_SKIP_PASS=<pass>[@N]`    | Skips it; `@N` only on the Nth fixed-point invocation                      |
 | `WADO_TRACE=<target>`          | Enables `compiler_trace!(target, …)` lines, framed `[target]`; `*` for all |
 
 Each takes a comma-separated list. Names are `nir/<name>` (`optimize.rs`) and

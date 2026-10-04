@@ -42,8 +42,9 @@ stating an invariant is an assert to write; one carrying nothing is deleted.
 ### Markdown
 
 Apply the `markdown` skill. In an instruction file (an `AGENTS.md`, a skill),
-also cut whatever follows from a principle the file or the root `AGENTS.md`
-already states: detail dilutes the rules that matter.
+also cut a rule that is trivially deduced from a principle the file or the root
+`AGENTS.md` already states: detail dilutes the rules that matter. Keep one that
+fences a principle against a reading broader than intended.
 
 ## Sweep by Shape
 
