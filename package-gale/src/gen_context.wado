@@ -6,6 +6,8 @@ use {
     RepeatElement,
     ActionLanguage,
     ActionKind,
+    AltAction,
+    push_alt_actions,
     compute_scan_cyclic,
     edges_reach_self,
     peel_labels,
@@ -344,41 +346,21 @@ pub struct GenContext {
 /// grammar rather than from registration, so a condition rendered before its
 /// predicate is registered names the same fn.
 fn predicate_fn_owners(parser_rules: &List<ParserRule>) -> GaleMap<i32, i32> {
-    let mut by_text = GaleMap::<String, i32>::new();
-    let mut owners = GaleMap::<i32, i32>::new();
+    let mut actions: List<AltAction> = [];
     for let rule of parser_rules {
         for let alt of &rule.alternatives {
-            add_alt_predicate_owners(alt, &mut by_text, &mut owners);
+            push_alt_actions(alt, &mut actions);
         }
     }
-    return owners;
-}
-
-fn add_alt_predicate_owners(alt: &Alternative, by_text: &mut GaleMap<String, i32>, owners: &mut GaleMap<i32, i32>) {
-    for let a of &alt.actions {
+    let mut by_text = GaleMap::<String, i32>::new();
+    let mut owners = GaleMap::<i32, i32>::new();
+    for let a of &actions {
         if a.kind matches { Predicate } {
             let id = a.source.action_id;
             owners[id] = by_text.get_or_insert(a.source.text.trim().to_string(), id);
         }
     }
-    for let e of &alt.elements {
-        add_element_predicate_owners(e, by_text, owners);
-    }
-}
-
-fn add_element_predicate_owners(elem: &Element, by_text: &mut GaleMap<String, i32>, owners: &mut GaleMap<i32, i32>) {
-    match *elem {
-        Group(g) => {
-            for let alt of &g.alternatives {
-                add_alt_predicate_owners(alt, by_text, owners);
-            }
-        },
-        Repeat(rep) => add_element_predicate_owners(&rep.element, by_text, owners),
-        Label(lab) => add_element_predicate_owners(&lab.element, by_text, owners),
-        Not(n) => add_element_predicate_owners(&n.element, by_text, owners),
-        _ => {
-        },
-    }
+    return owners;
 }
 
 fn one_token_rule_kinds(rule: &ParserRule) -> Option<List<String>> {
@@ -1359,7 +1341,7 @@ impl GenContext {
     /// The id naming the `pred_<id>` fn that predicate `id` calls: the first
     /// predicate in the grammar with the same text.
     pub fn predicate_fn_id(&self, id: i32) -> i32 {
-        return self.predicate_fn_owners.get(id).unwrap_or(id);
+        return self.predicate_fn_owners.get(id).expect("a gated predicate is one of the grammar's");
     }
 
     /// Register a context-free gated predicate's body for a standalone

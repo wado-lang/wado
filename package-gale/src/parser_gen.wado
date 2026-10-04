@@ -5278,7 +5278,7 @@ fn atn_prec_arg(ctx: &GenContext) -> String {
 }
 
 /// Wrap a raw Optional entry condition with the runtime caller-FOLLOW
-/// yield gate: `!(follow_yields(...)) && (cond)` when the Repeat is
+/// yield gate: `!follow_yields(...) && cond` when the Repeat is
 /// tail-position (`gate_caller_follow`), so the Optional fires only when
 /// the caller's continuation does NOT claim the upcoming tokens; the
 /// unchanged `cond` otherwise. The Group-bodied counterpart of
@@ -5727,7 +5727,7 @@ fn gen_op_optional_with_shape_lookahead_storable(
         let entry = &s.shapes[ei];
         // K-prefix gate: every shape's entry condition must yield to
         // the caller when the deterministic K-prefix matches, so wrap
-        // each entry's condition with `!(K_match) && (cond)`.
+        // each entry's condition with `!K_match && cond`.
         let cond = `${gate_cond_with_caller_follow(&conditions[ei], gate_caller_follow)}${gate}`;
 
         if is_first {
@@ -6616,7 +6616,12 @@ fn gen_op_repeat_star_plus_non_storable_group(
             w.end();
         } else {
             w.begin(
-                `while !p.recovering && ${and_operand(repeat_guard_cond(&rep_op.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx))}`,
+                `while !p.recovering && ${and_operand(repeat_guard_cond(
+                    &rep_op.body_admits,
+                    &NO_EXCLUSION,
+                    &PEEK_KIND,
+                    ctx,
+                ))}`,
             );
             gen_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
@@ -6647,7 +6652,12 @@ fn gen_op_repeat_star_plus_non_storable_group(
             w.end();
             gen_loop_back_sync(w, ctx, rep_op);
             w.begin(
-                `while !p.recovering && ${and_operand(repeat_guard_cond(&rep_op.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx))}`,
+                `while !p.recovering && ${and_operand(repeat_guard_cond(
+                    &rep_op.body_admits,
+                    &NO_EXCLUSION,
+                    &PEEK_KIND,
+                    ctx,
+                ))}`,
             );
             gen_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
@@ -6777,7 +6787,12 @@ fn gen_op_repeat_star_plus_storable(
             w.end();
         } else {
             w.begin(
-                `while !p.recovering && ${and_operand(repeat_guard_cond(&rep_op.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx))}`,
+                `while !p.recovering && ${and_operand(repeat_guard_cond(
+                    &rep_op.body_admits,
+                    &NO_EXCLUSION,
+                    &PEEK_KIND,
+                    ctx,
+                ))}`,
             );
             // Same caller-FOLLOW gate for the non-scannable while loop.
             gen_caller_follow_gate(w, rep_op);

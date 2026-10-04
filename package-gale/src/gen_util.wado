@@ -661,15 +661,15 @@ fn operand_end(chars: &List<char>, start: i32) -> i32 {
     while i < n {
         let c = chars[i];
         let end = if c matches { '(' | '[' } {
-            delimited_end(chars, i)
+            delimited_end(chars, i);
         } else if c matches { '"' | '\'' } && !atom {
-            literal_end(chars, i)
+            literal_end(chars, i);
         } else if c == '<' && i >= 2 && chars[i - 1] == ':' && chars[i - 2] == ':' {
-            delimited_end(chars, i)
+            delimited_end(chars, i);
         } else if is_id_continue_char(c) || c matches { '.' | ':' } {
-            i + 1
+            i + 1;
         } else {
-            break
+            break;
         };
         if end < 0 {
             return -1;

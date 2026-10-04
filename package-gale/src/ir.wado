@@ -901,6 +901,32 @@ pub struct AltAction {
     pub before_index: i32,
 }
 
+/// Push every action and predicate written in `alt`, nested blocks included,
+/// in source order.
+pub fn push_alt_actions(alt: &Alternative, out: &mut List<AltAction>) {
+    for let a of &alt.actions {
+        out.push(*a);
+    }
+    for let e of &alt.elements {
+        push_element_actions(e, out);
+    }
+}
+
+fn push_element_actions(elem: &Element, out: &mut List<AltAction>) {
+    match elem {
+        Group(g) => {
+            for let alt of &g.alternatives {
+                push_alt_actions(alt, out);
+            }
+        },
+        Repeat(rep) => push_element_actions(&rep.element, out),
+        Label(lab) => push_element_actions(&lab.element, out),
+        Not(n) => push_element_actions(&n.element, out),
+        TokenRef(_) | Literal(_) | RuleRef(_) | Wildcard(_) => {
+        },
+    }
+}
+
 /// Alternative is one branch of a parser rule, optionally labeled.
 ///
 /// `options` carries the alt-level element options parsed from a leading

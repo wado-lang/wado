@@ -10,10 +10,12 @@
 //! interface synthesis, call rewrite. Codegen threads the effect.
 
 use {
+    AltAction,
     Alternative,
     Element,
     Grammar,
     ActionKind,
+    push_alt_actions,
     LexerRule,
     LexerAlternative,
     LexerElement,
@@ -109,36 +111,15 @@ fn parser_bodies(grammar: &Grammar) -> List<SuperBody> {
                 out.push(SuperBody { text: a.text, kind: ActionKind::Action });
             }
         }
+        let mut actions: List<AltAction> = [];
         for let alt of &rule.alternatives {
-            push_parser_alt_bodies(alt, &mut out);
+            push_alt_actions(alt, &mut actions);
+        }
+        for let a of &actions {
+            out.push(SuperBody { text: a.source.text, kind: a.kind });
         }
     }
     return out;
-}
-
-fn push_parser_alt_bodies(alt: &Alternative, out: &mut List<SuperBody>) {
-    for let a of &alt.actions {
-        out.push(SuperBody { text: a.source.text, kind: a.kind });
-    }
-    for let e of &alt.elements {
-        push_parser_elem_bodies(e, out);
-    }
-}
-
-fn push_parser_elem_bodies(elem: &Element, out: &mut List<SuperBody>) {
-    match elem {
-        Group(g) => {
-            for let alt of &g.alternatives {
-                push_parser_alt_bodies(alt, out);
-            }
-        },
-        Repeat(rep) => push_parser_elem_bodies(&rep.element, out),
-        Not(n) => push_parser_elem_bodies(&n.element, out),
-        // A label's operand is an atom or a set of terminals, never a block
-        // holding an action (`is_labelable_set`).
-        Label(_) | TokenRef(_) | Literal(_) | RuleRef(_) | Wildcard(_) => {
-        },
-    }
 }
 
 fn collect_super_ops(bodies: &List<SuperBody>) -> List<SuperOp> {
