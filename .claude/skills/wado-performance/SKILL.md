@@ -105,8 +105,9 @@ count a stdlib copy in `wado dump -O2`:
 ```sh
 wado compile -O2 --log-level info prog.wado 2>&1 | grep -c 'remark: a copy of'
 ```
- Moving a copy from a callee into its
-call sites multiplies it by the number of sites.
+
+Moving a copy from a callee into its call sites multiplies it by the number of
+sites.
 
 Also: a `Trait::method(…)` call left in a hot loop (the inliner declined it), and
 `array_set_u8` / `array_get_value` (bounds-checked; one per element is the store floor
