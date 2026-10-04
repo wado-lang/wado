@@ -20,9 +20,7 @@ use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Sever
 use crate::const_eval::format_float_repr;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
-use crate::lower::plan::value_copy::place::{
-    is_source_place, source_place_subscripts_mut,
-};
+use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
 use crate::lower::wide_int_literal::{create_conversion, create_literal, method_ref};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, Receiver, global_init_function, global_name};

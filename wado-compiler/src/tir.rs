@@ -9,9 +9,7 @@ use std::rc::Rc;
 
 use sha2::Digest;
 
-use crate::builtin_facts::{
-    BuiltinFacts, ParamShape, ReturnShape, SideEffect, Storage, TrapCheck,
-};
+use crate::builtin_facts::{BuiltinFacts, ParamShape, ReturnShape, SideEffect, Storage, TrapCheck};
 use crate::call_args::CallArgs;
 use crate::canonical::CmCallTarget;
 use crate::compiler_item::CompilerItem;
