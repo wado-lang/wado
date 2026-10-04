@@ -114,9 +114,12 @@ A range lies within `a` only when its start and its count are both
 non-negative and they end at or before `a`'s length, as the Wasm instructions
 read them unsigned.
 
-`outside = [a]` also says the call does not replace `a`. `negative` covers only a
-length below zero. An allocation too large to satisfy is not a trap any
-condition describes.
+`outside = [a]` also says the call does not replace `a`.
+
+The attributes state what a call does when the host behaves as specified.
+Running out of memory is assumed never to happen, and no attribute states it.
+The same holds for any other failure of the host: the attributes do not list
+what a broken host might do.
 
 ```wado
 #[storage(fresh, len = len)]
