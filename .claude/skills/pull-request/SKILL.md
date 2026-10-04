@@ -54,7 +54,7 @@ If the branch is worth more than one thing, name the largest and leave the rest
 to the description.
 
 `type` is one of these, with `!` for a breaking change. The scope is optional.
-`.claude/hooks/pr-conventions.sh` reads the types from this list.
+`.claude/hooks/pr-conventions.mts` reads the types from this list.
 
 - `feat`
 - `fix`
