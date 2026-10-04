@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791150735821,
+  "lastUpdate": 1791152028882,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -63725,6 +63725,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a26c0a9e1578fd3d56363bd5d0c0a54001aa4b4d"
         },
         "date": 1791150734881,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338523,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c296641f98446195ac7921aae95f8091b1e581bd",
+          "message": "Merge pull request #2271 from wado-lang/ccr-8839a653-o5oi9p\n\nfix(run-webgpu): make on_submitted_work_done wait without hanging, on wasi-webgpu-wasmtime 0.3.1",
+          "timestamp": "2026-10-05T06:34:32+09:00",
+          "tree_id": "941d47023307a9b19feec286f9e5e460a96c0e6f",
+          "url": "https://github.com/wado-lang/wado/commit/c296641f98446195ac7921aae95f8091b1e581bd"
+        },
+        "date": 1791152027932,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
