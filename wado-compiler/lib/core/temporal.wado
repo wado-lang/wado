@@ -159,7 +159,7 @@ impl Display for Instant {
 
 impl Display for ZonedDateTime {
     fn fmt(&self, f: &mut Formatter) {
-        f.pad(self.checked().format(resolve_precision(f), true));
+        f.pad(self.format(resolve_precision(f), true));
     }
 }
 
@@ -235,10 +235,14 @@ impl Instant {
         panic(`core:temporal: ${seconds} epoch seconds names no instant within the range`);
     }
 
-    /// The current reading of the system clock (`Temporal.Now.instant`). The
+    /// The current reading of the system clock (`Temporal.Now.instant`),
+    /// clamped to the range as `HostSystemUTCEpochNanoseconds` requires. The
     /// effect row is what keeps the clock off callers that never ask the time.
     pub fn now() -> Instant with SystemClock {
-        return Instant::from(SystemClock::now());
+        let reading = SystemClock::now();
+        let limit = MAX_EPOCH_SECONDS as i128 * 1_000_000_000;
+        let nanoseconds = reading.seconds as i128 * 1_000_000_000 + reading.nanoseconds as i128;
+        return Instant::from_epoch_nanoseconds(i128::clamp(nanoseconds, -limit, limit));
     }
 
     /// Milliseconds since the Unix epoch (`Temporal.Instant.epochMilliseconds`),
@@ -663,18 +667,17 @@ impl ZonedDateTime {
     /// Hours between this day's start and the next. A fixed offset has no DST,
     /// so it is always 24; traps where either start is outside the range.
     pub fn hours_in_day(&self) -> i32 {
-        let z = self.checked();
-        let [days, _] = z.local();
-        let today = local_instant(days, 0, z.offset_seconds());
-        let tomorrow = local_instant(days + 1, 0, z.offset_seconds());
+        let [days, _] = self.local();
+        let offset = self.offset_seconds();
+        let today = local_instant(days, 0, offset);
+        let tomorrow = local_instant(days + 1, 0, offset);
         return ((tomorrow.seconds - today.seconds) / 3600) as i32;
     }
 
     /// The first instant of this value's local day (`startOfDay`).
     pub fn start_of_day(&self) -> ZonedDateTime {
-        let z = self.checked();
-        let [days, _] = z.local();
-        return z.with_instant(local_instant(days, 0, z.offset_seconds()));
+        let [days, _] = self.local();
+        return self.with_instant(local_instant(days, 0, self.offset_seconds()));
     }
 
     /// Move forward by `duration` (Temporal's `AddZonedDateTime`): the date
@@ -768,13 +771,13 @@ impl ZonedDateTime {
     /// offset, and the zone annotation, as in
     /// `"2023-11-15T07:13:20+09:00[+09:00]"`. This is the serde wire form.
     pub fn to_iso8601(&self) -> String {
-        return self.checked().format(-1, true);
+        return self.format(-1, true);
     }
 
     /// RFC 3339: the local date and time and the offset, without the zone
     /// annotation RFC 9557 adds. `parse_rfc3339` reads it back.
     pub fn to_rfc3339(&self) -> String {
-        return self.checked().format(-1, false);
+        return self.format(-1, false);
     }
 
     /// The local calendar date.
@@ -784,15 +787,16 @@ impl ZonedDateTime {
 
     /// The local wall-clock time.
     pub fn to_plain_time(&self) -> PlainTime {
-        let [_, time_of_day] = self.checked().local();
+        let [_, time_of_day] = self.local();
         return PlainTime::from_nanoseconds_since_midnight(time_of_day);
     }
 
     /// The local date and time together, dropping the zone.
     pub fn to_plain_date_time(&self) -> PlainDateTime {
+        let [days, time_of_day] = self.local();
         return PlainDateTime {
-            date: self.to_plain_date(),
-            time: self.to_plain_time(),
+            date: PlainDate::from_iso_date(iso_date_from_epoch_days(days)),
+            time: PlainTime::from_nanoseconds_since_midnight(time_of_day),
         };
     }
 
@@ -810,13 +814,13 @@ impl ZonedDateTime {
     }
 
     /// The local reading as days since the epoch and the nanosecond of that
-    /// day.
+    /// day, checking the value on the way.
     fn local(&self) -> [i64, i64] {
-        return day_parts(self.instant.seconds + self.offset_seconds(), self.instant.nanoseconds);
+        return day_parts(self.instant.checked().seconds + self.offset_seconds(), self.instant.nanoseconds);
     }
 
     fn local_date(&self) -> IsoDate {
-        let [days, _] = self.checked().local();
+        let [days, _] = self.local();
         return iso_date_from_epoch_days(days);
     }
 
@@ -906,10 +910,11 @@ fn require_epoch_days_range(days: i64) {
 /// minute-precision offset. Anything else traps.
 fn to_time_zone_identifier<S: AsStrSlice>(text: S) -> String {
     let view = text.as_str_slice();
-    let mut result = time_zone_identifier(&view);
-    if result matches { Err(_) } {
-        result = time_zone_from_iso_string(&view);
-    }
+    let result = if is_time_zone_identifier(&view) {
+        time_zone_identifier(&view);
+    } else {
+        time_zone_from_iso_string(&view);
+    };
     return match result {
         Ok(zone) => zone,
         Err(e) => panic(`core:temporal: "${view}" names no available time zone: ${e.message}`),
@@ -1127,6 +1132,22 @@ fn unit_rank(unit: Unit) -> i32 {
         Millisecond => 7,
         Microsecond => 8,
         Nanosecond => 9,
+    };
+}
+
+/// The unit at `rank` in Temporal's order, the inverse of `unit_rank`.
+fn unit_of_rank(rank: i32) -> Unit {
+    return match rank {
+        0 => Unit::Year,
+        1 => Unit::Month,
+        2 => Unit::Week,
+        3 => Unit::Day,
+        4 => Unit::Hour,
+        5 => Unit::Minute,
+        6 => Unit::Second,
+        7 => Unit::Millisecond,
+        8 => Unit::Microsecond,
+        _ => Unit::Nanosecond,
     };
 }
 
@@ -1387,7 +1408,8 @@ fn add_time(time_of_day: i64, time: TimeDuration) -> [i64, i64] {
 ///
 /// Temporal's invariants hold: every non-zero component has one sign, a year,
 /// month, or week count is below 2^32, and the days and time components
-/// together are below 2^53 seconds. A struct literal can break them, so every
+/// together are below 2^53 seconds. So that negation stays exact, no component
+/// is `i64::MIN`. A struct literal can break them, so every
 /// operation checks its receiver and traps on one that does. The date
 /// components (`years`, `months`, `weeks`) have no fixed length, so a duration
 /// carrying one applies only to a receiver that knows a calendar position.
@@ -1537,7 +1559,8 @@ impl Duration {
     fn is_valid(&self) -> bool {
         let sign = self.raw_sign();
         for let component of self.components() {
-            if component > 0 && sign < 0 || component < 0 && sign > 0 {
+            // `i64::MIN` has no negation in an `i64`.
+            if component > 0 && sign < 0 || component < 0 && sign > 0 || component == i64::MIN {
                 return false;
             }
         }
@@ -1606,18 +1629,12 @@ impl Duration {
     /// Temporal's `DefaultTemporalLargestUnit`: the largest non-zero
     /// component, or `Nanosecond` for a zero duration.
     fn default_largest_unit(&self) -> Unit {
-        let units: List<Unit> = [
-            Unit::Year, Unit::Month, Unit::Week, Unit::Day, Unit::Hour, Unit::Minute, Unit::Second, Unit::Millisecond,
-            Unit::Microsecond,
-        ];
-        let values: List<i64> = [
-            self.years, self.months, self.weeks, self.days, self.hours, self.minutes, self.seconds, self.milliseconds,
-            self.microseconds,
-        ];
-        for let mut i = 0; i < values.len(); i += 1 {
-            if values[i] != 0 {
-                return units[i];
+        let mut rank = 0;
+        for let component of self.components() {
+            if component != 0 {
+                return unit_of_rank(rank);
             }
+            rank += 1;
         }
         return Unit::Nanosecond;
     }
@@ -2804,18 +2821,43 @@ fn imf_weekday_name(day_of_week: i64) -> String {
     };
 }
 
+/// English weekday names, Monday first, as RFC 850 spells them.
+fn imf_long_weekday_name(day_of_week: i64) -> String {
+    return match day_of_week {
+        1 => "Monday",
+        2 => "Tuesday",
+        3 => "Wednesday",
+        4 => "Thursday",
+        5 => "Friday",
+        6 => "Saturday",
+        _ => "Sunday",
+    };
+}
+
 /// English month abbreviations, as RFC 7231 spells them.
 fn imf_month_name(month: i64) -> String {
-    let names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as List<String>;
-    return names[(month - 1) as i32];
+    return match month {
+        1 => "Jan",
+        2 => "Feb",
+        3 => "Mar",
+        4 => "Apr",
+        5 => "May",
+        6 => "Jun",
+        7 => "Jul",
+        8 => "Aug",
+        9 => "Sep",
+        10 => "Oct",
+        11 => "Nov",
+        _ => "Dec",
+    };
 }
 
 /// Whether `name` is one of RFC 7231's `day-name`s, or with `long` its
 /// `day-name-l`s.
 fn is_weekday_name(name: &StrSlice, long: bool) -> bool {
-    let full = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as List<String>;
-    for let day of full {
-        if long && name == day || !long && name == day.substr_bytes(0, 3) {
+    for let mut day: i64 = 1; day <= 7; day += 1 {
+        let candidate = if long { imf_long_weekday_name(day) } else { imf_weekday_name(day) };
+        if name == candidate {
             return true;
         }
     }
@@ -3830,43 +3872,45 @@ impl Visitor for ZonedDateTimeVisitor {
     }
 
     fn visit_i64(&mut self, v: i64) -> Result<ZonedDateTime, DeserializeError> {
-        let instant = InstantVisitor {}.visit_i64(v)?;
-        return Result::Ok(ZonedDateTime { instant: instant, time_zone: "UTC" });
+        return in_utc(InstantVisitor {}.visit_i64(v));
     }
 
     fn visit_u64(&mut self, v: u64) -> Result<ZonedDateTime, DeserializeError> {
-        let instant = InstantVisitor {}.visit_u64(v)?;
-        return Result::Ok(ZonedDateTime { instant: instant, time_zone: "UTC" });
+        return in_utc(InstantVisitor {}.visit_u64(v));
     }
 
-    fn visit_i128(&mut self, _v: i128) -> Result<ZonedDateTime, DeserializeError> {
-        return Result::Err(DeserializeError::overflow("epoch seconds out of range", -1));
+    fn visit_i128(&mut self, v: i128) -> Result<ZonedDateTime, DeserializeError> {
+        return in_utc(InstantVisitor {}.visit_i128(v));
     }
 
-    fn visit_u128(&mut self, _v: u128) -> Result<ZonedDateTime, DeserializeError> {
-        return Result::Err(DeserializeError::overflow("epoch seconds out of range", -1));
+    fn visit_u128(&mut self, v: u128) -> Result<ZonedDateTime, DeserializeError> {
+        return in_utc(InstantVisitor {}.visit_u128(v));
     }
 
     fn visit_f64(&mut self, v: f64) -> Result<ZonedDateTime, DeserializeError> {
-        let instant = InstantVisitor {}.visit_f64(v)?;
-        return Result::Ok(ZonedDateTime { instant: instant, time_zone: "UTC" });
+        return in_utc(InstantVisitor {}.visit_f64(v));
     }
 
     fn visit_null(&mut self) -> Result<ZonedDateTime, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected datetime string or epoch number", -1));
+        return in_utc(InstantVisitor {}.visit_null());
     }
 
-    fn visit_bool(&mut self, _v: bool) -> Result<ZonedDateTime, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected datetime string or epoch number", -1));
+    fn visit_bool(&mut self, v: bool) -> Result<ZonedDateTime, DeserializeError> {
+        return in_utc(InstantVisitor {}.visit_bool(v));
     }
 
-    fn visit_seq<A: DeserializeSeq>(&mut self, _seq: &mut A) -> Result<ZonedDateTime, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected datetime, found sequence", -1));
+    fn visit_seq<A: DeserializeSeq>(&mut self, seq: &mut A) -> Result<ZonedDateTime, DeserializeError> {
+        return in_utc(InstantVisitor {}.visit_seq(seq));
     }
 
-    fn visit_map<A: DeserializeMap>(&mut self, _map: &mut A) -> Result<ZonedDateTime, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("expected datetime, found map", -1));
+    fn visit_map<A: DeserializeMap>(&mut self, map: &mut A) -> Result<ZonedDateTime, DeserializeError> {
+        return in_utc(InstantVisitor {}.visit_map(map));
     }
+}
+
+/// What `InstantVisitor` read, as a UTC reading.
+fn in_utc(instant: Result<Instant, DeserializeError>) -> Result<ZonedDateTime, DeserializeError> {
+    return Result::Ok(ZonedDateTime { instant: instant?, time_zone: "UTC" });
 }
 
 impl Deserialize for ZonedDateTime {

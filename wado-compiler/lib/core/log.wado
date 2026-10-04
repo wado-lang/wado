@@ -25,7 +25,6 @@ use { to_string } from "core:json";
 use { log_stderr } from "core:rt";
 use { LenientFromStr, LenientParseError } from "core:prelude/traits.wado";
 use { Instant } from "core:temporal";
-use { SystemClock } from "wasi:clocks";
 
 #[synopsis]
 test {
@@ -511,7 +510,7 @@ pub struct WallClock {
 impl Clock for WallClock {
     #[ambient]
     fn now() -> Option<String> {
-        return Option::Some(`${Instant::from(SystemClock::now()):.3}`);
+        return Option::Some(`${Instant::now():.3}`);
     }
 }
 

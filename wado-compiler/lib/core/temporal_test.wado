@@ -10,7 +10,7 @@ use {
     PlainYearMonth,
     PlainMonthDay,
 } from "core:temporal";
-use { Instant as ClockInstant } from "wasi:clocks";
+use { Instant as ClockInstant, SystemClock } from "wasi:clocks";
 use { to_string, from_string } from "core:json";
 use { to_bytes, from_bytes } from "core:cbor";
 use { DeserializeErrorKind } from "core:serde";
@@ -1819,6 +1819,48 @@ test "HTTP-date parsing refuses each malformed part" {
     assert Instant::parse_http_date("Sat, 06-Nov-04 08:49:37 GMT") matches { Err(_) };
     assert Instant::parse_http_date("Saturday, 06-Nov-04 08:49:37 GMT") matches { Ok(i) && i.to_http_date() == "Sat, 06 Nov 2004 08:49:37 GMT" };
     assert Instant::parse_http_date("Sun Nov 06 08:49:37 1994") matches { Ok(i) && i.seconds == 784111777 };
+}
+
+struct FixedClock {
+    reading: ClockInstant,
+}
+
+impl SystemClock for FixedClock {
+    fn now(&self) -> ClockInstant {
+        resume self.reading;
+    }
+
+    ..trap
+}
+
+test "Instant::now clamps a clock reading to the range" {
+    let late = FixedClock {
+        reading: ClockInstant { seconds: 9_000_000_000_000, nanoseconds: 0 },
+    };
+    with SystemClock => &late do {
+        assert Instant::now() == Instant::from_epoch_seconds(8_640_000_000_000);
+    };
+    let early = FixedClock {
+        reading: ClockInstant { seconds: -9_000_000_000_000, nanoseconds: 5 },
+    };
+    with SystemClock => &early do {
+        assert Instant::now() == Instant::from_epoch_seconds(-8_640_000_000_000);
+    };
+}
+
+test "ZonedDateTime deserializes a number through the Instant visitor, in UTC" {
+    assert from_string::<ZonedDateTime>("1") matches { Ok(z) && z == Instant::from_epoch_seconds(1).to_zoned_date_time(
+        "UTC",
+    ) };
+    assert from_string::<ZonedDateTime>("null") matches { Err(_) };
+    assert from_string::<ZonedDateTime>("true") matches { Err(_) };
+    assert from_string::<ZonedDateTime>("[]") matches { Err(_) };
+    assert from_string::<ZonedDateTime>("{}") matches { Err(_) };
+}
+
+#[expect_trap]
+test "a duration component of i64::MIN, which has no negation, traps" {
+    let _ = Duration { nanoseconds: i64::MIN }.negated();
 }
 
 #[expect_trap]
