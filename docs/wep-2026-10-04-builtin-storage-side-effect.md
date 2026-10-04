@@ -72,7 +72,7 @@ The bare identifiers are:
 
 | Identifier  | Meaning                                                          |
 | ----------- | ---------------------------------------------------------------- |
-| `none`      | No effect at all                                                 |
+| `none`      | No effect beyond what the signature states                       |
 | `trap`      | The call may trap                                                |
 | `read`      | The call reads linear memory                                     |
 | `write`     | The call writes linear memory                                    |
@@ -80,7 +80,9 @@ The bare identifiers are:
 | `hint`      | The call computes nothing, but its position is what it means     |
 | `black_box` | The optimizer may assume nothing about the operand or the result |
 
-A write through a `&mut` parameter is not listed, since the type states it.
+The signature states two facts, so no identifier lists them. A `&mut` parameter
+is written through. A declaration returning `!` never returns: every call ends
+in a trap. That is not `trap`, which says a call that returns may instead trap.
 
 A fact the attribute leaves out is a fact the call does not have. A call with no
 `trap` never traps. A wrong attribute miscompiles as wrong code does, so
@@ -207,7 +209,8 @@ when one is installed, and the handler's own body states what it does.
 Each of these is an error. A malformed attribute is never read as some other
 fact.
 
-- A body-less `core:builtin` declaration missing either attribute.
+- A body-less `core:builtin` declaration missing either attribute, unless it is
+  `#[unavailable]`: it is never called, so it has no facts to state.
 - Either attribute on a function with a body, on a `trait` or `interface`
   method requirement, or on a declaration carrying `#[cm(...)]`.
 - A second `#[storage]` or `#[side_effect]` on one declaration.
