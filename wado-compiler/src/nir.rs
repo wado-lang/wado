@@ -49,13 +49,6 @@ impl<'a> From<&'a FunctionRef> for DeclarationLookup<'a> {
     }
 }
 
-/// How a builtin reaches an array element.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum ArrayElementAccess {
-    Read,
-    Write,
-}
-
 impl FunctionRef {
     /// Create a `FunctionRef` by extracting metadata from a resolved `NirFunction`.
     pub fn from_resolved(func: &NirFunction, module_source: ModuleSource) -> Self {
@@ -89,19 +82,6 @@ impl FunctionRef {
     /// Whether this is the `core:builtin` intrinsic `builtin`.
     pub fn is_builtin_named(&self, builtin: &str) -> bool {
         self.intrinsic() == Some(builtin)
-    }
-
-    /// How this builtin reaches an array element, or `None` when it is not an
-    /// element accessor. All three hand back a handle into the array argument;
-    /// only `array_get_ref_mut` names a write.
-    pub fn array_element_access(&self) -> Option<ArrayElementAccess> {
-        match self.intrinsic() {
-            Some("array_get_value" | "array_get_value_u8" | "array_get_ref") => {
-                Some(ArrayElementAccess::Read)
-            }
-            Some("array_get_ref_mut") => Some(ArrayElementAccess::Write),
-            _ => None,
-        }
     }
 
     /// The `$call` of closure functor `functor_id`, under the mangled name
@@ -356,7 +336,7 @@ pub struct NirFunction {
     /// to infer signature resources.
     pub task_return_type: Option<TypeId>,
     pub effects: Vec<EffectRef>,
-    /// Parameter names a `#[retain(...)]` declaration names as retained.
+    /// Parameter names the function keeps past its return.
     pub retains: Vec<String>,
     pub body: Option<Body>,
     pub span: Span,

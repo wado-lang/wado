@@ -245,31 +245,31 @@ fact.
 The steps land as one change. Validation comes first, so its errors list every
 declaration still to be written.
 
-- [ ] Accept identifiers in an attribute array, print them back in the
+- [x] Accept identifiers in an attribute array, print them back in the
   formatter, and test both in `tests/format.rs`.
-- [ ] Parse `#[storage]` and `#[side_effect]` into one record per declaration,
+- [x] Parse `#[storage]` and `#[side_effect]` into one record per declaration,
   and validate them as Decision says.
-- [ ] Write both attributes on every `core:builtin` declaration, declare every
+- [x] Write both attributes on every `core:builtin` declaration, declare every
   minted builtin there, and remove the four old attributes.
-- [ ] Write both attributes on the declaration of every core Wasm import, and
+- [x] Write both attributes on the declaration of every core Wasm import, and
   derive both from `#[cm(...)]` for the raw call of every Component Model
   import.
-- [ ] Point every reader of `#[result]`, `#[retain]`, `#[trap]` and
+- [x] Point every reader of `#[result]`, `#[retain]`, `#[trap]` and
   `#[linear_memory]` at that record, and replace each place that decides a
   builtin's storage or side effects by its name or its module:
-  - [ ] `mod_ref::leaf_effect`: a `#[canonical]` builtin is opaque, and a
+  - [x] `mod_ref::leaf_effect`: a `#[canonical]` builtin is opaque, and a
     minted builtin falls back to may-trap and writes-shared-heap.
-  - [ ] `NirPackage::pure_builtin_callee_ids`: every builtin writes no field
+  - [x] `NirPackage::pure_builtin_callee_ids`: every builtin writes no field
     slot.
-  - [ ] `value_copy::ownership`: a builtin that hands out no storage is owned.
-  - [ ] `value_copy::analyze`: `select` is a projection of its operands.
-  - [ ] `value_copy::place`: the `array_get_*` results are part of the array.
-  - [ ] `nir::FunctionRef::array_element_access`: which builtins read or write
+  - [x] `value_copy::ownership`: a builtin that hands out no storage is owned.
+  - [x] `value_copy::analyze`: `select` is a projection of its operands.
+  - [x] `value_copy::place`: the `array_get_*` results are part of the array.
+  - [x] `nir::FunctionRef::array_element_access`: which builtins read or write
     an element.
-  - [ ] `heap_effect::classify_callee`: an `array_` builtin writes only its
+  - [x] `heap_effect::classify_callee`: an `array_` builtin writes only its
     array.
-  - [ ] `dce`: `cold_path` is inert.
-- [ ] Move the rules into `spec-attributes.md`, replacing the four sections,
+  - [x] `dce`: `cold_path` is inert.
+- [x] Move the rules into `spec-attributes.md`, replacing the four sections,
   and update what `spec-effects.md` and `spec-memory.md` say about
   `#[retain]` and `#[result]`.
 

@@ -978,7 +978,7 @@ fn safepoint_calls(project: &NirPackage, descriptors: &[FunctionRef]) -> Vec<boo
                     .builtin_registry
                     .intrinsic(name)
                     .is_some_and(|info| info.canonical_name.is_some())
-                    || project.builtin_declarations.returns_owned(callee)
+                    || project.builtin_declarations.allocates(callee)
             })
         })
         .collect()

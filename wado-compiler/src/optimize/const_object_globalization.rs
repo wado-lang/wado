@@ -17,7 +17,7 @@ use crate::nir_arena::{
     StmtKind, StmtNode,
 };
 use crate::nir_package::NirPackage;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ArrayElementAccess, ResolvedType, TypeId, TypeTable};
 
 use super::arena_query::{
     bare_promoted_local, bare_promoted_reads, buried_promoted_reads, collect_reads,
@@ -25,7 +25,7 @@ use super::arena_query::{
 };
 use crate::ast::Visibility;
 use crate::name::{CONST_OBJ_GLOBAL_PREFIX, MODULE_INIT_FUNCTION, MODULES_INIT_FUNCTION};
-use crate::nir::{ArrayElementAccess, FuncId, NirParam, NirStruct};
+use crate::nir::{FuncId, NirParam, NirStruct};
 use crate::nir_arena::ArenaCallArg;
 use crate::nir_value_graph::builder::is_const_value;
 use crate::nir_value_graph::{ValueId, ValueKind};
@@ -157,7 +157,11 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         .iter()
         .map(|f| {
             let f = f.borrow();
-            nir::FunctionRef::from_resolved(&f, f.module_source.clone()).array_element_access()
+            let reference = nir::FunctionRef::from_resolved(&f, f.module_source.clone());
+            project
+                .builtin_declarations
+                .element_access(&reference)
+                .map(|(_, access)| access)
         })
         .collect();
     // Asked of every argument of every call, and fixed per function, so the

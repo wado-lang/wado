@@ -209,8 +209,8 @@ impl Ctx<'_> {
     }
 
     /// Whether `operand`, at `param_index`, outlives this call. A value-copy
-    /// helper keeps nothing, a builtin keeps what `#[retain(p)]` names — and
-    /// under `elements_of = p` only elements that carry an identity — a body
+    /// helper keeps nothing, a builtin keeps what its `#[storage]` implies — and
+    /// through a reference only elements that carry an identity — a body
     /// answers from the fixpoint, and a callee this scan cannot read keeps all.
     fn callee_keeps(&self, func: &FunctionRef, param_index: usize, operand: &TirExpr) -> bool {
         match self.kind(func) {
@@ -591,8 +591,8 @@ fn carries_identity(type_id: TypeId, type_table: &TypeTable) -> bool {
 }
 
 /// Whether the elements of the array `type_id` refers to carry an identity: an
-/// array of plain data hands on nothing. `elements_of` is declared on arrays
-/// alone.
+/// array of plain data hands on nothing. Every builtin keeping what a reference
+/// points to takes an array there.
 fn holds_identity(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_table.peel_refs(type_id)) {
         ResolvedType::BuiltinArray(element) => carries_identity(*element, type_table),

@@ -96,6 +96,7 @@ pub fn demote_value_copies(
     let mut analyzer = Analyzer {
         funcs: &project.functions,
         descriptors,
+        element_accessors: element_accessors(project),
         type_table: &type_table,
         eimm_memo: IndexMap::default(),
     };
@@ -574,6 +575,8 @@ fn retarget_wrapper_call(
 struct Analyzer<'a> {
     funcs: &'a [Rc<RefCell<NirFunction>>],
     descriptors: &'a [FunctionRef],
+    /// The builtins that hand back a handle into an array argument.
+    element_accessors: IndexSet<FuncId>,
     type_table: &'a Rc<RefCell<TypeTable>>,
     eimm_memo: IndexMap<FuncKey, bool>,
 }
@@ -999,7 +1002,7 @@ impl ElementImmutable<'_, '_, '_> {
                             ve,
                             &self.tainted,
                             self.analyzer.type_table,
-                            self.analyzer.descriptors,
+                            &self.analyzer.element_accessors,
                         )
                     {
                         self.tainted.insert(local_index);
@@ -1024,7 +1027,7 @@ impl ElementImmutable<'_, '_, '_> {
                             value,
                             &self.tainted,
                             self.analyzer.type_table,
-                            self.analyzer.descriptors,
+                            &self.analyzer.element_accessors,
                         ) {
                             self.tainted.insert(index);
                         }
@@ -1050,7 +1053,13 @@ impl ElementImmutable<'_, '_, '_> {
                 expr: inner,
             } => {
                 let inner = *inner;
-                if is_self_derived_op(body, inner, &self.tainted, tt, self.analyzer.descriptors) {
+                if is_self_derived_op(
+                    body,
+                    inner,
+                    &self.tainted,
+                    tt,
+                    &self.analyzer.element_accessors,
+                ) {
                     compiler_trace!("demote", "verify reject: &mut of self-derived");
                     self.clean = false;
                     return;
@@ -1068,17 +1077,22 @@ impl ElementImmutable<'_, '_, '_> {
                         let base = *base;
                         // A promoted base is never self-derived, so the guard
                         // short-circuits before the node lookup.
-                        is_self_derived_op(body, base, &self.tainted, tt, self.analyzer.descriptors)
-                            && base.as_expr().is_some_and(|be| {
-                                !matches!(&body.exprs[be].kind, ExprKind::Local { index: 0, .. })
-                            })
+                        is_self_derived_op(
+                            body,
+                            base,
+                            &self.tainted,
+                            tt,
+                            &self.analyzer.element_accessors,
+                        ) && base.as_expr().is_some_and(|be| {
+                            !matches!(&body.exprs[be].kind, ExprKind::Local { index: 0, .. })
+                        })
                     }
                     ExprKind::Index { expr: base, .. } => is_self_derived_op(
                         body,
                         *base,
                         &self.tainted,
                         tt,
-                        self.analyzer.descriptors,
+                        &self.analyzer.element_accessors,
                     ),
                     _ => false,
                 };
@@ -1104,8 +1118,13 @@ impl ElementImmutable<'_, '_, '_> {
                 // unless the callee is known `&self` (cannot mutate) or a
                 // verified element-immutable `&mut self` method. An
                 // unresolvable callee is conservatively unsafe.
-                if is_self_derived_op(body, receiver, &self.tainted, tt, self.analyzer.descriptors)
-                {
+                if is_self_derived_op(
+                    body,
+                    receiver,
+                    &self.tainted,
+                    tt,
+                    &self.analyzer.element_accessors,
+                ) {
                     let ok = match self.analyzer.callee_mutates_self(callee) {
                         Some(false) => true,
                         Some(true) => self.analyzer.verify(callee, self.visiting),
@@ -1184,7 +1203,13 @@ impl ElementImmutable<'_, '_, '_> {
                 // its (unverified) body with access to `self`'s elements.
                 let callee = *callee;
                 let args = args.clone();
-                if is_self_derived_op(body, callee, &self.tainted, tt, self.analyzer.descriptors) {
+                if is_self_derived_op(
+                    body,
+                    callee,
+                    &self.tainted,
+                    tt,
+                    &self.analyzer.element_accessors,
+                ) {
                     compiler_trace!(
                         "demote",
                         "verify reject: indirect call of self-capturing closure"
@@ -1234,7 +1259,7 @@ impl ElementImmutable<'_, '_, '_> {
             arg,
             &self.tainted,
             self.analyzer.type_table,
-            self.analyzer.descriptors,
+            &self.analyzer.element_accessors,
         ) {
             self.clean = false;
             return;
@@ -1243,16 +1268,32 @@ impl ElementImmutable<'_, '_, '_> {
     }
 }
 
+fn element_accessors(project: &NirPackage) -> IndexSet<FuncId> {
+    project
+        .functions
+        .iter()
+        .filter_map(|f| {
+            let f = f.borrow();
+            let reference = FunctionRef::from_resolved(&f, f.module_source.clone());
+            let accessor = project
+                .builtin_declarations
+                .element_access(&reference)
+                .is_some();
+            accessor.then(|| f.id.expect("func_id assigned at lower"))
+        })
+        .collect()
+}
+
 /// [`is_self_derived`] for an operand: a promoted constant is never self-derived.
 fn is_self_derived_op(
     body: &Body,
     op: Operand,
     tainted: &IndexSet<u32>,
     tt: &Rc<RefCell<TypeTable>>,
-    descriptors: &[FunctionRef],
+    element_accessors: &IndexSet<FuncId>,
 ) -> bool {
     op.as_expr()
-        .is_some_and(|e| is_self_derived(body, e, tainted, tt, descriptors))
+        .is_some_and(|e| is_self_derived(body, e, tainted, tt, element_accessors))
 }
 
 /// True when the expression at `id` produces a value that may alias `self`'s
@@ -1267,7 +1308,7 @@ fn is_self_derived(
     id: ExprId,
     tainted: &IndexSet<u32>,
     tt: &Rc<RefCell<TypeTable>>,
-    descriptors: &[FunctionRef],
+    element_accessors: &IndexSet<FuncId>,
 ) -> bool {
     if matches!(
         tt.borrow().get(body.exprs[id].type_id),
@@ -1281,7 +1322,7 @@ fn is_self_derived(
         | ExprKind::Index { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
         | ExprKind::Unary { expr: inner, .. } => {
-            is_self_derived_op(body, *inner, tainted, tt, descriptors)
+            is_self_derived_op(body, *inner, tainted, tt, element_accessors)
         }
         ExprKind::Call { func_id, args, .. } => {
             // An element accessor yields an element of the spine, and any
@@ -1290,8 +1331,7 @@ fn is_self_derived(
             // `container_sroa` rewrites it to the builtin. Other array
             // builtins (`array_clone`, `array_new`) and every by-value return
             // (`$value_copy$T`) produce fresh storage.
-            let callee = callee_descriptor(descriptors, *func_id);
-            let hands_back_borrow = callee.array_element_access().is_some()
+            let hands_back_borrow = element_accessors.contains(func_id)
                 || matches!(
                     tt.borrow().get(body.exprs[id].type_id),
                     ResolvedType::Ref(_) | ResolvedType::MutRef(_)
@@ -1299,7 +1339,7 @@ fn is_self_derived(
             hands_back_borrow
                 && args
                     .iter()
-                    .any(|a| is_self_derived_op(body, a.expr, tainted, tt, descriptors))
+                    .any(|a| is_self_derived_op(body, a.expr, tainted, tt, element_accessors))
         }
         // An aggregate / closure that embeds a self-derived value carries
         // that aliasing storage. Tainting it lets the mutation checks below
@@ -1307,15 +1347,15 @@ fn is_self_derived(
         // aggregate / closure too.
         ExprKind::StructLiteral { fields, .. } => fields
             .iter()
-            .any(|f| is_self_derived_op(body, f.value, tainted, tt, descriptors)),
+            .any(|f| is_self_derived_op(body, f.value, tainted, tt, element_accessors)),
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
             .iter()
-            .any(|e| is_self_derived_op(body, *e, tainted, tt, descriptors)),
+            .any(|e| is_self_derived_op(body, *e, tainted, tt, element_accessors)),
         ExprKind::VariantConstruct { payload, .. } => payload
             .as_ref()
-            .is_some_and(|p| is_self_derived_op(body, *p, tainted, tt, descriptors)),
+            .is_some_and(|p| is_self_derived_op(body, *p, tainted, tt, element_accessors)),
         ExprKind::ClosureToCanonical { functor, .. } => {
-            is_self_derived_op(body, *functor, tainted, tt, descriptors)
+            is_self_derived_op(body, *functor, tainted, tt, element_accessors)
         }
         _ => false,
     }

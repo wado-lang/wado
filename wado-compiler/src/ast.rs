@@ -1534,10 +1534,13 @@ pub enum AttrArg {
     /// A key = \["value", ...\] pair whose value is a string array literal,
     /// e.g. `sources = ["a.wit", "b.wit"]`.
     KeyArray(String, Vec<String>),
+    /// A `key = [ident, ...]` pair whose items name things in the source, e.g.
+    /// `outside = [dst, src]`.
+    KeyIdentArray(String, Vec<String>),
     /// A numeric literal, e.g. `120000`.
     Number(String),
     /// A `key = ident` pair, whose value names something in the source rather
-    /// than carrying text, e.g. `part_of = arr`.
+    /// than carrying text, e.g. `negative = len`.
     KeyIdent(String, String),
     /// A `key = 3` pair, whose value is a number rather than text.
     KeyNumber(String, String),
@@ -1550,7 +1553,9 @@ impl AttrArg {
         match self {
             Self::Str(s) | Self::Ident(s) | Self::Number(s) => s,
             Self::KeyValue(_, v) | Self::KeyIdent(_, v) | Self::KeyNumber(_, v) => v,
-            Self::KeyArray(_, vs) => vs.first().map(String::as_str).unwrap_or(""),
+            Self::KeyArray(_, vs) | Self::KeyIdentArray(_, vs) => {
+                vs.first().map(String::as_str).unwrap_or("")
+            }
         }
     }
 
@@ -1562,6 +1567,7 @@ impl AttrArg {
             Self::Str(s) | Self::Ident(s) | Self::Number(s) => s,
             Self::KeyValue(k, _)
             | Self::KeyArray(k, _)
+            | Self::KeyIdentArray(k, _)
             | Self::KeyIdent(k, _)
             | Self::KeyNumber(k, _) => k,
         }

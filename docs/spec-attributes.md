@@ -509,6 +509,8 @@ Declares that a bodyless function is imported rather than defined. Used in `core
 
 ```wado
 #[canonical("wasi", "stream-new")]
+#[storage(none)]
+#[side_effect(opaque)]
 pub fn stream_new() -> i64;
 ```
 
@@ -516,77 +518,14 @@ pub fn stream_new() -> i64;
 
 ```wado
 #[canonical("mem", "realloc")]
+#[storage(none)]
+#[side_effect(opaque)]
 pub fn realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32;
 ```
 
 ### `#[compiler_item("name")]`
 
 Binds a stdlib declaration to the language item of that name, such as `#[compiler_item("option")]` on `variant Option` or `#[compiler_item("display")]` on the `Display` trait.
-
-### `#[retain(...)]` / `#[result(...)]`
-
-These attributes state what a call does with the reference parameters it is
-handed: whether its result aliases one, and whether it keeps one past the
-return. They are for a declaration with no body, whose retention cannot be read
-from one: a `core:builtin` primitive, a Component Model import, a `.wasm` /
-`.wat` asset import. [Reference Retention](./spec-memory.md#reference-retention)
-states what retention is, and that no function type carries it.
-
-<!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
-
-```wado
-#[result(part_of = arr)]
-#[trap(outside = arr, at = idx)]
-#[trap(unset = arr)]
-pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
-```
-
-<!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
-
-```wado
-#[retain(value, into = arr)]
-#[trap(outside = arr, at = idx)]
-pub fn array_set<T>(arr: &mut Array<T>, idx: i32, value: T);
-```
-
-<!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
-
-```wado
-#[retain(elements_of = src, into = dst)]
-#[trap(outside = dst, at = dst_offset, len = len)]
-#[trap(outside = src, at = src_offset, len = len)]
-pub fn array_copy<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_offset: i32, len: i32);
-```
-
-`#[result(owned)]` says the result is freshly allocated; `#[result(part_of = p)]`
-says it is part of `p`. `#[result]` takes exactly one of the two. An `owned`
-result holds nothing it was handed, except what a `#[retain(...)]` clause says.
-A declaration with a reference parameter whose result can share storage must
-state one, and leaving it out is an error. A Component Model import needs none,
-since the boundary copies and its result is always owned. Nor does an
-[`#[unavailable]`](#unavailablereason) declaration, which is never called.
-
-Silence reads as `owned` storage that may hold what any argument holds. A result
-built from a by-value argument, as `builtin::select` returns one of its
-operands, is a new value, but a reference inside that argument is now inside
-the result as well.
-
-`#[retain(...)]` names one retained thing and repeats where there is more than
-one, so each carries its own destination. A bare name is the parameter itself
-and `elements_of = p` is that parameter's elements; `into = q` names the
-parameter it lands in, and without it the destination is unknown. Silence says
-the call keeps nothing.
-
-Every parameter is named bare, never quoted, and a name that is not a parameter
-of the declaration is an error. An argument the attribute does not take, or a
-second retained thing in one `#[retain]`, is an error too. A malformed attribute
-is never read as silence.
-
-Both are an error on a function with a body, which states these facts itself,
-and on a `trait` or `interface` method requirement: a call to one is statically
-dispatched to an impl that has a body, so the impl states it.
-
-Rationale: [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
 
 ### `#[immediate(...)]`
 
@@ -597,82 +536,179 @@ encoded into the instruction itself.
 
 ```wado
 #[immediate(value)]
-#[trap(never)]
+#[storage(none)]
+#[side_effect(none)]
 pub fn v128_const(value: i128) -> v128;
 ```
 
 It names one parameter, unquoted, and repeats for a second. Like
-`#[retain(...)]`, it belongs to a declaration with no body, because a body is
+[`#[storage(...)]`](#storage), it belongs to a declaration with no body, because a body is
 called rather than encoded as one instruction. A `trait` or `interface` method
 requirement is an error for the same reason: it reaches an impl, which is
 called.
 
-### `#[trap(...)]`
+### `#[storage(...)]`
 
-States when a call to a declaration with no body traps. Silence means it may
-trap.
-`#[trap(never)]` says it never traps, and a check names the one condition it
-traps on:
+States what a call to a declaration with no body shares with its arguments and
+what it keeps of them. Its body cannot be read for these facts, so the
+attribute is their only source. [Reference
+Retention](./spec-memory.md#reference-retention) states what keeping is, and
+that no function type carries it.
 
 <!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
 
 ```wado
-#[trap(never)]
-pub fn f64_sqrt(x: f64) -> f64;
+#[storage(part_of_args)]
+#[side_effect(trap, outside = [arr], at = [idx], unset = arr)]
+pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
 ```
 
 <!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
 
 ```wado
-#[result(part_of = arr)]
-#[trap(outside = arr, at = idx)]
-#[trap(unset = arr)]
-pub fn array_get_value<T>(arr: &Array<T>, idx: i32) -> T;
+#[storage(stores_args)]
+#[side_effect(trap, outside = [dst, src], at = [dst_offset, src_offset], count = len)]
+pub fn array_copy<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_offset: i32, len: i32);
 ```
+
+The first argument is one of six values:
+
+| Value          | Meaning                                                           |
+| -------------- | ----------------------------------------------------------------- |
+| `none`         | The call shares no storage and keeps none                         |
+| `fresh`        | The result is new storage and holds nothing it was handed         |
+| `part_of_args` | The result is an argument's storage, or part of it                |
+| `holds_args`   | The result is new storage that holds what the arguments hold      |
+| `stores_args`  | The call stores what the arguments hold into the `&mut` argument  |
+| `opaque`       | The optimizer assumes nothing about what the call shares or keeps |
+
+The attribute names no parameter, since the types say which ones it means. Only
+a parameter whose type can carry storage counts, and a type parameter does,
+since some instantiation carries storage. A by-value parameter contributes
+itself: `builtin::select` hands back one of its two operands, so its
+`part_of_args` result may be part of either. A reference parameter contributes
+what it points to, so `array_copy` stores the elements of `src`. The
+destination of `stores_args` is the one `&mut` parameter.
+
+`len = p` says the returned array holds `p` elements. It goes with `fresh` and
+`holds_args`, the two values whose result is new storage.
+
+### `#[side_effect(...)]`
+
+States what a call to a declaration with no body does besides computing its
+result.
+
+| Identifier  | Meaning                                                          |
+| ----------- | ---------------------------------------------------------------- |
+| `none`      | No effect beyond what the signature states                       |
+| `trap`      | The call may trap                                                |
+| `read`      | The call reads linear memory                                     |
+| `write`     | The call writes linear memory                                    |
+| `opaque`    | The optimizer assumes nothing about what the call does           |
+| `hint`      | The call computes nothing, but its position is what it means     |
+| `black_box` | The optimizer may assume nothing about the operand or the result |
 
 <!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
 
 ```wado
-#[result(owned)]
-#[trap(negative = len, result_len = len)]
-pub fn array_new<T>(len: i32) -> Array<T>;
-```
-
-`array_copy`, quoted under [`#[retain]`](#retain--result), checks a range in
-each of its two arrays.
-
-`negative = p` traps when `p` is below zero. `outside = a` traps unless the
-range from `at` (0 when absent) of `len` elements (1 when absent) lies within
-the array `a`, and says the call does not replace `a`. `unset = a` traps when
-the element read holds no value: `array_new` leaves a reference element empty,
-while a primitive element always holds one. Each attribute states one
-check and repeats for another; the call traps where any fails. `result_len = p`
-is no check: it says the returned array holds `p` elements, so a later check
-against it can be proved. Running out of memory is not a trap any of these
-describe.
-
-It is an error on a function with a body, which states when it traps itself,
-and on a `trait` or `interface` method requirement, for the reason `#[retain]`
-is.
-
-### `#[linear_memory(...)]`
-
-States how a call to a declaration with no body touches linear memory: `read`
-or `write`. Silence means it touches none. A linear-memory address is a plain
-`i32`, so no parameter type says this, and the attribute is the only source.
-
-<!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
-
-```wado
-#[linear_memory(read)]
+#[storage(none)]
+#[side_effect(read, trap)]
 pub fn i32_load(addr: i32) -> i32;
 ```
 
+The signature states two facts, so no identifier lists them. A `&mut` parameter
+is written through, and the write may reach everything the referent reaches. A
+declaration returning `!` never returns: every call ends in a trap. That is not
+`trap`, which says a call that returns may instead trap.
+
+A fact the attribute leaves out is a fact the call does not have: a call with no
+`trap` never traps. `none`, `opaque` and `black_box` each stand alone.
+
+A `hint` call is never deleted, moved or merged on its own. It goes when the
+code that contains it goes, and it never keeps that code alive.
+
+A `black_box` call is never deleted, moved or merged, and its result is never
+computed from its operand. A test or a benchmark uses `builtin::black_box` to
+keep the work it measures from being folded away.
+
+#### Trap Conditions
+
+`trap` alone means the call may trap at any time. Condition keys narrow it: with
+any of them, the conditions listed are the only ones under which the call
+traps.
+
+| Key        | Form     | Meaning                                          |
+| ---------- | -------- | ------------------------------------------------ |
+| `outside`  | `[a, …]` | Traps unless the range lies within array `a`     |
+| `at`       | `[p, …]` | Paired with `outside`: the range starts at `p`   |
+| `count`    | `p`      | Every range in `outside` has `p` elements        |
+| `unset`    | `a`      | Traps if the element of `a` at its `at` is unset |
+| `negative` | `p`      | Traps if `p` is below zero                       |
+
 <!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
 
 ```wado
-#[linear_memory(write)]
-pub fn i32_store(addr: i32, value: i32);
+#[storage(fresh, len = len)]
+#[side_effect(trap, negative = len)]
+pub fn array_new<T>(len: i32) -> Array<T>;
 ```
 
-It is written once, and is an error where `#[trap]` is.
+`outside` and `at` are arrays of the same length, and the i-th entries pair up.
+Without `at`, every range starts at 0. Without `count`, every range has 1
+element. A range lies within `a` only when its start and its count are both
+non-negative and they end at or before `a`'s length. `outside = [a]` also says
+the call does not replace `a`, and a write through `a` then reaches only the
+elements of `a` in that range.
+
+A call that states `outside = [a], at = [i]` without `count` and returns a value
+is an element accessor: it reaches the one element of `a` at `i`. It writes
+that element when it returns `&mut`, and reads it otherwise. An element is
+unset when `array_new` left a reference element empty; a primitive element
+always holds a value.
+
+#### What the Attributes Assume
+
+The attributes state what a call does when the host behaves as specified.
+Running out of memory is assumed never to happen, and no attribute states it.
+The same holds for any other failure of the host.
+
+#### Imports
+
+A function imported from a core `.wasm` / `.wat` asset exchanges only scalars,
+and the compiler sees none of its body. The declaration the compiler writes for
+it carries `#[storage(none)]` and `#[side_effect(opaque)]`.
+
+A Component Model import carries neither attribute. Its adapter lowers every
+argument to scalars and linear memory and lifts the result back, so the import
+call it makes shares no storage and is opaque, the same for every import.
+
+#### Errors
+
+Each of these is an error, and a malformed attribute is never read as some
+other fact:
+
+- A body-less `core:builtin` declaration missing either attribute, unless it is
+  [`#[unavailable]`](#unavailablereason): it is never called, so it has no
+  facts to state.
+- Either attribute on a function with a body, on a `trait` or `interface`
+  method requirement, or on a declaration carrying `#[cm(...)]`.
+- A second `#[storage]` or `#[side_effect]` on one declaration.
+- A repeated key, or an unknown value, identifier or key.
+- `none`, `opaque` or `black_box` beside anything else in `#[side_effect]`.
+- A condition key without `trap`.
+- `at` or `count` without `outside`, or `outside` and `at` arrays of different
+  lengths.
+- A name in a key that is not a parameter of the declaration.
+- `unset` naming an array that is not in `outside`.
+- `outside` or `unset` naming a parameter that is not an array, or `at`,
+  `count` or `negative` naming one that is not an integer.
+- `len` in `#[storage]` beside a value other than `fresh` or `holds_args`, on a
+  declaration that does not return an array, or naming a parameter that is not
+  an integer.
+- `stores_args` on a declaration without exactly one `&mut` parameter.
+- `fresh`, `part_of_args` or `holds_args` on a declaration that returns `()`.
+- `part_of_args`, `holds_args` or `stores_args` on a declaration with no
+  parameter that can carry storage.
+
+Rationale: [WEP: Builtin Storage and Side-Effect
+Attributes](./wep-2026-10-04-builtin-storage-side-effect.md).

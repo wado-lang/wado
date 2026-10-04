@@ -11,15 +11,17 @@ use crate::ast::{
     self, AstId, AstVisitor, CompoundAssignOp, Expr, Item, Module, UnaryOp, walk_expr,
 };
 use crate::attribute::{
-    self, ALLOC, AMBIENT, EXPORT_NAME, IMMEDIATE, INLINE, LINEAR_MEMORY, PARAM, RESULT, RETAIN,
-    SECRET, TRAP, WIRE,
+    self, ALLOC, AMBIENT, CM, EXPORT_NAME, IMMEDIATE, INLINE, PARAM, SECRET, SIDE_EFFECT, STORAGE,
+    WIRE,
 };
+use crate::builtin_facts::{self, BuiltinFacts, ParamShape, ReturnShape};
 use crate::call_args::CallArgs;
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
-use crate::lower::plan::value_copy::ownership::owes_return_convention;
-use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
+use crate::lower::plan::value_copy::place::{
+    is_source_place, may_carry_storage, source_place_subscripts_mut,
+};
 use crate::lower::wide_int_literal::{create_conversion, create_literal, method_ref};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, Receiver, global_init_function, global_name};
@@ -119,13 +121,6 @@ macro_rules! reify_annotation_accessors {
             }
         )+
     };
-}
-
-/// What one `#[trap(...)]` attribute states; `never` states nothing.
-#[derive(Default)]
-struct TrapClause {
-    check: Option<tir::TrapCheck<String>>,
-    result_len: Option<String>,
 }
 
 /// Whether a compound-assign target sub-piece may be left inline (duplicated
@@ -1222,17 +1217,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let type_params = self
             .ann_decl_type_params(func.id)
             .expect("the declaring walk records the type params for every function reify emits");
-        let declared_return_convention = self.resolved_return_convention(
-            func,
-            &params,
-            return_type,
-            body.is_some(),
-            self.reify_return_convention_attr(&func.attrs, &params),
-        );
-        let retains = self.reify_retain_attrs(&func.attrs, &params);
+        let declared = self.reify_declared_facts(func, &params, return_type);
         let immediates = self.reify_immediate_attrs(&func.attrs, &params);
-        let trap = self.reify_trap_attrs(&func.attrs, &params);
-        let linear_memory = self.reify_linear_memory_attr(&func.attrs);
         if body.is_some() {
             self.reject_bodyless_attrs_on_body(&func.attrs);
         }
@@ -1255,10 +1241,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             effects: self.types.function_effects.get(&func.id).cloned().expect(
                 "the declaring walk records function_effects for every function reify emits",
             ),
-            retains,
             immediates,
-            trap,
-            linear_memory,
+            declared,
             body,
             span: func.span,
             local_count: ctx.local_count(),
@@ -1278,7 +1262,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ),
             export_name: extract_export_name_attr(&func.attrs),
             allocator_tag: extract_allocator_tag_attr(&func.attrs),
-            declared_return_convention,
             kind: tir::FunctionKind::Regular,
             return_abi: tir::ReturnAbi::Single,
         }
@@ -1547,10 +1530,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return_type,
             task_return_type: None,
             effects: vec![],
-            retains: vec![],
             immediates: vec![],
-            trap: None,
-            linear_memory: None,
+            declared: None,
             body: Some(body),
             span: test_decl.span,
             local_count: ctx.local_count(),
@@ -1565,7 +1546,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             compiler_item: None,
             export_name: None,
             allocator_tag: None,
-            declared_return_convention: None,
             kind: FunctionKind::Regular,
             return_abi: ReturnAbi::default(),
         };
@@ -1745,6 +1725,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ast::AttrArg::KeyValue(k, _) if k == "name" || k == "from_env" => {}
                 ast::AttrArg::KeyValue(k, _)
                 | ast::AttrArg::KeyArray(k, _)
+                | ast::AttrArg::KeyIdentArray(k, _)
                 | ast::AttrArg::KeyIdent(k, _)
                 | ast::AttrArg::KeyNumber(k, _) => {
                     emit(format!("unknown #[param] argument: {k}"));
@@ -1783,156 +1764,90 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// A body-less declaration reading through a reference and returning
-    /// something that can carry storage must say which: silence reads as
-    /// "allocates", and a declaration that does hand out an argument's storage
-    /// then has its caller's copies elided. Reported here, where the declaration
-    /// has a span, rather than asserted in a later phase that has none.
-    ///
-    /// A Component Model import declares nothing and owes nothing: the boundary
-    /// copies, so its result is owned by construction, and the answer is the
-    /// same for every one of them.
-    fn resolved_return_convention(
+    /// What a body-less declaration states with `#[storage]` and
+    /// `#[side_effect]`. A `core:builtin` declaration owes both, unless it only
+    /// reserves a name. A Component Model import states neither: the raw call
+    /// its adapter makes carries the facts, the same for every import.
+    fn reify_declared_facts(
         &self,
         func: &ast::Function,
         params: &[tir::TirParam],
         return_type: tir::TypeId,
-        has_body: bool,
-        declared: Option<tir::ReturnConvention>,
-    ) -> Option<tir::ReturnConvention> {
-        // The attribute, not what it resolved to: one that failed to resolve was
-        // reported already, and asking for it again says nothing new.
-        let states_one = func.attrs.iter().any(|attr| attr.name == RESULT);
-        if has_body || states_one || reserves_a_name_only(func) {
-            return declared;
-        }
-        if func.is_cm_import() {
-            return Some(tir::ReturnConvention::Owned);
-        }
-        if !owes_return_convention(params, return_type, &self.tysys.type_table.borrow()) {
+    ) -> Option<BuiltinFacts<String>> {
+        if func.body.is_some() || reserves_a_name_only(func) {
             return None;
         }
-        let _ = self.logger.error_in(
-            &self.current_module_source,
-            Diagnostic {
-                severity: Severity::Error,
-                code: Code::ResultAttr,
-                message: format!(
-                    "`{}` reads through a reference and returns storage: \
-                     declare #[result(part_of = p)], or #[result(owned)] that it allocates",
-                    func.name
-                ),
-                span: Some(DiagnosticSpan::from_span(&func.name_span, None)),
-            },
-        );
-        None
-    }
-
-    /// The `#[result(...)]` convention, `None` where the declaration states
-    /// none. A malformed one is reported rather than read as that silence, which
-    /// means "allocates" — the reading that elides copies.
-    fn reify_return_convention_attr(
-        &self,
-        attrs: &[ast::Attribute],
-        params: &[tir::TirParam],
-    ) -> Option<tir::ReturnConvention> {
-        let attr = attrs.iter().find(|a| a.name == RESULT)?;
-        let emit = |message: String| {
-            self.attr_error(Code::ResultAttr, attr, message);
-            None
-        };
-        let [arg] = attr.args.as_slice() else {
-            return emit(
-                "#[result] takes one convention: `owned` or `part_of = param`".to_string(),
-            );
-        };
-        match arg {
-            ast::AttrArg::Ident(name) if name == "owned" => Some(tir::ReturnConvention::Owned),
-            ast::AttrArg::KeyIdent(key, named) if key == "part_of" => {
-                match params.iter().position(|p| &p.name == named) {
-                    Some(index) => Some(tir::ReturnConvention::PartOf(index)),
-                    None => emit(format!("#[result(part_of = {named})] names no parameter")),
-                }
-            }
-            _ if arg.name() == "part_of" => {
-                emit("#[result(part_of = ...)] takes a parameter name, unquoted".to_string())
-            }
-            _ => emit(format!(
-                "unknown #[result] convention: {} (expected `owned` or `part_of = param`)",
-                arg.name()
-            )),
-        }
-    }
-
-    /// The `#[retain(...)]` clauses, one per attribute.
-    fn reify_retain_attrs(
-        &self,
-        attrs: &[ast::Attribute],
-        params: &[tir::TirParam],
-    ) -> Vec<tir::RetainSpec<String>> {
-        attrs
+        let written = func
+            .attrs
             .iter()
-            .filter(|a| a.name == RETAIN)
-            .filter_map(|attr| self.reify_retain_attr(attr, params))
-            .collect()
-    }
-
-    fn reify_retain_attr(
-        &self,
-        attr: &ast::Attribute,
-        params: &[tir::TirParam],
-    ) -> Option<tir::RetainSpec<String>> {
-        let emit = |message: String| {
-            self.attr_error(Code::RetainAttr, attr, message);
-            None
-        };
-        let named = |name: &str| params.iter().any(|p| p.name == name);
-        let unquoted = |key: &str| {
-            emit(format!(
-                "#[retain({key} = ...)] takes a parameter name, unquoted"
-            ))
-        };
-
-        let (source, elements) = match attr.args.first() {
-            Some(ast::AttrArg::Ident(name)) => (name.clone(), false),
-            Some(ast::AttrArg::KeyIdent(key, name)) if key == "elements_of" => (name.clone(), true),
-            Some(arg) if arg.name() == "elements_of" => return unquoted("elements_of"),
-            _ => {
-                return emit(
-                    "#[retain] names one parameter: `p`, or `elements_of = p`".to_string(),
+            .filter(|attr| attr.name == STORAGE || attr.name == SIDE_EFFECT);
+        if func.attrs.iter().any(|attr| attr.name == CM) {
+            for attr in written {
+                self.attr_error(
+                    code_of(&attr.name),
+                    attr,
+                    format!(
+                        "#[{}] does not belong on a Component Model import: the raw call \
+                         its adapter makes carries the facts, the same for every import",
+                        attr.name
+                    ),
                 );
             }
-        };
-        if !named(&source) {
-            return emit(format!("#[retain] names no parameter: {source}"));
+            return None;
         }
-
-        let into = match attr.args.get(1) {
-            None => None,
-            Some(ast::AttrArg::KeyIdent(key, dest)) if key == "into" => {
-                if !named(dest) {
-                    return emit(format!("#[retain(into = {dest})] names no parameter"));
+        let type_table = self.tysys.type_table.borrow();
+        let is_array = |t: tir::TypeId| {
+            matches!(
+                type_table.get(type_table.peel_refs(t)),
+                tir::ResolvedType::BuiltinArray(_)
+            )
+        };
+        let shapes: Vec<ParamShape<'_>> = params
+            .iter()
+            .map(|p| ParamShape {
+                name: &p.name,
+                carries_storage: may_carry_storage(p.type_id, &type_table),
+                is_mut_ref: matches!(type_table.get(p.type_id), tir::ResolvedType::MutRef(_)),
+                is_array: is_array(p.type_id),
+                is_integer: type_table.is_integer(p.type_id),
+            })
+            .collect();
+        let ret = ReturnShape {
+            is_unit: matches!(type_table.get(return_type), tir::ResolvedType::Unit),
+            is_array: is_array(return_type),
+        };
+        match builtin_facts::read(&func.attrs, &shapes, ret) {
+            Ok(Some(facts)) => Some(facts),
+            Ok(None) => {
+                if self.current_module_source.is_core_builtin() {
+                    let _ = self.logger.error_in(
+                        &self.current_module_source,
+                        Diagnostic {
+                            severity: Severity::Error,
+                            code: Code::StorageAttr,
+                            message: format!(
+                                "`{}` has no body, so it states what a call does: \
+                                 declare #[storage(...)] and #[side_effect(...)]",
+                                func.name
+                            ),
+                            span: Some(DiagnosticSpan::from_span(&func.name_span, None)),
+                        },
+                    );
                 }
-                Some(dest.clone())
+                None
             }
-            Some(arg) if arg.name() == "into" => return unquoted("into"),
-            Some(arg) => {
-                return emit(format!(
-                    "unknown #[retain] argument: {} (expected `into = param`)",
-                    arg.name()
-                ));
+            Err(faults) => {
+                for fault in faults {
+                    let attr = func
+                        .attrs
+                        .iter()
+                        .find(|attr| attr.name == fault.attr)
+                        .expect("a fault points at an attribute the declaration carries");
+                    self.attr_error(code_of(fault.attr), attr, fault.message);
+                }
+                None
             }
-        };
-        if attr.args.len() > 2 {
-            return emit(
-                "#[retain] names one retained thing; repeat the attribute for another".to_string(),
-            );
         }
-        Some(tir::RetainSpec {
-            source,
-            elements,
-            into,
-        })
     }
 
     /// The parameters named by `#[immediate(p)]`, each lowered to a Wasm
@@ -1970,122 +1885,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
         Some(name.clone())
-    }
-
-    /// The `#[trap(...)]` attributes as one spec, `None` where there are none.
-    /// A malformed one is reported and the whole spec dropped: silence is "may
-    /// trap", the reading that deletes nothing.
-    fn reify_trap_attrs(
-        &self,
-        attrs: &[ast::Attribute],
-        params: &[tir::TirParam],
-    ) -> Option<tir::TrapSpec<String>> {
-        let written: Vec<&ast::Attribute> = attrs.iter().filter(|a| a.name == TRAP).collect();
-        let mut spec = tir::TrapSpec {
-            checks: Vec::new(),
-            result_len: None,
-        };
-        let mut sound = true;
-        for attr in &written {
-            let emit = |message: String| self.attr_error(Code::TrapAttr, attr, message);
-            match self.reify_trap_attr(attr, params, written.len()) {
-                Ok(clause) => {
-                    spec.checks.extend(clause.check);
-                    if let Some(len) = clause.result_len {
-                        if spec.result_len.is_some() {
-                            emit("#[trap] states `result_len` once".to_string());
-                            sound = false;
-                        }
-                        spec.result_len = Some(len);
-                    }
-                }
-                Err(message) => {
-                    emit(message);
-                    sound = false;
-                }
-            }
-        }
-        (sound && !written.is_empty()).then_some(spec)
-    }
-
-    /// The `#[linear_memory(...)]` access, `None` where there is none. A
-    /// malformed one is reported and read as a write, which reorders nothing.
-    fn reify_linear_memory_attr(&self, attrs: &[ast::Attribute]) -> Option<tir::LinearMemory> {
-        let mut written = attrs.iter().filter(|a| a.name == LINEAR_MEMORY);
-        let attr = written.next()?;
-        let emit = |message: &str| {
-            self.attr_error(Code::LinearMemoryAttr, attr, message.to_string());
-            Some(tir::LinearMemory::Write)
-        };
-        if written.next().is_some() {
-            return emit("#[linear_memory] is written once");
-        }
-        match attr.args.as_slice() {
-            [ast::AttrArg::Ident(word)] if word == "read" => Some(tir::LinearMemory::Read),
-            [ast::AttrArg::Ident(word)] if word == "write" => Some(tir::LinearMemory::Write),
-            _ => emit("#[linear_memory] takes `read` or `write`"),
-        }
-    }
-
-    fn reify_trap_attr(
-        &self,
-        attr: &ast::Attribute,
-        params: &[tir::TirParam],
-        attr_count: usize,
-    ) -> Result<TrapClause, String> {
-        if let [ast::AttrArg::Ident(word)] = attr.args.as_slice()
-            && word == "never"
-        {
-            if attr_count > 1 {
-                return Err("#[trap(never)] stands alone".to_string());
-            }
-            return Ok(TrapClause::default());
-        }
-        let mut named: IndexMap<&str, String> = IndexMap::default();
-        for arg in &attr.args {
-            let ast::AttrArg::KeyIdent(key, param) = arg else {
-                return Err(format!(
-                    "#[trap] takes `never` or `key = param` pairs, not {}",
-                    arg.name()
-                ));
-            };
-            if !matches!(
-                key.as_str(),
-                "negative" | "outside" | "unset" | "at" | "len" | "result_len"
-            ) {
-                return Err(format!("unknown #[trap] key: {key}"));
-            }
-            if !params.iter().any(|p| &p.name == param) {
-                return Err(format!("#[trap({key} = {param})] names no parameter"));
-            }
-            if named.insert(key, param.clone()).is_some() {
-                return Err(format!("#[trap] names `{key}` twice"));
-            }
-        }
-        let mut take = |key: &str| named.shift_remove(key);
-        let check = match (take("negative"), take("outside"), take("unset")) {
-            (None, None, None) => None,
-            (Some(p), None, None) => Some(tir::TrapCheck::Negative(p)),
-            (None, Some(array), None) => Some(tir::TrapCheck::Outside {
-                array,
-                at: take("at"),
-                len: take("len"),
-            }),
-            (None, None, Some(array)) => Some(tir::TrapCheck::Unset(array)),
-            _ => {
-                return Err(
-                    "#[trap] states one check; repeat the attribute for another".to_string()
-                );
-            }
-        };
-        let result_len = take("result_len");
-        if let Some(key) = named.keys().next() {
-            return Err(format!("#[trap({key} = ...)] belongs with `outside`"));
-        }
-        if check.is_none() && result_len.is_none() {
-            return Err("#[trap] takes `never` or at least one `key = param`".to_string());
-        }
-        Ok(TrapClause { check, result_len })
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -10408,6 +10207,16 @@ fn wire_name_policy_of(attrs: &[ast::Attribute]) -> Option<NamePolicy> {
 /// owed nothing about one either.
 fn reserves_a_name_only(func: &ast::Function) -> bool {
     func.unavailable_attr().is_some()
+}
+
+/// The code a fault in the attribute named `name` is reported under.
+fn code_of(name: &str) -> Code {
+    if name == STORAGE {
+        Code::StorageAttr
+    } else {
+        assert_eq!(name, SIDE_EFFECT, "a fact attribute is one of the two");
+        Code::SideEffectAttr
+    }
 }
 
 /// The discriminant of a case the walk resolved. The walk rejects a case the

@@ -211,10 +211,14 @@ pub(crate) fn rehydrate_tir_module(
     fn_remap: &mut IndexMap<*const RefCell<TirFunction>, Rc<RefCell<TirFunction>>>,
 ) -> TirModule {
     // A synthesized function declares nothing, so nothing in the graph can name
-    // it and it is never dropped.
-    let reachable = |f: &Rc<RefCell<TirFunction>>| match (live, f.borrow().def_id) {
-        (Some(live), Some(def)) => live.contains(&def),
-        _ => true,
+    // it and it is never dropped. Nor is a declaration, as reify keeps it: the
+    // call naming it may be one synthesis mints later.
+    let reachable = |f: &Rc<RefCell<TirFunction>>| {
+        let f = f.borrow();
+        match (live, f.def_id) {
+            (Some(live), Some(def)) => f.body.is_none() || live.contains(&def),
+            _ => true,
+        }
     };
     let mut new_module = snap_module.clone();
     new_module.type_table = Rc::clone(fresh_type_table);

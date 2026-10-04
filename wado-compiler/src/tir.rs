@@ -9,6 +9,7 @@ use std::rc::Rc;
 
 use sha2::Digest;
 
+use crate::builtin_facts::{BuiltinFacts, Storage, TrapCheck};
 use crate::call_args::CallArgs;
 use crate::canonical::CmCallTarget;
 use crate::compiler_item::CompilerItem;
@@ -7098,16 +7099,13 @@ pub struct TirFunction {
     /// to infer signature resources.
     pub task_return_type: Option<TypeId>,
     pub effects: Vec<EffectRef>,
-    /// `#[retain(...)]` on a bodyless declaration — what the call keeps past
-    /// its return. A function with a body declares none: the body is read.
-    pub retains: Vec<RetainSpec<String>>,
     /// `#[immediate(...)]` — parameters lowered to a Wasm immediate, whose
     /// argument must still be a literal when codegen reads it.
     pub immediates: Vec<String>,
-    /// `#[trap(...)]` on a bodyless declaration — when the call can trap.
-    pub trap: Option<TrapSpec<String>>,
-    /// `#[linear_memory(...)]` on a bodyless declaration.
-    pub linear_memory: Option<LinearMemory>,
+    /// What a bodyless declaration states about its calls with `#[storage]`
+    /// and `#[side_effect]`. A function with a body states nothing: the body
+    /// is read.
+    pub declared: Option<BuiltinFacts<String>>,
     pub body: Option<TirBlock>,
     pub span: Span,
     pub local_count: u32,
@@ -7163,10 +7161,6 @@ pub struct TirFunction {
 
     /// Allocator tag from `#[allocator("...")]` attribute (e.g., `"bump"`, `"debug"`).
     pub allocator_tag: Option<String>,
-
-    /// What `#[result(...)]` declared. Read only where there is no body to
-    /// infer from, so one written on a body is recorded and ignored.
-    pub declared_return_convention: Option<ReturnConvention>,
 
     /// Categorizes the function for kind-specific optimizations. Most functions
     /// are `Regular`; synthesis passes set specialized kinds so the TIR
@@ -7244,96 +7238,82 @@ pub enum InlineHint {
     Never,
 }
 
-/// Where a bodyless declaration's result comes from. A body is read for the
-/// same fact, so this is the declared half of one notion: the result is either
-/// a fresh place or a projection of one parameter.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Where a bodyless declaration's result comes from, as its `#[storage]`
+/// implies. A body is read for the same fact, so this is the declared half of
+/// one notion: the result is either a fresh place or a projection of
+/// parameters.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReturnConvention {
-    /// `#[result(owned)]` — every returned value is freshly materialized, so a
-    /// caller may consume it as a move.
+    /// Every returned value is freshly materialized, so a caller may consume
+    /// it as a move.
     Owned,
-    /// `#[result(part_of = p)]` — the result names a component of parameter `p`
-    /// in place, so it lives as long as that argument's storage does.
-    PartOf(usize),
+    /// The result names a component of one of these parameters in place, so
+    /// it lives as long as that argument's storage does.
+    PartOf(Vec<usize>),
 }
 
-/// One `#[retain(...)]` clause on a bodyless declaration: what the call keeps
-/// past its return, and where that lands.
+/// What a call keeps of one parameter past its return, and where that lands.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RetainSpec<Param> {
     /// The retained parameter.
     pub source: Param,
-    /// `elements_of = p` — what is retained is what `p` holds, not `p`.
+    /// What is retained is what `source` points to, not `source`.
     pub elements: bool,
-    /// `into = q` — the parameter the retained reference lands in, `None`
-    /// where the declaration names no destination.
-    pub into: Option<Param>,
+    pub into: RetainInto<Param>,
 }
 
-/// One `#[trap(...)]` condition: the call traps exactly where one fails.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TrapCheck<Param> {
-    /// `negative = p` — traps when `p < 0`.
-    Negative(Param),
-    /// `outside = a, at = i, len = n` — traps unless `[i, i + n)` lies within
-    /// the array `a`. `at` defaults to 0, `len` to 1.
-    Outside {
-        array: Param,
-        at: Option<Param>,
-        len: Option<Param>,
-    },
-    /// `unset = a` — traps when the element read is a slot of `a` that holds no
-    /// value, as a reference element `array_new` left at its default does.
-    Unset(Param),
-}
-
-/// What a bodyless declaration's `#[trap(...)]` attributes state. Silence is
-/// "may trap"; `#[trap(never)]` is a spec with no checks.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TrapSpec<Param> {
-    pub checks: Vec<TrapCheck<Param>>,
-    /// `result_len = p` — the returned array holds exactly `p` elements.
-    pub result_len: Option<Param>,
-}
-
-impl<P> TrapSpec<P> {
-    fn map<Q>(&self, mut f: impl FnMut(&P) -> Q) -> TrapSpec<Q> {
-        TrapSpec {
-            checks: self
-                .checks
-                .iter()
-                .map(|check| match check {
-                    TrapCheck::Negative(p) => TrapCheck::Negative(f(p)),
-                    TrapCheck::Outside { array, at, len } => TrapCheck::Outside {
-                        array: f(array),
-                        at: at.as_ref().map(&mut f),
-                        len: len.as_ref().map(&mut f),
-                    },
-                    TrapCheck::Unset(array) => TrapCheck::Unset(f(array)),
-                })
-                .collect(),
-            result_len: self.result_len.as_ref().map(f),
-        }
-    }
-}
-
-/// `#[linear_memory(...)]`: how a bodyless declaration touches linear memory.
+/// Where a retained reference lands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LinearMemory {
+pub enum RetainInto<Param> {
+    /// The result, which `holds_args` builds around it.
+    Result,
+    /// The `&mut` parameter `stores_args` stores into.
+    Param(Param),
+    /// Anywhere, the result included: `opaque` says nothing.
+    Anywhere,
+}
+
+/// How a call reaches the one array element it is an accessor of.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ArrayElementAccess {
     Read,
-    /// Writes, and reads too: a store is ordered against every other access.
     Write,
 }
 
-/// What a bodyless `core:builtin` declared about storage, by parameter position.
-/// Link snapshots it because monomorphization drops the generic declarations.
+/// A bodyless declaration's signature, by parameter position, as its facts
+/// are read against it.
 #[derive(Debug, Clone, Default)]
+pub struct DeclarationShape {
+    pub arity: usize,
+    /// Positions whose type can carry storage in some instantiation.
+    pub storage_params: Vec<usize>,
+    /// Positions taken through a reference, which contribute what they point
+    /// to rather than themselves.
+    pub reference_params: IndexSet<usize>,
+    /// Positions taken by `&mut`.
+    pub mut_params: IndexSet<usize>,
+    /// `#[immediate(...)]` positions.
+    pub immediate_params: IndexSet<usize>,
+    pub returns_value: bool,
+    pub returns_mut_ref: bool,
+    /// The declaration returns `!`, so every call ends in a trap.
+    pub returns_never: bool,
+}
+
+/// What a bodyless declaration stated, by parameter position, and what that
+/// implies for the questions its readers ask. Link snapshots it because
+/// monomorphization drops the generic declarations.
+#[derive(Debug, Clone)]
 pub struct BuiltinDeclaration {
     /// How many parameters the declaration takes.
     pub arity: usize,
-    /// `#[result(...)]`, or `None` where the declaration states none.
+    /// What `#[storage]` and `#[side_effect]` state. `None` for a declaration
+    /// that states nothing: a Component Model import, whose raw call carries
+    /// the facts instead.
+    pub facts: Option<BuiltinFacts<usize>>,
+    /// The convention the storage implies, `None` where it implies none.
     pub returns: Option<ReturnConvention>,
-    /// `#[retain(...)]` — what this call keeps beyond it.
+    /// What the call keeps beyond it, as the storage implies.
     pub retains: Vec<RetainSpec<usize>>,
     /// Positions the declaration takes by `&mut`, the only ones it can write
     /// the caller's storage through. Snapshot here because the bodyless
@@ -7343,10 +7323,121 @@ pub struct BuiltinDeclaration {
     /// reads the argument's literal value, so nothing may rewrite it into a
     /// load.
     pub immediate_params: IndexSet<usize>,
-    /// `#[trap(...)]`, or `None` where the declaration states none.
-    pub trap: Option<TrapSpec<usize>>,
-    /// `#[linear_memory(...)]`, or `None` where it touches none.
-    pub linear_memory: Option<LinearMemory>,
+    /// The array parameter whose one element the call reaches, and how.
+    pub element_access: Option<(usize, ArrayElementAccess)>,
+    /// Every call ends in a trap, as a `!` return states.
+    pub never_returns: bool,
+}
+
+impl BuiltinDeclaration {
+    /// The declaration `facts` make of a signature shaped as `shape`.
+    pub fn new(facts: Option<BuiltinFacts<usize>>, shape: DeclarationShape) -> Self {
+        let storage = facts.as_ref().map(|f| f.storage);
+        let returns = match storage {
+            None | Some(Storage::Opaque) => None,
+            Some(Storage::PartOfArgs) => {
+                Some(ReturnConvention::PartOf(shape.storage_params.clone()))
+            }
+            Some(Storage::None | Storage::Fresh | Storage::HoldsArgs | Storage::StoresArgs) => {
+                Some(ReturnConvention::Owned)
+            }
+        };
+        let retain = |source: usize, into: RetainInto<usize>| RetainSpec {
+            source,
+            elements: shape.reference_params.contains(&source),
+            into,
+        };
+        let retains = match storage {
+            Some(Storage::HoldsArgs) => shape
+                .storage_params
+                .iter()
+                .map(|&p| retain(p, RetainInto::Result))
+                .collect(),
+            Some(Storage::StoresArgs) => {
+                let dst = *shape
+                    .mut_params
+                    .first()
+                    .expect("validation gives `stores_args` one `&mut` parameter");
+                shape
+                    .storage_params
+                    .iter()
+                    .filter(|&&p| p != dst)
+                    .map(|&p| retain(p, RetainInto::Param(dst)))
+                    .collect()
+            }
+            Some(Storage::Opaque) => shape
+                .storage_params
+                .iter()
+                .map(|&source| RetainSpec {
+                    source,
+                    elements: false,
+                    into: RetainInto::Anywhere,
+                })
+                .collect(),
+            None | Some(Storage::None | Storage::Fresh | Storage::PartOfArgs) => Vec::new(),
+        };
+        let element_access = facts.as_ref().and_then(|facts| {
+            let [
+                TrapCheck::Outside {
+                    array,
+                    at: Some(_),
+                    count: None,
+                },
+            ] = facts
+                .trap_checks()
+                .iter()
+                .filter(|check| matches!(check, TrapCheck::Outside { .. }))
+                .collect::<Vec<_>>()[..]
+            else {
+                return None;
+            };
+            let access = if shape.returns_mut_ref {
+                ArrayElementAccess::Write
+            } else {
+                ArrayElementAccess::Read
+            };
+            shape.returns_value.then_some((*array, access))
+        });
+        Self {
+            arity: shape.arity,
+            facts,
+            returns,
+            retains,
+            mut_params: shape.mut_params,
+            immediate_params: shape.immediate_params,
+            element_access,
+            never_returns: shape.returns_never,
+        }
+    }
+}
+
+impl BuiltinDeclaration {
+    /// Whether the call returns new storage: `fresh` or `holds_args`.
+    pub fn allocates(&self) -> bool {
+        self.facts
+            .as_ref()
+            .is_some_and(|facts| matches!(facts.storage, Storage::Fresh | Storage::HoldsArgs))
+    }
+
+    /// Whether the call writes no struct field: its storage is stated, and
+    /// every `&mut` parameter is an array it ranges over.
+    pub fn writes_no_field(&self) -> bool {
+        self.facts
+            .as_ref()
+            .is_some_and(|facts| facts.storage != Storage::Opaque)
+            && self.mut_params.iter().all(|&p| self.ranges_over(p))
+    }
+
+    /// Whether the call states `outside = [pos]`: it reaches the elements of
+    /// that array and nothing they reach.
+    pub fn ranges_over(&self, pos: usize) -> bool {
+        self.facts.as_ref().is_some_and(|facts| {
+            facts
+                .trap_checks()
+                .iter()
+                .any(|check| matches!(check, TrapCheck::Outside { array, .. } if *array == pos))
+        })
+    }
 }
 
 /// All a declaration lookup reads of a call. TIR and NIR each carry their own
@@ -7366,6 +7457,19 @@ impl<'a> DeclarationLookup<'a> {
         self.module_source
             .is_core_builtin()
             .then(|| self.generic_name.unwrap_or(self.name))
+    }
+}
+
+impl<'a> From<&'a TirFunction> for DeclarationLookup<'a> {
+    fn from(func: &'a TirFunction) -> Self {
+        Self {
+            module_source: &func.module_source,
+            name: &func.name,
+            generic_name: func
+                .monomorph_info
+                .as_ref()
+                .map(|m| m.generic_name.as_str()),
+        }
     }
 }
 
@@ -7424,20 +7528,18 @@ impl<V> DeclarationTable<V> {
 pub type BuiltinDeclarations = DeclarationTable<BuiltinDeclaration>;
 
 impl DeclarationTable<BuiltinDeclaration> {
-    /// Whether `call` names a body-less declaration that stated a convention or
-    /// a retention — the calls that answer from a declaration rather than from
-    /// the fixpoint.
+    /// Whether `call` names a body-less declaration whose storage implies a
+    /// return convention — the calls that answer from a declaration rather
+    /// than from the fixpoint.
     pub fn declares<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {
-        self.get(call.into())
-            .is_some_and(|d| d.returns.is_some() || !d.retains.is_empty())
+        self.get(call.into()).is_some_and(|d| d.returns.is_some())
     }
 
     /// Whether the call leaves the argument *object* at `pos` where the caller
     /// put it: it neither writes through it (`&mut`) nor keeps it past the
-    /// return (`#[retain(p)]`). It says nothing about what that object holds —
-    /// `#[retain(elements_of = p)]` re-homes the elements and still answers
-    /// `true` here, so a caller asking about reachable storage must read the
-    /// retain specs itself.
+    /// return. It says nothing about what that object holds — a call keeping
+    /// the elements a reference points to still answers `true` here, so a
+    /// caller asking about reachable storage must read the retain specs itself.
     ///
     /// A call with no snapshot answers `false`. Link takes one for every
     /// bodyless free function, so the gap is a method, whose key would not be
@@ -7461,17 +7563,20 @@ impl DeclarationTable<BuiltinDeclaration> {
             .unwrap_or_default()
     }
 
-    /// What `call` declared with `#[trap(...)]`; `None` is "may trap".
-    pub fn trap<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> Option<&TrapSpec<usize>> {
-        self.get(call.into())?.trap.as_ref()
-    }
-
-    /// What `call` declared with `#[linear_memory(...)]`.
-    pub fn linear_memory<'a>(
+    /// What `call` states with `#[storage]` and `#[side_effect]`.
+    pub fn facts<'a>(
         &self,
         call: impl Into<DeclarationLookup<'a>>,
-    ) -> Option<LinearMemory> {
-        self.get(call.into())?.linear_memory
+    ) -> Option<&BuiltinFacts<usize>> {
+        self.get(call.into())?.facts.as_ref()
+    }
+
+    /// The array parameter whose one element `call` reaches, and how.
+    pub fn element_access<'a>(
+        &self,
+        call: impl Into<DeclarationLookup<'a>>,
+    ) -> Option<(usize, ArrayElementAccess)> {
+        self.get(call.into())?.element_access
     }
 
     /// The positions `call` takes by `&mut`, `None` where nothing was snapshot.
@@ -7482,29 +7587,28 @@ impl DeclarationTable<BuiltinDeclaration> {
         self.get(call.into()).map(|d| &d.mut_params)
     }
 
-    /// Whether the call declared `#[result(owned)]`: the object it hands back
-    /// is freshly allocated, and so never one it was given.
+    /// Whether what `call` hands back is never part of an argument.
     pub fn returns_owned<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {
         self.get(call.into())
             .is_some_and(|d| d.returns == Some(ReturnConvention::Owned))
     }
 
-    /// The parameter a declaration's result is a component of, for a call that
-    /// declared `#[result(part_of = p)]`.
-    pub fn part_of<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> Option<usize> {
-        self.part_of_params(call).map(|params| params[0])
+    /// Whether `call` returns new storage.
+    pub fn allocates<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {
+        self.get(call.into())
+            .is_some_and(BuiltinDeclaration::allocates)
     }
 
-    /// [`Self::part_of`] as the parameter set a result projects, which for a
-    /// declaration is that one parameter.
+    /// The parameters a declaration's result may be a component of, for a
+    /// call whose storage is `part_of_args`.
     pub fn part_of_params<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> Option<&[usize]> {
         match &self.get(call.into())?.returns {
-            Some(ReturnConvention::PartOf(param)) => Some(std::slice::from_ref(param)),
+            Some(ReturnConvention::PartOf(params)) => Some(params),
             Some(ReturnConvention::Owned) | None => None,
         }
     }
 
-    /// The parameters a declaration keeps beyond the call, from `#[retain(p)]`.
+    /// The parameters a declaration keeps beyond the call.
     pub fn retained_params<'a>(
         &self,
         call: impl Into<DeclarationLookup<'a>>,
@@ -7512,8 +7616,7 @@ impl DeclarationTable<BuiltinDeclaration> {
         self.retain_specs(call).map(|r| r.source)
     }
 
-    /// Every `#[retain(...)]` clause a declaration carries, destinations
-    /// included.
+    /// Everything a declaration keeps beyond the call, destinations included.
     pub fn retain_specs<'a>(
         &self,
         call: impl Into<DeclarationLookup<'a>>,
@@ -7568,15 +7671,6 @@ impl TirFunction {
             })
     }
 
-    /// This declaration's `#[retain(...)]` clauses by parameter position.
-    pub fn retains_by_position(&self) -> impl Iterator<Item = RetainSpec<usize>> + '_ {
-        self.retains.iter().map(move |r| RetainSpec {
-            source: self.param_position(&r.source),
-            elements: r.elements,
-            into: r.into.as_deref().map(|name| self.param_position(name)),
-        })
-    }
-
     /// This declaration's `#[immediate(...)]` parameters by position.
     pub fn immediates_by_position(&self) -> impl Iterator<Item = usize> + '_ {
         self.immediates
@@ -7584,11 +7678,12 @@ impl TirFunction {
             .map(move |name| self.param_position(name))
     }
 
-    /// This declaration's `#[trap(...)]` by parameter position.
-    pub fn trap_by_position(&self) -> Option<TrapSpec<usize>> {
-        self.trap
+    /// This declaration's `#[storage]` and `#[side_effect]` by parameter
+    /// position.
+    pub fn declared_by_position(&self) -> Option<BuiltinFacts<usize>> {
+        self.declared
             .as_ref()
-            .map(|spec| spec.map(|name| self.param_position(name)))
+            .map(|facts| facts.map(|name| self.param_position(name)))
     }
 
     /// Take the body's frame, leaving an empty one. The counterpart of
@@ -7646,10 +7741,8 @@ impl TirFunction {
             return_type,
             task_return_type: None,
             effects: Vec::new(),
-            retains: Vec::new(),
             immediates: Vec::new(),
-            trap: None,
-            linear_memory: None,
+            declared: None,
             body: Some(body),
             span,
             local_count: u32::try_from(locals.len()).expect("local count fits in u32"),
@@ -7664,7 +7757,6 @@ impl TirFunction {
             compiler_item: None,
             export_name: None,
             allocator_tag: None,
-            declared_return_convention: None,
             kind: FunctionKind::Regular,
             return_abi: ReturnAbi::default(),
         }

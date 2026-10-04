@@ -72,6 +72,8 @@ fn "bug_elide_box_local_init_write_after_write.wado/run"() with Stdout {
     let start_28: i32;
     let packed: i64;
     let $sroa_$f_buf_55: ref "core:prelude/string.wado//String";
+    drop(black_box(1));
+    drop(black_box(0));
     $sroa_$f_buf_55 = local.tee $local_4_4(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(502, $sroa_$f_buf_55);
     if @unlikely(local.tee new_used($local_4_4.used + 1) > builtin::array_len($local_4_4.repr)) {

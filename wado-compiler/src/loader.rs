@@ -618,7 +618,7 @@ fn wasm_core_val_type_name(ty: WasmCoreValType) -> &'static str {
 
 /// Synthesize Wado source declaring one extern `pub fn` per export of a wasm
 /// asset, each carrying `#[canonical("<namespace>", "<export>")]` so the existing
-/// import lowering picks the call up. Emitted as text and fed back through the
+/// import lowering picks the call up, and the facts of an opaque import. Emitted as text and fed back through the
 /// regular parse/bind pipeline. The identifiers are the wat export names
 /// verbatim, so a re-exporter's `pub use { libm_sin, … }` lines up.
 fn synthesize_wasm_bindings_source(namespace: &str, exports: &[WasmExportSig]) -> String {
@@ -635,6 +635,9 @@ fn synthesize_wasm_bindings_source(namespace: &str, exports: &[WasmExportSig]) -
         // by `Debug`. The Wado parser accepts the same string-literal
         // syntax.
         let _ = writeln!(out, "#[canonical({namespace:?}, {:?})]", sig.name);
+        // A core Wasm export exchanges only scalars, and its body is out of sight.
+        let _ = writeln!(out, "#[storage(none)]");
+        let _ = writeln!(out, "#[side_effect(opaque)]");
         let mut params = String::new();
         for (i, ty) in sig.params.iter().enumerate() {
             if i > 0 {

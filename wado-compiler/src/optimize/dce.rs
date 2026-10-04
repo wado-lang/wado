@@ -2003,8 +2003,7 @@ impl GlobalGuards<'_> {
         let ExprKind::Call { func_id, args, .. } = &body.exprs[expr].kind else {
             return false;
         };
-        (self.inert_functions.contains(func_id)
-            || callee_descriptor(self.descriptors, *func_id).is_builtin_named("cold_path"))
+        (self.inert_functions.contains(func_id) || calls.call(expr, *func_id).is_unobservable())
             && args
                 .iter()
                 .all(|arg| deletable_value(body, arg.expr, self.types, calls))

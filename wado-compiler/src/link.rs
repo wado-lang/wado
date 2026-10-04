@@ -9,10 +9,12 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 #[cfg(debug_assertions)]
 use crate::hashmap::IndexSet;
+use crate::lower::plan::value_copy::place::{is_reference, may_carry_storage};
 use crate::module_source::ModuleSource;
 use crate::package::Package;
 use crate::tir::{
-    BuiltinDeclaration, BuiltinDeclarations, ResolvedType, RetainSpec, TirFunction, TypeTable,
+    BuiltinDeclaration, BuiltinDeclarations, DeclarationShape, ResolvedType, TirFunction, TypeId,
+    TypeTable,
 };
 use crate::wir_build::component_plan;
 use crate::world_registry::TEST_WORLD;
@@ -32,45 +34,49 @@ fn record_declaration(
     if func.body.is_some() {
         return;
     }
-    let retains: Vec<RetainSpec<usize>> = func.retains_by_position().collect();
     // A call re-homes a method's key to the impl block's module, so only a free
     // function is found again under the module declaring it. A reader takes the
     // absent method as one it knows nothing about.
     if func.method_info.is_some() {
         assert!(
-            func.declared_return_convention.is_none()
-                && retains.is_empty()
-                && func.immediates.is_empty()
-                && func.trap.is_none()
-                && func.linear_memory.is_none(),
+            func.declared.is_none() && func.immediates.is_empty(),
             "`{}` is a method with a bodyless attribute; key the snapshot by `DefId` first",
             func.name
         );
         return;
     }
+    // Read from the type, which is the only thing that says `&mut` here:
+    // `TirParam::is_mut_ref` is filled by `lower::plan`, which runs after link,
+    // so every one of them is still `false`.
+    let positions = |keep: &dyn Fn(TypeId) -> bool| {
+        func.params
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| keep(p.type_id))
+            .map(|(pos, _)| pos)
+            .collect::<Vec<_>>()
+    };
+    let returns = type_table.get(func.return_type);
+    let shape = DeclarationShape {
+        arity: func.params.len(),
+        storage_params: positions(&|t| may_carry_storage(t, type_table)),
+        reference_params: positions(&|t| is_reference(t, type_table))
+            .into_iter()
+            .collect(),
+        mut_params: positions(&|t| matches!(type_table.get(t), ResolvedType::MutRef(_)))
+            .into_iter()
+            .collect(),
+        immediate_params: func.immediates_by_position().collect(),
+        returns_value: !matches!(returns, ResolvedType::Unit | ResolvedType::Never),
+        returns_mut_ref: matches!(returns, ResolvedType::MutRef(_)),
+        returns_never: matches!(returns, ResolvedType::Never),
+    };
     // Every bodyless free function is snapshot, not only one carrying an
     // attribute: a reader asking what this call does with an argument must be
     // able to tell "it says it keeps nothing" from "nothing here says".
     out.insert(
         (module_source.clone(), declaration_key(func)),
-        BuiltinDeclaration {
-            arity: func.params.len(),
-            returns: func.declared_return_convention,
-            retains,
-            // Read from the type, which is the only thing that says `&mut` here:
-            // `TirParam::is_mut_ref` is filled by `lower::plan`, which runs
-            // after link, so every one of them is still `false`.
-            mut_params: func
-                .params
-                .iter()
-                .enumerate()
-                .filter(|(_, p)| matches!(type_table.get(p.type_id), ResolvedType::MutRef(_)))
-                .map(|(pos, _)| pos)
-                .collect(),
-            immediate_params: func.immediates_by_position().collect(),
-            trap: func.trap_by_position(),
-            linear_memory: func.linear_memory,
-        },
+        BuiltinDeclaration::new(func.declared_by_position(), shape),
     );
 }
 

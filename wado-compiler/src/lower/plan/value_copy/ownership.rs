@@ -11,55 +11,17 @@
 use super::callgraph::CallGraph;
 use super::confine::ConfinedParams;
 use super::funcset::{FuncKeyMap, FuncKeySet};
-use super::place::{arg_at, carries_storage, is_reference, may_carry_storage, param_position};
+use super::place::{arg_at, carries_storage, is_reference, param_position};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::lower::plan::value_copy::analyze::{
-    builtin_projected_params, is_owned_value, returned_value,
-};
+use crate::lower::plan::value_copy::analyze::{is_owned_value, returned_value};
 use crate::lower::plan::value_copy::place::ReturnPaths;
 use crate::lower::plan::value_copy::{analyze, hands_out_payload};
 use crate::tir::{
-    BuiltinDeclarations, CallArg, FunctionKind, FunctionRef, ReturnConvention, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    BuiltinDeclarations, CallArg, FunctionKind, FunctionRef, TirBlock, TirExpr, TirExprKind,
+    TirFunction, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
-
-/// Whether any input names storage the caller still reaches, which is what a
-/// result can be a part of: `struct_field_get(v: &T, i) -> F` reads a field of
-/// what `v` points at, while `array_new(len) -> Array<T>` allocates.
-fn reads_through_reference(func: &TirFunction, type_table: &TypeTable) -> bool {
-    func.params
-        .iter()
-        .any(|p| is_reference(p.type_id, type_table))
-}
-
-/// Whether a bodyless declaration's result may be storage its caller still
-/// owns, asked over monomorphized TIR. A declaration answering no is fresh
-/// without declaring anything.
-fn hands_out_storage(func: &TirFunction, type_table: &TypeTable) -> bool {
-    reads_through_reference(func, type_table) && carries_storage(func.return_type, type_table)
-}
-
-/// [`hands_out_storage`] asked at the declaration, before monomorphization
-/// narrows the types: a body-less declaration answering yes owes
-/// `#[result(part_of = p)]`, or `#[result(owned)]` that it allocates. Silence
-/// reads as "allocates", which elides copies, so it is not a safe default here.
-pub fn owes_return_convention(
-    params: &[TirParam],
-    return_type: TypeId,
-    type_table: &TypeTable,
-) -> bool {
-    params.iter().any(|p| is_reference(p.type_id, type_table))
-        && may_carry_storage(return_type, type_table)
-}
-
-/// Whether `func` declares `#[result(owned)]`. Only a declaration with no body
-/// is asked: a body is inferred from below, and would be free to contradict
-/// what it declared.
-fn declares_owned(func: &TirFunction) -> bool {
-    func.body.is_none() && func.declared_return_convention == Some(ReturnConvention::Owned)
-}
 
 /// Oracle the freshness checker consults for a call's return convention.
 pub struct OwnedCalls<'a> {
@@ -100,29 +62,25 @@ impl<'a> OwnedCalls<'a> {
     }
 
     /// Whether a call to `func` yields an owned (fresh) value. A body-less
-    /// declaration answers from what it stated: one that hands out an argument's
-    /// storage must say `#[result(part_of = p)]`, so anything that did not is
-    /// fresh. A body function is owned iff the fixpoint proved it so, and an
-    /// extern / opaque callee defaults to borrowed.
+    /// declaration answers from its `#[storage]`: one whose result is not
+    /// part of its arguments is fresh. A body function is owned iff the
+    /// fixpoint proved it so, and a callee nothing describes defaults to
+    /// borrowed.
     pub fn is_owned(&self, func: &FunctionRef) -> bool {
-        if func.module_source.is_core_builtin() || self.builtins.declares(func) {
-            return builtin_projected_params(self.builtins, func).is_none();
+        if self.builtins.declares(func) {
+            return self.builtins.part_of_params(func).is_none();
         }
         self.returns_owned.contains(&func.module_source, &func.name)
     }
 
     /// The parameters `func` returns a projection of, by position, so a call to
     /// it is fresh exactly when *those* arguments are. A body function answers
-    /// from the fixpoint; a `core:builtin` from `#[result(part_of = p)]`, which
-    /// says the result is a component of `p` — and a component of a place
-    /// nothing else reaches is one nothing else reaches. `builtin::select`
-    /// hands back either operand. A wasm asset declares none.
+    /// from the fixpoint; a body-less declaration from `part_of_args`, which
+    /// says the result is a component of its arguments — and a component of a
+    /// place nothing else reaches is one nothing else reaches.
     pub fn projected_params(&self, func: &FunctionRef) -> Option<&'a [usize]> {
-        if func.module_source.is_core_builtin() || self.builtins.declares(func) {
-            return builtin_projected_params(self.builtins, func);
-        }
-        if func.module_source.is_wasm_asset() {
-            return None;
+        if self.builtins.declares(func) {
+            return self.builtins.part_of_params(func);
         }
         self.returns_projection
             .get(&func.module_source, &func.name)
@@ -253,11 +211,12 @@ fn is_receiver_projection(
         | TirExprKind::VariantPayload { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::Index { expr: inner, .. } => recurse(inner),
-        // A builtin hands out the parameter its `#[result(part_of = p)]` names,
-        // which need not be the first: `struct_field_get(v, i)` reads `v`.
-        TirExprKind::Call { func, args, .. } if func.module_source.is_core_builtin() => builtins
-            .part_of(&**func)
-            .is_some_and(|p| recurse(arg_at(func, args, p))),
+        // A builtin hands out a parameter its result is part of, which need
+        // not be the first: `struct_field_get(v, i)` reads `v`. It aliases
+        // `param` only when every one it may hand out does.
+        TirExprKind::Call { func, args, .. } if builtins.declares(&**func) => builtins
+            .part_of_params(&**func)
+            .is_some_and(|params| params.iter().all(|&p| recurse(arg_at(func, args, p)))),
         TirExprKind::Call { func, args, .. } if set.contains(&func.module_source, &func.name) => {
             recurse(arg_at(func, args, 0))
         }
@@ -266,9 +225,8 @@ fn is_receiver_projection(
 }
 
 /// The two return conventions, component by component. Seeds the callees that
-/// have no body to settle — a value-copy helper clones, a declaration says
-/// `#[result(owned)]`, and a builtin that cannot hand storage out allocates —
-/// then settles each strongly connected component of the
+/// have no body to settle — a value-copy helper clones, and a declaration's
+/// `#[storage]` says whether its result is owned — then settles each strongly connected component of the
 /// call graph with its callees already decided: a body function is owned when
 /// every value it returns is owned, and projects parameters `P` when every
 /// value it returns that is not owned is a projection of some of `P`.
@@ -290,11 +248,7 @@ pub fn compute_return_conventions(
     for func in &project.functions {
         let func = func.borrow();
         let is_helper = matches!(func.kind, FunctionKind::ValueCopy { .. });
-        let is_builtin = func.module_source.is_builtin();
-        if is_helper
-            || declares_owned(&func)
-            || (is_builtin && !hands_out_storage(&func, &type_table))
-        {
+        if is_helper || (func.body.is_none() && builtins.returns_owned(&*func)) {
             owned.insert(func.module_source.clone(), func.name.clone());
         }
     }

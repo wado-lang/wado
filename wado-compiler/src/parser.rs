@@ -1375,18 +1375,31 @@ impl Parser {
                             }
                             TokenKind::LBracket => {
                                 self.advance();
+                                // The first item decides whether the array holds
+                                // text or names, and every item must agree.
+                                let names = self.peek_kind().as_ident_name().is_some();
                                 let mut items: Vec<String> = Vec::new();
                                 if !self.check(&TokenKind::RBracket) {
                                     loop {
-                                        if let TokenKind::StringLit(item) = self.peek_kind().clone()
-                                        {
-                                            items.push(self.take_attr_string(&item)?);
-                                        } else {
-                                            let span = self.peek().span;
-                                            return Err(self.error_at_span(
-                                                span,
-                                                "expected string literal in attribute array",
-                                            ));
+                                        let kind = self.peek_kind().clone();
+                                        match (&kind, kind.as_ident_name()) {
+                                            (TokenKind::StringLit(item), _) if !names => {
+                                                items.push(self.take_attr_string(item)?);
+                                            }
+                                            (_, Some(named)) if names => {
+                                                items.push(named.to_string());
+                                                self.mark_keyword_name();
+                                                self.advance();
+                                            }
+                                            _ => {
+                                                let span = self.peek().span;
+                                                let expected = if names {
+                                                    "expected an identifier in attribute array"
+                                                } else {
+                                                    "expected string literal in attribute array"
+                                                };
+                                                return Err(self.error_at_span(span, expected));
+                                            }
                                         }
                                         if self.check(&TokenKind::Comma) {
                                             self.advance();
@@ -1399,7 +1412,11 @@ impl Parser {
                                     }
                                 }
                                 self.expect(&TokenKind::RBracket)?;
-                                AttrArg::KeyArray(value, items)
+                                if names {
+                                    AttrArg::KeyIdentArray(value, items)
+                                } else {
+                                    AttrArg::KeyArray(value, items)
+                                }
                             }
                             TokenKind::NumberLit(number) => {
                                 let number = self.unsuffixed_number(number)?;
@@ -1418,7 +1435,7 @@ impl Parser {
                                 AttrArg::KeyNumber(value, format!("-{number}"))
                             }
                             _ => {
-                                // `part_of = arr` names something in the source,
+                                // `negative = len` names something in the source,
                                 // so it stays unquoted and keeps its own shape.
                                 let Some(named) =
                                     self.peek_kind().as_ident_name().map(str::to_string)
@@ -6831,6 +6848,7 @@ fn serde_attr_advice(args: &[AttrArg]) -> String {
                 let items: Vec<String> = values.iter().map(|v| quoted(v)).collect();
                 format!("{key} = [{}]", items.join(", "))
             }
+            AttrArg::KeyIdentArray(key, named) => format!("{key} = [{}]", named.join(", ")),
             AttrArg::KeyIdent(key, named) => format!("{key} = {named}"),
             AttrArg::KeyNumber(key, number) => format!("{key} = {number}"),
         })

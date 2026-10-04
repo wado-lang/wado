@@ -192,6 +192,17 @@ fn test_format_keeps_resource_extends() {
     assert_eq!(formatted, again, "format should be idempotent");
 }
 
+/// An attribute array of identifiers prints back unquoted, as written.
+#[test]
+fn test_format_keeps_identifier_attribute_array() {
+    let source = concat!(
+        "#[side_effect(trap, outside = [dst, src], at = [dst_offset, src_offset], count = len)]\n",
+        "pub fn array_copy(dst: i32, dst_offset: i32, src: i32, src_offset: i32, len: i32);\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+}
+
 #[test]
 fn test_format_idempotent_simple() {
     let source = r"

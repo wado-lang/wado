@@ -4,7 +4,7 @@
 //! [`ExprKind`] / [`StmtKind`] variant must be added to `accumulate_expr` /
 //! `accumulate_stmt` explicitly, or it silently defaults to pure.
 
-use crate::builtin_registry::BuiltinRegistry;
+use crate::builtin_facts::{SideEffect, Trap};
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::nir;
@@ -18,7 +18,7 @@ use crate::optimize::arena_query::{
 };
 use crate::optimize::bounds::{self, Builtin, Proofs};
 use crate::optimize::inline::recursive_scc_members;
-use crate::tir::{BuiltinDeclarations, LinearMemory, TypeTable};
+use crate::tir::{BuiltinDeclarations, TypeTable};
 
 /// Read / write flags for a single state channel (e.g., GC heap or
 /// linear memory).
@@ -654,7 +654,7 @@ pub(super) struct FnEffect {
     /// Some execution may trap: a body's own nodes
     /// ([`super::arena_query::expr_node_may_trap_typed`]) and the promoted
     /// values they hold ([`operand_values_may_trap`]), a builtin call
-    /// whose `#[trap(...)]` checks [`bounds`] cannot prove, or a callee's.
+    /// whose trap conditions [`bounds`] cannot prove, or a callee's.
     pub may_trap: bool,
     /// Some execution may never return: a loop [`bounds`] cannot count out, or
     /// recursion.
@@ -662,6 +662,13 @@ pub(super) struct FnEffect {
     /// Stores into GC memory a caller may hold: through a reference argument,
     /// a receiver, or anything else the function did not allocate.
     pub writes_shared_heap: bool,
+    /// Runs a call the optimizer may assume nothing about, `builtin::black_box`,
+    /// so neither it nor a call reaching it is deleted, moved or merged.
+    pub pinned: bool,
+    /// Is a hint whose position is what it means, `builtin::cold_path`: never
+    /// deleted, moved or merged on its own. It goes with the code containing it
+    /// and never keeps that code alive, so a caller does not inherit it.
+    pub hint: bool,
 }
 
 impl FnEffect {
@@ -671,13 +678,27 @@ impl FnEffect {
     /// Says nothing about termination or trapping — a caller that changes
     /// *when* the call runs must reason about those separately.
     pub fn is_pure(&self) -> bool {
-        !self.reads_mutable_state && !self.writes_state && !self.opaque
+        !self.reads_mutable_state
+            && !self.writes_state
+            && !self.opaque
+            && !self.pinned
+            && !self.hint
     }
 
     /// Pure, sure to return without trapping, and storing nowhere a caller can
     /// look, so a call whose result nothing reads can be deleted.
     pub fn is_deletable(&self) -> bool {
         self.is_pure() && !self.may_trap && !self.may_diverge && !self.writes_shared_heap
+    }
+
+    /// Deletable but for a hint: running it changes nothing the program
+    /// computes, though the call itself stays where it is.
+    pub fn is_unobservable(&self) -> bool {
+        Self {
+            hint: false,
+            ..*self
+        }
+        .is_deletable()
     }
 
     pub(super) fn opaque() -> Self {
@@ -688,6 +709,8 @@ impl FnEffect {
             may_trap: true,
             may_diverge: true,
             writes_shared_heap: true,
+            pinned: true,
+            hint: false,
         }
     }
 
@@ -698,62 +721,57 @@ impl FnEffect {
         self.may_trap |= other.may_trap;
         self.may_diverge |= other.may_diverge;
         self.writes_shared_heap |= other.writes_shared_heap;
+        self.pinned |= other.pinned;
     }
 }
 
-/// What a `#[linear_memory(...)]` access does to state a caller can observe.
-/// Wado spells a linear-memory address as a plain `i32`, so no `&mut` gives
-/// one away: the declaration is the ground truth.
-fn linear_memory_effect(access: Option<LinearMemory>) -> FnEffect {
-    FnEffect {
-        reads_mutable_state: access.is_some(),
-        writes_state: access == Some(LinearMemory::Write),
-        ..FnEffect::default()
-    }
-}
-
-/// A bodyless function as a call to it is read: its summary, and what it
-/// declared if it is a builtin the body scan answers for at each call.
+/// A bodyless function as a call to it is read: its summary, from what it
+/// declared, and the declaration the body scan answers from at each call.
 ///
-/// A builtin carrying a `canonical_name` is a component-model operation
-/// (streams, futures, waitables, tasks, threads) — I/O, hence opaque. The rest
-/// are Wasm instructions: touching linear memory where `#[linear_memory]`
-/// says so, trapping unless `#[trap(...)]` says when, and storing through
-/// their `&mut` parameters. Anything bodyless that is not a builtin at all
-/// (an extern declaration) is opaque, since there is no body to inspect.
+/// One that declared nothing is opaque: a Component Model import, whose
+/// adapter's raw call states the facts, or a method, which link does not
+/// snapshot.
 fn leaf_effect<'a>(
     f: &NirFunction,
-    registry: &BuiltinRegistry,
     declarations: &'a BuiltinDeclarations,
 ) -> (FnEffect, Option<Builtin<'a>>) {
     let fref = nir::FunctionRef::from_resolved(f, f.module_source.clone());
-    let Some(intrinsic) = fref.intrinsic() else {
+    let declared = declarations
+        .get(&fref)
+        .and_then(|d| d.facts.as_ref().map(|facts| (d, facts)));
+    let Some((declaration, facts)) = declared else {
+        assert!(
+            fref.intrinsic().is_none(),
+            "a call to builtin `{}` has no declaration to read its facts from",
+            f.name
+        );
         return (FnEffect::opaque(), None);
     };
-    if registry
-        .intrinsic(intrinsic)
-        .is_some_and(|info| info.canonical_name.is_some())
-    {
-        return (FnEffect::opaque(), None);
-    }
-    // One the compiler mints itself (`array_clone_shallow`) declares nothing.
-    let Some(mut_params) = declarations.mut_params(&fref) else {
-        let effect = FnEffect {
-            may_trap: true,
-            writes_shared_heap: true,
+    let effect = match &facts.side_effect {
+        SideEffect::Opaque => FnEffect::opaque(),
+        SideEffect::BlackBox => FnEffect {
+            pinned: true,
             ..FnEffect::default()
-        };
-        return (effect, None);
+        },
+        SideEffect::Listed {
+            trap,
+            read,
+            write,
+            hint,
+        } => FnEffect {
+            // A store is ordered against every other access, so it reads too.
+            reads_mutable_state: *read || *write,
+            writes_state: *write,
+            may_trap: !matches!(trap, Trap::Never) || declaration.never_returns,
+            writes_shared_heap: !declaration.mut_params.is_empty(),
+            hint: *hint,
+            ..FnEffect::default()
+        },
     };
     let builtin = Builtin {
-        trap: declarations.trap(&fref),
-        mut_params,
-        owned: declarations.returns_owned(&fref),
-    };
-    let effect = FnEffect {
-        may_trap: builtin.trap.is_none_or(|spec| !spec.checks.is_empty()),
-        writes_shared_heap: !mut_params.is_empty(),
-        ..linear_memory_effect(declarations.linear_memory(&fref))
+        facts,
+        mut_params: &declaration.mut_params,
+        allocates: declaration.allocates(),
     };
     (effect, Some(builtin))
 }
@@ -767,8 +785,7 @@ fn leaf_effects(project: &NirPackage) -> (Vec<FnEffect>, Vec<Option<Builtin<'_>>
     for (i, f) in funcs.iter().enumerate() {
         let f = f.borrow();
         if f.body.is_none() {
-            (effects[i], builtins[i]) =
-                leaf_effect(&f, &project.builtin_registry, &project.builtin_declarations);
+            (effects[i], builtins[i]) = leaf_effect(&f, &project.builtin_declarations);
         }
     }
     (effects, builtins)
@@ -874,10 +891,11 @@ pub(super) fn summarize(project: &NirPackage) -> (FnSummaries, Vec<Option<Builti
                         own.merge(FnEffect::opaque());
                     }
                     // The body scan answers for a builtin at its call site: its
-                    // `#[trap(...)]` checks, and whose memory it writes.
+                    // trap conditions, and whose memory it writes.
                     ExprKind::Call { func_id, .. } if builtins[func_id.index()].is_some() => {
                         own.merge(FnEffect {
-                            may_trap: !bounds.proofs.holds(id, *func_id),
+                            may_trap: effects[func_id.index()].may_trap
+                                && !bounds.proofs.holds(id, *func_id),
                             writes_shared_heap: false,
                             ..effects[func_id.index()]
                         });

@@ -229,21 +229,15 @@ pub enum Code {
     /// is unknown, the attribute is attached to the wrong declaration
     /// kind, or it appears outside a `core::*` stdlib module.
     CompilerItemAttr,
-    /// A `#[result(...)]` attribute is malformed — no argument, an unknown
-    /// convention, or a `part_of` naming something that is not a parameter.
-    ResultAttr,
-    /// A `#[retain(...)]` attribute is malformed, names something that is not a
-    /// parameter, or sits on a declaration that has a body to read instead.
-    RetainAttr,
+    /// A `#[storage(...)]` attribute is missing, malformed, or contradicts the
+    /// signature it sits on.
+    StorageAttr,
     /// An `#[immediate(...)]` attribute is malformed, names something that is
     /// not a parameter, or sits on a declaration with a body.
     ImmediateAttr,
-    /// A `#[trap(...)]` attribute is malformed, names something that is not a
-    /// parameter, or sits on a declaration with a body.
-    TrapAttr,
-    /// A `#[linear_memory(...)]` attribute is malformed, repeated, or sits on a
-    /// declaration with a body.
-    LinearMemoryAttr,
+    /// A `#[side_effect(...)]` attribute is missing, malformed, or contradicts
+    /// the signature it sits on.
+    SideEffectAttr,
     ResourceExtends,
     /// A resource's `#[cm(..., classes = ...)]` does not number its `extends`
     /// tree, or a type pattern narrows to a resource that declares none.
@@ -335,11 +329,9 @@ impl std::fmt::Display for Code {
             Code::UnknownAttr => "UNKNOWN_ATTR",
             Code::AttrMisuse => "ATTR_MISUSE",
             Code::CompilerItemAttr => "COMPILER_ITEM_ATTR",
-            Code::ResultAttr => "RESULT_ATTR",
-            Code::RetainAttr => "RETAIN_ATTR",
+            Code::StorageAttr => "STORAGE_ATTR",
             Code::ImmediateAttr => "IMMEDIATE_ATTR",
-            Code::TrapAttr => "TRAP_ATTR",
-            Code::LinearMemoryAttr => "LINEAR_MEMORY_ATTR",
+            Code::SideEffectAttr => "SIDE_EFFECT_ATTR",
             Code::ResourceExtends => "RESOURCE_EXTENDS",
             Code::ResourceClasses => "RESOURCE_CLASSES",
             Code::ParamAttr => "PARAM_ATTR",
