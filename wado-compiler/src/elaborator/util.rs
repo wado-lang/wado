@@ -1,7 +1,7 @@
 //! Utility functions for the elaborator phase.
 
 use crate::ast::{Literal, NumericSuffix, Pattern};
-use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
+use crate::elaborator::float_literal::{FloatFormat, FloatLiteralError, float_literal_bits};
 use crate::elaborator::stmt::{primitive_assoc_const_to_i128, primitive_float_limit_owner};
 use crate::elaborator::trait_env::written_type_source;
 use crate::elaborator::types::TypeError;
@@ -257,21 +257,17 @@ pub(super) fn unsettled_pattern_errors(pattern: &InstancePattern) -> Vec<Pattern
             end,
             inclusive,
         } => {
-            let bits = |bound: &RangeBound| match bound {
-                RangeBound::Float(bound) => bound.f64_bits(),
+            let [start, end] = [start, end].map(|bound| match bound {
+                RangeBound::Float(float) => float.f64_bits().map(|bits| (float, bits)),
                 RangeBound::Discrete(_) => None,
-            };
+            });
             let mut errors: Vec<_> = [start, end]
                 .into_iter()
-                .filter_map(|bound| match bound {
-                    RangeBound::Float(float) => {
-                        nan_bound_error(float, FloatFormat::F64, bits(bound)?)
-                    }
-                    RangeBound::Discrete(_) => None,
-                })
+                .flatten()
+                .filter_map(|(bound, bits)| nan_bound_error(bound, FloatFormat::F64, bits))
                 .collect();
             if errors.is_empty()
-                && let (Some(start), Some(end)) = (bits(start), bits(end))
+                && let (Some((_, start)), Some((_, end))) = (start, end)
             {
                 let range = FloatRange {
                     format: FloatFormat::F64,
@@ -406,14 +402,7 @@ fn float_bound_bits(
                     ));
                 }
             }
-            float_literal_bits(digits, format)
-                .map(|bits| {
-                    if *negated {
-                        bits | format.sign_bit()
-                    } else {
-                        bits
-                    }
-                })
+            signed_literal_bits(digits, *negated, format)
                 .map_err(|error| PatternLiteralError::Invalid(error.message(&bound.shown)))?
         }
         FloatBoundKind::Limit { owner, name } => {
@@ -429,6 +418,21 @@ fn float_bound_bits(
         Some(error) => Err(error),
         None => Ok(bits),
     }
+}
+
+/// The bits the literal `digits`, negated where `negated`, rounds to in
+/// `format`.
+fn signed_literal_bits(
+    digits: &str,
+    negated: bool,
+    format: FloatFormat,
+) -> Result<u64, FloatLiteralError> {
+    let bits = float_literal_bits(digits, format)?;
+    Ok(if negated {
+        bits | format.sign_bit()
+    } else {
+        bits
+    })
 }
 
 /// Why `bound`, holding `bits` in `format`, is no bound: it is a NaN.
@@ -469,13 +473,7 @@ impl FloatBound {
         match &self.kind {
             FloatBoundKind::Literal {
                 digits, negated, ..
-            } => float_literal_bits(digits, format).ok().map(|bits| {
-                if *negated {
-                    bits | format.sign_bit()
-                } else {
-                    bits
-                }
-            }),
+            } => signed_literal_bits(digits, *negated, format).ok(),
             FloatBoundKind::Limit { owner, name } => {
                 let owner = FloatFormat::of(*owner).expect("a limit's owner is a float type");
                 let bits = owner
