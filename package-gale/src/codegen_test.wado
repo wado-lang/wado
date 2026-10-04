@@ -4119,3 +4119,30 @@ b c b w => (t (s (v b c b w)))
 b d q => (t (s (v b d q)))
 ", got;
 }
+
+test "an optional nullable rule is entered, as the lower alternative, on what follows it too" {
+    let got = parses("grammar T;
+s : b? Z? EOF ;
+b : Y | ;
+Y : 'y' ; Z : 'z' ;
+WS : ' ' -> skip ;
+", "s", ["", "z", "y z"]);
+    assert got == " => (s b)\nz => (s b z)\ny z => (s (b y) z)\n", got;
+}
+
+test "a catch-all declared first wins a one-char tie against a later rule" {
+    let got = lexes("lexer grammar L;
+OTHER : . ;
+WS : ' ' -> skip ;
+B : 'b' ;
+", ["a b"]);
+    assert got == "a b => OTHER:a OTHER:  OTHER:b\n", got;
+}
+
+test "a java floating cast makes integer division a float division" {
+    let got = parses("grammar T;
+s : ID { System.out.println((double) 1 / 2); } EOF ;
+ID : [a-z]+ ;
+", "s", ["x"]);
+    assert got == "x => (s x) [0.5\n]\n", got;
+}

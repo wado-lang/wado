@@ -863,10 +863,21 @@ r : ID ;
     assert !should_emit_actions(&plain);
 }
 
-test "java: a primitive cast is dropped and its operand kept" {
+test "java: an integer cast is dropped and its operand kept" {
     // Wado infers the operand's type from the comparison, so the cast adds nothing.
     let out = java_pred("(int)this.n > (long)3", "a : ID ;", false);
     assert out == "p.n > 3", `out: '${out}'`;
+}
+
+test "java: a floating cast converts, since it turns integer division into float division" {
+    let cases: List<[String, String]> = [
+        ["(double)this.n / 2 > 1", "(p.n as f64) / 2 > 1"],
+        ["(float)(this.n) / 2 > 1", "((p.n) as f32) / 2 > 1"],
+    ];
+    for let [java, wado] of cases {
+        let out = java_pred(&java, "a : ID ;", false);
+        assert out == wado, `${java}: '${out}'`;
+    }
 }
 
 test "java: a parenthesized name is a cast only when an operand follows it" {

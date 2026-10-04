@@ -456,7 +456,16 @@ pub fn emit_expr(
         },
         Member(m) => emit_member(rule, rules, m, vals_in_scope, bindings, env),
         Call(c) => emit_call(rule, rules, c, vals_in_scope, bindings, env),
-        Cast(c) => emit_expr(rule, rules, &c.operand, vals_in_scope, bindings, env),
+        Cast(c) => {
+            let operand = emit_expr(rule, rules, &c.operand, vals_in_scope, bindings, env)?;
+            // An integer target is left to Wado's inference; a floating one
+            // changes the arithmetic, so it converts.
+            match c.ty.as_str_slice() {
+                "double" => Result::Ok(`(${operand} as f64)`),
+                "float" => Result::Ok(`(${operand} as f32)`),
+                _ => Result::Ok(operand),
+            };
+        },
         Unary(u) => {
             let operand = emit_expr(rule, rules, &u.operand, vals_in_scope, bindings, env)?;
             Result::Ok(`${u.op}${operand}`);
