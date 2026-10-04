@@ -1,7 +1,6 @@
 ---
 name: cr
 description: Review the branch with /code-review at xhigh, then answer the findings with /code-review-response.
-disable-model-invocation: true
 ---
 
 # Code Review and Response
