@@ -760,8 +760,7 @@ fn leaf_effect<'a>(
             reads_mutable_state: *read || *write,
             writes_state: *write,
             may_trap: !matches!(trap, Trap::Never) || declaration.never_returns,
-            writes_shared_heap: !declaration.mut_params.is_empty()
-                || stores_unseen(declaration),
+            writes_shared_heap: !declaration.mut_params.is_empty() || stores_unseen(declaration),
             hint: *hint,
             ..FnEffect::default()
         },
