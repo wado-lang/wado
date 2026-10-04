@@ -453,7 +453,6 @@ fn i32_eq(left: TirExpr, right: TirExpr, span: Span) -> TirExpr {
 /// no-`self`, single-`i32`-or-bytes-param function returning `Option<i32>`.
 /// Both methods share this boilerplate; only the name, parameter, and body
 /// differ.
-#[allow(clippy::too_many_arguments)]
 fn field_schema_method_fn(
     type_name: &FqTypeName,
     field_schema_trait: &FqTraitName,

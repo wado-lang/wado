@@ -217,7 +217,6 @@ fn discover_wado_files(
     Ok(result)
 }
 
-#[allow(clippy::too_many_arguments)]
 fn walk_dir(
     dir: &Path,
     root: &Path,

@@ -1347,16 +1347,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .into_iter()
                     .any(|t| self.type_contains_slice_view_inner(type_table, t, visited))
             }
-            ResolvedType::Variant { .. } => {
-                let payloads: Vec<TypeId> = self
-                    .tysys
-                    .variant_of_type(base)
-                    .map(|info| info.cases.iter().map(|c| c.payload).collect())
-                    .unwrap_or_default();
-                payloads
-                    .into_iter()
-                    .any(|t| self.type_contains_slice_view_inner(type_table, t, visited))
-            }
+            ResolvedType::Variant { .. } => self
+                .tysys
+                .case_payload_types(base)
+                .unwrap_or_default()
+                .into_iter()
+                .any(|t| self.type_contains_slice_view_inner(type_table, t, visited)),
             _ => false,
         }
     }
@@ -1397,19 +1393,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .into_iter()
                     .any(|t| self.type_contains_closure_inner(type_table, t, visited))
             }
-            ResolvedType::Variant { .. } => {
-                // The per-case payload types live in `data.variant_cases`; look
-                // them up so a variant case payload containing a closure type
-                // fails the CM boundary check too.
-                let payloads: Vec<TypeId> = self
-                    .tysys
-                    .variant_of_type(type_id)
-                    .map(|info| info.cases.iter().map(|c| c.payload).collect())
-                    .unwrap_or_default();
-                payloads
-                    .into_iter()
-                    .any(|t| self.type_contains_closure_inner(type_table, t, visited))
-            }
+            ResolvedType::Variant { .. } => self
+                .tysys
+                .case_payload_types(type_id)
+                .unwrap_or_default()
+                .into_iter()
+                .any(|t| self.type_contains_closure_inner(type_table, t, visited)),
             _ => false,
         }
     }

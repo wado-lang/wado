@@ -1661,6 +1661,36 @@ impl f32 {
         return builtin::f32_is_nan(*self);
     }
 
+    /// IEEE 754's `==`: false when either is a NaN, where `==` holds for two.
+    pub fn ieee754_eq(&self, other: f32) -> bool {
+        return builtin::f32_ieee754_eq(*self, other);
+    }
+
+    /// IEEE 754's `!=`: true when either is a NaN.
+    pub fn ieee754_ne(&self, other: f32) -> bool {
+        return builtin::f32_ieee754_ne(*self, other);
+    }
+
+    /// IEEE 754's `<`: false when either is a NaN, where `<` orders NaN last.
+    pub fn ieee754_lt(&self, other: f32) -> bool {
+        return builtin::f32_ieee754_lt(*self, other);
+    }
+
+    /// IEEE 754's `<=`: false when either is a NaN.
+    pub fn ieee754_le(&self, other: f32) -> bool {
+        return builtin::f32_ieee754_le(*self, other);
+    }
+
+    /// IEEE 754's `>`: false when either is a NaN.
+    pub fn ieee754_gt(&self, other: f32) -> bool {
+        return builtin::f32_ieee754_gt(*self, other);
+    }
+
+    /// IEEE 754's `>=`: false when either is a NaN.
+    pub fn ieee754_ge(&self, other: f32) -> bool {
+        return builtin::f32_ieee754_ge(*self, other);
+    }
+
     pub fn is_finite(&self) -> bool {
         return *self - *self == 0.0;
     }
@@ -2099,6 +2129,36 @@ impl f64 {
 
     pub fn is_nan(&self) -> bool {
         return builtin::f64_is_nan(*self);
+    }
+
+    /// IEEE 754's `==`: false when either is a NaN, where `==` holds for two.
+    pub fn ieee754_eq(&self, other: f64) -> bool {
+        return builtin::f64_ieee754_eq(*self, other);
+    }
+
+    /// IEEE 754's `!=`: true when either is a NaN.
+    pub fn ieee754_ne(&self, other: f64) -> bool {
+        return builtin::f64_ieee754_ne(*self, other);
+    }
+
+    /// IEEE 754's `<`: false when either is a NaN, where `<` orders NaN last.
+    pub fn ieee754_lt(&self, other: f64) -> bool {
+        return builtin::f64_ieee754_lt(*self, other);
+    }
+
+    /// IEEE 754's `<=`: false when either is a NaN.
+    pub fn ieee754_le(&self, other: f64) -> bool {
+        return builtin::f64_ieee754_le(*self, other);
+    }
+
+    /// IEEE 754's `>`: false when either is a NaN.
+    pub fn ieee754_gt(&self, other: f64) -> bool {
+        return builtin::f64_ieee754_gt(*self, other);
+    }
+
+    /// IEEE 754's `>=`: false when either is a NaN.
+    pub fn ieee754_ge(&self, other: f64) -> bool {
+        return builtin::f64_ieee754_ge(*self, other);
     }
 
     pub fn is_finite(&self) -> bool {

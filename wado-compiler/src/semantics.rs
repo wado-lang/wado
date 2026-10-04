@@ -465,6 +465,14 @@ impl Semantics {
         self.state.as_ref()?.tysys.struct_field_type_ids_of(type_id)
     }
 
+    /// Whether a value of `type_id` reaches a `&mut` a call handed it may write
+    /// through. Without the annotate state nothing is known, so any may.
+    pub(crate) fn reaches_mut_ref(&self, type_id: TypeId) -> bool {
+        self.state
+            .as_ref()
+            .is_none_or(|state| state.tysys.reaches_mut_ref(type_id))
+    }
+
     /// Whether the method call at `id` takes its receiver `self` by value,
     /// transferring ownership — in any of its recorded dispatches. False for
     /// a `&self` / `&mut self` receiver, a static call, or any call site with

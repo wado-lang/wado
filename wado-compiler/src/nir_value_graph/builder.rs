@@ -214,7 +214,6 @@ pub struct ValueGraphBuild {
 /// visible in the loop-entry snapshots taken before any in-loop read. An
 /// `aliased` local invalidates through the coarse generations, `untrackable`
 /// ones are never seeded, and `mut_escaped` narrows `aliased` to real mutation.
-#[allow(clippy::too_many_arguments)]
 pub fn build(
     body: &mut Body,
     param_locals: &[u32],
@@ -250,7 +249,6 @@ pub fn build(
 /// arithmetic / field reads over the call-site args); the caller filters. Runs in
 /// `scratch`, cloned from `body.values` with ids preserved, so the shared graph
 /// is not perturbed.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn build_scoped(
     body: &mut Body,
     block: BlockId,
@@ -300,7 +298,6 @@ pub(crate) fn build_scoped(
 /// value** wants this — the equivalence is what the walk establishes, while the
 /// scratch ids themselves mean nothing in the live pool (see
 /// `Engine::scoped_field_values`).
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn walk_scoped(
     body: &Body,
     block: BlockId,

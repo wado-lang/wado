@@ -15,7 +15,7 @@ use {
     find_lexer_rule,
     ActionLanguage,
 } from "./ir.wado";
-use { build as build_follow_env } from "./follow_env.wado";
+use { build as build_follow_env, rule_input_end } from "./follow_env.wado";
 use { TokenKinds, resolve_kind_ids } from "./token_kinds.wado";
 use {
     LitToken,
@@ -247,7 +247,11 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     let lowered = lower_for_analysis(grammar, &lit_tokens, &mut ctx);
     mark_at_end_conflicts_routed(grammar, &lowered, &mut ctx);
     ctx.close_simulator_reach();
-    ctx.set_scan_memo(!ctx.needs_lr_atn() && lowered.parser_rules.iter_ref().any(|r| r matches { LeftRecursive(_) }));
+    ctx.close_rule_rescans();
+    ctx.set_scan_memo(
+        !ctx.needs_lr_atn()
+            && (ctx.any_rule_rescanned() || lowered.parser_rules.iter_ref().any(|r| r matches { LeftRecursive(_) })),
+    );
     // Every grammar reads its recovery sets off the ATN; only the simulator's
     // grammars also embed it.
     let atn = build_atn_with(grammar, &lowered);
@@ -289,11 +293,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         }
     }
     let emit_follow = ctx.emit_follow();
-    // A superClass grammar can't be highlighted: the `highlight` entry calls
-    // `tokenize` / `parse` (base effect) but can't install the handler. Skip it
-    // (warned below) instead of emitting uncompilable code.
-    let any_base = ctx.has_superclass() || ctx.has_parser_superclass();
-    let emit_highlight = options.highlight_query matches { Some(_) } && !any_base;
+    let emit_highlight = options.highlight_query matches { Some(_) };
     gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
     let has_members = members_present(&lexer_members);
     gen_lexer(
@@ -314,16 +314,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     warn_atn_class_lexer_predicates(grammar, &latn.atn_class_rules, &mut ctx);
     gen_string_tree_helper(&mut w, grammar, &lit_tokens);
     if let Some(query) = &options.highlight_query {
-        if any_base {
-            let base = if ctx.has_superclass() { *ctx.superclass_name() } else { *ctx.parser_superclass_name() };
-            ctx.warn(
-                &DiagnosticOwner::host("highlight"),
-                DiagnosticKind::UnsupportedAction,
-                `a highlight query with superClass '${base}' is not supported (the highlighter entry cannot install the base handler); skipping the highlighter`,
-            );
-        } else {
-            gen_highlight(&mut w, grammar, &lit_tokens, query, &mut ctx);
-        }
+        gen_highlight(&mut w, grammar, &lit_tokens, query, &mut ctx);
     }
     for let name of ctx.take_root_refs().iter_value() {
         w.note(&name);
@@ -436,6 +427,7 @@ fn wire_parser_superclass(grammar: &mut Grammar, ctx: &mut GenContext) {
         } else {
             ctx.set_parser_superclass(&sc, ops);
             rewrite_parser_superclass_calls(grammar, &sc);
+            ctx.adopt_rewritten_bodies(&grammar.parser_rules);
         }
     }
 }
@@ -557,6 +549,17 @@ fn install_rule_follow(grammar: &Grammar, ctx: &mut GenContext) {
         follow_kinds[rule.name] = kinds;
     }
     ctx.set_rule_follow(follow_kinds, !grammar_has_open_first_element(&grammar.parser_rules));
+    let input_end = rule_input_end(&grammar.parser_rules, ctx);
+    ctx.set_rule_input_end(input_end);
+    // Unseeded, so EOF is in a rule's FOLLOW only where the grammar matches it.
+    let written = build_follow_env(&grammar.parser_rules, ctx, "");
+    let mut before_eof: List<String> = [];
+    for let rule of &grammar.parser_rules {
+        if written.rule_follow(&rule.name).kinds.contains("TK_EOF") {
+            before_eof.push(rule.name);
+        }
+    }
+    ctx.set_rules_before_eof_token(before_eof);
 }
 
 fn grammar_has_open_first_element(parser_rules: &List<ParserRule>) -> bool {

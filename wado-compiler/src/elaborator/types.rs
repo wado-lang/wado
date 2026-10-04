@@ -681,6 +681,15 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An `impl Ord for T;` marker where a written `eq` leaves `Ord` nothing to
+    /// derive from: an order read from the members could disagree with the
+    /// written equality. `why` names the link of the newtype chain writing it.
+    OrdMarkerBesideWrittenEq {
+        type_name: String,
+        why: String,
+        span: Span,
+    },
+
     /// An `impl Sub for T` block whose `T` does not implement one of `Sub`'s
     /// supertraits. Reported at the impl block: the impl is what promises the
     /// subtrait, so it is what owes the supertrait.
@@ -2164,6 +2173,15 @@ impl TypeError {
                     ),
                     reason,
                 ),
+                *span,
+            ),
+            TypeError::OrdMarkerBesideWrittenEq {
+                type_name,
+                why,
+                span,
+            } => (
+                Code::TraitDeclInvalid,
+                format!("cannot derive `Ord` for `{type_name}`: {why}"),
                 *span,
             ),
             TypeError::InvalidPattern { message, span } => (

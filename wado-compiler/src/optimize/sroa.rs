@@ -660,6 +660,7 @@ fn array_read_of_candidate(
         | CtfeBuiltin::Select
         | CtfeBuiltin::I32AsChar
         | CtfeBuiltin::FloatIsNan
+        | CtfeBuiltin::Ieee754Comparison(_)
         | CtfeBuiltin::HeapBase(_) => None,
     }
 }

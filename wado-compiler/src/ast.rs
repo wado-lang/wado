@@ -1627,6 +1627,8 @@ pub mod lint {
     pub const UNDECIDED_EFFECTS: &str = "undecided_effects";
     /// A cast that types a literal, which a suffix writes: `255 as u8`.
     pub const LITERAL_CAST: &str = "literal_cast";
+    /// A comparison of an expression with itself: `x == x`.
+    pub const SELF_COMPARISON: &str = "self_comparison";
 }
 
 /// Whether `#[allow(<lint>)]` sits among `attrs`. The one reading of an allow

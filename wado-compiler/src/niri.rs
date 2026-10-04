@@ -7,7 +7,7 @@
 use crate::const_eval::Value;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{FunctionRef, NirFunction, NirUnaryOp};
+use crate::nir::{FunctionRef, NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, LocalSet, NodeRef, Operand, PatId,
     PatKind, StmtId, StmtKind, StmtNode,
@@ -88,6 +88,9 @@ pub enum CtfeBuiltin {
     /// `f32_is_nan` and `f64_is_nan`, IEEE's NaN test, which no operator
     /// spells under the float order.
     FloatIsNan,
+    /// An `f32_ieee754_*` or `f64_ieee754_*` builtin: the comparison answered
+    /// as IEEE 754 answers it rather than by the float order.
+    Ieee754Comparison(NirBinaryOp),
     /// `heap_base`, carrying the address it is for this package.
     HeapBase(i32),
 }
@@ -107,6 +110,7 @@ impl CtfeBuiltin {
             | Self::Select
             | Self::I32AsChar
             | Self::FloatIsNan
+            | Self::Ieee754Comparison(_)
             | Self::HeapBase(_) => false,
         }
     }
@@ -281,7 +285,25 @@ pub(crate) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
             Some("i32_as_char") => CtfeBuiltin::I32AsChar,
             Some("f32_is_nan" | "f64_is_nan") => CtfeBuiltin::FloatIsNan,
             Some("heap_base") => CtfeBuiltin::HeapBase(project.heap_base()),
-            _ => continue,
+            Some("f32_ieee754_eq" | "f64_ieee754_eq") => {
+                CtfeBuiltin::Ieee754Comparison(NirBinaryOp::Eq)
+            }
+            Some("f32_ieee754_ne" | "f64_ieee754_ne") => {
+                CtfeBuiltin::Ieee754Comparison(NirBinaryOp::NotEq)
+            }
+            Some("f32_ieee754_lt" | "f64_ieee754_lt") => {
+                CtfeBuiltin::Ieee754Comparison(NirBinaryOp::Lt)
+            }
+            Some("f32_ieee754_le" | "f64_ieee754_le") => {
+                CtfeBuiltin::Ieee754Comparison(NirBinaryOp::LtEq)
+            }
+            Some("f32_ieee754_gt" | "f64_ieee754_gt") => {
+                CtfeBuiltin::Ieee754Comparison(NirBinaryOp::Gt)
+            }
+            Some("f32_ieee754_ge" | "f64_ieee754_ge") => {
+                CtfeBuiltin::Ieee754Comparison(NirBinaryOp::GtEq)
+            }
+            Some(_) | None => continue,
         };
         map.insert(id, builtin);
     }

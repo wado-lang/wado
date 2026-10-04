@@ -3203,7 +3203,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// A conditional slot's failure-message text, chosen in the cold branch so
     /// an unreached slot says so instead of quoting its zero value.
-    #[allow(clippy::too_many_arguments)]
     fn assert_slot_text_let(
         &mut self,
         render_index: u32,

@@ -497,6 +497,7 @@ impl Interpreter<'_> {
             | CtfeBuiltin::Select
             | CtfeBuiltin::I32AsChar
             | CtfeBuiltin::FloatIsNan
+            | CtfeBuiltin::Ieee754Comparison(_)
             | CtfeBuiltin::HeapBase(_) => None,
         }
     }
