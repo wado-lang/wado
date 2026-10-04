@@ -7269,6 +7269,7 @@ pub struct RetainSpec<Param> {
     pub source: Param,
     /// What is retained is what `source` points to, not `source`.
     pub elements: bool,
+    /// Where what is retained lands.
     pub into: RetainInto<Param>,
 }
 

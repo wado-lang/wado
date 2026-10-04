@@ -1904,7 +1904,8 @@ pub(super) fn deletable_value(
         _ if operand_values_may_trap(body, node) => Some(()),
         NodeRef::Expr(id) => match &body.exprs[id].kind {
             ExprKind::Call { func_id, .. } => {
-                (!calls.call(id, *func_id).is_deletable()).then_some(())
+                // A hint goes with the value that contains it.
+                (!calls.call(id, *func_id).is_unobservable()).then_some(())
             }
             ExprKind::GlobalVarSet { .. }
             | ExprKind::Assign { .. }

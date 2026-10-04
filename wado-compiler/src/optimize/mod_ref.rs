@@ -882,13 +882,15 @@ pub(super) fn summarize(project: &NirPackage) -> (FnSummaries, Vec<Option<&Built
                         own.merge(FnEffect::opaque());
                     }
                     // The body scan answers for a builtin at its call site: its
-                    // trap conditions, and whose memory it writes.
+                    // trap conditions, and whose memory its `&mut` arguments
+                    // write. An opaque one may write anything, which no scan
+                    // narrows.
                     ExprKind::Call { func_id, .. } if builtins[func_id.index()].is_some() => {
+                        let callee = effects[func_id.index()];
                         own.merge(FnEffect {
-                            may_trap: effects[func_id.index()].may_trap
-                                && !bounds.proofs.holds(id, *func_id),
-                            writes_shared_heap: false,
-                            ..effects[func_id.index()]
+                            may_trap: callee.may_trap && !bounds.proofs.holds(id, *func_id),
+                            writes_shared_heap: callee.opaque,
+                            ..callee
                         });
                     }
                     // A direct call's trap arrives with its callee's summary.

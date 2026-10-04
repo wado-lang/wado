@@ -517,17 +517,14 @@ impl Reader<'_, '_> {
                     words.insert(word);
                 }
                 AttrArg::KeyIdentArray(key, items) if matches!(key.as_str(), "outside" | "at") => {
-                    arrays.push((key, items));
-                }
-                // The parser reads an empty array as text, having no item to
-                // tell it otherwise.
-                AttrArg::KeyArray(key, items)
-                    if items.is_empty() && matches!(key.as_str(), "outside" | "at") =>
-                {
-                    self.report(
-                        SIDE_EFFECT,
-                        format!("`#[side_effect({key} = [])]` names no parameter"),
-                    );
+                    if items.is_empty() {
+                        self.report(
+                            SIDE_EFFECT,
+                            format!("`#[side_effect({key} = [])]` names no parameter"),
+                        );
+                    } else {
+                        arrays.push((key, items));
+                    }
                 }
                 AttrArg::KeyIdent(key, name)
                     if matches!(key.as_str(), "count" | "unset" | "negative") =>
@@ -809,7 +806,7 @@ mod tests {
             (
                 vec![
                     ident("trap"),
-                    AttrArg::KeyArray("outside".to_string(), Vec::new()),
+                    AttrArg::KeyIdentArray("outside".to_string(), Vec::new()),
                 ],
                 "`#[side_effect(outside = [])]` names no parameter",
             ),
