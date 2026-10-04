@@ -49,12 +49,10 @@ The attribute names no parameter. The types say which ones it means:
 - Only a parameter whose type can carry storage counts. `select`'s `cond: bool`
   and `array_get_ref`'s `idx: i32` do not.
 - The destination of `stores_args` is the one `&mut` parameter.
-- A by-value parameter contributes itself. A reference parameter contributes
-  what it points to, so `array_copy` stores the elements of `src`.
-
-`select` returns one of its by-value operands. The result is a new value, but a
-reference inside the operand is now inside the result as well, so it is
-`holds_args`.
+- A by-value parameter contributes itself. `select` returns one of its
+  operands, so its result is a new value that holds what the operand holds.
+- A reference parameter contributes what it points to, so `array_copy` stores
+  the elements of `src`.
 
 `len = p` says the returned array holds `p` elements. It goes with `fresh` and
 `holds_args`, the two values whose result is new storage.
