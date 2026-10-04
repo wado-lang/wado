@@ -684,19 +684,21 @@ impl FnEffect {
             && !self.hint
     }
 
-    /// Pure but for a hint, sure to return without trapping, and storing
-    /// nowhere a caller can look: running it changes nothing the program
-    /// computes. A hint among them goes with the code containing it, so a call
-    /// whose result nothing reads is deleted along with that code.
+    /// Pure, sure to return without trapping, and storing nowhere a caller can
+    /// look, so a call whose result nothing reads can be deleted. A hint is
+    /// not: deleting `cold_path();` on its own takes the hint away.
+    pub fn is_deletable(&self) -> bool {
+        self.is_pure() && !self.may_trap && !self.may_diverge && !self.writes_shared_heap
+    }
+
+    /// Deletable but for a hint: running it changes nothing the program
+    /// computes, though the call itself stays where it is.
     pub fn is_unobservable(&self) -> bool {
         Self {
             hint: false,
             ..*self
         }
-        .is_pure()
-            && !self.may_trap
-            && !self.may_diverge
-            && !self.writes_shared_heap
+        .is_deletable()
     }
 
     pub(super) fn opaque() -> Self {
