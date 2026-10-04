@@ -2,6 +2,7 @@ use { Alternative, Element, Visibility } from "./ir.wado";
 use { FOLLOW_PARAM, symbol_char_names, char_hex_name } from "./ident.wado";
 use { CodeWriter } from "lib:wadopoet";
 use { unwrap_label } from "./lr_util.wado";
+use { is_id_continue_char } from "./g4/scan.wado";
 pub use { escape_ident, escape_case, to_pascal_case, to_snake_case, to_lower } from "./ident.wado";
 
 /// Emit a `// rule visibility: <name> (ignored by codegen, matches ANTLR4)`
@@ -605,103 +606,139 @@ pub fn follow_sep(emit_follow: bool) -> String {
     return "";
 }
 
-/// The negation of the generated condition `cond`: `!x` on an operand,
-/// `a != b` for `a == b` and back, and `!(cond)` only where `!` would bind to
-/// part of it.
+/// The negation of the condition `cond`: `!x` on an operand, `x` on `!x`,
+/// `a != b` for `a == b` and back, and `!(cond)` for anything else.
 pub fn negate_cond<S: AsStrSlice>(cond: S) -> String {
     let c = cond.to_string();
-    if is_operand(&c) {
-        if c.starts_with("!") && is_operand(c.substr_bytes(1, c.len())) {
-            return c.substr_bytes(1, c.len()).to_string();
-        }
-        return `!${c}`;
+    let mut chars: List<char> = c.chars().collect();
+    let n = chars.len();
+    if operand_end(&chars, 0) == n {
+        return if chars[0] == '!' { chars_from(&chars, 1) } else { `!${c}` };
     }
-    for let [op, flipped] of [[" == ", " != "], [" != ", " == "]] {
-        let sides = top_level_split(&c, op);
-        if sides.len() == 2 && is_operand(&sides[0]) && is_operand(&sides[1]) {
-            return `${sides[0]}${flipped}${sides[1]}`;
-        }
+    let lhs = operand_end(&chars, 0);
+    if is_equality_at(&chars, lhs) && operand_end(&chars, lhs + 4) == n {
+        chars[lhs + 1] = if chars[lhs + 1] == '=' { '!' } else { '=' };
+        return chars_from(&chars, 0);
     }
     return `!(${c})`;
 }
 
-/// `cond` as an operand of `&&`: parenthesized only when it is a top-level `||`.
+/// `cond` as an operand of `&&`: bare when it is a chain of operands and
+/// equalities joined by `&&`, parenthesized otherwise.
 pub fn and_operand<S: AsStrSlice>(cond: S) -> String {
     let c = cond.to_string();
-    return if top_level_split(&c, " || ").len() > 1 { `(${c})` } else { c };
-}
-
-/// Whether the generated expression `e` is one operand: generated code spaces
-/// every binary operator, so an operand is text with no space outside
-/// brackets, braces, parentheses, turbofish angles and literals.
-fn is_operand<S: AsStrSlice>(e: S) -> bool {
-    let s = e.to_string();
-    return !s.is_empty() && top_level_split(&s, " ").len() == 1;
-}
-
-/// `s` split at each occurrence of `sep` outside brackets, braces,
-/// parentheses, turbofish angles (`::<…>`) and string or char literals.
-fn top_level_split<S: AsStrSlice, S1: AsStrSlice>(s: S, sep: S1) -> List<String> {
-    let text: List<char> = s.to_string().chars().collect();
-    let sep_chars: List<char> = sep.to_string().chars().collect();
-    let mut parts: List<String> = [];
-    let mut current = String::new();
-    let mut depth = 0;
-    // A turbofish closes on a `>` that, unlike a spaced comparison, follows a type.
-    let mut angle = 0;
+    let chars: List<char> = c.chars().collect();
     let mut i = 0;
-    while i < text.len() {
-        let c = text[i];
-        if c == '"' || c == '\'' {
-            let close = literal_end(&text, i);
-            for let mut j = i; j < close; j += 1 {
-                current.push(text[j]);
-            }
-            i = close;
-            continue;
+    loop {
+        i = operand_end(&chars, i);
+        if is_equality_at(&chars, i) {
+            i = operand_end(&chars, i + 4);
         }
-        if depth == 0 && angle == 0 && starts_at(&text, i, &sep_chars) {
-            parts.push(current);
-            current = String::new();
-            i += sep_chars.len();
-            continue;
+        if i == chars.len() {
+            return c;
         }
-        if c matches { '(' | '[' | '{' } {
-            depth += 1;
-        } else if c matches { ')' | ']' | '}' } {
-            depth -= 1;
-        } else if c == '<' && i >= 2 && text[i - 1] == ':' && text[i - 2] == ':' {
-            angle += 1;
-        } else if c == '>' && angle > 0 && text[i - 1] != ' ' {
-            angle -= 1;
+        if !spaced_operator_at(&chars, i, '&', '&') {
+            return `(${c})`;
         }
-        current.push(c);
+        i += 4;
+    }
+}
+
+/// The end of the operand starting at `start`, or -1 where none does: `!`s,
+/// then a path, literal or bracketed group, each followed by calls, indexes and
+/// field reads. Recognized rather than inferred from spacing, so a condition
+/// carrying a predicate's own text (`vals.a&&vals.b`) is never taken for one.
+fn operand_end(chars: &List<char>, start: i32) -> i32 {
+    if start < 0 {
+        return -1;
+    }
+    let n = chars.len();
+    let mut i = start;
+    while i < n && chars[i] == '!' {
         i += 1;
     }
-    parts.push(current);
-    return parts;
-}
-
-/// The index past the string or char literal opening at `start`.
-fn literal_end(text: &List<char>, start: i32) -> i32 {
-    let quote = text[start];
-    let mut i = start + 1;
-    while i < text.len() && text[i] != quote {
-        i += if text[i] == '\\' { 2 } else { 1 };
-    }
-    return i + 1;
-}
-
-fn starts_at(text: &List<char>, at: i32, needle: &List<char>) -> bool {
-    if at + needle.len() > text.len() {
-        return false;
-    }
-    for let mut j = 0; j < needle.len(); j += 1 {
-        if text[at + j] != needle[j] {
-            return false;
+    let mut atom = false;
+    while i < n {
+        let c = chars[i];
+        let end = if c matches { '(' | '[' } {
+            delimited_end(chars, i)
+        } else if c matches { '"' | '\'' } && !atom {
+            literal_end(chars, i)
+        } else if c == '<' && i >= 2 && chars[i - 1] == ':' && chars[i - 2] == ':' {
+            delimited_end(chars, i)
+        } else if is_id_continue_char(c) || c matches { '.' | ':' } {
+            i + 1
+        } else {
+            break
+        };
+        if end < 0 {
+            return -1;
         }
+        i = end;
+        atom = true;
     }
-    return true;
+    return if atom { i } else { -1 };
+}
+
+/// The end of the bracket opening at `open`, skipping nested brackets and
+/// literals, or -1 where it never closes.
+fn delimited_end(chars: &List<char>, open: i32) -> i32 {
+    let mut depth = 0;
+    let mut i = open;
+    while i < chars.len() {
+        let c = chars[i];
+        if c matches { '"' | '\'' } {
+            i = literal_end(chars, i);
+            if i < 0 {
+                return -1;
+            }
+            continue;
+        }
+        if c matches { '(' | '[' | '{' } || c == '<' && chars[open] == '<' {
+            depth += 1;
+        } else if c matches { ')' | ']' | '}' } || c == '>' && chars[open] == '<' {
+            depth -= 1;
+            if depth == 0 {
+                return i + 1;
+            }
+        }
+        i += 1;
+    }
+    return -1;
+}
+
+fn is_equality_at(chars: &List<char>, at: i32) -> bool {
+    return at >= 0 && (spaced_operator_at(chars, at, '=', '=') || spaced_operator_at(chars, at, '!', '='));
+}
+
+fn spaced_operator_at(chars: &List<char>, at: i32, first: char, second: char) -> bool {
+    return at + 4 <= chars.len()
+        && chars[at] == ' '
+        && chars[at + 1] == first
+        && chars[at + 2] == second
+        && chars[at + 3] == ' ';
+}
+
+fn chars_from(chars: &List<char>, from: i32) -> String {
+    let mut s = String::new();
+    for let mut i = from; i < chars.len(); i += 1 {
+        s.push(chars[i]);
+    }
+    return s;
+}
+
+/// The index past the string or char literal opening at `start`, or -1 where
+/// it never closes.
+fn literal_end(chars: &List<char>, start: i32) -> i32 {
+    let quote = chars[start];
+    let mut i = start + 1;
+    while i < chars.len() {
+        if chars[i] == quote {
+            return i + 1;
+        }
+        i += if chars[i] == '\\' { 2 } else { 1 };
+    }
+    return -1;
 }
 
 pub fn join_kinds(kinds: &List<String>) -> String {

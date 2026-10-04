@@ -748,10 +748,11 @@ fn gen_runtime(f: &RuntimeFeatures) -> InlinedRuntime {
 
 /// Append a runtime fragment. A sibling import (`from "./..."`) is dropped,
 /// since the sibling is inlined too, and a standard-library one is hoisted.
-/// A fragment's inner attribute is dropped: an inner attribute must open its
+/// A fragment's `#![allow(…)]` is dropped: an inner attribute must open its
 /// module, and the generated module's own `#![generated]` already waives the
 /// lints a fragment waives for the generator's build, where the parser that
-/// calls it is absent.
+/// calls it is absent. Any other inner attribute would change meaning when
+/// dropped, so it is refused.
 fn gen_runtime_fragment<S: AsStrSlice>(rt: &mut InlinedRuntime, src: S) {
     let mut block = String::new();
     let mut in_use = false;
@@ -759,6 +760,7 @@ fn gen_runtime_fragment<S: AsStrSlice>(rt: &mut InlinedRuntime, src: S) {
     for let line of src.lines() {
         if line.starts_with("#![") || after_attr && line.is_empty() {
             after_attr = line.starts_with("#![");
+            assert !after_attr || line.starts_with("#![allow("), `a runtime fragment's attribute would be lost: ${line}`;
             continue;
         }
         after_attr = false;

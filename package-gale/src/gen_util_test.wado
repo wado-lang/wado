@@ -22,9 +22,21 @@ test "negating anything else parenthesizes it" {
     assert negate_cond("c == ' '") == "c != ' '";
 }
 
-test "an && operand is parenthesized only for a top-level ||" {
+test "a predicate's own unspaced text is never taken for one operand" {
+    assert negate_cond("vals.a&&vals.b") == "!(vals.a&&vals.b)";
+    assert negate_cond("!vals.done&&vals.ok") == "!(!vals.done&&vals.ok)";
+    assert negate_cond("vals.n<3") == "!(vals.n<3)";
+    assert and_operand("vals.a||vals.b") == "(vals.a||vals.b)";
+}
+
+test "an unclosed literal is no operand" {
+    assert negate_cond("p.x() /* it's */") == "!(p.x() /* it's */)";
+    assert negate_cond("f('a)") == "!(f('a))";
+}
+
+test "an && operand is bare only as a chain of operands and equalities" {
     assert and_operand("a || b") == "(a || b)";
     assert and_operand("a && b") == "a && b";
-    assert and_operand("f(a || b)") == "f(a || b)";
-    assert and_operand("x matches { A | B }") == "x matches { A | B }";
+    assert and_operand("k == TK_A && !f(a || b)") == "k == TK_A && !f(a || b)";
+    assert and_operand("x matches { A | B }") == "(x matches { A | B })";
 }
