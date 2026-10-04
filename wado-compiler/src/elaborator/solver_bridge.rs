@@ -1,5 +1,5 @@
 //! The lowering from the compiler's tables into the solver's [`Program`], and
-//! the differential checking the solver's answers against the compiler's own.
+//! the solver's answers read back as the compiler keys them.
 
 use crate::ast::Type;
 use crate::compiler_item::CompilerItem;
@@ -624,8 +624,7 @@ fn newtype_decls<'a>(
         })
 }
 
-/// The solver's view of the whole program, and the differential that checks
-/// its answers against the path in use.
+/// The solver's view of the whole program.
 pub(crate) struct SolverBridge {
     program: Program,
     lowering: Lowering,
@@ -668,7 +667,7 @@ impl SolverBridge {
         OnBoundTrait::ReflectTemplate,
     ];
 
-    /// Whether the differential asks about `item`: the lowering states the
+    /// Whether the solver answers about `item`: the lowering states the
     /// structural traits, `Inspect`, the reflection kinds and the operators.
     fn states(item: CompilerItem) -> bool {
         Self::DERIVED.contains(&item)
@@ -1609,21 +1608,7 @@ impl SolverBridge {
         }
     }
 
-    /// The solver's answer to the question `type_implements_trait` just
-    /// answered; `None` where the lowering states nothing about it.
-    pub(super) fn answer(
-        &self,
-        tysys: &TypeSystem,
-        ctx: &scope::Scope,
-        scope: &TypeLookup,
-        type_id: TypeId,
-        asked: &FqTraitName,
-    ) -> Option<bool> {
-        let q = self.question(tysys, ctx, scope, type_id, asked)?;
-        Some(holds_with_args(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args).is_some())
-    }
-
-    /// The impls the order ties for a bound `answer` holds: a bound reaches
+    /// The impls the order ties for a bound [`Self::answer_owing`] holds: a bound reaches
     /// them as a call does, so neither may win by declaration order.
     pub(super) fn tied_through_bound(
         &self,
@@ -1749,68 +1734,6 @@ impl SolverBridge {
     /// `TraitMethodMatch` says it too.
     fn impl_def_of(&self, impl_: ImplId) -> Option<DefId> {
         self.lowering.impl_defs.get(&impl_).copied()
-    }
-
-    /// What the solver was asked and what it had to answer from, for the
-    /// differential's failure message.
-    pub(super) fn explain(
-        &self,
-        tysys: &TypeSystem,
-        ctx: &scope::Scope,
-        scope: &TypeLookup,
-        type_id: TypeId,
-        asked: &FqTraitName,
-    ) -> String {
-        let Some(q) = self.question(tysys, ctx, scope, type_id, asked) else {
-            return "outside what the lowering states".to_string();
-        };
-        let name_of = |id: u32| -> String {
-            self.lowering
-                .decls
-                .iter()
-                .find(|(_, i)| **i == id)
-                .map_or_else(
-                    || format!("#{id}"),
-                    |(key, _)| match key {
-                        DeclKey::Def(def) => tysys.resolutions.defs().name(*def).to_string(),
-                        DeclKey::Builtin(name) => name.clone(),
-                        DeclKey::AnonymousStruct => "{..}".to_string(),
-                        DeclKey::TemplateShape => "`..`".to_string(),
-                    },
-                )
-        };
-        // Positions are `env_for`'s: every parameter in scope, in order.
-        let env: Vec<(&String, Vec<String>)> = ctx
-            .trait_ctx
-            .type_params
-            .keys()
-            .zip(&q.env.param_bounds)
-            .map(|(name, bounds)| (name, bounds.iter().map(|b| name_of(b.trait_.0)).collect()))
-            .collect();
-        let answer = holds_with_args(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args);
-        let impls: Vec<_> = self
-            .program
-            .impls
-            .iter()
-            .filter(|(_, d)| d.trait_ == Some(q.trait_))
-            .map(|(id, d)| {
-                let head = match &d.target {
-                    SolverType::Decl(head, _) => name_of(head.0),
-                    SolverType::Param(_)
-                    | SolverType::Pack(_)
-                    | SolverType::Ref { .. }
-                    | SolverType::Tuple(_)
-                    | SolverType::Projection { .. } => String::new(),
-                };
-                (id, head, d)
-            })
-            .collect();
-        format!(
-            "lowered as {:?} : {} under {env:?} from {:?}; answer {answer:?}; impls of the trait: {impls:?}",
-            q.ty,
-            name_of(q.trait_.0),
-            q.module,
-        )
     }
 }
 

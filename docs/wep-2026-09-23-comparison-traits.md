@@ -415,8 +415,6 @@ the lint says it is always false.
 The compiler states the table in [One source for `==` and `cmp`](#one-source-for--and-cmp)
 twice. The trait solver states it as impls, each paired with the written impl it
 follows from, and lets precedence between the impls reaching an instance pick
-the row. The elaborator reads the written impls reaching the instance in
-`comparison_written_alone`, which an operator, a bound, a method call and
-synthesis all ask. Nothing makes the two agree but the solver's differential
-check, which panics a debug build on the first case where they do not, and a
-release build compiles with the elaborator's answer.
+the row, and a bound reads the row from there. The elaborator reads the written
+impls reaching the instance in `comparison_written_alone`, which an operator, a
+method call and synthesis ask. Nothing makes the two agree but the fixtures.

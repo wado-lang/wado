@@ -637,22 +637,22 @@ name. They share which impls reach the receiver, and nothing after that. Ranks
 order. Each path holds a different amount of the call: a receiver type, an
 operand class, a bound list.
 
-### Derivation is still a query in the compiler
+### The compiler answers what the lowering cannot state
 
-`structural_conformance` still walks a receiver's members at each bound and
-asks the full question of each, and the recursion guard counts the member
-descents to tell a recursive type from an ungrounded cycle. The solver's
-`derive` runs beside it: every declaration is lowered and derived when the
-`Program` is built, and `holds` answers under the differential against
-`type_implements_trait` over every fixture. A late declaration is stated when
-its members are known. An anonymous struct and a template shape lower as one
-variadic declaration each, their fields the pack's elements, so `derive` reads
-them once for every shape a literal mints. A struct or newtype declared in a
-body is stated when annotate hoists it (`trait_late_declaration_derives.wado`).
-What is left is the flip:
+The solver answers every bound the lowering states, and the bodies its answer
+owes are what synthesis emits: `owed` closes a structural body over its
+members, since the body calls the trait on each. A late declaration is stated
+when its members are known. An anonymous struct and a template shape lower as
+one variadic declaration each, their fields the pack's elements, and a struct or
+newtype declared in a body is stated when annotate hoists it
+(`trait_late_declaration_derives.wado`).
 
-- [ ] Route the derived bodies through what `holds` reports instead of
-  `record_bound_driven_synth_request_for`, and retire the member walk.
+A question the lowering cannot state still falls to `type_implements_trait`'s
+own rules: a bound in scope the lowering cannot spell, or a type it has no way
+to say (an inference variable, a closure environment, a mapped pack). Those
+rules carry a second copy of what the solver states for reflection, `Default`
+and the comparison table, and no member walk, so a structural trait asked there
+holds only through an impl. No fixture asks one about a structural trait.
 
 ### Specificity is refused, and now has a named cost
 

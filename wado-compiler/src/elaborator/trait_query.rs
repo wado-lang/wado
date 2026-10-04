@@ -1,7 +1,7 @@
 //! Trait query functions: checking trait implementations, bounds validation,
 //! and associated type resolution.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 
 use crate::hashmap::IndexMap;
 
@@ -126,10 +126,6 @@ impl OnBoundTrait {
         Some(found)
     }
 
-    pub(super) fn is_serde(self) -> bool {
-        matches!(self, Self::Serialize | Self::Deserialize)
-    }
-
     /// Holds for every type, so the bound is satisfied before any body exists.
     /// `Display` is not: a `T: Display` bound is checked against a real impl.
     pub(super) fn is_total(self) -> bool {
@@ -245,22 +241,6 @@ impl<'s> OpenQuestion<'s> {
 impl Drop for OpenQuestion<'_> {
     fn drop(&mut self) {
         self.0.borrow_mut().pop();
-    }
-}
-
-/// A member edge crossed on the way to a bound question, uncrossed when dropped.
-struct MemberEdge<'s>(&'s Cell<u32>);
-
-impl<'s> MemberEdge<'s> {
-    fn cross(edges: &'s Cell<u32>) -> Self {
-        edges.set(edges.get() + 1);
-        Self(edges)
-    }
-}
-
-impl Drop for MemberEdge<'_> {
-    fn drop(&mut self) {
-        self.0.set(self.0.get() - 1);
     }
 }
 
@@ -702,11 +682,9 @@ impl TypeSystem {
             return holds;
         }
         let resolved = self.type_table.borrow().get(type_id).clone();
-        let result = Self::asking(ctx, type_id, decl, wanted, || {
+        Self::asking(ctx, type_id, decl, wanted, || {
             self.type_implements_trait_inner(ctx, scope, type_id, &resolved, trait_)
-        });
-        self.check_solver_agreement(ctx, scope, type_id, trait_, result);
-        result
+        })
     }
 
     /// The trait a bound names, with the arguments it writes for that trait's
@@ -774,9 +752,8 @@ impl TypeSystem {
                 .all(|trait_| self.type_implements_trait(ctx, scope, type_id, trait_))
     }
 
-    /// `answer` under the recursion guard. A question already open answers
-    /// without it: a repeat reached through a member is a recursive type and
-    /// holds; one reached through bounds alone grounds nothing (WEP 2026-09-01).
+    /// `answer` under the recursion guard. A question already open does not
+    /// hold: reached through bounds alone, it grounds nothing (WEP 2026-09-01).
     fn asking(
         ctx: &Scope,
         type_id: TypeId,
@@ -784,60 +761,18 @@ impl TypeSystem {
         wanted: &[FqTypeName],
         answer: impl FnOnce() -> bool,
     ) -> bool {
-        let member_edges = ctx.member_edges.get();
         // Keyed by the arguments too: the same trait asked at two
         // instantiations is two questions, and only one of them may hold.
-        let repeated = ctx
-            .trait_check_stack
-            .borrow()
-            .iter()
-            .find(|f| f.type_id == type_id && f.trait_ == trait_ && f.wanted == wanted)
-            .map(|open| member_edges > open.member_edges);
-        if let Some(repeated) = repeated {
-            return repeated;
+        let frame = TraitCheckFrame {
+            type_id,
+            trait_,
+            wanted: wanted.to_vec(),
+        };
+        if ctx.trait_check_stack.borrow().contains(&frame) {
+            return false;
         }
-        let _open = OpenQuestion::open(
-            &ctx.trait_check_stack,
-            TraitCheckFrame {
-                type_id,
-                trait_,
-                wanted: wanted.to_vec(),
-                member_edges,
-            },
-        );
+        let _open = OpenQuestion::open(&ctx.trait_check_stack, frame);
         answer()
-    }
-
-    /// The differential of WEP 2026-09-01: in debug builds, the solver must
-    /// answer an outermost bound question as this path did.
-    fn check_solver_agreement(
-        &self,
-        ctx: &Scope,
-        scope: &TypeLookup,
-        type_id: TypeId,
-        trait_: &FqTraitName,
-        expected: bool,
-    ) {
-        // The solver is built in every profile, since selection asks it, but
-        // this check is a differential and stays a debug-build cost.
-        if !cfg!(debug_assertions) || !ctx.trait_check_stack.borrow().is_empty() {
-            return;
-        }
-        let Some(bridge) = self.solver.as_ref() else {
-            return;
-        };
-        let bridge = bridge.borrow();
-        let Some(actual) = bridge.answer(self, ctx, scope, type_id, trait_) else {
-            return;
-        };
-        assert_eq!(
-            actual,
-            expected,
-            "the trait solver disagrees with type_implements_trait: `{}: {}` is {expected} to the compiler and {actual} to the solver ({})",
-            self.type_table.borrow().type_name(type_id),
-            trait_.base_name(),
-            bridge.explain(self, ctx, scope, type_id, trait_),
-        );
     }
 
     /// Whether `type_id` satisfies `trait_` at the type itself, without peeling
@@ -900,11 +835,7 @@ impl TypeSystem {
         let mut failing: Option<(String, TypeId)> = None;
         let walked =
             self.walk_structural_derive_members(scope, resolved, tr, &mut |member, member_tid| {
-                let holds = {
-                    let _edge = MemberEdge::cross(&ctx.member_edges);
-                    self.type_implements_trait(ctx, scope, member_tid, trait_)
-                };
-                if holds {
+                if self.type_implements_trait(ctx, scope, member_tid, trait_) {
                     true
                 } else {
                     failing = Some((member.describe(), member_tid));
@@ -1439,27 +1370,6 @@ impl TypeSystem {
             }
             return holds;
         }
-        // A structural derivation writes no argument, so it answers the trait's
-        // declared defaults. A bound writing one needs an impl that writes it.
-        if let Some(tr) = on_bound
-            && tr.is_field_recursive()
-            && wanted.is_empty()
-            && let Some((_, module_source)) = nominal
-        {
-            let serde_blocked =
-                tr.is_serde() && self.has_real_trait_impl_for_type(ctx, scope, type_id, decl);
-            if !serde_blocked
-                && self.structural_conformance(ctx, scope, resolved, tr, trait_)
-                    == StructuralConformance::Holds
-            {
-                if let Some(key) = self.compiler_trait_def(tr.compiler_item()) {
-                    self.type_table
-                        .borrow_mut()
-                        .record_bound_driven_synth_request_for(type_id, &module_source, &key);
-                }
-                return true;
-            }
-        }
 
         if let ResolvedType::Struct { def, .. } = &resolved
             && on_bound == Some(OnBoundTrait::Default)
@@ -1854,7 +1764,7 @@ impl TypeSystem {
         trait_: DefId,
         peel: NewtypePeel,
     ) -> bool {
-        // A structural obligation is the member walk's to answer, so a
+        // A structural obligation is derivation's to answer, so a
         // `Reflect*`-bounded blanket does not get to answer it: its bound holds
         // for every type of that kind, while the bound that decides eligibility
         // is the pack's (`..F: Serialize`), which this index does not carry.
