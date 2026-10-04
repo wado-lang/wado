@@ -48,9 +48,9 @@ $B/wasm-opt "${FEATURES[@]}" -O3 $S/jco/prog.core.wasm -o $S/O3.wasm
     --enable-multivalue --enable-gc --enable-extended-const --enable-multimemory)
   ```
 
-- Run with no pass (`$B/wasm-opt "${FEATURES[@]}" in.wasm -o rt.wasm`) as well. This
-  re-encodes the module and nothing more, so it separates encoding waste from
-  optimization.
+- Run with no pass (`$B/wasm-opt "${FEATURES[@]}" in.wasm -o rt.wasm`) as
+  well. This re-encodes the module and nothing more, so it separates encoding
+  waste from optimization.
 - Add `-g` to keep function names for a diff. Measure size without it.
 
 ## Reading the difference

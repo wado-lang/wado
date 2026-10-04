@@ -99,8 +99,13 @@ element** in a loop:
   through the `match`; a missed copy shows up here and is removable.
 
 Count the copies, not only the time: a cut count is a result even when the
-benchmark is flat. `wado compile -O2 --log-level info prog.wado 2>&1 | grep -c 'remark: a copy of'` counts the entry package's; remarks skip the stdlib, so
-count a stdlib copy in `wado dump -O2`. Moving a copy from a callee into its
+benchmark is flat. This counts the entry package's; remarks skip the stdlib, so
+count a stdlib copy in `wado dump -O2`:
+
+```sh
+wado compile -O2 --log-level info prog.wado 2>&1 | grep -c 'remark: a copy of'
+```
+ Moving a copy from a callee into its
 call sites multiplies it by the number of sites.
 
 Also: a `Trait::method(…)` call left in a hot loop (the inliner declined it), and

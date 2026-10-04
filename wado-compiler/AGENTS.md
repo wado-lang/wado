@@ -41,7 +41,8 @@ The Wado compiler crate.
   `cargo test -p wado-compiler --test e2e` for anything the language touches: it
   covers O0 and O2 and leaves the rest to CI, whose `ignored` lines are that
   split and not a gap, so never set `WADO_FULL_TEST` unless asked by name.
-  `mise run test` and `mise run test-wado` are the slowest runs there are: run them at the end.
+  `mise run test` and `mise run test-wado` are the slowest runs there are: run
+  them at the end.
 - This crate must compile for `wasm32-unknown-unknown` (checked in CI). Keep
   OS-dependent `std` modules out of production code.
 

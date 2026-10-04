@@ -105,8 +105,9 @@ modules while tuples follow TypeScript.
 that proposed a feature at `docs/wep-*.md`. `wado doc <module>` (`core:prelude`,
 say) states that module's signatures; read it rather than guess.
 
-As a principle, do not commit a binary: its diff is unreadable. Where a text form means the
-same, commit that instead (`.wat` for `.wasm`, `.onnxtext` for `.onnx`).
+As a principle, do not commit a binary: its diff is unreadable. Where a text
+form means the same, commit that instead (`.wat` for `.wasm`, `.onnxtext` for
+`.onnx`).
 
 ## Repository Map
 
