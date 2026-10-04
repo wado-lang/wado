@@ -36,9 +36,8 @@ pub struct Gpu {
 struct Host {
     ctx: WasiCtx,
     table: ResourceTable,
-    instance: Arc<Global>,
+    gpu: Gpu,
     options: WasiWebGpuOptions,
-    pinned: Option<Adapter>,
     log_level: LogLevel,
 }
 
@@ -53,25 +52,25 @@ impl Host {
         if self.log_level >= LogLevel::Info {
             let answer = adapter.as_ref().map_or_else(
                 || "none".to_owned(),
-                |id| describe(&self.instance.adapter_get_info(**id)),
+                |id| describe(&self.gpu.instance.adapter_get_info(**id)),
             );
             eprintln!("wado-run-webgpu: info: request-adapter: {answer}");
         }
-        Ok(match adapter {
-            Some(adapter) => Some(self.table.push(adapter)?),
-            None => None,
-        })
+        Ok(adapter
+            .map(|adapter| self.table.push(adapter))
+            .transpose()?)
     }
 
     fn choose_adapter(
         &self,
         options: Option<&GpuRequestAdapterOptions>,
     ) -> wasmtime::Result<Option<Adapter>> {
-        if let Some(pinned) = &self.pinned {
+        if let Some(pinned) = &self.gpu.pinned {
             return Ok(Some(Arc::clone(pinned)));
         }
         let options = options.map_or_else(RequestAdapterOptions::default, core_options);
         match self
+            .gpu
             .instance
             .request_adapter(&options, Backends::all(), None)
         {
@@ -120,7 +119,7 @@ impl WasiView for Host {
 impl WasiWebGpuCtxView for Host {
     fn webgpu_ctx(&mut self) -> WasiWebGpuCtx<'_> {
         WasiWebGpuCtx {
-            instance: &self.instance,
+            instance: &self.gpu.instance,
             table: &mut self.table,
             options: &self.options,
         }
@@ -195,9 +194,8 @@ fn host(args: &Args, gpu: Gpu) -> Result<Host> {
     Ok(Host {
         ctx: builder.build(),
         table: ResourceTable::new(),
-        instance: gpu.instance,
+        gpu,
         options: WasiWebGpuOptions::default(),
-        pinned: gpu.pinned,
         log_level: args.log_level,
     })
 }
@@ -248,11 +246,11 @@ fn pin(global: &Global, adapters: &[AdapterId], name: &str) -> Result<AdapterId>
     match matches.as_slice() {
         [(id, _)] => Ok(*id),
         [] => bail!(
-            "no GPU adapter matches '{name}'. The adapters here:{}",
+            "no GPU adapter matches '{name}'. The adapters here:\n  {}",
             listed(described.iter())
         ),
         [..] => bail!(
-            "'{name}' matches more than one GPU adapter:{}",
+            "'{name}' matches more than one GPU adapter:\n  {}",
             listed(matches.into_iter())
         ),
     }
@@ -260,7 +258,7 @@ fn pin(global: &Global, adapters: &[AdapterId], name: &str) -> Result<AdapterId>
 
 fn listed<'a>(adapters: impl Iterator<Item = &'a (AdapterId, AdapterInfo)>) -> String {
     adapters
-        .map(|(_, info)| format!("\n  {}", describe(info)))
+        .map(|(_, info)| describe(info))
         .collect::<Vec<_>>()
-        .concat()
+        .join("\n  ")
 }

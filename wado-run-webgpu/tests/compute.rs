@@ -59,6 +59,8 @@ fn a_compute_shader_writes_what_the_guest_reads_back() {
         "stdout: {stdout}\nstderr: {stderr}"
     );
     assert!(output.status.success(), "stderr: {stderr}");
+    // Below `--log-level info` the adapter goes unnamed.
+    assert!(!stderr.contains("request-adapter"), "stderr: {stderr}");
 }
 
 #[test]
@@ -105,14 +107,6 @@ fn the_named_adapter_is_the_one_the_guest_gets_and_info_says_which() {
         stderr.contains("info: request-adapter: llvmpipe") && stderr.contains("(Vulkan, Cpu"),
         "stderr: {stderr}"
     );
-}
-
-#[test]
-fn the_adapter_goes_unnamed_below_info() {
-    let output = run(&[fixture("compute_double.wado").to_str().unwrap()]);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(output.status.success(), "stderr: {stderr}");
-    assert!(!stderr.contains("request-adapter"), "stderr: {stderr}");
 }
 
 #[test]
