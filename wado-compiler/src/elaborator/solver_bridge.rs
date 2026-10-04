@@ -1514,7 +1514,10 @@ impl SolverBridge {
         };
         let owed = owed(&self.program, &q.env, q.module, held.requests);
         let table = tysys.type_table.borrow();
-        let shape_heads = [self.lowering.anonymous_head(), self.lowering.template_head()];
+        let shape_heads = [
+            self.lowering.anonymous_head(),
+            self.lowering.template_head(),
+        ];
         let mut shapes = Vec::new();
         if owed
             .iter()

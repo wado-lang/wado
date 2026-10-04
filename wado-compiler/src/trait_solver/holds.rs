@@ -284,7 +284,10 @@ impl Query<'_> {
                     trait_: implemented,
                     // The `==` paired with a written `cmp` calls `cmp`.
                     structural: def.origin != ImplOrigin::Paired
-                        && program.traits.get(&implemented).is_some_and(|t| t.structural),
+                        && program
+                            .traits
+                            .get(&implemented)
+                            .is_some_and(|t| t.structural),
                 }]
             }
             ImplOrigin::Withheld => unreachable!("a withholding impl answers nothing"),

@@ -368,7 +368,10 @@ mod tests {
                 ..declaration(WRAPPER, 1, vec![SolverType::Pack(0)])
             },
         ];
-        let shape = SolverType::Decl(WRAPPER, vec![SolverType::Tuple(vec![decl(POINT), decl(I32)])]);
+        let shape = SolverType::Decl(
+            WRAPPER,
+            vec![SolverType::Tuple(vec![decl(POINT), decl(I32)])],
+        );
         assert_eq!(
             owed_at(&declarations, &shape),
             vec![decl(POINT), shape.clone()]

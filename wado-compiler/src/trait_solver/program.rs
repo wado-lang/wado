@@ -324,7 +324,11 @@ impl Declaration {
     /// is each element of the tuple its argument is.
     #[must_use]
     pub fn members_at(&self, args: &[SolverType]) -> Vec<SolverType> {
-        assert_eq!(args.len(), self.params as usize, "an instance argues every parameter");
+        assert_eq!(
+            args.len(),
+            self.params as usize,
+            "an instance argues every parameter"
+        );
         let arg = |index: u32| Some(args[index as usize].clone());
         self.members
             .iter()
