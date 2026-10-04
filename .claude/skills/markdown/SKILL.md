@@ -5,29 +5,33 @@ description: "The rules for every Markdown file in the repository, inside docs/ 
 
 # Markdown
 
-The goal is prose a reader understands on the first pass.
+The goal is prose a reader understands on the first pass. Everything below
+serves that.
 
 ## Prose
 
-- Plain words, one idea per sentence, the plain statement before its reason.
-- Undo what makes a reader decode: a clause hung off a dash, an abstract noun
-  where a verb would do, the clever phrasing before the obvious one.
-- Shorter is not the goal. A passage that came out shorter and harder to follow
-  has failed.
+- Plain words. One idea per sentence. The plain statement first, the reason for
+  it after.
+- Three habits make a reader decode instead of read: a second clause hung off a
+  dash, an abstract noun standing where a verb would do, and the clever phrasing
+  of a point arriving before the obvious one. Undo each where you find it.
+- Correct and fresh. Keep the facts.
+- Cutting narration and redundancy is one way to get there. It is not the point.
+  A passage that came out shorter and harder to follow has failed.
 
 ## Structure
 
-- Simple and MECE.
-- Sub-sections are headings, never `**bold**`.
-- TODOs are a checklist (`- [ ]`, `- [x]`).
+- Keep a document simple and MECE.
+- Do not use `**...**` (bold) for sub-sections. Use Markdown sections instead.
+- Use a Markdown checklist for TODOs (`- [ ] ...`) and what's done (`- [x] ...`).
 
 ## Numbers
 
-A number is trustworthy only where something regenerates it. Name the shape to
-grep for rather than a count of sites, and keep measured figures in a table a
-refresh re-measures. Figures that define a workload, commit messages, and pull
-request bodies are exempt.
+- A measured figure belongs in the table that holds its measurement, not in
+  prose beside it: the table gets refreshed and the prose does not.
+- Name the shape to grep for, not how many sites there are. A count goes stale
+  with the next site.
 
 ## Finish
 
-Run `mise run format`.
+Run `mise run format` after editing.

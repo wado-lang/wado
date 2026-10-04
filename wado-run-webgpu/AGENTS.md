@@ -5,9 +5,12 @@ runs the component on a wasmtime host that serves `wasi:webgpu`.
 
 ## Rules
 
-- This crate is a workspace of its own, since it needs a wasmtime other than the
-  pin. No root build, test, clippy or fmt reaches it; only the `test-webgpu` CI
-  job does.
+- This crate is a workspace of its own and is excluded from the repository's.
+  It needs wasmtime 48 where the workspace pins 49, and one workspace
+  resolves one version of a crate. Nothing here is built by `cargo build` at the
+  repository root, `mise run test`, or the repository's clippy and fmt jobs. The
+  `test-webgpu` CI job is what builds, lints and tests it, on every change that
+  is not documentation.
 - A program behaves the same here as under `wado run`, which is the only reason
   to have both: the arguments after the input file go to the guest unparsed,
   `--dir` and `--no-dir` grant what they grant there, and the engine takes the
@@ -20,7 +23,9 @@ runs the component on a wasmtime host that serves `wasi:webgpu`.
   says so and exits rather than letting the guest see `request-adapter` answer
   `none`. On Linux `mesa-vulkan-drivers` supplies the lavapipe software adapter,
   which is what CI installs; macOS answers with Metal and Windows with D3D12.
-- Dependencies live in this crate's own `Cargo.toml`.
+- The Rust rules in `.claude/skills/rust/SKILL.md` apply here too, except that
+  dependencies live in this crate's own `Cargo.toml`, there being no workspace
+  above it to hold them.
 
 ## Module Map
 

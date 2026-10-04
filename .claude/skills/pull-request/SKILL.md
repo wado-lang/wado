@@ -3,34 +3,58 @@ name: pull-request
 description: The rules for opening a PR you must read before creating or editing any pull request.
 ---
 
-# Pull Request
+## First: a question you asked is a stop
 
-## First: An Open Question Is a Stop
+If even one question you put to the user is still unanswered, stop here. Do not
+open a pull request, do not edit one, do not write a title or a description.
+End the turn by asking for the answer.
 
-If a question you put to the user is unanswered, do not open or edit a pull
-request. End the turn by asking for the answer. The user decides what is minor.
+A pull request never goes out with an open question behind it. "The rest is
+ready" is not a reason to proceed, and neither is a question that looks minor:
+the user decides what is minor.
 
-## Before Writing
+## Before writing
 
-Read the branch's own changes:
+Read the branch's own changes, generated files left out:
 
 ```sh
 git diff origin/main...HEAD -- $(scripts/changed-sources.sh)
 ```
 
-The title and description come from that diff, not from the session. Say that
-generated output was regenerated, not what moved inside it. Tidy the branch's
-comments and docs while there.
+The title and description come from that diff, not from the session that
+produced it. `scripts/changed-sources.sh` drops what `.gitattributes` marks
+`linguist-generated` or `linguist-vendored`, which is where a regenerated corpus
+or a fetched one would otherwise bury the change the PR is actually about. Say
+in the description that the generated output was regenerated, not what moved
+inside it.
 
-After `git fetch origin main`,
-`git merge-tree --write-tree --no-messages --name-only HEAD origin/main` exits 1
-on a conflict, touching nothing; resolve one with the `git-upstream-sync` skill.
+Revise the branch while you are there: clean up comments and docs according to
+the project rules.
+
+Check mergeability by exit status (after `git fetch origin main`):
+
+```sh
+git merge-tree --write-tree --no-messages --name-only HEAD origin/main
+```
+
+Exit 0 = mergeable; exit 1 = conflicts, printing the merged tree OID followed
+by one conflicted path per line. This runs the real (ort) merge in memory and
+touches neither the worktree nor the index.
+
+If conflicting, resolve with the `git-upstream-sync` skill.
 
 ## Title
 
-`<type>(<scope>): <the value>`, naming the value the branch creates, not what it
-edited; the largest one if there are several. The scope is optional, and `!`
-marks a breaking change. The type is one of:
+A short summary of the value the branch creates, not of what was edited. A
+reader scanning a list of PRs is deciding whether to care.
+
+`<type>(<scope>): <the value>`
+
+If the branch is worth more than one thing, name the largest and leave the rest
+to the description.
+
+`type` is one of these, with `!` for a breaking change. The scope is optional.
+`.claude/hooks/pr-conventions.sh` reads the types from this list.
 
 - `feat`
 - `fix`
@@ -41,25 +65,44 @@ marks a breaking change. The type is one of:
 
 ## Description
 
-Open with the outcome, in a paragraph a reader can stop after; mechanism goes
-under headings below it.
+Open with the outcome, in a paragraph a reader can stop after: what holds once
+this is merged, and what it is worth. Mechanism comes after, under headings.
 
-Write for someone who sees only the merged tree. A sentence that parses only
-against the old state ("previously X, now Y", "2 -> 0", an earlier approach) is
-history, which the commits hold. Cut it.
+Do not include trial-and-error history in the description; the commit history is
+the SSoT. That is any sentence which only parses against the pre-branch state:
+"previously X, now Y", "an earlier approach", "X was replaced by Y", a count
+given as a delta ("2 -> 0"). Read each sentence back and ask whether it works
+for someone who sees only the merged tree. If it needs the old state, cut it.
 
 - No: "Codegen looked the global up by name; it now compares the read's type."
 - Yes: "Codegen compares the read site's `result_ty` against the slot's type."
 
-Add `Closes #N` when the branch obviously closes an issue; don't go looking. No
-test section: CI runs the suite. The GitHub MCP server drops angle brackets and
-escapes quotes in what it reads back, so check the web UI before rewriting.
+The opening paragraph is the hardest place to hold that line: a speedup is worth
+stating, the struggle to find it is not.
 
-Cut the draft before posting: a first draft follows the shape of the work.
+If the branch obviously closes a known issue, add a closing keyword
+(`Closes #N`). Do not go looking for one to attach.
 
-## After Opening
+No need to include a test section. CI runs the full test suite.
 
-Subscribe with `subscribe_pr_activity` and handle every event; skipping one is a
-decision you state. Without the tool, check status and reviews every 10 minutes
-until the review settles and CI passes. Keep the branch mergeable with
-`git-upstream-sync`, and answer reviews with `code-review-response`.
+Angle brackets need nothing but a code span: `` `t_<Name>` `` renders as
+written. The GitHub MCP server drops them and HTML-escapes quotes in the text it
+reads back. Check the web UI before believing the description is broken, and
+never rewrite prose to work around it.
+
+Cut the draft before posting. A first draft follows the shape of the work: a
+heading for each thing that happened, at the length it took to do. Read it back
+and cut every sentence a reader would skip.
+
+## After opening
+
+Subscribe to the PR with `subscribe_pr_activity`. Handle every event it
+delivers; skipping one is a decision you state.
+
+If the tool is unavailable, check the PR status and its review comments every
+10 minutes instead. Stop once the review has settled and CI passes.
+
+Keep checking mergeability (`mergeable_state`). If conflicting, resolve it with
+the `git-upstream-sync` skill.
+
+Answer a review, human or bot, with the `code-review-response` skill.

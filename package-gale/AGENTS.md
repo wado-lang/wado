@@ -46,7 +46,8 @@ The first rule is enforced: `permissions.deny` covers the Read tool, `.claude/ho
 
 - No backtracking on the accept path — parser or lexer. Disambiguate with static k-token lookahead; a decision static prediction cannot resolve in depth 5 routes to the runtime ATN simulator, never a try-fail-retry loop. The one exception decides nothing: the repeat-exit probe re-parses a failed element under `speculating` to record where the error is, and rolls back all but the message. Mechanics, soundness invariants, and ATN escalation: [`antlr4-compatibility.md`](./antlr4-compatibility.md) (Prediction & codegen design).
 - Keep generated code byte-identical for grammars that do not use a feature (actions, FOLLOW gates, ATN) — gate every emit site on the feature.
-- Keep the ATN off any shape the static path already lexes or predicts as the jar does: an ATN-class rule inlines the ATN runtime into the generated parser. A change to what routes to the ATN, or to a static prediction trigger, runs the shapes it newly includes and newly excludes through `scripts/antlr4-oracle.sh <grammar.g4> <start_rule> < input` (`--tokens` for the lexer) before it is reported. The script caches the jar; it needs only `java`.
+- Keep the ATN off any shape the static path already lexes or predicts as the jar does: an ATN-class rule inlines about a thousand lines of runtime into the generated parser. A change to what routes to the ATN, or to a static prediction trigger, runs the shapes it newly includes and newly excludes through `scripts/antlr4-oracle.sh <grammar.g4> <start_rule> < input` (`--tokens` for the lexer) before it is reported. The script caches the jar and needs `java` and `javac`.
+- A compiler bug is P0 (top-level `AGENTS.md`): write a minimal `wado-compiler/tests/fixtures/` repro first, then fix.
 
 ## Debugging tools
 
@@ -62,10 +63,15 @@ wado run package-gale dump path/to/Grammar.g4
 wado run package-gale dump --lexer path/to/Grammar.g4
 ```
 
-The route covering a rule (`lexer_rule_routes`) and the emit decisions below it
-(`lexer_rule_plan`) are each decided once, and both the emitter and the dump read
-them. A new strategy is a plan node with those two consumers, never a branch in
-one of them.
+Which matcher covers a rule is its `lexer_rule_routes` entry, derived once per grammar, and the emit reads it rather than re-deciding: both "does this rule get its own `try_`" and "does the dispatch call it" are derived from that one answer, so a shortcut added to the route is one every emit site already knows about. Asking the shortcuts separately is what let a rule keep its actions past the keyword classifier and still lose them to the shared literal matcher.
+
+The emit _decisions_ below the route — plain vs lookahead-aware repeat, first-match vs arm scoring, maximal munch, suffix cutting, fragment calls — are `lexer_rule_plan`: one tree per rule that `gen_lexer` emits from and the dump renders. Neither decides for itself, so neither can reach a construct the other does not, and tail position is a property of the plan rather than a parameter each function re-derives. A new strategy is a new plan node with two consumers; adding a branch to only one does not compile.
+
+The plan never holds a second copy of the same elements. A scored alternation only peeks what follows it, so that suffix stays a step of the enclosing sequence and `gen_lexer_alt_seq` re-emits those steps from a `from` index; planning it apart would let the peek and the commit choose differently. Only a non-greedy repeat's exit try is cut out, since it alone lowers what follows outside the sequence's tail position.
+
+The test "every strategy the dump reports is one the emitter emitted" in `codegen_test.wado` counts the strategies the dump reports against the locals the emitter mints for them (`alts_best_`, `la_win_`, `accept_`, `ng_saved_`), over shapes that force each one. The grammars are action-free on purpose: an action-carrying rule emits its body twice.
+
+For a grammar outside the repo, `wado run --dir <dir> package-gale dump Grammar.g4` — see `--dir` in the root [`AGENTS.md`](../AGENTS.md).
 
 The `trace` generator option logs a runtime event stream (enter / ok / FAIL per rule, per-alt scan lengths, the committed `pick`); its `alt#N` indices match `gale dump`. Strictly opt-in — off is byte-identical output.
 
@@ -77,18 +83,18 @@ gale gen --trace Grammar.g4
 
 or `options: { trace: true }` in a Kiln `with { generator: ... }` block.
 
-`tools/rust_corpus_check.wado` parses Rust files with the generated
-`RustParser.g4` parser, one `ok` / `ng` line each with the first diagnostic's
-rule stack, which names the failing rule where the message cannot. Every `.rs`
-the repository tracks parses clean, so any `ng` is a regression.
+`tools/rust_corpus_check.wado` parses a list of Rust files with the generated `RustParser.g4` parser and prints one `ok` / `ng` line each — path, diagnostic count, line, message, and the first diagnostic's rule stack — plus a summary on stderr. The stack is the part that carries information: recovery restarts at an item boundary, so most failures report the same `expected KW_EXTERN` whatever went wrong inside, and only the stack names the rule. Repository-wide it is the one number that says whether a prediction change helped.
 
 ```sh
 git ls-files '*.rs' > target/rs-corpus.txt
 wado run package-gale/tools/rust_corpus_check.wado -- --paths-from target/rs-corpus.txt
 ```
 
-`tools/rust_inline_paths.wado` uses the same parser for `../AGENTS.md`'s rule on
-inline `crate::` paths, driven by `../scripts/check-rust-paths.sh`.
+`--paths-from` reads one path per line, the only form that survives a path with a space.
+
+Every `.rs` this repository tracks parses clean, so any `ng` line is a regression. Each failing file reports exactly one diagnostic — it dies once and recovery carries the rest — so the count is files, not errors.
+
+`tools/rust_inline_paths.wado` is the parser's second consumer. It applies this repository's own Rust rule (`../AGENTS.md` > General Rules): a `crate::` / `super::` path belongs in a `use` item. It reports every one written where its item is read, and `../scripts/check-rust-paths.sh` drives it. It needs the same clean corpus, since a file it cannot parse is reported rather than counted. Both tools share `tools/rust_corpus.wado`, which holds the recognizer with its base ports installed.
 
 ## Running tests
 
@@ -102,13 +108,9 @@ needs no separate Gale run either: locally, `mise run test-wado` walks this
 package, which catches miscompiles the e2e fixtures miss. `test-gale-o2` is
 CI's.
 
-Pass a directory, never a glob: the descriptor corpus sits one level deeper
-(`tests/antlr4-compat/stage_*/<Category>/`), and a flat glob passes over most
-of it.
+Pass the package directory and let the CLI discover the files. A hand-written glob is the thing that goes wrong: the descriptor corpus sits one directory deeper (`tests/antlr4-compat/stage_{a,b,b_oracle,c}/<Category>/`), so a flat `tests/antlr4-compat/*.wado` reaches about a third of the suite, passes, and says nothing about the rest — including the corpus that exists to catch compatibility regressions. The fixtures it never reaches also keep whatever the generator emitted the last time something did run them, so the committed corpus drifts behind the generator with every green run.
 
-A test that reaches `generate` compiles the whole generator, so such tests live
-in `src/codegen_test.wado` (and the entry points' in `src/main_test.wado`),
-paying that once.
+A test that calls `generate` belongs in `src/codegen_test.wado`. A test file that reaches `generate` compiles the whole generator however small the test is, so keeping such tests in one file pays that cost once. The one other file that reaches it is `src/main_test.wado`, which tests the two entry points that wrap `generate`: the `gale` command line and the Kiln generator. A unit test beside its module stays cheap as long as it does not reach `generate`. No check enforces this rule. A file that breaks it shows up as a slow compile in the output of `wado test`.
 
 A codegen test asserts what the generated parser does, not what its source says. `parses`, `lexes`, `printed` and `traced` run it through [`core:eval`](../docs/stdlib-core-eval.md) and return the trees, tokens, action output or trace lines; take the expected trees from the jar. Each run costs a few seconds of compile, cached across runs. Match the source text only for what running cannot show: that a feature left unused emits nothing, or which strategy the emitter picked.
 
@@ -128,8 +130,7 @@ A `superClass` grammar has no behaviour without its hand-written base class, so 
 
 To add an e2e grammar: drop the `.g4` in `tests/grammars/`, add a parse test in `src/g4/integration_test.wado`, and a driver test that imports it via the generator. Open the file with a comment saying which shape it pins and why that shape is hard.
 
-A grammar taken from elsewhere also carries `// Source:` (its URL) and
-`// License:`; one written here carries neither.
+A grammar taken from elsewhere carries `// Source:` (the URL it came from) and `// License:` as well. A fixture written here carries neither. Most of the older ones do — "Source: Gale test fixture", "License: same as the Gale package" — and those two lines say nothing the directory has not already said. Don't copy them into a new file.
 
 ## Inlined runtime
 

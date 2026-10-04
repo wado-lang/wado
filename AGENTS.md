@@ -6,25 +6,38 @@ This document describes how to develop the Wado compiler toolchain.
 
 - Succinctly — say and write the least that fully conveys the point.
 - Fix-forward — fix the cause of a defect and move forward; never backtrack.
-- Fix the class — a defect is one instance; fix what admits the class. An input nobody would supply is bounded by one constant where it enters, not modelled.
-- A compiler bug is P0. The instant you suspect one, stop all other work, write a minimal e2e fixture, and fix it. A compiler rule that blocks an edit is a suspect, not an obstacle to route around.
-- Design is the user's call. A rule invented to soften a fix's side effect is a design decision: propose it with the trade-off.
-- Red/green TDD. A pre-existing issue is fixed too.
+- Fix the class — a defect is one instance; fix what admits the class.
+- Design is the user's call — a rule invented to soften a fix's side effect is a design decision: propose it with the trade-off.
 
 ## Development
 
-Tools come from [mise](https://mise.jdx.dev/) (`curl -fsSL https://mise.run | sh`); tasks are in `mise.toml`.
+This project uses [mise](https://mise.jdx.dev/) to manage dev tools. Project tasks are defined in `mise.toml`. Run `mise tasks` to discover available tasks.
+
+Install mise first if you don't have it:
 
 ```sh
-mise trust                 # first time only
+curl -fsSL https://mise.run | sh
+```
+
+### When Starting a Task
+
+Run the following to set up your development environment:
+
+```sh
+mise trust                 # trust the mise.toml config (first time only)
 mise run on-task-started   # install project tools
 ```
 
 ### The Cycle
 
-Write the change, commit it, run `/distill` over the whole branch, then test
-once. Run `/distill` again after answering review findings, which go through
-`/code-review-response` however they arrive.
+Write the change, commit it, invoke the `/distill` skill, then test. `/distill`
+is the last of the editing rather than a phase after it, so one full test run at
+the end answers for the change and for what `/distill` edited. A run on either
+side of it is the same hour spent twice.
+
+Having invoked `/distill` on this branch an hour ago is not a reason to skip the
+next one. The scope is the whole branch every time, and what the commits since
+then made stale is spread across everything the branch touched.
 
 ### Common Development Tasks
 
@@ -39,39 +52,48 @@ mise run benchmark-all     # runs all benchmarks and reports the results
 mise run report-wasm-size  # measures the size of the generated Wasm files and reports the results
 ```
 
-Iterate with the `dev` profile (`cargo build` / `run` / `test`); `Cargo.toml`
-raises its `opt-level` where it matters. `--release` is for distribution.
-
 ## Tooling
 
-- Make every edit with the editing tools.
-- Run one heavy job at a time, in the background, its output in a file outside the tree that records its own end: `cmd > /tmp/run.log 2>&1 && s=0 || s=$?; echo "exit=$s" >> /tmp/run.log`. Scratch files never go in the tree, where `git add -A` picks them up. Wait for the harness's notification, never a `sleep` loop. An abandoned job keeps running, so kill it by pid (`ps -eo pid,etime,pcpu,args`) before restarting; `test`, `test-wado`, `test-stdlib` and `test-gale-o2` refuse to start beside themselves where `flock` exists.
-- A generated file carries `-diff` in `.gitattributes`: regenerate and commit it, don't read it. `scripts/changed-sources.sh` lists the changed sources without them. On an internal pull request CI's `tidy` job regenerates them, with clippy and format, and pushes `chore: tidy`, so pull before pushing.
+- Make every edit with the editing tools. They refuse a match that is not unique and a file the session has not read, and the harness tracks what they wrote, so each edit is checkable.
+- Run a long job (`mise run test`, `test-wado`, `update-golden-fixtures`) in the background, one per invocation: the harness announces the end of a job it owns. Run one heavy job at a time; two starve each other.
+- `test`, `test-wado`, `test-stdlib` and `test-gale-o2` refuse to start while another of the same is running, naming the holder's pid — where `flock` exists; `scripts/exclusive.sh` says so on stderr and runs unlocked where it does not. Abandoning a job does not stop it, so restarting after an edit means killing that pid first.
+- Redirect a job's output to a file and read the file, so what you did not anticipate is still there. Scratch files go in `scratchpad/`: it is git-ignored, so `git add -A` leaves them out, and per worktree, so concurrent sessions do not overwrite each other's. A fixed path under `/tmp` is shared by every session.
+- Have the job record its own completion — `mkdir -p scratchpad; cmd > scratchpad/run.log 2>&1 && s=0 || s=$?; echo "exit=$s" >> scratchpad/run.log` — and wait for it with `until grep -q "^exit=" scratchpad/run.log; do sleep 30; done`. The `&&`/`||` is what writes the marker on a failure too, which `set -e` would otherwise exit before.
+- On an internal pull request, CI's `tidy` job regenerates the generated files, applies clippy and format, and pushes `chore: tidy` onto the branch. Pull before pushing.
+- A generated file carries `-diff` in `.gitattributes`, so `git diff`, `git show` and `git log -p` report it as changed without printing it, and the sources stay readable. Regenerate and commit those; do not read them. `--text` prints one where you do want it. `rg` reads them like any other file; `git grep` calls them binary.
+- `git diff <base> -- $(scripts/changed-sources.sh)` narrows further, to the changed paths themselves: a stat line or a rename for a generated or vendored file is gone too.
 
-## Git
+## General Rules
 
-- Commit and push each self-contained unit without asking, never onto `main`. Open a pull request only when the user asks.
+- Write all documentation and comments in clear, simple English.
+  - Comments: write one only for what the code cannot say, and make it say why: why this way, a tradeoff, a constraint, a spec or bug reference. Make the code say what it can: rename and decompose until the comment is redundant, then delete it.
+  - Invariants: state them as assertions, not comments. An assert is checked; a comment goes stale.
+  - Doc comments (`///`, `//!`): write one on every `pub` item. Say what the item is, not how it works.
+  - Markdown: the `markdown` skill holds the rules. Read it before writing or editing any `.md` file.
+  - Issue references: an issue or pull request in another repository is written fully qualified, `org/repo#num` (`antlr/antlr4#4911`). A bare `#num` means this repository.
+  - Timings: no wall-clock seconds in comments or docs. This machine is the fastest one, so write the ratio.
+- Commit and push each self-contained unit without asking, never onto `main`. Open a pull request only when the user asks: auto-merge lets an unrequested one land itself.
 - Read the whole diff before committing. A trimmed comment or doc keeps every clause that names a pass, a type, a literal, a condition, or the bug behind the code.
-- A defect found mid-task is fixed on the branch in hand.
-- Delete local branches `git branch --merged main` lists without asking, except `main` and a branch with no commits of its own yet; never one `--no-merged` lists.
-- Merge `origin/main` only through the `git-upstream-sync` skill. CI's test jobs run on the branch merged with `main`, so reproduce a CI-only failure there first. `tidy` is the exception: it checks out the head.
-
-## Writing
-
-- English, plain. A comment says only why; an invariant is an assert; every `pub` item has a doc comment saying what it is. Markdown follows the `markdown` skill.
-- An issue elsewhere is `org/repo#num`; a bare `#num` is this repository.
-- A `crate::` or `super::` path goes in a `use` at the top, never inline (`pub(in …)` is exempt). `mise run check-rust-paths` checks it.
-- No wall-clock seconds in comments or docs: this machine is the fastest one. Write the ratio.
-
-## Testing
-
-- Test the language from an e2e fixture: a `.wado` file in `wado-compiler/tests/fixtures/`, expectations in its `__DATA__`. Nearly everything the language does is stated there, diagnostics included. `{"compile_error": "…"}` matches the whole report, position included; `{"compile_error_codes": [...]}` names the `Code`. Kiln is the exception, since a generator needs the filesystem.
-- Test a stdlib function from the `*_test.wado` beside its module.
-- Write an integration test only for what no fixture can state, in `tests/integration/`, declared in its `main.rs`. Each file directly in `tests/` links another ~150 MB target.
-- A regression fixture's shape is its point: when a harness cannot classify one, fix the harness.
-- Run what the change can reach, not more.
-- An unexplained failure indicts the measurement as often as the change: re-run the exact command by hand before believing it. zsh does not word-split `$VAR`.
-- A CI-only timeout in a test reading `wasi:clocks` is runner slowness.
+- A defect found mid-task is fixed on the branch in hand, never on a side branch or worktree.
+- Delete the local branches `git branch --merged main` lists without asking, except `main` and a branch with no commits of its own yet. Never one `--no-merged` lists.
+- A compiler rule that blocks an edit is a suspect, not an obstacle to route around: widening a modifier until the build goes green once hid a public-API regression.
+- An input nobody would supply is bounded by one constant where it enters, not modelled through the code.
+- Name an item, don't spell out its path: a `crate::` or `super::` path belongs in a `use` item at the top of the module, never inline where the item is read. A `pub(in …)` is exempt: it names a scope rather than reading an item, and Rust admits no import there. `mise run check-rust-paths` gates this in CI. The corpus carries no inline path, so the baseline `scripts/rust-inline-paths.json` is empty and any file that gains one fails. The detector is Wado (`package-gale/tools/rust_inline_paths.wado`) and parses with the Gale Rust grammar, so the grammar decides what counts as a path. `scripts/check-rust-paths.sh <file.rs>…` lists what a file carries.
+- Perform red/green TDD.
+- A compiler bug is always P0 — no exceptions. The instant you suspect one, stop all other work, and as the top priority write a minimal reproducible e2e fixture and fix it.
+- A pre-existing issue must be fixed, with TDD when practical.
+- Use plain `cargo build` / `cargo run` / `cargo test` (the `dev` profile) for iteration. `Cargo.toml` raises `opt-level` on `wado-compiler`, `wado-dev-tools`, and deps so dev-build runtime is close to release for the parts that matter. `--release` is only for distributing binaries.
+- Merge origin/main only through the `git-upstream-sync` skill, conflicts or not; a clean merge still ends with its sanity check.
+- A failure that shows only in CI is usually not the environment: a pull request's test jobs run on the branch merged with `main`, not on the branch head. Sync first with the `git-upstream-sync` skill and reproduce on the merged tree before suspecting anything else. `tidy` is the exception, checking out the head ref.
+- Test the language from an e2e fixture: a `.wado` file in `wado-compiler/tests/fixtures/`, expectations in its `__DATA__` section. Nearly everything the language does is stated there, diagnostics included. A fixture states a rejection two ways. `{"compile_error": "…"}` matches the whole report, so writing `":4:13: parse error: …"` pins the position as well as the message. `{"compile_error_codes": ["INVALID_SYNTAX"]}` names the `Code` it was raised under. Kiln is the exception: a generator runs against the filesystem, which a fixture cannot set up.
+- Write an integration test only for what no fixture can state — the CLI, the loader, `dump` output, a host API. Put it in `tests/integration/` and declare it in that directory's `main.rs`. A file dropped directly in `tests/` becomes its own target, and each one statically links the compiler and wasmtime for another ~150 MB.
+- Test a stdlib function from the `*_test.wado` beside its module under `wado-compiler/lib/`, not from a new e2e fixture.
+- A regression fixture's shape is its point: when a harness cannot classify one, fix the harness, not the fixture.
+- Run what the change can reach, not more: a test-only addition does not need the full suite.
+- An unexplained failure indicts the measurement as often as the change: re-run the exact command by hand before believing it, and never revert a design over one. zsh does not word-split `$VAR`, so a flag list in one variable reaches a command as one argument.
+- A CI-only timeout in a test that reads `wasi:clocks` is the runner's slowness, not the branch.
+- Run `/code-review-response` to answer any review finding, whoever the reviewer is and however it reaches you. A finding arriving as a pull request event is one, and handling it straight from the event skips every step the skill ends with.
+- Run `/distill` once a piece of work is done, and again after answering review findings. An extra run costs nothing, so run it the moment you wonder whether you should. §"The Cycle" says where it sits.
 
 ## The Wado Language
 
@@ -82,8 +104,8 @@ modules while tuples follow TypeScript.
 
 @docs/cheatsheet.md is the quick reference. For the detailed specification read
 `docs/spec-*.md` (one file per area, indexed in `docs/README.md`), or the WEP
-that proposed a feature at `docs/wep-*.md`. `wado doc <module>` (`core:prelude`, say)
-states a stdlib module's signatures; read it rather than guess.
+that proposed a feature at `docs/wep-*.md`. `wado doc <module>` (`core:prelude`,
+say) states that module's signatures; read it rather than guess.
 
 Avoid committing a binary: its diff is unreadable. Where a text form means the
 same, commit that instead (`.wat` for `.wasm`, `.onnxtext` for `.onnx`).
@@ -99,40 +121,78 @@ same, commit that instead (`.wat` for `.wasm`, `.onnxtext` for `.onnx`).
 - `wado-manifest/` — `wado.toml` / `wado.lock` parsing, validation, and dependency resolution.
 - `wado-wasm-embed/` — prepares a core wasm asset for embedding in a component: memory definition to import, then a prune to the used exports.
 - `wado-bundled-libm/` — deterministic math, bundled into the compiler as a Wasm module.
-- `wado-bundled-icu/` — ICU binding for Wado (under development; not bundled yet).
+- `wado-bundled-icu/` - ICU binding for Wado (under development; not bundled yet)
 - `docs/` — the language spec (`docs/spec-*.md`), the compiler and formatter guides (`docs/compiler.md`, `docs/optimizer.md`, `docs/formatter.md`), stdlib docs, and the Wado Evolution Proposals (`docs/wep-*.md`).
 - `benchmark/`, `wasm-size/` — performance and code-size measurement.
-- `cloudflare-worker/` — serves a `wasi:http/service` component from a Cloudflare Worker, via jco.
-- `package-gale/` — a parser generator compatible with ANTLR4 (`.g4`) in Wado.
-- `package-gale-highlight-wado/` — a complete `Wado.g4` and a syntax highlighter for Wado source code, built with `package-gale`.
-- `package-grog/` — a Protocol Buffers compiler in Wado: a `.proto` becomes Wado declarations, and the runtime library encodes them.
-- `package-jade/` — a JSON Schema 2020-12 validator in Wado.
-- `package-marl/` — a CommonMark subset in Wado.
-- `package-loam/` — a tensor compiler in Wado: an ONNX graph becomes Wado source, shapes checked at build time.
-- `package-wadopoet/` — builders for generated Wado source, and the reserved vocabulary (generated from `wado syntax --format json`) a minted name must avoid.
-- `package-web/` — `wado-lang:web`: the web platform bindings, their browser glue, and `SurfaceDom`, a DOM without a browser engine that serves them under `wado test`, `wado run` and `wado serve`.
-- `package-cm-catalog/` — a catalog of Wasm Component Model modules for demo and testing purposes.
-- `vendor/` — reference specs and runtimes, as git submodules (`git submodule update --init --recommend-shallow`).
+- `cloudflare-worker/` — serves a `wasi:http/service` component from a Cloudflare
+  Worker, via jco.
+- `package-gale/` — A parser generator compatible with ANTLR4 (`.g4`) in Wado.
+- `package-gale-highlight-html` - A syntax highlighter for HTML that highlights embedded CSS and JavaScript as those languages, built with `package-gale` on the grammars-v4 grammars.
+- `package-gale-highlight-wado` - A complete `Wado.g4` and a syntax highlighter for Wado source code, built with `package-gale`.
+- `package-grog` - A Protocol Buffers compiler in Wado: a `.proto` becomes Wado declarations, and the runtime library encodes them.
+- `package-jade` - A JSON Schema 2020-12 validator in Wado.
+- `package-marl` - A CommonMark subset in Wado.
+- `package-loam` - A tensor compiler in Wado: an ONNX graph becomes Wado source, shapes checked at build time.
+- `package-wadopoet` - Builders for generated Wado source, and the reserved vocabulary (generated from `wado syntax --format json`) a minted name must avoid.
+- `package-web/` - `wado-lang:web`: the web platform bindings, their browser glue, and `SurfaceDom`, a DOM without a browser engine that serves them under `wado test`, `wado run` and `wado serve`.
+- `package-cm-catalog/` - A catalog of Wasm Component Model modules for demo and testing purposes.
+- `vendor/` — reference specs and runtimes, as git submodules.
 
 ## The CLI
 
-`wado` is `cargo run --bin wado --`. `wado --help` lists the subcommands; the
-`wado-cli` skill covers the workflows. Behavior that no `--help` will remind you
-of:
+The `wado` binary is implemented in `wado-cli/`. Below, `wado` is shorthand for `cargo run --bin wado --`. `wado --help` lists every subcommand and `wado <command> --help` its flags; the `wado-cli` skill covers the workflows.
 
-- A program targets a Wasm _world_: `wasi:cli/command` (default), `wasi:http/service`, or the synthetic `test` world, which exports the entry module's `test` blocks and nothing else.
-- The world selects the allocator: `bump` for CLI (never frees), `freelist` for HTTP, `debug` for tests (never reuses freed memory, poisons it with `0xFF`). E2E tests rely on `debug`.
-- `wado run` reaches only the current directory, or exactly the `--dir` grants once any is given. An absolute path never opens.
-- The formatter skips `wado-compiler/tests/**`, but only when walking a directory: never `wado format -w` a fixture file. A syntax change adds tests to `wado-compiler/tests/format.rs`.
+The ones you reach for while developing the toolchain:
+
+- `compile` — compile one source file to Wasm or WAT. `-O0` (none) … `-O3` (aggressive), `-Os` (`-O2` + strip symbols); default `-O2`.
+- `check` — verify a source file (and its Kiln generators) without emitting Wasm.
+- `run` — compile and run a CLI program with wasmtime.
+- `test` — run the `test` blocks in Wado source files.
+- `serve` — compile and serve an HTTP service.
+- `dump` — dump compiler internal state at every stage: AST, modules, symbols, types, TIR, NIR, WIR.
+- `query` — ask the language service for hover / definition / references / diagnostics, by position or by `MODULE#SYMBOL` notation. `query inlay-hints` splices the hints into the source, so a misplaced anchor is visible rather than a number to check by hand.
+- `format` — format Wado source code. Its rules are in `docs/formatter.md`.
+
+The rest (`init`, `update`, `fetch`, `build`, `publish`, `doc`, `wit`, `syntax`, `lsp`, `clean`) serve packaging, registry, and editor integration.
+
+Behavior that no `--help` will remind you of:
+
+- A program targets a Wasm _world_: `wasi:cli/command` (default), `wasi:http/service`, or the synthetic `test` world. `--world test` exports the entry module's `test` blocks and drops everything else; `serve` and `test` pick their world automatically.
+- The world selects the allocator: `bump` for CLI (never frees), `freelist` for HTTP (long-running), `debug` for the test world (never reuses freed memory, poisons it with `0xFF`). E2E tests rely on the test world picking `debug`.
+- `wado run` reaches only the directories granted to it: the current one, or exactly the `--dir` grants once any is given. Paths open relative to a grant, so an absolute path never opens.
+- The Wado formatter skips `wado-compiler/tests/**` (`[format] exclude` in its `wado.toml`), so an e2e fixture keeps its hand-authored layout. A directory argument is walked from the package enclosing it, so naming a subdirectory honours the exclusion. Naming a file bypasses it, so never `wado format -w` a fixture file directly. When the syntax changes, add tests to `wado-compiler/tests/format.rs`.
 
 ## Dependencies
 
-The wasm-tools crates (`wasmparser`, `wasm-encoder`, `wasmprinter`, `wit-parser`, `wat`) are pinned in `[workspace.dependencies]` to the generation wasmtime depends on, so cargo dedupes them. `mise run check-deps` enforces this. When bumping wasmtime, find its generation (`cargo tree -i wasmparser@<ver>`), re-pin them (`wat = "~1.<gen>"`, the rest `"0.<gen>"`), then `cargo update` and `mise run check-deps`.
+The wasm-tools crates (`wasmparser`, `wasm-encoder`, `wasmprinter`, `wit-parser`, `wat`) are pinned in `[workspace.dependencies]` to the same generation wasmtime depends on, so cargo dedupes them instead of compiling parallel 0.x trees. `mise run check-deps` enforces this (also a CI job) and lists the irreducible exceptions.
+
+When bumping wasmtime, re-align them:
+
+1. Find wasmtime's generation, e.g. `cargo tree -i wasmparser@<ver>`.
+2. Re-pin the wasm-tools crates in `Cargo.toml` to that generation (`wat = "~1.<gen>"`, the rest `"0.<gen>"`).
+3. `cargo update`, then `mise run check-deps`.
 
 ## References
 
-Wado targets Wasm 3.0 (GC and JSPI included), the Component Model, and WASI 0.3
-(p3), all fully supported by wasmtime. The sources of truth are vendored:
+### Wasm and WASI
 
-- Component Model: `vendor/component-model/design/mvp/` (`CanonicalABI.md`, `Concurrency.md` for async, streams and futures)
-- WASI p3: `find vendor/wasmtime/crates/wasi/src/p3/wit -name '*.wit'`
+Wado targets the following Wasm features:
+
+- Wasm 3.0 (released on 2025-09-17), including GC and JSPI
+- Wasm Component Model (CM)
+  - Design: `vendor/component-model/design/mvp/`
+  - Canonical ABI: `vendor/component-model/design/mvp/CanonicalABI.md`
+  - Concurrency (async, streams, futures): `vendor/component-model/design/mvp/Concurrency.md`
+- WASI 0.3 (or p3, released on 2026-06-11)
+  - Fully supported by wasmtime.
+  - See wasmtime's P3 support: `find vendor/wasmtime/crates/wasi/src/p3/wit -name '*.wit'`
+
+### Vendor Submodules
+
+`vendor/` contains reference repositories: the specifications for Wasm and the Component Model, plus runtimes such as wasmtime.
+
+To initialize:
+
+```sh
+git submodule update --init --recommend-shallow
+```

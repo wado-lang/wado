@@ -5,72 +5,185 @@ description: Transpile Wado Wasm components to JS with jco, then run, debug, and
 
 # Running Wado on Node via jco
 
-jco transpiles a component into JS and core Wasm, so it runs on V8 rather than a
-Component Model runtime. The released npm jco (verified at 1.30.0) runs Wado's
-compute, filesystem, and `wasi:http/service` programs.
+jco (bytecodealliance) transpiles a Wasm **component** into JS + core Wasm so it
+runs on a plain Wasm engine (V8/Node, browsers) instead of a Component Model
+runtime. Wado targets WASI P3; this doc covers what the released jco does for
+Wado today and what is still blocked.
 
-## Requirements
+## TL;DR
 
-- Node 26+, for stable JSPI. The repo pins it; outside the repo `node` may be a
-  system Node 22, whose JSPI fails (`WebAssembly.Suspending is not a constructor`).
-- Compile with `-f no-wide-arithmetic`. No V8 implements wide arithmetic, which
-  float formatting and `i128` emit, so without it the module fails with
-  `invalid numeric opcode: 0xfc16` (or transpile refuses it). The flag lowers
-  those builtins to software forms in `core:rt` before NIR.
+- Use the **released npm jco as a library** (`scripts/jco`, `mise run jco-*`).
+- Compile Wado with **`-f no-wide-arithmetic`** — V8 has no wide-arithmetic
+  proposal, and float formatting / `i128` emit it.
+- Run on **Node 26+** — stable JSPI, no flag.
+- **Compute and filesystem programs work** (including float formatting). A
+  filesystem program needs its preopen set with `_setPreopens` (see below).
+- Quick check: `mise run jco-hello-released`. Benchmark:
+  `mise run jco-bench <program.wado>`.
 
-## Pipeline
+## Environment
 
-```sh
-mise run jco-deps                        # npm install jco under scripts/jco
-mise run jco-transpile-released foo.wasm [out-dir]
-mise run jco-hello-released              # compile, transpile, run hello
-mise run jco-bench <program.wado> [runs] # self-timed; keep the best
-```
+- **Node 26+ required.** Node 26 (V8 14.6) ships **stable JSPI**
+  (`WebAssembly.Suspending`), so no flag is needed; the repo pins `node = "26"`
+  in `mise.toml`. Node 24 needs `--experimental-wasm-jspi`; Node 22's older JSPI
+  fails (`WebAssembly.Suspending` is not a constructor).
+- **`/tmp` pitfall:** outside the repo, `node` may resolve to a system Node 22
+  (mise activation is path-scoped). Run inside the repo, or use the pinned
+  binary's absolute path.
+- **V8 has no wide-arithmetic** in any version (no flag exists). This is a V8
+  gap, not a jco one — handled by `-f no-wide-arithmetic` (see below).
 
-`transpile-released.mjs` is a plain `transpile()`; jco's `preview3-shim` serves
-every import, linked through a `node_modules` symlink beside the output. Two
-things a runner must do:
+## Vendor-free pipeline (`scripts/jco`)
+
+Released `@bytecodealliance/jco` as a library. `transpile-released.mjs` is a
+plain `transpile()` — jco's own `preview3-shim` serves every import a Wado
+program makes, and the output links to it through a `node_modules` symlink the
+script writes beside the files.
+
+The shim writes stdout from a worker that is torn down once the event loop
+empties, so lines still queued when `run()` resolves are lost, and a runner that
+calls `process.exit` on that promise loses more. Hold the loop open for a
+second after `run()` resolves. The lines of one run can also arrive out of
+order.
+
+A program that reads files needs a preopen. Set it before importing the
+transpiled module, mapping the guest's `.` to a host directory as
+`wado run --dir <dir>::.` does:
 
 ```js
 import { _setPreopens } from "@bytecodealliance/preview3-shim/filesystem";
-_setPreopens({ ".": "/abs/host/dir" }); // before the import; through the symlinked shim
+_setPreopens({ ".": "/abs/host/dir" });
 const m = await import("./out/prog.js");
 await m.run.run();
-await new Promise((r) => setTimeout(r, 1000)); // the shim's stdout worker flushes late
+await new Promise((r) => setTimeout(r, 1000));
 ```
 
-A second copy of the shim keeps its own preopen table the program never reads.
-`jco-bench` takes the preopen from `JCO_PREOPEN` (default: the repository root;
-the benchmarks want `JCO_PREOPEN=benchmark`).
+Import the shim the output links to through its `node_modules` symlink. A
+second copy of the shim holds its own preopen table, which the program never
+reads.
 
-The shim's browser `cli` is unimplemented, so the playground keeps its own.
+mise tasks:
 
-## Numbers
+```sh
+mise run jco-deps                       # npm install released jco under scripts/jco
+mise run jco-transpile-released foo.wasm [out-dir]
+mise run jco-hello-released             # compile + transpile + run hello on Node
+mise run jco-bench <program.wado> [runs] # compile -f no-wide-arithmetic, transpile, self-time
+```
 
-Node's rate over wasmtime's, best of three on one machine:
+### Released jco status (verified at 1.30.0)
 
-| Benchmark  | Node (jco) / wasmtime |
-| ---------- | --------------------- |
-| mandelbrot | ~0.95×                |
-| sieve      | ~2.3×                 |
+| Capability                | Status                                                                                                                                               |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Transpile (GC component)  | ✅ works, `wasi:http/service` included                                                                                                               |
+| JSPI                      | ✅ native (Node 26 no flag; Node 24 needs the flag)                                                                                                  |
+| Wide-arithmetic component | ❌ `transpile` rejects it (`wide arithmetic support is not enabled`); even if forced, V8 rejects the opcode at runtime → use `-f no-wide-arithmetic` |
+| Stdout via stream         | ✅ jco's own shim delivers it, if the runner holds the event loop open after `run()` resolves                                                        |
+| Filesystem read stream    | ✅ reads through a preopen set with `_setPreopens` (zlib benchmark verified)                                                                         |
 
-## Known Blocker
+## wide-arithmetic (`-f no-wide-arithmetic`)
 
-A reused instance serves a couple of calls, then suspends on a stream read whose
-host injection never runs (`JCO_DEBUG=1` ends at `[StreamEnd#copy()] blocked`).
-`cloudflare-worker/` builds one per request.
+Wado emits the Wasm wide-arithmetic proposal (`i64.mul_wide_u/s`, `i64.add128`,
+`i64.sub128`) for float formatting (`core:prelude/fpfmt.wado`) and `i128`. **No
+V8 implements it** (checked through Node 26; no flag, `--wasm-staging` no help),
+so any component containing those opcodes fails `WebAssembly.compile` with
+`invalid numeric opcode: 0xfc16`.
 
-## Debugging
+`-f no-wide-arithmetic` rewrites each such builtin call, before NIR, to a
+32-bit-limb software form in `core:rt` (`i64_mul_wide_u_soft` and so on;
+`wado-compiler/src/lower/wide_arith.rs`). NIR and WIR then show ordinary calls,
+which the optimizer inlines. **Compile every Node-bound Wado program with this
+flag** — a bare `println` of a float needs it.
 
-- jco's async machinery loses errors: add
-  `process.on('unhandledRejection', e => { console.error(e); process.exit(1); })`.
-- `JCO_DEBUG=1` traces every trampoline; a trailing
-  `[ComponentAsyncState#suspendTask()]` with no progress is a rendezvous
-  deadlock. Run under `timeout 12` so one doesn't wedge.
-- The canonical builtins are `streamWrite()`, `streamRead()`,
-  `_lowerImportBackwardsCompat()` (async lower), `taskReturn()`, and
-  `_genStreamHostInjectFn` / `createReadableStreamEnd` (host-to-guest futures);
-  string-replace a header in the transpiled JS to log one.
-- A bare `unreachable` from a program reading files is a missing preopen or a
-  path outside it. `FutureReadableEnd is not defined` means it was not
-  transpiled through `transpile-released.mjs`.
+## WASI shims
+
+BA ships a `preview3-shim` implementing P3 `cli` / `clocks` / `filesystem` /
+`http`, with a browser build beside the Node one. A plain `jco transpile` wires
+it, and stdout, float formatting, `wasi:random`, `MonotonicClock` and an HTTP
+`handle` all run through it unaided. Its **browser** `cli` is unimplemented
+(`throw new Todo()`), which is why the playground keeps a hand-written one.
+
+A hand-written clock is where precision goes missing: `system-clock.now` is an
+instant carrying sub-second nanoseconds, and `get-resolution` a bare duration.
+
+## Benchmarking on Node
+
+`mise run jco-bench <program.wado> [runs]` compiles with `-f no-wide-arithmetic`,
+transpiles via the released pipeline, and runs the program self-timed `runs`
+times (default 3; keep the best). The benchmark programs already self-time via
+`core:benchmark` + `MonotonicClock` and print their own
+throughput line, so no host timing is needed.
+
+`JCO_PREOPEN` names the host directory granted as the program's `.` (default:
+the repository root). The benchmarks read their data relative to `benchmark/`:
+
+```sh
+mise run jco-bench benchmark/mandelbrot/mandelbrot.wado
+JCO_PREOPEN=benchmark mise run jco-bench benchmark/zlib/zlib_bench.wado
+```
+
+| Benchmark       | Wado on Node (jco) | Wado on wasmtime        |
+| --------------- | ------------------ | ----------------------- |
+| mandelbrot      | ~4.0 M px/s        | ~4.2 M                  |
+| sieve           | ~150 M numbers/s   | ~64 M (V8 ~2.3× faster) |
+| fts             | ~12 M conv/s       | —                       |
+| zlib compress   | ~65 MB/s           | —                       |
+| zlib decompress | ~220 MB/s          | —                       |
+
+Compute throughput on V8 lands within ~5–10% of wasmtime (sieve is much faster
+on V8). Numbers are indicative on a noisy cloud VM; keep best-of-3.
+
+The other filesystem benchmarks (json-{twitter,canada,catalog}, sqlite-parse,
+syntax-highlight, cbor) load their data the same way, outside the timed loop,
+but have not been run on Node yet.
+
+## Known blockers (jco / V8 gaps)
+
+### wide-arithmetic (V8)
+
+Not jco. Handled by `-f no-wide-arithmetic`.
+
+### Reusing an instance (jco)
+
+An instance serves a couple of calls, then the next suspends on a stream read
+whose host injection is never driven (`JCO_DEBUG=1` ends at
+`[StreamEnd#copy()] blocked`). `cloudflare-worker/` builds one per request.
+
+## Debugging jco runtime errors
+
+Transpiled output is one large JS file. Useful canonical-builtin → JS mappings:
+
+| Wasm builtin          | jco JS function                                      | Notes             |
+| --------------------- | ---------------------------------------------------- | ----------------- |
+| `stream.write`        | `streamWrite()`                                      | JSPI Suspending   |
+| `stream.read`         | `streamRead()`                                       | JSPI Suspending   |
+| `canon lower (async)` | `_lowerImportBackwardsCompat()`                      | JSPI Suspending   |
+| `task.return`         | `taskReturn()`                                       |                   |
+| `future.new` (lift)   | `_genStreamHostInjectFn` / `createReadableStreamEnd` | host→guest wiring |
+
+### Techniques
+
+- **Catch swallowed errors** — jco's async machinery loses errors as unhandled
+  rejections:
+
+  ```js
+  process.on('unhandledRejection', e => { console.error('UNHANDLED:', e); process.exit(1); });
+  ```
+- **`JCO_DEBUG=1 node run.mjs`** — verbose trace of every instruction/trampoline.
+  A trailing `[ComponentAsyncState#suspendTask()]` with no progress = a
+  rendezvous deadlock.
+- **Inject logging** by string-replacing a function header in the transpiled JS
+  (e.g. add `console.error(...)` to `streamRead`/`generatedStreamHostInject`).
+- **Timeout hangs**: `timeout 12 node run.mjs` so a deadlock doesn't wedge.
+
+### Common error patterns
+
+| Error                                                | Likely cause                                                                                     |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `invalid numeric opcode: 0xfc16`                     | Wide-arithmetic — recompile with `-f no-wide-arithmetic`                                         |
+| `WebAssembly.Suspending is not a constructor`        | Node < 24, or Node 22 picked up outside the repo (use Node 26)                                   |
+| `FutureReadableEnd is not defined`                   | Future-end classes not injected (run via `transpile-released.mjs`)                               |
+| stdout empty or missing lines                        | The runner exits or empties the event loop before the shim's worker flushes (wait after `run()`) |
+| Bare `unreachable` from a program that reads files   | No preopen set (`_setPreopens`), or a path outside it; the panic message is lost with the exit   |
+| `wide arithmetic support is not enabled` (transpile) | Compile with `-f no-wide-arithmetic`; V8 cannot run the opcodes either                           |
+| Hang / timeout                                       | JSPI Suspending missing on a trampoline, or a stream rendezvous deadlock                         |

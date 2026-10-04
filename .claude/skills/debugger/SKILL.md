@@ -5,46 +5,108 @@ description: Use rust-gdb to inspect variables and step through code without mod
 
 # Debugger
 
-lldb cannot launch under Claude Code Web's ptrace restrictions; use rust-gdb.
+Debug wado compiler with rust-gdb.
 
-## Build
+## Build first
 
-`dev` optimizes the compiler and keeps only line tables, so `info locals` comes
-back empty. The `debugger` profile has full DWARF, no optimization, and its own
-`target/debugger/`:
+`dev` sets `debug = "line-tables-only"` and raises the workspace crates to
+`opt-level = 1`, so `info locals` / `info args` come back empty in every
+compiler frame. Build the `debugger` profile instead — full DWARF, no
+optimization on the crates being stepped through, its own `target/debugger/`
+dir so the `dev` cache stays warm:
 
 ```sh
 cargo build --profile debugger --bin wado
 ```
 
-## Run
+## Usage
 
 ```sh
 cat > /tmp/gdb_commands.txt << 'EOF'
 file ./target/debugger/wado
 set pagination off
-break <file.rs>:<line> if $_streq(<a String local>.data_ptr, "…")
+break wado-compiler/src/codegen.rs:5985
+run compile -o /tmp/out.wasm example/hello.wado
+info locals
+print *expr
+bt 5
+quit
+EOF
+rust-gdb --batch -x /tmp/gdb_commands.txt
+```
+
+## Ask one question per run, not one per build
+
+A breakpoint that fires thousands of times and gets `grep`ed answers one
+question and costs a rebuild for the next. Make the breakpoint itself select:
+
+```
+break wado-compiler/src/wir_build/calls.rs:131 if name.length == 3 && $_memeq(name.data_ptr, "foo", 3)
+break …/func_inst.rs:2052
 commands
 silent
 bt 6
-print <a local>
 continue
 end
-run compile -o /tmp/out.wasm example/hello.wado
-quit
-EOF
+```
+
+`bt` at a conditional hit gives the origin outright — the thing print
+debugging cannot produce without guessing where to put the next `eprintln!`.
+
+## Printing Rust values
+
+`printf "%s", s` fails on a Rust `String` (it is a struct, not a `char*`) and
+aborts the whole command file with `Value can't be converted to integer`. Use
+`print`, which rust-gdb's pretty printers handle:
+
+```
+print fq              # "core:prelude/string.wado/String^Eq::eq"
+print *expr
+print info.struct_name
+```
+
+To compare a `&str` `s` inside a breakpoint condition, check its length and its
+bytes: `s.length == 3 && $_memeq(s.data_ptr, "lit", 3)`. `$_streq` reads up to
+a NUL, which a Rust string slice does not end with, so it misses a match.
+
+## Batch runs
+
+`rust-gdb --batch` exits on the first command error, so a typo in a `commands`
+block silently truncates the rest of the run — check the tail of the output for
+`Error in sourced command file` before trusting an empty result. Redirect to a
+file and grep it; the DWO-loading noise otherwise buries the hits:
+
+```sh
 rust-gdb --batch -x /tmp/gdb_commands.txt > /tmp/gdb.log 2>&1
 grep -a '^\$[0-9]* = ' /tmp/gdb.log | sort -u
 ```
 
-- Fill in a line and locals that exist there; gdb names a missing symbol and
-  prints nothing else.
-- Make the breakpoint select with a condition, so one run answers the question
-  and `bt` names the origin.
-- Print a Rust `String` with `print`; `printf "%s"` aborts the command file.
-  Compare one with `$_streq(s->data_ptr, "lit")`.
-- `--batch` stops at the first command error. Check the log for
-  `Error in sourced command file` before trusting an empty result.
+## When a guard beats a breakpoint
 
-To find every place an invariant breaks, an `assert!` enumerates them in one
-run; gdb is for the values behind one that fired.
+The debugger answers "what is this value here". When the question is "where
+else does this invariant break", an assertion at the point the invariant must
+hold enumerates every violation in one run and keeps doing so afterwards —
+the same reason a newtype that makes an illegal name unconstructible beats
+chasing one miscompile at a time. Reach for `debug_assert!` / `assert!` in the
+merge or registration step first, and for gdb once it fires and you need the
+values behind it.
+
+## Common commands
+
+| Command       | Description                   |
+| ------------- | ----------------------------- |
+| `info locals` | Show local variables          |
+| `info args`   | Show function arguments       |
+| `print *expr` | Dereference and print pointer |
+| `bt 5`        | Backtrace (top 5 frames)      |
+| `continue`    | Resume execution              |
+
+## Notes
+
+lldb does not work in Claude Code Web due to ptrace restrictions:
+
+```
+error: Cannot launch '...': personality get failed: Invalid argument
+```
+
+Use rust-gdb instead.

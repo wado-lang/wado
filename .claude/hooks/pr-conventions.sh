@@ -11,7 +11,8 @@
 #
 # An invalid title is denied with the conventions; a valid title is allowed and
 # the conventions are injected as a reminder. If the skill file is missing the
-# hook fails open (allows) rather than blocking all PR creation.
+# hook allows. If the file is there but its `## Title` section lists no types,
+# the hook denies: the list's format changed under this parser.
 
 set -euo pipefail
 
@@ -34,9 +35,10 @@ allow() {
 # Conventions surfaced to the model = the skill body (frontmatter stripped).
 conventions=$(awk '/^---$/{c++; next} c>=2' "$skill")
 
-# Allowed Conventional Commits types, derived from the skill's title list
-# (e.g. "- \`feat\`: ..." / "- \`feat!\`: ..." -> feat).
-types=$(sed -nE 's/^- `([a-z]+)!?`.*/\1/p' "$skill" | sort -u | paste -sd'|' -)
+# Allowed Conventional Commits types: the "- \`feat\`" bullets of the skill's
+# `## Title` section only, so a bullet elsewhere never becomes a type.
+types=$(awk '/^## /{in_title=($0 == "## Title"); next} in_title' "$skill" \
+    | sed -nE 's/^- `([a-z]+)!?`.*/\1/p' | sort -u | paste -sd'|' -)
 
 deny() {
     jq -nc --arg r "$1" \
