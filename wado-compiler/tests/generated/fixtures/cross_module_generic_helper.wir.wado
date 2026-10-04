@@ -55,15 +55,15 @@ fn "cross_module_generic_helper.wado/$cm_binding__Stdout_write_via_stream"(data)
 
 fn "cross_module_generic_helper.wado/$cm_export__run"() {
     let packed: i64;
-    let rx_28: i32;
-    let tx_29: i32;
-    rx_28 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_29 = builtin::i32_wrap_i64(packed >> 32_i64);
-    rx_28 = "cross_module_generic_helper.wado/$cm_binding__Stdout_write_via_stream"(rx_28);
+    let rx_36: i32;
+    let tx_37: i32;
+    rx_36 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_37 = builtin::i32_wrap_i64(packed >> 32_i64);
+    rx_36 = "cross_module_generic_helper.wado/$cm_binding__Stdout_write_via_stream"(rx_36);
     let $mv_field_2: ref Array<u8>;
     $mv_field_2 = array.new_data<u8>("identity(100) = 100");
-    "core:rt/write_string_to_stream"(tx_29, $mv_field_2, 19);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_28);
+    "core:rt/write_string_to_stream"(tx_37, $mv_field_2, 19);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_36);
     "wasi/task-return"(0);
 }
 

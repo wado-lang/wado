@@ -65,47 +65,47 @@ global global:newtype_eq_impl_survives_relowering.wado::$const_obj_1: ref "core:
 
 fn "newtype_eq_impl_survives_relowering.wado/run"() with Stdout {
     let $local_2: ref "core:prelude/string.wado//String";
-    let new_used_28: i32;
-    let start_29: i32;
+    let new_used_30: i32;
+    let start_31: i32;
     let packed: i64;
-    let $sroa_$f_buf_83: ref "core:prelude/string.wado//String";
-    $sroa_$f_buf_83 = local.tee $local_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 });
+    let $sroa_$f_buf_85: ref "core:prelude/string.wado//String";
+    $sroa_$f_buf_85 = local.tee $local_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 });
     let $arg_spill_1: ref "core:prelude/string.wado//String";
-    $arg_spill_1 = $sroa_$f_buf_83;
+    $arg_spill_1 = $sroa_$f_buf_85;
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:newtype_eq_impl_survives_relowering.wado::$const_obj_1;
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($arg_spill_1, $mv_arg_2.repr, $mv_arg_2.used);
-    if @unlikely(local.tee new_used_28($local_2.used + 1) > builtin::array_len($local_2.repr)) {
+    if @unlikely(local.tee new_used_30($local_2.used + 1) > builtin::array_len($local_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_28);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_30);
     }
-    start_29 = $local_2.used;
-    $local_2.used = new_used_28;
-    builtin::array_copy<u8>($local_2.repr, start_29, global:newtype_eq_impl_survives_relowering.wado::$const_obj_0, 0, 1);
-    $mv_arg_2 = local.tee $sroa_$f_buf_83($local_2);
+    start_31 = $local_2.used;
+    $local_2.used = new_used_30;
+    builtin::array_copy<u8>($local_2.repr, start_31, global:newtype_eq_impl_survives_relowering.wado::$const_obj_0, 0, 1);
+    $mv_arg_2 = local.tee $sroa_$f_buf_85($local_2);
     $arg_spill_1 = global:newtype_eq_impl_survives_relowering.wado::$const_obj_1;
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($mv_arg_2, $arg_spill_1.repr, $arg_spill_1.used);
-    if @unlikely(local.tee start_29($local_2.used + 1) > builtin::array_len($local_2.repr)) {
+    if @unlikely(local.tee start_31($local_2.used + 1) > builtin::array_len($local_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_29);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_31);
     }
-    new_used_28 = $local_2.used;
-    $local_2.used = start_29;
-    builtin::array_copy<u8>($local_2.repr, new_used_28, global:newtype_eq_impl_survives_relowering.wado::$const_obj_0, 0, 1);
-    $sroa_$f_buf_83 = $local_2;
-    new_used_28 = black_box(1);
-    start_29 = black_box(2);
-    $arg_spill_1 = (if new_used_28 == start_29 -> ref "core:prelude/string.wado//String" {
+    new_used_30 = $local_2.used;
+    $local_2.used = start_31;
+    builtin::array_copy<u8>($local_2.repr, new_used_30, global:newtype_eq_impl_survives_relowering.wado::$const_obj_0, 0, 1);
+    $sroa_$f_buf_85 = $local_2;
+    new_used_30 = black_box(1);
+    start_31 = black_box(2);
+    $arg_spill_1 = (if new_used_30 == start_31 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
     });
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_83, $arg_spill_1.repr, $arg_spill_1.used);
-    start_29 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    new_used_28 = builtin::i32_wrap_i64(packed >> 32_i64);
-    start_29 = "newtype_eq_impl_survives_relowering.wado/$cm_binding__Stdout_write_via_stream"(start_29);
-    "core:rt/write_string_to_stream"(new_used_28, $local_2.repr, $local_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_29);
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_85, $arg_spill_1.repr, $arg_spill_1.used);
+    start_31 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    new_used_30 = builtin::i32_wrap_i64(packed >> 32_i64);
+    start_31 = "newtype_eq_impl_survives_relowering.wado/$cm_binding__Stdout_write_via_stream"(start_31);
+    "core:rt/write_string_to_stream"(new_used_30, $local_2.repr, $local_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_31);
 }
 
 fn "newtype_eq_impl_survives_relowering.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

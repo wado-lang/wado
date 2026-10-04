@@ -56,33 +56,33 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:struct_import_collision.wado::$const_obj_1: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 116, 104, 101, 114, 32, 112, 114, 111, 100, 117, 99, 116, 58, 32, 52, 48), used: 17 };
-global global:struct_import_collision.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 116, 104, 101, 114, 32, 115, 117, 109, 58, 32, 49, 52), used: 13 };
-global global:struct_import_collision.wado::$const_obj_3: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(108, 111, 99, 97, 108, 32, 116, 111, 116, 97, 108, 58, 32, 54), used: 14 };
+global global:struct_import_collision.wado::$const_obj_3: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 116, 104, 101, 114, 32, 112, 114, 111, 100, 117, 99, 116, 58, 32, 52, 48), used: 17 };
+global global:struct_import_collision.wado::$const_obj_4: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 116, 104, 101, 114, 32, 115, 117, 109, 58, 32, 49, 52), used: 13 };
+global global:struct_import_collision.wado::$const_obj_5: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(108, 111, 99, 97, 108, 32, 116, 111, 116, 97, 108, 58, 32, 54), used: 14 };
 
 fn "struct_import_collision.wado/run"() with Stdout {
-    let packed_33: i64;
-    let rx_34: i32;
-    let tx_35: i32;
-    rx_34 = builtin::i32_wrap_i64(local.tee packed_33("wasi/stream-new"()));
-    tx_35 = builtin::i32_wrap_i64(packed_33 >> 32_i64);
-    rx_34 = "struct_import_collision.wado/$cm_binding__Stdout_write_via_stream"(rx_34);
+    let packed_41: i64;
+    let rx_42: i32;
+    let tx_43: i32;
+    rx_42 = builtin::i32_wrap_i64(local.tee packed_41("wasi/stream-new"()));
+    tx_43 = builtin::i32_wrap_i64(packed_41 >> 32_i64);
+    rx_42 = "struct_import_collision.wado/$cm_binding__Stdout_write_via_stream"(rx_42);
     let $mv_arg_2: ref "core:prelude/string.wado//String";
+    $mv_arg_2 = global:struct_import_collision.wado::$const_obj_5;
+    "core:rt/write_string_to_stream"(tx_43, $mv_arg_2.repr, $mv_arg_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_42);
+    rx_42 = builtin::i32_wrap_i64(local.tee packed_41("wasi/stream-new"()));
+    tx_43 = builtin::i32_wrap_i64(packed_41 >> 32_i64);
+    rx_42 = "struct_import_collision.wado/$cm_binding__Stdout_write_via_stream"(rx_42);
+    $mv_arg_2 = global:struct_import_collision.wado::$const_obj_4;
+    "core:rt/write_string_to_stream"(tx_43, $mv_arg_2.repr, $mv_arg_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_42);
+    rx_42 = builtin::i32_wrap_i64(local.tee packed_41("wasi/stream-new"()));
+    tx_43 = builtin::i32_wrap_i64(packed_41 >> 32_i64);
+    rx_42 = "struct_import_collision.wado/$cm_binding__Stdout_write_via_stream"(rx_42);
     $mv_arg_2 = global:struct_import_collision.wado::$const_obj_3;
-    "core:rt/write_string_to_stream"(tx_35, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_34);
-    rx_34 = builtin::i32_wrap_i64(local.tee packed_33("wasi/stream-new"()));
-    tx_35 = builtin::i32_wrap_i64(packed_33 >> 32_i64);
-    rx_34 = "struct_import_collision.wado/$cm_binding__Stdout_write_via_stream"(rx_34);
-    $mv_arg_2 = global:struct_import_collision.wado::$const_obj_2;
-    "core:rt/write_string_to_stream"(tx_35, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_34);
-    rx_34 = builtin::i32_wrap_i64(local.tee packed_33("wasi/stream-new"()));
-    tx_35 = builtin::i32_wrap_i64(packed_33 >> 32_i64);
-    rx_34 = "struct_import_collision.wado/$cm_binding__Stdout_write_via_stream"(rx_34);
-    $mv_arg_2 = global:struct_import_collision.wado::$const_obj_1;
-    "core:rt/write_string_to_stream"(tx_35, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_34);
+    "core:rt/write_string_to_stream"(tx_43, $mv_arg_2.repr, $mv_arg_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_42);
 }
 
 fn "struct_import_collision.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
