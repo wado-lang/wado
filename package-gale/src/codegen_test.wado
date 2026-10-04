@@ -444,7 +444,7 @@ Y : 'Y' ;
 ";
     let output = gen_source(input);
     let e = extract_fn_body(&output, "fn _parse_e__inner(");
-    assert e.contains("while !p.recovering && ("), e;
+    assert e.contains("while !p.recovering && _kind_set_0(p.peek_kind())"), e;
     assert e.contains("p.take();"), `the loop guard proved the operator\n${e}`;
     assert !e.contains("sync_alts"), `the loop guard proved the operator\n${e}`;
     let fs = extract_fn_body(&output, "fn _parse_fs__inner(");
@@ -980,7 +980,7 @@ WS : (' '|'\\n') -> skip ;
 ";
     let output = gen_source(input);
     let body = extract_fn_body(&output, "fn _parse_b__inner(");
-    assert body.contains("while !p.recovering && (_kind_set_0(p.peek_kind()))"), body;
+    assert body.contains("while !p.recovering && _kind_set_0(p.peek_kind())"), body;
     assert body.contains("p.take();"), body;
     assert !body.contains("expect_set"), body;
 }
@@ -1422,7 +1422,7 @@ test "non-LR ATN grammar carries prediction without the LR tables" {
     let output = gen_source(AT_END_CONFLICT_G4);
     assert output.contains("global ATN_SIM: AtnSim = atn_decode(&b\"");
     assert !output.contains("atn_with_lr_tables");
-    assert output.contains("pub fn atn_predict_with_stack(");
+    assert output.contains("internal fn atn_predict_with_stack(");
     assert !output.contains("fn atn_lr_loop_decision(");
 }
 
@@ -1436,8 +1436,8 @@ WS : ' ' -> skip ;
 
 test "a lexer-ATN-only grammar carries the decoder and no parser simulator" {
     let output = gen_source(LATN_ONLY_G4);
-    assert output.contains("pub fn latn_match(");
-    assert output.contains("pub fn atn_decode(");
+    assert output.contains("internal fn latn_match(");
+    assert output.contains("internal fn atn_decode(");
     assert !output.contains("fn atn_predict_with_stack(");
     assert !output.contains("struct CtxArena");
     assert !output.contains("fn atn_lr_loop_decision(");
@@ -1460,7 +1460,7 @@ WS : ' ' -> skip ;
 test "ATN-class LR grammar keeps the decoder's LR tables" {
     let output = gen_source(LR_WILDCARD_CODEGEN_G4);
     assert output.contains("global ATN_SIM: AtnSim = atn_with_lr_tables(atn_decode(&b\"");
-    assert output.contains("pub fn atn_lr_loop_decision(");
+    assert output.contains("internal fn atn_lr_loop_decision(");
 }
 
 // TypeScript's `typeParameter` shape: every first token of `id` leads to the same
@@ -2834,7 +2834,7 @@ WS : [ \\t\\r\\n]+ -> skip ;
 ");
     assert out.contains("let _sd_p_0 = "), `the grammar must reach a tournament: ${out}`;
     assert !out.contains("else { -1 }"), `the gate is tested twice: ${out}`;
-    assert out.contains("if !((gate.no_struct == 0)) { return -1; }"), `the candidate scan tests the gate: ${out}`;
+    assert out.contains("if !(gate.no_struct == 0) { return -1; }"), `the candidate scan tests the gate: ${out}`;
 }
 
 test "a single-token rule with a gated alternative keeps the gate in its scan" {

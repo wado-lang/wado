@@ -3813,7 +3813,7 @@ fn gen_char_class<S: AsStrSlice>(w: &mut CodeWriter, cc: &CharClass, fail_action
     if cc.negated {
         w.line(`if ${cond} { ${fail_action}; }`);
     } else {
-        w.line(`if !(${cond}) { ${fail_action}; }`);
+        w.line(`if !${cond} { ${fail_action}; }`);
     }
     w.line("pos += 1;");
 }
@@ -3823,10 +3823,10 @@ fn gen_char_class<S: AsStrSlice>(w: &mut CodeWriter, cc: &CharClass, fail_action
 global SHARED_CHAR_SET_MIN_RANGES: i32 = 16;
 
 /// `(chars[pos] matches { 'x' | 'lo'..='hi' | ... })` for a char class, or a
-/// call to the shared function testing a large one.
+/// call to the shared function testing a large one: an operand `!` applies to.
 fn char_class_disjunction(w: &mut CodeWriter, cc: &CharClass) -> String {
     if cc.ranges.len() == 0 {
-        return "(false)";
+        return "false";
     }
     let pattern = || cc.ranges.iter_ref().map(|r| char_pat(r.start, r.end)).collect().join(" | ");
     if cc.ranges.len() <= SHARED_CHAR_SET_MIN_RANGES {
@@ -3855,41 +3855,78 @@ fn gen_lexer_repeat<S: AsStrSlice>(
     let id = w.next_id();
     let label = if rep.kind matches { Optional } { `opt_${id}` } else { `rep_${id}` };
     let break_label = `break ${label}`;
+    // An iteration that fails before it moves the cursor leaves nothing to undo.
+    let rewinds = replay || !lexer_elem_fails_in_place(&rep.element, inner);
     if let Star = rep.kind {
-        w.begin("loop");
-        w.line(`let rep_saved_${id} = pos;`);
-        w.begin(`${label}:`);
-        gen_lexer_repeat_iteration(w, rep, inner, all_rules, &break_label, ci, ea, hm, replay, id);
-        w.line("continue;");
-        w.end();
-        w.line(`pos = rep_saved_${id};`);
-        w.line("break;");
-        w.end();
+        gen_lexer_repeat_loop(w, rep, inner, all_rules, &label, rewinds, ci, ea, hm, replay, id, id);
     }
     if let Plus = rep.kind {
         gen_lexer_repeat_iteration(w, rep, inner, all_rules, fail_action, ci, ea, hm, replay, id);
         // The loop's own probe names, minted rather than derived: two iterations
         // in one fn must not share a `rep_probe_`.
         let loop_id = w.next_id();
-        w.begin("loop");
-        w.line(`let rep_saved_${id} = pos;`);
-        w.begin(`${label}:`);
-        gen_lexer_repeat_iteration(w, rep, inner, all_rules, &break_label, ci, ea, hm, replay, loop_id);
-        w.line("continue;");
-        w.end();
-        w.line(`pos = rep_saved_${id};`);
-        w.line("break;");
-        w.end();
+        gen_lexer_repeat_loop(w, rep, inner, all_rules, &label, rewinds, ci, ea, hm, replay, id, loop_id);
     }
     if let Optional = rep.kind {
-        w.line(`let opt_saved_${id} = pos;`);
-        w.line(`let mut opt_ok_${id} = false;`);
+        if rewinds {
+            w.line(`let opt_saved_${id} = pos;`);
+            w.line(`let mut opt_ok_${id} = false;`);
+        }
         w.begin(`${label}:`);
         gen_lexer_repeat_iteration(w, rep, inner, all_rules, &break_label, ci, ea, hm, replay, id);
-        w.line(`opt_ok_${id} = true;`);
+        if rewinds {
+            w.line(`opt_ok_${id} = true;`);
+        }
         w.end();
-        w.line(`if !opt_ok_${id} { pos = opt_saved_${id}; }`);
+        if rewinds {
+            w.line(`if !opt_ok_${id} { pos = opt_saved_${id}; }`);
+        }
     }
+}
+
+/// The greedy loop of a `*` or `+`: iterate until an iteration fails, then
+/// rewind what the failed iteration consumed when `rewinds`.
+fn gen_lexer_repeat_loop(
+    w: &mut CodeWriter,
+    rep: &LexerRepeatElement,
+    inner: &LexerElemPlan,
+    all_rules: &List<LexerRule>,
+    label: &String,
+    rewinds: bool,
+    ci: bool,
+    ea: bool,
+    hm: bool,
+    replay: bool,
+    id: i32,
+    iteration_id: i32,
+) {
+    w.begin("loop");
+    if rewinds {
+        w.line(`let rep_saved_${id} = pos;`);
+    }
+    w.begin(`${*label}:`);
+    gen_lexer_repeat_iteration(w, rep, inner, all_rules, `break ${*label}`, ci, ea, hm, replay, iteration_id);
+    w.line("continue;");
+    w.end();
+    if rewinds {
+        w.line(`pos = rep_saved_${id};`);
+    }
+    w.line("break;");
+    w.end();
+}
+
+/// Whether `elem`, emitted under `plan`, tests the char at the cursor and fails
+/// before it moves the cursor: a single-char literal, a class or range, or `.`.
+fn lexer_elem_fails_in_place(elem: &LexerElement, plan: &LexerElemPlan) -> bool {
+    return match plan {
+        CharSet(_) => true,
+        Leaf => match *elem {
+            Literal(text) => text.chars().count() == 1,
+            CharRange(_) | CharClass(_) | AnyChar => true,
+            RuleRef(_) | Group(_) | Repeat(_) | Not(_) => false,
+        },
+        Body(_) | Not(_) | Call(_) => false,
+    };
 }
 
 /// One iteration of a repeat: the inner element, and on the replay path a
@@ -4746,13 +4783,14 @@ fn gen_literal_match_fns(w: &mut CodeWriter, lit_tokens: &List<LitToken>, ci: bo
         if hm {
             w.line("let chars = &lx.chars;");
         }
-        w.line("let pos = start;");
-        for let mut i = 0; i < chars.len(); i += 1 {
-            let mismatch = gen_char_mismatch(`chars[pos + ${i}]`, chars[i], ci);
-            w.line(`if pos + ${i} >= chars.len() || ${mismatch} { return -1; }`);
-        }
         let len = chars.len();
-        w.line(`return pos + ${len};`);
+        let mut mismatches: List<String> = [];
+        for let mut i = 0; i < len; i += 1 {
+            let at = if i == 0 { String::from("start") } else { `start + ${i}` };
+            mismatches.push(gen_char_mismatch(`chars[${at}]`, chars[i], ci));
+        }
+        w.line(`if start + ${len} > chars.len() || ${mismatches.join(" || ")} { return -1; }`);
+        w.line(`return start + ${len};`);
         w.end();
         w.blank();
     }

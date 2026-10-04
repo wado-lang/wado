@@ -1,0 +1,30 @@
+use { negate_cond, and_operand } from "./gen_util.wado";
+
+test "negating an operand prefixes it, and negating a negation strips it" {
+    assert negate_cond("p.recovering") == "!p.recovering";
+    assert negate_cond("_kind_set_3(p.peek_kind())") == "!_kind_set_3(p.peek_kind())";
+    assert negate_cond("(chars[pos] matches { 'a' | 'b' })") == "!(chars[pos] matches { 'a' | 'b' })";
+    assert negate_cond("!pred_5(p)") == "pred_5(p)";
+    assert negate_cond("List::<i32>::new().is_empty()") == "!List::<i32>::new().is_empty()";
+}
+
+test "negating an equality flips it" {
+    assert negate_cond("k == TK_POUND") == "k != TK_POUND";
+    assert negate_cond("tokens[pos] != TK_A") == "tokens[pos] == TK_A";
+    assert negate_cond("f(a, b) == g(c > d)") == "f(a, b) != g(c > d)";
+}
+
+test "negating anything else parenthesizes it" {
+    assert negate_cond("a || b") == "!(a || b)";
+    assert negate_cond("a == b && c") == "!(a == b && c)";
+    assert negate_cond("x matches { A | B }") == "!(x matches { A | B })";
+    assert negate_cond("s == \" == \"") == "s != \" == \"";
+    assert negate_cond("c == ' '") == "c != ' '";
+}
+
+test "an && operand is parenthesized only for a top-level ||" {
+    assert and_operand("a || b") == "(a || b)";
+    assert and_operand("a && b") == "a && b";
+    assert and_operand("f(a || b)") == "f(a || b)";
+    assert and_operand("x matches { A | B }") == "x matches { A | B }";
+}
