@@ -42,9 +42,9 @@ use crate::elaborator::types::{RequiredTrait, StructFieldInfo, VariantInfo};
 use crate::name::FqTraitName;
 use crate::resolve::{Resolution, Resolutions};
 use crate::synthesis::template::{
-    comparison_written_alone, eq_from_written_cmp, written_impl_reaches,
+    PairedEq, comparison_written_alone, eq_from_written_cmp, written_impl_reaches,
 };
-use crate::tir::{SlotProjections, TemplateId, TraitRef};
+use crate::tir::{SlotProjections, TraitRef};
 
 /// Proof that a bound was asked and answered no. Its field is private here, so
 /// [`TypeError::TraitBoundNotSatisfied`] can be raised from nowhere else.
@@ -3254,9 +3254,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow_mut()
             .intern(ResolvedType::Ref(lookup_type_id));
-        // The `eq` a written `cmp` gives is emitted into that `cmp`'s block and
-        // dispatched as the block's own method; any other derived impl names
-        // no block.
+        // The `eq` a written `cmp` gives is dispatched as its block's own
+        // method; any other derived impl names no block.
         let paired = eq_from_written_cmp(
             &self.tysys.trait_env,
             trait_,
@@ -3264,19 +3263,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &self.tysys.type_table.borrow(),
         );
         let (method_def, impl_def, receiver) = match paired {
-            Some(TemplateId::Declared {
-                def,
-                block: Some(block),
-            }) => {
+            Some(PairedEq { eq, block }) => {
                 let header = &self.tysys.trait_env.impl_headers[&block];
                 (
-                    Some(def),
+                    Some(eq),
                     Some(block),
                     self.impl_receiver(header, lookup_type_id),
                 )
             }
             None => (None, None, self.tysys.fq_receiver_head(lookup_type_id)),
-            Some(other) => unreachable!("an `eq` from `cmp` is emitted into a block: {other:?}"),
         };
         Some(ResolvedTraitMethod {
             method_def,
@@ -3312,9 +3307,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .compiler_trait_def(item)
             .expect("a compiler trait item names a declaration");
-        // As in `resolve_trait_method_for_op`: the `eq` a written `cmp` gives
-        // is that `cmp`'s block's own method, on the link of the chain writing
-        // it. Any other derived impl is off every block.
+        // As in `resolve_trait_method_for_op`, on the link of the chain
+        // writing the `cmp`.
         let paired = self
             .tysys
             .impl_link(base_type_id, trait_decl)
@@ -3333,25 +3327,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             impl_module_source,
             impl_struct_fq,
         ) = match paired {
-            Some((
-                link,
-                TemplateId::Declared {
-                    def,
-                    block: Some(block),
-                },
-            )) => {
+            Some((link, PairedEq { eq, block })) => {
                 let header = &self.tysys.trait_env.impl_headers[&block];
                 (
                     link,
-                    Some(def),
+                    Some(eq),
                     Some(block),
                     self.tysys.impl_is_concrete_instantiation(&header.ty),
                     header.module.clone(),
                     self.impl_receiver(header, link),
                 )
-            }
-            Some((_, other)) => {
-                unreachable!("an `eq` from `cmp` is emitted into a block: {other:?}")
             }
             None => {
                 // A newtype has no derivation of its own: the one its

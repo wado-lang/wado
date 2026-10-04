@@ -1,7 +1,7 @@
 //! Derivation as impl generation: a declaration whose members all satisfy a
 //! structural trait contributes `impl<Pi: Tr, …> Tr for D<P1..Pn>`.
 
-use super::holds::{at_defaults, holds};
+use super::holds::{at_defaults, at_self, holds};
 use super::program::ParamBound;
 use super::program::{
     Declaration, Env, ImplDef, ImplId, ImplOrigin, ParamDef, Program, SolverType, TraitDeclId,
@@ -69,7 +69,7 @@ pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declar
 
 /// Whether `def` reaches every instance of its target's head: the target names
 /// a declaration over distinct parameters.
-pub fn covers_every_instance(def: &ImplDef) -> bool {
+fn covers_every_instance(def: &ImplDef) -> bool {
     let SolverType::Decl(_, args) = &def.target else {
         return false;
     };
@@ -91,12 +91,7 @@ pub fn pair_comparisons(program: &mut Program, eq: TraitDeclId, ord: TraitDeclId
         program
             .impls
             .values()
-            .filter(|def| {
-                def.trait_ == Some(trait_)
-                    && def.origin == ImplOrigin::Written
-                    && at_defaults(program, def)
-                    && matches!(def.target, SolverType::Decl(..))
-            })
+            .filter(|def| at_self(program, def, trait_, &[ImplOrigin::Written]))
             .cloned()
             .collect()
     };

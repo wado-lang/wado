@@ -325,12 +325,23 @@ fn reached_by(
 ) -> bool {
     !origins.is_empty()
         && program.impls.values().any(|def| {
-            def.trait_ == Some(trait_)
-                && origins.contains(&def.origin)
-                && at_defaults(program, def)
-                && matches!(def.target, SolverType::Decl(..))
+            at_self(program, def, trait_, origins)
                 && match_target(&def.target, ty, &mut vec![None; def.params.len()])
         })
+}
+
+/// Whether `def` is an impl of `trait_` at its defaults from one of `origins`,
+/// targeting a declaration.
+pub(super) fn at_self(
+    program: &Program,
+    def: &ImplDef,
+    trait_: TraitDeclId,
+    origins: &[ImplOrigin],
+) -> bool {
+    def.trait_ == Some(trait_)
+        && origins.contains(&def.origin)
+        && at_defaults(program, def)
+        && matches!(def.target, SolverType::Decl(..))
 }
 
 /// Whether `ty` has no `trait_`, whatever answers it: a withholding impl

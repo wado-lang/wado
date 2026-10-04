@@ -1086,8 +1086,8 @@ pub(crate) fn trait_method_template(
     {
         return Some(template);
     }
-    if let Some(template) = eq_from_written_cmp(trait_env, trait_, receiver, tt) {
-        return Some(template);
+    if let Some(paired) = eq_from_written_cmp(trait_env, trait_, receiver, tt) {
+        return Some(paired.template());
     }
     let resolved = tt.get(receiver);
     let blanket = match resolved {
@@ -1230,16 +1230,28 @@ pub(crate) fn comparison_written_alone(
     }
 }
 
+/// The trait's `eq` emitted into the block of a `cmp` written alone.
+#[derive(Clone, Copy)]
+pub(crate) struct PairedEq {
+    pub(crate) eq: DefId,
+    pub(crate) block: DefId,
+}
+
+impl PairedEq {
+    pub(crate) fn template(self) -> TemplateId {
+        TemplateId::in_block(self.eq, self.block)
+    }
+}
+
 /// The `eq` that a `cmp` written alone gives `instance`, when `trait_` is
-/// `Eq`: the trait's `eq` emitted into that `cmp`'s block. It is the
-/// instance's own, as a written one would be, so a newtype answers `==` with
-/// it rather than with its base's.
+/// `Eq`. It is the instance's own, as a written one would be, so a newtype
+/// answers `==` with it rather than with its base's.
 pub(crate) fn eq_from_written_cmp(
     trait_env: &TraitEnv,
     trait_: DefId,
     instance: TypeId,
     tt: &TypeTable,
-) -> Option<TemplateId> {
+) -> Option<PairedEq> {
     if tt.compiler_items().trait_def(CompilerItem::Eq) != Some(trait_) {
         return None;
     }
@@ -1249,7 +1261,7 @@ pub(crate) fn eq_from_written_cmp(
     let eq = trait_env
         .trait_method_decl(trait_, "eq")
         .expect("`Eq` declares `eq`");
-    Some(TemplateId::in_block(eq, block))
+    Some(PairedEq { eq, block })
 }
 
 /// Whether `type_id` is one of the five reflection kinds, i.e. whether a
