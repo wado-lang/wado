@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use { Span, TokenStream, line_starts, line_col_at, push_chars_escaped } from "./lex.wado";
 
 pub enum Severity {
@@ -54,7 +56,7 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
-    pub fn error<S: AsStrSlice>(
+    internal fn error<S: AsStrSlice>(
         code: DiagnosticCode,
         message: S,
         span: Span,
@@ -107,7 +109,7 @@ fn lex_error_at(tokens: &TokenStream, i: i32) -> Diagnostic {
     );
 }
 
-pub fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagnostic>, max_errors: i32) {
+internal fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagnostic>, max_errors: i32) {
     let mut merged: List<Diagnostic> = [];
     for let mut i = 0; i < tokens.len(); i += 1 {
         if tokens.is_lex_error(i) {
@@ -120,7 +122,7 @@ pub fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagnostic>
     *diagnostics = merged;
 }
 
-pub fn resolve_positions(diagnostics: &mut List<Diagnostic>, chars: &List<char>) {
+internal fn resolve_positions(diagnostics: &mut List<Diagnostic>, chars: &List<char>) {
     if diagnostics.is_empty() {
         return;
     }

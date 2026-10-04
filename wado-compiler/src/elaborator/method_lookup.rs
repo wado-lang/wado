@@ -2243,7 +2243,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return Some(Ordered::One(Some(*def)));
         }
-        let bridge = self.tysys.solver.as_ref()?;
+        let bridge = self.tysys.solver.as_ref()?.borrow();
         let required = match required_trait.map(|r| r.decl) {
             Some(Resolution::Def(def)) => Some(def),
             // A qualified trait that resolved to nothing is already reported.

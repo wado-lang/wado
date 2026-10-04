@@ -991,14 +991,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (mangled, base, type_arg_names, Some(type_args))
             }
             // Named by its declaring module: a bare head names no definition,
-            // and re-resolution would peel past the impl to the base.
+            // and re-resolution would peel past the impl to the base. A block
+            // written at one instantiation is named at it, as a struct's is.
             ResolvedType::Newtype { def, .. } if matched_impl_decl == Some(def) => {
-                let base = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .fq_base_type_name(method_impl_type_id);
-                (base.clone(), base, vec![], None)
+                let tt = self.tysys.type_table.borrow();
+                let base = tt.fq_base_type_name(method_impl_type_id);
+                let name = if from_concrete_impl {
+                    tt.fq_type_name(method_impl_type_id)
+                } else {
+                    base.clone()
+                };
+                (name, base, vec![], None)
             }
             // The newtype's own arguments, not the base's: a base may re-shape
             // them, and the `impl` header names the newtype.

@@ -1,7 +1,7 @@
 //! Trait query functions: checking trait implementations, bounds validation,
 //! and associated type resolution.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 
 use crate::hashmap::IndexMap;
 
@@ -41,9 +41,17 @@ use crate::elaborator::trait_env::{
 use crate::elaborator::types::{RequiredTrait, StructFieldInfo, VariantInfo};
 use crate::name::FqTraitName;
 use crate::resolve::{Resolution, Resolutions};
+<<<<<<< HEAD
 use crate::synthesis::template::{comparison_written_alone, written_impl_reaches};
 use crate::tir::{AssocTypeSig, ProjectionAnswer, SlotProjections, TraitRef};
 use crate::unparse::unparse_generic_params_into;
+||||||| 21cd413f524
+use crate::synthesis::template::{comparison_written_alone, written_impl_reaches};
+use crate::tir::{SlotProjections, TraitRef};
+=======
+use crate::synthesis::template::{PairedEq, eq_from_written_cmp, written_impl_reaches};
+use crate::tir::{SlotProjections, TraitRef};
+>>>>>>> origin/main
 
 /// Proof that a bound was asked and answered no. Its field is private here, so
 /// [`TypeError::TraitBoundNotSatisfied`] can be raised from nowhere else.
@@ -123,10 +131,6 @@ impl OnBoundTrait {
             _ => return None,
         };
         Some(found)
-    }
-
-    pub(super) fn is_serde(self) -> bool {
-        matches!(self, Self::Serialize | Self::Deserialize)
     }
 
     /// Holds for every type, so the bound is satisfied before any body exists.
@@ -247,22 +251,6 @@ impl<'s> OpenQuestion<'s> {
 impl Drop for OpenQuestion<'_> {
     fn drop(&mut self) {
         self.0.borrow_mut().pop();
-    }
-}
-
-/// A member edge crossed on the way to a bound question, uncrossed when dropped.
-struct MemberEdge<'s>(&'s Cell<u32>);
-
-impl<'s> MemberEdge<'s> {
-    fn cross(edges: &'s Cell<u32>) -> Self {
-        edges.set(edges.get() + 1);
-        Self(edges)
-    }
-}
-
-impl Drop for MemberEdge<'_> {
-    fn drop(&mut self) {
-        self.0.set(self.0.get() - 1);
     }
 }
 
@@ -748,20 +736,24 @@ impl TypeSystem {
             return false;
         };
         let wanted = trait_.args();
-        // Where a written argument decides, the answer is the solver's — the
-        // one path that reads arguments (WEP 2026-09-01).
-        if !wanted.is_empty()
-            && let Some(bridge) = self.solver.as_ref()
-            && let Some(answer) = bridge.answer(self, ctx, scope, type_id, trait_)
+        // The answer is the solver's wherever the lowering states the
+        // question, and so are the bodies it owes (WEP 2026-09-01).
+        if let Some(bridge) = self.solver.as_ref()
+            && let Some(answer) = bridge
+                .borrow()
+                .answer_owing(self, ctx, scope, type_id, trait_)
         {
-            return answer;
+            let holds = answer.is_some();
+            let mut table = self.type_table.borrow_mut();
+            for body in answer.into_iter().flatten() {
+                table.record_bound_driven_synth_request(&body.head, &body.module, &body.trait_);
+            }
+            return holds;
         }
         let resolved = self.type_table.borrow().get(type_id).clone();
-        let result = Self::asking(ctx, type_id, decl, wanted, || {
+        Self::asking(ctx, type_id, decl, wanted, || {
             self.type_implements_trait_inner(ctx, scope, type_id, &resolved, trait_)
-        });
-        self.check_solver_agreement(ctx, scope, type_id, trait_, result);
-        result
+        })
     }
 
     /// The trait a bound names, with the arguments it writes for that trait's
@@ -824,9 +816,8 @@ impl TypeSystem {
                 .all(|trait_| self.type_implements_trait(ctx, scope, type_id, trait_))
     }
 
-    /// `answer` under the recursion guard. A question already open answers
-    /// without it: a repeat reached through a member is a recursive type and
-    /// holds; one reached through bounds alone grounds nothing (WEP 2026-09-01).
+    /// `answer` under the recursion guard. A question already open does not
+    /// hold: reached through bounds alone, it grounds nothing (WEP 2026-09-01).
     fn asking(
         ctx: &Scope,
         type_id: TypeId,
@@ -834,59 +825,18 @@ impl TypeSystem {
         wanted: &[FqTypeName],
         answer: impl FnOnce() -> bool,
     ) -> bool {
-        let member_edges = ctx.member_edges.get();
         // Keyed by the arguments too: the same trait asked at two
         // instantiations is two questions, and only one of them may hold.
-        let repeated = ctx
-            .trait_check_stack
-            .borrow()
-            .iter()
-            .find(|f| f.type_id == type_id && f.trait_ == trait_ && f.wanted == wanted)
-            .map(|open| member_edges > open.member_edges);
-        if let Some(repeated) = repeated {
-            return repeated;
+        let frame = TraitCheckFrame {
+            type_id,
+            trait_,
+            wanted: wanted.to_vec(),
+        };
+        if ctx.trait_check_stack.borrow().contains(&frame) {
+            return false;
         }
-        let _open = OpenQuestion::open(
-            &ctx.trait_check_stack,
-            TraitCheckFrame {
-                type_id,
-                trait_,
-                wanted: wanted.to_vec(),
-                member_edges,
-            },
-        );
+        let _open = OpenQuestion::open(&ctx.trait_check_stack, frame);
         answer()
-    }
-
-    /// The differential of WEP 2026-09-01: in debug builds, the solver must
-    /// answer an outermost bound question as this path did.
-    fn check_solver_agreement(
-        &self,
-        ctx: &Scope,
-        scope: &TypeLookup,
-        type_id: TypeId,
-        trait_: &FqTraitName,
-        expected: bool,
-    ) {
-        // The solver is built in every profile, since selection asks it, but
-        // this check is a differential and stays a debug-build cost.
-        if !cfg!(debug_assertions) || !ctx.trait_check_stack.borrow().is_empty() {
-            return;
-        }
-        let Some(bridge) = self.solver.as_ref() else {
-            return;
-        };
-        let Some(actual) = bridge.answer(self, ctx, scope, type_id, trait_) else {
-            return;
-        };
-        assert_eq!(
-            actual,
-            expected,
-            "the trait solver disagrees with type_implements_trait: `{}: {}` is {expected} to the compiler and {actual} to the solver ({})",
-            self.type_table.borrow().type_name(type_id),
-            trait_.base_name(),
-            bridge.explain(self, ctx, scope, type_id, trait_),
-        );
     }
 
     /// Whether `type_id` satisfies `trait_` at the type itself, without peeling
@@ -949,11 +899,7 @@ impl TypeSystem {
         let mut failing: Option<(String, TypeId)> = None;
         let walked =
             self.walk_structural_derive_members(scope, resolved, tr, &mut |member, member_tid| {
-                let holds = {
-                    let _edge = MemberEdge::cross(&ctx.member_edges);
-                    self.type_implements_trait(ctx, scope, member_tid, trait_)
-                };
-                if holds {
+                if self.type_implements_trait(ctx, scope, member_tid, trait_) {
                     true
                 } else {
                     failing = Some((member.describe(), member_tid));
@@ -1514,27 +1460,6 @@ impl TypeSystem {
             }
             return holds;
         }
-        // A structural derivation writes no argument, so it answers the trait's
-        // declared defaults. A bound writing one needs an impl that writes it.
-        if let Some(tr) = on_bound
-            && tr.is_field_recursive()
-            && wanted.is_empty()
-            && let Some((_, module_source)) = nominal
-        {
-            let serde_blocked =
-                tr.is_serde() && self.has_real_trait_impl_for_type(ctx, scope, type_id, decl);
-            if !serde_blocked
-                && self.structural_conformance(ctx, scope, resolved, tr, trait_)
-                    == StructuralConformance::Holds
-            {
-                if let Some(key) = self.compiler_trait_def(tr.compiler_item()) {
-                    self.type_table
-                        .borrow_mut()
-                        .record_bound_driven_synth_request_for(type_id, &module_source, &key);
-                }
-                return true;
-            }
-        }
 
         if let ResolvedType::Struct { def, .. } = &resolved
             && on_bound == Some(OnBoundTrait::Default)
@@ -1740,11 +1665,12 @@ impl TypeSystem {
         )
     }
 
-    /// [`comparison_written_alone`] for `type_id`.
+    /// Which comparison trait `type_id` writes without the other, by
+    /// [`SolverBridge::comparison_written_alone`].
     pub(super) fn comparison_written_alone(&self, type_id: TypeId) -> Option<OnBoundTrait> {
-        let tt = self.type_table.borrow();
-        let (written, _) =
-            comparison_written_alone(&self.trait_env, &tt.impl_receiver_key(type_id), &tt)?;
+        let (written, _) = self
+            .solver()
+            .comparison_written_alone(&self.type_table.borrow(), type_id)?;
         OnBoundTrait::of_compiler_item(written)
     }
 
@@ -1757,18 +1683,16 @@ impl TypeSystem {
     pub(super) fn ord_withheld_by(&self, type_id: TypeId) -> Option<TypeId> {
         let ord = self.compiler_trait_def(CompilerItem::Ord)?;
         let tt = self.type_table.borrow();
+        let solver = self.solver();
         let mut link = type_id;
         loop {
             if matches!(tt.get(link), ResolvedType::Primitive(_)) {
                 return None;
             }
-            let key = tt.impl_receiver_key(link);
-            if let Some((CompilerItem::Eq, _)) =
-                comparison_written_alone(&self.trait_env, &key, &tt)
-            {
+            if let Some((CompilerItem::Eq, _)) = solver.comparison_written_alone(&tt, link) {
                 return Some(link);
             }
-            if self.trait_env.has_any_methodful_impl_by_receiver(&key, ord) {
+            if written_impl_reaches(&self.trait_env, ord, link, &tt) {
                 return None;
             }
             link = tt.get_newtype_base(link)?;
@@ -1979,7 +1903,7 @@ impl TypeSystem {
         trait_: DefId,
         peel: NewtypePeel,
     ) -> bool {
-        // A structural obligation is the member walk's to answer, so a
+        // A structural obligation is derivation's to answer, so a
         // `Reflect*`-bounded blanket does not get to answer it: its bound holds
         // for every type of that kind, while the bound that decides eligibility
         // is the pack's (`..F: Serialize`), which this index does not carry.
@@ -2892,7 +2816,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         if self.check_and_register_bound(type_arg, trait_) {
             let tied = self.tysys.solver.as_ref().map_or_else(Vec::new, |bridge| {
-                bridge.tied_through_bound(
+                bridge.borrow().tied_through_bound(
                     &self.tysys,
                     &self.annotate_ctx,
                     &self.type_lookup(),
@@ -3438,15 +3362,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow_mut()
             .intern(ResolvedType::Ref(lookup_type_id));
-        // Auto-derived: no `impl` block is written, so none is named.
+        // The `eq` a written `cmp` gives is dispatched as its block's own
+        // method; any other derived impl names no block.
+        let paired = eq_from_written_cmp(
+            &self.tysys.trait_env,
+            &self.tysys.solver(),
+            trait_,
+            lookup_type_id,
+            &self.tysys.type_table.borrow(),
+        );
+        let (method_def, impl_def, receiver) = match paired {
+            Some(PairedEq { eq, block }) => {
+                let header = &self.tysys.trait_env.impl_headers[&block];
+                (
+                    Some(eq),
+                    Some(block),
+                    self.impl_receiver(header, lookup_type_id),
+                )
+            }
+            None => (None, None, self.tysys.fq_receiver_head(lookup_type_id)),
+        };
         Some(ResolvedTraitMethod {
-            method_def: None,
+            method_def,
             trait_name: self.tysys.type_table.borrow().compiler_trait_fq(item),
             method_name: method_name.to_string(),
-            impl_def: None,
+            impl_def,
             impl_name: struct_name.to_string(),
             impl_type_id: Some(lookup_type_id),
-            receiver: self.tysys.fq_receiver_head(lookup_type_id),
+            receiver,
             self_kind: ast::SelfKind::Ref,
             return_type,
             param_types: vec![ref_self_ty],
@@ -3466,48 +3409,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<TraitMethodMatch> {
         let (item, _, return_type) = self.tysys.auto_derive_by_method(method_name)?;
         let base_type_id = self.tysys.get_base_type(receiver_type_id);
-        // A newtype has no derivation of its own: the one its representation
-        // carries answers, and is inherited the way a written impl on the base
-        // is, so the signature re-types back to the receiver.
-        let derive_id = self
-            .tysys
-            .type_table
-            .borrow()
-            .representation_head(base_type_id);
-        let inherited = (derive_id != base_type_id).then_some(derive_id);
-        if !self.tysys.auto_derive_eligible_kind(derive_id) {
-            return None;
-        }
-        let trait_ = self.tysys.compiler_trait(item)?;
-        if !self.tysys.type_implements_trait(
-            &self.annotate_ctx,
-            &self.type_lookup(),
-            derive_id,
-            &trait_,
-        ) {
-            return None;
-        }
-        let ref_self_ty = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .intern(ResolvedType::Ref(derive_id));
-        // Derived from the receiver's structure, off no `impl` block.
-        let method_info = MethodInfo {
-            param_types: vec![ref_self_ty],
-            param_is_mut: vec![false],
-            param_defaults: vec![None],
-            param_names: vec!["other".to_string()],
-            owner: inherited.map_or(MethodOwner::Receiver, MethodOwner::InheritedFrom),
-            ..MethodInfo::undeclared(return_type)
-        };
-        let impl_module_source = self
-            .tysys
-            .type_table
-            .borrow()
-            .nominal_head(derive_id)
-            .expect("an auto-derive-eligible type names a head")
-            .1;
         // The auto-derived trait is a compiler item, so it is named by the
         // declaration the registry holds, not by a spelling resolved here.
         let trait_fq = self.tysys.type_table.borrow().compiler_trait_fq(item);
@@ -3515,6 +3416,100 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .compiler_trait_def(item)
             .expect("a compiler trait item names a declaration");
+        // As in `resolve_trait_method_for_op`, on the link of the chain
+        // writing the `cmp`.
+        let paired = self
+            .tysys
+            .impl_link(base_type_id, trait_decl)
+            .and_then(|link| {
+                let tt = self.tysys.type_table.borrow();
+                Some((
+                    link,
+                    eq_from_written_cmp(
+                        &self.tysys.trait_env,
+                        &self.tysys.solver(),
+                        trait_decl,
+                        link,
+                        &tt,
+                    )?,
+                ))
+            });
+        let (
+            owner_link,
+            method_def,
+            impl_block,
+            from_concrete_impl,
+            impl_module_source,
+            impl_struct_fq,
+        ) = if let Some((link, PairedEq { eq, block })) = paired {
+            let header = &self.tysys.trait_env.impl_headers[&block];
+            (
+                link,
+                Some(eq),
+                Some(block),
+                self.tysys.impl_is_concrete_instantiation(&header.ty),
+                header.module.clone(),
+                self.impl_receiver(header, link),
+            )
+        } else {
+            // A newtype has no derivation of its own: the one its
+            // representation carries answers.
+            let derive_id = self
+                .tysys
+                .type_table
+                .borrow()
+                .representation_head(base_type_id);
+            if !self.tysys.auto_derive_eligible_kind(derive_id) {
+                return None;
+            }
+            let trait_ = self.tysys.compiler_trait(item)?;
+            if !self.tysys.type_implements_trait(
+                &self.annotate_ctx,
+                &self.type_lookup(),
+                derive_id,
+                &trait_,
+            ) {
+                return None;
+            }
+            let home = self
+                .tysys
+                .type_table
+                .borrow()
+                .nominal_head(derive_id)
+                .expect("an auto-derive-eligible type names a head")
+                .1;
+            (
+                derive_id,
+                None,
+                None,
+                false,
+                home,
+                self.tysys.fq_receiver_head(derive_id),
+            )
+        };
+        let ref_self_ty = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .intern(ResolvedType::Ref(owner_link));
+        // An impl on a link below the receiver is inherited the way a written
+        // impl on the base is, so the signature re-types back to the receiver.
+        let owner = if owner_link == base_type_id {
+            MethodOwner::Receiver
+        } else {
+            MethodOwner::InheritedFrom(owner_link)
+        };
+        let method_info = MethodInfo {
+            method_def,
+            impl_block,
+            from_concrete_impl,
+            param_types: vec![ref_self_ty],
+            param_is_mut: vec![false],
+            param_defaults: vec![None],
+            param_names: vec!["other".to_string()],
+            owner,
+            ..MethodInfo::undeclared(return_type)
+        };
         Some(TraitMethodMatch {
             // Auto-derived `Eq` / `Ord` take no type arguments.
             trait_name: trait_fq,
@@ -3524,7 +3519,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             impl_module_source,
             blanket_type_param: None,
             blanket_binder: None,
-            impl_struct_fq: self.tysys.fq_receiver_head(derive_id),
+            impl_struct_fq,
             is_blanket_ref_impl: false,
             ref_impl_target: None,
         })

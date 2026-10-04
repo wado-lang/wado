@@ -4013,6 +4013,24 @@ impl DataDecls {
             .chain(generic_newtypes.keys())
             .copied()
     }
+
+    /// The entries of `defs` alone.
+    pub(crate) fn restricted_to(&self, defs: &[DefId]) -> Self {
+        fn kept<V: Clone>(table: &IndexMap<DefId, V>, defs: &[DefId]) -> IndexMap<DefId, V> {
+            defs.iter()
+                .filter_map(|def| Some((*def, table.get(def)?.clone())))
+                .collect()
+        }
+        Self {
+            newtypes: kept(&self.newtypes, defs),
+            generic_newtypes: kept(&self.generic_newtypes, defs),
+            struct_fields: kept(&self.struct_fields, defs),
+            variant_cases: kept(&self.variant_cases, defs),
+            enum_cases: kept(&self.enum_cases, defs),
+            flags_cases: kept(&self.flags_cases, defs),
+            resource_types: kept(&self.resource_types, defs),
+        }
+    }
 }
 
 /// Read-only view resolving a type name from a module's perspective without

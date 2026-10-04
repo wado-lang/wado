@@ -15,7 +15,7 @@ impl Span {
     }
 }
 
-pub fn push_chars(out: &mut String, chars: &List<char>, start: i32, end: i32) {
+internal fn push_chars(out: &mut String, chars: &List<char>, start: i32, end: i32) {
     let mut bytes = 0;
     for let mut i = start; i < end; i += 1 {
         bytes += chars[i].len_utf8();
@@ -26,13 +26,13 @@ pub fn push_chars(out: &mut String, chars: &List<char>, start: i32, end: i32) {
     }
 }
 
-pub fn chars_text(chars: &List<char>, start: i32, end: i32) -> String {
+internal fn chars_text(chars: &List<char>, start: i32, end: i32) -> String {
     let mut s = String::new();
     push_chars(&mut s, chars, start, end);
     return s;
 }
 
-pub fn push_chars_escaped(out: &mut String, chars: &List<char>, start: i32, end: i32) {
+internal fn push_chars_escaped(out: &mut String, chars: &List<char>, start: i32, end: i32) {
     for let mut i = start; i < end; i += 1 {
         match chars[i] {
             '\n' => out.push_str("\\n"),
@@ -43,7 +43,7 @@ pub fn push_chars_escaped(out: &mut String, chars: &List<char>, start: i32, end:
     }
 }
 
-pub fn kind_set_has(set: &List<i32>, kind: i32) -> bool {
+internal fn kind_set_has(set: &List<i32>, kind: i32) -> bool {
     let w = kind >> 5;
     if w >= set.len() {
         return false;
@@ -51,7 +51,7 @@ pub fn kind_set_has(set: &List<i32>, kind: i32) -> bool {
     return set[w] >> (kind & 31) & 1 == 1;
 }
 
-pub fn with_expected<S: AsStrSlice>(message: S, expected: &List<String>) -> String {
+internal fn with_expected<S: AsStrSlice>(message: S, expected: &List<String>) -> String {
     let n = expected.len();
     if n == 0 {
         return message.to_string();
@@ -69,7 +69,7 @@ pub fn with_expected<S: AsStrSlice>(message: S, expected: &List<String>) -> Stri
     return out;
 }
 
-pub fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
+internal fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
     let mut j = if i < chars.len() { i } else { chars.len() };
     let mut col = 0;
     while j > 0 && chars[j - 1] != '\n' {
@@ -79,7 +79,7 @@ pub fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
     return col;
 }
 
-pub fn line_starts(chars: &List<char>) -> List<i32> {
+internal fn line_starts(chars: &List<char>) -> List<i32> {
     let mut starts: List<i32> = [0];
     for let mut i = 0; i < chars.len(); i += 1 {
         if chars[i] == '\n' {
@@ -89,7 +89,7 @@ pub fn line_starts(chars: &List<char>) -> List<i32> {
     return starts;
 }
 
-pub fn line_col_at(starts: &List<i32>, pos: i32) -> [i32, i32] {
+internal fn line_col_at(starts: &List<i32>, pos: i32) -> [i32, i32] {
     let mut lo = 0;
     let mut hi = starts.len() - 1;
     while lo < hi {
@@ -125,7 +125,7 @@ pub struct TokenStream {
 }
 
 impl TokenStream {
-    pub fn new(chars: &List<char>) -> TokenStream {
+    internal fn new(chars: &List<char>) -> TokenStream {
         let cap = chars.len() / 4 + 1;
         return TokenStream {
             kinds: List::with_capacity(cap),
@@ -146,11 +146,11 @@ impl TokenStream {
         return self.kinds.len();
     }
 
-    pub fn trivia_mark(&self) -> i32 {
+    internal fn trivia_mark(&self) -> i32 {
         return self.triv_kinds.len();
     }
 
-    pub fn push_trivia(&mut self, kind: i32, start: i32, end: i32, channel: i32) {
+    internal fn push_trivia(&mut self, kind: i32, start: i32, end: i32, channel: i32) {
         if self.triv_kinds.len() >= self.triv_kinds.capacity() {
             builtin::cold_path();
             self.triv_kinds.grow();
@@ -167,11 +167,11 @@ impl TokenStream {
         self.triv_chans.push_within_capacity(channel);
     }
 
-    pub fn push_token(&mut self, kind: i32, start: i32, end: i32, triv_lo: i32, triv_hi: i32) {
+    internal fn push_token(&mut self, kind: i32, start: i32, end: i32, triv_lo: i32, triv_hi: i32) {
         self.push_token_flagged(kind, start, end, triv_lo, triv_hi, TokenFlags::none());
     }
 
-    pub fn push_token_flagged(
+    internal fn push_token_flagged(
         &mut self,
         kind: i32,
         start: i32,
@@ -204,7 +204,7 @@ impl TokenStream {
         return idx;
     }
 
-    pub fn push_synthetic(&mut self, expected_kind: i32, at: i32) -> i32 {
+    internal fn push_synthetic(&mut self, expected_kind: i32, at: i32) -> i32 {
         let m = self.trivia_mark();
         return self.push_token_flagged(expected_kind, at, at, m, m, TokenFlags::Synthetic);
     }
@@ -213,11 +213,11 @@ impl TokenStream {
         return self.flags[i];
     }
 
-    pub fn set_flag(&mut self, i: i32, flag: TokenFlags) {
+    internal fn set_flag(&mut self, i: i32, flag: TokenFlags) {
         self.flags[i] |= flag;
     }
 
-    pub fn mark_skipped(&mut self, i: i32) {
+    internal fn mark_skipped(&mut self, i: i32) {
         self.set_flag(i, TokenFlags::Skipped);
     }
 
@@ -327,7 +327,7 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
-    pub fn error<S: AsStrSlice>(
+    internal fn error<S: AsStrSlice>(
         code: DiagnosticCode,
         message: S,
         span: Span,
@@ -380,7 +380,7 @@ fn lex_error_at(tokens: &TokenStream, i: i32) -> Diagnostic {
     );
 }
 
-pub fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagnostic>, max_errors: i32) {
+internal fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagnostic>, max_errors: i32) {
     let mut merged: List<Diagnostic> = [];
     for let mut i = 0; i < tokens.len(); i += 1 {
         if tokens.is_lex_error(i) {
@@ -393,7 +393,7 @@ pub fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagnostic>
     *diagnostics = merged;
 }
 
-pub fn resolve_positions(diagnostics: &mut List<Diagnostic>, chars: &List<char>) {
+internal fn resolve_positions(diagnostics: &mut List<Diagnostic>, chars: &List<char>) {
     if diagnostics.is_empty() {
         return;
     }
@@ -552,7 +552,7 @@ fn bubble_to_parent(stack: &List<i32>, end: &mut List<i32>, flags: &mut List<Nod
     }
 }
 
-pub struct TreeBuilder {
+internal struct TreeBuilder {
     tag: List<EventTag>,
     id: List<i32>,
     offset: List<i32>,
@@ -563,7 +563,7 @@ pub struct TreeBuilder {
 }
 
 impl TreeBuilder {
-    pub fn with_capacity(rows: i32) -> TreeBuilder {
+    internal fn with_capacity(rows: i32) -> TreeBuilder {
         return TreeBuilder {
             tag: List::with_capacity(rows),
             id: List::with_capacity(rows),
@@ -592,27 +592,27 @@ impl TreeBuilder {
         self.alt.push_within_capacity(-1);
     }
 
-    pub fn start_node(&mut self, kind: NodeKind, start: i32) {
+    internal fn start_node(&mut self, kind: NodeKind, start: i32) {
         let row = self.tag.len();
         self.push_row(EventTag::Open, kind as i32, start);
         self.open.push(row);
     }
 
-    pub fn start_error(&mut self, start: i32) {
+    internal fn start_error(&mut self, start: i32) {
         let row = self.tag.len();
         self.push_row(EventTag::Open, K_ERROR as i32, start);
         self.open.push(row);
     }
 
-    pub fn set_alt(&mut self, alt: i32) {
+    internal fn set_alt(&mut self, alt: i32) {
         self.alt[self.open[self.open.len() - 1]] = alt;
     }
 
-    pub fn checkpoint(&self) -> i32 {
+    internal fn checkpoint(&self) -> i32 {
         return self.tag.len();
     }
 
-    pub fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
+    internal fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
         assert self.innermost_open() < checkpoint, "a node wraps only rows finished before it";
         self.tag.insert(checkpoint, EventTag::Open);
         self.id.insert(checkpoint, kind as i32);
@@ -627,7 +627,7 @@ impl TreeBuilder {
         }
     }
 
-    pub fn truncate(&mut self, checkpoint: i32) {
+    internal fn truncate(&mut self, checkpoint: i32) {
         self.tag.truncate(checkpoint);
         self.id.truncate(checkpoint);
         self.offset.truncate(checkpoint);
@@ -643,25 +643,25 @@ impl TreeBuilder {
         }
     }
 
-    pub fn finish_node(&mut self, end: i32) {
+    internal fn finish_node(&mut self, end: i32) {
         let row = self.open[self.open.len() - 1];
         self.push_row(EventTag::Close, self.id[row], end);
         self.last_finished = row;
         let _ = self.open.pop();
     }
 
-    pub fn innermost_open(&self) -> i32 {
+    internal fn innermost_open(&self) -> i32 {
         if self.open.is_empty() {
             return -1;
         }
         return self.open[self.open.len() - 1];
     }
 
-    pub fn node_kind(&self, row: i32) -> NodeKind {
+    internal fn node_kind(&self, row: i32) -> NodeKind {
         return self.id[row] as NodeKind;
     }
 
-    pub fn resume_node(&mut self, row: i32, end: i32) {
+    internal fn resume_node(&mut self, row: i32, end: i32) {
         while self.innermost_open() > row {
             self.finish_node(end);
         }
@@ -673,11 +673,11 @@ impl TreeBuilder {
         self.open.push(row);
     }
 
-    pub fn mark_error(&mut self) {
+    internal fn mark_error(&mut self) {
         self.error_row = self.tag.len();
     }
 
-    pub fn in_error_mode(&self) -> bool {
+    internal fn in_error_mode(&self) -> bool {
         if self.error_row < 0 {
             return false;
         }
@@ -689,7 +689,7 @@ impl TreeBuilder {
         return true;
     }
 
-    pub fn push_open_rule_names(&self, rule_names: &List<String>, out: &mut List<String>) {
+    internal fn push_open_rule_names(&self, rule_names: &List<String>, out: &mut List<String>) {
         for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
             let kind = self.id[self.open[i]];
             if kind != K_ERROR as i32 {
@@ -698,19 +698,19 @@ impl TreeBuilder {
         }
     }
 
-    pub fn token(&mut self, idx: i32) {
+    internal fn token(&mut self, idx: i32) {
         self.push_row(EventTag::Tok, idx, 0);
     }
 
-    pub fn missing(&mut self, syn_idx: i32) {
+    internal fn missing(&mut self, syn_idx: i32) {
         self.push_row(EventTag::Miss, syn_idx, 0);
     }
 
-    pub fn skip(&mut self, idx: i32) {
+    internal fn skip(&mut self, idx: i32) {
         self.push_row(EventTag::Skip, idx, 0);
     }
 
-    pub fn finish(&self) -> CstStore {
+    internal fn finish(&self) -> CstStore {
         let n = self.tag.len();
         let mut end = List::filled(n, 0);
         let mut flags = List::filled(n, NodeFlags::none());
@@ -755,14 +755,14 @@ impl TreeBuilder {
         return CstStore { tag: self.tag, id: self.id, offset: self.offset, alt: self.alt, end, flags, next };
     }
 
-    pub fn render_open(&self, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
+    internal fn render_open(&self, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
         if self.open.len() == 0 {
             return String::new();
         }
         return self.render_from(self.open[self.open.len() - 1], toks, rule_names, token_names);
     }
 
-    pub fn render_at(
+    internal fn render_at(
         &self,
         row: i32,
         toks: &TokenStream,
@@ -775,7 +775,7 @@ impl TreeBuilder {
         return self.render_from(row, toks, rule_names, token_names);
     }
 
-    pub fn open_rule_names(&self, rule_names: &List<String>) -> String {
+    internal fn open_rule_names(&self, rule_names: &List<String>) -> String {
         let mut out = String::from("[");
         for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
             if i < self.open.len() - 1 {
@@ -789,7 +789,7 @@ impl TreeBuilder {
         return out;
     }
 
-    pub fn render_last_finished(
+    internal fn render_last_finished(
         &self,
         toks: &TokenStream,
         rule_names: &List<String>,
@@ -963,7 +963,6 @@ fn try_A(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let la_saved_0 = pos;
     let mut la_reach_0: i32 = -1;
-    let mut la_end_0: i32 = -1;
     let mut la_win_0: i32 = -1;
     let mut la_arm_0_0: i32 = -1;
     la_alt_0_0: {
@@ -987,257 +986,159 @@ fn try_A(chars: &List<char>, start: i32) -> i32 {
         pos = la_at_0;
         let mut la_tot_0: i32 = -1;
         let peek_save_1 = pos;
-        let opt_saved_2 = pos;
-        let mut opt_ok_2 = false;
         opt_2: {
             if pos >= chars.len() || chars[pos] != 'c' { break opt_2; }
             pos += 1;
-            opt_ok_2 = true;
         }
-        if !opt_ok_2 { pos = opt_saved_2; }
         la_tot_0 = pos;
         pos = peek_save_1;
         if la_tot_0 > la_reach_0 {
             la_reach_0 = la_tot_0;
-            la_end_0 = la_at_0;
             la_win_0 = la_i_0;
         }
     }
     if la_win_0 < 0 { return -1; }
-    pos = la_end_0;
-    let opt_saved_3 = pos;
-    let mut opt_ok_3 = false;
-    opt_3: {
-        if pos >= chars.len() || chars[pos] != 'c' { break opt_3; }
-        pos += 1;
-        opt_ok_3 = true;
-    }
-    if !opt_ok_3 { pos = opt_saved_3; }
+    pos = la_reach_0;
     return pos;
 }
 
 fn try_B(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let la_saved_4 = pos;
-    let mut la_reach_4: i32 = -1;
-    let mut la_end_4: i32 = -1;
-    let mut la_win_4: i32 = -1;
-    let mut la_arm_4_0: i32 = -1;
-    la_alt_4_0: {
-        pos = la_saved_4;
-        if pos >= chars.len() || chars[pos] != 'p' { break la_alt_4_0; }
+    let la_saved_3 = pos;
+    let mut la_reach_3: i32 = -1;
+    let mut la_win_3: i32 = -1;
+    let mut la_arm_3_0: i32 = -1;
+    la_alt_3_0: {
+        pos = la_saved_3;
+        if pos >= chars.len() || chars[pos] != 'p' { break la_alt_3_0; }
         pos += 1;
-        la_arm_4_0 = pos;
+        la_arm_3_0 = pos;
     }
-    let mut la_arm_4_1: i32 = -1;
-    la_alt_4_1: {
-        pos = la_saved_4;
-        if pos >= chars.len() || chars[pos] != 'p' { break la_alt_4_1; }
+    let mut la_arm_3_1: i32 = -1;
+    la_alt_3_1: {
+        pos = la_saved_3;
+        if pos >= chars.len() || chars[pos] != 'p' { break la_alt_3_1; }
         pos += 1;
-        if pos >= chars.len() || chars[pos] != 'q' { break la_alt_4_1; }
+        if pos >= chars.len() || chars[pos] != 'q' { break la_alt_3_1; }
         pos += 1;
-        la_arm_4_1 = pos;
+        la_arm_3_1 = pos;
     }
-    for let mut la_i_4 = 0; la_i_4 < 2; la_i_4 += 1 {
-        let la_at_4 = match la_i_4 { 0 => la_arm_4_0, _ => la_arm_4_1 };
-        if la_at_4 < 0 { continue; }
-        pos = la_at_4;
-        let mut la_tot_4: i32 = -1;
-        let peek_save_5 = pos;
-        let mut peek_ok_5 = false;
-        let mut peek_end_5: i32 = -1;
-        peek_5: {
-            if pos >= chars.len() { break peek_5; }
-            if !((chars[pos] matches { 'r' })) { break peek_5; }
+    for let mut la_i_3 = 0; la_i_3 < 2; la_i_3 += 1 {
+        let la_at_3 = match la_i_3 { 0 => la_arm_3_0, _ => la_arm_3_1 };
+        if la_at_3 < 0 { continue; }
+        pos = la_at_3;
+        let mut la_tot_3: i32 = -1;
+        let peek_save_4 = pos;
+        peek_4: {
+            if pos >= chars.len() { break peek_4; }
+            if !(chars[pos] matches { 'r' }) { break peek_4; }
             pos += 1;
-            peek_end_5 = pos;
-            peek_ok_5 = true;
+            la_tot_3 = pos;
         }
-        pos = peek_save_5;
-        if peek_ok_5 {
-            la_tot_4 = peek_end_5;
-        }
-        if la_tot_4 > la_reach_4 {
-            la_reach_4 = la_tot_4;
-            la_end_4 = la_at_4;
-            la_win_4 = la_i_4;
+        pos = peek_save_4;
+        if la_tot_3 > la_reach_3 {
+            la_reach_3 = la_tot_3;
+            la_win_3 = la_i_3;
         }
     }
-    if la_win_4 < 0 { return -1; }
-    pos = la_end_4;
-    if pos >= chars.len() { return -1; }
-    if !((chars[pos] matches { 'r' })) { return -1; }
-    pos += 1;
+    if la_win_3 < 0 { return -1; }
+    pos = la_reach_3;
     return pos;
 }
 
 fn try_C(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let la_saved_6 = pos;
-    let mut la_reach_6: i32 = -1;
-    let mut la_end_6: i32 = -1;
-    let mut la_win_6: i32 = -1;
-    let mut la_arm_6_0: i32 = -1;
-    la_alt_6_0: {
-        pos = la_saved_6;
-        if pos >= chars.len() || chars[pos] != 'm' { break la_alt_6_0; }
+    let la_saved_5 = pos;
+    let mut la_reach_5: i32 = -1;
+    let mut la_win_5: i32 = -1;
+    let mut la_arm_5_0: i32 = -1;
+    la_alt_5_0: {
+        pos = la_saved_5;
+        if pos >= chars.len() || chars[pos] != 'm' { break la_alt_5_0; }
         pos += 1;
-        la_arm_6_0 = pos;
+        la_arm_5_0 = pos;
     }
-    let mut la_arm_6_1: i32 = -1;
-    la_alt_6_1: {
-        pos = la_saved_6;
-        if pos >= chars.len() || chars[pos] != 'm' { break la_alt_6_1; }
+    let mut la_arm_5_1: i32 = -1;
+    la_alt_5_1: {
+        pos = la_saved_5;
+        if pos >= chars.len() || chars[pos] != 'm' { break la_alt_5_1; }
         pos += 1;
-        if pos >= chars.len() || chars[pos] != 'n' { break la_alt_6_1; }
+        if pos >= chars.len() || chars[pos] != 'n' { break la_alt_5_1; }
         pos += 1;
-        la_arm_6_1 = pos;
+        la_arm_5_1 = pos;
     }
-    for let mut la_i_6 = 0; la_i_6 < 2; la_i_6 += 1 {
-        let la_at_6 = match la_i_6 { 0 => la_arm_6_0, _ => la_arm_6_1 };
-        if la_at_6 < 0 { continue; }
-        pos = la_at_6;
-        let mut la_tot_6: i32 = -1;
-        let peek_save_7 = pos;
-        let mut peek_ok_7 = false;
-        let mut peek_end_7: i32 = -1;
-        peek_7: {
-            let alts_saved_8 = pos;
-            alts_done_8: {
-                alts_8_0: {
-                    pos = alts_saved_8;
-                    if pos >= chars.len() || chars[pos] != 'n' { break alts_8_0; }
+    for let mut la_i_5 = 0; la_i_5 < 2; la_i_5 += 1 {
+        let la_at_5 = match la_i_5 { 0 => la_arm_5_0, _ => la_arm_5_1 };
+        if la_at_5 < 0 { continue; }
+        pos = la_at_5;
+        let mut la_tot_5: i32 = -1;
+        let peek_save_6 = pos;
+        peek_6: {
+            let alts_saved_7 = pos;
+            alts_done_7: {
+                alts_7_0: {
+                    pos = alts_saved_7;
+                    if pos >= chars.len() || chars[pos] != 'n' { break alts_7_0; }
                     pos += 1;
-                    if pos >= chars.len() || chars[pos] != 'o' { break alts_8_0; }
+                    if pos >= chars.len() || chars[pos] != 'o' { break alts_7_0; }
                     pos += 1;
-                    break alts_done_8;
+                    break alts_done_7;
                 }
-                alts_8_1: {
-                    pos = alts_saved_8;
-                    if pos >= chars.len() || chars[pos] != 'q' { break alts_8_1; }
+                alts_7_1: {
+                    pos = alts_saved_7;
+                    if pos >= chars.len() || chars[pos] != 'q' { break alts_7_1; }
                     pos += 1;
-                    break alts_done_8;
+                    break alts_done_7;
                 }
-                break peek_7;
+                break peek_6;
             }
-            peek_end_7 = pos;
-            peek_ok_7 = true;
+            la_tot_5 = pos;
         }
-        pos = peek_save_7;
-        if peek_ok_7 {
-            la_tot_6 = peek_end_7;
-        }
-        if la_tot_6 > la_reach_6 {
-            la_reach_6 = la_tot_6;
-            la_end_6 = la_at_6;
-            la_win_6 = la_i_6;
+        pos = peek_save_6;
+        if la_tot_5 > la_reach_5 {
+            la_reach_5 = la_tot_5;
+            la_win_5 = la_i_5;
         }
     }
-    if la_win_6 < 0 { return -1; }
-    pos = la_end_6;
-    let alts_saved_9 = pos;
-    alts_done_9: {
-        alts_9_0: {
-            pos = alts_saved_9;
-            if pos >= chars.len() || chars[pos] != 'n' { break alts_9_0; }
-            pos += 1;
-            if pos >= chars.len() || chars[pos] != 'o' { break alts_9_0; }
-            pos += 1;
-            break alts_done_9;
-        }
-        alts_9_1: {
-            pos = alts_saved_9;
-            if pos >= chars.len() || chars[pos] != 'q' { break alts_9_1; }
-            pos += 1;
-            break alts_done_9;
-        }
-        return -1;
-    }
+    if la_win_5 < 0 { return -1; }
+    pos = la_reach_5;
     return pos;
 }
 
 fn try_D(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let mut accept_10: i32 = -1;
-    let mut la_reach_10: i32 = -1;
+    let mut la_end_8: i32 = -1;
     if pos >= chars.len() || chars[pos] != 'd' { return -1; }
     pos += 1;
-    let mut la_tot_11: i32 = -1;
-    let peek_save_12 = pos;
-    let mut peek_ok_12 = false;
-    let mut peek_end_12: i32 = -1;
-    peek_12: {
-        let opt_saved_13 = pos;
-        let mut opt_ok_13 = false;
-        opt_13: {
-            if pos >= chars.len() || chars[pos] != 'e' { break opt_13; }
-            pos += 1;
-            opt_ok_13 = true;
-        }
-        if !opt_ok_13 { pos = opt_saved_13; }
-        if pos >= chars.len() || chars[pos] != 'd' { break peek_12; }
-        pos += 1;
-        peek_end_12 = pos;
-        peek_ok_12 = true;
-    }
-    pos = peek_save_12;
-    if peek_ok_12 {
-        la_tot_11 = peek_end_12;
-    }
-    if la_tot_11 >= 0 && la_tot_11 >= la_reach_10 {
-        la_reach_10 = la_tot_11;
-        accept_10 = pos;
-    }
     loop {
-        let la_saved_10 = pos;
-        la_rep_10: {
-            if pos >= chars.len() || chars[pos] != 'd' { break la_rep_10; }
-            pos += 1;
-            let mut la_tot_14: i32 = -1;
-            let peek_save_15 = pos;
-            let mut peek_ok_15 = false;
-            let mut peek_end_15: i32 = -1;
-            peek_15: {
-                let opt_saved_16 = pos;
-                let mut opt_ok_16 = false;
-                opt_16: {
-                    if pos >= chars.len() || chars[pos] != 'e' { break opt_16; }
-                    pos += 1;
-                    opt_ok_16 = true;
-                }
-                if !opt_ok_16 { pos = opt_saved_16; }
-                if pos >= chars.len() || chars[pos] != 'd' { break peek_15; }
+        let mut la_tot_9: i32 = -1;
+        let peek_save_10 = pos;
+        peek_10: {
+            opt_11: {
+                if pos >= chars.len() || chars[pos] != 'e' { break opt_11; }
                 pos += 1;
-                peek_end_15 = pos;
-                peek_ok_15 = true;
             }
-            pos = peek_save_15;
-            if peek_ok_15 {
-                la_tot_14 = peek_end_15;
-            }
-            if la_tot_14 >= 0 && la_tot_14 >= la_reach_10 {
-                la_reach_10 = la_tot_14;
-                accept_10 = pos;
-            }
+            if pos >= chars.len() || chars[pos] != 'd' { break peek_10; }
+            pos += 1;
+            la_tot_9 = pos;
+        }
+        pos = peek_save_10;
+        if la_tot_9 >= 0 && la_tot_9 >= la_end_8 {
+            la_end_8 = la_tot_9;
+        }
+        let la_saved_8 = pos;
+        la_rep_8: {
+            if pos >= chars.len() || chars[pos] != 'd' { break la_rep_8; }
+            pos += 1;
             continue;
         }
-        pos = la_saved_10;
+        pos = la_saved_8;
         break;
     }
-    if accept_10 < 0 {
+    if la_end_8 < 0 {
         return -1;
     }
-    pos = accept_10;
-    let opt_saved_17 = pos;
-    let mut opt_ok_17 = false;
-    opt_17: {
-        if pos >= chars.len() || chars[pos] != 'e' { break opt_17; }
-        pos += 1;
-        opt_ok_17 = true;
-    }
-    if !opt_ok_17 { pos = opt_saved_17; }
-    if pos >= chars.len() || chars[pos] != 'd' { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
-    pos += 1;
+    pos = la_end_8;
     return pos;
 }
 
@@ -1252,54 +1153,44 @@ fn try_E(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'x' { return -1; }
     pos += 1;
-    let la_saved_18 = pos;
-    let mut la_reach_18: i32 = -1;
-    let mut la_end_18: i32 = -1;
-    let mut la_win_18: i32 = -1;
-    let mut la_arm_18_0: i32 = -1;
-    la_alt_18_0: {
-        pos = la_saved_18;
-        if pos >= chars.len() || chars[pos] != 'y' { break la_alt_18_0; }
+    let la_saved_12 = pos;
+    let mut la_reach_12: i32 = -1;
+    let mut la_win_12: i32 = -1;
+    let mut la_arm_12_0: i32 = -1;
+    la_alt_12_0: {
+        pos = la_saved_12;
+        if pos >= chars.len() || chars[pos] != 'y' { break la_alt_12_0; }
         pos += 1;
-        la_arm_18_0 = pos;
+        la_arm_12_0 = pos;
     }
-    let mut la_arm_18_1: i32 = -1;
-    la_alt_18_1: {
-        pos = la_saved_18;
-        if pos >= chars.len() || chars[pos] != 'y' { break la_alt_18_1; }
+    let mut la_arm_12_1: i32 = -1;
+    la_alt_12_1: {
+        pos = la_saved_12;
+        if pos >= chars.len() || chars[pos] != 'y' { break la_alt_12_1; }
         pos += 1;
-        if pos >= chars.len() || chars[pos] != 'z' { break la_alt_18_1; }
+        if pos >= chars.len() || chars[pos] != 'z' { break la_alt_12_1; }
         pos += 1;
-        la_arm_18_1 = pos;
+        la_arm_12_1 = pos;
     }
-    for let mut la_i_18 = 0; la_i_18 < 2; la_i_18 += 1 {
-        let la_at_18 = match la_i_18 { 0 => la_arm_18_0, _ => la_arm_18_1 };
-        if la_at_18 < 0 { continue; }
-        pos = la_at_18;
-        let mut la_tot_18: i32 = -1;
-        let peek_save_19 = pos;
-        let mut peek_ok_19 = false;
-        let mut peek_end_19: i32 = -1;
-        peek_19: {
-            if pos >= chars.len() || chars[pos] != 'h' { break peek_19; }
+    for let mut la_i_12 = 0; la_i_12 < 2; la_i_12 += 1 {
+        let la_at_12 = match la_i_12 { 0 => la_arm_12_0, _ => la_arm_12_1 };
+        if la_at_12 < 0 { continue; }
+        pos = la_at_12;
+        let mut la_tot_12: i32 = -1;
+        let peek_save_13 = pos;
+        peek_13: {
+            if pos >= chars.len() || chars[pos] != 'h' { break peek_13; }
             pos += 1;
-            peek_end_19 = pos;
-            peek_ok_19 = true;
+            la_tot_12 = pos;
         }
-        pos = peek_save_19;
-        if peek_ok_19 {
-            la_tot_18 = peek_end_19;
-        }
-        if la_tot_18 > la_reach_18 {
-            la_reach_18 = la_tot_18;
-            la_end_18 = la_at_18;
-            la_win_18 = la_i_18;
+        pos = peek_save_13;
+        if la_tot_12 > la_reach_12 {
+            la_reach_12 = la_tot_12;
+            la_win_12 = la_i_12;
         }
     }
-    if la_win_18 < 0 { return -1; }
-    pos = la_end_18;
-    if pos >= chars.len() || chars[pos] != 'h' { return -1; }
-    pos += 1;
+    if la_win_12 < 0 { return -1; }
+    pos = la_reach_12;
     return pos;
 }
 
@@ -1307,107 +1198,87 @@ fn try_G(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'g' { return -1; }
     pos += 1;
-    let la_saved_20 = pos;
-    let mut la_reach_20: i32 = -1;
-    let mut la_end_20: i32 = -1;
-    let mut la_win_20: i32 = -1;
-    let mut la_arm_20_0: i32 = -1;
-    la_alt_20_0: {
-        pos = la_saved_20;
-        if pos >= chars.len() || chars[pos] != 'i' { break la_alt_20_0; }
+    let la_saved_14 = pos;
+    let mut la_reach_14: i32 = -1;
+    let mut la_win_14: i32 = -1;
+    let mut la_arm_14_0: i32 = -1;
+    la_alt_14_0: {
+        pos = la_saved_14;
+        if pos >= chars.len() || chars[pos] != 'i' { break la_alt_14_0; }
         pos += 1;
-        la_arm_20_0 = pos;
+        la_arm_14_0 = pos;
     }
-    let mut la_arm_20_1: i32 = -1;
-    la_alt_20_1: {
-        pos = la_saved_20;
-        if pos >= chars.len() || chars[pos] != 'i' { break la_alt_20_1; }
+    let mut la_arm_14_1: i32 = -1;
+    la_alt_14_1: {
+        pos = la_saved_14;
+        if pos >= chars.len() || chars[pos] != 'i' { break la_alt_14_1; }
         pos += 1;
-        if pos >= chars.len() || chars[pos] != 'k' { break la_alt_20_1; }
+        if pos >= chars.len() || chars[pos] != 'k' { break la_alt_14_1; }
         pos += 1;
-        la_arm_20_1 = pos;
+        la_arm_14_1 = pos;
     }
-    for let mut la_i_20 = 0; la_i_20 < 2; la_i_20 += 1 {
-        let la_at_20 = match la_i_20 { 0 => la_arm_20_0, _ => la_arm_20_1 };
-        if la_at_20 < 0 { continue; }
-        pos = la_at_20;
-        let mut la_tot_20: i32 = -1;
-        let peek_save_21 = pos;
-        let mut peek_ok_21 = false;
-        let mut peek_end_21: i32 = -1;
-        peek_21: {
-            if pos >= chars.len() || chars[pos] != 'l' { break peek_21; }
+    for let mut la_i_14 = 0; la_i_14 < 2; la_i_14 += 1 {
+        let la_at_14 = match la_i_14 { 0 => la_arm_14_0, _ => la_arm_14_1 };
+        if la_at_14 < 0 { continue; }
+        pos = la_at_14;
+        let mut la_tot_14: i32 = -1;
+        let peek_save_15 = pos;
+        peek_15: {
+            if pos >= chars.len() || chars[pos] != 'l' { break peek_15; }
             pos += 1;
-            peek_end_21 = pos;
-            peek_ok_21 = true;
+            la_tot_14 = pos;
         }
-        pos = peek_save_21;
-        if peek_ok_21 {
-            la_tot_20 = peek_end_21;
-        }
-        if la_tot_20 > la_reach_20 {
-            la_reach_20 = la_tot_20;
-            la_end_20 = la_at_20;
-            la_win_20 = la_i_20;
+        pos = peek_save_15;
+        if la_tot_14 > la_reach_14 {
+            la_reach_14 = la_tot_14;
+            la_win_14 = la_i_14;
         }
     }
-    if la_win_20 < 0 { return -1; }
-    pos = la_end_20;
-    if pos >= chars.len() || chars[pos] != 'l' { return -1; }
-    pos += 1;
+    if la_win_14 < 0 { return -1; }
+    pos = la_reach_14;
     return pos;
 }
 
 fn try_K(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let la_saved_22 = pos;
-    let mut la_reach_22: i32 = -1;
-    let mut la_end_22: i32 = -1;
-    let mut la_win_22: i32 = -1;
-    let mut la_arm_22_0: i32 = -1;
-    la_alt_22_0: {
-        pos = la_saved_22;
-        if pos >= chars.len() || chars[pos] != 'w' { break la_alt_22_0; }
+    let la_saved_16 = pos;
+    let mut la_reach_16: i32 = -1;
+    let mut la_win_16: i32 = -1;
+    let mut la_arm_16_0: i32 = -1;
+    la_alt_16_0: {
+        pos = la_saved_16;
+        if pos >= chars.len() || chars[pos] != 'w' { break la_alt_16_0; }
         pos += 1;
-        la_arm_22_0 = pos;
+        la_arm_16_0 = pos;
     }
-    let mut la_arm_22_1: i32 = -1;
-    la_alt_22_1: {
-        pos = la_saved_22;
-        if pos >= chars.len() || chars[pos] != 'w' { break la_alt_22_1; }
+    let mut la_arm_16_1: i32 = -1;
+    la_alt_16_1: {
+        pos = la_saved_16;
+        if pos >= chars.len() || chars[pos] != 'w' { break la_alt_16_1; }
         pos += 1;
-        if pos >= chars.len() || chars[pos] != 'v' { break la_alt_22_1; }
+        if pos >= chars.len() || chars[pos] != 'v' { break la_alt_16_1; }
         pos += 1;
-        la_arm_22_1 = pos;
+        la_arm_16_1 = pos;
     }
-    for let mut la_i_22 = 0; la_i_22 < 2; la_i_22 += 1 {
-        let la_at_22 = match la_i_22 { 0 => la_arm_22_0, _ => la_arm_22_1 };
-        if la_at_22 < 0 { continue; }
-        pos = la_at_22;
-        let mut la_tot_22: i32 = -1;
-        let peek_save_23 = pos;
-        let mut peek_ok_23 = false;
-        let mut peek_end_23: i32 = -1;
-        peek_23: {
-            if pos >= chars.len() || chars[pos] != 'v' { break peek_23; }
+    for let mut la_i_16 = 0; la_i_16 < 2; la_i_16 += 1 {
+        let la_at_16 = match la_i_16 { 0 => la_arm_16_0, _ => la_arm_16_1 };
+        if la_at_16 < 0 { continue; }
+        pos = la_at_16;
+        let mut la_tot_16: i32 = -1;
+        let peek_save_17 = pos;
+        peek_17: {
+            if pos >= chars.len() || chars[pos] != 'v' { break peek_17; }
             pos += 1;
-            peek_end_23 = pos;
-            peek_ok_23 = true;
+            la_tot_16 = pos;
         }
-        pos = peek_save_23;
-        if peek_ok_23 {
-            la_tot_22 = peek_end_23;
-        }
-        if la_tot_22 > la_reach_22 {
-            la_reach_22 = la_tot_22;
-            la_end_22 = la_at_22;
-            la_win_22 = la_i_22;
+        pos = peek_save_17;
+        if la_tot_16 > la_reach_16 {
+            la_reach_16 = la_tot_16;
+            la_win_16 = la_i_16;
         }
     }
-    if la_win_22 < 0 { return -1; }
-    pos = la_end_22;
-    if pos >= chars.len() || chars[pos] != 'v' { return -1; }
-    pos += 1;
+    if la_win_16 < 0 { return -1; }
+    pos = la_reach_16;
     return pos;
 }
 

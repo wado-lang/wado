@@ -5,6 +5,8 @@
 //! replacing linear scans across all modules.
 
 use std::borrow::{Borrow, Cow};
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::ast::{self, AstVisitor, Item, Module, Type};
@@ -63,6 +65,7 @@ pub(super) fn namespace_imports_of(
     out
 }
 
+use super::solver_bridge::SolverBridge;
 use super::types::TypeError;
 
 /// Pick a `ModuleSource` from the AST and synthesised candidate lists: a
@@ -842,6 +845,9 @@ pub struct TraitEnv {
     /// populated, the field is itself immutable; later phases either query
     /// it or replace the whole `TraitEnv` with a further-extended copy.
     pub(crate) synthesised: Option<SynthesisedImpls>,
+    /// The solver elaboration built, joined by [`Self::with_solver`] once
+    /// elaboration ends, so the phases after it ask what elaboration asked.
+    solver: Option<SolverBridge>,
 }
 
 /// Trait impls produced by the synthesis phase but not present in the AST.
@@ -1210,6 +1216,7 @@ impl TraitEnv {
                 trait_impl_modules,
                 concrete_trait_impl_modules,
                 synthesised: None,
+                solver: None,
             }),
             violations,
         )
@@ -1538,25 +1545,53 @@ impl TraitEnv {
         method: &str,
         reaches: impl Fn(DefId) -> bool,
     ) -> Option<TemplateId> {
+        self.answering(receiver, trait_, wanted, |block| {
+            if reaches(block) {
+                self.method_template(block, method)
+            } else {
+                None
+            }
+        })
+    }
+
+    /// What `answer` gives for the first block on `receiver` writing
+    /// `trait_<wanted>` that it answers for, a concrete one before a generic
+    /// one (coherence Rule 1).
+    fn answering<T>(
+        &self,
+        receiver: &name::Receiver,
+        trait_: Option<DefId>,
+        wanted: &[name::FqTypeName],
+        answer: impl Fn(DefId) -> Option<T>,
+    ) -> Option<T> {
         let mut generic = None;
         for &block in self.all_by_receiver.get(receiver).into_iter().flatten() {
             let header = &self.impl_headers[&block];
             if header.is_synthesize_request
                 || header.trait_def() != trait_
                 || trait_.is_some_and(|trait_| !self.block_answers(block, trait_, wanted))
-                || !reaches(block)
             {
                 continue;
             }
-            let Some(template) = self.method_template(block, method) else {
+            let Some(answered) = answer(block) else {
                 continue;
             };
             if header.is_concrete() {
-                return Some(template);
+                return Some(answered);
             }
-            generic.get_or_insert(template);
+            generic.get_or_insert(answered);
         }
         generic
+    }
+
+    /// The declaration of `trait_`'s method `method`.
+    pub(crate) fn trait_method_decl(&self, trait_: DefId, method: &str) -> Option<DefId> {
+        self.trait_decl_headers
+            .get(&trait_)?
+            .methods
+            .iter()
+            .find(|m| m.name == method)
+            .map(|m| m.def)
     }
 
     /// Whether an impl on `receiver` writes `trait_` at its declared defaults
@@ -1814,6 +1849,26 @@ impl TraitEnv {
         };
         env.synthesised = Some(synth_impls);
         Arc::new(env)
+    }
+
+    /// `prev` with the solver elaboration built. Each must be the unique
+    /// owner, as for [`Self::extend_with_synthesised`].
+    pub(crate) fn with_solver(prev: Arc<Self>, solver: Rc<RefCell<SolverBridge>>) -> Arc<Self> {
+        let Ok(mut env) = Arc::try_unwrap(prev) else {
+            panic!("with_solver: TraitEnv Arc must be uniquely owned")
+        };
+        let Ok(solver) = Rc::try_unwrap(solver) else {
+            panic!("with_solver: the solver must be uniquely owned")
+        };
+        env.solver = Some(solver.into_inner());
+        Arc::new(env)
+    }
+
+    /// The solver elaboration built.
+    pub(crate) fn solver(&self) -> &SolverBridge {
+        self.solver
+            .as_ref()
+            .expect("the solver joins the environment when elaboration ends")
     }
 }
 

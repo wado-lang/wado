@@ -234,15 +234,18 @@ test "a newtype takes == from its own cmp, not its base's" {
     let b = Entry { key: 2, hits: 5 } as ByHits;
     let c = Entry { key: 1, hits: 9 } as ByHits;
     assert a == b && same(&a, &b) && a != c && !same(&a, &c);
+    assert a.eq(&b) && !a.eq(&c);
     let x: Rounded = builtin::black_box(1.2);
     let y: Rounded = builtin::black_box(0.9);
     assert x == y && same(&x, &y) && x != 2.0;
+    assert x.eq(&y);
 }
 
 test "a generic newtype takes == from its own cmp at every instance" {
     let a = [1, 2] as Shortest<i32>;
     let b = [3, 4] as Shortest<i32>;
     assert a == b && same(&a, &b) && a != [1] as Shortest<i32>;
+    assert a.eq(&b);
     assert ["x"] as Shortest<String> == ["y"] as Shortest<String>;
 }
 

@@ -662,12 +662,12 @@ Fixture `nullable_first_alt.g4`.
 The lexer follows the same principle: a single-pass forward DFA with
 explicit accept-state tracking, never a remembered-position retry. When a
 greedy `?`/`+`/`*` inner can eat a char the suffix needs (`'a' ~('b')+ 'c'`,
-`'x' ('ab')? 'ab'`), the emitter peeks the suffix after each iteration and
-rewinds once to the latest legal suffix start. The peek lowers the suffix
-through the same path the commit will run, so what it proves is what then
-happens. A semantic predicate the suffix can reach without consuming a char
-takes the same path, since it too decides where the repeat stops: the peek
-evaluates it once per iteration and again on commit, which
+`'x' ('ab')? 'ab'`), the emitter peeks the suffix at every stop and ends the
+token where the furthest-reaching peek ended. The peek is the sequence's own
+steps, so where it ends is where the sequence does. A semantic predicate the
+suffix can reach without consuming a char takes the same path, since it too
+decides where the repeat stops: the peek evaluates it once per stop, and a
+rule with actions evaluates it again when it replays the match, which
 `doc/predicates.md` allows. The inner must match each iteration along one
 path, a string or a char set; one that can end an iteration in two places
 keeps the plain greedy loop.

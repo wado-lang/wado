@@ -687,14 +687,16 @@ fn build_analysis_graph(project: &NirPackage, descriptors: &[FunctionRef]) -> An
             }
         }
 
-        let prior = func_positions.insert(func_id.clone(), pos);
-        assert!(
-            prior.is_none(),
-            "function_id_for collision in project.functions: two distinct \
-             functions map to the same FunctionId {func_id:?}. \
-             `function_id_for` must be injective; check the synthesis or \
-             monomorphize layer for duplicate emission."
-        );
+        if let Some(prior) = func_positions.insert(func_id.clone(), pos) {
+            let prior = project.functions[prior].borrow();
+            panic!(
+                "function_id_for collision in project.functions: `{}` and `{}` \
+                 map to the same FunctionId {func_id:?}. `function_id_for` \
+                 must be injective; check the synthesis or monomorphize layer \
+                 for duplicate emission.",
+                prior.name, func.name,
+            );
+        }
         call_graph.insert(func_id.clone(), analysis.callees);
         if !analysis.effect_calls.is_empty() {
             effect_usage.insert(func_id.clone(), analysis.effect_calls);

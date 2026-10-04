@@ -1466,10 +1466,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let _ = logger.error_in(&module_source, violation);
             decl_failed.insert(module_source);
         }
+        // Every declaration is resolved, so the solver reads them all at once.
+        // Selection asks it, so it is built in every profile.
+        state.tysys.solver = Some(Rc::new(RefCell::new(SolverBridge::build(
+            &state.tysys,
+            &state.sorted_sources,
+        ))));
         // Impl headers' bounds: after every decl pass, since any module's impl
-        // may answer one; before the solver, which takes an impl of a trait to
-        // answer its supertraits too, and so would answer the very question
-        // this asks.
+        // may answer one. The solver answers them, and an impl of a trait never
+        // answers its supertrait there, so the question is not its own answer.
         for module_source in &sorted_sources {
             if is_stdlib_snapshot_hit(snapshot, module_source) {
                 continue;
@@ -1487,12 +1492,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 decl_failed.insert(module_source.clone());
             }
         }
-        // Every declaration is resolved, so the solver reads them all at once.
-        // Selection asks it, so it is built in every profile.
-        state.tysys.solver = Some(Rc::new(SolverBridge::build(
-            &state.tysys,
-            &state.sorted_sources,
-        )));
 
         // Imported globals: a `use`-brought global's type is the declaring
         // module's declaration fact, so it is filled here — once every decl
