@@ -970,7 +970,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let sig = table
             .assoc_type_sig(owning_trait, assoc)
             .cloned()
-            .expect("a declared associated type has its signature");
+            .unwrap_or_else(|| {
+                panic!("associated type `{assoc}` of {owning_trait:?} has no signature")
+            });
         table.instantiate_trait_refs(
             &sig,
             &sig.bounds,

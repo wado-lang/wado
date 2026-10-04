@@ -1642,10 +1642,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             self.collect_types(module);
         }
 
-        // Every signature may project an associated type, so what each trait
-        // declares of them is read first.
-        self.register_assoc_type_sigs(module);
-
         // Second pass: collect function signatures (for call resolution)
         {
             let _span = self.logger.span("elaborate/collect_sigs");

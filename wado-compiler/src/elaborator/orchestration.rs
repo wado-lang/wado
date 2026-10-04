@@ -1301,6 +1301,29 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // even when their body walk stays clean.
         let mut decl_failed: IndexSet<ModuleSource> = IndexSet::default();
 
+        // Phase 0 — what each trait declares of its associated types, ahead of
+        // every declaration: a struct field projecting one builds it, in any
+        // module, whichever order the modules run in.
+        for module_source in &sorted_sources {
+            if is_stdlib_snapshot_hit(snapshot, module_source) {
+                continue;
+            }
+            let module = modules.get(module_source).expect("module should exist");
+            if !Self::run_module_pass(
+                state,
+                module_source,
+                symbols,
+                logger,
+                &entry_module_source,
+                |elaborator| {
+                    elaborator.current_module_source = module_source.clone();
+                    elaborator.register_assoc_type_sigs(module);
+                },
+            ) {
+                decl_failed.insert(module_source.clone());
+            }
+        }
+
         // Phase 1a — `annotate_decls`: every module's declaration facts
         // resolve before any body walk, so bodies see complete decl
         // knowledge regardless of module order.
