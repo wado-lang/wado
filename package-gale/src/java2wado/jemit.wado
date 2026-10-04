@@ -415,8 +415,6 @@ pub fn map_java_type<S: AsStrSlice>(ty: S) -> Option<String> {
         "short" => Option::Some("i16"),
         "byte" => Option::Some("i8"),
         "long" => Option::Some("i64"),
-        "float" => Option::Some("f32"),
-        "double" => Option::Some("f64"),
         "boolean" => Option::Some("bool"),
         "String" => Option::Some("String"),
         _ => null,
@@ -456,7 +454,16 @@ pub fn emit_expr(
         },
         Member(m) => emit_member(rule, rules, m, vals_in_scope, bindings, env),
         Call(c) => emit_call(rule, rules, c, vals_in_scope, bindings, env),
-        Cast(c) => emit_expr(rule, rules, &c.operand, vals_in_scope, bindings, env),
+        Cast(c) => {
+            // An integer target is left to Wado's inference. A floating one
+            // asks for Java's numeric promotion, which the subset does not model.
+            if c.ty == "double" || c.ty == "float" {
+                builtin::cold_path();
+                Result::Err(`java2wado: a '(${c.ty})' cast needs Java's numeric promotion, which is unsupported`);
+            } else {
+                emit_expr(rule, rules, &c.operand, vals_in_scope, bindings, env);
+            }
+        },
         Unary(u) => {
             let operand = emit_expr(rule, rules, &u.operand, vals_in_scope, bindings, env)?;
             Result::Ok(`${u.op}${operand}`);

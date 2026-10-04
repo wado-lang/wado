@@ -2157,6 +2157,30 @@ fn repeat_inner_admits(inner: &Element, inner_first: &List<String>, ctx: &mut Ge
     return admits_or_untestable(inner_first);
 }
 
+/// A repeat's `body_admits`, widened for a greedy `b?` whose `b` matches empty:
+/// entering is the preferred alternative, so what follows the `?` enters too.
+/// An inexact follow set is left out, for `group_empty_alt_admits`'s reason.
+fn repeat_body_admits(
+    rep: &RepeatElement,
+    inner_first: &List<String>,
+    outer_follow: &List<String>,
+    follow_is_exact: bool,
+    ctx: &mut GenContext,
+) -> Admits {
+    let admits = repeat_inner_admits(&rep.element, inner_first, ctx);
+    if rep.non_greedy || !rep.kind matches { Optional } || !follow_is_exact || outer_follow.is_empty() {
+        return admits;
+    }
+    let mut visiting: List<String> = [];
+    if !ctx.element_is_nullable_deep(&rep.element, &mut visiting) {
+        return admits;
+    }
+    return match admits {
+        Everything(_) => admits,
+        _ => admits_or_untestable(&union_kind_arrays(inner_first, outer_follow)),
+    };
+}
+
 /// Scan-side twin of `lower_repeat_op`. Same restrictions: greedy
 /// `Star` / `Plus` with a leaf inner only.
 fn lower_scan_repeat(
@@ -2809,6 +2833,7 @@ fn lower_op<S: AsStrSlice>(
             outer_follow,
             follow_arg,
             gate_caller_follow,
+            follow_is_exact,
             outer_suffix,
         ),
         Group(g) => lower_group_op(
@@ -3537,6 +3562,7 @@ fn lower_repeat_op<S: AsStrSlice>(
     outer_follow: &List<String>,
     follow_arg: FollowArg,
     gate_caller_follow: bool,
+    follow_is_exact: bool,
     outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> Op {
     let inner_follow_arg = greedy_optional_inner_follow(ctx, rep, follow_arg);
@@ -3705,7 +3731,7 @@ fn lower_repeat_op<S: AsStrSlice>(
         caller_follow_second: [],
         body_scannable,
         body_has_field,
-        body_admits: repeat_inner_admits(&rep.element, &inner_first, ctx),
+        body_admits: repeat_body_admits(rep, &inner_first, outer_follow, follow_is_exact, ctx),
         body_is_single_alt_group,
         body_second_position_first,
         body_shape,

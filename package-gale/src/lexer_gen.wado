@@ -3109,7 +3109,7 @@ fn lexer_elem_leading_chars(
                 "the g4 parser admits only a set under `~`, and a set has leading chars",
             );
             assert !inner.nullable, "a set under `~` consumes one char";
-            // A negated class inside the set (`~('a' | [^b])`) is not read.
+            // A negated class inside the set is not read.
             if inner.negated {
                 null;
             } else {
@@ -4804,14 +4804,14 @@ fn lexer_rule_total_on_first_char(rule: &LexerRule, all_rules: &List<LexerRule>)
     return true;
 }
 
-/// The catch-alls a dispatch branch carries: none when every member matches on
-/// its first character, else all but the last-resort ones.
+/// The catch-alls a dispatch branch carries: all but the last-resort ones, less
+/// those every member outranks. A member declared earlier that matches whenever
+/// its first character does ties the catch-all's one char or beats it.
 fn branch_catch_all_calls(calls: &List<TryCall>, members: &List<i32>) -> List<i32> {
-    if members.iter_ref().all(|i| calls[*i].total_on_first_char) {
-        return [];
-    }
     let last_resort = last_resort_calls(calls);
-    return (0..<calls.len()).filter(|i| calls[i].is_catch_all && !last_resort.contains(&i)).collect();
+    return (0..<calls.len()).filter(|c| calls[c].is_catch_all
+        && !last_resort.contains(&c)
+        && !members.iter_ref().all(|m| calls[*m].total_on_first_char && *m < c)).collect();
 }
 
 /// The catch-alls declared after every other candidate: any other match ties
@@ -4967,7 +4967,7 @@ fn build_rule_try_call(
     let [chars, is_wc] = rule_first_chars(rule, all_rules, grammar_opts);
     // A catch-all (`UNEXPECTED_CHAR : .`) matches any single character, so it
     // is redundant only in a branch whose rules all match on their first
-    // character — see `branch_catch_all_calls`.
+    // character and precede it — see `branch_catch_all_calls`.
     let catch_all = is_wc
         && rule.body.len() == 1
         && rule.body[0].elements.len() == 1

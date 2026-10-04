@@ -478,6 +478,20 @@ rationale live in
 implementation design and what is left of it are in
 [`action.md`](./action.md) and [`TODO.md`](./TODO.md).
 
+The goal is that a `.g4` taken as it is from elsewhere runs unchanged. The
+translator gets there one construct at a time, and the real-world corpus sets
+the order: a construct that real grammars use comes first. A construct not yet
+supported must be rejected loudly, never translated in part. A translation that
+runs but behaves differently from Java is worse than none, because nothing
+reports it. So a construct is translated only where Wado gives the same result
+as Java. A floating-point cast or declaration is one example. Wado does not
+promote `int` operands the way Java does, and it prints `2` where Java prints
+`2.0`. No corpus grammar uses floating point, so java2wado rejects it.
+
+Today a rejected action is an `UnsupportedAction` diagnostic at `Warn`: the
+build names the construct and drops the action, so the generated parser runs
+without it.
+
 Stage C is sequenced after Stage A and Stage B because the descriptor
 corpus is the cheapest way to discover which constructs a translator
 must cover. A descriptor that exercises action-body behaviour still
