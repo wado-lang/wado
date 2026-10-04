@@ -47,7 +47,9 @@ The first argument is one of five values:
 The attribute names no parameter. The types say which ones it means:
 
 - Only a parameter whose type can carry storage counts. `select`'s `cond: bool`
-  and `array_get_ref`'s `idx: i32` do not.
+  and `array_get_ref`'s `idx: i32` do not. A type parameter counts, since some
+  instantiation carries storage. The generic declaration is what states and
+  validates the facts, so an instantiation over `i32` changes neither.
 - The destination of `stores_args` is the one `&mut` parameter.
 - A by-value parameter contributes itself. `select` hands back one of its two
   operands, so its `part_of_args` result may be part of either.
@@ -67,7 +69,7 @@ The bare identifiers are:
 | `trap`      | The call may trap                                                |
 | `read`      | The call reads linear memory                                     |
 | `write`     | The call writes linear memory                                    |
-| `host`      | The call reaches code outside the module being optimized         |
+| `host`      | The call may reach the program's state outside linear memory     |
 | `hint`      | The call computes nothing, but its position is what it means     |
 | `black_box` | The optimizer may assume nothing about the operand or the result |
 
@@ -114,8 +116,9 @@ A range lies within `a` only when its start and its count are both
 non-negative and they end at or before `a`'s length, as the Wasm instructions
 read them unsigned.
 
-`outside = [a]` also says the call does not replace `a`. Running out of memory
-is not a trap any condition describes.
+`outside = [a]` also says the call does not replace `a`. `negative` covers only a
+length below zero. An allocation too large to satisfy is not a trap any
+condition describes.
 
 ```wado
 #[storage(fresh, len = len)]
@@ -141,11 +144,19 @@ pub fn i32_load(addr: i32) -> i32;
 
 ### Where the Facts Live
 
-The compiler learns what a builtin does from its attributes alone. A table
-hardcoded inside the compiler, keyed by a builtin's name, is forbidden: it holds
-the same facts where no reader of the declaration sees them. So a trap
-condition that follows from a Wasm instruction is still written in the
-attribute.
+The compiler learns a builtin's storage and side effects from its attributes
+alone. A table hardcoded inside the compiler, keyed by a builtin's name or its
+module, is forbidden: it holds the same facts where no reader of the
+declaration sees them. So a trap condition that follows from a Wasm instruction
+is still written in the attribute.
+
+A pass may still name a builtin for what it computes or means: lowering it to
+an instruction, rewriting a call to it, or reading `cold_path` as a branch
+hint. It never names one to learn what the call shares, keeps, reads, writes or
+traps on.
+
+This WEP states the vocabulary and the rules. The value each declaration takes
+is written on the declaration, where validation and the tests check it.
 
 ### Minted Builtins
 
@@ -158,18 +169,18 @@ since no other place holds its facts.
 
 A `#[canonical(...)]` builtin is a body-less `core:builtin` declaration like any
 other and carries both attributes. Its name says what it is imported as, not
-what the call does. A canonical that hands the host a buffer to fill later, as
-`stream_read` does, lists `write` beside `host`. So does every canonical during
-which the host may fill such a buffer: `waitable_set_wait`, `waitable_set_poll`
-and the cancels. `realloc` is an export of the `"mem"` core module, outside
-the module being optimized, so it carries what a core Wasm import carries.
+what the call does. A canonical during which the host may read or write a
+buffer in linear memory lists `read` or `write` beside `host`, whether the
+buffer was handed over by this call or an earlier one.
 
 ### Core Wasm Imports
 
 A function imported from a core `.wasm` / `.wat` asset is opaque: the compiler
-sees none of its body. The declaration the compiler writes for it carries both
-attributes, with values that assume the worst: `#[storage(none)]` and
-`#[side_effect(read, write, trap, host)]`.
+sees none of its body. It exchanges only scalars, so it cannot reach the
+program's globals or GC objects. The declaration the compiler writes for it
+carries both attributes, with values that assume the worst of what it can
+reach: `#[storage(none)]` and `#[side_effect(read, write, trap)]`. `realloc`,
+an export of the `"mem"` core module, carries the same.
 
 ### Component Model Imports
 
@@ -204,9 +215,11 @@ fact.
   arrays of different lengths.
 - A name in a key that is not a parameter of the declaration.
 - `unset` naming an array that is not in `outside`.
-- `outside` or `unset` naming a parameter that is not an array, or `negative`
-  or `count` naming one that is not an integer.
-- `len` in `#[storage]` beside a value other than `fresh` or `holds_args`.
+- `outside` or `unset` naming a parameter that is not an array, or `at`,
+  `count` or `negative` naming one that is not an integer.
+- `len` in `#[storage]` beside a value other than `fresh` or `holds_args`, on a
+  declaration that does not return an array, or naming a parameter that is not
+  an integer.
 - `stores_args` on a declaration without exactly one `&mut` parameter.
 - `fresh`, `part_of_args` or `holds_args` on a declaration that returns `()`.
 - `part_of_args`, `holds_args` or `stores_args` on a declaration with no
@@ -226,15 +239,29 @@ declaration still to be written.
 - [ ] Write both attributes on the declaration of every core Wasm import, and
   derive both from `#[cm(...)]` for the raw call of every Component Model
   import.
-- [ ] Point every reader of `#[result]`, `#[retain]`, `#[trap]`,
-  `#[linear_memory]`, and of host calls recognized by `#[canonical]`, at
-  that record. The copy planner's special case for `select` goes with it,
-  since `part_of_args` over every storage parameter states it.
+- [ ] Point every reader of `#[result]`, `#[retain]`, `#[trap]` and
+  `#[linear_memory]` at that record, and replace each place that decides a
+  builtin's storage or side effects by its name or its module:
+  - [ ] `mod_ref::leaf_effect`: a `#[canonical]` builtin is opaque, and a
+    minted builtin falls back to may-trap and writes-shared-heap.
+  - [ ] `NirPackage::pure_builtin_callee_ids`: every builtin writes no field
+    slot.
+  - [ ] `value_copy::ownership`: a builtin that hands out no storage is owned.
+  - [ ] `value_copy::analyze`: `select` is a projection of its operands.
+  - [ ] `value_copy::place`: the `array_get_*` results are part of the array.
+  - [ ] `nir::FunctionRef::array_element_access`: which builtins read or write
+    an element.
+  - [ ] `dce`: `cold_path` is inert.
 - [ ] Move the rules into `spec-attributes.md`, replacing the four sections,
   and update what `spec-effects.md` and `spec-memory.md` say about
   `#[retain]` and `#[result]`.
 
-## Known Gaps
+## Known gaps
+
+- A Component Model import that passes GC references at the boundary, as
+  [WEP: Migration to GC in Components](./wep-2026-03-28-gc-in-components.md)
+  plans, shares storage with what it is handed. `#[cm]` implies
+  `#[storage(none)]` for every import, which is then false.
 
 - A `&mut` parameter always counts as a write, so `array_get_ref_mut`, which
   only hands out a reference, invalidates what the optimizer knew of the array.
