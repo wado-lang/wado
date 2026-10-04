@@ -1351,9 +1351,9 @@ fn round_time_duration(t: TimeDuration, increment: i64, unit: Unit, mode: Roundi
 /// larger unit, so a half-even tie looks at the parity within that unit.
 fn round_time(time_of_day: i64, increment: i64, unit: Unit, mode: RoundingMode) -> [i64, i64] {
     let parent = if unit matches { Day } {
-        NANOSECONDS_PER_DAY
+        NANOSECONDS_PER_DAY;
     } else {
-        unit_nanoseconds(unit) * maximum_rounding_increment(unit)
+        unit_nanoseconds(unit) * maximum_rounding_increment(unit);
     };
     let quantity = time_of_day % parent;
     let step = increment * unit_nanoseconds(unit);

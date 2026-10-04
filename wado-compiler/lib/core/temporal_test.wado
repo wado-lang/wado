@@ -1681,6 +1681,8 @@ test "the inverse operations of the plain types" {
     assert dt.since(&PlainDate::new(2024, 2, 29).to_plain_date_time()) == Duration { days: 1 };
     let ym = PlainYearMonth::new(2024, 3);
     assert ym.days_in_year() == 366;
+    assert PlainYearMonth::new(2023, 3).days_in_year() == 365;
+    assert PlainMonthDay::from_str("2020-12-25") matches { Ok(md) && md == PlainMonthDay::new(12, 25) };
     assert ym.months_in_year() == 12;
     assert ym.month_code() == "M03";
     assert ym.subtract(&Duration { months: 3 }) == PlainYearMonth::new(2023, 12);
@@ -1704,21 +1706,18 @@ test "zone annotations follow the TimeZoneIANAName grammar" {
 
 test "annotations follow the AnnotationKey and AnnotationValue grammar" {
     let bad: List<String> = [
-        "2020-01-01T00:00Z[UTC",
-        "2020-01-01T00:00Z[UTC][u-ca=]",
-        "2020-01-01T00:00Z[UTC][=x]",
-        "2020-01-01T00:00Z[UTC][a.b=x]",
-        "2020-01-01T00:00Z[UTC][u-ca=a--b]",
-        "2020-01-01T00:00Z[UTC][u-ca=a_b]",
-        "2020-01-01T00:00Z[UTC][u-ca=a-]",
-        "2020-01-01T00:00Z[UTC][u-ca=iso8601][!u-ca=iso8601]",
-        "2020-01-01T00:00Z[UTC][u-ca=gregory]",
-        "nope",
+        "2020-01-01T00:00Z[UTC", "2020-01-01T00:00Z[UTC][u-ca=]", "2020-01-01T00:00Z[UTC][=x]",
+        "2020-01-01T00:00Z[UTC][a.b=x]", "2020-01-01T00:00Z[UTC][u-ca=a--b]", "2020-01-01T00:00Z[UTC][u-ca=a_b]",
+        "2020-01-01T00:00Z[UTC][u-ca=a-]", "2020-01-01T00:00Z[UTC][u-ca=iso8601][!u-ca=iso8601]",
+        "2020-01-01T00:00Z[UTC][u-ca=gregory]", "nope",
     ];
     for let s of bad {
         assert ZonedDateTime::from_str(s) matches { Err(_) };
     }
     assert ZonedDateTime::from_str("2020-01-01T00:00Z[UTC][x-y=a-b]") matches { Ok(_) };
+    // A second calendar is ignored unless either one is critical.
+    assert ZonedDateTime::from_str("2020-01-01T00:00Z[UTC][u-ca=iso8601][u-ca=gregory]") matches { Ok(_) };
+    assert ZonedDateTime::from_str("2020-01-01T00:00Z[UTC][!u-ca=iso8601][u-ca=iso8601]") matches { Err(_) };
 }
 
 test "the plain types refuse a calendar other than ISO 8601 and malformed text" {
@@ -1734,6 +1733,7 @@ test "the plain types refuse a calendar other than ISO 8601 and malformed text" 
     assert PlainDate::from_str("2020-01-x1") matches { Err(_) };
     assert PlainMonthDay::from_str("12-x1") matches { Err(_) };
     assert PlainYearMonth::from_str("2020-01[") matches { Err(_) };
+    assert PlainMonthDay::from_str("12-25[") matches { Err(_) };
     assert Instant::from_str("2020-01-01T00:00+x") matches { Err(_) };
 }
 
@@ -1800,40 +1800,17 @@ test "to_http_date names every weekday" {
 
 test "HTTP-date parsing refuses each malformed part" {
     let bad: List<String> = [
-        "Sun,06 Nov 1994 08:49:37 GMT",
-        "Sun, x6 Nov 1994 08:49:37 GMT",
-        "Sun, 06-Nov 1994 08:49:37 GMT",
-        "Sun, 06 Xov 1994 08:49:37 GMT",
-        "Sun, 06 Nov-1994 08:49:37 GMT",
-        "Sun, 06 Nov 19x4 08:49:37 GMT",
-        "Sun, 06 Nov 1994-08:49:37 GMT",
-        "Sun, 06 Nov 1994 x8:49:37 GMT",
-        "Sun, 06 Nov 1994 08-49:37 GMT",
-        "Sun, 06 Nov 1994 08:x9:37 GMT",
-        "Sun, 06 Nov 1994 08:49-37 GMT",
-        "Sun, 06 Nov 1994 08:49:x7 GMT",
-        "Sun, 06 Nov 1994 24:49:37 GMT",
-        "Sun, 06 Nov 1994 08:49:37GMT",
-        "Sun, 06 Nov 1994 08:49:37 XMT",
-        "Sun, 06 Nov 1994 08:49:37 GXT",
-        "Sun, 06 Nov 1994 08:49:37 GMX",
-        "Sun, 06 No",
-        "Sunday,x06-Nov-94 08:49:37 GMT",
-        "Sunday, x6-Nov-94 08:49:37 GMT",
-        "Sunday, 06-Xov-94 08:49:37 GMT",
-        "Sunday, 06-Nov 94 08:49:37 GMT",
-        "Sunday, 06-Nov-x4 08:49:37 GMT",
-        "Sunday, 06-Nov-94-08:49:37 GMT",
-        "Sunday, 06-Nov-94 x8:49:37 GMT",
-        "Sunday, 06-Nov-94 08:49:37 UTC",
-        "SunxNov  6 08:49:37 1994",
-        "Sun Xov  6 08:49:37 1994",
-        "Sun Nov- 6 08:49:37 1994",
-        "Sun Nov x6 08:49:37 1994",
-        "Sun Nov 06x08:49:37 1994",
-        "Sun Nov 06 x8:49:37 1994",
-        "Sun Nov 06 08:49:37x1994",
-        "Sun Nov 06 08:49:37 19x4",
+        "Sun,06 Nov 1994 08:49:37 GMT", "Sun, x6 Nov 1994 08:49:37 GMT", "Sun, 06xNov 1994 08:49:37 GMT",
+        "Sun, 06 Xov 1994 08:49:37 GMT", "Sun, 06 Nov-1994 08:49:37 GMT", "Sun, 06 Nov 19x4 08:49:37 GMT",
+        "Sun, 06 Nov 1994-08:49:37 GMT", "Sun, 06 Nov 1994 x8:49:37 GMT", "Sun, 06 Nov 1994 08-49:37 GMT",
+        "Sun, 06 Nov 1994 08:x9:37 GMT", "Sun, 06 Nov 1994 08:49-37 GMT", "Sun, 06 Nov 1994 08:49:x7 GMT",
+        "Sun, 06 Nov 1994 24:49:37 GMT", "Sun, 06 Nov 1994 08:49:37GMT", "Sun, 06 Nov 1994 08:49:37 XMT",
+        "Sun, 06 Nov 1994 08:49:37 GXT", "Sun, 06 Nov 1994 08:49:37 GMX", "Sun, 06 No", "Sunday,x06-Nov-94 08:49:37 GMT",
+        "Sunday, x6-Nov-94 08:49:37 GMT", "Sunday, 06-Xov-94 08:49:37 GMT", "Sunday, 06-Nov 94 08:49:37 GMT",
+        "Sunday, 06-Nov-x4 08:49:37 GMT", "Sunday, 06-Nov-94-08:49:37 GMT", "Sunday, 06-Nov-94 x8:49:37 GMT",
+        "Sunday, 06-Nov-94 08:49:37 UTC", "SunxNov  6 08:49:37 1994", "Sun Xov  6 08:49:37 1994",
+        "Sun Nov- 6 08:49:37 1994", "Sun Nov x6 08:49:37 1994", "Sun Nov 06x08:49:37 1994", "Sun Nov 06 x8:49:37 1994",
+        "Sun Nov 06 08:49:37x1994", "Sun Nov 06 08:49:37 19x4",
     ];
     for let s of bad {
         assert Instant::parse_http_date(s) matches { Err(_) };
