@@ -671,7 +671,7 @@ patternPrimary
     : '_'
     | 'mut'? bindingName
     | literal
-    | '-' INTEGER
+    | '-' (INTEGER | FLOAT)
     | 'mut'? patternPath ('(' (pattern (',' pattern)*)? ')')?
     | 'mut'? path? '{' patternFieldList? '}'
     | 'mut'? '(' (pattern (',' pattern)*)? ')'
