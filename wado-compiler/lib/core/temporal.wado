@@ -1320,9 +1320,15 @@ impl TimeDuration {
         return time_duration(self.seconds + days * SECONDS_PER_DAY, self.nanoseconds).checked();
     }
 
-    /// Trap past Temporal's `maxTimeDuration`, 2^53 seconds less a nanosecond.
+    /// Whether this is within Temporal's `maxTimeDuration`, 2^53 seconds less
+    /// a nanosecond.
+    fn is_in_range(&self) -> bool {
+        return -TIME_DURATION_SECONDS_LIMIT < self.seconds < TIME_DURATION_SECONDS_LIMIT;
+    }
+
+    /// Trap past Temporal's `maxTimeDuration`.
     fn checked(&self) -> TimeDuration {
-        if !(-TIME_DURATION_SECONDS_LIMIT < self.seconds < TIME_DURATION_SECONDS_LIMIT) {
+        if !self.is_in_range() {
             panic("core:temporal: the time duration reaches 2^53 seconds");
         }
         return *self;
@@ -1632,7 +1638,7 @@ impl Duration {
             && f64::abs(self.nanoseconds) < limit * 1_000_000_000.0) {
             return false;
         }
-        return is_below(self.time_with_days().seconds, TIME_DURATION_SECONDS_LIMIT);
+        return self.time_with_days().is_in_range();
     }
 
     /// Trap unless this is a valid duration, the check a struct literal skips.
@@ -1716,12 +1722,6 @@ impl Duration {
     }
 }
 
-/// Whether `value` is strictly between `-limit` and `limit`, written so that
-/// `i64::MIN` fails it rather than wrapping through an `abs`.
-fn is_below(value: i64, limit: i64) -> bool {
-    return -limit < value < limit;
-}
-
 /// Temporal's `TemporalDurationFromInternal`: the date components as given,
 /// and the time balanced into the components up to `largest_unit`. Each
 /// component is the float nearest its exact value, as Temporal's `𝔽` takes,
@@ -1793,8 +1793,8 @@ fn with_sign(sign: i64, magnitude: f64) -> f64 {
 }
 
 /// The f64 nearest `numerator / denominator`, ties to even, for a positive
-/// `denominator`: the exact quotient Temporal's `TotalTimeDuration` rounds
-/// once, where dividing two rounded floats would round twice.
+/// `denominator`. Temporal rounds an exact value once, as `TotalTimeDuration`
+/// and `𝔽` do, where dividing two rounded floats would round twice.
 fn exact_quotient_to_f64(numerator: i128, denominator: i128) -> f64 {
     if numerator == 0 {
         return 0.0;
@@ -1896,7 +1896,7 @@ fn temporal_duration_to_string(d: &Duration, precision: i32) -> String {
 }
 
 /// A component's magnitude and its designator, or nothing for a zero. A valid
-/// duration's components from days up are integers below 2^53.
+/// duration's components from years to minutes are integers below 2^53.
 fn designated(component: f64, designator: String) -> String {
     if component == 0.0 {
         return "";
