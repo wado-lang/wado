@@ -634,7 +634,7 @@ pub enum CompilerItem {
     /// `Formatter::new` — template expansion builds the formatter through it.
     FormatterNew,
     /// `Formatter::internal_write_literal` — the only call a synthesized
-    /// closure-functor `Display` / `Inspect` body makes.
+    /// closure-functor `Inspect` body makes.
     FormatterWriteLiteral,
     /// `Formatter::write_str` — the text a derived `Inspect` body writes.
     FormatterWriteStr,

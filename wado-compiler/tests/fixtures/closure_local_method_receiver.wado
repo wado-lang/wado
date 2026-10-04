@@ -1,0 +1,48 @@
+// A closure local stays specialised only where its functor can serve the use.
+// As the receiver of any method but `Inspect` on its own fn type, it travels as
+// the canonical closure the callee expects.
+
+type Cb = fn(i32) -> i32;
+type Cb2 = Cb;
+
+impl Cb {
+    fn twice(&self, x: i32) -> i32 {
+        return self(self(x));
+    }
+}
+
+trait Apply {
+    fn apply1(&self) -> i32;
+}
+
+impl Apply for fn(i32) -> i32 {
+    fn apply1(&self) -> i32 {
+        return self(1);
+    }
+}
+
+test "inspect through a newtype over a fn type" {
+    let g: Cb = |x: i32| x + 2;
+    assert `${g:?}` == "|i32| -> i32 as Cb";
+    assert `${g:#?}` == "|x: i32| (x + 2) as Cb";
+    assert g(1) == 3;
+}
+
+test "inspect through a newtype chain" {
+    let h: Cb2 = |x: i32| x * 3;
+    assert `${h:#?}` == "|x: i32| (x * 3) as Cb as Cb2";
+}
+
+test "inherent method on a newtype over a fn type" {
+    let g: Cb = |x: i32| x + 2;
+    assert g.twice(1) == 5;
+}
+
+test "trait method on a fn type" {
+    let h = |x: i32| x * 10;
+    assert h.apply1() == 10;
+    assert h(2) == 20;
+}
+
+__DATA__
+{"test": {}}

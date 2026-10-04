@@ -292,7 +292,7 @@ fn print_heartbeat(state: &HeartbeatState) {
         counts.push_str(&format!(", {todo} todo"));
     }
     if resolved > 0 {
-        counts.push_str(&format!(", {resolved} resolved"));
+        counts.push_str(&format!(", {resolved} unexpectedly passed"));
     }
     if skip > 0 {
         counts.push_str(&format!(", {skip} skip"));
@@ -454,10 +454,11 @@ impl TestReporter for HeartbeatReporter {
             TestOutcome::TodoResolved => {
                 self.state.todo_resolved.fetch_add(1, Ordering::Relaxed);
                 self.announce(&format!(
-                    "resolved  {} :: {} ({}) — remove the #[TODO] attribute",
+                    "unexpectedly passed {} :: {} ({})\n  {}",
                     result.file_path,
                     result.display_name,
-                    result.cost()
+                    result.cost(),
+                    result.resolved_advice()
                 ));
             }
         }
@@ -652,7 +653,7 @@ impl TapDoc {
 /// `test` blocks — a `# Subtest:` block nesting each test's own Test
 /// Point. `#[TODO]` maps onto TAP's own `TODO` directive (the feature it
 /// was modeled on); a TODO test that unexpectedly passes is reported
-/// honestly as `ok … # TODO resolved` rather than forced to `not ok` —
+/// honestly as `ok … # TODO unexpectedly passed` rather than forced to `not ok` —
 /// whether that counts as a failure is `wado test`'s own policy (see
 /// `on_run_done`/the exit code in `test::run`), not something the raw TAP
 /// text should misrepresent. Compile/load progress, the final summary and
@@ -767,9 +768,10 @@ impl TestReporter for TapReporter {
             }
             TestOutcome::TodoPending => (vec![format!("not ok - {name} ({cost}) # TODO")], false),
             TestOutcome::TodoResolved => (
-                vec![format!(
-                    "ok - {name} ({cost}) # TODO resolved — remove the #[TODO] attribute"
-                )],
+                vec![
+                    format!("ok - {name} ({cost}) # TODO unexpectedly passed"),
+                    format!("# {}", result.resolved_advice()),
+                ],
                 false,
             ),
         };

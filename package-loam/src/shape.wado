@@ -2,7 +2,7 @@
 //! operation owes before it can emit anything.
 
 use { Extent } from "./extent.wado";
-use { Condition, Poly } from "./poly.wado";
+use { Condition, Poly, owe } from "./poly.wado";
 
 /// Whether a regrouping that has consumed `consumed` elements per step must
 /// take another part to reach `produced`: fewer, where both are numbers, and a
@@ -82,24 +82,31 @@ pub struct Shape {
     pub axes: List<Axis>,
 }
 
-/// Two axes an operation needs to be one length are not. Both extents are
-/// carried, so the diagnostic names each.
-pub struct ExtentConflict {
+/// Two axes an operation needs to be one axis are not: named apart, or not one
+/// length. Both sides are carried, so the diagnostic names each.
+pub struct AxisConflict {
     pub op: String,
     pub axis: String,
+    pub right_axis: String,
     pub left: Extent,
     pub right: Extent,
 }
 
-impl Display for ExtentConflict {
+impl Display for AxisConflict {
     fn fmt(&self, f: &mut Formatter) {
+        if self.axis != self.right_axis {
+            f.write_str(
+                `${self.op}: axis ${self.axis} on the left meets ${self.right_axis} on the right, and only an axis of 1 takes another's name`,
+            );
+            return;
+        }
         f.write_str(
             `${self.op}: axis ${self.axis} is ${self.left} on the left and ${self.right} on the right`,
         );
     }
 }
 
-impl Error for ExtentConflict {
+impl Error for AxisConflict {
 }
 
 impl Shape {
@@ -226,7 +233,7 @@ impl Shape {
     /// Elementwise over two operands under ONNX's multidirectional
     /// broadcasting, which every unary operation is the one-operand case of.
     /// `owed` gains what the inputs owe for the operands' axes to meet.
-    pub fn elementwise(&self, other: &Shape, op: String, owed: &mut List<Condition>) -> Result<Shape, ExtentConflict> {
+    pub fn elementwise(&self, other: &Shape, op: String, owed: &mut List<Condition>) -> Result<Shape, AxisConflict> {
         let axes = Shape::broadcast(&self.axes, &other.axes, &op, owed)?;
         return Result::Ok(Shape { axes });
     }
@@ -234,7 +241,7 @@ impl Shape {
     /// `MatMul` as ONNX defines it, which is numpy's: the batch axes broadcast,
     /// and a rank-1 operand is a matrix whose missing axis the result drops.
     /// `owed` gains what the inputs owe for the operands' axes to meet.
-    pub fn matmul(&self, rhs: &Shape, op: String, owed: &mut List<Condition>) -> Result<Shape, ExtentConflict> {
+    pub fn matmul(&self, rhs: &Shape, op: String, owed: &mut List<Condition>) -> Result<Shape, AxisConflict> {
         assert self.rank() >= 1 && rhs.rank() >= 1;
 
         let right_k = if rhs.rank() == 1 { rhs.from_end(0) } else { rhs.from_end(1) };
@@ -269,7 +276,7 @@ impl Shape {
         right: &List<Axis>,
         op: &String,
         owed: &mut List<Condition>,
-    ) -> Result<List<Axis>, ExtentConflict> {
+    ) -> Result<List<Axis>, AxisConflict> {
         let rank = i32::max(left.len(), right.len());
         let mut axes: List<Axis> = [];
         for let mut i = 0; i < rank; i += 1 {
@@ -284,6 +291,18 @@ impl Shape {
                 continue;
             }
             let [l, r] = [left[li], right[ri]];
+            // A 1 meeting a length the run derives, which reads as 1, keeps the
+            // number, as a pair met through a reading does below.
+            if l.extent.is_one() && r.extent.is_derived() && let Some(c) = r.extent.oneness() {
+                owed.extend(&c);
+                axes.push(l);
+                continue;
+            }
+            if r.extent.is_one() && l.extent.is_derived() && let Some(c) = l.extent.oneness() {
+                owed.extend(&c);
+                axes.push(r);
+                continue;
+            }
             if l.extent.is_one() {
                 axes.push(r);
                 continue;
@@ -313,19 +332,48 @@ impl Shape {
     }
 
     /// Discharge the one condition an operation places on a pair of axes, that
-    /// they are one length. What stage 0 cannot prove is an error, save what
-    /// `Extent::agreement` owes, which `owed` gains.
-    pub fn agree(left: &Axis, right: &Axis, op: &String, owed: &mut List<Condition>) -> Result<(), ExtentConflict> {
-        if let Some(c) = left.extent.agreement(&right.extent) {
+    /// they are one axis: one name, and one length. What stage 0 cannot prove
+    /// is an error, save what `Extent::agreement` owes and the equality of two
+    /// symbolic lengths, which `owed` gains. Lengths that agree do not make two
+    /// names one, since the names are what the generated code types the axes by.
+    pub fn agree(left: &Axis, right: &Axis, op: &String, owed: &mut List<Condition>) -> Result<(), AxisConflict> {
+        if left.name == right.name && let Some(c) = left.extent.agreement(&right.extent) {
+            owed.extend(&c);
+            return Result::Ok(());
+        }
+        if left.name == right.name && let Some(c) = Shape::owed_equality(left, right, op) {
             owed.extend(&c);
             return Result::Ok(());
         }
         builtin::cold_path();
-        return Result::Err(ExtentConflict {
+        return Result::Err(AxisConflict {
             op: *op,
             axis: left.name,
+            right_axis: right.name,
             left: left.extent,
             right: right.extent,
         });
+    }
+
+    /// What the inputs owe for two symbolic lengths of one axis to be one: their
+    /// difference, read as `Extent::agreement` reads it, neither above 0 nor
+    /// below. `None` where either length is a number, which `dims` binds at
+    /// build time instead, or where the difference is never 0.
+    fn owed_equality(left: &Axis, right: &Axis, op: &String) -> Option<List<Condition>> {
+        let Symbolic(l) = left.extent else {
+            return null;
+        };
+        let Symbolic(r) = right.extent else {
+            return null;
+        };
+        let mut conditions: List<Condition> = [];
+        let difference = l.try_sub(&r)?.presumed(&mut conditions)?;
+        let condition = `axis ${left.name} is ${l} on the left and ${r} on the right, and the two must be one length`;
+        for let slack of [difference, Poly::constant(0).try_sub(&difference)?] {
+            if owe(&mut conditions, op, &slack, condition).is_err() {
+                return null;
+            }
+        }
+        return Option::Some(conditions);
     }
 }

@@ -4,34 +4,49 @@
 //!
 //!     wado run package-loam/example/gpt2.wado -- "Hello, my name is"
 //!
-//! The graph leaves the sequence length to the run, so each step reads the
-//! tokens so far and nothing more.
+//! The decoder is one graph that branches on whether it is given a past. The
+//! prompt runs through the branch without one, all its positions at once, and
+//! each token after it through the branch with the keys and values computed so
+//! far, so a step computes one position rather than every position so far.
 
 use { args, eprintln, println, Environment, Stderr, Stdout } from "core:cli";
 use { from_string } from "core:json";
 use { tiny } from "./gpt2_tokenizer.wado";
-use gpt2 from "../tests/models/tiny-gpt2/model.onnx"
+use gpt2 from "../tests/models/tiny-gpt2/merged/model.onnx"
     with {
         generator: {
             module: "../src/generator.wado",
             options: {
                 dims: { batch_size: 1 },
-                outputs: ["logits"],
                 layout: [
                     {
                         pattern: "input_ids",
                         axes: ["Batch", "Seq"],
                     },
+                    // Without a past the keys are the sequence itself, so the
+                    // mask over them and the sequence share one axis.
                     {
                         pattern: "attention_mask",
                         axes: ["Batch", "Seq"],
                     },
                     {
-                        pattern: "transformer.wte.weight",
+                        pattern: "use_cache_branch",
+                        axes: ["One"],
+                    },
+                    {
+                        pattern: "past_key_values.*",
+                        axes: ["Batch", "Head", "Past", "Dim"],
+                    },
+                    {
+                        pattern: "present.*",
+                        axes: ["Batch", "Head", "Seq", "Dim"],
+                    },
+                    {
+                        pattern: "transformer.wte.weight*",
                         axes: ["Vocab", "Embed"],
                     },
                     {
-                        pattern: "transformer.wpe.weight",
+                        pattern: "transformer.wpe.weight*",
                         axes: ["Pos", "Embed"],
                     },
                     {
@@ -43,32 +58,36 @@ use gpt2 from "../tests/models/tiny-gpt2/model.onnx"
                         axes: ["Embed"],
                     },
                     {
-                        pattern: "*c_attn.weight",
+                        pattern: "*c_attn.weight*",
                         axes: ["Embed", "Qkv"],
                     },
                     {
-                        pattern: "*c_attn.bias",
+                        pattern: "*c_attn.bias*",
                         axes: ["Qkv"],
                     },
                     {
-                        pattern: "*attn.c_proj.weight",
+                        pattern: "*attn.c_proj.weight*",
                         axes: ["(Head Dim)", "Embed"],
                     },
                     {
-                        pattern: "*mlp.c_fc.weight",
+                        pattern: "*mlp.c_fc.weight*",
                         axes: ["Embed", "Inner"],
                     },
                     {
-                        pattern: "*mlp.c_fc.bias",
+                        pattern: "*mlp.c_fc.bias*",
                         axes: ["Inner"],
                     },
                     {
-                        pattern: "*mlp.c_proj.weight",
+                        pattern: "*mlp.c_proj.weight*",
                         axes: ["Inner", "Embed"],
                     },
                     {
-                        pattern: "onnx::MatMul_1588",
+                        pattern: "onnx::MatMul_1588*",
                         axes: ["Embed", "Vocab"],
+                    },
+                    {
+                        pattern: "*attn.bias*",
+                        axes: ["Batch", "Head", "Pos", "Pos"],
                     },
                     {
                         pattern: "/transformer/Range_output_0",
@@ -115,10 +134,6 @@ use gpt2 from "../tests/models/tiny-gpt2/model.onnx"
                         axes: ["Batch", "Seq", "Head", "Dim"],
                     },
                     {
-                        pattern: "*attn.bias",
-                        axes: ["Batch", "Head", "Pos", "Pos"],
-                    },
-                    {
                         pattern: "*/attn/Slice_3_output_0",
                         axes: ["Batch", "Head", "Seq", "Pos"],
                     },
@@ -135,7 +150,7 @@ global STEPS: i32 = 8;
 
 /// How many tokens the model reads at most: one position per row of `wpe`.
 fn positions(weights: &gpt2::Weights) -> i32 {
-    return weights.transformer_wpe_weight.extents[0];
+    return weights.transformer_wpe_weight_merged_0.extents[0];
 }
 
 /// The longest prompt `greedy` extends by `steps`. The last token it picks is
@@ -144,27 +159,88 @@ fn longest_prompt(steps: i32, weights: &gpt2::Weights) -> i32 {
     return positions(weights) - steps + 1;
 }
 
+/// The keys and values so far, one per layer's key and value in the order the
+/// graph names them.
+type Cache = List<gpt2::Tensor<f32, [gpt2::Batch, gpt2::Head, gpt2::Past, gpt2::Dim]>>;
+
+/// No positions yet, which takes the branch without a past.
+fn empty_cache() -> Cache {
+    let mut cache: Cache = [];
+    for let _ of 0..<10 {
+        cache.push(gpt2::Tensor {
+            data: [],
+            extents: [gpt2::Batch::EXTENT, 4, 0, 8],
+        });
+    }
+    return cache;
+}
+
+/// The token the logits rank first at the last position.
+fn best(logits: &gpt2::Tensor<f32, [gpt2::Batch, gpt2::Seq, gpt2::Vocab]>) -> i32 {
+    let vocab = logits.extents[2];
+    let row = (logits.extents[1] - 1) * vocab;
+    let mut top = 0;
+    for let v of 1..<vocab {
+        if logits.data[row + v] > logits.data[row + top] {
+            top = v;
+        }
+    }
+    return top;
+}
+
+/// The token after `tokens` and the positions `cache` holds, and the cache
+/// grown by `tokens`' positions.
+fn decode(tokens: &List<i32>, cache: &Cache, weights: &gpt2::Weights) -> [i32, Cache] {
+    let past = cache[0].extents[2];
+    let length = past + tokens.len();
+    let ids: List<i64> = tokens.into_iter().map(|id| id as i64).collect();
+    let o = gpt2::forward(
+        &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
+            data: ids,
+            extents: [gpt2::Batch::EXTENT, tokens.len()],
+        },
+        &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
+            data: List::<i64>::filled(length, 1),
+            extents: [gpt2::Batch::EXTENT, length],
+        },
+        &cache[0],
+        &cache[1],
+        &cache[2],
+        &cache[3],
+        &cache[4],
+        &cache[5],
+        &cache[6],
+        &cache[7],
+        &cache[8],
+        &cache[9],
+        &gpt2::Tensor::<bool, [gpt2::One]> {
+            data: [past > 0],
+            extents: [1],
+        },
+        weights,
+    );
+    let presents = [
+        o.present_0_key, o.present_0_value, o.present_1_key, o.present_1_value, o.present_2_key, o.present_2_value,
+        o.present_3_key, o.present_3_value, o.present_4_key, o.present_4_value,
+    ];
+    let mut grown: Cache = [];
+    for let p of presents {
+        grown.push(gpt2::Tensor { data: p.data, extents: p.extents });
+    }
+    return [best(&o.logits), grown];
+}
+
 /// `prompt` extended by `steps` tokens, each the one the model ranks first.
 fn greedy(prompt: &List<i32>, steps: i32, weights: &gpt2::Weights) -> List<i32> {
     assert 1 <= prompt.len() <= longest_prompt(steps, weights);
     let mut ids = *prompt;
-    for let _ of 0..<steps {
-        let input: List<i64> = ids.into_iter().map(|id| id as i64).collect();
-        let extents: List<i32> = [gpt2::Batch::EXTENT, ids.len()];
-        let logits = gpt2::forward(
-            &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: input, extents },
-            &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: List::<i64>::filled(ids.len(), 1), extents },
-            weights,
-        );
-        let vocab = logits.extents[2];
-        let row = (ids.len() - 1) * vocab;
-        let mut best = 0;
-        for let v of 1..<vocab {
-            if logits.data[row + v] > logits.data[row + best] {
-                best = v;
-            }
-        }
-        ids.push(best);
+    let [first, prefilled] = decode(prompt, &empty_cache(), weights);
+    ids.push(first);
+    let mut cache = prefilled;
+    for let _ of 1..<steps {
+        let [next, grown] = decode(&[ids[ids.len() - 1]], &cache, weights);
+        ids.push(next);
+        cache = grown;
     }
     return ids;
 }

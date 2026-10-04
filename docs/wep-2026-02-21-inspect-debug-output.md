@@ -109,8 +109,8 @@ println(`${arr:#?}`);
 // ]
 ```
 
-A closure is the one type whose `Display` delegates to `Inspect`, so `${f}`
-and `${f:?}` both write the signature and `${f:#}` and `${f:#?}` the source.
+A closure has no `Display`, as in Rust: `${f:?}` writes the signature and
+`${f:#?}` the source.
 
 ### Truncation
 
@@ -187,7 +187,6 @@ Per-literal artifacts, synthesised at lower time:
    signature, e.g. `|i32, i32| -> i32`, or under `f.alternate` the
    TIR-unparsed source, e.g. `|x: i32| (x + 1)`. A capturing closure's
    captured bindings appear as free variables in that source.
-4. `$Closure_N^Display::fmt` — delegates to the `Inspect` impl.
 
 Per-literal canonical-path wrappers, registered in WIR build for inspectable
 signatures only:

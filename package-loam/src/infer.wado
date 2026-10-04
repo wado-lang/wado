@@ -2,12 +2,13 @@
 //! then discharge each operator's extent conditions in order.
 
 use { TreeMap, TreeSet } from "core:collections";
-use { Extent } from "./extent.wado";
-use { Axis, ExtentConflict, Shape } from "./shape.wado";
+use { Extent, solved } from "./extent.wado";
+use { Axis, AxisConflict, Shape } from "./shape.wado";
 use {
     SliceBounds,
     axes_of,
     axis_indices,
+    carried_axes,
     count_of,
     fill_of,
     fits,
@@ -55,7 +56,7 @@ pub struct AxisCountConflict {
 /// An operator's conditions failed, at the node its first output names.
 pub struct NodeConflict {
     pub node: String,
-    pub error: ExtentConflict,
+    pub error: AxisConflict,
 }
 
 /// A graph output whose declared rank is not the rank the nodes produced.
@@ -106,7 +107,7 @@ pub struct AttributeConflict {
     pub reason: String,
 }
 
-/// Every operator Loam carries but `Split` produces one value, so a node naming
+/// Every operator Loam carries but `Split` and `If` produces one value, so a node naming
 /// any other number of outputs has nowhere to put them.
 pub struct OutputCountConflict {
     pub node: String,
@@ -293,6 +294,10 @@ pub struct Checked {
     pub primitives: TreeMap<String, String>,
     pub known: TreeMap<String, Known>,
     pub owed: List<Condition>,
+    /// Each `If`'s two branches, keyed by its first output, then before else:
+    /// the branch's scope, the one around it included, and what it owes where
+    /// it runs.
+    pub branches: TreeMap<String, [Checked, Checked]> = TreeMap::new(),
 }
 
 /// `owe_at` the node, which a graph wrong for every input stops at.
@@ -304,70 +309,44 @@ fn owe(node: &Node, owed: &mut List<Condition>, slack: Poly, condition: String) 
 /// discharges the graph's extent conditions, so a successful return is the
 /// proof, save the conditions it hands `forward` to check.
 pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
-    let mut shapes = TreeMap::<String, Shape>::new();
-    let mut primitives = TreeMap::<String, String>::new();
-    let mut owed: List<Condition> = [];
-    let mut known = graph.constants;
-    for let [name, k] of known.entries() {
-        primitives[*name] = known_primitive(k);
+    let mut scope = Checked {
+        shapes: TreeMap::new(),
+        primitives: TreeMap::new(),
+        known: TreeMap::new(),
+        owed: [],
+    };
+    checked_graph(graph, &mut scope, schema)?;
+    return Result::Ok(scope);
+}
+
+/// Check `graph` within `scope`, which gains its tensors and what it owes.
+fn checked_graph(graph: &Graph, scope: &mut Checked, schema: &Schema) -> Result<(), InferError> {
+    let local = schema.within(&graph.name);
+    for let [name, k] of graph.constants.entries() {
+        scope.known[*name] = *k;
+        scope.primitives[*name] = known_primitive(k);
     }
     for let declared of [&graph.inputs, &graph.initializers] {
         for let vi of *declared {
-            shapes[vi.name] = shape_of(&vi, schema)?;
+            scope.shapes[vi.name] = shape_of(&vi, &local)?;
             // An element no kernel reaches is left out, for emit to name.
             if let Some(element) = element_of(&vi.dtype) {
-                primitives[vi.name] = element.computed;
+                scope.primitives[vi.name] = element.computed;
             }
         }
     }
+    unspell_unbound(graph, &mut scope.shapes);
     for let node of &graph.nodes {
-        if node.outputs.is_empty() || node.outputs.len() != 1 && node.op != "Split" {
-            builtin::cold_path();
-            return Result::Err(InferError::OutputCount(OutputCountConflict {
-                node: node.name(),
-                op: node.op,
-                given: node.outputs.len(),
-            }));
-        }
-        operands_given(node, &known, &shapes)?;
-        match fold(node, &known, &shapes) {
-            Ok(Some(k)) => {
-                primitives[node.outputs[0]] = known_primitive(&k);
-                known[node.outputs[0]] = k;
-                continue;
-            },
-            Ok(None) => {
-            },
-            Err(reason) => {
-                return Result::Err(refusal(node, reason));
-            },
-        }
-        for let [index, input] of node.inputs.into_iter().enumerate() {
-            if !read_at_build_time(node, index) {
-                materialize(&input, &known, &mut shapes, schema)?;
-            }
-        }
-        let produced = if node.op == "Split" {
-            split(node, &shapes, &known, schema, &mut owed)?;
-        } else {
-            [infer_node(node, &shapes, &known, schema, graph.opset, &mut owed)?] as List<Shape>;
-        };
-        let primitive = produced_primitive(node, &primitives)?;
-        for let [i, shape] of produced.into_iter().enumerate() {
-            shapes[node.outputs[i]] = held(&node.outputs[i], shape)?;
-            if let Some(p) = primitive {
-                primitives[node.outputs[i]] = p;
-            }
-        }
+        checked_node(node, scope, schema, &local, graph.opset)?;
     }
     for let vi of &graph.outputs {
-        materialize(&vi.name, &known, &mut shapes, schema)?;
-        let Some(produced) = shapes.get(vi.name) else {
+        materialize(&vi.name, &scope.known, &mut scope.shapes, &local)?;
+        let Some(produced) = scope.shapes.get(vi.name) else {
             builtin::cold_path();
             return Result::Err(InferError::Undefined(vi.name));
         };
-        shapes[vi.name] = held(&vi.name, merge_declared(vi, &produced, &mut owed)?)?;
-        if let Some(element) = element_of(&vi.dtype) && let Some(computed) = primitives.get(vi.name) && element.computed != computed {
+        scope.shapes[vi.name] = held(&vi.name, merge_declared(vi, &produced, &mut scope.owed)?)?;
+        if let Some(element) = element_of(&vi.dtype) && let Some(computed) = scope.primitives.get(vi.name) && element.computed != computed {
             builtin::cold_path();
             return Result::Err(InferError::DeclaredElement(DeclaredElementConflict {
                 tensor: vi.name,
@@ -376,7 +355,211 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
             }));
         }
     }
-    return Result::Ok(Checked { shapes, primitives, known, owed: distinct(owed) });
+    scope.owed = distinct(scope.owed);
+    return Result::Ok(());
+}
+
+/// Each input axis whose `dim_param` spells arithmetic over a name no input
+/// binds (`solved`) read again as one symbol of its own, which the run reads
+/// from that axis.
+fn unspell_unbound(graph: &Graph, shapes: &mut TreeMap<String, Shape>) {
+    let mut extents: List<Extent> = [];
+    for let vi of &graph.inputs {
+        extents.extend(&shapes[vi.name].axes.into_iter().map(|a| a.extent).collect());
+    }
+    let bound: List<String> = solved(&extents).into_iter().map(|s| s.symbol).collect();
+    for let vi of &graph.inputs {
+        let Dims(dims) = vi.rank else {
+            continue;
+        };
+        for let [i, d] of dims.into_iter().enumerate() {
+            let Symbol(text) = d else {
+                continue;
+            };
+            let axis = shapes[vi.name].axes[i];
+            let Symbolic(p) = axis.extent else {
+                continue;
+            };
+            if !p.symbols().into_iter().all(|s| bound.contains_str(s.as_str_slice())) {
+                shapes[vi.name].axes[i] = Axis { ..axis, extent: Extent::symbol(&text) };
+            }
+        }
+    }
+}
+
+/// Check one node: `schema` is the whole schema, which a branch narrows to its
+/// own graph, and `local` the part that reaches this graph's tensors.
+fn checked_node(
+    node: &Node,
+    scope: &mut Checked,
+    schema: &Schema,
+    local: &Schema,
+    opset: Option<i64>,
+) -> Result<(), InferError> {
+    if node.outputs.is_empty() || node.outputs.len() != 1 && node.op != "Split" && node.op != "If" {
+        builtin::cold_path();
+        return Result::Err(InferError::OutputCount(OutputCountConflict {
+            node: node.name(),
+            op: node.op,
+            given: node.outputs.len(),
+        }));
+    }
+    for let output of node.outputs {
+        if scope.shapes.contains_key(output) || scope.known.contains_key(output) {
+            return Result::Err(refusal(node, `${output} is already defined in its graph`));
+        }
+    }
+    operands_given(node, &scope.known, &scope.shapes)?;
+    match fold(node, &scope.known, &scope.shapes) {
+        Ok(Some(k)) => {
+            scope.primitives[node.outputs[0]] = known_primitive(&k);
+            scope.known[node.outputs[0]] = k;
+            return Result::Ok(());
+        },
+        Ok(None) => {
+        },
+        Err(reason) => {
+            return Result::Err(refusal(node, reason));
+        },
+    }
+    for let [index, input] of node.inputs.into_iter().enumerate() {
+        if !read_at_build_time(node, index) {
+            materialize(&input, &scope.known, &mut scope.shapes, local)?;
+        }
+    }
+    if node.op == "If" {
+        return branched(node, scope, schema, local);
+    }
+    let produced = if node.op == "Split" {
+        split(node, &scope.shapes, &scope.known, local, &mut scope.owed)?;
+    } else {
+        [infer_node(node, &scope.shapes, &scope.known, local, opset, &mut scope.owed)?] as List<Shape>;
+    };
+    let primitive = produced_primitive(node, &scope.primitives)?;
+    for let [i, shape] of produced.into_iter().enumerate() {
+        scope.shapes[node.outputs[i]] = held(&node.outputs[i], shape)?;
+        if let Some(p) = primitive {
+            scope.primitives[node.outputs[i]] = p;
+        }
+    }
+    return Result::Ok(());
+}
+
+/// An `If`: each branch checked in a scope of its own, and each output the
+/// axes both branches give it. An axis the two name apart takes the name the
+/// output's layout gives, and one of two lengths a length of its own, which
+/// nothing after the node can spell.
+fn branched(node: &Node, scope: &mut Checked, schema: &Schema, local: &Schema) -> Result<(), InferError> {
+    branch_condition(node, scope)?;
+    let [then_graph, then_scope] = checked_branch(node, "then_branch", scope, schema)?;
+    let [else_graph, else_scope] = checked_branch(node, "else_branch", scope, schema)?;
+    for let [i, output] of node.outputs.into_iter().enumerate() {
+        let t = then_scope.shapes[then_graph.outputs[i].name];
+        let e = else_scope.shapes[else_graph.outputs[i].name];
+        if t.rank() != e.rank() {
+            return Result::Err(refusal(
+                node,
+                `output ${i} has rank ${t.rank()} in then_branch and ${e.rank()} in else_branch`,
+            ));
+        }
+        let pt = then_scope.primitives.get(then_graph.outputs[i].name);
+        let pe = else_scope.primitives.get(else_graph.outputs[i].name);
+        if pt != pe {
+            return Result::Err(refusal(
+                node,
+                `output ${i} is ${held_name(&pt)} in then_branch and ${held_name(&pe)} in else_branch`,
+            ));
+        }
+        let mut axes: List<Axis> = [];
+        for let j of 0..<t.rank() {
+            let [a, b] = [t.axes[j], e.axes[j]];
+            let extent = if a.extent.agrees(&b.extent) { a.extent } else { Extent::symbol(&`${output}[${j}]`) };
+            axes.push(if a.name == b.name {
+                Axis { ..a, extent };
+            } else {
+                output_layout_axis(node, &output, local, j, t.rank(), extent, "is named apart in its branches")?;
+            });
+        }
+        scope.shapes[output] = held(&output, Shape { axes })?;
+        if let Some(p) = pt {
+            scope.primitives[output] = p;
+        }
+    }
+    for let branch of [&then_scope, &else_scope] {
+        hoist_constants(scope, branch, local)?;
+    }
+    scope.branches[node.outputs[0]] = [then_scope, else_scope];
+    return Result::Ok(());
+}
+
+/// Give `scope` a shape, under its own layout, for each of its constants
+/// `branch` read, so the constant is spelled once around the branches and each
+/// branch relabels it to the axes it read it under. One the layout around the
+/// branches does not name is left to each branch.
+fn hoist_constants(scope: &mut Checked, branch: &Checked, local: &Schema) -> Result<(), InferError> {
+    for let [name, _] of branch.shapes.entries() {
+        if scope.known.contains_key(*name) && local.axes_for(name) matches { Some(_) } {
+            materialize(name, &scope.known, &mut scope.shapes, local)?;
+        }
+    }
+    return Result::Ok(());
+}
+
+/// What a message calls a tensor's primitive, where it may have none.
+fn held_name(primitive: &Option<String>) -> String {
+    return match primitive {
+        Some(p) => *p,
+        None => "an element no kernel holds",
+    };
+}
+
+/// An `If`'s condition, which is one bool.
+fn branch_condition(node: &Node, scope: &Checked) -> Result<(), InferError> {
+    let cond = node.inputs[0];
+    let primitive = scope.primitives.get(cond);
+    if primitive != Option::Some("bool") {
+        return Result::Err(refusal(node, `operand ${cond} is ${held_name(&primitive)}, and If branches on bool`));
+    }
+    let mut count: i64 = 1;
+    for let axis of scope.shapes[cond].axes {
+        let Static(n) = axis.extent else {
+            return Result::Err(refusal(
+                node,
+                `operand ${cond}'s axis ${axis.name} is ${axis.extent}, and If branches on one element`,
+            ));
+        };
+        count *= n as i64;
+    }
+    if count != 1 {
+        return Result::Err(refusal(node, `operand ${cond} holds ${count} elements, and If branches on one`));
+    }
+    return Result::Ok(());
+}
+
+/// The graph an `If` attribute holds, checked in a copy of `scope` that owes
+/// nothing yet.
+fn checked_branch(node: &Node, attr: String, scope: &Checked, schema: &Schema) -> Result<[Graph, Checked], InferError> {
+    let Some(a) = node.attr(attr) else {
+        return Result::Err(attribute_error(node, attr, "is absent and the operator reads it"));
+    };
+    let Some(graph) = a.graph else {
+        return Result::Err(attribute_error(node, attr, "holds no graph, and If branches into one"));
+    };
+    if !graph.inputs.is_empty() {
+        return Result::Err(refusal(node, `${attr} declares inputs, and a branch reads only the scope around it`));
+    }
+    if !graph.initializers.is_empty() {
+        return Result::Err(refusal(node, `${attr} declares weights, and a branch reads those of the graph around it`));
+    }
+    if graph.outputs.len() != node.outputs.len() {
+        return Result::Err(refusal(
+            node,
+            `${attr} gives ${graph.outputs.len()} outputs, and the node names ${node.outputs.len()}`,
+        ));
+    }
+    let mut inner = Checked { ..*scope, owed: [], branches: TreeMap::new() };
+    checked_graph(&graph, &mut inner, schema)?;
+    return Result::Ok([graph, inner]);
 }
 
 /// `owed` with each slack kept once, as every layer slicing one mask owes the
@@ -448,6 +631,19 @@ fn produced_primitive(node: &Node, primitives: &TreeMap<String, String>) -> Resu
             return Result::Err(refusal(node, `operand ${indices} is ${p}, and Gather indexes with i64`));
         }
         return Result::Ok(primitives.get(node.inputs[0]));
+    }
+    if op == "Concat" {
+        let first = node.inputs[0];
+        let element = primitives.get(first);
+        for let input of node.inputs {
+            if let Some(a) = element && let Some(b) = primitives.get(input) && a != b {
+                return Result::Err(refusal(
+                    node,
+                    `operand ${input} is ${b} and ${first} is ${a}, and Concat joins one element`,
+                ));
+            }
+        }
+        return Result::Ok(element);
     }
     if is_layout(&op) {
         return Result::Ok(primitives.get(node.inputs[0]));
@@ -604,12 +800,13 @@ fn held(tensor: &String, shape: Shape) -> Result<Shape, InferError> {
     return Result::Ok(shape);
 }
 
-/// An ONNX `dim_value` is a static extent and a `dim_param` a symbolic one. A
-/// `?` has no symbol, so the axis's name stands for it, as one length.
+/// An ONNX `dim_value` is a static extent and a `dim_param` a symbolic one, or
+/// the arithmetic over symbols it spells. A `?` has no symbol, so the axis's
+/// name stands for it, as one length.
 fn extent_of(dim: &Dim, axis: &String) -> Extent {
     return match dim {
         Static(n) => Extent::Static(*n),
-        Symbol(s) => Extent::symbol(s),
+        Symbol(s) => Extent::param(s),
         Unknown => Extent::symbol(axis),
     };
 }
@@ -623,7 +820,28 @@ fn infer_node(
     owed: &mut List<Condition>,
 ) -> Result<Shape, InferError> {
     let op = node.op;
-    if op == "Reshape" || op == "Unsqueeze" || op == "Squeeze" {
+    if op == "Unsqueeze" || op == "Squeeze" {
+        let operand = operand_at(node, shapes, 0);
+        let input: List<Extent> = operand.axes.into_iter().map(|axis| axis.extent).collect();
+        let carried = carried_axes(node, known, &input).map_err(|reason| refusal(node, reason))?;
+        let mut axes: List<Axis> = [];
+        for let [i, from] of carried.into_iter().enumerate() {
+            axes.push(match from {
+                Some(a) => operand.axes[a],
+                None => output_layout_axis(
+                    node,
+                    &node.outputs[0],
+                    schema,
+                    i,
+                    carried.len(),
+                    Extent::Static(1),
+                    "is inserted",
+                )?,
+            });
+        }
+        return Result::Ok(Shape { axes });
+    }
+    if op == "Reshape" {
         let operand = operand_at(node, shapes, 0);
         let input = extents_of(node, &operand)?;
         let targets = regrouped_extents(node, known, &input, owed).map_err(|reason| refusal(node, reason))?;
@@ -664,7 +882,7 @@ fn infer_node(
         // `window_of` checks the weight's rank, which `conv_group` relies on.
         let window = window_of(node, &x, shapes, owed)?;
         let group = conv_group(node, &w)?;
-        agree_at(node, &x.axes[1], &grouped_inputs(node, &w.axes[1], group)?, owed)?;
+        agree_at(node, &x.axes[1], &grouped_inputs(node, &x.axes[1], &w.axes[1], group)?, owed)?;
         if has_bias(node) {
             let b = operand_at(node, shapes, 2);
             if b.rank() != 1 {
@@ -707,6 +925,9 @@ fn infer_node(
         let shape = operand_at(node, shapes, 0);
         let perm = transpose_perm(node, shape.rank())?;
         return Result::Ok(shape.permute(&perm));
+    }
+    if op == "Concat" {
+        return joined(node, shapes, schema, owed);
     }
     if is_unary_elementwise(&op) {
         return Result::Ok(operand_at(node, shapes, 0));
@@ -768,6 +989,56 @@ fn split(
         produced.push(Shape { axes });
     }
     return Result::Ok(produced);
+}
+
+/// A `Concat` the run computes, since some operand is only known then. The
+/// operands meet on every other axis, and the joined axis, as long as their
+/// parts together, is new, for the output's layout to name.
+fn joined(
+    node: &Node,
+    shapes: &TreeMap<String, Shape>,
+    schema: &Schema,
+    owed: &mut List<Condition>,
+) -> Result<Shape, InferError> {
+    let first = operand_at(node, shapes, 0);
+    let axis = concat_axis(node, first.rank())?;
+    if node.inputs.len() == 1 {
+        return Result::Ok(first);
+    }
+    let mut sum = Poly::constant(0);
+    for let index of 0..<node.inputs.len() {
+        let x = operand_at(node, shapes, index);
+        if x.rank() != first.rank() {
+            return Result::Err(operand_rank(node, index, x.rank(), first.rank()));
+        }
+        for let i of 0..<x.rank() {
+            if i == axis {
+                continue;
+            }
+            agree_at(node, &first.axes[i], &x.axes[i], owed)?;
+        }
+        let part = extents_of(node, &x)?[axis].poly();
+        sum = sum.try_add(&part).ok_or(refusal(node, `${sum} + ${part} leaves i64`))?;
+    }
+    let mut axes = first.axes;
+    axes[axis] = output_layout_axis(
+        node,
+        &node.outputs[0],
+        schema,
+        axis,
+        first.rank(),
+        counted(node, sum)?,
+        "is a concatenation",
+    )?;
+    return Result::Ok(Shape { axes });
+}
+
+/// The axis `Concat` joins along, resolved against `rank`.
+pub fn concat_axis(node: &Node, rank: i32) -> Result<i32, InferError> {
+    if node.attr("axis") matches { None } {
+        return Result::Err(attribute_error(node, "axis", "is absent and the operator reads it"));
+    }
+    return axis_attr(node, 0, rank, rank - 1);
 }
 
 /// The axis `Split` cuts, resolved against `rank`.
@@ -1141,8 +1412,13 @@ pub fn conv_group(node: &Node, w: &Shape) -> Result<i32, InferError> {
 }
 
 /// The input channels a `Conv` of `group` groups reads, each group reading
-/// `per_group` of them, as an axis to hold the input's to.
-fn grouped_inputs(node: &Node, per_group: &Axis, group: i32) -> Result<Axis, InferError> {
+/// `per_group` of them, as an axis to hold the input's, `input`, to. One group
+/// reads the input's own axis. Over several, a group's share is an axis of its
+/// own, so only the lengths meet and the input's name stands for the whole.
+fn grouped_inputs(node: &Node, input: &Axis, per_group: &Axis, group: i32) -> Result<Axis, InferError> {
+    if group == 1 {
+        return Result::Ok(*per_group);
+    }
     let read = match per_group.extent.poly().try_mul(&Poly::constant(group as i64)) {
         Some(p) => Extent::of(p),
         None => null,
@@ -1154,7 +1430,7 @@ fn grouped_inputs(node: &Node, per_group: &Axis, group: i32) -> Result<Axis, Inf
             `is ${group}, and so many groups of ${per_group.extent} channels pass what an axis holds`,
         ));
     };
-    return Result::Ok(Axis { name: per_group.name, extent });
+    return Result::Ok(Axis { name: input.name, extent });
 }
 
 /// Whether a `Gemm` was given its `C` operand, or a `Conv` its `B`. ONNX
@@ -1351,6 +1627,7 @@ fn required_operands(op: &String) -> Option<i32> {
             1,
         ),
         "Gather" | "MatMul" | "Gemm" | "Conv" => Option::Some(2),
+        "If" => Option::Some(1),
         "Range" | "Where" => Option::Some(3),
         _ => null,
     };
@@ -1377,7 +1654,7 @@ fn operand_at(node: &Node, shapes: &TreeMap<String, Shape>, index: i32) -> Shape
     return shapes.get(node.inputs[index]).unwrap();
 }
 
-fn at_node(node: &Node, result: Result<Shape, ExtentConflict>) -> Result<Shape, InferError> {
+fn at_node(node: &Node, result: Result<Shape, AxisConflict>) -> Result<Shape, InferError> {
     return match result {
         Ok(shape) => Result::Ok(shape),
         Err(error) => Result::Err(InferError::Node(NodeConflict {

@@ -37,6 +37,7 @@ pub fn install_rustls_provider_for_tests() {
     });
 }
 
+use wado_compiler::ast::TodoMark;
 use wado_compiler::world_registry::WorldSurface;
 use wado_compiler::{
     CompileError, CompileFailure, CompilerHost, CompilerOptions, Diagnostic, OptLevel, SourceError,
@@ -1555,9 +1556,17 @@ pub fn run_wasm_with_full_options(
 /// `anyhow::bail!`) so the outer `#![TODO]` module wrapper can distinguish a
 /// resolved-but-still-marked TODO (hard failure) from a genuine pending test
 /// (silent OK). The runner identifies it by downcasting the panic payload;
-/// all other panics fall back to the "pending" path.
+/// all other panics fall back to the "pending" path. It names the test only:
+/// whoever catches it knows whether the mark came from the test or its module.
 #[derive(Debug)]
 pub struct TodoResolved(pub String);
+
+impl TodoResolved {
+    /// The failure to report, with the advice for where the mark came from.
+    pub fn report(&self, mark: TodoMark) -> String {
+        format!("{} passed: {}", self.0, mark.resolved_advice())
+    }
+}
 
 /// Format a trap-producing error with the full diagnostic chain.
 ///
@@ -1645,8 +1654,7 @@ pub fn run_test_world(
                         // so we panic with a typed sentinel rather than bailing through
                         // the generic `anyhow::Result` channel.
                         std::panic::panic_any(TodoResolved(format!(
-                            "[{test_id}] TODO test '{test_name}' resolved — \
-                             remove the #[TODO] attribute"
+                            "[{test_id}] TODO test '{test_name}'"
                         )));
                     } else if expect_trap {
                         anyhow::bail!(

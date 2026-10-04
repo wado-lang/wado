@@ -252,8 +252,16 @@ fn read_attr(a: &onnx::AttributeProto) -> Result<Attr, String> {
                 return Result::Ok(Attr { name, values, is_list, tensor: Option::Some(known) });
             }
         },
-        // A graph or a type has no text form, so the attribute is carried with
-        // no value; the operator that reads one is refused by name anyway.
+        Some(onnx::AttributeProtoAttributeType::Graph) => {
+            if let Some(g) = &a.g {
+                return Result::Ok(Attr { name, values, is_list, graph: Option::Some(read_graph(g)?) });
+            }
+        },
+        Some(onnx::AttributeProtoAttributeType::Graphs) => {
+            return Result::Err(`${name}: a list of subgraphs is not read`);
+        },
+        // A type has no text form, so the attribute is carried with no value;
+        // the operator that reads one is refused by name anyway.
         _ => {
         },
     }
@@ -280,7 +288,17 @@ fn read_model<S: AsByteSlice>(bytes: S) -> Result<Graph, String> {
     let Some(graph) = &model.graph else {
         return Result::Err("a model without a graph");
     };
+    let written = read_graph(graph)?;
+    let imports: List<[String, i64]> = model.opset_import.into_iter().map(|o| [
+        o.domain.unwrap_or(""),
+        o.version.unwrap_or(0),
+    ]).collect();
+    let opset = default_opset(&imports);
+    return Result::Ok(Graph { ..written, nodes: upgraded(written.nodes, opset)?, opset });
+}
 
+/// A `GraphProto` as written, its operators not yet read at an opset.
+fn read_graph(graph: &onnx::GraphProto) -> Result<Graph, String> {
     let mut initializers: List<ValueInfo> = [];
     let mut constants = TreeMap::<String, Known>::new();
     for let t of graph.initializer {
@@ -309,18 +327,12 @@ fn read_model<S: AsByteSlice>(bytes: S) -> Result<Graph, String> {
     for let n of graph.node {
         nodes.push(read_node(&n)?);
     }
-    let imports: List<[String, i64]> = model.opset_import.into_iter().map(|o| [
-        o.domain.unwrap_or(""),
-        o.version.unwrap_or(0),
-    ]).collect();
-    let opset = default_opset(&imports);
     return Result::Ok(Graph {
         name: graph.name.unwrap_or(""),
         inputs,
         outputs,
         initializers,
         constants,
-        nodes: upgraded(nodes, opset)?,
-        opset,
+        nodes,
     });
 }

@@ -14,6 +14,7 @@ use futures::stream::{self, StreamExt};
 use glob::Pattern;
 use lexopt::Arg::Value;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc};
+use wado_compiler::ast::TodoMark;
 use wado_compiler::coverage::{CoverageScope, Registered, read_from_component};
 use wado_compiler::hashmap::IndexMap;
 use wasmtime::component::{Component, Linker};
@@ -534,6 +535,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
 struct CompiledArtifact {
     path: String,
     wasm: Vec<u8>,
+    is_todo_module: bool,
 }
 
 /// Load-stage output: a module fully resident in wasmtime. Wrapped in
@@ -552,6 +554,7 @@ struct LoadedModule {
     component: Arc<Component>,
     linker: Arc<Linker<WasiState>>,
     tests: Vec<ParsedTest>,
+    is_todo_module: bool,
     /// `--profile`: the run's one sampler and its sampling period, shared with
     /// `run` so it can write the profile once every test has fed it.
     profiler: Option<(GuestProfilerSlot, Duration)>,
@@ -653,13 +656,12 @@ struct TestJob {
     test_name: String,
     display_name: String,
     expect_trap: bool,
-    is_todo: bool,
+    todo: Option<TodoMark>,
     timeout_ms: u64,
 }
 
 /// Regular tests are Pass/Fail. TODO tests live on a separate axis:
-/// `TodoPending` trapped as expected, `TodoResolved` passed unexpectedly
-/// (consider dropping the `#[TODO]`).
+/// `TodoPending` trapped as expected, `TodoResolved` passed unexpectedly.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum TestOutcome {
     Pass,
@@ -686,6 +688,14 @@ pub(crate) struct TestResult {
 }
 
 impl TestResult {
+    /// The advice a resolved TODO test carries.
+    pub(crate) fn resolved_advice(&self) -> &str {
+        assert!(self.outcome == TestOutcome::TodoResolved);
+        self.error
+            .as_deref()
+            .expect("a resolved TODO carries its advice")
+    }
+
     /// What the test cost: its duration, and its fuel where it was metered.
     pub(crate) fn cost(&self) -> String {
         let duration = format_duration(self.duration);
@@ -879,6 +889,7 @@ async fn compile_artifact(
             CompileOutcome::Compiled(CompiledArtifact {
                 path,
                 wasm: result.wasm,
+                is_todo_module: result.is_todo_module,
             })
         }
         Err(failure) if failure.is_todo_module => {
@@ -1021,6 +1032,7 @@ fn load_module(
                 component,
                 linker,
                 tests,
+                is_todo_module: artifact.is_todo_module,
                 profiler,
                 coverage,
                 _module_permit: module_permit,
@@ -1346,7 +1358,11 @@ async fn run_execute_stage(
                 test_name: t.export_name.clone(),
                 display_name: t.display_name(),
                 expect_trap: t.parsed.kind == TestKind::ExpectTrap,
-                is_todo: t.parsed.kind == TestKind::Todo,
+                todo: (t.parsed.kind == TestKind::Todo).then_some(if module.is_todo_module {
+                    TodoMark::Module
+                } else {
+                    TodoMark::Test
+                }),
                 timeout_ms: t.parsed.timeout_ms.unwrap_or(DEFAULT_TIMEOUT_MS),
             })
             .collect();
@@ -1783,12 +1799,10 @@ async fn run_single_test(
     let (outcome, error) = match test_func {
         Ok(func) => match func.call_async(&mut store, ()).await {
             Ok((Ok(()),)) => {
-                if job.is_todo {
-                    // TODO test passed — the feature may now work. This is good news,
-                    // not a failure. Report as "resolved" so the developer can remove #[TODO].
+                if let Some(mark) = job.todo {
                     (
                         TestOutcome::TodoResolved,
-                        Some("remove the #[TODO] attribute".to_string()),
+                        Some(mark.resolved_advice().to_string()),
                     )
                 } else if job.expect_trap {
                     (
@@ -1810,7 +1824,7 @@ async fn run_single_test(
                             job.timeout_ms
                         )),
                     )
-                } else if job.is_todo {
+                } else if job.todo.is_some() {
                     (TestOutcome::TodoPending, None) // TODO test trapped as expected
                 } else if job.expect_trap {
                     (TestOutcome::Pass, None) // expect_trap test trapped as expected
@@ -1934,7 +1948,7 @@ pub(crate) fn format_three_axis_lines(
     if todo_total > 0 {
         let mut todo_line = format!("todo:    {} pending", totals.todo_pending);
         if totals.todo_resolved > 0 {
-            todo_line.push_str(&format!(", {} resolved", totals.todo_resolved));
+            todo_line.push_str(&format!(", {} unexpectedly passed", totals.todo_resolved));
         }
         lines.push(todo_line);
     }
@@ -2086,7 +2100,7 @@ pub(crate) fn display_test_results(
                 }
                 TestOutcome::TodoResolved => {
                     println!(
-                        "  \x1b[36m✓\x1b[0m {} \x1b[36m# TODO resolved\x1b[0m ({cost})",
+                        "  \x1b[36m✓\x1b[0m {} \x1b[36m# TODO unexpectedly passed\x1b[0m ({cost})",
                         result.display_name
                     );
                     if let Some(ref error) = result.error {
@@ -2137,12 +2151,12 @@ pub(crate) fn print_todo_section(todo_entries: &[TodoEntry], todo_resolved: u32)
     for entry in todo_entries {
         if entry.resolved {
             println!(
-                "  \x1b[36m✓ resolved\x1b[0m  {} — {}",
+                "  \x1b[36m✓ unexpectedly passed\x1b[0m  {} — {}",
                 entry.file_path, entry.display_name
             );
         } else {
             println!(
-                "  \x1b[33m· pending\x1b[0m   {} — {}",
+                "  \x1b[33m· pending\x1b[0m              {} — {}",
                 entry.file_path, entry.display_name
             );
         }
@@ -2150,8 +2164,8 @@ pub(crate) fn print_todo_section(todo_entries: &[TodoEntry], todo_resolved: u32)
     if todo_resolved > 0 {
         println!();
         println!(
-            "\x1b[36m{todo_resolved} TODO test(s) resolved — \
-             remove the #[TODO] attribute\x1b[0m"
+            "\x1b[36m{todo_resolved} TODO test(s) passed although expected to fail — \
+             see each one above\x1b[0m"
         );
     }
 }
