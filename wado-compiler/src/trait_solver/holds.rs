@@ -163,7 +163,7 @@ impl Query<'_> {
         if trait_def.is_some_and(|def| def.holds_for_all) {
             return Some(Holds::default());
         }
-        if withheld_at(program, ty) == Some(trait_) {
+        if withholds(program, trait_, ty) {
             return None;
         }
         let on_ref = trait_def.map_or(RefRule::default(), |def| def.on_ref);
@@ -386,14 +386,26 @@ pub(super) fn at_self(
 /// reaches it alone.
 pub(super) fn withheld_at(program: &Program, ty: &SolverType) -> Option<TraitDeclId> {
     let (eq, ord) = program.comparisons?;
-    matches!(comparison_row(program, ty), Some((written, _)) if written == eq).then_some(ord)
+    row_is(program, ty, eq).then_some(ord)
+}
+
+/// Whether `ty` has no `trait_`, as `withheld_at` says, checking the trait
+/// before the row: the row scans every impl.
+fn withholds(program: &Program, trait_: TraitDeclId, ty: &SolverType) -> bool {
+    program
+        .comparisons
+        .is_some_and(|(eq, ord)| trait_ == ord && row_is(program, ty, eq))
 }
 
 /// Whether `trait_`'s body at `ty` is the `==` a `cmp` written alone gives.
 fn eq_from_cmp(program: &Program, trait_: TraitDeclId, ty: &SolverType) -> bool {
-    program.comparisons.is_some_and(|(eq, ord)| {
-        trait_ == eq && matches!(comparison_row(program, ty), Some((written, _)) if written == ord)
-    })
+    program
+        .comparisons
+        .is_some_and(|(eq, ord)| trait_ == eq && row_is(program, ty, ord))
+}
+
+fn row_is(program: &Program, ty: &SolverType, written: TraitDeclId) -> bool {
+    matches!(comparison_row(program, ty), Some((row, _)) if row == written)
 }
 
 /// The row of the comparison table `ty` reads (spec-traits.md §Derivation
