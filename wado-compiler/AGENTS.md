@@ -36,12 +36,9 @@ The Wado compiler crate.
 - Optimize to the limit correctness allows, and nothing short of it. Wrong code
   is never a trade for speed. A conservatism is not caution but a defect:
   measure what it buys, and delete it when that is nothing.
-- `cargo check --all-targets` while iterating, or a type the crate changes
-  breaks the uncompiled unit tests where nothing looks. Run
-  `cargo test -p wado-compiler --test e2e` for anything the language touches: it
-  covers O0 and O2 and leaves the rest to CI, whose `ignored` lines are that
-  split and not a gap, so never set `WADO_FULL_TEST` unless asked by name.
-  `mise run test` and `mise run test-wado` take an hour: run them at the end.
+- Iterate with `cargo check --all-targets`, so the unit tests compile too, and
+  `cargo test -p wado-compiler --test e2e`. Locally e2e covers O0 and O2; its
+  `ignored` lines are CI's share, so never set `WADO_FULL_TEST` unless asked.
 - This crate must compile for `wasm32-unknown-unknown` (checked in CI). Keep
   OS-dependent `std` modules out of production code.
 
@@ -57,28 +54,16 @@ first.
 The stdlib carries no inline hints (`#[inline(...)]`). A hint that makes code
 faster marks a case the optimizer misses, so the fix belongs in the optimizer.
 
-A module re-exports an effect only where it owns it: `core:cli` hands out
-`Stdout`, `core:fs` hands out `Preopens`. A module that merely performs an
-ambient effect imports it privately, and its callers take the name from
-`wasi:*` too. `pub use` keeps the identity, so re-exporting an effect abstracts
-nothing — it only adds a second path to one type, and a reader of
-`use { MonotonicClock } from "core:benchmark"` has to go and find out which
-clock that is.
+A module re-exports an effect only where it owns it (`core:cli`'s `Stdout`,
+`core:fs`'s `Preopens`). One that merely performs an effect imports it
+privately: `pub use` keeps the identity, so a re-export only adds a second path
+to one type.
 
-A module carries a `#[synopsis]` test, in the module itself, since `wado doc`
-renders it as the module's `## Synopsis`. Write the shortest program that shows
-what the module is for, not a tour of its API. Leave it out only where such a
-program cannot be written.
-
-Tests for a module live in `<module>_test.wado` beside it. The test file
-joins `core:*`'s package, so it reaches `internal` items as well as `pub`
-ones. A private item cannot be reached from there, so its test goes in the
-module. A facade puts each test beside the file that implements it, which is why
-`core:collections` is tested from `collections/treemap_test.wado` and
-`collections/treeset_test.wado`.
-
-`core:prelude` owes neither. Every program already imports it, so a synopsis has
-nothing to show, and the e2e fixtures are what hold its behaviour.
+A module carries a `#[synopsis]` test, which `wado doc` renders as its
+`## Synopsis`: the shortest program showing what the module is for, not a tour.
+Its other tests live in `<module>_test.wado` beside the file that implements
+them; that file reaches `internal` items, and a private item's test goes in the
+module itself. `core:prelude` owes neither: the e2e fixtures hold it.
 
 `mise run test-stdlib-coverage` holds the stdlib to
 `scripts/stdlib-coverage.json`, the regions its tests leave unrun, and fails on
