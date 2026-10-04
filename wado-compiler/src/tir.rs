@@ -188,8 +188,16 @@ impl SubstitutionContext {
                 // `I::Item` with `I -> I`, or `I -> some other type param`).
                 // Preserve the projection over the substituted parameter
                 // rather than collapsing to the bare parameter, so later
-                // monomorphization can resolve `concrete::assoc_name`.
-                if concrete_id == param_id && new_args == args {
+                // monomorphization can resolve `concrete::assoc_name`. What it
+                // carries is written in the same frame, so it substitutes too.
+                let new_bindings: Vec<(String, TypeId)> = assoc_type_bindings
+                    .iter()
+                    .map(|(name, bound)| (name.clone(), self.substitute(*bound, type_table)))
+                    .collect();
+                if concrete_id == param_id
+                    && new_args == args
+                    && new_bindings == assoc_type_bindings
+                {
                     type_id
                 } else {
                     type_table.make_assoc_type_projection(
@@ -198,7 +206,7 @@ impl SubstitutionContext {
                         assoc_name,
                         new_args,
                         bounds,
-                        assoc_type_bindings,
+                        new_bindings,
                     )
                 }
             }
@@ -3205,6 +3213,31 @@ impl TypeTable {
             bounds,
             assoc_type_bindings,
         })
+    }
+
+    /// Whether `a` and `b` project one associated type off one base at one
+    /// list of arguments: the same type, whatever bounds and bindings each
+    /// carries from the frame that built it.
+    pub fn projects_alike(&self, a: TypeId, b: TypeId) -> bool {
+        match (self.get(a), self.get(b)) {
+            (
+                ResolvedType::AssocTypeProjection {
+                    param_id: base_a,
+                    assoc_name: name_a,
+                    args: args_a,
+                    owning_trait: trait_a,
+                    ..
+                },
+                ResolvedType::AssocTypeProjection {
+                    param_id: base_b,
+                    assoc_name: name_b,
+                    args: args_b,
+                    owning_trait: trait_b,
+                    ..
+                },
+            ) => base_a == base_b && name_a == name_b && args_a == args_b && trait_a == trait_b,
+            _ => a == b,
+        }
     }
 
     /// The bounds the declaration gives projection `id`'s associated type, at

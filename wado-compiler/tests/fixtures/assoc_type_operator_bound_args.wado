@@ -1,0 +1,40 @@
+// An operator on a projection is answered by the associated type's bound at
+// the arguments the bound writes: `Add<String, Output = String>` gives
+// `S::Buf` a `+` taking and yielding a `String`, not one on `Self`.
+
+struct Line {
+    at: String,
+}
+
+impl Add<String> for Line {
+    type Output = String;
+
+    fn add(&self, rhs: &String) -> String {
+        return self.at;
+    }
+}
+
+trait Store with () {
+    type Buf: Add<String, Output = String>;
+
+    fn put(&self, value: String) -> Self::Buf;
+}
+
+struct Lines {}
+
+impl Store for Lines {
+    type Buf = Line;
+
+    fn put(&self, value: String) -> Line {
+        return Line { at: value };
+    }
+}
+
+fn snap<S: Store>(s: &S) -> String {
+    let line = s.put("on");
+    return line + "off";
+}
+
+test "an operator through an associated type's bound reads its arguments" {
+    assert snap(&Lines {}) == "on";
+}

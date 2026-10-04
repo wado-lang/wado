@@ -202,13 +202,21 @@ impl MethodCallOutcome {
     }
 }
 
+/// What a projection projects its associated type off, and at.
+struct Projected {
+    base: TypeId,
+    owning_trait: DefId,
+    args: Vec<TypeId>,
+}
+
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// The trait bounds `ty` carries, which answer a method or an operator on
     /// it: a type parameter's declared ones, or those the trait's
     /// `type A: Bound` puts on the projection `ty`. Empty for any other type.
-    /// A projection's rebuilt bound has no walked site, so it carries its
-    /// declaration; one naming none was reported where written.
-    pub(super) fn carried_bounds(&self, ty: TypeId, span: Span) -> Vec<ScopedBound> {
+    /// A projection's are the declaration's own, arguments included, written
+    /// with `Self` meaning the projection's base and read under
+    /// [`Self::in_family_space`].
+    pub(super) fn carried_bounds(&self, ty: TypeId) -> Vec<ScopedBound> {
         if let Some(name) = self.tysys.binder_name(ty) {
             return self
                 .annotate_ctx
@@ -218,44 +226,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .cloned()
                 .unwrap_or_default();
         }
-        if let Some((decl, _)) = self.family_at(ty) {
-            // Written over the family's parameters, so read under
-            // `Self::in_family_space`.
-            return decl
-                .bounds
-                .iter()
-                .filter(|bound| bound.names_a_trait())
-                .map(|bound| ScopedBound::new(bound.clone(), None))
-                .collect();
-        }
-        let tt = self.tysys.type_table.borrow();
-        let ResolvedType::AssocTypeProjection { bounds, .. } = tt.get(ty) else {
+        let Some((decl, projected)) = self.projected_decl(ty) else {
             return Vec::new();
         };
-        bounds
+        let written_self = Some(SelfBinding {
+            type_id: projected.base,
+            declaring_trait: Some(projected.owning_trait),
+        });
+        decl.bounds
             .iter()
-            .filter_map(|b| {
-                Some(ScopedBound::new(
-                    ast::TraitBound {
-                        id: AstId::fresh(),
-                        name: b.base_name().to_string(),
-                        type_args: Vec::new(),
-                        assoc_types: Vec::new(),
-                        span,
-                        fn_signature: None,
-                        resolved: Some(b.canonical()?),
-                    },
-                    None,
-                ))
-            })
+            .filter(|bound| bound.names_a_trait())
+            .map(|bound| ScopedBound::new(bound.clone(), written_self))
             .collect()
     }
 
-    /// The declaration of `ty`'s associated type and the arguments `ty` gives
-    /// it, where `ty` projects a generic associated type.
-    fn family_at(&self, ty: TypeId) -> Option<(ast::AssociatedTypeDecl, Vec<TypeId>)> {
+    /// The declaration of the associated type projection `ty` names, and what
+    /// `ty` projects it off and at.
+    fn projected_decl(&self, ty: TypeId) -> Option<(ast::AssociatedTypeDecl, Projected)> {
         let tt = self.tysys.type_table.borrow();
         let ResolvedType::AssocTypeProjection {
+            param_id,
             assoc_name,
             args,
             owning_trait,
@@ -264,16 +254,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return None;
         };
-        if args.is_empty() {
-            return None;
-        }
         let decl = self
             .tysys
             .trait_env
-            .assoc_type_decl(owning_trait, assoc_name)
-            .expect("a projection with arguments names a declared family")
+            .assoc_type_decl(owning_trait, assoc_name)?
             .clone();
-        Some((decl, args.clone()))
+        Some((
+            decl,
+            Projected {
+                base: *param_id,
+                owning_trait: *owning_trait,
+                args: args.clone(),
+            },
+        ))
     }
 
     /// Run `body` where the names of `ty`'s family parameters stand for the
@@ -284,11 +277,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ty: TypeId,
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        let Some((decl, args)) = self.family_at(ty) else {
+        let Some((decl, projected)) = self.projected_decl(ty) else {
             return body(self);
         };
         let names: Vec<String> = decl.type_params.iter().map(|p| p.name.clone()).collect();
-        self.with_type_params_bound(&names, &args, body)
+        self.with_type_params_bound(&names, &projected.args, body)
     }
 
     /// What the call `call` selected through a declared bound, where the walk
@@ -600,20 +593,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `T: Ord` gives `T` its `cmp`, and `type Seq: SerializeSeq` gives
         // `S::Seq` its `element`.
         if method_info.is_none() {
-            let bounds = self.carried_bounds(base_type_id, span);
+            let bounds = self.carried_bounds(base_type_id);
             if !bounds.is_empty()
-                && let Some((found_trait, info)) = self.in_family_space(base_type_id, |e| {
-                    e.find_method_in_trait_bounds(
-                        call_id,
-                        is_ref,
-                        &bounds,
-                        method_name,
-                        base_type_id,
-                        span,
-                        required_trait,
-                        ArgSource::Exprs(&mut probe),
-                    )
-                })
+                && let Some((found_trait, info)) = self.find_method_in_trait_bounds(
+                    call_id,
+                    is_ref,
+                    &bounds,
+                    method_name,
+                    base_type_id,
+                    span,
+                    required_trait,
+                    ArgSource::Exprs(&mut probe),
+                )
             {
                 trait_name = Some(found_trait);
                 method_info = Some(info);

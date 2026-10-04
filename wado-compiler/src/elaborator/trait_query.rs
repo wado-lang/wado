@@ -2474,6 +2474,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         required_trait: Option<&RequiredTrait>,
         args: ArgSource<'_, '_>,
     ) -> Option<(FqTraitName, MethodInfo)> {
+        // A family's bounds are written over its parameters, which stand for
+        // the projection's arguments while they are read.
+        self.in_family_space(self_type_id, |e| {
+            e.find_method_in_bounds_read_here(
+                call,
+                through_ref,
+                bounds,
+                method_name,
+                self_type_id,
+                span,
+                required_trait,
+                args,
+            )
+        })
+    }
+
+    /// [`Self::find_method_in_trait_bounds`] with `bounds` read in this frame.
+    fn find_method_in_bounds_read_here(
+        &mut self,
+        call: Option<AstId>,
+        through_ref: bool,
+        bounds: &[ScopedBound],
+        method_name: &str,
+        self_type_id: TypeId,
+        span: Span,
+        required_trait: Option<&RequiredTrait>,
+        args: ArgSource<'_, '_>,
+    ) -> Option<(FqTraitName, MethodInfo)> {
         let elaborated = self.elaborate_bounds(bounds);
         let keyed: Vec<(ElaboratedBound, DefId)> = elaborated
             .iter()
