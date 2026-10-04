@@ -88,13 +88,34 @@ fn a_machine_without_an_adapter_is_told_what_to_install() {
     assert!(stderr.contains("mesa-vulkan-drivers"), "stderr: {stderr}");
 }
 
-/// lavapipe is the one adapter every machine this runs on can have, CI included.
+/// The names of this machine's adapters, as the refusal of a name nothing
+/// matches lists them, so no test assumes which GPU or driver is installed.
+fn adapter_names() -> Vec<String> {
+    let output = run(&["--gpu-adapter", "no-such-gpu", "app.wado"]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success());
+    let (_, listing) = stderr
+        .split_once("The adapters here:\n")
+        .unwrap_or_else(|| panic!("no listing in stderr: {stderr}"));
+    listing
+        .lines()
+        .map(|line| {
+            let (name, _) = line.trim_start().rsplit_once(" (").expect("described");
+            name.to_owned()
+        })
+        .collect()
+}
+
 #[test]
-#[cfg(target_os = "linux")]
 fn the_named_adapter_is_the_one_the_guest_gets_and_info_says_which() {
+    let names = adapter_names();
+    let name = names
+        .iter()
+        .find(|name| names.iter().filter(|other| other == name).count() == 1)
+        .expect("an adapter whose name no other shares");
     let output = run(&[
         "--gpu-adapter",
-        "LLVMPIPE",
+        &name.to_uppercase(),
         "--log-level",
         "info",
         fixture("compute_double.wado").to_str().unwrap(),
@@ -104,26 +125,33 @@ fn the_named_adapter_is_the_one_the_guest_gets_and_info_says_which() {
     assert!(output.status.success(), "stderr: {stderr}");
     assert!(stdout.contains("compute ok"), "stdout: {stdout}");
     assert!(
-        stderr.contains("info: request-adapter: llvmpipe") && stderr.contains("(Vulkan, Cpu"),
+        stderr.contains(&format!("info: request-adapter: {name} (")),
         "stderr: {stderr}"
     );
 }
 
 #[test]
 fn an_adapter_name_nothing_matches_is_refused_with_the_names_there_are() {
-    let output = run(&[
-        "--gpu-adapter",
-        "no-such-gpu",
-        fixture("compute_double.wado").to_str().unwrap(),
-    ]);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(!output.status.success());
-    assert!(
-        stderr.contains("no GPU adapter matches 'no-such-gpu'"),
-        "stderr: {stderr}"
-    );
-    #[cfg(target_os = "linux")]
-    assert!(stderr.contains("llvmpipe"), "stderr: {stderr}");
+    assert!(!adapter_names().is_empty());
+}
+
+/// The runner reads the level itself and hands it to `wado compile`, so the
+/// two must accept the same spellings.
+#[test]
+fn the_log_level_spellings_are_the_ones_wado_takes() {
+    for level in [
+        "debug", "info", "warn", "warning", "error", "off", "none", "INFO", "loud",
+    ] {
+        let runner_accepts = run(&["--log-level", level, "--help"]).status.success();
+        let wado_accepts = Command::new(&*WADO)
+            .args(["check", "--log-level", level])
+            .arg(fixture("compute_double.wado"))
+            .output()
+            .expect("running wado check")
+            .status
+            .success();
+        assert_eq!(runner_accepts, wado_accepts, "--log-level {level}");
+    }
 }
 
 #[test]

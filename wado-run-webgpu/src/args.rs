@@ -50,6 +50,7 @@ impl OptLevel {
         }
     }
 
+    /// The `-O` flag that passes this level to `wado compile`.
     pub fn flag(self) -> &'static str {
         match self {
             Self::O0 => "-O0",
@@ -83,6 +84,7 @@ impl LogLevel {
         }
     }
 
+    /// The value that passes this level to `wado compile --log-level`.
     pub fn flag_value(self) -> &'static str {
         match self {
             Self::Off => "off",
@@ -94,7 +96,9 @@ impl LogLevel {
     }
 }
 
+/// One run, as the command line asks for it.
 pub struct Args {
+    /// The `.wado` source or `.wasm` component to run.
     pub input: PathBuf,
     pub opt_level: OptLevel,
     pub log_level: LogLevel,
@@ -102,6 +106,7 @@ pub struct Args {
     pub gpu_adapter: Option<String>,
     /// Empty means preopen nothing, which `--no-dir` also asks for.
     pub preopens: Vec<PathBuf>,
+    /// The arguments after the input file, which belong to the program.
     pub program_args: Vec<String>,
 }
 

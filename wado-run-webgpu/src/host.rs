@@ -4,9 +4,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Result, bail};
-use wasi_webgpu_wasmtime::wasi::webgpu::webgpu::{
-    Gpu as GuestGpu, GpuPowerPreference, GpuRequestAdapterOptions,
-};
+use wasi_webgpu_wasmtime::wasi::webgpu::webgpu::{Gpu as GuestGpu, GpuRequestAdapterOptions};
 use wasi_webgpu_wasmtime::{
     Adapter, WasiWebGpuCtx, WasiWebGpuCtxView, WasiWebGpuOptions,
     add_to_linker as add_webgpu_to_linker,
@@ -22,9 +20,6 @@ use wgpu_core::instance::RequestAdapterOptions;
 use wgpu_types::{AdapterInfo, Backends, InstanceDescriptor, PowerPreference, RequestAdapterError};
 
 use crate::args::{Args, LogLevel, OptLevel};
-
-/// The interface `request-adapter` belongs to, as the host's bindings name it.
-const WEBGPU_INTERFACE: &str = "wasi:webgpu/webgpu@0.3.0-rc.2";
 
 /// The wgpu instance every `wasi:webgpu` call draws on, and the adapter
 /// `--gpu-adapter` hands every `request-adapter`.
@@ -49,12 +44,15 @@ impl Host {
         options: Option<&GpuRequestAdapterOptions>,
     ) -> wasmtime::Result<Option<Resource<Adapter>>> {
         let adapter = self.choose_adapter(options)?;
-        if self.log_level >= LogLevel::Info {
-            let answer = adapter.as_ref().map_or_else(
-                || "none".to_owned(),
-                |id| describe(&self.gpu.instance.adapter_get_info(**id)),
-            );
-            eprintln!("wado-run-webgpu: info: request-adapter: {answer}");
+        match &adapter {
+            Some(id) if self.log_level >= LogLevel::Info => eprintln!(
+                "wado-run-webgpu: info: request-adapter: {}",
+                describe(&self.gpu.instance.adapter_get_info(**id))
+            ),
+            None if self.log_level >= LogLevel::Warn => eprintln!(
+                "wado-run-webgpu: warning: request-adapter: no adapter satisfies the options the program passed"
+            ),
+            Some(_) | None => {}
         }
         Ok(adapter
             .map(|adapter| self.table.push(adapter))
@@ -86,11 +84,9 @@ impl Host {
 /// `xr-compatible` ignored as they are there.
 fn core_options(options: &GpuRequestAdapterOptions) -> RequestAdapterOptions {
     RequestAdapterOptions {
-        power_preference: match options.power_preference {
-            None => PowerPreference::None,
-            Some(GpuPowerPreference::LowPower) => PowerPreference::LowPower,
-            Some(GpuPowerPreference::HighPerformance) => PowerPreference::HighPerformance,
-        },
+        power_preference: options
+            .power_preference
+            .map_or(PowerPreference::None, Into::into),
         force_fallback_adapter: options.force_fallback_adapter.unwrap_or(false),
         compatible_surface: None,
     }
@@ -134,16 +130,22 @@ pub async fn run(component: &Path, args: &Args, gpu: Gpu) -> Result<()> {
     let mut linker: Linker<Host> = Linker::new(&engine);
     add_wasi_to_linker(&mut linker)?;
     add_webgpu_to_linker(&mut linker)?;
-    linker.allow_shadowing(true);
-    linker.instance(WEBGPU_INTERFACE)?.func_wrap_concurrent(
-        "[method]gpu.request-adapter",
-        |accessor: &Accessor<Host>,
-         (_gpu, options): (Resource<GuestGpu>, Option<GpuRequestAdapterOptions>)| {
-            Box::pin(async move {
-                accessor.with(|mut access| Ok((access.get().request_adapter(options.as_ref())?,)))
-            })
-        },
-    )?;
+    // Named by the guest's import rather than spelled here: a version the host
+    // crate does not serve then fails to instantiate instead of leaving this
+    // override on an interface nothing imports.
+    if let Some(interface) = webgpu_import(&engine, &component) {
+        linker.allow_shadowing(true);
+        linker.instance(&interface)?.func_wrap_concurrent(
+            "[method]gpu.request-adapter",
+            |accessor: &Accessor<Host>,
+             (_gpu, options): (Resource<GuestGpu>, Option<GpuRequestAdapterOptions>)| {
+                Box::pin(async move {
+                    accessor
+                        .with(|mut access| Ok((access.get().request_adapter(options.as_ref())?,)))
+                })
+            },
+        )?;
+    }
 
     let mut store = Store::new(&engine, host(args, gpu)?);
     let command = Command::instantiate_async(&mut store, &component, &linker).await?;
@@ -154,6 +156,17 @@ pub async fn run(component: &Path, args: &Args, gpu: Gpu) -> Result<()> {
         Ok(()) => Ok(()),
         Err(()) => bail!("the program exited with an error"),
     }
+}
+
+/// The `wasi:webgpu/webgpu` interface the component imports, versioned as it
+/// names it.
+fn webgpu_import(engine: &Engine, component: &Component) -> Option<String> {
+    component
+        .component_type()
+        .imports(engine)
+        .map(|(name, _)| name)
+        .find(|name| name.starts_with("wasi:webgpu/webgpu@"))
+        .map(str::to_owned)
 }
 
 /// What `wado run` configures, so a program behaves the same under either
@@ -217,10 +230,11 @@ pub fn gpu(args: &Args) -> Result<Gpu> {
              or set WGPU_BACKEND to pick another backend"
         );
     }
-    let pinned = match &args.gpu_adapter {
-        Some(name) => Some(pin(&global, &adapters, name)?),
-        None => None,
-    };
+    let pinned = args
+        .gpu_adapter
+        .as_deref()
+        .map(|name| pin(&global, &adapters, name))
+        .transpose()?;
     for id in adapters {
         if pinned != Some(id) {
             global.adapter_drop(id);
@@ -235,30 +249,30 @@ pub fn gpu(args: &Args) -> Result<Gpu> {
 /// The one adapter whose name contains `name`, ignoring case.
 fn pin(global: &Global, adapters: &[AdapterId], name: &str) -> Result<AdapterId> {
     let needle = name.to_lowercase();
-    let described: Vec<(AdapterId, AdapterInfo)> = adapters
+    let infos: Vec<AdapterInfo> = adapters
         .iter()
-        .map(|&id| (id, global.adapter_get_info(id)))
+        .map(|&id| global.adapter_get_info(id))
         .collect();
-    let matches: Vec<&(AdapterId, AdapterInfo)> = described
-        .iter()
-        .filter(|(_, info)| info.name.to_lowercase().contains(&needle))
+    let matching: Vec<usize> = (0..infos.len())
+        .filter(|&i| infos[i].name.to_lowercase().contains(&needle))
         .collect();
-    match matches.as_slice() {
-        [(id, _)] => Ok(*id),
+    match *matching.as_slice() {
+        [only] => Ok(adapters[only]),
         [] => bail!(
             "no GPU adapter matches '{name}'. The adapters here:\n  {}",
-            listed(described.iter())
+            listed(&infos)
         ),
         [..] => bail!(
             "'{name}' matches more than one GPU adapter:\n  {}",
-            listed(matches.into_iter())
+            listed(matching.iter().map(|&i| &infos[i]))
         ),
     }
 }
 
-fn listed<'a>(adapters: impl Iterator<Item = &'a (AdapterId, AdapterInfo)>) -> String {
-    adapters
-        .map(|(_, info)| describe(info))
+fn listed<'a>(infos: impl IntoIterator<Item = &'a AdapterInfo>) -> String {
+    infos
+        .into_iter()
+        .map(describe)
         .collect::<Vec<_>>()
         .join("\n  ")
 }

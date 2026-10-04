@@ -16,6 +16,7 @@ pub struct Component {
 }
 
 impl Component {
+    /// The component file.
     pub fn path(&self) -> &Path {
         &self.path
     }
