@@ -1,8 +1,8 @@
-// A dead global whose initializer calls a builtin, every `#[trap]` check
-// holding at the call, goes with its module initializer: the call can neither
-// trap nor write anything another reader sees. `BYTES` calls the builtin
-// directly. `SEEN` reaches it through `List::from`, whose body inlining brings
-// into the initializer.
+// A dead global whose initializer calls a builtin, every trap condition its
+// `#[side_effect]` states holding at the call, goes with its module
+// initializer: the call can neither trap nor write anything another reader
+// sees. `BYTES` calls the builtin directly. `SEEN` reaches it through
+// `List::from`, whose body inlining brings into the initializer.
 use { println, Stdout } from "core:cli";
 
 global mut SEEN: List<u8> = [];

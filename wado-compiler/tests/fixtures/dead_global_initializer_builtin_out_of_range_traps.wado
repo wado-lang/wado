@@ -1,6 +1,6 @@
-// A dead global whose initializer calls a builtin that fails its `#[trap]`
-// check traps, and the trap is observable: the call stays although nothing
-// reads the global.
+// A dead global whose initializer calls a builtin that fails a trap condition
+// its `#[side_effect]` states traps, and the trap is observable: the call stays
+// although nothing reads the global.
 use { println, Stdout } from "core:cli";
 
 global mut BYTES: Array<u8> = builtin::array_new::<u8>(builtin::black_box(-1));
