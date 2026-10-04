@@ -13,11 +13,17 @@ Run a Wado program on a wasi:webgpu host.
 Usage: wado run-webgpu [options] <file.wado|file.wasm> [args...]
 
 Options:
-  -O<level>        Optimization level: 0, 1, 2, 3 or s (default: 2)
-      --dir <path> Preopen a directory (repeatable; default: the current one)
-      --no-dir     Drop that default
-  -h, --help       Show this help
-  -V, --version    Show the version
+  -O<level>              Optimization level: 0, 1, 2, 3 or s (default: 2)
+      --dir <path>       Preopen a directory (repeatable; default: the current one)
+      --no-dir           Drop that default
+      --gpu-adapter <name>
+                         Give the program the one adapter whose name contains
+                         <name> (case-insensitive), whatever it requests
+      --log-level <level>
+                         Log level: debug, info, warn, error, off (default: warn)
+                         info names the adapter each request-adapter returns
+  -h, --help             Show this help
+  -V, --version          Show the version
 
 Arguments after the input file go to the program.
 ";
@@ -55,9 +61,45 @@ impl OptLevel {
     }
 }
 
+/// The levels and spellings `wado --log-level` takes, in rising verbosity.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub enum LogLevel {
+    Off,
+    Error,
+    Warn,
+    Info,
+    Debug,
+}
+
+impl LogLevel {
+    fn parse(level: &str) -> Option<Self> {
+        match level.to_lowercase().as_str() {
+            "debug" => Some(Self::Debug),
+            "info" => Some(Self::Info),
+            "warn" | "warning" => Some(Self::Warn),
+            "error" => Some(Self::Error),
+            "off" | "none" => Some(Self::Off),
+            _ => None,
+        }
+    }
+
+    pub fn flag_value(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Error => "error",
+            Self::Warn => "warn",
+            Self::Info => "info",
+            Self::Debug => "debug",
+        }
+    }
+}
+
 pub struct Args {
     pub input: PathBuf,
     pub opt_level: OptLevel,
+    pub log_level: LogLevel,
+    /// A case-insensitive substring of the one adapter's name.
+    pub gpu_adapter: Option<String>,
     /// Empty means preopen nothing, which `--no-dir` also asks for.
     pub preopens: Vec<PathBuf>,
     pub program_args: Vec<String>,
@@ -72,6 +114,8 @@ impl Args {
         let mut parser = lexopt::Parser::from_args(argv);
         let mut input = None;
         let mut opt_level = OptLevel::O2;
+        let mut log_level = LogLevel::Warn;
+        let mut gpu_adapter = None;
         let mut preopens = Vec::new();
         let mut no_dir = false;
         let mut program_args = Vec::new();
@@ -97,6 +141,14 @@ impl Args {
                     };
                     opt_level = parsed;
                 }
+                Long("log-level") => {
+                    let level = parser.value()?.string()?;
+                    let Some(parsed) = LogLevel::parse(&level) else {
+                        bail!("unknown log level '{level}'. Use debug, info, warn, error, or off");
+                    };
+                    log_level = parsed;
+                }
+                Long("gpu-adapter") => gpu_adapter = Some(parser.value()?.string()?),
                 Long("dir") => preopens.push(PathBuf::from(parser.value()?)),
                 Long("no-dir") => no_dir = true,
                 // Everything after the input file, flags included, is the
@@ -124,6 +176,8 @@ impl Args {
         Ok(Some(Self {
             input,
             opt_level,
+            log_level,
+            gpu_adapter,
             preopens,
             program_args,
         }))
@@ -158,6 +212,32 @@ mod tests {
         assert_eq!(args.opt_level, OptLevel::O0);
         assert_eq!(args.program_args, ["--dir", "/data", "-x", "rest"]);
         assert_eq!(args.preopens, [std::env::current_dir().unwrap()]);
+    }
+
+    #[test]
+    fn the_log_level_takes_what_wado_takes_and_defaults_to_warn() {
+        assert_eq!(parse(&["app.wado"]).log_level, LogLevel::Warn);
+        assert_eq!(
+            parse(&["--log-level", "INFO", "app.wado"]).log_level,
+            LogLevel::Info
+        );
+        assert_eq!(
+            parse(&["--log-level", "none", "app.wado"]).log_level,
+            LogLevel::Off
+        );
+        assert!(try_parse(&["--log-level", "loud", "app.wado"]).is_err());
+    }
+
+    #[test]
+    fn a_gpu_adapter_is_named_by_a_value() {
+        assert_eq!(parse(&["app.wado"]).gpu_adapter, None);
+        assert_eq!(
+            parse(&["--gpu-adapter", "nvidia", "app.wado"])
+                .gpu_adapter
+                .as_deref(),
+            Some("nvidia")
+        );
+        assert!(try_parse(&["--gpu-adapter"]).is_err());
     }
 
     #[test]

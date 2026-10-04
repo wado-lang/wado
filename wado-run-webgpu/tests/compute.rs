@@ -86,6 +86,52 @@ fn a_machine_without_an_adapter_is_told_what_to_install() {
     assert!(stderr.contains("mesa-vulkan-drivers"), "stderr: {stderr}");
 }
 
+/// lavapipe is the one adapter every machine this runs on can have, CI included.
+#[test]
+#[cfg(target_os = "linux")]
+fn the_named_adapter_is_the_one_the_guest_gets_and_info_says_which() {
+    let output = run(&[
+        "--gpu-adapter",
+        "LLVMPIPE",
+        "--log-level",
+        "info",
+        fixture("compute_double.wado").to_str().unwrap(),
+    ]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "stderr: {stderr}");
+    assert!(stdout.contains("compute ok"), "stdout: {stdout}");
+    assert!(
+        stderr.contains("info: request-adapter: llvmpipe") && stderr.contains("(Vulkan, Cpu"),
+        "stderr: {stderr}"
+    );
+}
+
+#[test]
+fn the_adapter_goes_unnamed_below_info() {
+    let output = run(&[fixture("compute_double.wado").to_str().unwrap()]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "stderr: {stderr}");
+    assert!(!stderr.contains("request-adapter"), "stderr: {stderr}");
+}
+
+#[test]
+fn an_adapter_name_nothing_matches_is_refused_with_the_names_there_are() {
+    let output = run(&[
+        "--gpu-adapter",
+        "no-such-gpu",
+        fixture("compute_double.wado").to_str().unwrap(),
+    ]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success());
+    assert!(
+        stderr.contains("no GPU adapter matches 'no-such-gpu'"),
+        "stderr: {stderr}"
+    );
+    #[cfg(target_os = "linux")]
+    assert!(stderr.contains("llvmpipe"), "stderr: {stderr}");
+}
+
 #[test]
 fn the_usage_names_the_subcommand_it_serves() {
     let output = run(&["--help"]);

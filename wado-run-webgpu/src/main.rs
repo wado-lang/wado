@@ -32,7 +32,7 @@ async fn main() -> ExitCode {
 async fn run(args: Args) -> anyhow::Result<()> {
     // The GPU first: a machine without one has nothing to run on, and saying so
     // before the compile beats saying it after.
-    let gpu = host::gpu()?;
+    let gpu = host::gpu(&args)?;
     let component = compile::component_for(&args)?;
     host::run(component.path(), &args, gpu).await
 }
