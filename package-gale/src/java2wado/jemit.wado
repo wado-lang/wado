@@ -457,13 +457,13 @@ pub fn emit_expr(
         Member(m) => emit_member(rule, rules, m, vals_in_scope, bindings, env),
         Call(c) => emit_call(rule, rules, c, vals_in_scope, bindings, env),
         Cast(c) => {
-            let operand = emit_expr(rule, rules, &c.operand, vals_in_scope, bindings, env)?;
-            // An integer target is left to Wado's inference; a floating one
-            // changes the arithmetic, so it converts.
-            match c.ty.as_str_slice() {
-                "double" => Result::Ok(`(${operand} as f64)`),
-                "float" => Result::Ok(`(${operand} as f32)`),
-                _ => Result::Ok(operand),
+            // An integer target is left to Wado's inference. A floating one
+            // asks for Java's numeric promotion, which the subset does not model.
+            if c.ty == "double" || c.ty == "float" {
+                builtin::cold_path();
+                Result::Err(`java2wado: a '(${c.ty})' cast needs Java's numeric promotion, which is unsupported`);
+            } else {
+                emit_expr(rule, rules, &c.operand, vals_in_scope, bindings, env);
             }
         },
         Unary(u) => {

@@ -869,14 +869,12 @@ test "java: an integer cast is dropped and its operand kept" {
     assert out == "p.n > 3", `out: '${out}'`;
 }
 
-test "java: a floating cast converts, since it turns integer division into float division" {
-    let cases: List<[String, String]> = [
-        ["(double)this.n / 2 > 1", "(p.n as f64) / 2 > 1"],
-        ["(float)(this.n) / 2 > 1", "((p.n) as f32) / 2 > 1"],
-    ];
-    for let [java, wado] of cases {
-        let out = java_pred(&java, "a : ID ;", false);
-        assert out == wado, `${java}: '${out}'`;
+test "java: a floating cast is a loud error" {
+    // Dropping it turns `(double)n / 2` into integer division; converting only
+    // its operand leaves `f64 / i32`, which Wado rejects where Java promotes.
+    for let java of ["(double)this.n / 2 > 1", "(float)(this.n) / this.n > 1"] {
+        let res = java_pred_res(java, "a : ID ;", false);
+        assert res.is_err(), `${java}: ${res:?}`;
     }
 }
 

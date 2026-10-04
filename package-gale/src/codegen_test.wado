@@ -4130,6 +4130,18 @@ WS : ' ' -> skip ;
     assert got == " => (s b)\nz => (s b z)\ny z => (s (b y) z)\n", got;
 }
 
+test "an optional rule whose only empty alternative is predicated is entered on what follows it as the predicate says" {
+    for let [pred, tree] of [["false", "(s z)"], ["true", "(s b z)"]] {
+        let got = parses(`grammar T;
+s : b? Z EOF ;
+b : {${pred}}? | Y ;
+Y : 'y' ; Z : 'z' ;
+WS : ' ' -> skip ;
+`, "s", ["z"]);
+        assert got == `z => ${tree}\n`, `${pred}: ${got}`;
+    }
+}
+
 test "a catch-all declared first wins a one-char tie against a later rule" {
     let got = lexes("lexer grammar L;
 OTHER : . ;
@@ -4137,12 +4149,4 @@ WS : ' ' -> skip ;
 B : 'b' ;
 ", ["a b"]);
     assert got == "a b => OTHER:a OTHER:  OTHER:b\n", got;
-}
-
-test "a java floating cast makes integer division a float division" {
-    let got = parses("grammar T;
-s : ID { System.out.println((double) 1 / 2); } EOF ;
-ID : [a-z]+ ;
-", "s", ["x"]);
-    assert got == "x => (s x) [0.5\n]\n", got;
 }
