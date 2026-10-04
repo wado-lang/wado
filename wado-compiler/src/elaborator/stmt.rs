@@ -1438,7 +1438,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .expect("the resolver answers only an immutable global");
                 self.record_reference_to_decl(*id, global, *name_span);
                 Some(PatternConstant {
-                    id: *id,
                     shown: name.clone(),
                     ty,
                 })
@@ -1467,7 +1466,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
                     self.resolve_associated_const_body(&assoc, ctx);
                     return Some(PatternConstant {
-                        id: *name_id,
                         shown,
                         ty: assoc.ty,
                     });
@@ -1475,11 +1473,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let (alias, ty) =
                     self.namespaced_constant(variant_qualifier.as_ref(), variant_name)?;
                 self.record_item_reference_by_name(*name_id, &alias);
-                Some(PatternConstant {
-                    id: *name_id,
-                    shown,
-                    ty,
-                })
+                Some(PatternConstant { shown, ty })
             }
             _ => None,
         }
@@ -1543,7 +1537,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let PatternConstant {
             shown,
             ty: constant,
-            ..
         } = constant;
         let constant = *constant;
         if self.tysys.holds_float(constant) {
@@ -1742,7 +1735,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if let Some(constant) = self.resolve_pattern_constant(pattern, ctx) {
                         self.typecheck(constant.ty, scrutinee_type, *span);
                         self.resolve_constant_pattern(
-                            constant.id,
+                            *name_id,
                             &constant,
                             scrutinee_type,
                             ctx,
@@ -2369,7 +2362,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for bound in bounds {
             if let Some(constant) = self.resolve_pattern_constant(bound, ctx) {
                 self.typecheck(constant.ty, scrutinee, span);
-                origin = origin.or(Some(util::constant_bound_site(bound)));
+                origin = origin.or(Some(util::constant_pattern_site(bound)));
                 continue;
             }
             let error = match util::range_bound(bound, &self.tysys.resolutions) {
@@ -3398,10 +3391,8 @@ pub(super) fn remap_pattern_local(pattern: &mut TirPattern, from: u32, to: u32) 
     }
 }
 
-/// A constant a pattern names: its name's reference site, how it is written,
-/// and its type.
+/// A constant a pattern names: how it is written, and its type.
 struct PatternConstant {
-    id: AstId,
     shown: String,
     ty: TypeId,
 }

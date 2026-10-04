@@ -67,9 +67,9 @@ use crate::elaborator::stmt::{
 use crate::elaborator::trait_query::trait_sig_of_with;
 use crate::elaborator::types::{VarRef, newtype_member_owner};
 use crate::elaborator::util::{
-    BoundValue, FloatRange, PatternLiteralError, SettledPattern, bound_value, constant_bound_site,
-    parse_i128_literal, parse_u128_literal, pattern_literal, range_bound, range_pattern,
-    settle_instance_pattern, settles_literal_patterns,
+    BoundValue, FloatRange, PatternLiteralError, SettledPattern, bound_value,
+    constant_pattern_site, parse_i128_literal, parse_u128_literal, pattern_literal, range_bound,
+    range_pattern, settle_instance_pattern, settles_literal_patterns,
 };
 use crate::escape::{
     unescape_byte, unescape_bytes, unescape_char, unescape_string, unescape_template_segment,
@@ -8966,7 +8966,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let (origin, span) = bounds
             .into_iter()
             .zip(&constants)
-            .find_map(|(bound, constant)| constant.is_some().then(|| constant_bound_site(bound)))
+            .find_map(|(bound, constant)| constant.is_some().then(|| constant_pattern_site(bound)))
             .expect("annotate takes a range with no constant bound as no range");
         let [start, end] = [0, 1].map(|i| {
             if let Some(constant) = constants[i].take() {
@@ -9170,7 +9170,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let TirPattern::ConstantValue { expr: constant } = &pattern else {
             return pattern;
         };
-        let (pattern_id, _) = constant_bound_site(written);
+        let (pattern_id, _) = constant_pattern_site(written);
         let Some(dispatch) = self.ann_operator_dispatch(pattern_id) else {
             return pattern;
         };

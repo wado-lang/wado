@@ -47,16 +47,13 @@ fn saturated_value(magnitude: u128, negated: bool) -> i128 {
     }
 }
 
-/// Why a float literal is no pattern.
-const FLOAT_LITERAL_PATTERN: &str = "float literals cannot be used in match patterns";
-
 /// The value a number, byte, char or bool literal pattern names, or why it
 /// names none.
 pub(super) fn pattern_literal(lit: &Literal) -> Result<PatternLiteral, String> {
     match lit {
         Literal::Number(repr, suffix) => {
             if denotes_float(repr, *suffix) {
-                return Err(FLOAT_LITERAL_PATTERN.to_string());
+                return Err("float literals cannot be used in match patterns".to_string());
             }
             let (negated, digits) = repr
                 .strip_prefix('-')
@@ -385,8 +382,8 @@ pub(super) fn float_range(
 /// Where a pattern naming a constant names it: the site annotate records the
 /// comparison on, and reify reads it from. A range records on its first
 /// constant bound.
-pub(super) fn constant_bound_site(bound: &Pattern) -> (AstId, Span) {
-    match bound {
+pub(super) fn constant_pattern_site(pattern: &Pattern) -> (AstId, Span) {
+    match pattern {
         Pattern::Ident { id, span, .. } | Pattern::MutIdent { id, span, .. } => (*id, *span),
         Pattern::Variant { name_id, span, .. } => (*name_id, *span),
         _ => unreachable!("only a name names a constant"),
