@@ -3553,16 +3553,6 @@ impl FqTraitName {
         self.args.iter().any(FqTypeName::mentions_binder)
     }
 
-    /// This trait with every occurrence of the type `old` in its arguments
-    /// replaced by `new`. The head is a declaration and never substitutes.
-    #[must_use]
-    pub fn substitute(&self, old: &FqTypeName, new: &FqTypeName) -> Self {
-        Self {
-            head: self.head.clone(),
-            args: self.args.iter().map(|a| a.substitute(old, new)).collect(),
-        }
-    }
-
     /// This trait with [`FqTypeName::rewrite`] applied to each argument: every
     /// replacement made at once, so one never rewrites another's result.
     #[must_use]

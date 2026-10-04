@@ -172,6 +172,7 @@ pub(super) fn unify(
                 assoc_name: expected_name,
                 args: expected_args,
                 owning_trait: expected_trait,
+                trait_args: expected_trait_args,
                 ..
             },
             ResolvedType::AssocTypeProjection {
@@ -179,6 +180,7 @@ pub(super) fn unify(
                 assoc_name: actual_name,
                 args: actual_args,
                 owning_trait: actual_trait,
+                trait_args: actual_trait_args,
                 ..
             },
         ) if expected_base == actual_base
@@ -186,7 +188,15 @@ pub(super) fn unify(
             && expected_trait == actual_trait
             && expected_args.len() == actual_args.len() =>
         {
-            for (&exp_arg, &act_arg) in expected_args.iter().zip(actual_args.iter()) {
+            let trait_args = expected_trait_args
+                .iter()
+                .flatten()
+                .zip(actual_trait_args.iter().flatten());
+            for (&exp_arg, &act_arg) in expected_args
+                .iter()
+                .zip(actual_args.iter())
+                .chain(trait_args)
+            {
                 unify(type_table, exp_arg, act_arg, bindings);
             }
         }

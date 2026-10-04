@@ -14,7 +14,10 @@ use crate::hashmap::IndexSet;
 use crate::logger::Logger;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, MethodName, global_name};
-use crate::tir::{ImplProjection, TirEffectOp, TirParam, TypeId, TypeTable, method_param_offset};
+use crate::tir::{
+    AssocTypeSig, ImplProjection, TirEffectOp, TirParam, TraitRef, TypeId, TypeTable,
+    method_param_offset,
+};
 use crate::token::Span;
 
 use super::infer_hole::InferHoleTable;
@@ -767,10 +770,11 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             .as_ref()
             .and_then(|t| scope.tysys.resolutions.head_decl(t));
 
+        let impl_site = scope.impl_family_site(impl_block);
         let mut associated_types = hashmap::IndexMap::default();
         for binding in &impl_block.associated_types {
             scope.reject_unsupported_assoc_params(&binding.name, &binding.type_params);
-            let type_id = scope.resolve_assoc_binding(trait_decl, binding);
+            let type_id = scope.resolve_assoc_binding(impl_site.as_ref(), binding);
             scope
                 .annotate_ctx
                 .trait_ctx
@@ -845,8 +849,15 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         if let Some(trait_type) = &impl_block.trait_type {
             trait_type.mentioned_names(&mut named);
         }
+        // A binding's own parameters shadow the impl's in its right-hand side.
         for binding in &impl_block.associated_types {
-            binding.ty.mentioned_names(&mut named);
+            let mut in_binding = Vec::new();
+            binding.ty.mentioned_names(&mut in_binding);
+            named.extend(
+                in_binding
+                    .into_iter()
+                    .filter(|n| !binding.type_params.iter().any(|p| &p.name == n)),
+            );
         }
         for param in &impl_block.type_params {
             for bound in &param.bounds {
@@ -970,6 +981,69 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     }
 }
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
+    /// Resolve what each trait `module` declares says of its associated types,
+    /// once, in the trait's own frame, ahead of every signature that projects
+    /// one. See [`AssocTypeSig`].
+    pub(super) fn register_assoc_type_sigs(&mut self, module: &ast::Module) {
+        for item in &module.items {
+            let ast::Item::Trait(trait_decl) = item else {
+                continue;
+            };
+            if trait_decl.associated_types.is_empty() {
+                continue;
+            }
+            let owner = self.tysys.def_at(trait_decl.id);
+            let (mut scope, self_param, _) = self.enter_trait_scope(trait_decl);
+            let trait_params: Vec<(String, TypeId)> = trait_decl
+                .type_params
+                .iter()
+                .filter_map(|param| {
+                    let binder = scope.annotate_ctx.trait_ctx.type_params.get(&param.name)?;
+                    Some((param.name.clone(), binder.type_id))
+                })
+                .collect();
+            for assoc in &trait_decl.associated_types {
+                let sig =
+                    scope.with_assoc_params(owner, &assoc.name, &assoc.type_params, None, |e| {
+                        AssocTypeSig {
+                            self_param,
+                            trait_params: trait_params.clone(),
+                            params: e.family_params(owner, &assoc.name),
+                            param_bounds: assoc
+                                .type_params
+                                .iter()
+                                .map(|param| e.trait_refs_of(&param.bounds))
+                                .collect(),
+                            bounds: e.trait_refs_of(&assoc.bounds),
+                        }
+                    });
+                scope.tysys.type_table.borrow_mut().register_assoc_type_sig(
+                    owner,
+                    assoc.name.clone(),
+                    sig,
+                );
+            }
+        }
+    }
+
+    /// Each of `bounds` naming a trait, at the arguments it writes, resolved in
+    /// this frame.
+    pub(super) fn trait_refs_of(&mut self, bounds: &[ast::TraitBound]) -> Vec<TraitRef> {
+        bounds
+            .iter()
+            .filter(|bound| bound.names_a_trait())
+            .filter_map(|bound| {
+                let decl = self.tysys.resolutions.bound_decl(bound)?;
+                let args = bound
+                    .type_args
+                    .iter()
+                    .map(|arg| self.resolve_type(arg))
+                    .collect();
+                Some(TraitRef::new(decl, args))
+            })
+            .collect()
+    }
+
     /// Report each of a generic associated type's `params` that is not a plain
     /// type parameter. A projection supplies one type per parameter, so a pack,
     /// an effect or a default has nothing to take.
@@ -1164,10 +1238,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if impl_block.is_synthesize_request {
             return;
         }
-        let trait_decl = impl_block
-            .trait_type
-            .as_ref()
-            .and_then(|t| block.tysys.resolutions.head_decl(t));
 
         for method in &impl_block.methods {
             let mut frame_scope = block.enter_inherited_type_param_scope();
@@ -1186,8 +1256,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .trait_ctx
                 .assoc_type_bindings
                 .clear();
+            let impl_site = frame_scope.impl_family_site(impl_block);
             for binding in &impl_block.associated_types {
-                let type_id = frame_scope.resolve_assoc_binding(trait_decl, binding);
+                let type_id = frame_scope.resolve_assoc_binding(impl_site.as_ref(), binding);
                 frame_scope
                     .annotate_ctx
                     .trait_ctx

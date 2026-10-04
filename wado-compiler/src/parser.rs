@@ -38,6 +38,8 @@ pub struct Parser {
     /// until it is consumed. It is the current token meanwhile, so every
     /// lookahead and span reads it before `tokens[pos]`.
     pending_gt: Option<Token>,
+    /// The half [`Self::advance`] last consumed, which it hands back.
+    consumed_gt: Option<Token>,
     /// When true, `Name {` is not parsed as a struct literal. This is set in
     /// expression contexts where a block `{` follows the expression (e.g.,
     /// if/while/match conditions), preventing ambiguity between struct literals
@@ -226,6 +228,7 @@ impl Parser {
             tokens,
             pos: 0,
             pending_gt: None,
+            consumed_gt: None,
             restrict_struct_literals: false,
             shebang,
             data_section,
@@ -620,9 +623,8 @@ impl Parser {
     }
 
     fn advance(&mut self) -> &Token {
-        if self.pending_gt.is_some() {
-            self.pending_gt = None;
-            return &self.tokens[self.pos - 1];
+        if let Some(half) = self.pending_gt.take() {
+            return self.consumed_gt.insert(half);
         }
         if !self.is_at_end() {
             self.pos += 1;
@@ -6925,7 +6927,9 @@ mod tests {
         assert_eq!(parser.peek().span.column, 4);
         assert_matches!(&parser.peek_nth(1).kind, TokenKind::Ident(name) if name == "b");
         assert_matches!(&parser.peek_nth(2).kind, TokenKind::Ident(name) if name == "c");
-        parser.advance();
+        let consumed = parser.advance();
+        assert_matches!(consumed.kind, TokenKind::Gt);
+        assert_eq!(consumed.span.column, 4);
         assert_matches!(&parser.peek_nth(0).kind, TokenKind::Ident(name) if name == "b");
     }
 

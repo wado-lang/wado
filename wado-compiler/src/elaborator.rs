@@ -1156,16 +1156,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.type_lookup().declaration(name)
     }
 
-    /// The trait `bound` names; one naming no declaration keeps its spelling,
-    /// which the mangle falls back to.
-    pub(super) fn fq_trait_name_of(&self, bound: &ast::TraitBound) -> FqTraitName {
-        let resolutions = &self.tysys.resolutions;
-        resolutions.bound_decl(bound).map_or_else(
-            || FqTraitName::binder(&bound.name),
-            |def| FqTraitName::declared(resolutions.defs(), def),
-        )
-    }
-
     /// The trait a reference site names, with the type arguments it writes; one
     /// naming no declaration keeps its spelling.
     pub(super) fn fq_trait_name(&self, ty: &ast::Type) -> FqTraitName {
@@ -1652,6 +1642,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             self.collect_types(module);
         }
 
+        // Every signature may project an associated type, so what each trait
+        // declares of them is read first.
+        self.register_assoc_type_sigs(module);
+
         // Second pass: collect function signatures (for call resolution)
         {
             let _span = self.logger.span("elaborate/collect_sigs");
@@ -1946,9 +1940,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .as_ref()
             .zip(trait_name.and_then(FqTraitName::canonical))
             .map(|(written, trait_key)| self.impl_trait_ref(written, &impl_block.ty, trait_key));
+        let impl_site = self.impl_family_site(impl_block);
 
         for binding in &impl_block.associated_types {
-            let type_id = self.resolve_assoc_binding(declaring_trait, binding);
+            let type_id = self.resolve_assoc_binding(impl_site.as_ref(), binding);
             self.annotate_ctx
                 .trait_ctx
                 .assoc_type_bindings

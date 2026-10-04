@@ -7,7 +7,7 @@ use crate::tir::{ResolvedType, SlotProjections, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
-use super::scope::{BinderInScope, ScopedBound};
+use super::scope::{BinderInScope, FamilySite, ScopedBound};
 use super::trait_query::SelfBinding;
 use super::types::{TypeError, forward_type_param_defaults};
 use crate::ast;
@@ -16,7 +16,7 @@ use crate::defs::{DefId, DefKind};
 use crate::elaborator::trait_env::{
     ViaClause, non_default_arg_count, written_arg_nodes, written_type_arg,
 };
-use crate::name::{FqTraitName, FqTypeName, namespace_member_alias};
+use crate::name::{FqTypeName, namespace_member_alias};
 use crate::symbol::SymbolKind;
 use crate::tir::TraitRef;
 
@@ -249,7 +249,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(target) = self.assoc_target(namespaced) else {
             return TypeTable::ERROR;
         };
-        let Some(args) = self.assoc_args(namespaced, target.owner()) else {
+        // A binding a type supplies is read where its impl stands, which this
+        // frame does not see; a projection where the frame's bound names it.
+        let site = match &target {
+            AssocTarget::Family { .. } => FamilySite {
+                base: self.assoc_base(namespaced),
+                trait_args: None,
+            },
+            AssocTarget::Projection {
+                base,
+                base_name,
+                owner,
+            } => FamilySite {
+                base: *base,
+                trait_args: self.trait_args_for(*base, base_name, *owner),
+            },
+        };
+        let Some(args) = self.assoc_args(namespaced, target.owner(), &site) else {
             return TypeTable::ERROR;
         };
         match target {
@@ -272,23 +288,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// The type `namespaced` projects off: `Self` or the type parameter it
+    /// names.
+    fn assoc_base(&self, namespaced: &NamespacedGenericType) -> TypeId {
+        let trait_ctx = &self.annotate_ctx.trait_ctx;
+        if namespaced.namespace == "Self" {
+            return trait_ctx
+                .self_type
+                .expect("a `Self::X` naming a binding is read where `Self` is bound");
+        }
+        trait_ctx.type_params[&namespaced.namespace].type_id
+    }
+
     /// The arguments `namespaced` writes for its associated type's own
-    /// parameters, as many as `owner`'s declaration takes and each meeting its
-    /// parameter's bounds, or `None` once the count is reported wrong.
+    /// parameters, as many as `owner`'s declaration takes and each meeting the
+    /// bounds the declaration gives its parameter at `site`, or `None` once the
+    /// count is reported wrong.
     fn assoc_args(
         &mut self,
         namespaced: &NamespacedGenericType,
         owner: Option<DefId>,
+        site: &FamilySite,
     ) -> Option<Vec<TypeId>> {
-        let decl = owner.and_then(|owner| {
-            self.tysys
-                .trait_env
-                .assoc_type_decl(&owner, &namespaced.name)
-                .cloned()
-        });
-        let params = decl
-            .as_ref()
-            .map_or(&[][..], |decl| decl.type_params.as_slice());
+        let params = owner
+            .and_then(|owner| {
+                self.tysys
+                    .trait_env
+                    .assoc_type_decl(&owner, &namespaced.name)
+            })
+            .map(|decl| decl.type_params.clone())
+            .unwrap_or_default();
         if params.len() != namespaced.args.len() {
             let _ = self.emit(TypeError::TypeArgumentCount {
                 name: format!("{}::{}", namespaced.namespace, namespaced.name),
@@ -298,30 +327,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return None;
         }
-        let (Some(owner), Some(decl)) = (owner, &decl) else {
+        let Some(owner) = owner.filter(|_| !params.is_empty()) else {
             return Some(Vec::new());
         };
         let args = self.resolve_turbofish_args(&namespaced.args);
-        // A parameter's bound may name its siblings, which stand for their own
-        // arguments here; the family's spelling of each is replaced at once.
-        let at_args: IndexMap<FqTypeName, FqTypeName> = {
-            let own = self.family_params(owner, &decl.name);
-            let table = self.tysys.type_table.borrow();
-            own.iter()
-                .zip(&args)
-                .map(|(&param, &arg)| (table.fq_type_name(param), table.fq_type_name(arg)))
-                .collect()
-        };
-        for ((param, &arg), written) in params.iter().zip(&args).zip(&namespaced.args) {
-            for (bound_name, bound_trait) in
-                self.bounds_over_family(owner, &decl.name, params, &param.bounds)
-            {
-                let bound_trait =
-                    bound_trait.map(|fq| fq.rewrite_args(&|node| at_args.get(node).cloned()));
+        let owed = self.param_bounds_at(owner, &namespaced.name, site, &args);
+        for (((param, &arg), written), refs) in
+            params.iter().zip(&args).zip(&namespaced.args).zip(owed)
+        {
+            for trait_ref in refs {
+                let (bound_name, bound_trait) = {
+                    let table = self.tysys.type_table.borrow();
+                    (
+                        table.def_name(trait_ref.decl).to_string(),
+                        table.trait_ref_name(&trait_ref),
+                    )
+                };
                 self.enforce_single_bound_args(
                     arg,
                     &bound_name,
-                    bound_trait.as_ref(),
+                    Some(&bound_trait),
                     &param.name,
                     written.span(),
                 );
@@ -1224,46 +1249,132 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             assoc_params.len(),
             "a projection of `{assoc}` is built at the arguments its declaration takes"
         );
-        // A nullary associated type's bound names no parameter a projection
-        // fills, so it is kept as the trait alone.
-        let bound_names: Vec<FqTraitName> = match &decl {
-            Some(decl) if !assoc_params.is_empty() => self
-                .declared_assoc_bounds(owning_trait, decl)
-                .into_iter()
-                .filter_map(|(_, written)| written)
-                .collect(),
-            _ => assoc_bounds
-                .iter()
-                .map(|b| self.fq_trait_name_of(b))
-                .collect(),
+        let site = FamilySite {
+            base,
+            trait_args: self.trait_args_for(base, base_name, owning_trait),
+        };
+        let bounds = {
+            let mut table = self.tysys.type_table.borrow_mut();
+            match table.assoc_type_sig(owning_trait, assoc).cloned() {
+                Some(sig) => table.instantiate_trait_refs(
+                    &sig,
+                    &sig.bounds,
+                    site.base,
+                    site.trait_args.as_deref(),
+                    args,
+                ),
+                None => Vec::new(),
+            }
         };
         // Built over the family's own parameters, which a bound may name, then
         // instantiated at `args`.
-        let assoc_type_bindings = self.with_assoc_params(owning_trait, assoc, &assoc_params, |e| {
-            e.frame_assoc_bindings(base, base_name, owning_trait, assoc, &assoc_bounds)
-        });
+        let assoc_type_bindings =
+            self.with_assoc_params(owning_trait, assoc, &assoc_params, Some(&site), |e| {
+                e.frame_assoc_bindings(base, base_name, owning_trait, assoc, &assoc_bounds)
+            });
         let open = self.family_params(owning_trait, assoc);
         let mut table = self.tysys.type_table.borrow_mut();
-        let bound_names = bound_names
+        let bindings_at: Vec<(String, TypeId)> = assoc_type_bindings
             .into_iter()
-            .map(|bound| {
-                open.iter()
-                    .enumerate()
-                    .fold(bound, |bound, (index, &param)| {
-                        let slot = table.family_slot(owning_trait, assoc, index);
-                        bound.substitute(&table.fq_type_name(param), &slot)
-                    })
-            })
+            .map(|(name, bound)| (name, table.instantiate_family(bound, args)))
             .collect();
-        let family = table.make_assoc_type_projection(
+        debug_assert_eq!(open.len(), args.len());
+        let trait_args = site
+            .trait_args
+            .map(|space| space.into_iter().map(|(_, arg)| arg).collect());
+        table.make_assoc_type_projection(
             base,
             owning_trait,
+            trait_args,
             assoc.to_string(),
-            open,
-            bound_names,
-            assoc_type_bindings,
-        );
-        table.instantiate_family(family, args)
+            args.to_vec(),
+            bounds,
+            bindings_at,
+        )
+    }
+
+    /// The trait `impl_block` implements, and the site its bindings are read
+    /// at: its target as `Self`, the arguments its header writes as the
+    /// trait's, defaults filled.
+    pub(super) fn impl_family_site(
+        &mut self,
+        impl_block: &ast::ImplBlock,
+    ) -> Option<(DefId, FamilySite)> {
+        let trait_type = impl_block.trait_type.as_ref()?;
+        let owner = self.impl_trait_decl(trait_type)?;
+        let base = self.resolve_type(&impl_block.ty);
+        let written: Vec<TypeId> = written_arg_nodes(trait_type)
+            .iter()
+            .map(|arg| self.resolve_type(arg))
+            .collect();
+        Some((owner, self.family_site(owner, base, &written)))
+    }
+
+    /// The site `owner`'s associated types are read at for `base`, the trait
+    /// reached at `written` arguments, defaults filling the rest.
+    pub(super) fn family_site(
+        &mut self,
+        owner: DefId,
+        base: TypeId,
+        written: &[TypeId],
+    ) -> FamilySite {
+        let space = self.param_space_of(owner, written);
+        let known = space.iter().all(|(_, arg)| *arg != TypeTable::UNKNOWN);
+        FamilySite {
+            base,
+            trait_args: known.then_some(space),
+        }
+    }
+
+    /// The arguments `owner` is reached through for `base`, which the frame
+    /// files under `base_name`, by parameter name: the trait's own parameters
+    /// inside its declaration, the bound naming it where one does, the bounds
+    /// a projection base carries. Defaults fill what a bound leaves out.
+    /// `None` where nothing in the frame says.
+    pub(super) fn trait_args_for(
+        &mut self,
+        base: TypeId,
+        base_name: &str,
+        owner: DefId,
+    ) -> Option<ParamSpace> {
+        let in_own_declaration = self.annotate_ctx.trait_ctx.self_trait == Some(owner)
+            && self.annotate_ctx.trait_ctx.self_type == Some(base)
+            && matches!(
+                self.tysys.type_table.borrow().get(base),
+                ResolvedType::TypeParam { .. }
+            );
+        if in_own_declaration {
+            let params = self.tysys.trait_env.trait_decl_params(owner).to_vec();
+            return params
+                .iter()
+                .map(|param| {
+                    let binder = self.annotate_ctx.trait_ctx.type_params.get(&param.name)?;
+                    Some((param.name.clone(), binder.type_id))
+                })
+                .collect();
+        }
+        let written: Vec<TypeId> = if let Some((bound, space)) = self
+            .bound_closure_of(base_name)
+            .unwrap_or_default()
+            .into_iter()
+            .find(|(bound, _)| self.trait_decl_of(bound) == Some(owner))
+        {
+            let type_args = bound.type_args.clone();
+            self.in_bound_frame(&bound, &space, |e| {
+                type_args.iter().map(|ty| e.resolve_type(ty)).collect()
+            })
+        } else {
+            let table = self.tysys.type_table.borrow();
+            let ResolvedType::AssocTypeProjection { bounds, .. } = table.get(base) else {
+                return None;
+            };
+            bounds
+                .iter()
+                .find(|bound| bound.decl == owner)?
+                .args
+                .clone()
+        };
+        self.family_site(owner, base, &written).trait_args
     }
 
     /// [`Self::frame_projection`] scoped to one trait, so a second bound

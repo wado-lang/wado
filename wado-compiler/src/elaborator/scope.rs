@@ -5,7 +5,7 @@
 //! path (WEP 2026-05-26).
 
 use std::borrow::Borrow;
-use std::cell::{Cell, RefCell};
+use std::cell::{Cell, Ref, RefCell};
 use std::hash::Hash;
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
@@ -14,7 +14,7 @@ use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::tir::TypeId;
+use crate::tir::{TraitRef, TypeId, TypeTable};
 
 use super::coercion::PendingLiterals;
 use super::trait_env::{InheritedBound, ViaClause};
@@ -24,7 +24,7 @@ use super::types::TypeError;
 use super::util;
 use super::{AbstractSelections, Elaborator};
 use crate::defs::DefId;
-use crate::name::FqTypeName;
+use crate::name::{FqTraitName, FqTypeName};
 use crate::token::Span;
 
 /// A name bound in a type-parameter scope: its slot, the type it stands for,
@@ -103,6 +103,15 @@ impl BoundSelf {
             }),
         }
     }
+}
+
+/// Where a generic associated type's declaration is read: the type standing
+/// for the trait's `Self`, and the arguments its parameters take there, by
+/// name — `None` where the site does not know them.
+#[derive(Clone, Debug)]
+pub(super) struct FamilySite {
+    pub(super) base: TypeId,
+    pub(super) trait_args: Option<ParamSpace>,
 }
 
 /// A bound together with what `Self` means where it was written, which is not
@@ -245,6 +254,9 @@ pub(super) struct TraitContext {
     /// Associated type bindings in scope (`Self::Name` → resolved type).
     /// Set when resolving trait implementations.
     pub(super) assoc_type_bindings: IndexMap<String, TypeId>,
+    /// The bounds each generic associated type's parameter in scope carries,
+    /// by its identity, instantiated where the frame stands.
+    pub(super) assoc_param_bounds: IndexMap<TypeId, Vec<FqTraitName>>,
     /// Current `Self` type in scope (the type being implemented in an impl block).
     pub(super) self_type: Option<TypeId>,
     /// The trait `Self` is being elaborated against — the trait an `impl` block
@@ -863,14 +875,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Run `body` with the parameters of `owning_trait`'s associated type
-    /// `assoc` in scope over this frame, under the names `written` gives them
-    /// and with the bounds it declares. Each is the family's own parameter at
-    /// its position, so a declaration and an impl renaming it reach one type.
+    /// `assoc` in scope over this frame, under the names `written` gives them.
+    /// Each is the family's own parameter at its position, so a declaration
+    /// and an impl renaming it reach one type. At a `site`, each also carries
+    /// the bounds the declaration gives it there, by its identity.
     pub(super) fn with_assoc_params<R>(
         &mut self,
         owning_trait: DefId,
         assoc: &str,
         written: &[ast::GenericParam],
+        site: Option<&FamilySite>,
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
         if written.is_empty() {
@@ -889,22 +903,75 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 bounds,
             );
         }
+        if let Some(site) = site {
+            let declared: Vec<Vec<TraitRef>> =
+                scope.param_bounds_at(owning_trait, assoc, site, &params);
+            let named: Vec<(TypeId, Vec<FqTraitName>)> = {
+                let table: Ref<'_, TypeTable> = RefCell::borrow(&scope.tysys.type_table);
+                params
+                    .iter()
+                    .zip(declared)
+                    .map(|(&param, refs)| {
+                        (
+                            param,
+                            refs.iter().map(|r| table.trait_ref_name(r)).collect(),
+                        )
+                    })
+                    .collect()
+            };
+            scope
+                .annotate_ctx
+                .trait_ctx
+                .assoc_param_bounds
+                .extend(named);
+        }
         body(&mut scope)
     }
 
-    /// What an impl of `owning_trait` binds `binding` to, its own parameters
-    /// left open as the family's.
+    /// The bounds `owning_trait`'s associated type `assoc` declares on each of
+    /// its parameters, at `site` and at the arguments `args`.
+    pub(super) fn param_bounds_at(
+        &mut self,
+        owning_trait: DefId,
+        assoc: &str,
+        site: &FamilySite,
+        args: &[TypeId],
+    ) -> Vec<Vec<TraitRef>> {
+        let mut table = self.tysys.type_table.borrow_mut();
+        let Some(sig) = table.assoc_type_sig(owning_trait, assoc).cloned() else {
+            return Vec::new();
+        };
+        sig.param_bounds
+            .iter()
+            .map(|refs| {
+                table.instantiate_trait_refs(
+                    &sig,
+                    refs,
+                    site.base,
+                    site.trait_args.as_deref(),
+                    args,
+                )
+            })
+            .collect()
+    }
+
+    /// What an impl binds `binding` to, its own parameters left open as the
+    /// family's. `impl_site` is the trait the impl implements and where.
     pub(super) fn resolve_assoc_binding(
         &mut self,
-        owning_trait: Option<DefId>,
+        impl_site: Option<&(DefId, FamilySite)>,
         binding: &ast::AssociatedTypeBinding,
     ) -> TypeId {
-        let Some(owning_trait) = owning_trait else {
+        let Some((owning_trait, site)) = impl_site else {
             return self.resolve_type(&binding.ty);
         };
-        self.with_assoc_params(owning_trait, &binding.name, &binding.type_params, |scope| {
-            scope.resolve_type(&binding.ty)
-        })
+        self.with_assoc_params(
+            *owning_trait,
+            &binding.name,
+            &binding.type_params,
+            Some(site),
+            |scope| scope.resolve_type(&binding.ty),
+        )
     }
 
     /// Reject a bound writing `Self` where the frame binds none. `Self::Assoc`

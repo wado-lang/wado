@@ -203,20 +203,16 @@ impl MethodCallOutcome {
     }
 }
 
-/// What a projection projects its associated type off, and at.
-struct Projected {
-    base: TypeId,
-    owning_trait: DefId,
-    args: Vec<TypeId>,
-}
-
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// The trait bounds `ty` carries, which answer a method or an operator on
     /// it: a type parameter's declared ones, or those the trait's
     /// `type A: Bound` puts on the projection `ty`. Empty for any other type.
-    /// A projection's are the declaration's own, arguments included, written
-    /// with `Self` meaning the projection's base and the family's parameters
-    /// the projection's arguments.
+    ///
+    /// A projection's are the declaration's own, read in its trait's frame
+    /// at the projection: `Self` its base, the trait's parameters the
+    /// arguments it was reached at, the family's parameters its arguments. A
+    /// bound reading a trait parameter the projection does not know keeps its
+    /// trait alone, as [`TypeTable::instantiate_trait_refs`] does.
     pub(super) fn carried_bounds(&self, ty: TypeId) -> Vec<ScopedBound> {
         if let Some(name) = self.tysys.binder_name(ty) {
             return self
@@ -227,53 +223,65 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .cloned()
                 .unwrap_or_default();
         }
-        let Some((decl, projected)) = self.projected_decl(ty) else {
-            return Vec::new();
-        };
-        let written_self = Some(SelfBinding {
-            type_id: projected.base,
-            declaring_trait: Some(projected.owning_trait),
-        });
-        let space: ParamSpace = decl
-            .type_params
-            .iter()
-            .map(|param| param.name.clone())
-            .zip(projected.args)
-            .collect();
-        decl.bounds
-            .iter()
-            .filter(|bound| bound.names_a_trait())
-            .map(|bound| ScopedBound::new(bound.clone(), written_self).in_space(space.clone()))
-            .collect()
-    }
-
-    /// The declaration of the associated type projection `ty` names, and what
-    /// `ty` projects it off and at.
-    fn projected_decl(&self, ty: TypeId) -> Option<(ast::AssociatedTypeDecl, Projected)> {
         let tt = self.tysys.type_table.borrow();
         let ResolvedType::AssocTypeProjection {
             param_id,
             assoc_name,
             args,
             owning_trait,
+            trait_args,
             ..
         } = tt.get(ty)
         else {
-            return None;
+            return Vec::new();
         };
-        let decl = self
-            .tysys
-            .trait_env
-            .assoc_type_decl(owning_trait, assoc_name)?
-            .clone();
-        Some((
-            decl,
-            Projected {
-                base: *param_id,
-                owning_trait: *owning_trait,
-                args: args.clone(),
-            },
-        ))
+        let (Some(decl), Some(sig)) = (
+            self.tysys
+                .trait_env
+                .assoc_type_decl(owning_trait, assoc_name),
+            tt.assoc_type_sig(*owning_trait, assoc_name),
+        ) else {
+            return Vec::new();
+        };
+        let written_self = Some(SelfBinding {
+            type_id: *param_id,
+            declaring_trait: Some(*owning_trait),
+        });
+        let mut space: ParamSpace = decl
+            .type_params
+            .iter()
+            .map(|param| param.name.clone())
+            .zip(args.iter().copied())
+            .collect();
+        if let Some(given) = trait_args {
+            let params = self.tysys.trait_env.trait_decl_params(*owning_trait);
+            assert_eq!(
+                params.len(),
+                given.len(),
+                "a projection's trait arguments are one per parameter"
+            );
+            space.extend(
+                params
+                    .iter()
+                    .map(|param| param.name.clone())
+                    .zip(given.iter().copied()),
+            );
+        }
+        // `sig.bounds` was read off these, one per bound naming a trait.
+        decl.bounds
+            .iter()
+            .filter(|bound| {
+                bound.names_a_trait() && self.tysys.resolutions.bound_decl(bound).is_some()
+            })
+            .zip(&sig.bounds)
+            .map(|(bound, written)| {
+                let mut bound = bound.clone();
+                if trait_args.is_none() && tt.reads_trait_params(sig, written) {
+                    bound.type_args.clear();
+                }
+                ScopedBound::new(bound, written_self).in_space(space.clone())
+            })
+            .collect()
     }
 
     /// What the call `call` selected through a declared bound, where the walk

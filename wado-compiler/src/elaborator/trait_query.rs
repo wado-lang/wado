@@ -18,7 +18,7 @@ use crate::token::Span;
 use super::callee::CalleeRef;
 use super::method_lookup::ImplParamSlots;
 use super::scope::{
-    BinderInScope, BoundSelf, ElaboratedBound, Scope, ScopedBound, TraitCheckFrame,
+    BinderInScope, BoundSelf, ElaboratedBound, FamilySite, Scope, ScopedBound, TraitCheckFrame,
     trait_params_from_impl,
 };
 use super::trait_env::{ImplMethodHeader, InheritedBound, ViaClause};
@@ -42,7 +42,7 @@ use crate::elaborator::types::{RequiredTrait, StructFieldInfo, VariantInfo};
 use crate::name::FqTraitName;
 use crate::resolve::{Resolution, Resolutions};
 use crate::synthesis::template::{comparison_written_alone, written_impl_reaches};
-use crate::tir::{SlotProjections, TraitRef};
+use crate::tir::{AssocTypeSig, SlotProjections, TraitRef};
 use crate::unparse::unparse_generic_params_into;
 
 /// Proof that a bound was asked and answered no. Its field is private here, so
@@ -219,9 +219,12 @@ fn mentions_type_pack(ty: &ast::Type) -> bool {
 /// declaring item's parameter space, and become what the site wrote there.
 /// `None` where one stays a binder, which belongs to the site's own caller.
 fn asked_at(trait_: FqTraitName, at_call: &[(FqTypeName, FqTypeName)]) -> Option<FqTraitName> {
-    let asked = at_call
-        .iter()
-        .fold(trait_, |trait_, (param, arg)| trait_.substitute(param, arg));
+    let asked = trait_.rewrite_args(&|name| {
+        at_call
+            .iter()
+            .find(|(param, _)| param == name)
+            .map(|(_, arg)| arg.clone())
+    });
     (!asked.args_mention_binder()).then_some(asked)
 }
 
@@ -393,21 +396,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// bindings. Only the bound's trait is checked, not its associated-type
     /// equality constraints (`Iterator<Item = Self::Item>`).
     pub(super) fn enforce_impl_assoc_type_bounds(&mut self, impl_block: &ast::ImplBlock) {
-        let Some((_, _, trait_decl)) = self.impl_trait_head(impl_block) else {
+        let Some(impl_site) = self.impl_family_site(impl_block) else {
             return;
         };
+        let (owner, site) = &impl_site;
         for binding in &impl_block.associated_types {
             let Some(decl) = self
                 .tysys
                 .trait_env
-                .assoc_type_decl(&trait_decl, &binding.name)
+                .assoc_type_decl(owner, &binding.name)
                 .cloned()
             else {
                 continue;
             };
-            self.check_assoc_binding_params(trait_decl, &decl, binding);
-            let bounds = self.declared_assoc_bounds(trait_decl, &decl);
-            if bounds.is_empty() {
+            let sig = self
+                .tysys
+                .type_table
+                .borrow()
+                .assoc_type_sig(*owner, &binding.name)
+                .cloned()
+                .expect("every declared associated type has its signature");
+            self.check_assoc_binding_params(*owner, &decl, &sig, site, binding);
+            if sig.bounds.is_empty() {
                 continue;
             }
             let type_id = self
@@ -416,66 +426,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .assoc_type_bindings
                 .get(&binding.name)
                 .copied()
-                .unwrap_or_else(|| self.resolve_assoc_binding(Some(trait_decl), binding));
+                .unwrap_or_else(|| self.resolve_assoc_binding(Some(&impl_site), binding));
             if !self.tysys.type_table.borrow().binding_is_concrete(type_id) {
                 continue;
             }
             // The binding answers for every argument the declaration admits,
-            // so it is checked under the declaration's own parameter bounds.
-            self.with_assoc_params(trait_decl, &decl.name, &decl.type_params, |scope| {
-                for (bound_name, bound_trait) in &bounds {
+            // so it is checked over the family's own parameters, which carry
+            // the bounds the declaration gives them and nothing more.
+            self.with_assoc_params(*owner, &decl.name, &decl.type_params, Some(site), |scope| {
+                let owed: Vec<(String, FqTraitName)> = {
+                    let mut table = scope.tysys.type_table.borrow_mut();
+                    let refs = table.instantiate_trait_refs(
+                        &sig,
+                        &sig.bounds,
+                        site.base,
+                        site.trait_args.as_deref(),
+                        &sig.params,
+                    );
+                    refs.iter()
+                        .map(|r| (table.def_name(r.decl).to_string(), table.trait_ref_name(r)))
+                        .collect()
+                };
+                for (bound_name, bound_trait) in &owed {
                     scope.enforce_single_bound_args(
                         type_id,
                         bound_name,
-                        bound_trait.as_ref(),
+                        Some(bound_trait),
                         &binding.name,
                         binding.span,
                     );
                 }
             });
         }
-    }
-
-    /// `bounds`, written over `params`, with each parameter's name read as the
-    /// family's own parameter at its position, which no other name reaches.
-    pub(super) fn bounds_over_family(
-        &mut self,
-        owning_trait: DefId,
-        assoc: &str,
-        params: &[ast::GenericParam],
-        bounds: &[ast::TraitBound],
-    ) -> Vec<(String, Option<FqTraitName>)> {
-        let family: Vec<FqTypeName> = {
-            let ids = self.family_params(owning_trait, assoc);
-            let table = self.tysys.type_table.borrow();
-            ids.iter().map(|&id| table.fq_type_name(id)).collect()
-        };
-        bounds
-            .iter()
-            .filter(|bound| bound.names_a_trait())
-            .map(|bound| {
-                let (name, written) = self.tysys.bound_named_written(bound);
-                let written = written.map(|written| {
-                    params
-                        .iter()
-                        .zip(&family)
-                        .fold(written, |written, (param, own)| {
-                            written.substitute(&FqTypeName::binder(&param.name), own)
-                        })
-                });
-                (name, written)
-            })
-            .collect()
-    }
-
-    /// The bounds `decl`, a generic associated type of `owning_trait`, puts on
-    /// itself, over the family's own parameters.
-    pub(super) fn declared_assoc_bounds(
-        &mut self,
-        owning_trait: DefId,
-        decl: &ast::AssociatedTypeDecl,
-    ) -> Vec<(String, Option<FqTraitName>)> {
-        self.bounds_over_family(owning_trait, &decl.name, &decl.type_params, &decl.bounds)
     }
 
     /// Report an impl binding `decl` with parameters other than the trait
@@ -485,23 +467,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         owning_trait: DefId,
         decl: &ast::AssociatedTypeDecl,
+        sig: &AssocTypeSig,
+        site: &FamilySite,
         binding: &ast::AssociatedTypeBinding,
     ) {
-        let declared_bounds =
-            |e: &mut Self, params: &[ast::GenericParam]| -> Vec<Vec<Option<FqTraitName>>> {
-                params
+        let declared = self.param_bounds_at(owning_trait, &decl.name, site, &sig.params);
+        let written: Vec<Vec<TraitRef>> =
+            self.with_assoc_params(owning_trait, &decl.name, &binding.type_params, None, |e| {
+                binding
+                    .type_params
                     .iter()
-                    .map(|param| {
-                        e.bounds_over_family(owning_trait, &decl.name, params, &param.bounds)
-                            .into_iter()
-                            .map(|(_, written)| written)
-                            .collect()
-                    })
+                    .map(|param| e.trait_refs_of(&param.bounds))
                     .collect()
-            };
-        let declared = declared_bounds(self, &decl.type_params);
-        let written = declared_bounds(self, &binding.type_params);
-        let agrees = declared.len() == written.len()
+            });
+        let agrees = declared.len() == binding.type_params.len()
             && declared
                 .iter()
                 .zip(&written)
@@ -833,21 +812,16 @@ impl TypeSystem {
                 let named = self.bound_written(&inherited.bound).unwrap_or_else(|| {
                     FqTraitName::declared(self.resolutions.defs(), inherited.decl)
                 });
-                let at_site = params.iter().zip(written).fold(named, |acc, (param, arg)| {
-                    acc.substitute(&FqTypeName::binder(&param.name), arg)
+                let at_site = named.rewrite_args(&|name| {
+                    params
+                        .iter()
+                        .zip(written)
+                        .find(|(param, _)| *name == FqTypeName::binder(&param.name))
+                        .map(|(_, arg)| arg.clone())
                 });
                 (inherited.decl, at_site)
             })
             .collect()
-    }
-
-    /// [`Self::bound_written`] with the bound's spelling, for the diagnostics
-    /// that name a trait the resolution did not reach.
-    pub(super) fn bound_named_written(
-        &self,
-        bound: &ast::TraitBound,
-    ) -> (String, Option<FqTraitName>) {
-        (bound.name.clone(), self.bound_written(bound))
     }
 
     /// Whether `type_id` answers every one of `bounds`, each at the arguments it
@@ -1164,10 +1138,8 @@ impl TypeSystem {
             .any(|(decl, named)| *decl == trait_ && self.args_answer(named.args(), trait_, wanted))
     }
 
-    /// Whether the family parameter `param` supplies `trait_` at `wanted`. It
-    /// answers by the bounds it carries in this frame, under the name the frame
-    /// writes it as; `wanted` spells each family parameter by its identity, so
-    /// it is read in the frame's names too.
+    /// Whether the family parameter `param` supplies `trait_` at `wanted`, by
+    /// the bounds the declaration gives it where the frame stands.
     fn assoc_param_supplies(
         &self,
         ctx: &Scope,
@@ -1175,36 +1147,14 @@ impl TypeSystem {
         trait_: DefId,
         wanted: &[FqTypeName],
     ) -> bool {
-        let table = self.type_table.borrow();
-        let family_in_scope: Vec<(&String, TypeId)> = ctx
-            .trait_ctx
-            .type_params
-            .iter()
-            .filter(|(_, binder)| {
-                matches!(table.get(binder.type_id), ResolvedType::AssocParam { .. })
-            })
-            .map(|(name, binder)| (name, binder.type_id))
-            .collect();
-        let Some(&(name, _)) = family_in_scope.iter().find(|(_, id)| *id == param) else {
-            return false;
-        };
-        let wanted: Vec<FqTypeName> = wanted
-            .iter()
-            .map(|want| {
-                family_in_scope
-                    .iter()
-                    .fold(want.clone(), |want, (name, id)| {
-                        want.substitute(&table.fq_type_name(*id), &FqTypeName::binder(name))
-                    })
-            })
-            .collect();
         ctx.trait_ctx
-            .type_param_bounds
-            .get(name)
+            .assoc_param_bounds
+            .get(&param)
             .is_some_and(|bounds| {
-                bounds
-                    .iter()
-                    .any(|b| self.bound_supplies(b, trait_, &wanted))
+                bounds.iter().any(|bound| {
+                    bound.canonical() == Some(trait_)
+                        && self.args_answer(bound.args(), trait_, wanted)
+                })
             })
     }
 
@@ -3320,8 +3270,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_ref: &TraitRef,
         bindings: &[ast::AssociatedTypeBinding],
     ) {
+        let impl_site = (
+            trait_ref.decl,
+            self.family_site(trait_ref.decl, concrete, &trait_ref.args),
+        );
         for binding in bindings {
-            let resolved_id = self.resolve_assoc_binding(Some(trait_ref.decl), binding);
+            let resolved_id = self.resolve_assoc_binding(Some(&impl_site), binding);
             let mut table = self.tysys.type_table.borrow_mut();
             if table.binding_is_concrete(resolved_id) {
                 table.register_assoc_type_resolution(

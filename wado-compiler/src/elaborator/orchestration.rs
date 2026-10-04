@@ -2109,6 +2109,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     return type_table.make_assoc_type_projection(
                         param_id,
                         owning_trait,
+                        None,
                         namespaced.name.clone(),
                         args,
                         vec![],
@@ -2273,6 +2274,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             type_table.borrow_mut().make_assoc_type_projection(
                                 inner_param_id,
                                 owning_trait,
+                                None,
                                 ns.name.clone(),
                                 vec![],
                                 vec![],
