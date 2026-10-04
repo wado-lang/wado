@@ -807,8 +807,10 @@ impl SolverBridge {
         let Self { program, lowering } = self;
         let mut stated = Self::state_newtype_bases(tysys, data, table, lowering, program);
         let (mut structs, variants, handles) = Self::declarations(tysys, data, table, lowering);
-        let shape_kinds: Vec<(TypeDeclId, OnBoundTrait)> =
-            shapes.iter().map(|(shape, kind)| (shape.id, *kind)).collect();
+        let shape_kinds: Vec<(TypeDeclId, OnBoundTrait)> = shapes
+            .iter()
+            .map(|(shape, kind)| (shape.id, *kind))
+            .collect();
         structs.extend(shapes.into_iter().map(|(shape, _)| shape));
         stated.extend(
             structs
@@ -897,8 +899,8 @@ impl SolverBridge {
                 .decls
                 .get_index(head.0 as usize)
                 .expect("a lowered head is interned");
-            if let Some(&source) = kind_of(key)
-                .and_then(|kind| lowering.derivation_source.get(&(trait_, kind)))
+            if let Some(&source) =
+                kind_of(key).and_then(|kind| lowering.derivation_source.get(&(trait_, kind)))
             {
                 lowering.impl_defs.insert(id, source);
             }
@@ -1293,7 +1295,8 @@ impl SolverBridge {
                 .compiler_trait_def(item)
                 .and_then(|def| lowering.known_trait(def))
         };
-        let (Some(ref_), Some(ref_mut)) = (trait_of(CompilerItem::Ref), trait_of(CompilerItem::RefMut))
+        let (Some(ref_), Some(ref_mut)) =
+            (trait_of(CompilerItem::Ref), trait_of(CompilerItem::RefMut))
         else {
             return;
         };
