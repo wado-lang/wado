@@ -20,7 +20,7 @@ merge recorded, so the next `git add -A` does not stage a stale checkout.
 ```sh
 b=$(git branch --show-current)
 if git ls-remote --exit-code --heads origin "$b" > /dev/null; then
-  git pull --no-rebase origin "$b"
+  git pull --no-rebase origin "$b" || exit 1   # a conflict stops here
 fi
 git fetch origin main
 git -c merge.conflictstyle=zdiff3 merge origin/main
