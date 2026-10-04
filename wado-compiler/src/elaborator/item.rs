@@ -15,8 +15,8 @@ use crate::logger::Logger;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, MethodName, global_name};
 use crate::tir::{
-    AssocTypeSig, ImplProjection, TirEffectOp, TirParam, TraitRef, TypeId, TypeKey, TypeTable,
-    method_param_offset,
+    AssocTypeSig, ImplProjection, TirEffectOp, TirParam, TraitFrame, TraitRef, TypeId, TypeKey,
+    TypeTable, method_param_offset,
 };
 use crate::token::Span;
 
@@ -1013,13 +1013,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if !self.annotate_ctx.assoc_sig_stack.insert(key.clone()) {
             return None;
         }
-        // Read where the trait is written, whoever asks first: neither the
-        // asking frame's bounds nor its module's imports reach it.
-        let home = self.tysys.resolutions.defs().module(owning_trait).clone();
-        let sig = self.with_module_perspective_for(&home, |e| {
-            let mut clean = e.enter_inherited_type_param_scope();
-            clean.annotate_ctx.trait_ctx = TraitContext::default();
-            clean.build_assoc_type_sig(owning_trait, assoc)
+        let sig = self.in_trait_frame(owning_trait, |e, frame| {
+            e.build_assoc_type_sig(owning_trait, assoc, frame)
         });
         self.annotate_ctx.assoc_sig_stack.shift_remove(&key);
         let sig = Rc::new(sig);
@@ -1031,56 +1026,98 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         Some(sig)
     }
 
-    /// [`Self::assoc_type_sig`] resolved in a frame holding nothing but the
-    /// trait's own.
-    fn build_assoc_type_sig(&mut self, owning_trait: DefId, assoc: &str) -> AssocTypeSig {
+    /// [`Self::assoc_type_sig`] resolved in the trait's `frame`.
+    fn build_assoc_type_sig(
+        &mut self,
+        owning_trait: DefId,
+        assoc: &str,
+        frame: Rc<TraitFrame>,
+    ) -> AssocTypeSig {
+        let decl = self
+            .tysys
+            .trait_env
+            .assoc_type_decl(&owning_trait, assoc)
+            .cloned()
+            .expect("the trait declares the associated type asked of it");
+        self.with_assoc_params(owning_trait, assoc, &decl.type_params, None, |e| {
+            AssocTypeSig {
+                owning_trait,
+                assoc_name: assoc.to_string(),
+                frame,
+                params: e.family_params(owning_trait, assoc),
+                param_bounds: e.family_param_bounds(owning_trait, assoc, &decl.type_params),
+                bounds: e.trait_refs_of(&decl.bounds),
+            }
+        })
+    }
+
+    /// `owning_trait`'s own frame, resolved once and kept. `None` for an
+    /// interface or a resource, which an impl also names and which has none.
+    pub(super) fn trait_frame(&mut self, owning_trait: DefId) -> Option<Rc<TraitFrame>> {
+        if let Some(frame) = self.tysys.type_table.borrow().trait_frame(owning_trait) {
+            return Some(Rc::clone(frame));
+        }
+        self.tysys.trait_env.decl_header_of(&owning_trait)?;
+        Some(self.in_trait_frame(owning_trait, |_, frame| frame))
+    }
+
+    /// Run `body` in `owning_trait`'s own frame, handing it the frame: read
+    /// where the trait is written, whoever asks, so neither the asking frame's
+    /// bounds nor its module's imports reach it.
+    fn in_trait_frame<R>(
+        &mut self,
+        owning_trait: DefId,
+        body: impl FnOnce(&mut Self, Rc<TraitFrame>) -> R,
+    ) -> R {
         let header = self
             .tysys
             .trait_env
             .decl_header_of(&owning_trait)
             .cloned()
-            .expect("an associated type's trait has a header");
-        let decl = header
-            .assoc_types
-            .iter()
-            .find(|decl| decl.name == assoc)
-            .cloned()
-            .expect("the trait declares the associated type asked of it");
+            .expect("a trait has a header");
+        let home = self.tysys.resolutions.defs().module(owning_trait).clone();
         let trait_id = self.tysys.resolutions.defs().ast_id(owning_trait);
-        let (mut scope, self_param, _) =
-            self.enter_trait_frame(trait_id, &header.name, header.span, &header.type_params);
-        let type_params: Vec<&ast::GenericParam> = header
-            .type_params
-            .iter()
-            .filter(|param| param.fills_impl_slot())
-            .collect();
-        let trait_params: Vec<Option<TypeId>> = type_params
-            .iter()
-            .map(|param| {
-                let binder = scope.annotate_ctx.trait_ctx.type_params.get(&param.name)?;
-                Some(binder.type_id)
-            })
-            .collect();
-        let trait_param_defaults: Vec<Option<TypeId>> = type_params
-            .iter()
-            .map(|param| {
-                param
-                    .default
-                    .as_ref()
-                    .map(|default| scope.resolve_type(default))
-            })
-            .collect();
-        scope.with_assoc_params(owning_trait, assoc, &decl.type_params, None, |e| {
-            AssocTypeSig {
-                owning_trait,
-                assoc_name: assoc.to_string(),
-                self_param,
-                trait_params,
-                trait_param_defaults,
-                params: e.family_params(owning_trait, assoc),
-                param_bounds: e.family_param_bounds(owning_trait, assoc, &decl.type_params),
-                bounds: e.trait_refs_of(&decl.bounds),
-            }
+        self.with_module_perspective_for(&home, |e| {
+            let mut clean = e.enter_inherited_type_param_scope();
+            clean.annotate_ctx.trait_ctx = TraitContext::default();
+            let (mut scope, self_param, _) =
+                clean.enter_trait_frame(trait_id, &header.name, header.span, &header.type_params);
+            let known = scope
+                .tysys
+                .type_table
+                .borrow()
+                .trait_frame(owning_trait)
+                .cloned();
+            let frame = known.unwrap_or_else(|| {
+                let type_params: Vec<&ast::GenericParam> = header
+                    .type_params
+                    .iter()
+                    .filter(|param| param.fills_impl_slot())
+                    .collect();
+                let params = type_params
+                    .iter()
+                    .map(|param| {
+                        let binder = scope.annotate_ctx.trait_ctx.type_params.get(&param.name)?;
+                        Some(binder.type_id)
+                    })
+                    .collect();
+                let defaults = type_params
+                    .iter()
+                    .map(|param| param.default.as_ref().map(|ty| scope.resolve_type(ty)))
+                    .collect();
+                let frame = Rc::new(TraitFrame {
+                    self_param,
+                    params,
+                    defaults,
+                });
+                scope
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .register_trait_frame(owning_trait, Rc::clone(&frame));
+                frame
+            });
+            body(&mut scope, frame)
         })
     }
 

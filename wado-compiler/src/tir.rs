@@ -721,6 +721,20 @@ impl TraitRef {
     }
 }
 
+/// A trait's own frame, resolved once: slot 0 is `Self`, its type parameters
+/// follow, and each declared default is written over the ones before it.
+#[derive(Debug, Clone)]
+pub struct TraitFrame {
+    /// The frame's `Self`.
+    pub self_param: TypeId,
+    /// One per the trait's type parameter (every one but an effect) in
+    /// declaration order: the positions a trait reference's arguments fill.
+    /// `None` for one the frame binds to no type.
+    pub params: Vec<Option<TypeId>>,
+    /// The default each of [`Self::params`] declares, in this frame.
+    pub defaults: Vec<Option<TypeId>>,
+}
+
 /// What a trait declares of one of its associated types, resolved once in the
 /// trait's own frame: slot 0 is `Self`, the trait's parameters follow, and the
 /// associated type's own parameters are [`ResolvedType::AssocParam`]s. A reader
@@ -732,16 +746,8 @@ pub struct AssocTypeSig {
     pub owning_trait: DefId,
     /// The associated type's name.
     pub assoc_name: String,
-    /// The trait frame's `Self`.
-    pub self_param: TypeId,
-    /// The trait frame's own parameters, one per the trait's type parameter
-    /// (every one but an effect) in declaration order: the positions a
-    /// projection's trait arguments fill. `None` for one the frame binds to no
-    /// type.
-    pub trait_params: Vec<Option<TypeId>>,
-    /// The default each of [`Self::trait_params`] declares, read in the trait
-    /// frame: `Self` and the parameters before it are its slots.
-    pub trait_param_defaults: Vec<Option<TypeId>>,
+    /// The declaring trait's frame, which the rest is written in.
+    pub frame: Rc<TraitFrame>,
     /// The associated type's own parameters, in declaration order.
     pub params: Vec<TypeId>,
     /// The bounds each of [`Self::params`] declares.
@@ -944,6 +950,9 @@ pub struct TypeTable {
     /// What each trait declares of its associated types, by declaring trait and
     /// name. See [`AssocTypeSig`].
     assoc_type_sigs: IndexMap<DefId, IndexMap<String, Rc<AssocTypeSig>>>,
+    /// Each trait's own frame, which its signatures and references read. See
+    /// [`TraitFrame`].
+    trait_frames: IndexMap<DefId, Rc<TraitFrame>>,
     /// What [`Self::projection_bounds`] answered for each projection, which
     /// depends on nothing but the interned projection.
     projection_bounds_cache: IndexMap<TypeKey, Rc<[TraitRef]>>,
@@ -1135,6 +1144,7 @@ impl TypeTable {
             assoc_type_resolutions: IndexMap::default(),
             generic_assoc_type_defs: IndexMap::default(),
             assoc_type_sigs: IndexMap::default(),
+            trait_frames: IndexMap::default(),
             projection_bounds_cache: IndexMap::default(),
             redirects: TypeMap::default(),
             box_payload_types: TypeMap::default(),
@@ -3397,25 +3407,7 @@ impl TypeTable {
         trait_args: Option<&[TypeId]>,
         args: &[TypeId],
     ) -> Vec<TraitRef> {
-        let slot_of = |table: &Self, param: TypeId| {
-            table
-                .param_slot(param)
-                .expect("a trait frame's parameters are slots")
-        };
-        let mut frame: IndexMap<u32, TypeId> =
-            IndexMap::from_iter([(slot_of(self, sig.self_param), base)]);
-        if let Some(given) = trait_args {
-            assert_eq!(
-                given.len(),
-                sig.trait_params.len(),
-                "a trait is reached at one argument per parameter"
-            );
-            for (param, &arg) in sig.trait_params.iter().zip(given) {
-                if let Some(param) = param {
-                    frame.insert(slot_of(self, *param), arg);
-                }
-            }
-        }
+        let frame = self.frame_slots(&sig.frame, base, trait_args.unwrap_or_default());
         let said: Vec<&TraitRef> = refs
             .iter()
             .filter(|written| trait_args.is_some() || !self.reads_trait_params(sig, written))
@@ -3439,11 +3431,55 @@ impl TypeTable {
     /// declaring it, and so means nothing where its arguments are unknown.
     pub fn reads_trait_params(&self, sig: &AssocTypeSig, written: &TraitRef) -> bool {
         written.args.iter().any(|&arg| {
-            sig.trait_params
+            sig.frame
+                .params
                 .iter()
                 .flatten()
                 .any(|&param| self.mentions(arg, param))
         })
+    }
+
+    /// The substitution reading `frame` at a reference: `Self` as `base`, each
+    /// parameter as its argument in `args`, which name a prefix of them.
+    fn frame_slots(
+        &self,
+        frame: &TraitFrame,
+        base: TypeId,
+        args: &[TypeId],
+    ) -> IndexMap<u32, TypeId> {
+        assert!(
+            args.len() <= frame.params.len(),
+            "a trait is reached at no more arguments than it has parameters"
+        );
+        let slot_of = |param: TypeId| {
+            self.param_slot(param)
+                .expect("a trait frame's parameters are slots")
+        };
+        let mut slots = IndexMap::from_iter([(slot_of(frame.self_param), base)]);
+        for (param, &arg) in frame.params.iter().zip(args) {
+            if let Some(param) = param {
+                slots.insert(slot_of(*param), arg);
+            }
+        }
+        slots
+    }
+
+    /// `written`, a reference's arguments to the trait of `frame` reached on
+    /// `receiver`, with the defaults filling the rest, each read with `Self`
+    /// the receiver and the arguments before it. `None` where a parameter left
+    /// out has no default.
+    pub fn fill_trait_args(
+        &mut self,
+        frame: &TraitFrame,
+        receiver: TypeId,
+        written: &[TypeId],
+    ) -> Option<Vec<TypeId>> {
+        let mut filled = written.to_vec();
+        for &default in &frame.defaults[written.len().min(frame.defaults.len())..] {
+            let slots = self.frame_slots(frame, receiver, &filled);
+            filled.push(self.substitute_type_params(default?, &slots));
+        }
+        Some(filled)
     }
 
     /// Whether `id` is or is built over `part`.
@@ -3601,7 +3637,7 @@ impl TypeTable {
         assoc_name: String,
         resolved_id: TypeId,
     ) {
-        let filled = self.filled_trait_args(&trait_ref, &assoc_name, concrete_id);
+        let filled = self.filled_trait_args(&trait_ref, concrete_id);
         self.assoc_type_resolutions
             .entry(AssocTypeKey {
                 receiver: self.instance_key(concrete_id),
@@ -3614,39 +3650,21 @@ impl TypeTable {
 
     /// `trait_ref`'s arguments with the trait's defaults filled where it
     /// leaves them out, read with `Self` the `receiver`. `None` where the
-    /// trait's signature for `assoc_name` is not built, or a parameter it
-    /// leaves out has no default.
-    fn filled_trait_args(
-        &mut self,
-        trait_ref: &TraitRef,
-        assoc_name: &str,
-        receiver: TypeId,
-    ) -> Option<Vec<TypeId>> {
-        let sig = Rc::clone(self.assoc_type_sig(trait_ref.decl, assoc_name)?);
-        let slot_of = |table: &Self, param: TypeId| {
-            table
-                .param_slot(param)
-                .expect("a trait frame's parameters are slots")
-        };
-        let mut frame: IndexMap<u32, TypeId> =
-            IndexMap::from_iter([(slot_of(self, sig.self_param), receiver)]);
-        let mut filled = Vec::with_capacity(sig.trait_params.len());
-        for (index, (param, default)) in sig
-            .trait_params
-            .iter()
-            .zip(&sig.trait_param_defaults)
-            .enumerate()
-        {
-            let arg = match trait_ref.args.get(index) {
-                Some(&arg) => arg,
-                None => self.substitute_type_params((*default)?, &frame),
-            };
-            if let Some(param) = param {
-                frame.insert(slot_of(self, *param), arg);
-            }
-            filled.push(arg);
-        }
-        Some(filled)
+    /// trait's frame is not built, or a parameter it leaves out has no
+    /// default.
+    fn filled_trait_args(&mut self, trait_ref: &TraitRef, receiver: TypeId) -> Option<Vec<TypeId>> {
+        let frame = Rc::clone(self.trait_frames.get(&trait_ref.decl)?);
+        self.fill_trait_args(&frame, receiver, &trait_ref.args)
+    }
+
+    /// Record `trait_`'s frame.
+    pub fn register_trait_frame(&mut self, trait_: DefId, frame: Rc<TraitFrame>) {
+        self.trait_frames.insert(trait_, frame);
+    }
+
+    /// `trait_`'s frame, where it is built.
+    pub fn trait_frame(&self, trait_: DefId) -> Option<&Rc<TraitFrame>> {
+        self.trait_frames.get(&trait_)
     }
 
     /// The [`InstanceKey`] of `id`.

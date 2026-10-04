@@ -1372,32 +1372,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         base: TypeId,
         written: &[TypeId],
     ) -> Option<Vec<TypeId>> {
-        let bounded = SelfBinding {
-            type_id: base,
-            declaring_trait: Some(owner),
+        let Some(frame) = self.trait_frame(owner) else {
+            // An interface or a resource takes no arguments.
+            return Some(Vec::new());
         };
-        let params: Vec<ast::GenericParam> = self
-            .tysys
-            .trait_env
-            .trait_type_params(owner)
-            .into_iter()
-            .cloned()
-            .collect();
-        let mut space = ParamSpace::new();
-        for (index, param) in params.iter().enumerate() {
-            let arg = match (written.get(index), &param.default) {
-                (Some(&arg), _) => arg,
-                (None, Some(default)) => self.under_self_binding(Some(bounded), |e| {
-                    e.resolve_in_space(&space, std::slice::from_ref(default))[0]
-                }),
-                (None, None) => return None,
-            };
-            if arg == TypeTable::UNKNOWN {
-                return None;
-            }
-            space.push((param.name.clone(), arg));
+        if written.len() > frame.params.len() {
+            return None;
         }
-        Some(space.into_iter().map(|(_, arg)| arg).collect())
+        let filled = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .fill_trait_args(&frame, base, written)?;
+        (!filled.contains(&TypeTable::UNKNOWN)).then_some(filled)
     }
 
     /// The arguments the declaration of the projection `base` reaches `owner`
