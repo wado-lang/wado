@@ -36,6 +36,9 @@ specification.
 | xoshiro256++ |  187 M |  762 M |
 | SHISHUA      |  185 M | 1.65 G |
 
+PCG64 was not measured. Written over a `u128` state it allocates on every
+output, since `u128` is a GC type in Wado.
+
 ## Decision
 
 `core:prng` answers the three demands separately and does not mix them: a scalar

@@ -95,6 +95,9 @@ Two helpers cover literals a hole cannot express:
 - `char_range_pat(range)` writes a char range pattern, or one literal when the
   range holds one char.
 
+No helper writes a non-finite float. A hole holding one renders as `Display`
+does, which is not Wado source.
+
 ## Testing
 
 ### What to Check

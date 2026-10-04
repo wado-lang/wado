@@ -2,7 +2,7 @@
 // PreToolUse hook for the Bash tool: deny the command words below, read the way
 // a shell reads them, so one is caught wherever it runs.
 
-import { commandNames, payloadCommand, readStdin } from "./shell-commands.mts";
+import { commandNames, denial, payloadCommand, readStdin } from "./shell-commands.mts";
 
 const FORBIDDEN = [
   {
@@ -10,7 +10,7 @@ const FORBIDDEN = [
     reason:
       "sed, awk, perl, python and python3 are forbidden (AGENTS.md > Tooling): a rewrite keeps" +
       " matching where it was not aimed. Edit with the editing tools, one call per change" +
-      " site; script in Node.js.",
+      " site; script anything else in Node.js.",
   },
   {
     pattern: /^(nohup|setsid|disown)$/,
@@ -38,15 +38,5 @@ if (import.meta.main) {
   } catch (error) {
     reason = `this command could not be read (${(error as Error).message}), so it is denied. Rephrase it, or report the input if it is an ordinary one.`;
   }
-  if (reason) {
-    process.stdout.write(
-      JSON.stringify({
-        hookSpecificOutput: {
-          hookEventName: "PreToolUse",
-          permissionDecision: "deny",
-          permissionDecisionReason: reason,
-        },
-      }),
-    );
-  }
+  if (reason) process.stdout.write(denial(reason));
 }

@@ -18,7 +18,9 @@ Answer the review as a whole before touching any single finding.
    findings in different files are often one class. One finding is often a class
    whose other instances the reviewer never reached.
 3. Report the classes to the user before writing any fix: what each class is,
-   which findings fall out of it as instances, and what closing it would take.
+   which findings fall out of it as instances, what admits it, and what closing
+   it would take. The user does not see the review's numbering, so name each
+   finding by its content (the file and the defect), never by its number.
    This is a report, not a request. State it and keep going; do not wait for
    approval. Only a design decision blocks, under its own heading below.
 
@@ -30,10 +32,18 @@ of the class standing, and the next review returns them one at a time.
 Report first so the user can redirect the work while it is still cheap, not to
 ask whether to do it.
 
+A fix is itself an unreviewed change. Before committing it, check what it
+breaks: a path moved to a shared location collides with a concurrent session,
+and a procedure rewritten from memory drops a step.
+
 ## Verify before fixing
 
 Reproduce the defect against the current code first, and fix only what survives
-that. Record which of these each finding was:
+that. Verify against a primary source: the code, a script, a tool's actual
+output, a spec. Reasoning and memory are not verification, and a reviewer's
+claim about an external tool is checked like any other. A finding you could not
+check is reported as unverified, never as fact. Record which of these each
+finding was:
 
 - Real → fix the cause. When the reviewer's patch is wrong, fix it anyway; the
   value was in the claim, not the suggestion.
@@ -47,6 +57,18 @@ to this branch or to the tree costs time and changes nothing you then do.
 
 A severity label and an aggregate "merge risk" verdict track neither the truth
 nor what you have already answered. Neither is evidence of anything.
+
+## When reviews do not converge
+
+A class that an earlier review on this branch already raised means the analysis
+or the fix was wrong or incomplete. Fixing the new sites repeats that. Analyze
+the class again, find what admits it, and close it so no review can find
+another instance.
+
+A review samples; it does not say how many instances remain. While new findings
+keep coming, stop waiting for the next review and take stock of the whole
+change that admitted them, mechanically: every line the diff removed, say,
+checked one by one. Review again once that stock is empty.
 
 ## Tests are held to a higher bar
 

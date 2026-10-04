@@ -72,6 +72,17 @@ deleted outright.
 
 Apply the `markdown` skill to every Markdown file in scope.
 
+In an instruction file (an `AGENTS.md`, a skill), also cut a rule that is
+trivially deduced from a principle the file or the root `AGENTS.md` already
+states: detail dilutes the rules that matter. Keep one that fences a principle
+against a reading broader than intended.
+
+Cut words, never a fact. A measurement, a name to grep for (a pass, a type, a
+function), a condition or an exception, and the bug behind a rule are facts,
+not detail. Before removing a passage, grep for what links to it. Keep a code
+block runnable on its own: every name it uses defined in it, every command and
+path real. Run only a block without side effects to check it.
+
 ## Sweep by shape
 
 A copy does not share a name, so grepping the name finds nothing.

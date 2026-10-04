@@ -9,6 +9,9 @@ three parts:
 - **Tried and didn't pan out** — measured dead-ends and non-levers, kept so we
   don't repeat them.
 
+A lever that landed is history, which `git log` keeps. Cut its entry to the cost
+that stays open, or delete it.
+
 Wado-wide performance rules — the WasmGC cost model, what decides adoption, and
 the measured dead-ends — live in the `wado-performance` skill; this file keeps
 what is true of Gale specifically.
@@ -56,7 +59,7 @@ Reproduce (guest self-time profile, and the collector split for GC cost):
 
 ```sh
 cd benchmark
-wado run --no-cache --profile guest,/tmp/p.json,1 -O2 syntax_highlight/syntax_highlight.wado
+wado run --no-cache --profile guest,../scratchpad/p.json,1 -O2 syntax_highlight/syntax_highlight.wado
 wado run --collector null   -O2 syntax_highlight/syntax_highlight.wado   # no GC
 wado run --collector copying -O2 syntax_highlight/syntax_highlight.wado   # default
 ```

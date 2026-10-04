@@ -83,6 +83,12 @@ understood.
 No "out of scope" section: an unfinished mechanism is a known gap. A deliberate
 omission goes in Decision.
 
+An open question gets no Decision and no Roadmap for its open part: the WEP
+states the problem, not an answer nobody chose. A comparison with another
+language is welcome; its useful half is what that language's users complain
+about. Work set aside for something that paid more is deferred, not dead: say
+what it lost to and what was already done, not how to finish it.
+
 ## Index
 
 @README.md

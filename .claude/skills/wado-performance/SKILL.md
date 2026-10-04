@@ -3,7 +3,7 @@ name: wado-performance
 description: Analyze and improve the runtime speed of a Wado program's compiled guest Wasm — profile hot functions, read the generated WIR for allocations and copies, reason about the WasmGC cost model, and A/B-measure a fix. Use for any guest-side speed question, whatever the program does. For host-side native compiler profiling see profiling-wado-compiler; for wrong code out of an optimizer pass see optimizer-debug.
 ---
 
-# Wado performance
+# Wado Performance
 
 Speed of the **compiled guest Wasm** (what wasmtime runs), not the native
 compiler — that is `profiling-wado-compiler`.
@@ -11,6 +11,9 @@ compiler — that is `profiling-wado-compiler`.
 Loop: profile the hot function → read its WIR for what it allocates/copies per
 iteration → change one thing → A/B both arms in one session, plus the WIR diff of
 the hot function → keep or revert (§5 says which evidence decides).
+
+Re-profile before choosing a target: the percentages a WEP or an older note
+quotes predate whatever has landed since.
 
 **A speedup lands in the compiler, not in Wado source.** Editing `.wado` files,
 the stdlib included, is fine as an experiment: an ablation that prices a piece,
@@ -95,6 +98,18 @@ element** in a loop:
   value's payload). `x?` desugars to `match f() {…}`, so freshness must see
   through the `match`; a missed copy shows up here and is removable.
 
+Count the copies, not only the time: a cut count is a result even when the
+benchmark is flat. The entry package's copies are its remarks:
+
+```sh
+wado compile -O2 --log-level info prog.wado 2>&1 | grep -c 'remark: a copy of'
+```
+
+Remarks skip the stdlib, so read a stdlib copy off `wado dump -O2`.
+
+Moving a copy from a callee into its call sites multiplies it by the number of
+sites.
+
 Also: a `Trait::method(…)` call left in a hot loop (the inliner declined it), and
 `array_set_u8` / `array_get_value` (bounds-checked; one per element is the store floor
 for `Array<T>`-backed `String` / `List`).
@@ -173,7 +188,8 @@ paid on a benchmark `fts` never touched.
   run it is a loss. **Four is where the sharing stops**: a wider block only adds
   lone gets, and measures worse the wider it gets (`dead-ends.md`).
   **`array.set` shares nothing**: a store may write the header as far as
-  Cranelift knows, so four adjacent sets reload the length four times. Only `array.copy` / `array.fill` amortise a write.
+  Cranelift knows, so four adjacent sets reload the length four times. Only
+  `array.copy` / `array.fill` amortise a write.
 - **SROA is priced by the aggregate's width, not by the allocation it removes.**
   Splitting a 40-slot tuple into locals deletes one `struct.new` per struct and
   costs 6.5% on cbor-twitter: past the register file, forty `ref` locals live
@@ -265,45 +281,76 @@ Run on an **idle** host, nothing else building: an A/B taken beside a compiling
 test suite has put both arms inside each other's spread and flipped their
 ranking. Check `ps` and `free` as well as `uptime` — a load average lags a
 session that just started and says nothing about memory, and another agent's on
-this box put the same test target at 145 s and at 2499 s before OOM-killing the
+this box put the same test target at 17× its idle time before OOM-killing the
 command after it. Nothing in a number says whether its host was idle, so
 `benchmark/README.md` is a sanity check on the arm you just built, never the
 control for it — even on the machine that produced it; a HEAD build has measured
 615 MB/s against its own recorded 656 in the same afternoon. Isolate the phase —
 A/B a float-format change on `fts`, not on a serialize benchmark that dilutes it.
 
+`core:json`'s inputs pull opposite ways: `citm_catalog.json` is mostly
+pretty-printing whitespace, `canada.json` minified floats. A scan win on one is
+no evidence about the other, so measure both, and json-twitter for strings.
+
+A CI "Performance Alert" on rows the diff cannot reach is the shared runner.
+Confirm it locally before treating it as a regression.
+
+While the user is iterating, the reading is 4–5 back-to-back pairs on the target
+row plus the wasm hash; the whole-suite A/B below is for the wrap-up.
+
 **A dev-build A/B is only valid where the dev build is.** The inflation §1
 describes flips A/B verdicts, not only profile weights. Dev runs the wasmtime
 runtime, GC and allocator at dev speed, so a row bound by allocation reads a
 different winner. json-canada is store- and compute-bound, so it matched release
-to under 2% and made an 8-second stdlib loop possible. On the same change dev
+to under 2% and made a fast stdlib loop possible. On the same change dev
 called syntax-highlight -1.2% where release said **+1.4%**, and cbor-canada and
 cbor-twitter deserialize -2.9% and -1.2% where release said +0.3%. Every row that
 moved is a deserialize or a CST build, which is what allocates. Iterate on
 dev, then settle any row whose work is building an object graph on release.
 
+Scratch files below go in `scratchpad/`. A path handed to the harness, which
+runs from `benchmark/`, must be absolute.
+
 ### A/B-ing a compiler change
+
+Build the head arm first: every command below compares against
+`target/release/wado`, and a stale one compares main with itself.
+
+```sh
+cargo build --release --bin wado
+```
+
+Run every benchmark at `-O0` through `-O3` before trusting an optimizer change:
+both suites have passed a miscompile only the large bodies `gale_gen` produces
+reach, where it reads as `ERROR task failed`. The last `-O` flag wins, so
+`WADO_BENCH_FLAGS=-O1 mise run benchmark-all` runs the suite at `-O1`.
 
 A change to the compiler needs two compilers. `benchmark-baseline` builds
 `origin/main`'s once and caches it under that commit; `WADO_BIN` then runs it
 through _this_ tree's harness, so only the compiler differs — the baseline's own
 `benchmark/` would put the branch's harness changes inside the comparison too.
+The task fetches `origin/main` each time it runs and deletes the baseline of an
+older main, so copy it out once and compare against the copy: a moved main is
+another compiler.
 
 ```sh
-base=$(mise run benchmark-baseline)   # ~5 min the first time, 2 s after
+cp "$(mise run benchmark-baseline)" scratchpad/wado-main   # slow the first time
+```
+
+```sh
 # alternate, so neither arm always goes second
-WADO_BIN=$base mise run benchmark-all > b1.log 2>&1
-mise run benchmark-all > h1.log 2>&1  # …and so on, 3 each
-node benchmark/ab.ts --base b1.log b2.log b3.log --head h1.log h2.log h3.log
+WADO_BIN="$PWD/scratchpad/wado-main" mise run benchmark-all > scratchpad/b1.log 2>&1
+mise run benchmark-all > scratchpad/h1.log 2>&1  # …and so on, 3 each
+node benchmark/ab.ts --base scratchpad/b{1,2,3}.log --head scratchpad/h{1,2,3}.log
 ```
 
 **Time the Wado rows alone, with `mise run all-wado`.** The reference arms (C,
 Rust, JavaScript, the Java ones) run the same binary whatever the compiler does,
-so re-timing them buys nothing and stretches a round from seconds to minutes.
+so re-timing them buys nothing and stretches a round many times over.
 That is the gap the host drifts across: a three-arm `benchmark-all` comparison
 came back with `ANTLR4 (Java)` at -2.2%, `count-prime / JavaScript` at +1.4% and
 a prime sieve 4.3% "faster" from a string-append change, all unreadable. The
-same arms over `all-wado`, six rounds seconds apart, settled every row. Keep
+same arms over `all-wado`, six rounds back to back, settled every row. Keep
 `sieve` in the selection as the in-band control, and run `benchmark-all` once at
 the end for the record.
 
@@ -343,18 +390,21 @@ for f in benchmark/*/*.wado; do
   case "$f" in *_schema.wado) continue ;; esac
   world=
   case "$f" in */http_routing/*) world=--world=wasi:http/service ;; esac
-  "$base" compile -O2 ${world:+"$world"} -o /tmp/b.wasm "$f" > /tmp/cc.log 2>&1 \
-    || { echo "FAILED  $f"; cat /tmp/cc.log; continue; }
-  target/release/wado compile -O2 ${world:+"$world"} -o /tmp/h.wasm "$f" > /tmp/cc.log 2>&1 \
-    || { echo "FAILED  $f"; cat /tmp/cc.log; continue; }
-  cmp -s /tmp/b.wasm /tmp/h.wasm || echo "DIFFERS $f"
+  scratchpad/wado-main compile -O2 ${world:+"$world"} -o scratchpad/b.wasm "$f" > scratchpad/cc.log 2>&1 \
+    || { echo "FAILED  $f"; cat scratchpad/cc.log; continue; }
+  target/release/wado compile -O2 ${world:+"$world"} -o scratchpad/h.wasm "$f" > scratchpad/cc.log 2>&1 \
+    || { echo "FAILED  $f"; cat scratchpad/cc.log; continue; }
+  cmp -s scratchpad/b.wasm scratchpad/h.wasm || echo "DIFFERS $f"
 done
 ```
 
 Give the four `wasm-size` programs the same pass at `-Os`: no benchmark covers
 `sqlite_highlight`, the largest generated program in the tree.
 
-Then time only the rows that differ, back to back, and read the rest as unmoved.
+For each row that differs, diff the two `wado dump --wir -O2` outputs function by
+function, which names what moved. A correctness fix is held to byte-identical
+output on every program it does not fix. Then time only the rows whose hot path moved, back to back, and read the
+rest as unmoved.
 
 `ab.ts` decides each row by whether the arms' `[min, max]` overlap, not by the
 delta: on a 5 ms benchmark a 6% gap between bests sits inside one arm's own
@@ -368,7 +418,7 @@ that one benchmark back to back and check the ranking holds pair by pair.
 
 ```sh
 for i in 1 2 3 4 5; do
-  "$base" run -O2 benchmark/sieve/sieve.wado
+  scratchpad/wado-main run -O2 benchmark/sieve/sieve.wado
   target/release/wado run -O2 benchmark/sieve/sieve.wado
 done
 ```
@@ -383,21 +433,27 @@ unset, so swapping an arm's `.wado` files into the tree invalidates
 two full rebuilds per alternating round, and they are the wall clock rather than
 the benchmark.
 
-Build one binary per arm first, replacing the whole of `lib/` for each. Copying
-only the files that differ leaves behind any file the other arm deletes or
-renames, and the binary then embeds a stdlib belonging to neither.
+Build one binary per arm first, from the same compiler source with `lib/` at the
+branch's fork point and at `HEAD`, so `lib/` is all that differs. `git restore`
+removes a file the source tree lacks, so neither binary embeds a stdlib
+belonging to neither arm. It overwrites uncommitted edits under `lib/`, so
+commit them first.
 
 ```sh
-for arm in base head; do
-  rm -rf wado-compiler/lib
-  git checkout $arm -- wado-compiler/lib
-  cargo build --release --bin wado --quiet
-  cp target/release/wado /tmp/ab/wado-$arm
-done
-git checkout HEAD -- wado-compiler/lib
+set -e  # a failed build would leave an earlier A/B's binary as its arm
+rm -f scratchpad/wado-base scratchpad/wado-head
+fork=$(git merge-base origin/main HEAD)
+# however the block ends, `lib/` goes back to HEAD rather than stay reverted
+trap 'git restore --source=HEAD --worktree -- wado-compiler/lib' EXIT
+git restore --source="$fork" --worktree -- wado-compiler/lib
+cargo build --release --bin wado --quiet
+cp target/release/wado scratchpad/wado-base
+git restore --source=HEAD --worktree -- wado-compiler/lib
+cargo build --release --bin wado --quiet
+cp target/release/wado scratchpad/wado-head
 for r in 1 2 3; do
   for arm in base head; do
-    WADO_BIN=/tmp/ab/wado-$arm mise run benchmark-json-catalog
+    WADO_BIN="$PWD/scratchpad/wado-$arm" mise run benchmark-json-catalog
   done
 done
 ```
@@ -408,8 +464,8 @@ which is what it takes to resolve a delta near 1% out of this row's spread.
 
 `WADO_SKIP_PASS=<pass>` is a third arm off the same binary, which is how a
 regression is attributed to one pass without a third build. `WADO_BENCH_FLAGS`
-sweeps a knob the same way, but the harness spends it on `wado run`, so a knob
-`compile` alone accepts is one no sweep reaches.
+sweeps a knob the same way; the harness appends it to every `wado compile` and
+`wado run` it issues, so only a knob both accept can be swept.
 
 **Give a threshold a temporary env override and sweep it, rather than
 rebuilding per value** — and reach for it the moment a change looks like it only
@@ -419,6 +475,10 @@ threshold and `match_to_switch`'s separately showed the fusion was never the
 cost at any width and the `br_table` past it was the whole of it on the row that
 regressed, turning 3.6% down on cbor-catalog into 2.1% up. Delete the overrides before
 committing: read per node visit, `std::env::var` is itself a compile-time cost.
+
+A runtime setting one benchmark wants becomes a CLI option with a conservative
+default, and that benchmark opts in through `gc_heap_flags` in
+`benchmark/wado.sh`. Sweep a candidate below the default as well as above it.
 
 **What decides adoption**, in priority order:
 
@@ -443,7 +503,9 @@ syntax-highlight 8.3% (a fused write unparses its offset as an expression) and
 shrank the `-Os` binary 1.5%, while the thing that justified it was a +8%
 benchmark and a diff showing one less capacity check per key. Size is its own
 budget (`mise run report-wasm-size`); as evidence about speed it is only the
-tiebreaker at rank 3.
+tiebreaker at rank 3. Where size and speed trade, take the speed and state the
+size cost. A fold of an idiom wasmtime already matches (shift-or into `rotl`)
+buys size only, so judge it by bytes.
 
 ## 6. Lessons
 

@@ -53,8 +53,15 @@ reader scanning a list of PRs is deciding whether to care.
 If the branch is worth more than one thing, name the largest and leave the rest
 to the description.
 
-`type` is `feat`, `fix`, `docs`, `perf`, `refactor` or `chore`, with `!` for a
-breaking change. The scope is optional.
+`type` is one of these, with `!` for a breaking change. The scope is optional.
+`.claude/hooks/pr-conventions.mts` reads the types from this list.
+
+- `feat`
+- `fix`
+- `docs`
+- `perf`
+- `refactor`
+- `chore`
 
 ## Description
 

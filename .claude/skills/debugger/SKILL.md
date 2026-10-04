@@ -22,18 +22,22 @@ cargo build --profile debugger --bin wado
 ## Usage
 
 ```sh
-cat > /tmp/gdb_commands.txt << 'EOF'
+cat > scratchpad/gdb_commands.txt << 'EOF'
 file ./target/debugger/wado
 set pagination off
-break wado-compiler/src/codegen.rs:5985
-run compile -o /tmp/out.wasm example/hello.wado
+break emit_function
+run compile -o scratchpad/out.wasm example/hello.wado
 info locals
-print *expr
+print func.name
 bt 5
 quit
 EOF
-rust-gdb --batch -x /tmp/gdb_commands.txt
+rust-gdb --batch -x scratchpad/gdb_commands.txt
 ```
+
+Break on a function name, not a `file:line`: a line number drifts with the
+next edit above it. gdb matches a bare name in every module, so qualify one
+that more than one module defines.
 
 ## Ask one question per run, not one per build
 
@@ -41,8 +45,8 @@ A breakpoint that fires thousands of times and gets `grep`ed answers one
 question and costs a rebuild for the next. Make the breakpoint itself select:
 
 ```
-break wado-compiler/src/wir_build/calls.rs:131 if $_streq(name->data_ptr, "…")
-break …/func_inst.rs:2052
+break wado_compiler::wir_build::calls::local_get if $_streq(name->data_ptr, "…")
+break substitute_types_in_expr
 commands
 silent
 bt 6
@@ -76,8 +80,8 @@ block silently truncates the rest of the run — check the tail of the output fo
 file and grep it; the DWO-loading noise otherwise buries the hits:
 
 ```sh
-rust-gdb --batch -x /tmp/gdb_commands.txt > /tmp/gdb.log 2>&1
-grep -a '^\$[0-9]* = ' /tmp/gdb.log | sort -u
+rust-gdb --batch -x scratchpad/gdb_commands.txt > scratchpad/gdb.log 2>&1
+grep -a '^\$[0-9]* = ' scratchpad/gdb.log | sort -u
 ```
 
 ## When a guard beats a breakpoint

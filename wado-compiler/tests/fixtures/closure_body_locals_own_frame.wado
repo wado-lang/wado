@@ -1,0 +1,51 @@
+// A closure body numbers its locals in a frame of its own, so its local N is
+// not the enclosing function's local N. The analyses that run before closure
+// lifting (call graph, retention, confinement, `&mut` write-back) each walk the
+// enclosing body; this pins that none of them reads a closure's locals as the
+// enclosing function's. Every local here collides by index with one across the
+// frame boundary, and each would change the output if read as the other.
+
+use { println, Stdout } from "core:cli";
+
+struct Holder {
+    v: List<i32>,
+}
+
+fn push_into(xs: &mut List<i32>, x: i32) {
+    xs.push(x);
+}
+
+fn keep(xs: List<i32>) -> List<i32> {
+    return xs;
+}
+
+fn call(mut f: fn mut(i32) -> i32, x: i32) -> i32 {
+    return f(x);
+}
+
+export fn run() with Stdout {
+    let mut a: List<i32> = [1];
+    let b = keep(a);
+    let mut h = Holder { v: [10] };
+    let mut f = |n: i32| {
+        let mut c: List<i32> = [];
+        let mut s = Holder { v: [] };
+        push_into(&mut s.v, n);
+        push_into(&mut c, n);
+        let d = keep(c);
+        c.push(n);
+        let mut g = |m: i32| {
+            let mut e: List<i32> = [m];
+            push_into(&mut e, m);
+            return e.len();
+        };
+        return c.len() + s.v.len() + d.len() + g(n);
+    };
+    a.push(2);
+    push_into(&mut h.v, 11);
+    println(`${f(5)} ${call(f, 6)}`);
+    println(`a=${a:?} b=${b:?} h=${h.v:?}`);
+}
+
+__DATA__
+{"stdout": "6 6\na=[1, 2] b=[1] h=[10, 11]\n"}

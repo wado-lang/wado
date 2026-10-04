@@ -7,6 +7,7 @@ This document describes how to develop the Wado compiler toolchain.
 - Succinctly — say and write the least that fully conveys the point.
 - Fix-forward — fix the cause of a defect and move forward; never backtrack.
 - Fix the class — a defect is one instance; fix what admits the class.
+- Design is the user's call — a rule invented to soften a fix's side effect is a design decision: propose it with the trade-off.
 
 ## Development
 
@@ -27,14 +28,18 @@ mise trust                 # trust the mise.toml config (first time only)
 mise run on-task-started   # install project tools
 ```
 
+Once you cut the branch, attach `wado-lang/wado` to the session with
+`add_repo` and `push` access. A session without it cannot subscribe to its
+pull request's activity.
+
 ### The Cycle
 
 Write the change, commit it, invoke the `/distill` skill, then test. `/distill`
 is the last of the editing rather than a phase after it, so one full test run at
 the end answers for the change and for what `/distill` edited. A run on either
-side of it is the same hour spent twice.
+side of it is the same full run spent twice.
 
-Having invoked `/distill` on this branch an hour ago is not a reason to skip the
+Having invoked `/distill` on this branch earlier is not a reason to skip the
 next one. The scope is the whole branch every time, and what the commits since
 then made stale is spread across everything the branch touched.
 
@@ -53,11 +58,11 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 
 ## Tooling
 
-- Make every edit with the editing tools. They refuse a match that is not unique and a file the session has not read, and the harness tracks what they wrote, so each edit is checkable.
-- Run a long job (`mise run test`, `test-wado`, `update-golden-fixtures`) in the background, one per invocation: the harness announces the end of a job it owns.
+- Make every edit with the editing tools, never a shell rewrite (`sed`, `awk`, a script), however bulk the change.
+- Run a long job (`mise run test`, `test-wado`, `update-golden-fixtures`) in the background, one per invocation. Run one heavy job at a time; two starve each other.
 - `test`, `test-wado`, `test-stdlib` and `test-gale-o2` refuse to start while another of the same is running, naming the holder's pid — where `flock` exists; `scripts/exclusive.sh` says so on stderr and runs unlocked where it does not. Abandoning a job does not stop it, so restarting after an edit means killing that pid first.
-- Redirect a job's output to a file and read the file, so what you did not anticipate is still there.
-- Have the job record its own completion — `cmd > run.log 2>&1 && s=0 || s=$?; echo "exit=$s" >> run.log` — and wait for it with `until grep -q "^exit=" run.log; do sleep 30; done`. The `&&`/`||` is what writes the marker on a failure too, which `set -e` would otherwise exit before.
+- Redirect a job's output to a file and read the file, so what you did not anticipate is still there. Scratch files go in `scratchpad/`: it is git-ignored, so `git add -A` leaves them out, and per worktree, so concurrent sessions do not overwrite each other's. A fixed path under `/tmp` is shared by every session.
+- On an internal pull request, CI's `tidy` job regenerates the generated files, applies clippy and format, and pushes `chore: tidy` onto the branch. Pull before pushing.
 - A generated file carries `-diff` in `.gitattributes`, so `git diff`, `git show` and `git log -p` report it as changed without printing it, and the sources stay readable. Regenerate and commit those; do not read them. `--text` prints one where you do want it. `rg` reads them like any other file; `git grep` calls them binary.
 - `git diff <base> -- $(scripts/changed-sources.sh)` narrows further, to the changed paths themselves: a stat line or a rename for a generated or vendored file is gone too.
 
@@ -69,6 +74,13 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
   - Doc comments (`///`, `//!`): write one on every `pub` item. Say what the item is, not how it works.
   - Markdown: the `markdown` skill holds the rules. Read it before writing or editing any `.md` file.
   - Issue references: an issue or pull request in another repository is written fully qualified, `org/repo#num` (`antlr/antlr4#4911`). A bare `#num` means this repository.
+  - Timings: no wall-clock seconds in comments or docs. This machine is the fastest one, so write the ratio.
+- Commit and push each self-contained unit without asking, never onto `main`.
+- Read the whole diff before committing. A trimmed comment or doc keeps every clause that names a pass, a type, a literal, a condition, or the bug behind the code.
+- A defect found mid-task is fixed on the branch in hand, never on a side branch or worktree.
+- Delete the local branches `git branch --merged main` lists without asking, except `main` and a branch with no commits of its own yet. Never one `--no-merged` lists.
+- A compiler rule that blocks an edit is a suspect, not an obstacle to route around: widening a modifier until the build goes green once hid a public-API regression.
+- An input nobody would supply is bounded by one constant where it enters, not modelled through the code.
 - Name an item, don't spell out its path: a `crate::` or `super::` path belongs in a `use` item at the top of the module, never inline where the item is read. A `pub(in …)` is exempt: it names a scope rather than reading an item, and Rust admits no import there. `mise run check-rust-paths` gates this in CI. The corpus carries no inline path, so the baseline `scripts/rust-inline-paths.json` is empty and any file that gains one fails. The detector is Wado (`package-gale/tools/rust_inline_paths.wado`) and parses with the Gale Rust grammar, so the grammar decides what counts as a path. `scripts/check-rust-paths.sh <file.rs>…` lists what a file carries.
 - Perform red/green TDD.
 - A compiler bug is always P0 — no exceptions. The instant you suspect one, stop all other work, and as the top priority write a minimal reproducible e2e fixture and fix it.
@@ -78,6 +90,10 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 - A failure that shows only in CI is usually not the environment: a pull request's test jobs run on the branch merged with `main`, not on the branch head. Sync first with the `git-upstream-sync` skill and reproduce on the merged tree before suspecting anything else. `tidy` is the exception, checking out the head ref.
 - Test the language from an e2e fixture: a `.wado` file in `wado-compiler/tests/fixtures/`, expectations in its `__DATA__` section. Nearly everything the language does is stated there, diagnostics included. A fixture states a rejection two ways. `{"compile_error": "…"}` matches the whole report, so writing `":4:13: parse error: …"` pins the position as well as the message. `{"compile_error_codes": ["INVALID_SYNTAX"]}` names the `Code` it was raised under. Kiln is the exception: a generator runs against the filesystem, which a fixture cannot set up.
 - Write an integration test only for what no fixture can state — the CLI, the loader, `dump` output, a host API. Put it in `tests/integration/` and declare it in that directory's `main.rs`. A file dropped directly in `tests/` becomes its own target, and each one statically links the compiler and wasmtime for another ~150 MB.
+- A regression fixture's shape is its point: when a harness cannot classify one, fix the harness, not the fixture.
+- Run what the change can reach, not more: a test-only addition does not need the full suite.
+- An unexplained failure indicts the measurement as often as the change: re-run the exact command by hand before believing it, and never revert a design over one. zsh does not word-split `$VAR`, so a flag list in one variable reaches a command as one argument.
+- A CI-only timeout in a test that reads `wasi:clocks`, once it passes on the merged tree, is the runner's slowness, not the branch.
 - Run `/code-review-response` to answer any review finding, whoever the reviewer is and however it reaches you. A finding arriving as a pull request event is one, and handling it straight from the event skips every step the skill ends with.
 - Run `/distill` once a piece of work is done, and again after answering review findings. An extra run costs nothing, so run it the moment you wonder whether you should. §"The Cycle" says where it sits.
 
@@ -90,7 +106,12 @@ modules while tuples follow TypeScript.
 
 @docs/cheatsheet.md is the quick reference. For the detailed specification read
 `docs/spec-*.md` (one file per area, indexed in `docs/README.md`), or the WEP
-that proposed a feature at `docs/wep-*.md`.
+that proposed a feature at `docs/wep-*.md`. `wado doc <module>` (`core:prelude`,
+say) states that module's signatures; read it rather than guess.
+
+As a principle, do not commit a binary: its diff is unreadable. Where a text
+form means the same, commit that instead (`.wat` for `.wasm`, `.onnxtext` for
+`.onnx`).
 
 ## Repository Map
 
