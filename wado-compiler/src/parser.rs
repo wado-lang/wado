@@ -593,7 +593,13 @@ impl Parser {
         &self.tokens[self.pos]
     }
 
+    /// The current token's kind. The second half of a split `>>` is a `>` of
+    /// its own, so a lookahead taken between the halves sees it rather than
+    /// the token after it.
     fn peek_kind(&self) -> &TokenKind {
+        if self.pending_gt {
+            return &TokenKind::Gt;
+        }
         &self.tokens[self.pos].kind
     }
 
@@ -613,6 +619,10 @@ impl Parser {
     }
 
     fn advance(&mut self) -> &Token {
+        if self.pending_gt {
+            self.pending_gt = false;
+            return &self.tokens[self.pos - 1];
+        }
         if !self.is_at_end() {
             self.pos += 1;
         }
@@ -655,13 +665,7 @@ impl Parser {
     /// Handles the case where >> is lexed as `GtGt` instead of two separate Gt tokens.
     /// This is necessary for nested generics like List<Tuple<String, String>>.
     fn expect_gt(&mut self) -> ParseResult<()> {
-        // First check if we have a pending > from a previous GtGt split
-        if self.pending_gt {
-            self.pending_gt = false;
-            return Ok(());
-        }
-
-        // Check for a regular Gt token
+        // A `>` of its own, or the second half of a split `>>`.
         if self.check(&TokenKind::Gt) {
             self.advance();
             return Ok(());
@@ -868,11 +872,9 @@ impl Parser {
         self.skipped_span(before)
     }
 
-    /// Consume the `,` separating two entries of an angle-bracket list. A `>`
-    /// left pending by splitting `>>` has already closed the list, so the `,`
-    /// after it belongs to the enclosing one.
+    /// Consume the `,` separating two entries of an angle-bracket list.
     fn eat_angle_list_comma(&mut self) -> bool {
-        if self.pending_gt || !self.check(&TokenKind::Comma) {
+        if !self.check(&TokenKind::Comma) {
             return false;
         }
         self.advance();
@@ -1859,7 +1861,7 @@ impl Parser {
     /// The raw text of the string literal at the cursor, escapes unresolved.
     /// [`Self::take_attr_string`] is the one that resolves them.
     fn consume_string(&mut self) -> ParseResult<String> {
-        match &self.peek().kind {
+        match self.peek_kind() {
             TokenKind::StringLit(raw) => {
                 let raw = raw.clone();
                 self.advance();
@@ -2863,7 +2865,7 @@ impl Parser {
             // Try to parse a let-pattern followed by 'of'
             let pattern = self.parse_pattern();
             if let Ok(binding) = pattern
-                && matches!(self.peek().kind, TokenKind::Of)
+                && matches!(self.peek_kind(), TokenKind::Of)
             {
                 // This is a for-of loop
                 self.advance(); // consume 'of'
@@ -3350,7 +3352,7 @@ impl Parser {
         }
 
         // Check for compound assignment operators
-        let compound_op = match self.peek().kind {
+        let compound_op = match self.peek_kind() {
             TokenKind::PlusEq => Some(CompoundAssignOp::Add),
             TokenKind::MinusEq => Some(CompoundAssignOp::Sub),
             TokenKind::StarEq => Some(CompoundAssignOp::Mul),
@@ -3905,7 +3907,7 @@ impl Parser {
                     // Support identifier and number literal for field access
                     // Integer literals are used for tuple field access: t.0, t.1, etc.
                     // Number literals like "0.0" after a dot are split into two field accesses.
-                    let (field, second_field) = if let TokenKind::NumberLit(s) = &self.peek().kind {
+                    let (field, second_field) = if let TokenKind::NumberLit(s) = self.peek_kind() {
                         // Check if it's a simple integer or contains a dot
                         if s.contains('.') {
                             // Handle cases like `t.0.0` where the lexer tokenizes "0.0" as a number
@@ -3924,7 +3926,7 @@ impl Parser {
                                 return Err(ParseError {
                                     message: format!(
                                         "expected field name, found {}",
-                                        self.peek().kind
+                                        self.peek_kind()
                                     ),
                                     span: field_span,
                                 });
