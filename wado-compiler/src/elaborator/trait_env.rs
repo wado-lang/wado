@@ -1528,25 +1528,67 @@ impl TraitEnv {
         method: &str,
         reaches: impl Fn(DefId) -> bool,
     ) -> Option<TemplateId> {
+        self.answering(receiver, trait_, wanted, |block| {
+            if reaches(block) {
+                self.method_template(block, method)
+            } else {
+                None
+            }
+        })
+    }
+
+    /// The written block on `receiver` answering `trait_<wanted>` where
+    /// `reaches` admits, chosen as [`Self::answering_template`] chooses one.
+    pub(crate) fn answering_block(
+        &self,
+        receiver: &name::Receiver,
+        trait_: DefId,
+        wanted: &[name::FqTypeName],
+        reaches: impl Fn(DefId) -> bool,
+    ) -> Option<DefId> {
+        self.answering(receiver, Some(trait_), wanted, |block| {
+            reaches(block).then_some(block)
+        })
+    }
+
+    /// What `answer` gives for the first block on `receiver` writing
+    /// `trait_<wanted>` that it answers for, a concrete one before a generic
+    /// one (coherence Rule 1).
+    fn answering<T>(
+        &self,
+        receiver: &name::Receiver,
+        trait_: Option<DefId>,
+        wanted: &[name::FqTypeName],
+        answer: impl Fn(DefId) -> Option<T>,
+    ) -> Option<T> {
         let mut generic = None;
         for &block in self.all_by_receiver.get(receiver).into_iter().flatten() {
             let header = &self.impl_headers[&block];
             if header.is_synthesize_request
                 || header.trait_def() != trait_
                 || trait_.is_some_and(|trait_| !self.block_answers(block, trait_, wanted))
-                || !reaches(block)
             {
                 continue;
             }
-            let Some(template) = self.method_template(block, method) else {
+            let Some(answered) = answer(block) else {
                 continue;
             };
             if header.is_concrete() {
-                return Some(template);
+                return Some(answered);
             }
-            generic.get_or_insert(template);
+            generic.get_or_insert(answered);
         }
         generic
+    }
+
+    /// The declaration of `trait_`'s method `method`.
+    pub(crate) fn trait_method_decl(&self, trait_: DefId, method: &str) -> Option<DefId> {
+        self.trait_decl_headers
+            .get(&trait_)?
+            .methods
+            .iter()
+            .find(|m| m.name == method)
+            .map(|m| m.def)
     }
 
     /// Whether an impl on `receiver` writes `trait_` at its declared defaults

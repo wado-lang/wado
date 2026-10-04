@@ -7,24 +7,19 @@ use super::program::{
     Declaration, Env, ImplDef, ImplId, ImplOrigin, ParamDef, Program, SolverType, TraitDeclId,
     TypeDeclId,
 };
-use crate::hashmap::{IndexMap, IndexSet};
+use crate::hashmap::IndexSet;
 
 /// Add to `program` the impls of `trait_` that `declarations` derive, in order:
-/// each but those an impl `covers` at every instance of their head.
-pub fn derive(
-    program: &mut Program,
-    trait_: TraitDeclId,
-    declarations: &[Declaration],
-    covers: impl Fn(ImplId, &ImplDef) -> bool,
-) {
+/// each but those another impl reaches at every instance.
+pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declaration]) {
     // An impl at other arguments (`Eq<String>`) leaves the defaults, where a
     // derived impl answers, to derive.
     let has_impl: IndexSet<TypeDeclId> = program
         .impls
-        .iter()
-        .filter(|(_, def)| def.trait_ == Some(trait_) && at_defaults(program, def))
-        .filter_map(|(&id, def)| match &def.target {
-            SolverType::Decl(head, _) if covers(id, def) => Some(*head),
+        .values()
+        .filter(|def| def.trait_ == Some(trait_) && at_defaults(program, def))
+        .filter_map(|def| match &def.target {
+            SolverType::Decl(head, _) if covers_every_instance(def) => Some(*head),
             SolverType::Decl(..)
             | SolverType::Param(_)
             | SolverType::Pack(_)
@@ -72,79 +67,53 @@ pub fn derive(
     }
 }
 
-/// The written impls of `trait_` at `Self` reaching every instance of a
-/// declaration, by that declaration: `impl Eq for D`, not
-/// `impl Eq<String> for D` nor a marker.
-pub fn written_at_self(
-    program: &Program,
-    trait_: TraitDeclId,
-    covers: impl Fn(ImplId, &ImplDef) -> bool,
-) -> IndexMap<TypeDeclId, ImplId> {
-    program
-        .impls
-        .iter()
-        .filter(|&(&id, def)| {
-            def.trait_ == Some(trait_)
-                && def.origin == ImplOrigin::Written
-                && at_defaults(program, def)
-                && covers(id, def)
-        })
-        .filter_map(|(&id, def)| match def.target {
-            SolverType::Decl(head, _) => Some((head, id)),
-            _ => None,
-        })
-        .collect()
-}
-
-/// The declarations with no `Ord`, by `writes_eq` and `writes_ord` from
-/// [`written_at_self`]: one writing `eq` alone, and a newtype over one with no
-/// `cmp` of its own (spec-traits.md §Derivation Policy).
-pub fn withholding_ord(
-    program: &Program,
-    writes_eq: &IndexMap<TypeDeclId, ImplId>,
-    writes_ord: &IndexMap<TypeDeclId, ImplId>,
-) -> IndexSet<TypeDeclId> {
-    let withholds = |head: TypeDeclId| {
-        let mut seen = IndexSet::default();
-        let mut link = head;
-        while seen.insert(link) && !writes_ord.contains_key(&link) {
-            if writes_eq.contains_key(&link) {
-                return true;
-            }
-            let Some(SolverType::Decl(base, _)) = program
-                .types
-                .get(&link)
-                .and_then(|def| def.newtype_base.as_ref())
-            else {
-                return false;
-            };
-            link = *base;
-        }
-        false
+/// Whether `def` reaches every instance of its target's head: the target names
+/// a declaration over distinct parameters.
+pub fn covers_every_instance(def: &ImplDef) -> bool {
+    let SolverType::Decl(_, args) = &def.target else {
+        return false;
     };
-    writes_eq
-        .keys()
-        .chain(program.types.keys())
-        .copied()
-        .filter(|&head| withholds(head))
-        .collect()
+    let mut seen = IndexSet::default();
+    args.iter()
+        .all(|arg| matches!(arg, SolverType::Param(index) if seen.insert(*index)))
 }
 
-/// Give each of `ords`, written impls of `Ord`, an impl of `eq` at its target
-/// and with its bounds: a written `cmp` gives `==` whatever the members are
-/// (spec-traits.md §Derivation Policy). A marker of `eq` on the same head asks
-/// for that `==`, so it takes the bounds in place of a derived impl. Answers
-/// the impls added or rewritten.
-pub fn derive_eq_from_ord(
-    program: &mut Program,
-    eq: TraitDeclId,
-    ords: impl IntoIterator<Item = ImplId>,
-) -> IndexSet<ImplId> {
-    let mut from_ord = IndexSet::default();
-    for id in ords {
-        let ord = program.impls[&id].clone();
-        let SolverType::Decl(head, _) = &ord.target else {
-            unreachable!("a written impl at `Self` targets a declaration")
+/// State the comparison table (spec-traits.md §Derivation Policy) as impls,
+/// each at the target and with the bounds of the written impl it pairs with:
+/// a written `cmp` gives `==`, and a written `eq` gives no `Ord`. Which row an
+/// instance reads is then the precedence between impls reaching it: a written
+/// `eq` or a marker takes the place of the `==` from `cmp`, and only a written
+/// `cmp` lifts the withholding. A marker of `Eq` at a written `Ord`'s target
+/// asks for that `==`, so it takes the `Ord`'s bounds in place of the paired
+/// impl.
+pub fn pair_comparisons(program: &mut Program, eq: TraitDeclId, ord: TraitDeclId) {
+    let written = |program: &Program, trait_| -> Vec<ImplDef> {
+        program
+            .impls
+            .values()
+            .filter(|def| {
+                def.trait_ == Some(trait_)
+                    && def.origin == ImplOrigin::Written
+                    && at_defaults(program, def)
+                    && matches!(def.target, SolverType::Decl(..))
+            })
+            .cloned()
+            .collect()
+    };
+    for written_eq in written(program, eq) {
+        program.push_impl(ImplDef {
+            trait_: Some(ord),
+            trait_args: Vec::new(),
+            origin: ImplOrigin::Withheld,
+            ..written_eq
+        });
+    }
+    for written_ord in written(program, ord) {
+        let paired = |origin| ImplDef {
+            trait_: Some(eq),
+            trait_args: Vec::new(),
+            origin,
+            ..written_ord.clone()
         };
         let markers: Vec<ImplId> = program
             .impls
@@ -152,25 +121,17 @@ pub fn derive_eq_from_ord(
             .filter(|(_, def)| {
                 def.trait_ == Some(eq)
                     && def.origin == ImplOrigin::Marker
-                    && matches!(&def.target, SolverType::Decl(h, _) if h == head)
+                    && def.target == written_ord.target
             })
             .map(|(&marker, _)| marker)
             .collect();
-        let eq_from = |origin| ImplDef {
-            trait_: Some(eq),
-            trait_args: Vec::new(),
-            origin,
-            ..ord.clone()
-        };
         if markers.is_empty() {
-            from_ord.insert(program.push_impl(eq_from(ImplOrigin::Derived)));
+            program.push_impl(paired(ImplOrigin::Paired));
         }
         for marker in markers {
-            program.impls[&marker] = eq_from(ImplOrigin::Marker);
-            from_ord.insert(marker);
+            program.impls[&marker] = paired(ImplOrigin::Marker);
         }
     }
-    from_ord
 }
 
 /// The bound each parameter of the derived impl carries: `trait_` where a
@@ -227,16 +188,10 @@ mod tests {
         });
     }
 
-    /// An answer for the programs here, whose written impls all reach every
-    /// instance of their heads.
-    fn every_instance(_: ImplId, _: &ImplDef) -> bool {
-        true
-    }
-
     /// The impls `derive` added to `prelude()`, in order.
     fn derived(program: Program, declarations: &[Declaration]) -> Vec<ImplDef> {
         let mut p = program;
-        derive(&mut p, EQ, declarations, every_instance);
+        derive(&mut p, EQ, declarations);
         p.impls
             .values()
             .filter(|def| def.origin == ImplOrigin::Derived)
@@ -387,12 +342,11 @@ mod tests {
     fn a_written_impl_at_some_instances_leaves_the_rest_derived() {
         let wrapper_of = |arg| SolverType::Decl(WRAPPER, vec![arg]);
         let mut p = prelude();
-        let written = p.push_impl(concrete(EQ, wrapper_of(decl(I32))));
+        p.push_impl(concrete(EQ, wrapper_of(decl(I32))));
         derive(
             &mut p,
             EQ,
             &[declaration(WRAPPER, 1, vec![SolverType::Param(0)])],
-            |id, _| id != written,
         );
         let asked = |ty| holds(&p, &Env::default(), &ty, EQ, HERE).map(|h| h.requests.len());
         assert_eq!(asked(wrapper_of(decl(I32))), Some(0));
@@ -426,66 +380,107 @@ mod tests {
         assert_eq!(targets(&d), vec![decl(POINT)]);
     }
 
+    const ORD: TraitDeclId = TraitDeclId(1);
+
+    fn wrapper_of(arg: SolverType) -> SolverType {
+        SolverType::Decl(WRAPPER, vec![arg])
+    }
+
     /// `impl<T: Ord> Ord for Wrapper<T>` gives `impl<T: Ord> Eq for Wrapper<T>`,
     /// whatever `Wrapper`'s members are.
     #[test]
-    fn eq_from_ord_copies_the_target_and_the_bounds() {
-        const ORD: TraitDeclId = TraitDeclId(1);
+    fn a_written_ord_pairs_an_eq_at_its_target_and_bounds() {
         let mut p = prelude();
-        let wrapper = SolverType::Decl(WRAPPER, vec![SolverType::Param(0)]);
-        let ord = p.push_impl(bounded(ORD, wrapper.clone(), vec![ORD]));
-        let ords = written_at_self(&p, ORD, every_instance);
-        assert_eq!(ords.get(&WRAPPER), Some(&ord));
-        let added = derive_eq_from_ord(&mut p, EQ, ords.values().copied());
-        let eq = &p.impls[added.first().expect("one impl added")];
+        let wrapper = wrapper_of(SolverType::Param(0));
+        p.push_impl(bounded(ORD, wrapper.clone(), vec![ORD]));
+        pair_comparisons(&mut p, EQ, ORD);
+        let paired: Vec<&ImplDef> = p
+            .impls
+            .values()
+            .filter(|def| def.origin == ImplOrigin::Paired)
+            .collect();
         assert_eq!(
-            eq,
-            &ImplDef {
-                origin: ImplOrigin::Derived,
+            paired,
+            vec![&ImplDef {
+                origin: ImplOrigin::Paired,
                 ..bounded(EQ, wrapper, vec![ORD])
-            }
+            }]
         );
     }
 
-    /// A newtype over a declaration writing `eq` alone withholds `Ord` too,
-    /// unless it writes `cmp` itself.
+    /// `impl<T: Ord> Ord for Node<T, i32>` decides `==` at the instances it
+    /// reaches, in place of the members: `Node<Opaque, i32>` has no `==`, as
+    /// `Opaque` writes `eq` and no `cmp`, though the members would give one.
+    /// Every other instance compares its members.
     #[test]
-    fn a_newtype_withholds_what_its_base_does() {
+    fn a_written_ord_at_some_instances_decides_eq_at_those() {
+        let node_of = |a, b| SolverType::Decl(NODE, vec![a, b]);
+        let mut p = prelude();
+        p.push_impl(concrete(EQ, decl(OPAQUE)));
+        p.push_impl(bounded(
+            ORD,
+            node_of(SolverType::Param(0), decl(I32)),
+            vec![ORD],
+        ));
+        p.push_impl(concrete(ORD, decl(I32)));
+        pair_comparisons(&mut p, EQ, ORD);
+        derive(
+            &mut p,
+            EQ,
+            &[declaration(NODE, 2, vec![SolverType::Param(0)])],
+        );
+        let has_eq = |ty| holds(&p, &Env::default(), &ty, EQ, HERE).is_some();
+        assert!(has_eq(node_of(decl(I32), decl(I32))));
+        assert!(!has_eq(node_of(decl(OPAQUE), decl(I32))));
+        assert!(has_eq(node_of(decl(OPAQUE), decl(OPTION))));
+    }
+
+    /// `impl Eq for Wrapper<i32>` withholds `Ord` there and nowhere else, and
+    /// a newtype over `Wrapper<i32>` inherits the withholding unless it writes
+    /// `cmp` itself.
+    #[test]
+    fn a_written_eq_withholds_ord_where_it_reaches() {
         const ALIAS: TypeDeclId = TypeDeclId(7);
         const ORDERED: TypeDeclId = TypeDeclId(8);
-        let mut p = prelude();
-        for (head, base) in [(WRAPPER, POINT), (ALIAS, WRAPPER), (ORDERED, POINT)] {
+        let mut p = Builder::default()
+            .concrete(EQ, decl(I32))
+            .concrete(ORD, decl(I32))
+            .build();
+        for head in [ALIAS, ORDERED] {
             p.types.insert(
                 head,
                 TypeDef {
-                    newtype_base: Some(decl(base)),
-                    ..TypeDef::default()
+                    newtype_base: Some(wrapper_of(decl(I32))),
                 },
             );
         }
-        let writes_eq = [(POINT, ImplId(0))].into_iter().collect();
-        let writes_ord = [(ORDERED, ImplId(1))].into_iter().collect();
-        let withheld = withholding_ord(&p, &writes_eq, &writes_ord);
-        assert_eq!(
-            withheld.into_iter().collect::<Vec<_>>(),
-            vec![POINT, WRAPPER, ALIAS]
+        p.push_impl(concrete(EQ, wrapper_of(decl(I32))));
+        p.push_impl(concrete(ORD, decl(ORDERED)));
+        pair_comparisons(&mut p, EQ, ORD);
+        derive(
+            &mut p,
+            ORD,
+            &[declaration(WRAPPER, 1, vec![SolverType::Param(0)])],
         );
+        let ordered = |ty| holds(&p, &Env::default(), &ty, ORD, HERE).is_some();
+        assert!(!ordered(wrapper_of(decl(I32))));
+        assert!(!ordered(decl(ALIAS)));
+        assert!(ordered(decl(ORDERED)));
+        assert!(ordered(wrapper_of(decl(ORDERED))));
     }
 
     /// `impl<T> Eq for Wrapper<T>;` beside `impl<T: Ord> Ord for Wrapper<T>`
     /// asks for the `==` that `cmp` gives, so it holds where the `Ord` does.
     #[test]
     fn a_marker_beside_a_written_ord_takes_its_bounds() {
-        const ORD: TraitDeclId = TraitDeclId(1);
         let mut p = prelude();
-        let wrapper_of = |arg| SolverType::Decl(WRAPPER, vec![arg]);
-        let ord = p.push_impl(bounded(ORD, wrapper_of(SolverType::Param(0)), vec![ORD]));
+        p.push_impl(bounded(ORD, wrapper_of(SolverType::Param(0)), vec![ORD]));
         let marker = p.push_impl(ImplDef {
             origin: ImplOrigin::Marker,
             ..bounded(EQ, wrapper_of(SolverType::Param(0)), vec![])
         });
-        let added = derive_eq_from_ord(&mut p, EQ, [ord]);
-        assert_eq!(added.into_iter().collect::<Vec<_>>(), vec![marker]);
+        pair_comparisons(&mut p, EQ, ORD);
+        assert!(p.impls.values().all(|def| def.origin != ImplOrigin::Paired));
         assert_eq!(
             p.impls[&marker],
             ImplDef {

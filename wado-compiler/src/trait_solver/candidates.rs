@@ -2,7 +2,7 @@
 //! (`docs/wep-2026-09-01-trait-resolution.md`, "The candidates"). What picks
 //! between them is [`rank`](super::rank).
 
-use super::holds::{answers_args, impl_applies, newtype_base};
+use super::holds::{answers_args, impl_applies, newtype_base, withheld_at};
 use super::program::{Env, MethodId, ModuleId, Program, SolverType, TraitDeclId};
 use super::rank::{Candidate, Generality};
 
@@ -90,16 +90,12 @@ fn collect(
     declares: impl Fn(TraitDeclId, &[MethodId]) -> bool,
 ) -> Candidates {
     let mut found = Candidates::default();
-    // What a declaration withholds, no impl on it answers and no level below
-    // it lends.
+    // What a level withholds, no impl on it answers and no level below it
+    // lends.
     let mut withheld: Vec<TraitDeclId> = Vec::new();
     for (depth, ty) in chain(program, receiver).iter().enumerate() {
         let depth = u32::try_from(depth).expect("a chain shorter than 2^32");
-        if let SolverType::Decl(head, _) = ty
-            && let Some(def) = program.types.get(head)
-        {
-            withheld.extend(&def.withholds);
-        }
+        withheld.extend(withheld_at(program, ty));
         for (&impl_, def) in &program.impls {
             let Some(trait_) = def.trait_ else {
                 continue;
@@ -419,9 +415,12 @@ mod tests {
             WRAPPER,
             TypeDef {
                 newtype_base: Some(decl(POINT)),
-                withholds: vec![TR],
             },
         );
+        p.push_impl(ImplDef {
+            origin: ImplOrigin::Withheld,
+            ..concrete(TR, decl(WRAPPER))
+        });
         assert!(ask(&p, &decl(WRAPPER)).in_scope.is_empty());
         assert_eq!(selected(&ask(&p, &decl(POINT))), Some(ImplId(0)));
     }

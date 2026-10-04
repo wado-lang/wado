@@ -1,0 +1,125 @@
+// The comparison table is read per instance: a `cmp` written for some
+// instances of a generic head gives `==` from `cmp` at exactly those, and an
+// `eq` written for some withholds `Ord` at exactly those. Every other instance
+// derives both from the members.
+
+struct Ranked<T> {
+    rank: i32,
+    tag: T,
+}
+
+impl Ord for Ranked<i32> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        return self.rank.cmp(&other.rank);
+    }
+}
+
+// A head pattern reaches a family of instances.
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<T> Ord for Pair<T, i32> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        return self.b.cmp(&other.b);
+    }
+}
+
+variant Reading<T> {
+    Exact(T),
+    Estimate(T),
+}
+
+impl Ord for Reading<i32> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        return value(self).cmp(&value(other));
+    }
+}
+
+fn value(r: &Reading<i32>) -> i32 {
+    return match *r {
+        Exact(v) | Estimate(v) => v,
+    };
+}
+
+struct Named<T> {
+    name: String,
+    value: T,
+}
+
+impl Eq for Named<i32> {
+    fn eq(&self, other: &Self) -> bool {
+        return self.name == other.name;
+    }
+}
+
+// A generic newtype is read per instance as well; the rest inherit from the base.
+type Shortest<T> = List<T>;
+
+impl Ord for Shortest<i32> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        return self.len().cmp(&other.len());
+    }
+}
+
+fn same<T: Eq>(a: &T, b: &T) -> bool {
+    return a == b;
+}
+
+fn less<T: Ord>(a: &T, b: &T) -> bool {
+    return *a < *b;
+}
+
+test "== agrees with a cmp written for the instance" {
+    let a = Ranked { rank: 1, tag: 10 };
+    let b = Ranked { rank: 1, tag: 20 };
+    assert a.cmp(&b) matches { Equal };
+    assert a == b && !(a != b) && same(&a, &b) && a.eq(&b);
+    let ranked: List<Ranked<i32>> = [b];
+    assert ranked.contains(&a);
+    let some_a: Option<Ranked<i32>> = Some(a);
+    let some_b: Option<Ranked<i32>> = Some(b);
+    assert some_a == some_b;
+}
+
+test "the instances the cmp does not reach derive both" {
+    let a = Ranked { rank: 1, tag: "x" };
+    let b = Ranked { rank: 1, tag: "y" };
+    assert a != b && !same(&a, &b);
+    assert a < b && less(&a, &b);
+}
+
+test "a head pattern decides each instance it reaches" {
+    let p: Pair<String, i32> = Pair { a: "x", b: 1 };
+    let q: Pair<String, i32> = Pair { a: "y", b: 1 };
+    assert p == q && same(&p, &q) && p.eq(&q);
+    let r: Pair<i32, i64> = Pair { a: 1, b: 2 };
+    let s: Pair<i32, i64> = Pair { a: 2, b: 2 };
+    assert r != s && !same(&r, &s);
+}
+
+test "a variant reads its instance too" {
+    assert Reading::Exact(3) == Reading::Estimate(3);
+    assert Reading::Exact("a") != Reading::Estimate("a");
+}
+
+test "a generic newtype reads its instance too" {
+    let a = [1, 2] as Shortest<i32>;
+    let b = [3, 4] as Shortest<i32>;
+    assert a == b && same(&a, &b) && a.eq(&b);
+    let s = ["a"] as Shortest<String>;
+    let t = ["b"] as Shortest<String>;
+    assert s != t && !same(&s, &t) && s < t;
+}
+
+test "an eq written for one instance leaves the rest ordered" {
+    let a = Named { name: "x", value: 1 };
+    assert a == Named { name: "x", value: 2 };
+    let b = Named { name: "x", value: "p" };
+    let c = Named { name: "x", value: "q" };
+    assert b != c && b < c && less(&b, &c);
+}
+
+__DATA__
+{"test": {}}

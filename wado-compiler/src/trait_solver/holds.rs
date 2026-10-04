@@ -129,12 +129,7 @@ impl Query<'_> {
         if trait_def.is_some_and(|def| def.holds_for_all) {
             return Some(Holds::default());
         }
-        if let SolverType::Decl(head, _) = ty
-            && program
-                .types
-                .get(head)
-                .is_some_and(|def| def.withholds.contains(&trait_))
-        {
+        if withheld(program, trait_, ty) {
             return None;
         }
         let on_ref = trait_def.map_or(RefRule::default(), |def| def.on_ref);
@@ -228,6 +223,9 @@ impl Query<'_> {
     fn impl_answers(&mut self, id: ImplId, def: &ImplDef, ty: &SolverType) -> Option<Answer> {
         let program = self.program;
         let implemented = def.trait_?;
+        if def.origin == ImplOrigin::Withheld {
+            return None;
+        }
         // A value blanket answers no reference; `&T` reaches it through the
         // pointee.
         if matches!(def.target, SolverType::Param(_)) && matches!(ty, SolverType::Ref { .. }) {
@@ -237,7 +235,7 @@ impl Query<'_> {
         if !match_target(&def.target, ty, &mut bindings) {
             return None;
         }
-        if def.origin == ImplOrigin::Derived && declared_for(program, implemented, ty) {
+        if reached_by(program, implemented, ty, def.origin.yields_to()) {
             return None;
         }
         let bound_to = |ty: &SolverType| {
@@ -245,10 +243,13 @@ impl Query<'_> {
         };
         let mut requests = match def.origin {
             ImplOrigin::Written => Vec::new(),
-            ImplOrigin::Derived | ImplOrigin::Marker => vec![DerivationRequest {
-                ty: ty.clone(),
-                trait_: implemented,
-            }],
+            ImplOrigin::Derived | ImplOrigin::Marker | ImplOrigin::Paired => {
+                vec![DerivationRequest {
+                    ty: ty.clone(),
+                    trait_: implemented,
+                }]
+            }
+            ImplOrigin::Withheld => unreachable!("a withholding impl answers nothing"),
         };
         let pinned = |index: u32| {
             def.params
@@ -313,17 +314,41 @@ impl Query<'_> {
     }
 }
 
-/// Whether the program declares `trait_` at its defaults for `ty`'s own head,
-/// by an impl or a marker whose target reaches it. A declared impl always wins
-/// over a derived one, which answers only at the defaults.
-fn declared_for(program: &Program, trait_: TraitDeclId, ty: &SolverType) -> bool {
-    program.impls.values().any(|def| {
-        def.trait_ == Some(trait_)
-            && matches!(def.origin, ImplOrigin::Written | ImplOrigin::Marker)
-            && at_defaults(program, def)
-            && matches!(def.target, SolverType::Decl(..))
-            && match_target(&def.target, ty, &mut vec![None; def.params.len()])
-    })
+/// Whether an impl of `trait_` at its defaults from one of `origins` names
+/// `ty`'s own head and reaches it, whatever its bounds. A derived impl answers
+/// only at the defaults, so only an impl there takes its place.
+fn reached_by(
+    program: &Program,
+    trait_: TraitDeclId,
+    ty: &SolverType,
+    origins: &[ImplOrigin],
+) -> bool {
+    !origins.is_empty()
+        && program.impls.values().any(|def| {
+            def.trait_ == Some(trait_)
+                && origins.contains(&def.origin)
+                && at_defaults(program, def)
+                && matches!(def.target, SolverType::Decl(..))
+                && match_target(&def.target, ty, &mut vec![None; def.params.len()])
+        })
+}
+
+/// Whether `ty` has no `trait_`, whatever answers it: a withholding impl
+/// reaches it and no written one does.
+fn withheld(program: &Program, trait_: TraitDeclId, ty: &SolverType) -> bool {
+    reached_by(program, trait_, ty, &[ImplOrigin::Withheld])
+        && !reached_by(program, trait_, ty, &[ImplOrigin::Written])
+}
+
+/// The traits [`withheld`] at `ty`.
+pub(super) fn withheld_at(program: &Program, ty: &SolverType) -> Vec<TraitDeclId> {
+    program
+        .impls
+        .values()
+        .filter(|def| def.origin == ImplOrigin::Withheld)
+        .filter_map(|def| def.trait_)
+        .filter(|&trait_| withheld(program, trait_, ty))
+        .collect()
 }
 
 /// One impl applying to one type. `holds` reads the bound it answers; selection
@@ -1014,9 +1039,9 @@ mod tests {
             COARSE,
             TypeDef {
                 newtype_base: Some(decl(I32)),
-                withholds: vec![ALPHA],
             },
         );
+        p.push_impl(withholding(ALPHA, decl(COARSE)));
         assert_eq!(holds(&p, &Env::default(), &decl(COARSE), ALPHA, HERE), None);
         assert_eq!(
             holds(&p, &Env::default(), &decl(COARSE), BETA, HERE),
@@ -1024,18 +1049,27 @@ mod tests {
         );
     }
 
-    /// A declaration withholding a trait has none, a marker asking for one
-    /// included.
+    /// A withheld trait is not there, a marker asking for it included; a
+    /// written impl is the one thing that answers it.
     #[test]
-    fn a_marker_does_not_answer_what_the_declaration_withholds() {
+    fn only_a_written_impl_answers_what_is_withheld() {
         let mut p = Builder::default().build();
         p.push_impl(ImplDef {
             origin: ImplOrigin::Marker,
             ..concrete(ALPHA, decl(POINT))
         });
         assert!(holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE).is_some());
-        p.types.entry(POINT).or_default().withholds.push(ALPHA);
+        p.push_impl(withholding(ALPHA, decl(POINT)));
         assert_eq!(holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE), None);
+        p.push_impl(concrete(ALPHA, decl(POINT)));
+        assert!(holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE).is_some());
+    }
+
+    fn withholding(trait_: TraitDeclId, target: SolverType) -> ImplDef {
+        ImplDef {
+            origin: ImplOrigin::Withheld,
+            ..concrete(trait_, target)
+        }
     }
 
     /// `type MyList<T> = List<T>` inherits at its own arguments.

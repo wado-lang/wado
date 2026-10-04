@@ -27,7 +27,7 @@ use crate::format_spec::{Align, FormatKind, TemplateFormatSpec};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FqTraitName, FqTypeName, LocalMethodName, MethodName, Receiver, RefKind, TEMPLATE_BLOCK_LABEL,
+    FqTraitName, FqTypeName, LocalMethodName, MethodName, RefKind, TEMPLATE_BLOCK_LABEL,
     TEMPLATE_FORMATTER_LOCAL, TEMPLATE_RESULT_LOCAL, hole_fmt_helper_name,
 };
 use crate::synthesis::common::{field_access, locals_from_params, make_synthetic_free_function};
@@ -884,10 +884,7 @@ fn peel_transparent_newtype(
     let owner = tt.newtype_link_owning(type_id, |tid| {
         ctx.trait_env
             .trait_def_of_fq(trait_name)
-            .is_some_and(|trait_| {
-                ctx.trait_env
-                    .has_any_methodful_impl_by_receiver(&tt.impl_receiver_key(tid), trait_)
-            })
+            .is_some_and(|trait_| written_impl_reaches(ctx.trait_env, trait_, tid, &tt))
     });
     owner.unwrap_or_else(|| tt.reflect_structure_head(type_id))
 }
@@ -1089,8 +1086,8 @@ pub(crate) fn trait_method_template(
     {
         return Some(template);
     }
-    if eq_from_written_cmp(trait_env, trait_, &key, tt) {
-        return None;
+    if let Some(template) = eq_from_written_cmp(trait_env, trait_, receiver, tt) {
+        return Some(template);
     }
     let resolved = tt.get(receiver);
     let blanket = match resolved {
@@ -1203,35 +1200,27 @@ pub(crate) fn written_impl_reaches(
         .any(|block| tt.impl_reaches_instance(block, receiver))
 }
 
-/// The impl block writing `trait_` at its declared defaults (`Eq<Self>`, not
-/// `Eq<String>`) for every instance of `receiver`'s head.
-fn written_default_impl(
-    trait_env: &TraitEnv,
-    trait_: DefId,
-    receiver: &Receiver,
-    tt: &TypeTable,
-) -> Option<DefId> {
-    trait_env
-        .methodful_default_impls_by_receiver(receiver, trait_)
-        .find(|&block| tt.impl_covers_every_instance(block))
-}
-
-/// Which of `Eq` and `Ord` `receiver` writes at `Self` without the other, with
-/// the impl block writing it. That one decides how the other derives
-/// (spec-traits.md §Derivation Policy): a written `cmp` gives `==`, and a
-/// written `eq` gives no `Ord`. An impl reaching only some instances decides
-/// nothing, since one derived body serves them all.
+/// Which of `Eq` and `Ord` is written at `Self` for `instance` without the
+/// other, with the block answering it. That one decides how the other derives
+/// there (spec-traits.md §Derivation Policy): a written `cmp` gives `==`, and a
+/// written `eq` gives no `Ord`. Each instance of a generic head reads its own
+/// row, by the impls that reach it. A reference reads none: `==` on one
+/// compares what it points to (`Eq for &T`), as `pair_comparisons` states.
 pub(crate) fn comparison_written_alone(
     trait_env: &TraitEnv,
-    receiver: &Receiver,
+    instance: TypeId,
     tt: &TypeTable,
 ) -> Option<(CompilerItem, DefId)> {
+    let receiver = tt.impl_receiver_key(instance);
+    if receiver.ref_kind().is_some() {
+        return None;
+    }
     let written = |item| {
-        written_default_impl(
-            trait_env,
+        trait_env.answering_block(
+            &receiver,
             tt.compiler_items().trait_def(item)?,
-            receiver,
-            tt,
+            &[],
+            |block| tt.impl_reaches_instance(block, instance),
         )
     };
     match (written(CompilerItem::Eq), written(CompilerItem::Ord)) {
@@ -1241,20 +1230,26 @@ pub(crate) fn comparison_written_alone(
     }
 }
 
-/// Whether `trait_` is `Eq` and `receiver` takes it from a `cmp` it writes
-/// alone. That `eq` is the receiver's own, as a written one would be, so a
-/// newtype answers `==` with it rather than with its base's.
+/// The `eq` that a `cmp` written alone gives `instance`, when `trait_` is
+/// `Eq`: the trait's `eq` emitted into that `cmp`'s block. It is the
+/// instance's own, as a written one would be, so a newtype answers `==` with
+/// it rather than with its base's.
 pub(crate) fn eq_from_written_cmp(
     trait_env: &TraitEnv,
     trait_: DefId,
-    receiver: &Receiver,
+    instance: TypeId,
     tt: &TypeTable,
-) -> bool {
-    tt.compiler_items().trait_def(CompilerItem::Eq) == Some(trait_)
-        && matches!(
-            comparison_written_alone(trait_env, receiver, tt),
-            Some((CompilerItem::Ord, _))
-        )
+) -> Option<TemplateId> {
+    if tt.compiler_items().trait_def(CompilerItem::Eq) != Some(trait_) {
+        return None;
+    }
+    let (CompilerItem::Ord, block) = comparison_written_alone(trait_env, instance, tt)? else {
+        return None;
+    };
+    let eq = trait_env
+        .trait_method_decl(trait_, "eq")
+        .expect("`Eq` declares `eq`");
+    Some(TemplateId::in_block(eq, block))
 }
 
 /// Whether `type_id` is one of the five reflection kinds, i.e. whether a
@@ -1281,7 +1276,7 @@ pub(crate) fn ranked_value_blanket<'a>(
         return None;
     };
     let base = *base_type;
-    if trait_env.has_any_methodful_impl_by_receiver(&tt.impl_receiver_key(base), trait_) {
+    if written_impl_reaches(trait_env, trait_, base, tt) {
         return None;
     }
     ranked_value_blanket(trait_env, trait_, type_module, base, tt)

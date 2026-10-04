@@ -1,0 +1,35 @@
+// An `eq` written for some instances of a generic head withholds `Ord` at
+// exactly those: an order derived from the members would ignore it.
+
+struct Ranked<T> {
+    rank: i32,
+    tag: T,
+}
+
+impl Eq for Ranked<i32> {
+    fn eq(&self, other: &Self) -> bool {
+        return self.rank == other.rank;
+    }
+}
+
+fn least<T: Ord>(a: T, b: T) -> T {
+    return if a < b { a } else { b };
+}
+
+test {
+    let a = Ranked { rank: 1, tag: 10 };
+    let b = Ranked { rank: 1, tag: 20 };
+    let _ = a < b;
+    let _ = least(a, b);
+    let _ = a.cmp(&b);
+    let _ = Ranked { rank: 1, tag: "x" } < Ranked { rank: 1, tag: "y" };
+}
+
+__DATA__
+{
+    "compile_error": ":22:13: analysis error: operator `<` cannot be applied to type `Ranked<i32>`: type does not implement `Ord`\n  note: `Ranked<i32>` writes `eq`, so no `Ord` is derived for it; write `cmp` beside it",
+    "compile_errors_contains": [
+        "type 'Ranked<i32>' does not implement trait 'Ord' required by bound on 'T'\n  note: `Ranked<i32>` writes `eq`",
+        "no method 'cmp' found on type 'Ranked<i32>'; `Ranked<i32>` writes `eq`"
+    ]
+}

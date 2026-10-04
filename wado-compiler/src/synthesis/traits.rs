@@ -10,7 +10,7 @@ use std::rc::Rc;
 
 use crate::call_args::CallArgs;
 use crate::compiler_item::{CompilerItem, CompilerItems};
-use crate::hashmap::{IndexMap, IndexSet};
+use crate::hashmap::IndexSet;
 
 use crate::elaborator::trait_env::{ImplReceiver, TraitEnv};
 use crate::flat_package::FlatPackage;
@@ -39,9 +39,7 @@ use crate::name::{
 };
 use crate::synthesis::common;
 use crate::synthesis::common::{locals_from_params, option_some, relocate_synthetic_locals};
-use crate::synthesis::template::{
-    blanket_dispatch_for, comparison_written_alone, ref_blanket_call, trait_call_template,
-};
+use crate::synthesis::template::{blanket_dispatch_for, ref_blanket_call, trait_call_template};
 use crate::{hashmap, tir};
 
 /// Snapshot of every `core:prelude/{traits,format}` symbol name that the
@@ -314,7 +312,6 @@ pub fn synthesize_traits(project: Package) -> Package {
         .into_iter()
         .collect();
     let partial_impls = type_table.borrow().partial_impls();
-    let written_cmps = written_cmps(&project);
     // In-pass dedup, per module: two modules' same-named types each derive.
     let mut pending: SynthRequests = IndexSet::default();
     for module in project.tir_modules.values_mut() {
@@ -331,7 +328,7 @@ pub fn synthesize_traits(project: Package) -> Package {
             names: &names,
             partial_impls: &partial_impls,
         };
-        generate_eq_impls(module, &mut ctx, &written_cmps);
+        generate_eq_impls(module, &mut ctx);
         generate_enum_ord_impls(module, &mut ctx);
         generate_flags_ord_impls(module, &mut ctx);
         generate_struct_ord_impls(module, &mut ctx);
@@ -3412,6 +3409,14 @@ impl SynthesisCtx<'_, '_, '_> {
             .contains(&(receiver.head().clone(), self.module.clone(), *trait_key))
     }
 
+    /// Whether a bound or marker demanded `impl <trait> for <receiver>` in any
+    /// module: a written impl answers it from the module it is written in.
+    fn is_requested_anywhere(&self, receiver: &FqTypeName, trait_key: &DefId) -> bool {
+        self.requested
+            .iter()
+            .any(|(head, _, trait_)| head == receiver.head() && trait_ == trait_key)
+    }
+
     /// Whether an impl with methods covers every instance of `receiver` within
     /// `scope`, or this pass emitted one. A marker asks for the body, so it never counts.
     fn has_methodful_impl(
@@ -3553,21 +3558,23 @@ fn collect_generic_variant_cases(
         .collect()
 }
 
-/// A written `cmp`, which a derived `Eq` beside no written `eq` copies: the
-/// parameters and bounds of its impl, and the type it is written for.
+/// A written `cmp`, whose block an `eq` from it is emitted into: the block, the
+/// parameters and bounds it declares, and the type it is written for.
 struct WrittenCmp {
+    block: DefId,
+    receiver: FqTypeName,
+    method_info: LocalMethodName,
     impl_type_params: Vec<TirTypeParam>,
     self_type: TypeId,
+    span: Span,
 }
 
-/// Every written `cmp` in `project`, by the impl block declaring it.
-fn written_cmps(project: &Package) -> IndexMap<DefId, WrittenCmp> {
-    let tt = shared_type_table(project).borrow();
+/// Every written `cmp` in `module`.
+fn written_cmps(module: &TirModule, tt: &TypeTable) -> Vec<WrittenCmp> {
     let ord = tt.compiler_items().trait_def(CompilerItem::Ord);
-    project
-        .tir_modules
-        .values()
-        .flat_map(|module| &module.functions)
+    module
+        .functions
+        .iter()
         .filter_map(|func| {
             let func = func.borrow();
             let block = func.impl_origin?;
@@ -3575,15 +3582,21 @@ fn written_cmps(project: &Package) -> IndexMap<DefId, WrittenCmp> {
             let of_ord = ord.is_some_and(|ord| {
                 method.trait_name.as_ref().and_then(FqTraitName::canonical) == Some(ord)
             });
-            (of_ord && method.method_name == "cmp").then(|| {
-                let self_ref = func.params.first().expect("`cmp` takes `&self`").type_id;
-                (
-                    block,
-                    WrittenCmp {
-                        impl_type_params: func.impl_type_params.clone(),
-                        self_type: tt.peel_refs(self_ref),
-                    },
-                )
+            if !of_ord || method.method_name != "cmp" {
+                return None;
+            }
+            // A reference reads no row (`comparison_written_alone`).
+            let Receiver::Type(receiver) = method.receiver() else {
+                return None;
+            };
+            let self_ref = func.params.first().expect("`cmp` takes `&self`").type_id;
+            Some(WrittenCmp {
+                block,
+                receiver: receiver.clone(),
+                method_info: method.clone(),
+                impl_type_params: func.impl_type_params.clone(),
+                self_type: tt.peel_refs(self_ref),
+                span: func.span,
             })
         })
         .collect()
@@ -3607,41 +3620,61 @@ struct EqTarget {
     members: EqMembers,
 }
 
-/// Generate `T^Eq::eq` for each requested declaration of `module`. A type that
-/// writes `cmp` and no `eq` takes `==` from that order (spec-traits.md
-/// §Derivation Policy); any other compares its members.
-fn generate_eq_impls(
-    module: &mut TirModule,
-    ctx: &mut SynthesisCtx<'_, '_, '_>,
-    written_cmps: &IndexMap<DefId, WrittenCmp>,
-) {
+/// Generate `T^Eq::eq` for each requested declaration of `module`, comparing
+/// its members, and the `eq` each `cmp` written in `module` gives the
+/// instances it reaches without a written `eq` (spec-traits.md §Derivation
+/// Policy). A declaration whose every instance a written `cmp` reaches compares
+/// no members.
+fn generate_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
     let module_source = module.module_source.clone();
     let mut tt = module.type_table.borrow_mut();
     let eq_trait_name = tt.compiler_trait_fq(CompilerItem::Eq);
     let eq_key = eq_trait_name.canonical().expect(KEYED);
+    let ord_key = tt.compiler_items().trait_def(CompilerItem::Ord);
+    let eq_decl = ctx
+        .trait_env
+        .trait_method_decl(eq_key, "eq")
+        .expect("`Eq` declares `eq`");
 
+    let mut generated = Vec::new();
+    for cmp in written_cmps(module, &tt) {
+        let written_eq_reaches_all = ctx
+            .trait_env
+            .methodful_default_impls_by_receiver(&Receiver::Type(cmp.receiver.clone()), eq_key)
+            .any(|block| tt.impl_reaches_instance(block, cmp.self_type));
+        if written_eq_reaches_all || !ctx.is_requested_anywhere(&cmp.receiver, &eq_key) {
+            continue;
+        }
+        let mut func = generate_eq_from_cmp_fn(
+            &cmp,
+            ctx.trait_env,
+            &module_source,
+            &eq_trait_name,
+            &mut tt,
+            ctx.names,
+        );
+        func.def_id = Some(eq_decl);
+        func.impl_origin = Some(cmp.block);
+        generated.push(Rc::new(RefCell::new(func)));
+    }
     let targets = eq_targets(module, &mut tt, |receiver| {
         ctx.should_synthesize(receiver, &eq_key)
     });
-    let mut generated = Vec::new();
     for target in targets {
-        let receiver_key = Receiver::Type(target.receiver.clone());
-        let from_cmp = match comparison_written_alone(ctx.trait_env, &receiver_key, &tt) {
-            Some((CompilerItem::Ord, block)) => Some(&written_cmps[&block]),
-            _ => None,
-        };
-        let func = match (from_cmp, &target.members) {
-            (Some(cmp), _) => generate_eq_from_cmp_fn(
-                &target.receiver,
-                cmp,
-                ctx.trait_env,
-                &module_source,
-                &eq_trait_name,
-                &mut tt,
-                target.span,
-                ctx.names,
-            ),
-            (None, &EqMembers::Scalar(ty, read)) => {
+        let every_instance_from_cmp = ord_key.is_some_and(|ord| {
+            ctx.trait_env.has_covering_methodful_impl_by_receiver(
+                &Receiver::Type(target.receiver.clone()),
+                ord,
+                None,
+                |block| tt.impl_covers_every_instance(block),
+            )
+        });
+        if every_instance_from_cmp {
+            ctx.record_impl(&target.receiver, &eq_key);
+            continue;
+        }
+        let func = match &target.members {
+            &EqMembers::Scalar(ty, read) => {
                 let ref_type = tt.make_ref(ty);
                 generate_scalar_eq_fn(
                     &target.receiver,
@@ -3652,7 +3685,7 @@ fn generate_eq_impls(
                     read,
                 )
             }
-            (None, EqMembers::Fields(ty, fields)) => {
+            EqMembers::Fields(ty, fields) => {
                 let ref_type = tt.make_ref(*ty);
                 generate_struct_eq_fn(
                     &target.receiver,
@@ -3666,7 +3699,7 @@ fn generate_eq_impls(
                     target.span,
                 )
             }
-            (None, EqMembers::Cases(ty, cases)) => {
+            EqMembers::Cases(ty, cases) => {
                 let ref_type = tt.make_ref(*ty);
                 generate_variant_eq_fn(
                     &target.receiver,
@@ -3680,7 +3713,7 @@ fn generate_eq_impls(
                     target.span,
                 )
             }
-            (None, EqMembers::Base) => continue,
+            EqMembers::Base => continue,
         };
         generated.push(Rc::new(RefCell::new(func)));
         ctx.record_impl(&target.receiver, &eq_key);
@@ -3789,17 +3822,23 @@ fn eq_target(
 /// Generate `T^Eq::eq(&self, &Self) -> bool` as `self.cmp(other) == Equal`,
 /// over the parameters `cmp`'s impl declares.
 fn generate_eq_from_cmp_fn(
-    receiver: &FqTypeName,
     cmp: &WrittenCmp,
     trait_env: &TraitEnv,
     module_source: &ModuleSource,
     eq_trait_name: &FqTraitName,
     tt: &mut TypeTable,
-    span: Span,
     names: &TraitsStdlibNames,
 ) -> TirFunction {
     let ty = cmp.self_type;
-    let method_info = trait_method_info(receiver, eq_trait_name, "eq");
+    let span = cmp.span;
+    // Named as the `cmp` is, so an instance its block's owner spells keeps
+    // that owner's arguments.
+    let method_info = LocalMethodName {
+        trait_name: Some(eq_trait_name.clone()),
+        trait_type_args: Vec::new(),
+        method_name: "eq".to_string(),
+        ..cmp.method_info.clone()
+    };
     let qualified_name = method_info.to_mangled_name();
     let ref_type = tt.make_ref(ty);
     let ordering_type = tt.make_compiler_enum(CompilerItem::Ordering);

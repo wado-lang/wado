@@ -1,0 +1,40 @@
+// An impl written for one instance of a generic newtype reaches that instance
+// alone: every other one inherits from its base.
+
+type Tagged<T> = List<T>;
+
+impl Eq for Tagged<i32> {
+    fn eq(&self, other: &Self) -> bool {
+        return self.len() == other.len();
+    }
+}
+
+trait Describe {
+    fn describe(&self) -> String;
+}
+
+impl Describe for Tagged<i32> {
+    fn describe(&self) -> String {
+        return "numbers";
+    }
+}
+
+impl<T> Describe for List<T> {
+    fn describe(&self) -> String {
+        return "list";
+    }
+}
+
+test "the written impl answers where it reaches" {
+    assert [1, 2] as Tagged<i32> == [3, 4] as Tagged<i32>;
+    assert ([1] as Tagged<i32>).describe() == "numbers";
+}
+
+test "the base answers everywhere else" {
+    assert ["a"] as Tagged<String> != ["b"] as Tagged<String>;
+    assert ["a"] as Tagged<String> == ["a"] as Tagged<String>;
+    assert (["a"] as Tagged<String>).describe() == "list";
+}
+
+__DATA__
+{"test": {}}

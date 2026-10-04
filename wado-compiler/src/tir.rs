@@ -6768,9 +6768,9 @@ impl TypeTable {
         }
         let written = &target.args;
         let instance = self.peel_refs(instance);
-        let args = match self.get(instance) {
+        let args = match self.get_unerased(instance) {
             ResolvedType::Struct { type_args, .. } => type_args.clone(),
-            _ => self.nominal_type_args(instance).unwrap_or_default(),
+            _ => self.declared_type_args(instance).unwrap_or_default(),
         };
         self.impl_target_binding(written, &args).is_some()
     }

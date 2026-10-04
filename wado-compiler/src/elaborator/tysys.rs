@@ -15,7 +15,7 @@ use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::resource_move_check::carries_affine_resource;
-use crate::synthesis::template::eq_from_written_cmp;
+use crate::synthesis::template::{eq_from_written_cmp, written_impl_reaches};
 use crate::tir::{ResolvedType, StructDef, TypeId, TypeKey, TypeTable, range_item};
 
 use super::sem::decls::ModuleDecls;
@@ -365,17 +365,14 @@ impl TypeSystem {
     }
 
     /// The first link at or below `type_id` — itself included — owning an impl
-    /// of `trait_`. A link owns what it writes, and the `Eq` a `cmp` it writes
-    /// alone gives it.
+    /// of `trait_`. A link owns what it writes where it reaches the link, and
+    /// the `Eq` a `cmp` it writes alone gives it.
     pub(crate) fn impl_link(&self, type_id: TypeId, trait_: DefId) -> Option<TypeId> {
         let tt = self.type_table.borrow();
         let mut tid = type_id;
         loop {
-            let key = tt.impl_receiver_key(tid);
-            if self
-                .trait_env
-                .has_any_methodful_impl_by_receiver(&key, trait_)
-                || eq_from_written_cmp(&self.trait_env, trait_, &key, &tt)
+            if written_impl_reaches(&self.trait_env, trait_, tid, &tt)
+                || eq_from_written_cmp(&self.trait_env, trait_, tid, &tt).is_some()
             {
                 return Some(tid);
             }

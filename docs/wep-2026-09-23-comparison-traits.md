@@ -113,10 +113,13 @@ takes `==` from it, not from its base. One writing `eq` alone inherits no `Ord`
 from its base, which orders values its `eq` may call equal, and a newtype over
 it inherits none from it.
 
-The second row's `==` holds where the written `cmp` does, under its bounds. A
-generic declaration derives one body for every instance (WEP 2026-06-25), so a
-`cmp` written for only some instances (`impl Ord for Ranked<i32>`) decides
-nothing, and `==` derives from the members.
+Each instance of a generic declaration reads its own row, by the impls that
+reach it. `impl Ord for Ranked<i32>` gives `Ranked<i32>` its `==` from that
+`cmp`, while `Ranked<String>` derives both from the members. `impl Eq for Named<i32>` withholds `Ord` from `Named<i32>` alone. The second row's `==` holds
+where the written `cmp` does, under its bounds.
+
+A reference reads no row. `==` on one compares what it points to, so
+`impl Ord for &Item` gives `&Item` no `==` of its own.
 
 The last row exists for speed. `==` on a `String` or a `List` stops at a length
 mismatch, where `cmp` must walk the common prefix. C++20 kept the two apart for
@@ -393,9 +396,6 @@ with `LIMIT` a NaN matches every value from `1.0` up, NaN included. Reversed
 and empty ranges, overlapping arms, and coverage go unreported, and a `match` on
 an integer needs `_` beside such a range even where the arms cover every value.
 
-A `cmp` written for only some instances of a generic head leaves `==` derived
-from the members there, so at those instances the two can disagree.
-
 The NaN test goes only where an operand is a constant. Nothing yet proves that a
 computed operand is not a NaN, so `a < b` between two variables pays the test
 even where neither can be one.
@@ -412,11 +412,11 @@ writes a `global mut`, since such a function declares no effect yet
 incrementing a counter and returning it, `next_id() != next_id()` is true, and
 the lint says it is always false.
 
-The compiler answers the table in [One source for `==` and `cmp`](#one-source-for--and-cmp)
-twice: the trait solver and the elaborator each read the written impls and
-decide, apart from each other, whether a type's `Eq` comes from `cmp` and
-whether it has an `Ord`. The elaborator decides at each place that asks: an
-operator, a bound, a method call, a marker, and synthesis. Nothing makes the
-two agree but the solver's differential check, which panics a debug build on
-the first case where they do not, and a release build compiles with the
-elaborator's answer.
+The compiler states the table in [One source for `==` and `cmp`](#one-source-for--and-cmp)
+twice. The trait solver states it as impls, each paired with the written impl it
+follows from, and lets precedence between the impls reaching an instance pick
+the row. The elaborator reads the written impls reaching the instance in
+`comparison_written_alone`, which an operator, a bound, a method call and
+synthesis all ask. Nothing makes the two agree but the solver's differential
+check, which panics a debug build on the first case where they do not, and a
+release build compiles with the elaborator's answer.

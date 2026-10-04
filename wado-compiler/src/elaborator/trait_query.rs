@@ -41,8 +41,10 @@ use crate::elaborator::trait_env::{
 use crate::elaborator::types::{RequiredTrait, StructFieldInfo, VariantInfo};
 use crate::name::FqTraitName;
 use crate::resolve::{Resolution, Resolutions};
-use crate::synthesis::template::{comparison_written_alone, written_impl_reaches};
-use crate::tir::{SlotProjections, TraitRef};
+use crate::synthesis::template::{
+    comparison_written_alone, eq_from_written_cmp, written_impl_reaches,
+};
+use crate::tir::{SlotProjections, TemplateId, TraitRef};
 
 /// Proof that a bound was asked and answered no. Its field is private here, so
 /// [`TypeError::TraitBoundNotSatisfied`] can be raised from nowhere else.
@@ -1652,8 +1654,7 @@ impl TypeSystem {
     /// [`comparison_written_alone`] for `type_id`.
     pub(super) fn comparison_written_alone(&self, type_id: TypeId) -> Option<OnBoundTrait> {
         let tt = self.type_table.borrow();
-        let (written, _) =
-            comparison_written_alone(&self.trait_env, &tt.impl_receiver_key(type_id), &tt)?;
+        let (written, _) = comparison_written_alone(&self.trait_env, type_id, &tt)?;
         OnBoundTrait::of_compiler_item(written)
     }
 
@@ -1671,13 +1672,12 @@ impl TypeSystem {
             if matches!(tt.get(link), ResolvedType::Primitive(_)) {
                 return None;
             }
-            let key = tt.impl_receiver_key(link);
             if let Some((CompilerItem::Eq, _)) =
-                comparison_written_alone(&self.trait_env, &key, &tt)
+                comparison_written_alone(&self.trait_env, link, &tt)
             {
                 return Some(link);
             }
-            if self.trait_env.has_any_methodful_impl_by_receiver(&key, ord) {
+            if written_impl_reaches(&self.trait_env, ord, link, &tt) {
                 return None;
             }
             link = tt.get_newtype_base(link)?;
@@ -3254,15 +3254,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow_mut()
             .intern(ResolvedType::Ref(lookup_type_id));
-        // Auto-derived: no `impl` block is written, so none is named.
+        // The `eq` a written `cmp` gives is emitted into that `cmp`'s block and
+        // dispatched as the block's own method; any other derived impl names
+        // no block.
+        let paired = eq_from_written_cmp(
+            &self.tysys.trait_env,
+            trait_,
+            lookup_type_id,
+            &self.tysys.type_table.borrow(),
+        );
+        let (method_def, impl_def, receiver) = match paired {
+            Some(TemplateId::Declared {
+                def,
+                block: Some(block),
+            }) => {
+                let header = &self.tysys.trait_env.impl_headers[&block];
+                (
+                    Some(def),
+                    Some(block),
+                    self.impl_receiver(header, lookup_type_id),
+                )
+            }
+            None => (None, None, self.tysys.fq_receiver_head(lookup_type_id)),
+            Some(other) => unreachable!("an `eq` from `cmp` is emitted into a block: {other:?}"),
+        };
         Some(ResolvedTraitMethod {
-            method_def: None,
+            method_def,
             trait_name: self.tysys.type_table.borrow().compiler_trait_fq(item),
             method_name: method_name.to_string(),
-            impl_def: None,
+            impl_def,
             impl_name: struct_name.to_string(),
             impl_type_id: Some(lookup_type_id),
-            receiver: self.tysys.fq_receiver_head(lookup_type_id),
+            receiver,
             self_kind: ast::SelfKind::Ref,
             return_type,
             param_types: vec![ref_self_ty],
@@ -3282,48 +3305,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<TraitMethodMatch> {
         let (item, _, return_type) = self.tysys.auto_derive_by_method(method_name)?;
         let base_type_id = self.tysys.get_base_type(receiver_type_id);
-        // A newtype has no derivation of its own: the one its representation
-        // carries answers, and is inherited the way a written impl on the base
-        // is, so the signature re-types back to the receiver.
-        let derive_id = self
-            .tysys
-            .type_table
-            .borrow()
-            .representation_head(base_type_id);
-        let inherited = (derive_id != base_type_id).then_some(derive_id);
-        if !self.tysys.auto_derive_eligible_kind(derive_id) {
-            return None;
-        }
-        let trait_ = self.tysys.compiler_trait(item)?;
-        if !self.tysys.type_implements_trait(
-            &self.annotate_ctx,
-            &self.type_lookup(),
-            derive_id,
-            &trait_,
-        ) {
-            return None;
-        }
-        let ref_self_ty = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .intern(ResolvedType::Ref(derive_id));
-        // Derived from the receiver's structure, off no `impl` block.
-        let method_info = MethodInfo {
-            param_types: vec![ref_self_ty],
-            param_is_mut: vec![false],
-            param_defaults: vec![None],
-            param_names: vec!["other".to_string()],
-            owner: inherited.map_or(MethodOwner::Receiver, MethodOwner::InheritedFrom),
-            ..MethodInfo::undeclared(return_type)
-        };
-        let impl_module_source = self
-            .tysys
-            .type_table
-            .borrow()
-            .nominal_head(derive_id)
-            .expect("an auto-derive-eligible type names a head")
-            .1;
         // The auto-derived trait is a compiler item, so it is named by the
         // declaration the registry holds, not by a spelling resolved here.
         let trait_fq = self.tysys.type_table.borrow().compiler_trait_fq(item);
@@ -3331,6 +3312,107 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .compiler_trait_def(item)
             .expect("a compiler trait item names a declaration");
+        // As in `resolve_trait_method_for_op`: the `eq` a written `cmp` gives
+        // is that `cmp`'s block's own method, on the link of the chain writing
+        // it. Any other derived impl is off every block.
+        let paired = self
+            .tysys
+            .impl_link(base_type_id, trait_decl)
+            .and_then(|link| {
+                let tt = self.tysys.type_table.borrow();
+                Some((
+                    link,
+                    eq_from_written_cmp(&self.tysys.trait_env, trait_decl, link, &tt)?,
+                ))
+            });
+        let (
+            owner_link,
+            method_def,
+            impl_block,
+            from_concrete_impl,
+            impl_module_source,
+            impl_struct_fq,
+        ) = match paired {
+            Some((
+                link,
+                TemplateId::Declared {
+                    def,
+                    block: Some(block),
+                },
+            )) => {
+                let header = &self.tysys.trait_env.impl_headers[&block];
+                (
+                    link,
+                    Some(def),
+                    Some(block),
+                    self.tysys.impl_is_concrete_instantiation(&header.ty),
+                    header.module.clone(),
+                    self.impl_receiver(header, link),
+                )
+            }
+            Some((_, other)) => {
+                unreachable!("an `eq` from `cmp` is emitted into a block: {other:?}")
+            }
+            None => {
+                // A newtype has no derivation of its own: the one its
+                // representation carries answers.
+                let derive_id = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .representation_head(base_type_id);
+                if !self.tysys.auto_derive_eligible_kind(derive_id) {
+                    return None;
+                }
+                let trait_ = self.tysys.compiler_trait(item)?;
+                if !self.tysys.type_implements_trait(
+                    &self.annotate_ctx,
+                    &self.type_lookup(),
+                    derive_id,
+                    &trait_,
+                ) {
+                    return None;
+                }
+                let home = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .nominal_head(derive_id)
+                    .expect("an auto-derive-eligible type names a head")
+                    .1;
+                (
+                    derive_id,
+                    None,
+                    None,
+                    false,
+                    home,
+                    self.tysys.fq_receiver_head(derive_id),
+                )
+            }
+        };
+        let ref_self_ty = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .intern(ResolvedType::Ref(owner_link));
+        // An impl on a link below the receiver is inherited the way a written
+        // impl on the base is, so the signature re-types back to the receiver.
+        let owner = if owner_link == base_type_id {
+            MethodOwner::Receiver
+        } else {
+            MethodOwner::InheritedFrom(owner_link)
+        };
+        let method_info = MethodInfo {
+            method_def,
+            impl_block,
+            from_concrete_impl,
+            param_types: vec![ref_self_ty],
+            param_is_mut: vec![false],
+            param_defaults: vec![None],
+            param_names: vec!["other".to_string()],
+            owner,
+            ..MethodInfo::undeclared(return_type)
+        };
         Some(TraitMethodMatch {
             // Auto-derived `Eq` / `Ord` take no type arguments.
             trait_name: trait_fq,
@@ -3340,7 +3422,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             impl_module_source,
             blanket_type_param: None,
             blanket_binder: None,
-            impl_struct_fq: self.tysys.fq_receiver_head(derive_id),
+            impl_struct_fq,
             is_blanket_ref_impl: false,
             ref_impl_target: None,
         })
