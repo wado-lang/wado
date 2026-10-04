@@ -38,7 +38,8 @@ struct Host {
 
 impl Host {
     /// What the host's own `request-adapter` answers, unless `--gpu-adapter`
-    /// pinned one. Replaced here so `--log-level info` can say which it was.
+    /// pinned one. Replaced here so the run can say which it was, or that
+    /// there was none.
     fn request_adapter(
         &mut self,
         options: Option<&GpuRequestAdapterOptions>,
