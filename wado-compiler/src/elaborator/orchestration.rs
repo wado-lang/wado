@@ -67,7 +67,7 @@ use crate::stdlib_snapshot::{is_building, rehydrate_tir_module, stdlib_sources};
 use crate::symbol::SymbolKind;
 use crate::tir::{StructDef, TirFunction, TraitRef};
 use crate::token::Span;
-use crate::unparse::{unparse_generic_params_into, unparse_type_into};
+use crate::unparse::unparse_type_into;
 use crate::wit_consume::module_host_leaf_imports;
 
 /// One `resource Child extends Parent` clause, held until every resource has
@@ -905,11 +905,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         //
         // The trait is the one the impl's header resolved to, so a module
         // implementing its own `Encode` is never checked against another's.
-        let params_as_written = |params: &[GenericParam]| {
-            let mut written = String::new();
-            unparse_generic_params_into(params, &mut written);
-            written
-        };
         for header in trait_env.impl_headers.values() {
             if !is_user_local(&header.module) {
                 continue;
@@ -946,44 +941,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // `T: Super`, so binding it here would record it where no
             // projection reads it (WEP 2026-07-27).
             for binding in &header.associated_types {
-                let Some(declared) = trait_env.assoc_type_decl(&decl_key, &binding.name) else {
+                if !trait_env.declares_assoc_type(&decl_key, &binding.name) {
                     let _ = logger.error_in(
                         &header.module,
                         TypeError::ImplAssocTypeNotInTrait {
                             trait_name: decl.name.clone(),
                             assoc_name: binding.name.clone(),
-                            span: binding.span,
-                        },
-                    );
-                    continue;
-                };
-                // The binding answers every projection the declaration admits,
-                // so it takes exactly the parameters the trait declares, under
-                // names of its own.
-                let bound_decls = |param: &ast::GenericParam| -> Vec<Option<DefId>> {
-                    param
-                        .bounds
-                        .iter()
-                        .map(|bound| resolutions.bound_decl(bound))
-                        .collect()
-                };
-                let agrees = declared.type_params.len() == binding.type_params.len()
-                    && declared
-                        .type_params
-                        .iter()
-                        .zip(&binding.type_params)
-                        .all(|(d, w)| {
-                            let (d, w) = (bound_decls(d), bound_decls(w));
-                            d.len() == w.len() && d.iter().all(|bound| w.contains(bound))
-                        });
-                if !agrees {
-                    let _ = logger.error_in(
-                        &header.module,
-                        TypeError::ImplAssocTypeParamsMismatch {
-                            trait_name: decl.name.clone(),
-                            assoc_name: binding.name.clone(),
-                            declared: params_as_written(&declared.type_params),
-                            written: params_as_written(&binding.type_params),
                             span: binding.span,
                         },
                     );

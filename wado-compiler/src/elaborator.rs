@@ -1948,7 +1948,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .map(|(written, trait_key)| self.impl_trait_ref(written, &impl_block.ty, trait_key));
 
         for binding in &impl_block.associated_types {
-            let type_id = self.resolve_assoc_binding(binding);
+            let type_id = self.resolve_assoc_binding(declaring_trait, binding);
             self.annotate_ctx
                 .trait_ctx
                 .assoc_type_bindings

@@ -43,6 +43,7 @@ use crate::name::FqTraitName;
 use crate::resolve::{Resolution, Resolutions};
 use crate::synthesis::template::{comparison_written_alone, written_impl_reaches};
 use crate::tir::{SlotProjections, TraitRef};
+use crate::unparse::unparse_generic_params_into;
 
 /// Proof that a bound was asked and answered no. Its field is private here, so
 /// [`TypeError::TraitBoundNotSatisfied`] can be raised from nowhere else.
@@ -404,12 +405,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             else {
                 continue;
             };
-            let bounds: Vec<(String, Option<FqTraitName>)> = decl
-                .bounds
-                .iter()
-                .filter(|bound| bound.names_a_trait())
-                .map(|bound| self.tysys.bound_named_written(bound))
-                .collect();
+            self.check_assoc_binding_params(trait_decl, &decl, binding);
+            let bounds = self.declared_assoc_bounds(trait_decl, &decl);
             if bounds.is_empty() {
                 continue;
             }
@@ -419,13 +416,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .assoc_type_bindings
                 .get(&binding.name)
                 .copied()
-                .unwrap_or_else(|| self.resolve_assoc_binding(binding));
+                .unwrap_or_else(|| self.resolve_assoc_binding(Some(trait_decl), binding));
             if !self.tysys.type_table.borrow().binding_is_concrete(type_id) {
                 continue;
             }
             // The binding answers for every argument the declaration admits,
             // so it is checked under the declaration's own parameter bounds.
-            self.with_assoc_params(&decl.type_params, |scope| {
+            self.with_assoc_params(trait_decl, &decl.name, &decl.type_params, |scope| {
                 for (bound_name, bound_trait) in &bounds {
                     scope.enforce_single_bound_args(
                         type_id,
@@ -437,6 +434,100 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             });
         }
+    }
+
+    /// `bounds`, written over `params`, with each parameter's name read as the
+    /// family's own parameter at its position, which no other name reaches.
+    fn bounds_over_family(
+        &mut self,
+        owning_trait: DefId,
+        assoc: &str,
+        params: &[ast::GenericParam],
+        bounds: &[ast::TraitBound],
+    ) -> Vec<(String, Option<FqTraitName>)> {
+        let family: Vec<FqTypeName> = {
+            let ids = self.family_params(owning_trait, assoc);
+            let table = self.tysys.type_table.borrow();
+            ids.iter().map(|&id| table.fq_type_name(id)).collect()
+        };
+        bounds
+            .iter()
+            .filter(|bound| bound.names_a_trait())
+            .map(|bound| {
+                let (name, written) = self.tysys.bound_named_written(bound);
+                let written = written.map(|written| {
+                    params
+                        .iter()
+                        .zip(&family)
+                        .fold(written, |written, (param, own)| {
+                            written.substitute(&FqTypeName::binder(&param.name), own)
+                        })
+                });
+                (name, written)
+            })
+            .collect()
+    }
+
+    /// The bounds `decl`, a generic associated type of `owning_trait`, puts on
+    /// itself, over the family's own parameters.
+    pub(super) fn declared_assoc_bounds(
+        &mut self,
+        owning_trait: DefId,
+        decl: &ast::AssociatedTypeDecl,
+    ) -> Vec<(String, Option<FqTraitName>)> {
+        self.bounds_over_family(owning_trait, &decl.name, &decl.type_params, &decl.bounds)
+    }
+
+    /// Report an impl binding `decl` with parameters other than the trait
+    /// declares: another count, or other bounds at a position, arguments
+    /// included. Names may differ, since each is read as the family's own.
+    fn check_assoc_binding_params(
+        &mut self,
+        owning_trait: DefId,
+        decl: &ast::AssociatedTypeDecl,
+        binding: &ast::AssociatedTypeBinding,
+    ) {
+        let declared_bounds =
+            |e: &mut Self, params: &[ast::GenericParam]| -> Vec<Vec<Option<FqTraitName>>> {
+                params
+                    .iter()
+                    .map(|param| {
+                        e.bounds_over_family(owning_trait, &decl.name, params, &param.bounds)
+                            .into_iter()
+                            .map(|(_, written)| written)
+                            .collect()
+                    })
+                    .collect()
+            };
+        let declared = declared_bounds(self, &decl.type_params);
+        let written = declared_bounds(self, &binding.type_params);
+        let agrees = declared.len() == written.len()
+            && declared
+                .iter()
+                .zip(&written)
+                .all(|(d, w)| d.len() == w.len() && d.iter().all(|bound| w.contains(bound)));
+        if agrees {
+            return;
+        }
+        let params_as_written = |params: &[ast::GenericParam]| {
+            let mut out = String::new();
+            unparse_generic_params_into(params, &mut out);
+            out
+        };
+        let trait_name = self
+            .tysys
+            .trait_env
+            .decl_header_of(&owning_trait)
+            .expect("the trait declaring `decl` has a header")
+            .name
+            .clone();
+        let _ = self.emit(TypeError::ImplAssocTypeParamsMismatch {
+            trait_name,
+            assoc_name: binding.name.clone(),
+            declared: params_as_written(&decl.type_params),
+            written: params_as_written(&binding.type_params),
+            span: binding.span,
+        });
     }
 
     /// Enforce a trait's supertraits against `impl Trait for T`. The whole
@@ -1073,6 +1164,50 @@ impl TypeSystem {
             .any(|(decl, named)| *decl == trait_ && self.args_answer(named.args(), trait_, wanted))
     }
 
+    /// Whether the family parameter `param` supplies `trait_` at `wanted`. It
+    /// answers by the bounds it carries in this frame, under the name the frame
+    /// writes it as; `wanted` spells each family parameter by its identity, so
+    /// it is read in the frame's names too.
+    fn assoc_param_supplies(
+        &self,
+        ctx: &Scope,
+        param: TypeId,
+        trait_: DefId,
+        wanted: &[FqTypeName],
+    ) -> bool {
+        let table = self.type_table.borrow();
+        let family_in_scope: Vec<(&String, TypeId)> = ctx
+            .trait_ctx
+            .type_params
+            .iter()
+            .filter(|(_, binder)| {
+                matches!(table.get(binder.type_id), ResolvedType::AssocParam { .. })
+            })
+            .map(|(name, binder)| (name, binder.type_id))
+            .collect();
+        let Some(&(name, _)) = family_in_scope.iter().find(|(_, id)| *id == param) else {
+            return false;
+        };
+        let wanted: Vec<FqTypeName> = wanted
+            .iter()
+            .map(|want| {
+                family_in_scope
+                    .iter()
+                    .fold(want.clone(), |want, (name, id)| {
+                        want.substitute(&table.fq_type_name(*id), &FqTypeName::binder(name))
+                    })
+            })
+            .collect();
+        ctx.trait_ctx
+            .type_param_bounds
+            .get(name)
+            .is_some_and(|bounds| {
+                bounds
+                    .iter()
+                    .any(|b| self.bound_supplies(b, trait_, &wanted))
+            })
+    }
+
     fn walk_structural_derive_members(
         &self,
         scope: &TypeLookup,
@@ -1360,6 +1495,10 @@ impl TypeSystem {
                 .is_some_and(|bounds| bounds.iter().any(|b| self.bound_supplies(b, decl, wanted)));
         }
 
+        if let ResolvedType::AssocParam { .. } = resolved {
+            return self.assoc_param_supplies(ctx, type_id, decl, wanted);
+        }
+
         if on_bound == Some(OnBoundTrait::Ref) {
             return self.is_ref_identity(resolved);
         }
@@ -1572,10 +1711,11 @@ impl TypeSystem {
                 }
                 return self.type_implements_trait(ctx, scope, inner_id, trait_);
             }
-            ResolvedType::AssocTypeProjection { bounds, .. } => {
+            ResolvedType::AssocTypeProjection { .. } => {
                 // An associated type projection T::Assoc implements a trait if
                 // the trait declaration for Assoc declares that bound, at the
                 // arguments the bound writes.
+                let bounds = self.type_table.borrow().projection_bounds(type_id);
                 return bounds.iter().any(|b| {
                     b.canonical() == Some(decl) && self.args_answer(b.args(), decl, wanted)
                 });
@@ -1711,15 +1851,48 @@ impl TypeSystem {
 
     /// Whether a bound writing `wanted` selects the header — see
     /// [`super::trait_env::header_answers_bound_args`].
-    fn header_answers_bound_args(&self, header: &ImplHeader, wanted: &[FqTypeName]) -> bool {
+    /// Whether `header` writes the trait arguments `wanted` asks for, at the
+    /// receiver whose arguments are `type_args`: an impl parameter the target
+    /// places stands for the receiver's argument there, not for any type.
+    fn header_answers_bound_args(
+        &self,
+        header: &ImplHeader,
+        wanted: &[FqTypeName],
+        type_args: Option<&[TypeId]>,
+    ) -> bool {
         let Some(decl) = header.trait_def() else {
             return true;
         };
         let Some(decl_header) = self.trait_env.decl_header_of(&decl) else {
             return true;
         };
+        let slots = ImplParamSlots::of(&header.ty, &header.type_params);
+        let at_receiver: Vec<FqTypeName> = {
+            let table = self.type_table.borrow();
+            header
+                .trait_arg_ids()
+                .iter()
+                .map(|written| {
+                    header
+                        .type_params
+                        .iter()
+                        .fold(written.clone(), |written, param| {
+                            let Some(&arg) = slots
+                                .of_name(&param.name)
+                                .and_then(|slot| type_args?.get(slot as usize))
+                            else {
+                                return written;
+                            };
+                            written.substitute(
+                                &FqTypeName::binder(&param.name),
+                                &table.fq_type_name(arg),
+                            )
+                        })
+                })
+                .collect()
+        };
         header_answers_bound_args(
-            header.trait_arg_ids(),
+            &at_receiver,
             &header.ty,
             &decl_header.type_params,
             &self.resolutions,
@@ -1764,7 +1937,7 @@ impl TypeSystem {
                 // made an aliased bound unsatisfiable and a same-named foreign
                 // trait satisfied (#1785).
                 if header.trait_def() == Some(trait_)
-                    && self.header_answers_bound_args(header, wanted)
+                    && self.header_answers_bound_args(header, wanted, type_args)
                     && self.impl_reaches(entry, type_args)
                     && self.check_impl_block_bounds(ctx, scope, entry, subject, type_args)
                 {
@@ -2104,7 +2277,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The declaration cannot say: `I: IntoIterator<Item = u8>` is written at
     /// the caller. Every name gets an answer, because the projection over the
     /// receiver carries the caller's bindings and instantiating the recorded
-    /// one would not.
+    /// one would not. A generic associated type's answer is its family, over
+    /// its own parameters, which each projection's arguments then fill.
     fn trait_assoc_answers(
         &mut self,
         assoc_types: &[DeclaredAssocType],
@@ -2118,11 +2292,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (declaring, decl) in assoc_types {
             let known = self.frame_projection(self_type_id, &self_name, &decl.name);
             let answer = known.unwrap_or_else(|| {
+                let open = self.family_params(*declaring, &decl.name);
                 self.make_frame_projection_of_trait(
                     self_type_id,
                     &self_name,
                     *declaring,
                     &decl.name,
+                    &open,
                 )
             });
             answers.push((*declaring, decl.name.clone(), answer));
@@ -3149,7 +3325,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         bindings: &[ast::AssociatedTypeBinding],
     ) {
         for binding in bindings {
-            let resolved_id = self.resolve_assoc_binding(binding);
+            let resolved_id = self.resolve_assoc_binding(Some(trait_ref.decl), binding);
             let mut table = self.tysys.type_table.borrow_mut();
             if table.binding_is_concrete(resolved_id) {
                 table.register_assoc_type_resolution(

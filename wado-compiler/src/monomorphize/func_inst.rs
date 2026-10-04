@@ -2386,7 +2386,13 @@ impl Monomorphizer {
     ) -> Option<TypeId> {
         if let Some((base, assoc, owning_trait)) = node.projected() {
             let base_id = Self::type_at_instance(base, bound, type_table)?;
-            return type_table.resolve_assoc_type_qualified(base_id, &owning_trait, assoc);
+            let family = type_table.resolve_assoc_type_qualified(base_id, &owning_trait, assoc)?;
+            let args = node
+                .args()
+                .iter()
+                .map(|arg| Self::type_at_instance(arg, bound, type_table))
+                .collect::<Option<Vec<_>>>()?;
+            return type_table.find_instantiated(family, &args);
         }
         if !node.args().is_empty() {
             return None;

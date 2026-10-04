@@ -2974,6 +2974,21 @@ impl FqTypeName {
         })
     }
 
+    /// The parameter `name` of the generic associated type `assoc` that trait
+    /// `def` declares (`E` in `type Buf<E>`). Owned by the family, so it names
+    /// no other type, and an impl renaming it reaches this one.
+    #[must_use]
+    pub fn binder_of_family(defs: &DefTable, def: DefId, assoc: &str, name: &str) -> Self {
+        Self::of_head_kind(TypeHead::Binder {
+            name: name.to_string(),
+            owner: Some(BinderOwner::of_family(
+                defs.module(def),
+                defs.ast_id(def),
+                assoc,
+            )),
+        })
+    }
+
     /// The index bucket holding every `impl` in `module` whose target is a type
     /// parameter spelled `name`. Keyed by the spelling, since that is the
     /// question it answers; not a binder, which is one parameter of one item.
@@ -3091,14 +3106,19 @@ impl FqTypeName {
 
     /// Whether some substitution for either side's binders and projections
     /// makes the two names one type. A binder stands for the rest of a type
-    /// after the references written before it.
+    /// after the references written before it. A family's parameter is the
+    /// exception: it stands for every argument at once, so it is one type, as
+    /// rigid as a declaration.
     #[must_use]
     pub fn unifies_with(&self, other: &FqTypeName) -> bool {
-        let open = |name: &FqTypeName| {
-            matches!(
-                name.head,
-                TypeHead::Binder { .. } | TypeHead::Projection { .. }
-            )
+        let open = |name: &FqTypeName| match &name.head {
+            TypeHead::Binder { owner, .. } => !owner.as_ref().is_some_and(BinderOwner::is_family),
+            TypeHead::Projection { .. } => true,
+            TypeHead::Declared(_)
+            | TypeHead::Shape { .. }
+            | TypeHead::ParamBucket { .. }
+            | TypeHead::Builtin(_)
+            | TypeHead::Tuple => false,
         };
         if open(self) {
             return other.reference.starts_with(&self.reference);
@@ -3297,12 +3317,15 @@ impl std::fmt::Display for FqTypeName {
     }
 }
 
-/// The `impl` block a blanket's receiver binder belongs to. Equality and
-/// hashing read the block alone, so two blankets of one trait write two
-/// template names whatever letter each spells its parameter (#1932).
+/// The item a binder belongs to: the `impl` block a blanket's receiver binder
+/// belongs to, or the generic associated type a family parameter does.
+/// Equality and hashing read the item alone, so two blankets of one trait
+/// write two template names whatever letter each spells its parameter (#1932).
 #[derive(Debug, Clone)]
 pub struct BinderOwner {
     id: AstId,
+    /// The associated type within the trait at `id`, for a family parameter.
+    assoc: Option<String>,
     /// What a mangle embeds: the declaring module plus the node's
     /// *module-local* `AstId` index — never the `AstIdSpace`, which is a
     /// process-global counter and would make mangled names non-deterministic
@@ -3312,7 +3335,7 @@ pub struct BinderOwner {
 
 impl PartialEq for BinderOwner {
     fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
+        self.id == other.id && self.assoc == other.assoc
     }
 }
 
@@ -3321,6 +3344,7 @@ impl Eq for BinderOwner {}
 impl std::hash::Hash for BinderOwner {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.id.hash(state);
+        self.assoc.hash(state);
     }
 }
 
@@ -3329,7 +3353,23 @@ impl BinderOwner {
     fn of_impl(module: &ModuleSource, id: AstId) -> Self {
         Self {
             id,
+            assoc: None,
             rendered: format!("{module}/{}", id.local()),
+        }
+    }
+
+    /// Whether this owns a generic associated type's parameter.
+    fn is_family(&self) -> bool {
+        self.assoc.is_some()
+    }
+
+    /// A parameter of the associated type `assoc` of the trait declared at
+    /// `id` in `module`.
+    fn of_family(module: &ModuleSource, id: AstId, assoc: &str) -> Self {
+        Self {
+            id,
+            assoc: Some(assoc.to_string()),
+            rendered: format!("{module}/{}::{assoc}", id.local()),
         }
     }
 

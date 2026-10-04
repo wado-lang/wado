@@ -830,25 +830,41 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ScopedBound::pin_declared(param, self_binding)
     }
 
-    /// Run `body` with a generic associated type's own parameters in scope over
-    /// this frame, each as the `ResolvedType::AssocParam` a projection's
-    /// argument fills, with the bounds it declares.
+    /// The parameters of `owning_trait`'s associated type `assoc`, as the
+    /// `ResolvedType::AssocParam`s a binding is written over.
+    pub(super) fn family_params(&mut self, owning_trait: DefId, assoc: &str) -> Vec<TypeId> {
+        let names: Vec<String> = self
+            .tysys
+            .trait_env
+            .assoc_type_decl(&owning_trait, assoc)
+            .map(|decl| decl.type_params.iter().map(|p| p.name.clone()).collect())
+            .unwrap_or_default();
+        self.tysys
+            .type_table
+            .borrow_mut()
+            .family_params(owning_trait, assoc, &names)
+    }
+
+    /// Run `body` with the parameters of `owning_trait`'s associated type
+    /// `assoc` in scope over this frame, under the names `written` gives them
+    /// and with the bounds it declares. Each is the family's own parameter at
+    /// its position, so a declaration and an impl renaming it reach one type.
     pub(super) fn with_assoc_params<R>(
         &mut self,
-        params: &[ast::GenericParam],
+        owning_trait: DefId,
+        assoc: &str,
+        written: &[ast::GenericParam],
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        if params.is_empty() {
+        if written.is_empty() {
             return body(self);
         }
+        let params = self.family_params(owning_trait, assoc);
         let mut scope = self.enter_inherited_type_param_scope();
         let base = scope.annotate_ctx.trait_ctx.type_params.len() as u32;
-        for (index, param) in params.iter().enumerate() {
-            let type_id = scope
-                .tysys
-                .type_table
-                .borrow_mut()
-                .make_assoc_param(param.name.clone(), index as u32);
+        // An impl writing more parameters than the trait declares is reported
+        // where the two are compared, and the excess binds nothing.
+        for (index, (param, &type_id)) in written.iter().zip(&params).enumerate() {
             let bounds = scope.scoped_bounds(param);
             scope.bind_param(
                 &param.name,
@@ -859,10 +875,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         body(&mut scope)
     }
 
-    /// What an impl's `binding` binds, its own parameters left open as
-    /// `ResolvedType::AssocParam`s.
-    pub(super) fn resolve_assoc_binding(&mut self, binding: &ast::AssociatedTypeBinding) -> TypeId {
-        self.with_assoc_params(&binding.type_params, |scope| {
+    /// What an impl of `owning_trait` binds `binding` to, its own parameters
+    /// left open as the family's.
+    pub(super) fn resolve_assoc_binding(
+        &mut self,
+        owning_trait: Option<DefId>,
+        binding: &ast::AssociatedTypeBinding,
+    ) -> TypeId {
+        let Some(owning_trait) = owning_trait else {
+            return self.resolve_type(&binding.ty);
+        };
+        self.with_assoc_params(owning_trait, &binding.name, &binding.type_params, |scope| {
             scope.resolve_type(&binding.ty)
         })
     }

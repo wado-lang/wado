@@ -1179,6 +1179,7 @@ fn normalize_assoc_projection(type_table: &TypeTable, type_id: TypeId) -> TypeId
     let ResolvedType::AssocTypeProjection {
         param_id,
         assoc_name,
+        args,
         owning_trait,
         ..
     } = type_table.get(type_id)
@@ -1187,6 +1188,7 @@ fn normalize_assoc_projection(type_table: &TypeTable, type_id: TypeId) -> TypeId
     };
     type_table
         .resolve_assoc_type_qualified(*param_id, owning_trait, assoc_name)
+        .and_then(|family| type_table.find_instantiated(family, args))
         .unwrap_or(type_id)
 }
 

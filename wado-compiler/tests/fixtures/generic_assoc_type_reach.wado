@@ -1,0 +1,79 @@
+// Every way of reaching a generic associated type takes its arguments from
+// the declaration: an inherent impl naming `Self::Buf`, a binding that is
+// another trait's associated type, an impl renaming the parameters, and a
+// bound whose arguments name the parameter.
+
+trait Holds<T> with () {
+    fn first(&self) -> T;
+}
+
+struct Bag<T> {
+    items: List<T>,
+}
+
+impl<T> Holds<T> for Bag<T> {
+    fn first(&self) -> T {
+        return self.items[0];
+    }
+}
+
+trait Store with () {
+    type Buf<E>: Holds<E>;
+
+    fn make<E>(&self, value: E) -> Self::Buf<E>;
+}
+
+struct Bags {}
+
+impl Store for Bags {
+    type Buf<F> = Bag<F>;
+
+    fn make<F>(&self, value: F) -> Bag<F> {
+        return Bag { items: [value] };
+    }
+}
+
+// An inherent impl reaches the family through the trait `Bags` implements.
+impl Bags {
+    fn make_int(&self) -> Self::Buf<i32> {
+        return self.make(4);
+    }
+}
+
+// The bound's argument names the parameter, so `first` yields the argument.
+fn first_of<S: Store>(s: &S) -> String {
+    let b = s.make("x");
+    return b.first();
+}
+
+trait Has with () {
+    type Out;
+}
+
+struct Wrapped<T> {
+    inner: T,
+}
+
+impl Has for i32 {
+    type Out = Bag<i32>;
+}
+
+// A binding that is another trait's associated type ignores its own argument.
+trait Fixed with () {
+    type Buf<E>;
+}
+
+impl<T: Has> Fixed for Wrapped<T> {
+    type Buf<E> = T::Out;
+}
+
+fn keep<S: Fixed>(b: S::Buf<String>) -> S::Buf<String> {
+    return b;
+}
+
+test "each way of reaching the family answers at the arguments" {
+    assert Bags {}.make_int().first() == 4;
+    assert first_of(&Bags {}) == "x";
+    let b = keep::<Wrapped<i32>>(Bag { items: [7] });
+    assert b.items[0] == 7;
+}

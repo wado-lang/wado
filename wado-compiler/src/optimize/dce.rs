@@ -1746,8 +1746,11 @@ fn collect_type_dependencies(
         // surviving projection (e.g. a field type of a retained generic
         // template) would dangle when the parameter type is pruned,
         // crashing later name-mangling.
-        ResolvedType::AssocTypeProjection { param_id, .. } => {
+        ResolvedType::AssocTypeProjection { param_id, args, .. } => {
             collect_type_transitive(*param_id, type_table, reachable);
+            for arg in args {
+                collect_type_transitive(*arg, type_table, reachable);
+            }
         }
 
         // Leaf types - no dependencies

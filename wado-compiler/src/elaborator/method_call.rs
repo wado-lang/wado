@@ -218,6 +218,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .cloned()
                 .unwrap_or_default();
         }
+        if let Some((decl, _)) = self.family_at(ty) {
+            // Written over the family's parameters, so read under
+            // `Self::in_family_space`.
+            return decl
+                .bounds
+                .iter()
+                .filter(|bound| bound.names_a_trait())
+                .map(|bound| ScopedBound::new(bound.clone(), None))
+                .collect();
+        }
         let tt = self.tysys.type_table.borrow();
         let ResolvedType::AssocTypeProjection { bounds, .. } = tt.get(ty) else {
             return Vec::new();
@@ -239,6 +249,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ))
             })
             .collect()
+    }
+
+    /// The declaration of `ty`'s associated type and the arguments `ty` gives
+    /// it, where `ty` projects a generic associated type.
+    fn family_at(&self, ty: TypeId) -> Option<(ast::AssociatedTypeDecl, Vec<TypeId>)> {
+        let tt = self.tysys.type_table.borrow();
+        let ResolvedType::AssocTypeProjection {
+            assoc_name,
+            args,
+            owning_trait,
+            ..
+        } = tt.get(ty)
+        else {
+            return None;
+        };
+        if args.is_empty() {
+            return None;
+        }
+        let decl = self
+            .tysys
+            .trait_env
+            .assoc_type_decl(owning_trait, assoc_name)
+            .expect("a projection with arguments names a declared family")
+            .clone();
+        Some((decl, args.clone()))
+    }
+
+    /// Run `body` where the names of `ty`'s family parameters stand for the
+    /// arguments `ty` gives them, as the bounds [`Self::carried_bounds`]
+    /// answers for it are written; `body` alone for any other type.
+    pub(super) fn in_family_space<R>(
+        &mut self,
+        ty: TypeId,
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let Some((decl, args)) = self.family_at(ty) else {
+            return body(self);
+        };
+        let names: Vec<String> = decl.type_params.iter().map(|p| p.name.clone()).collect();
+        self.with_type_params_bound(&names, &args, body)
     }
 
     /// What the call `call` selected through a declared bound, where the walk
@@ -552,16 +602,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if method_info.is_none() {
             let bounds = self.carried_bounds(base_type_id, span);
             if !bounds.is_empty()
-                && let Some((found_trait, info)) = self.find_method_in_trait_bounds(
-                    call_id,
-                    is_ref,
-                    &bounds,
-                    method_name,
-                    base_type_id,
-                    span,
-                    required_trait,
-                    ArgSource::Exprs(&mut probe),
-                )
+                && let Some((found_trait, info)) = self.in_family_space(base_type_id, |e| {
+                    e.find_method_in_trait_bounds(
+                        call_id,
+                        is_ref,
+                        &bounds,
+                        method_name,
+                        base_type_id,
+                        span,
+                        required_trait,
+                        ArgSource::Exprs(&mut probe),
+                    )
+                })
             {
                 trait_name = Some(found_trait);
                 method_info = Some(info);

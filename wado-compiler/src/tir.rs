@@ -510,9 +510,15 @@ pub enum ResolvedType {
     /// different times: an impl's parameters by the receiver, this by each
     /// projection's arguments, which [`TypeTable::instantiate_family`] fills.
     /// So a binding holding only these is as concrete as its impl.
+    ///
+    /// Identified by its position in the declaration, never by the name a
+    /// site writes it under: an impl may rename it, and the two are one.
     AssocParam {
-        name: String,
+        owning_trait: DefId,
+        assoc_name: String,
         index: u32,
+        /// The declaration's spelling, for messages.
+        name: String,
     },
     /// Generic struct instantiation (e.g., `Box<i32>`)
     /// Used to track instantiation sites before monomorphization
@@ -3102,9 +3108,27 @@ impl TypeTable {
         self.intern(ResolvedType::TypeParam { name, index })
     }
 
-    /// A generic associated type's own parameter (`E` in `type Buf<E>`).
-    pub fn make_assoc_param(&mut self, name: String, index: u32) -> TypeId {
-        self.intern(ResolvedType::AssocParam { name, index })
+    /// The parameters of `owning_trait`'s generic associated type
+    /// `assoc_name`, named as the declaration names them: the family's own
+    /// arguments, which a binding is written over.
+    pub fn family_params(
+        &mut self,
+        owning_trait: DefId,
+        assoc_name: &str,
+        names: &[String],
+    ) -> Vec<TypeId> {
+        names
+            .iter()
+            .enumerate()
+            .map(|(index, name)| {
+                self.intern(ResolvedType::AssocParam {
+                    owning_trait,
+                    assoc_name: assoc_name.to_string(),
+                    index: index as u32,
+                    name: name.clone(),
+                })
+            })
+            .collect()
     }
 
     /// The id a declaration's parameter at `index` interns to. A pack holds a
@@ -3183,36 +3207,46 @@ impl TypeTable {
         })
     }
 
-    /// `family` at a projection's `args`: a projection still awaiting them
-    /// carries them, and a binding is instantiated at them.
-    pub fn with_projection_args(&mut self, family: TypeId, args: &[TypeId]) -> TypeId {
+    /// The bounds the declaration gives projection `id`'s associated type, at
+    /// the projection's arguments. A projection holds them as declared, over
+    /// [`Self::family_slot`]s, since its arguments may be substituted later and
+    /// a name cannot follow them.
+    pub fn projection_bounds(&self, id: TypeId) -> Vec<FqTraitName> {
         let ResolvedType::AssocTypeProjection {
-            param_id,
             assoc_name,
-            args: own,
+            args,
             owning_trait,
             bounds,
-            assoc_type_bindings,
-        } = self.get(family).clone()
+            ..
+        } = self.get(id)
         else {
-            return self.instantiate_family(family, args);
+            panic!(
+                "projection_bounds asked of {:?}, not a projection",
+                self.get(id)
+            );
         };
-        // One that has its own is a binding naming another family, as
-        // `type Buf<E> = I::Buf<E>` does, and is instantiated like any other.
-        if !own.is_empty() || args.is_empty() {
-            return self.instantiate_family(family, args);
-        }
-        let assoc_type_bindings = assoc_type_bindings
-            .into_iter()
-            .map(|(name, bound)| (name, self.instantiate_family(bound, args)))
-            .collect();
-        self.make_assoc_type_projection(
-            param_id,
+        bounds
+            .iter()
+            .map(|bound| {
+                args.iter()
+                    .enumerate()
+                    .fold(bound.clone(), |bound, (index, &arg)| {
+                        let slot = self.family_slot(*owning_trait, assoc_name, index);
+                        bound.substitute(&slot, &self.fq_type_name(arg))
+                    })
+            })
+            .collect()
+    }
+
+    /// How a projection's stored bounds name its family's parameter at
+    /// `index`: by position, since a projection keeps no parameter names, and
+    /// in a spelling no source writes.
+    pub fn family_slot(&self, owning_trait: DefId, assoc_name: &str, index: usize) -> FqTypeName {
+        FqTypeName::binder_of_family(
+            &self.defs,
             owning_trait,
             assoc_name,
-            args.to_vec(),
-            bounds,
-            assoc_type_bindings,
+            &format!("{}{index}", name::INTERNAL_PREFIX),
         )
     }
 
@@ -3388,6 +3422,30 @@ impl TypeTable {
                     })
                     .flat_map(|(_, answers)| answers.tagged()),
             )
+        })
+    }
+
+    /// The trait whose impl on `concrete` binds `assoc_name`, where exactly
+    /// one does: the one declaring the associated type a frame with no trait
+    /// of its own, an inherent impl's, reaches by name.
+    pub fn assoc_type_owner(&self, concrete: TypeId, assoc_name: &str) -> Option<DefId> {
+        if self.contains_type_param(concrete) {
+            return None;
+        }
+        let registered = self.inheriting(concrete, |receiver| {
+            let receiver = self.instance_key(receiver);
+            let owners: IndexSet<DefId> = self
+                .assoc_type_resolutions
+                .keys()
+                .filter(|key| key.receiver == receiver && key.assoc_name == assoc_name)
+                .map(|key| key.trait_decl)
+                .collect();
+            (owners.len() == 1).then(|| owners[0])
+        });
+        registered.or_else(|| {
+            let (owner, _) =
+                self.generic_assoc_type_def(self.decl_of_type(concrete)?, assoc_name)?;
+            Some(owner)
         })
     }
 
@@ -3728,6 +3786,81 @@ impl TypeTable {
         )
     }
 
+    /// [`Self::instantiate_family`] for a reader that cannot intern: the
+    /// instantiation where it was interned already, `None` where it was not.
+    pub fn find_instantiated(&self, family: TypeId, args: &[TypeId]) -> Option<TypeId> {
+        let at = |id: TypeId| self.find_instantiated(id, args);
+        let all = |ids: &[TypeId]| ids.iter().map(|&id| at(id)).collect::<Option<Vec<_>>>();
+        let rebuilt = match self.get(family).clone() {
+            ResolvedType::AssocParam { index, .. } => return args.get(index as usize).copied(),
+            ResolvedType::BuiltinArray(inner) => ResolvedType::BuiltinArray(at(inner)?),
+            ResolvedType::Ref(inner) => ResolvedType::Ref(at(inner)?),
+            ResolvedType::MutRef(inner) => ResolvedType::MutRef(at(inner)?),
+            ResolvedType::Reactive(inner) => ResolvedType::Reactive(at(inner)?),
+            ResolvedType::Function {
+                is_mut,
+                params,
+                return_type,
+                effects,
+            } => ResolvedType::Function {
+                is_mut,
+                params: all(&params)?,
+                return_type: at(return_type)?,
+                effects,
+            },
+            ResolvedType::GenericInstance { def, type_args } => ResolvedType::GenericInstance {
+                def,
+                type_args: all(&type_args)?,
+            },
+            ResolvedType::GenericResource { def, type_args } => ResolvedType::GenericResource {
+                def,
+                type_args: all(&type_args)?,
+            },
+            ResolvedType::Newtype {
+                def,
+                type_args,
+                base_type,
+            } => ResolvedType::Newtype {
+                def,
+                type_args: all(&type_args)?,
+                base_type: at(base_type)?,
+            },
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_name,
+                args: own,
+                owning_trait,
+                bounds,
+                assoc_type_bindings,
+            } => ResolvedType::AssocTypeProjection {
+                param_id: at(param_id)?,
+                assoc_name,
+                args: all(&own)?,
+                owning_trait,
+                bounds,
+                assoc_type_bindings: assoc_type_bindings
+                    .into_iter()
+                    .map(|(name, bound)| Some((name, at(bound)?)))
+                    .collect::<Option<Vec<_>>>()?,
+            },
+            // Nothing in these is a family's parameter.
+            ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Never
+            | ResolvedType::Struct { .. }
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::TypeParam { .. }
+            | ResolvedType::InferVar(_)
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Unknown
+            | ResolvedType::Error => return Some(family),
+        };
+        self.intern_map.get(&rebuilt).copied()
+    }
+
     /// The shared traversal behind [`Self::substitute_type_params_with`],
     /// [`Self::substitute_infer_vars`] and [`Self::instantiate_family`].
     fn subst_rec(&mut self, type_id: TypeId, leaves: &Leaves<'_>) -> TypeId {
@@ -3882,7 +4015,7 @@ impl TypeTable {
                             .map(|(_, _, type_id)| *type_id)
                     })
                 {
-                    return self.with_projection_args(answer, &new_args);
+                    return self.instantiate_family(answer, &new_args);
                 }
                 // Substitute the parameter first; only attempt projection
                 // resolution once the underlying type is fully concrete.
@@ -3898,7 +4031,7 @@ impl TypeTable {
                         base_bindings.iter().find(|(name, _)| *name == assoc_name)
                 {
                     let answer = *answer;
-                    return self.with_projection_args(answer, &new_args);
+                    return self.instantiate_family(answer, &new_args);
                 }
                 if !self.contains_type_param(substituted_base)
                     && let Some(resolved) = self.answer_projection(
@@ -4341,8 +4474,10 @@ impl TypeTable {
         match self.get(id) {
             ResolvedType::TypePack { .. } => packs_count,
             ResolvedType::InferVar(_) | ResolvedType::Unknown | ResolvedType::Error => true,
-            ResolvedType::AssocTypeProjection { param_id, .. } => {
+            // Its arguments are holes of their own: `S::Buf<?0>` awaits `?0`.
+            ResolvedType::AssocTypeProjection { param_id, args, .. } => {
                 !self.projects_from_param(*param_id)
+                    || args.iter().any(|&arg| self.contains_hole(arg, packs_count))
             }
             _ => self.any_constituent(id, &mut |t| self.contains_hole(t, packs_count)),
         }
@@ -4395,8 +4530,10 @@ impl TypeTable {
     }
 
     /// Whether `id` mentions a slot a value assigned to it could still fill.
-    /// [`Self::contains_rigid_param`] stopping at a projection: `I::Item`
-    /// mentions a slot without being one, and inference cannot invert it.
+    /// [`Self::contains_rigid_param`] stopping at a projection's base: `I::Item`
+    /// mentions a slot without being one, and inference cannot invert it. Its
+    /// arguments it can, since two projections of one family meet argument by
+    /// argument.
     pub fn contains_fillable_slot(&self, id: TypeId) -> bool {
         self.mentions_slot(id, Through::ProjectionStops)
     }
@@ -4404,10 +4541,13 @@ impl TypeTable {
     fn mentions_slot(&self, id: TypeId, through: Through) -> bool {
         match self.get(id) {
             ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. } => true,
-            ResolvedType::AssocTypeProjection { param_id, .. } => match through {
-                Through::Projection => self.mentions_slot(*param_id, through),
-                Through::ProjectionStops => false,
-            },
+            ResolvedType::AssocTypeProjection { param_id, args, .. } => {
+                let base = match through {
+                    Through::Projection => self.mentions_slot(*param_id, through),
+                    Through::ProjectionStops => false,
+                };
+                base || args.iter().any(|&arg| self.mentions_slot(arg, through))
+            }
             _ => self.any_constituent(id, &mut |t| self.mentions_slot(t, through)),
         }
     }
@@ -4525,8 +4665,11 @@ impl TypeTable {
     }
 
     fn collect_assoc_type_projections(&self, id: TypeId, out: &mut Vec<TypeId>) {
-        if let ResolvedType::AssocTypeProjection { .. } = self.get(id) {
+        if let ResolvedType::AssocTypeProjection { args, .. } = self.get(id) {
             out.push(id);
+            for &arg in args {
+                self.collect_assoc_type_projections(arg, out);
+            }
             return;
         }
         self.any_constituent(id, &mut |t| {
@@ -5162,9 +5305,13 @@ impl TypeTable {
             ResolvedType::Newtype { def, type_args, .. } => {
                 FqTypeName::declared(&self.defs, *def).with_args(args_of(type_args))
             }
-            ResolvedType::TypeParam { name, .. } | ResolvedType::AssocParam { name, .. } => {
-                FqTypeName::binder(name)
-            }
+            ResolvedType::TypeParam { name, .. } => FqTypeName::binder(name),
+            ResolvedType::AssocParam {
+                owning_trait,
+                assoc_name,
+                name,
+                ..
+            } => FqTypeName::binder_of_family(&self.defs, *owning_trait, assoc_name, name),
             ResolvedType::GenericInstance { def, type_args } => {
                 let args = args_of(type_args);
                 if self.is_tuple_def(*def) {
@@ -5229,8 +5376,9 @@ impl TypeTable {
                 TypeNameInfo::Named(format!("{}/{}", self.def_module(*def), self.def_name(*def)))
             }
             // A type parameter is a template's own binder, not a declaration.
-            ResolvedType::TypeParam { name, .. } | ResolvedType::AssocParam { name, .. } => {
-                TypeNameInfo::Named(name.clone())
+            ResolvedType::TypeParam { name, .. } => TypeNameInfo::Named(name.clone()),
+            ResolvedType::AssocParam { .. } => {
+                TypeNameInfo::Named(self.fq_type_name(id).to_mangled())
             }
             // A mangled name is an identity, so two unsolved slots sharing a
             // spelling must not collapse. The slot's name is for reading.
@@ -8664,8 +8812,8 @@ mod tests {
             vec![],
             vec![],
         );
-        let open = table.make_assoc_param("E".to_string(), 0);
-        let family = table.make_builtin_array(open);
+        let open = table.family_params(DefId::for_test(0), "Item", &["E".to_string()]);
+        let family = table.make_builtin_array(open[0]);
 
         let substituted = table.substitute_type_params_with(
             projection,

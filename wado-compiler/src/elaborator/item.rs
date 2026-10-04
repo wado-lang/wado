@@ -759,10 +759,18 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         }
         scope.check_impl_params_constrained(impl_block);
 
+        // The header's own site answers: `check_impl_trait_resolves` rejects a
+        // header whose trait reaches no declaration, so a well-formed block has
+        // an identity here and an erroneous one contributes none.
+        let trait_decl = impl_block
+            .trait_type
+            .as_ref()
+            .and_then(|t| scope.tysys.resolutions.head_decl(t));
+
         let mut associated_types = hashmap::IndexMap::default();
         for binding in &impl_block.associated_types {
             scope.reject_unsupported_assoc_params(&binding.name, &binding.type_params);
-            let type_id = scope.resolve_assoc_binding(binding);
+            let type_id = scope.resolve_assoc_binding(trait_decl, binding);
             scope
                 .annotate_ctx
                 .trait_ctx
@@ -774,13 +782,6 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         // The block's name-level facts. Answered here because this is the only
         // phase standing in the block's own frame.
         let target_fq = scope.impl_receiver_name(impl_block);
-        // The header's own site answers: `check_impl_trait_resolves` rejects a
-        // header whose trait reaches no declaration, so a well-formed block has
-        // an identity here and an erroneous one contributes none.
-        let trait_decl = impl_block
-            .trait_type
-            .as_ref()
-            .and_then(|t| scope.tysys.resolutions.head_decl(t));
         let impl_def = scope.tysys.def_at(impl_block.id);
         let projections = scope.impl_projections(impl_block);
         scope.tysys.type_table.borrow_mut().record_impl_target(
@@ -1163,6 +1164,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if impl_block.is_synthesize_request {
             return;
         }
+        let trait_decl = impl_block
+            .trait_type
+            .as_ref()
+            .and_then(|t| block.tysys.resolutions.head_decl(t));
 
         for method in &impl_block.methods {
             let mut frame_scope = block.enter_inherited_type_param_scope();
@@ -1182,7 +1187,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .assoc_type_bindings
                 .clear();
             for binding in &impl_block.associated_types {
-                let type_id = frame_scope.resolve_assoc_binding(binding);
+                let type_id = frame_scope.resolve_assoc_binding(trait_decl, binding);
                 frame_scope
                     .annotate_ctx
                     .trait_ctx
