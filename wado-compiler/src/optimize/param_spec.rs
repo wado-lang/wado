@@ -30,11 +30,6 @@ use crate::module_source::ModuleSource;
 use crate::name::param_spec_name;
 use crate::nir::NirLocal;
 
-/// Cap on the number of distinct clones minted for one original callee. A
-/// config struct threaded from a handful of call sites specializes; a callee
-/// genuinely polymorphic in its configuration does not multiply.
-const MAX_SPECIALIZATIONS_PER_FUNCTION: usize = 2;
-
 /// Whole-module cap on synthesized clones, so a pathological program cannot
 /// trade unbounded code size for constant propagation.
 const MAX_TOTAL_SPECIALIZATIONS: usize = 128;
@@ -56,10 +51,6 @@ enum FieldConst {
 
 impl FieldConst {
     /// The scalar constant an operand holds, or `None` otherwise.
-    ///
-    /// A [`ValueKind::Const`] aggregate is deliberately not a specialization
-    /// key: cloning a function per distinct constant `String` trades code size
-    /// for folds the constant already enables in place.
     fn of_operand(body: &Body, op: Operand) -> Option<Self> {
         let value = op.as_value()?;
         match body.values.kind(value) {
@@ -135,7 +126,7 @@ struct SpecKey {
 pub(super) struct ParamSpecState {
     /// Minted clones by identity.
     clones: IndexMap<SpecKey, FuncId>,
-    /// Clones minted per original callee.
+    /// Clones minted per original callee, which numbers the next one's name.
     per_callee: IndexMap<FuncId, usize>,
     /// What each clone knows about its own parameters. Keyed by *name*, since
     /// `dae` renumbers local indices when it drops a parameter. Doubles as the
@@ -1210,7 +1201,6 @@ fn plan_clones<'s>(
         let ordinal = state.per_callee.get(&site.callee).copied().unwrap_or(0);
         if site.cold
             || state.budget_exhausted()
-            || ordinal >= MAX_SPECIALIZATIONS_PER_FUNCTION
             || body_exprs(project, site.callee) > MAX_CLONE_EXPRS
         {
             continue;
@@ -1434,7 +1424,7 @@ fn signatures_match(project: &NirPackage, original: FuncId, clone: FuncId) -> bo
 
 /// Replace every value-position read of a bound field with its constant.
 /// Matching nothing is normal: a pass-through callee reads none of them
-/// itself (see the module's Profitability note).
+/// itself, and its clone exists to seed the callee it forwards to.
 fn substitute_fields(
     body: &mut Body,
     locals: &mut Vec<NirLocal>,

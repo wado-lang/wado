@@ -1381,11 +1381,6 @@ impl LocalMethodName {
         }
     }
 
-    /// Returns true if this is a trait method.
-    pub fn is_trait_method(&self) -> bool {
-        self.trait_name.is_some()
-    }
-
     /// True for the synthesized `$call` on a `$Closure_N` functor struct.
     /// Syntactically these are inherent methods, but they dispatch through the
     /// closure's canonical type, whose Wasm signature is fixed — so a caller

@@ -12,6 +12,13 @@ Loop: profile the hot function → read its WIR for what it allocates/copies per
 iteration → change one thing → A/B both arms in one session, plus the WIR diff of
 the hot function → keep or revert (§5 says which evidence decides).
 
+**A speedup lands in the compiler, not in Wado source.** Editing `.wado` files,
+the stdlib included, is fine as an experiment: an ablation that prices a piece,
+or a hand-written shape that shows what the optimizer should emit. Shipping
+such an edit as the speedup is forbidden, unless the user approves it or asks
+for it. A fast iteration loop on the stdlib is not a reason to make an
+exception. §2 and §4 say where the fix goes instead.
+
 ## 1. Profile
 
 ```sh
@@ -173,11 +180,14 @@ paid on a benchmark `fts` never touched.
   across a call-heavy loop are forty spill slots reloaded at every call boundary,
   plus a `ref.null` init apiece at entry. "The allocation is gone" says nothing
   about which side won (`dead-ends.md`).
-- **`array.copy` is fast; leave it alone.** It has a fast path that does not call
-  out to the runtime, and it beats a hand-written loop from a couple of bytes on
-  — the loop pays the bounds check above on both the get and the set of every
-  byte. Neither hand-roll it nor contort an algorithm to avoid it
-  (`dead-ends.md`).
+- **`array.copy` is fast; leave it alone.** It beats a hand-written loop from a
+  couple of bytes on — the loop pays the bounds check above on both the get and
+  the set of every byte. Neither hand-roll it nor contort an algorithm to avoid
+  it (`dead-ends.md`). Its length decides the cost: a constant one compiles to
+  inline loads and stores, a run-time one calls `wasmtime_builtin_memory_copy`.
+  So a small copy repeated per item pays to reach the copy with a constant
+  length, which is what `param_spec` cloning on `name.used` gave the JSON key
+  writer.
 - **Constant `/` and `%` are cheap** (Cranelift magic-multiply, `x/k` and `x%k`
   fused) — don't trade a divide for extra multiplies.
 - **A short compare cascade is not a dispatch problem.** Cranelift lowers a short
@@ -242,6 +252,11 @@ function of its own, so the leaf inlines at its hot-path size. A marker
 in that pass, per §2.
 
 ## 5. Measurement
+
+**Report an improvement as +%, a regression as −%.** Compute it as speedup,
+`base / head − 1` on ms/iter (or `head / base − 1` on throughput), so faster is
+always positive. A report that writes one faster row as "+5%" and another as
+"−5% ms" leaves the reader to work out which way each number points.
 
 Only relative numbers carry signal. **A/B both arms in the same session**, best of
 three or four, alternating and with the order swapped once — the first run of a
