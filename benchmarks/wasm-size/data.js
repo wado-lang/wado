@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791141069511,
+  "lastUpdate": 1791150735821,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -63681,6 +63681,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c6cd46a13ba9e1f9253112444e0d08ea041ab93b"
         },
         "date": 1791141068772,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338523,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a26c0a9e1578fd3d56363bd5d0c0a54001aa4b4d",
+          "message": "Merge pull request #2270 from wado-lang/ccr-4293f746-rmzst6\n\nfix(traits): the trait solver answers bounds, derived bodies and the ==/cmp table",
+          "timestamp": "2026-10-05T06:33:31+09:00",
+          "tree_id": "a810d91bc3d5faf1d0a737294ca8367b13077373",
+          "url": "https://github.com/wado-lang/wado/commit/a26c0a9e1578fd3d56363bd5d0c0a54001aa4b4d"
+        },
+        "date": 1791150734881,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
