@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791081633424,
+  "lastUpdate": 1791085590657,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -63349,6 +63349,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 339304,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8b87b12314289b9061848565c1f2f01fad4fdfee",
+          "message": "Merge pull request #2260 from wado-lang/perf-json\n\nperf(json): faster JSON serialize via constant-length key copies and scalarized serializer self",
+          "timestamp": "2026-10-04T12:25:37+09:00",
+          "tree_id": "380ec4f22390f25614c0cfd44b8d44efb1f41b4f",
+          "url": "https://github.com/wado-lang/wado/commit/8b87b12314289b9061848565c1f2f01fad4fdfee"
+        },
+        "date": 1791085590218,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338887,
             "unit": "bytes"
           }
         ]
