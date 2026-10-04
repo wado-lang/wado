@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791110535688,
+  "lastUpdate": 1791118694994,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -63549,6 +63549,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/86eadc75d49f92aea8e70942028972d22dd87f4a"
         },
         "date": 1791110534809,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338887,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8c6b38820042df3d4a5d8e7549f6d5a1be6ca65e",
+          "message": "Merge pull request #2267 from wado-lang/webgpu-adapter-select\n\nfeat(run-webgpu): choose the GPU adapter and see which one ran",
+          "timestamp": "2026-10-04T21:39:45+09:00",
+          "tree_id": "ded564eb7c321a2fbcc5c1e31f26525679197b50",
+          "url": "https://github.com/wado-lang/wado/commit/8c6b38820042df3d4a5d8e7549f6d5a1be6ca65e"
+        },
+        "date": 1791118694045,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
