@@ -106,10 +106,18 @@ fn adapter_names() -> Vec<String> {
                 .trim_start()
                 .strip_prefix(&format!("{index}: "))
                 .unwrap_or_else(|| panic!("no index {index} on: {line}"));
-            let (name, _) = described.split_once(" [").expect("described");
-            name.to_owned()
+            name_of(described)
         })
         .collect()
+}
+
+/// The name an adapter description starts with, which ends where its
+/// bracketed details begin.
+fn name_of(described: &str) -> String {
+    let (name, _) = described
+        .split_once(" [")
+        .unwrap_or_else(|| panic!("no details on: {described}"));
+    name.to_owned()
 }
 
 /// Run the compute fixture on the adapter `selector` picks and return the
@@ -129,8 +137,7 @@ fn adapter_selected_by(selector: &str) -> String {
     let (_, line) = stderr
         .split_once("info: request-adapter: ")
         .unwrap_or_else(|| panic!("no adapter named in stderr: {stderr}"));
-    let (name, _) = line.lines().next().unwrap().split_once(" [").unwrap();
-    name.to_owned()
+    name_of(line.lines().next().unwrap())
 }
 
 #[test]
