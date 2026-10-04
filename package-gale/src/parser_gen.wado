@@ -5594,7 +5594,7 @@ fn gen_mandatory_first_report<S: AsStrSlice>(w: &mut CodeWriter, inner: &Element
         return;
     };
     let expected_ref = expected_set_ref(ctx, &admits.expected);
-    w.begin(`if ${plus_flag} && ${and_operand(negate_cond(&admits.condition))}`);
+    w.begin(`if ${plus_flag} && ${negate_cond(&admits.condition)}`);
     w.line(`p.no_viable("no viable alternative", p.peek_span(), ${expected_ref});`);
     w.line("break;");
     w.end();
@@ -5622,7 +5622,7 @@ fn gen_repeat_gate_break<S: AsStrSlice>(w: &mut CodeWriter, inner: &Element, ctx
         return;
     }
     if group_dispatch_reports(inner) {
-        w.line(`if !${plus_flag} && ${and_operand(negate_cond(&cond))} { break; }`);
+        w.line(`if !${plus_flag} && ${negate_cond(&cond)} { break; }`);
         return;
     }
     w.begin(`if ${negate_cond(&cond)}`);

@@ -1290,11 +1290,13 @@ impl GenContext {
     }
 
     /// Take the parser rules again after their action bodies were rewritten in
-    /// place. Everything derived in `new` reads only the rules' shape, which a
-    /// body rewrite leaves alone.
+    /// place. Everything else derived in `new` reads only the rules' shape,
+    /// which a body rewrite leaves alone; the predicate fn owners group bodies
+    /// by text, so they are derived again.
     pub fn adopt_rewritten_bodies(&mut self, parser_rules: &List<ParserRule>) {
         assert parser_rules.len() == self.parser_rules.len(), "a body rewrite keeps the rules";
         self.parser_rules = *parser_rules;
+        self.predicate_fn_owners = predicate_fn_owners(parser_rules);
     }
 
     /// The base interfaces an entry that lexes or parses performs: the lexer's,

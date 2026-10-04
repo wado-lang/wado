@@ -607,7 +607,8 @@ pub fn follow_sep(emit_follow: bool) -> String {
 }
 
 /// The negation of the condition `cond`: `!x` on an operand, `x` on `!x`,
-/// `a != b` for `a == b` and back, and `!(cond)` for anything else.
+/// `a != b` for `a == b` and back, and `!(cond)` for anything else. Each is
+/// already an operand of `&&`.
 pub fn negate_cond<S: AsStrSlice>(cond: S) -> String {
     let c = cond.to_string();
     let mut chars: List<char> = c.chars().collect();
@@ -681,7 +682,8 @@ fn operand_end(chars: &List<char>, start: i32) -> i32 {
 }
 
 /// The end of the bracket opening at `open`, skipping nested brackets and
-/// literals, or -1 where it never closes.
+/// literals, or -1 where it never closes or holds a template or a comment,
+/// whose text this scan does not follow. `-1` only costs parentheses.
 fn delimited_end(chars: &List<char>, open: i32) -> i32 {
     let mut depth = 0;
     let mut i = open;
@@ -693,6 +695,9 @@ fn delimited_end(chars: &List<char>, open: i32) -> i32 {
                 return -1;
             }
             continue;
+        }
+        if c == '`' || c == '/' && i + 1 < chars.len() && chars[i + 1] matches { '/' | '*' } {
+            return -1;
         }
         if c matches { '(' | '[' | '{' } || c == '<' && chars[open] == '<' {
             depth += 1;
@@ -708,11 +713,14 @@ fn delimited_end(chars: &List<char>, open: i32) -> i32 {
 }
 
 fn is_equality_at(chars: &List<char>, at: i32) -> bool {
-    return at >= 0 && (spaced_operator_at(chars, at, '=', '=') || spaced_operator_at(chars, at, '!', '='));
+    return spaced_operator_at(chars, at, '=', '=') || spaced_operator_at(chars, at, '!', '=');
 }
 
+/// Whether ` <first><second> ` sits at `at`, which is -1 where the scan before
+/// it recognized nothing.
 fn spaced_operator_at(chars: &List<char>, at: i32, first: char, second: char) -> bool {
-    return at + 4 <= chars.len()
+    return at >= 0
+        && at + 4 <= chars.len()
         && chars[at] == ' '
         && chars[at + 1] == first
         && chars[at + 2] == second

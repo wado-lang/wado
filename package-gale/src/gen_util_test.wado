@@ -29,9 +29,14 @@ test "a predicate's own unspaced text is never taken for one operand" {
     assert and_operand("vals.a||vals.b") == "(vals.a||vals.b)";
 }
 
-test "an unclosed literal is no operand" {
+test "text the scan does not follow is parenthesized, through either helper" {
     assert negate_cond("p.x() /* it's */") == "!(p.x() /* it's */)";
     assert negate_cond("f('a)") == "!(f('a))";
+    assert and_operand("(p.x() /* it's */)") == "((p.x() /* it's */))";
+    assert and_operand("f(`${a} || b`)") == "(f(`${a} || b`))";
+    assert and_operand("k == -1") == "(k == -1)";
+    assert and_operand("a && -b") == "(a && -b)";
+    assert and_operand("&a") == "(&a)";
 }
 
 test "an && operand is bare only as a chain of operands and equalities" {

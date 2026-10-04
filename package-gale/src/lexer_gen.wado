@@ -4784,6 +4784,7 @@ fn gen_literal_match_fns(w: &mut CodeWriter, lit_tokens: &List<LitToken>, ci: bo
             w.line("let chars = &lx.chars;");
         }
         let len = chars.len();
+        assert len > 0, "a literal token has text";
         let mut mismatches: List<String> = [];
         for let mut i = 0; i < len; i += 1 {
             let at = if i == 0 { String::from("start") } else { `start + ${i}` };
