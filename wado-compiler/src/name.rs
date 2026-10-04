@@ -474,6 +474,12 @@ pub fn constant_pattern_local_name() -> String {
     format!("{INTERNAL_PREFIX}constant")
 }
 
+/// The local a float range pattern holds its scrutinee in.
+#[must_use]
+pub fn float_range_local_name() -> String {
+    format!("{INTERNAL_PREFIX}float_range")
+}
+
 /// Local holding one flattened field of a variant-return slot. `slot_local`
 /// trails verbatim, so a source name and a minted one cannot collide.
 #[must_use]

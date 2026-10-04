@@ -32,6 +32,7 @@ use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
 use super::tysys::TypeSystem;
 use super::util;
+use super::util::RangeBound;
 use crate::ast::{RangeExpr, Visibility};
 use crate::compiler_item::CompilerItem;
 use crate::const_eval::{Value, eval_cast, is_signed_int, prim_of};
@@ -3385,10 +3386,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<Pat> {
         // Bad or empty bounds were reported where the pattern was resolved.
         let resolutions = &self.tysys.resolutions;
-        let start = util::range_bound_literal(start, resolutions)?.ok()?;
-        let end = util::range_bound_literal(end, resolutions)?.ok()?;
+        let start = util::range_bound(start, resolutions)?.ok()?;
+        let end = util::range_bound(end, resolutions)?.ok()?;
         let inclusive = matches!(kind, ast::RangeKind::Inclusive);
-        if util::range_order_error(&start, &end, inclusive).is_some() {
+        let (RangeBound::Discrete(start), RangeBound::Discrete(end)) = (&start, &end) else {
+            let range = util::float_range(
+                &start,
+                &end,
+                inclusive,
+                scrutinee_type,
+                &mut self.tysys.type_table.borrow_mut(),
+            )
+            .ok()?;
+            let (lo, hi) = range.keys();
+            return self.tysys.exh_int(lo, hi, scrutinee_type);
+        };
+        if util::range_order_error(start, end, inclusive).is_some() {
             return None;
         }
         // What a pattern on a type parameter names is decided per instance.
@@ -3396,8 +3409,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(Pat::Opaque);
         }
         let errors = util::range_bound_errors(
-            &start,
-            &end,
+            start,
+            end,
             scrutinee_type,
             &mut self.tysys.type_table.borrow_mut(),
         );

@@ -281,16 +281,24 @@ assert grade == "P" && lower;
 
 A float range compares by the
 [float order](./spec-standard-traits.md#float-comparison), so `0.0..<1.0`
-matches `-0.0`. Two more rules apply to it:
+matches `-0.0`:
+
+<!-- {"fixture":"float_range_pattern.wado"} -->
+
+```wado
+let zero = builtin::black_box(-0.0);
+assert zero matches { 0.0..<1.0 };
+let nan = builtin::black_box(f64::NAN);
+assert !(nan matches { f64::NEG_INFINITY..=f64::INFINITY });
+```
+
+Two more rules apply to it:
 
 - A NaN bound is an error. A NaN scrutinee therefore matches no range, and a
   `match` on a float needs a `_` arm. `f64::NEG_INFINITY..=f64::INFINITY`
   matches every float but a NaN.
 - A range whose bounds are equal (`1.0..=1.0`) is an error, as the float literal
   it stands for is.
-
-> Not yet implemented: a float range pattern is rejected, as an integer or
-> `char` bound is required.
 
 The range operators themselves are in [Ranges](./spec-expressions.md#ranges).
 

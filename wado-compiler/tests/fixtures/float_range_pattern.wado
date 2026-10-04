@@ -1,0 +1,118 @@
+// A float range pattern compares by the float order: `-0.0` falls in every range
+// holding `0.0`, a NaN in none, and each bound is rounded once into the
+// scrutinee's type.
+
+fn classify(x: f64) -> String {
+    return match x {
+        f64::NEG_INFINITY..<0.0 => "negative",
+        0.0..<1.0 => "unit",
+        1.0..=f64::INFINITY => "large",
+        _ => "nan",
+    };
+}
+
+fn narrow(x: f32) -> i32 {
+    return match x {
+        -1.5..<0.1 => 1,
+        0.1..=f32::MAX => 2,
+        _ => 0,
+    };
+}
+
+fn half(x: f16) -> i32 {
+    return match x {
+        f16::MIN..<1.0 => 1,
+        1.0..=f16::MAX => 2,
+        _ => 0,
+    };
+}
+
+fn brain(x: bf16) -> i32 {
+    return match x {
+        -2.0..<2.0 => 1,
+        _ => 0,
+    };
+}
+
+type Meters = f64;
+
+fn meters(m: Meters) -> i32 {
+    return match m {
+        0.0..<1000.0 => 1,
+        _ => 0,
+    };
+}
+
+fn nested(o: Option<f64>) -> i32 {
+    return match o {
+        Some(0.0..<1.0) => 1,
+        Some(_) => 2,
+        None => 0,
+    };
+}
+
+fn by_ref(x: &f64) -> i32 {
+    return match x {
+        0.0..=0.5 | 2.0..=2.5 => 1,
+        _ => 0,
+    };
+}
+
+fn nested_ref(o: &Option<f64>) -> i32 {
+    return match o {
+        Some(0.0..<1.0) => 1,
+        _ => 0,
+    };
+}
+
+test "a float range compares by the float order" {
+    assert classify(builtin::black_box(-1.0)) == "negative";
+    assert classify(builtin::black_box(-0.0)) == "unit";
+    assert classify(builtin::black_box(0.0)) == "unit";
+    assert classify(builtin::black_box(1.0)) == "large";
+    assert classify(builtin::black_box(f64::INFINITY)) == "large";
+    assert classify(builtin::black_box(f64::NEG_INFINITY)) == "negative";
+    assert classify(builtin::black_box(f64::NAN)) == "nan";
+    assert classify(builtin::black_box(-f64::NAN)) == "nan";
+}
+
+test "each bound is rounded into the scrutinee's type" {
+    assert narrow(builtin::black_box(-1.5_f32)) == 1;
+    assert narrow(builtin::black_box(0.1_f32)) == 2;
+    assert narrow(builtin::black_box(f32::NAN)) == 0;
+    assert narrow(builtin::black_box(f32::INFINITY)) == 0;
+}
+
+test "a half compares as its widened value" {
+    assert half(builtin::black_box(f16::from_f32(-0.0))) == 1;
+    assert half(builtin::black_box(f16::from_f32(1.0))) == 2;
+    assert half(builtin::black_box(f16::NAN)) == 0;
+    assert half(builtin::black_box(f16::INFINITY)) == 0;
+    assert brain(builtin::black_box(bf16::from_f32(1.5))) == 1;
+    assert brain(builtin::black_box(bf16::from_f32(2.0))) == 0;
+}
+
+test "a newtype, a payload and a reference read through" {
+    assert meters(builtin::black_box(999.5)) == 1;
+    assert meters(builtin::black_box(1000.0)) == 0;
+    assert nested(builtin::black_box(Option::Some(0.5))) == 1;
+    assert nested(builtin::black_box(Option::Some(f64::NAN))) == 2;
+    assert nested(builtin::black_box(null)) == 0;
+    assert by_ref(&builtin::black_box(2.5)) == 1;
+    assert by_ref(&builtin::black_box(1.0)) == 0;
+    assert nested_ref(&builtin::black_box(Option::Some(0.5))) == 1;
+    assert nested_ref(&builtin::black_box(Option::Some(1.0))) == 0;
+}
+
+test "if let and matches take a float range" {
+    let x = builtin::black_box(0.25);
+    let mut hit = false;
+    if let 0.0..<1.0 = x {
+        hit = true;
+    }
+    assert hit;
+    let zero = builtin::black_box(-0.0);
+    assert zero matches { 0.0..<1.0 };
+    let nan = builtin::black_box(f64::NAN);
+    assert !(nan matches { f64::NEG_INFINITY..=f64::INFINITY });
+}

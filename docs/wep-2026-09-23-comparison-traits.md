@@ -367,7 +367,7 @@ overlap, which is what `benchmark/ab.ts` decides.
   method's answers on a NaN, `-0.0` and an ordinary pair.
 - [x] Report the `self_comparison` lint, with a fixture for each operator, the
   float hint, a chain, an operand that performs an effect, and `allow`.
-- [ ] Accept float range patterns, with fixtures for `-0.0`, a NaN scrutinee, a
+- [x] Accept float range patterns, with fixtures for `-0.0`, a NaN scrutinee, a
   NaN bound, equal bounds, and a `match` that lacks `_`.
 - [x] Reject a constant pattern whose type is or holds a float, with fixtures
   for `f64::INFINITY`, a `global` float, and a nested struct constant holding

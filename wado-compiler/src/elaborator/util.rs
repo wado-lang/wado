@@ -1,7 +1,8 @@
 //! Utility functions for the elaborator phase.
 
 use crate::ast::{Literal, NumericSuffix, Pattern};
-use crate::elaborator::stmt::primitive_assoc_const_to_i128;
+use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
+use crate::elaborator::stmt::{primitive_assoc_const_to_i128, primitive_float_limit_owner};
 use crate::elaborator::trait_env::written_type_source;
 use crate::elaborator::types::TypeError;
 use crate::escape::{unescape_byte, unescape_char};
@@ -73,17 +74,54 @@ pub(super) fn pattern_literal(lit: &Literal) -> Result<PatternLiteral, String> {
     }
 }
 
-/// The value a range-pattern bound names: a number, byte or char literal, or a
-/// primitive's bound (`i32::MAX`). `None` for anything else, a user constant
-/// included.
-pub(super) fn range_bound_literal(
+/// What a range-pattern bound names: a value of an integer or `char`
+/// scrutinee, or a float, whose value turns on the float type that reads it.
+pub(super) enum RangeBound {
+    Discrete(PatternLiteral),
+    Float(FloatBound),
+}
+
+/// A float range bound, before a float type rounds it.
+pub(super) struct FloatBound {
+    kind: FloatBoundKind,
+    /// How a diagnostic writes it: `-1.5`, `f64::INFINITY`.
+    shown: String,
+}
+
+enum FloatBoundKind {
+    /// The unsigned literal `digits`, negated where `negated`.
+    Literal {
+        digits: String,
+        negated: bool,
+        suffix: Option<NumericSuffix>,
+    },
+    /// The limit `name` of the float type `owner`, as `f64::INFINITY`.
+    Limit { owner: PrimitiveType, name: String },
+}
+
+/// What a range-pattern bound names: a number, byte or char literal, or a
+/// primitive's limit (`i32::MAX`, `f64::INFINITY`). `None` for anything else,
+/// a user constant included.
+pub(super) fn range_bound(
     pattern: &Pattern,
     resolutions: &Resolutions,
-) -> Option<Result<PatternLiteral, String>> {
+) -> Option<Result<RangeBound, String>> {
     match pattern {
-        Pattern::Literal(Literal::Number(repr, suffix)) if denotes_float(repr, *suffix) => None,
+        Pattern::Literal(Literal::Number(repr, suffix)) if denotes_float(repr, *suffix) => {
+            let (negated, digits) = repr
+                .strip_prefix('-')
+                .map_or((false, repr.as_str()), |digits| (true, digits));
+            Some(Ok(RangeBound::Float(FloatBound {
+                kind: FloatBoundKind::Literal {
+                    digits: digits.to_string(),
+                    negated,
+                    suffix: *suffix,
+                },
+                shown: repr.clone(),
+            })))
+        }
         Pattern::Literal(lit @ (Literal::Number(..) | Literal::Byte(_) | Literal::Char(_))) => {
-            Some(pattern_literal(lit))
+            Some(pattern_literal(lit).map(RangeBound::Discrete))
         }
         Pattern::Variant {
             variant_name,
@@ -91,15 +129,181 @@ pub(super) fn range_bound_literal(
             bindings,
             ..
         } if bindings.is_empty() => {
-            let value = primitive_assoc_const_to_i128(Some(qualifier), variant_name, resolutions)?;
-            Some(Ok(PatternLiteral::Int {
-                magnitude: value.unsigned_abs(),
-                negated: value < 0,
-                suffix: None,
-                shown: format!("{}::{variant_name}", written_type_source(qualifier)),
-            }))
+            let shown = format!("{}::{variant_name}", written_type_source(qualifier));
+            if let Some(value) =
+                primitive_assoc_const_to_i128(Some(qualifier), variant_name, resolutions)
+            {
+                return Some(Ok(RangeBound::Discrete(PatternLiteral::Int {
+                    magnitude: value.unsigned_abs(),
+                    negated: value < 0,
+                    suffix: None,
+                    shown,
+                })));
+            }
+            let owner = primitive_float_limit_owner(Some(qualifier), variant_name, resolutions)?;
+            Some(Ok(RangeBound::Float(FloatBound {
+                kind: FloatBoundKind::Limit {
+                    owner,
+                    name: variant_name.clone(),
+                },
+                shown,
+            })))
         }
         _ => None,
+    }
+}
+
+/// A float range pattern, its bounds rounded into the float type that reads it.
+pub(crate) struct FloatRange {
+    pub(crate) format: FloatFormat,
+    pub(crate) start: u64,
+    pub(crate) end: u64,
+    pub(crate) inclusive: bool,
+}
+
+impl FloatRange {
+    /// The keys of the values the range takes, inclusive: [`float_order_key`]
+    /// of its bounds, the end stepped back below an exclusive bound.
+    pub(super) fn keys(&self) -> (i128, i128) {
+        let [start, end] =
+            [self.start, self.end].map(|bits| float_order_key(self.format.value(bits)));
+        (start, if self.inclusive { end } else { end - 1 })
+    }
+}
+
+/// A key ordering the non-NaN floats as the float order does, so a range of
+/// floats is a range of keys: `-0.0` keys as `0.0`, and adjacent `f64`s key
+/// adjacently.
+fn float_order_key(value: f64) -> i128 {
+    assert!(!value.is_nan(), "a NaN is no range bound");
+    // `-0.0 + 0.0` is `0.0`.
+    let bits = (value + 0.0).to_bits().cast_signed();
+    i128::from(if bits < 0 { bits ^ i64::MAX } else { bits })
+}
+
+/// The float range `start..end` (`..=` where `inclusive`) over `scrutinee`, or
+/// why it names no values of it.
+pub(super) fn float_range(
+    start: &RangeBound,
+    end: &RangeBound,
+    inclusive: bool,
+    scrutinee: TypeId,
+    type_table: &mut TypeTable,
+) -> Result<FloatRange, Vec<PatternLiteralError>> {
+    let scrutinee = type_table.peel_refs(scrutinee);
+    let prim = type_table.primitive_head(scrutinee);
+    let format = prim.and_then(FloatFormat::of);
+    let mut errors = Vec::new();
+    let mut bits = |bound: &RangeBound, errors: &mut Vec<PatternLiteralError>| {
+        let found = match (bound, format) {
+            (RangeBound::Discrete(lit), _) => {
+                pattern_literal_error(lit, scrutinee, type_table).map(Err)
+            }
+            (RangeBound::Float(bound), Some(format)) => {
+                Some(float_bound_bits(bound, format, scrutinee, type_table))
+            }
+            (RangeBound::Float(bound), None) => Some(Err(PatternLiteralError::Mismatch(
+                bound.demands(type_table),
+            ))),
+        };
+        match found {
+            Some(Ok(bits)) => Some(bits),
+            Some(Err(error)) => {
+                errors.push(error);
+                None
+            }
+            None => None,
+        }
+    };
+    let (start, end) = (bits(start, &mut errors), bits(end, &mut errors));
+    let (Some(format), Some(start), Some(end)) = (format, start, end) else {
+        assert!(
+            !errors.is_empty(),
+            "a float range on a non-float names a mismatch"
+        );
+        return Err(errors);
+    };
+    let range = FloatRange {
+        format,
+        start,
+        end,
+        inclusive,
+    };
+    let (lo, hi) = range.keys();
+    let message = if lo > hi + i128::from(!inclusive) {
+        "reversed range pattern"
+    } else if lo > hi {
+        "empty range pattern"
+    } else if lo == hi && inclusive {
+        "a float range with equal bounds names one value, as a float literal pattern would"
+    } else {
+        return Ok(range);
+    };
+    Err(vec![PatternLiteralError::Invalid(message.to_string())])
+}
+
+/// The bits `bound` names in `format`, read by `scrutinee`, or why it names
+/// none.
+fn float_bound_bits(
+    bound: &FloatBound,
+    format: FloatFormat,
+    scrutinee: TypeId,
+    type_table: &mut TypeTable,
+) -> Result<u64, PatternLiteralError> {
+    let bits = match &bound.kind {
+        FloatBoundKind::Literal {
+            digits,
+            negated,
+            suffix,
+        } => {
+            if let Some(suffix) = suffix {
+                let suffix_type = type_table.numeric_suffix_type(*suffix);
+                if type_table.type_key(suffix_type) != type_table.type_key(scrutinee) {
+                    return Err(PatternLiteralError::Mismatch(
+                        type_table.type_name(suffix_type),
+                    ));
+                }
+            }
+            let bits = float_literal_bits(digits, format)
+                .map_err(|error| PatternLiteralError::Invalid(error.message(&bound.shown)))?;
+            if *negated {
+                bits | format.sign_bit()
+            } else {
+                bits
+            }
+        }
+        FloatBoundKind::Limit { owner, name } => {
+            if FloatFormat::of(*owner) != Some(format) {
+                return Err(PatternLiteralError::Mismatch(owner.as_str().to_string()));
+            }
+            format
+                .limit(name)
+                .expect("a limit bound names one of the format's limits")
+        }
+    };
+    if format.value(bits).is_nan() {
+        return Err(PatternLiteralError::Invalid(format!(
+            "a NaN is no range bound: `{}` matches no value",
+            bound.shown
+        )));
+    }
+    Ok(bits)
+}
+
+impl FloatBound {
+    /// The type the bound demands of a scrutinee that is no float.
+    fn demands(&self, type_table: &mut TypeTable) -> String {
+        match &self.kind {
+            FloatBoundKind::Literal {
+                suffix: Some(suffix),
+                ..
+            } => {
+                let suffix_type = type_table.numeric_suffix_type(*suffix);
+                type_table.type_name(suffix_type)
+            }
+            FloatBoundKind::Literal { suffix: None, .. } => "a float type".to_string(),
+            FloatBoundKind::Limit { owner, .. } => owner.as_str().to_string(),
+        }
     }
 }
 

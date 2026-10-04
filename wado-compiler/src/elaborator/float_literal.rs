@@ -57,15 +57,53 @@ impl FloatFormat {
         (1 << (self.exponent_bits - 1)) - 1
     }
 
-    /// The value `bits` hold in `f32` or `f64`, widened to `f64`.
+    /// The value `bits` hold, widened to `f64`, which holds every value of
+    /// each format exactly.
     pub(crate) fn value(self, bits: u64) -> f64 {
-        match self {
-            Self::F64 => f64::from_bits(bits),
-            Self::F32 => f64::from(f32::from_bits(
-                u32::try_from(bits).expect("f32 bits fit u32"),
-            )),
-            _ => unreachable!("`{}` has no float value of its own", self.name),
+        let mb = self.mantissa_bits;
+        let field = (bits >> mb) & ((1 << self.exponent_bits) - 1);
+        let fraction = bits & ((1 << mb) - 1);
+        let magnitude = if field == (1 << self.exponent_bits) - 1 {
+            if fraction == 0 {
+                f64::INFINITY
+            } else {
+                f64::NAN
+            }
+        } else {
+            let (significand, exponent) = if field == 0 {
+                (fraction, 1 - self.bias())
+            } else {
+                (fraction | (1 << mb), field.cast_signed() - self.bias())
+            };
+            let scale = i32::try_from(exponent - i64::from(mb)).expect("an exponent fits i32");
+            // Two steps keep f64's smallest subnormal, 2^-1074, out of
+            // `powi`'s underflowing intermediate.
+            significand as f64 * 2f64.powi(scale / 2) * 2f64.powi(scale - scale / 2)
+        };
+        if bits & self.sign_bit() == 0 {
+            magnitude
+        } else {
+            -magnitude
         }
+    }
+
+    /// The bits of the limit `name` spells, as each float type's associated
+    /// constant of that name holds: `MAX`, `MIN`, `MIN_POSITIVE`, `EPSILON`,
+    /// `INFINITY`, `NEG_INFINITY` and `NAN`.
+    pub(crate) fn limit(self, name: &str) -> Option<u64> {
+        let mb = self.mantissa_bits;
+        let infinity = ((1 << self.exponent_bits) - 1) << mb;
+        let max = infinity - 1;
+        Some(match name {
+            "MAX" => max,
+            "MIN" => self.sign_bit() | max,
+            "MIN_POSITIVE" => 1 << mb,
+            "EPSILON" => (self.bias() - i64::from(mb)).cast_unsigned() << mb,
+            "INFINITY" => infinity,
+            "NEG_INFINITY" => self.sign_bit() | infinity,
+            "NAN" => infinity | (1 << (mb - 1)),
+            _ => return None,
+        })
     }
 }
 
@@ -301,6 +339,46 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn every_limit_holds_rusts_value() {
+        let f64_value = |name| FloatFormat::F64.value(FloatFormat::F64.limit(name).unwrap());
+        let f32_value = |name| FloatFormat::F32.value(FloatFormat::F32.limit(name).unwrap());
+        for (name, f64_expected, f32_expected) in [
+            ("MAX", f64::MAX, f64::from(f32::MAX)),
+            ("MIN", f64::MIN, f64::from(f32::MIN)),
+            (
+                "MIN_POSITIVE",
+                f64::MIN_POSITIVE,
+                f64::from(f32::MIN_POSITIVE),
+            ),
+            ("EPSILON", f64::EPSILON, f64::from(f32::EPSILON)),
+            ("INFINITY", f64::INFINITY, f64::INFINITY),
+            ("NEG_INFINITY", f64::NEG_INFINITY, f64::NEG_INFINITY),
+        ] {
+            assert_eq!(f64_value(name), f64_expected, "f64::{name}");
+            assert_eq!(f32_value(name), f32_expected, "f32::{name}");
+        }
+        assert!(f64_value("NAN").is_nan());
+        assert_eq!(FloatFormat::F16.limit("MAX"), Some(0x7BFF));
+        assert_eq!(FloatFormat::F16.limit("EPSILON"), Some(0x1400));
+        assert_eq!(FloatFormat::BF16.limit("INFINITY"), Some(0x7F80));
+        assert_eq!(FloatFormat::BF16.limit("NAN"), Some(0x7FC0));
+        assert_eq!(FloatFormat::F64.limit("PI"), None);
+    }
+
+    #[test]
+    fn a_value_decodes_every_class() {
+        assert_eq!(FloatFormat::F16.value(0x7BFF), 65504.0);
+        assert_eq!(FloatFormat::F16.value(0x0001), 2f64.powi(-24));
+        assert_eq!(FloatFormat::F16.value(0xBC00), -1.0);
+        assert_eq!(FloatFormat::BF16.value(0x4049), 3.140_625);
+        assert_eq!(FloatFormat::F64.value(1), 5e-324);
+        assert_eq!(
+            FloatFormat::F64.value(0x8000_0000_0000_0000).to_bits(),
+            (-0.0_f64).to_bits()
+        );
     }
 
     #[test]

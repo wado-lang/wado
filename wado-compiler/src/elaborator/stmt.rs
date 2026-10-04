@@ -19,15 +19,18 @@ use crate::ast::{BinaryOp, RangeKind, StructPatternField};
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
+use crate::elaborator::float_literal::FloatFormat;
 use crate::elaborator::orchestration::first_infer_span;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
 use crate::elaborator::synth::ArgClass;
 use crate::elaborator::trait_query::assoc_const_owner;
 use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, ParamSlot, StructFieldInfo};
+use crate::elaborator::util::RangeBound;
 use crate::name::{
-    constant_pattern_local_name, for_body_label, mangle_local_item_name, minted_name,
-    namespace_member_alias,
+    constant_pattern_local_name, float_range_local_name, for_body_label, mangle_local_item_name,
+    minted_name, namespace_member_alias,
 };
+use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
 use crate::symbol_notation::render;
 use crate::tir::StructDef;
@@ -2021,7 +2024,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } => {
                 // Range patterns introduce no binding; resolve for the
                 // reversed/empty-range diagnostics only.
-                self.resolve_range_pattern(start, end, *kind, scrutinee_type, *range_span);
+                self.resolve_range_pattern(start, end, *kind, scrutinee_type, ctx, *range_span);
                 Vec::new()
             }
             Pattern::Typed {
@@ -2258,25 +2261,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let _ = self.emit(error);
     }
 
-    /// Report a range pattern (`0..<10` or `'a'..='z'`) whose bounds name no
-    /// values of `scrutinee_type`. Range patterns bind nothing and reify
-    /// rebuilds the real `TirPattern::Range`, so no pattern node is produced
-    /// here.
+    /// Report a range pattern (`0..<10`, `'a'..='z'` or `0.0..<1.0`) whose
+    /// bounds name no values of `scrutinee_type`. Range patterns bind nothing
+    /// and reify rebuilds the real pattern, so no pattern node is produced
+    /// here; a float range reserves the local reify holds its scrutinee in.
     fn resolve_range_pattern(
         &mut self,
         start: &Pattern,
         end: &Pattern,
         kind: RangeKind,
         scrutinee_type: TypeId,
+        ctx: &mut FunctionContext,
         span: Span,
     ) {
         let resolutions = &self.tysys.resolutions;
         let (Some(start), Some(end)) = (
-            util::range_bound_literal(start, resolutions),
-            util::range_bound_literal(end, resolutions),
+            util::range_bound(start, resolutions),
+            util::range_bound(end, resolutions),
         ) else {
             let _ = self.emit(TypeError::InvalidPattern {
-                message: "range pattern bounds must be integer or char literals".to_string(),
+                message:
+                    "range pattern bounds must be number or char literals or a primitive's limit"
+                        .to_string(),
                 span,
             });
             return;
@@ -2290,10 +2296,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return;
             }
         };
-        if self.settles_literal_patterns(scrutinee_type) {
-            let errors = util::range_bound_errors(
+        let inclusive = matches!(kind, RangeKind::Inclusive);
+        let (RangeBound::Discrete(start), RangeBound::Discrete(end)) = (&start, &end) else {
+            if scrutinee_type == TypeTable::ERROR {
+                return;
+            }
+            let range = util::float_range(
                 &start,
                 &end,
+                inclusive,
+                scrutinee_type,
+                &mut self.tysys.type_table.borrow_mut(),
+            );
+            match range {
+                Ok(_) => {
+                    let float_type = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
+                    ctx.add_local(float_range_local_name(), float_type, false, None);
+                }
+                Err(errors) => {
+                    for error in errors {
+                        self.emit_pattern_literal_error(error, scrutinee_type, span);
+                    }
+                }
+            }
+            return;
+        };
+        if self.settles_literal_patterns(scrutinee_type) {
+            let errors = util::range_bound_errors(
+                start,
+                end,
                 scrutinee_type,
                 &mut self.tysys.type_table.borrow_mut(),
             );
@@ -2301,8 +2332,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.emit_pattern_literal_error(error, scrutinee_type, span);
             }
         }
-        let inclusive = matches!(kind, RangeKind::Inclusive);
-        if let Some(message) = util::range_order_error(&start, &end, inclusive) {
+        if let Some(message) = util::range_order_error(start, end, inclusive) {
             let _ = self.emit(TypeError::InvalidPattern { message, span });
         }
     }
@@ -3318,6 +3348,17 @@ pub(super) fn primitive_assoc_const_to_i128(
         "MAX" => Some(max),
         _ => None,
     }
+}
+
+/// The float type owning the limit `qualifier::const_name` (`f64::INFINITY`).
+pub(super) fn primitive_float_limit_owner(
+    qualifier: Option<&Type>,
+    const_name: &str,
+    resolutions: &Resolutions,
+) -> Option<PrimitiveType> {
+    let owner = assoc_const_owner(qualifier, resolutions)?;
+    let prim = resolutions.defs().primitive(owner)?;
+    FloatFormat::of(prim)?.limit(const_name).map(|_| prim)
 }
 
 /// The first statement in a for-of's body that names the loop itself. The
