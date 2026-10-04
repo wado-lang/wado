@@ -36,24 +36,28 @@ is not part of this design.
 
 The first argument is one of five values:
 
-| Value          | Meaning                                                          | Example                                        |
-| -------------- | ---------------------------------------------------------------- | ---------------------------------------------- |
-| `none`         | The call shares no storage and keeps none                        | `i32_and`, `i32_load`                          |
-| `fresh`        | The result is new storage and holds nothing it was handed        | `array_new`                                    |
-| `part_of_args` | The result is an argument's storage, or part of it               | `array_get_ref`, `select`                      |
-| `holds_args`   | The result is new storage that holds what the arguments hold     | `variant_case_construct`, `array_clone_prefix` |
-| `stores_args`  | The call stores what the arguments hold into the `&mut` argument | `array_set`, `array_copy`                      |
+| Value          | Meaning                                                          | Example                                                  |
+| -------------- | ---------------------------------------------------------------- | -------------------------------------------------------- |
+| `none`         | The call shares no storage and keeps none                        | `i32_and`, `i32_load`                                    |
+| `fresh`        | The result is new storage and holds nothing it was handed        | `array_new`                                              |
+| `part_of_args` | The result is an argument's storage, or part of it               | `array_get_ref`                                          |
+| `holds_args`   | The result is new storage that holds what the arguments hold     | `select`, `variant_case_construct`, `array_clone_prefix` |
+| `stores_args`  | The call stores what the arguments hold into the `&mut` argument | `array_set`, `array_copy`                                |
 
 The attribute names no parameter. The types say which ones it means:
 
 - Only a parameter whose type can carry storage counts. `select`'s `cond: bool`
   and `array_get_ref`'s `idx: i32` do not.
-- The destination of `stores_args` is the `&mut` parameter.
+- The destination of `stores_args` is the one `&mut` parameter.
 - A by-value parameter contributes itself. A reference parameter contributes
   what it points to, so `array_copy` stores the elements of `src`.
 
+`select` returns one of its by-value operands. The result is a new value, but a
+reference inside the operand is now inside the result as well, so it is
+`holds_args`.
+
 `len = p` says the returned array holds `p` elements. It goes with `fresh` and
-`holds_args`, the two values whose result is a new array.
+`holds_args`, the two values whose result is new storage.
 
 ### `#[side_effect(...)]`
 
@@ -61,7 +65,7 @@ The bare identifiers are:
 
 | Identifier  | Meaning                                                          |
 | ----------- | ---------------------------------------------------------------- |
-| `none`      | No effect at all; it stands alone                                |
+| `none`      | No effect at all                                                 |
 | `trap`      | The call may trap                                                |
 | `read`      | The call reads linear memory                                     |
 | `write`     | The call writes linear memory                                    |
@@ -71,15 +75,22 @@ The bare identifiers are:
 
 A write through a `&mut` parameter is not listed, since the type states it.
 
-`black_box` exists for `builtin::black_box` alone. A test or a benchmark uses
-that call to keep the work it measures from being folded away, which no other
-identifier says.
+Each identifier states one fact, and none implies another. `host` says only that
+the callee is out of sight. A call that also touches linear memory lists `read`
+or `write` beside it.
+
+`none` and `black_box` each stand alone. `black_box` exists for
+`builtin::black_box`, which a test or a benchmark uses to keep the work it
+measures from being folded away. The optimizer never deletes, moves or merges
+such a call, and never computes its result from the operand. Its storage is
+still stated, `#[storage(holds_args)]`, because where a value is copied depends
+on what the result holds, not on what the optimizer may assume about it.
 
 ### Trap Conditions
 
 `trap` alone means the call may trap at any time. Condition keys narrow it: with
 any of them, the conditions listed are the only ones under which the call
-traps. A condition key is an error without `trap`.
+traps.
 
 | Key        | Form     | Traps when                                     |
 | ---------- | -------- | ---------------------------------------------- |
@@ -126,6 +137,14 @@ A trap condition that follows from a Wasm instruction is still written in the
 attribute. The alternative is a table inside the compiler, which holds the same
 facts where no reader of the declaration sees them.
 
+### Canonical Builtins
+
+A `#[canonical(...)]` builtin is a body-less `core:builtin` declaration like any
+other and carries both attributes. Its name says what it is imported as, not
+what the call does. A canonical that hands the host a buffer to fill later, as
+`stream_read` does, lists `write` beside `host`. `realloc` is an export of the
+`"mem"` core module, so it carries what a core Wasm import carries.
+
 ### Core Wasm Imports
 
 A function imported from a core `.wasm` / `.wat` asset is opaque: the compiler
@@ -135,39 +154,62 @@ attributes, with values that assume the worst: `#[storage(none)]` and
 
 ### Component Model Imports
 
-A declaration carrying `#[cm(...)]` takes neither attribute: `#[cm]` implies
-both, and the same values hold for every Component Model import. That one rule
-is why the compiler needs no table to answer for them.
+`#[cm(...)]` implies both attributes, and the same values hold for every
+Component Model import. That one rule is why the compiler needs no table to
+answer for them.
 
-- The boundary copies every value, so the result is new storage and the call
-  keeps nothing it was handed: `#[storage(fresh)]`.
-- The callee is opaque and may trap: `#[side_effect(trap, host)]`.
-- Lowering a value reads and writes linear memory, but no program can observe
-  it, so `read` and `write` are not implied.
+The facts belong to the raw import call inside the synthesized adapter, not to
+the interface operation a program calls. An operation dispatches to a handler
+when one is installed, and the handler's own body states what it does.
+
+- The adapter lowers every argument to flat scalars and linear memory, and
+  lifts the result back. The raw call shares no storage: `#[storage(none)]`.
+- The adapter stores the arguments before the raw call and loads the result
+  after it. A program cannot observe that traffic, but the optimizer sees
+  both sides of the call, so the call reads and writes linear memory. The
+  callee is opaque and may trap: `#[side_effect(read, write, trap, host)]`.
 
 ### Validation
 
-Each of these is an error:
+Each of these is an error. A malformed attribute is never read as some other
+fact.
 
 - A body-less `core:builtin` declaration missing either attribute.
-- Either attribute on a function with a body, or on a `trait` or `interface`
-  method requirement.
-- Either attribute on a declaration carrying `#[cm(...)]`.
+- Either attribute on a function with a body, on a `trait` or `interface`
+  method requirement, or on a declaration carrying `#[cm(...)]`.
 - A second `#[storage]` or `#[side_effect]` on one declaration.
-- A repeated key, an unknown identifier or key, or `none` beside anything else.
-- A name in a condition key that is not a parameter.
-- `outside` and `at` arrays of different lengths.
+- A repeated key, or an unknown value, identifier or key.
+- `none` or `black_box` beside anything else in `#[side_effect]`.
+- A condition key without `trap`.
+- `at` or `len` in `#[side_effect]` without `outside`, or `outside` and `at`
+  arrays of different lengths.
+- A name in a key that is not a parameter of the declaration.
+- `outside` or `unset` naming a parameter that is not an array, or `negative`
+  or `len` naming one that is not an integer.
+- `len` in `#[storage]` beside a value other than `fresh` or `holds_args`.
+- `stores_args` on a declaration without exactly one `&mut` parameter.
 
 ## Roadmap
+
+The steps land as one change. Validation comes first, so its errors list every
+declaration still to be written.
 
 - [ ] Accept identifiers in an attribute array.
 - [ ] Parse `#[storage]` and `#[side_effect]` into one record per declaration,
   and validate them as Decision says.
+- [ ] Write both attributes on every `core:builtin` declaration, and remove the
+  four old attributes.
+- [ ] Write both attributes on the declaration of every core Wasm import, and
+  derive both from `#[cm(...)]` for the raw call of every Component Model
+  import.
 - [ ] Point every reader of `#[result]`, `#[retain]`, `#[trap]`,
   `#[linear_memory]`, and of host calls recognized by `#[canonical]`, at
   that record.
-- [ ] Write both attributes on every `core:builtin` declaration, and remove the
-  four old attributes.
-- [ ] Write both attributes on the declaration of every core Wasm import.
-- [ ] Derive both from `#[cm(...)]` for every Component Model import.
-- [ ] Move the rules into `spec-attributes.md`, replacing the four sections.
+- [ ] Move the rules into `spec-attributes.md`, replacing the four sections,
+  and update what `spec-effects.md` and `spec-memory.md` say about
+  `#[retain]` and `#[result]`.
+
+## Known Gaps
+
+- A bundled core Wasm asset such as the libm cannot state better than the worst
+  case, so a call to it is never hoisted, merged or deleted.
