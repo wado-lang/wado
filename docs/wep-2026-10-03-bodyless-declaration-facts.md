@@ -20,9 +20,9 @@ Each attribute read its absence its own way:
 | `#[linear_memory]` | touches none                                       | a miscompile where the call does touch it |
 
 Of the 353 body-less `core:builtin` declarations, 60 state no `#[trap]`. Some of
-them, such as `copy_value` and `variant_tag`, never trap. The
-optimizer still keeps every call to them. Only 19 state `#[linear_memory]`. The
-rest read as touching none, and nothing checks that they don't.
+them, such as `copy_value` and `variant_tag`, never trap. The optimizer still
+keeps every call to them. Only 19 state `#[linear_memory]`. The rest read as
+touching none, and nothing checks that they don't.
 
 `owned` meant two things. `#[result(owned)]` said the result's storage was new
 and held nothing it was handed. The reading of absence was also called owned,
@@ -150,9 +150,10 @@ operand points.
 the optimizer deletes loses the hint. No word says that a call is kept for
 where it stands.
 
-`#[linear_memory]` has no word for host I/O. `call_indirect_stdout_write_via_stream`
-and its `stderr` twin write to a stream, which is no linear-memory access, yet
-state `write` so that no call to them is reordered or dropped.
+`#[linear_memory]` has no word for host I/O.
+`call_indirect_stdout_write_via_stream` and its `stderr` twin write to a stream,
+which is no linear-memory access, yet state `write` so that no call to them is
+reordered or dropped.
 
 A `core:builtin` carrying a canonical name, a Component Model operation such as
 `stream_read`, is read as opaque whatever its attributes state.

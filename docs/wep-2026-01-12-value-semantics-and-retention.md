@@ -171,7 +171,8 @@ parameter, a projection of it, or a local bound from one. Where a join meets
 both spellings of a position — a function value of one type minted from two
 declarations — the reference is the wider claim and wins.
 
-These two are not the whole family a body-less declaration carries.
+`#[retain]` and `#[result]` are not the whole family a body-less declaration
+carries.
 `#[immediate(p)]` sits beside them and answers a different question — how
 codegen lowers the call, not what the call keeps. See
 [the spec](./spec-attributes.md#immediate) for it.
