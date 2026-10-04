@@ -48,14 +48,16 @@ fn record_declaration(
         );
         return;
     }
-    // Every bodyless free function is snapshot, not only one carrying an
-    // attribute: a reader asking what this call does with an argument must be
-    // able to tell "it says it keeps nothing" from "nothing here says".
+    // Reify states or proves a result for every bodyless free function but a
+    // declared absence, which no call reaches.
+    let Some(returns) = func.declared_return_convention.clone() else {
+        return;
+    };
     out.insert(
         (module_source.clone(), declaration_key(func)),
         BuiltinDeclaration {
             arity: func.params.len(),
-            returns: func.declared_return_convention,
+            returns,
             retains,
             // Read from the type, which is the only thing that says `&mut` here:
             // `TirParam::is_mut_ref` is filled by `lower::plan`, which runs
@@ -69,7 +71,9 @@ fn record_declaration(
                 .collect(),
             immediate_params: func.immediates_by_position().collect(),
             trap: func.trap_by_position(),
-            linear_memory: func.linear_memory,
+            linear_memory: func
+                .linear_memory
+                .expect("reify states or reads off the linear memory a called declaration touches"),
         },
     );
 }

@@ -429,7 +429,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
     AttributeSchema {
         name: LINEAR_MEMORY,
         targets: FUNCTION_TARGET,
-        args: AttrArgs::Read("`read` or `write`"),
+        args: AttrArgs::Read("`none`, `read` or `write`"),
         summary: "how a call to this declaration touches linear memory",
         stdlib_only: true,
         bodyless: Some(Bodyless {
@@ -458,7 +458,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
     AttributeSchema {
         name: RESULT,
         targets: FUNCTION_TARGET,
-        args: AttrArgs::Read("`owned`, or `part_of = param`"),
+        args: AttrArgs::Read("`fresh`, or `part_of = param`"),
         summary: "what the returned storage belongs to",
         stdlib_only: true,
         bodyless: Some(Bodyless {
@@ -471,7 +471,10 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
     AttributeSchema {
         name: RETAIN,
         targets: FUNCTION_TARGET,
-        args: AttrArgs::Read("a parameter name, with an optional `into = param`"),
+        args: AttrArgs::Read(
+            "`none`, or a parameter name or `elements_of = param`, with an optional \
+             `into = param` / `into = result`",
+        ),
         summary: "what this declaration retains a reference to",
         stdlib_only: true,
         bodyless: Some(Bodyless {
@@ -525,7 +528,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         name: TRAP,
         targets: FUNCTION_TARGET,
         args: AttrArgs::Read(
-            "`never`, or `negative = p` / `outside = a` (with `at = i`, `len = n`) / `unset = a`, \
+            "nothing (may trap), `never`, or `negative = p` / `outside = a` (with `at = i`, `len = n`) / `unset = a`, \
              with an optional `result_len = p`",
         ),
         summary: "when a call to this declaration traps",

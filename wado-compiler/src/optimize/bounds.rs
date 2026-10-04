@@ -22,8 +22,8 @@ pub(super) struct Builtin<'a> {
     pub trap: Option<&'a TrapSpec<usize>>,
     /// The positions it takes by `&mut`.
     pub mut_params: &'a IndexSet<usize>,
-    /// `#[result(owned)]`.
-    pub owned: bool,
+    /// `#[result(fresh)]`.
+    pub fresh: bool,
 }
 
 impl Builtin<'_> {
@@ -413,7 +413,7 @@ impl<'b, F: Fn(FuncId) -> Option<Builtin<'b>>> Scan<'_, F> {
                 op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
                 expr,
             } => self.fresh(*expr, depth + 1),
-            ExprKind::Call { func_id, .. } => (self.builtin)(*func_id).is_some_and(|b| b.owned),
+            ExprKind::Call { func_id, .. } => (self.builtin)(*func_id).is_some_and(|b| b.fresh),
             ExprKind::StructLiteral { .. }
             | ExprKind::TupleLiteral { .. }
             | ExprKind::ArrayLiteral { .. }

@@ -24,8 +24,9 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::analyze;
 use crate::tir::{
     BuiltinDeclaration, BuiltinDeclarations, DeclarationTable, FunctionRef, ResolvedType,
-    RetainSpec, ReturnConvention, TirBlock, TirExpr, TirExprKind, TirFunction, TirPattern, TirStmt,
-    TirStmtKind, TirStruct, TirUnaryOp, TypeId, TypeTable, capture_source_locals,
+    RetainInto, RetainSpec, ReturnConvention, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId, TypeTable,
+    capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
@@ -795,49 +796,47 @@ pub fn compute_retention(
 /// What one `#[retain(...)]` clause states, by parameter position. The single
 /// reading of a clause, so a declaration cannot mean two things by it.
 ///
-/// `into = q` names the destination, so the clause takes the bounded channel
-/// alone. Without one the reference persists and the declaration does not say
-/// where, so both unbounded channels take it: the result is one of the places
-/// it could be. `elements_of = p` claims what the referent holds rather than
-/// the reference, which each call gates on the argument's own type.
+/// `into = q` names a parameter, so the clause takes the bounded channel alone,
+/// and `into = result` names the result. Without one the reference persists
+/// and the declaration does not say where, so both unbounded channels take it:
+/// the result is one of the places it could be. `elements_of = p` claims what
+/// the referent holds rather than the reference, which each call gates on the
+/// argument's own type.
 fn declare_retention(facts: &mut RetentionFacts, retain: &RetainSpec<usize>) {
     let source = u32::try_from(retain.source).unwrap();
     if retain.elements {
         facts.elements.insert(source);
     }
-    if let Some(destination) = retain.into {
-        facts
-            .into_param
-            .entry(source)
-            .or_default()
-            .insert(u32::try_from(destination).unwrap());
-    } else {
-        facts.escapes.insert(source);
-        facts.into_result.insert(source);
+    match &retain.into {
+        Some(RetainInto::Param(destination)) => {
+            facts
+                .into_param
+                .entry(source)
+                .or_default()
+                .insert(u32::try_from(*destination).unwrap());
+        }
+        Some(RetainInto::Result) => {
+            facts.into_result.insert(source);
+        }
+        None => {
+            facts.escapes.insert(source);
+            facts.into_result.insert(source);
+        }
     }
 }
 
 /// What a body-less declaration states, by parameter position: its
-/// `#[retain(...)]` clauses, and what its result is made of. `part_of = p` is
-/// `p`, and `owned` is nothing a clause does not route there. Silence is any
-/// argument: the rule that makes a declaration state `#[result]` covers only
-/// its reference parameters, so `select` hands back a by-value operand while
-/// stating nothing.
+/// `#[retain(...)]` clauses, and where its result lives. `part_of = p` is `p`,
+/// and a `fresh` result holds only what a clause routes there.
 fn declared_facts(declaration: &BuiltinDeclaration) -> RetentionFacts {
     let mut facts = RetentionFacts::default();
     for retain in &declaration.retains {
         declare_retention(&mut facts, retain);
     }
-    match declaration.returns {
-        Some(ReturnConvention::PartOf(p)) => {
-            facts.into_result.insert(u32::try_from(p).unwrap());
-        }
-        Some(ReturnConvention::Owned) => {}
-        None => {
-            facts
-                .into_result
-                .extend(0..u32::try_from(declaration.arity).unwrap());
-        }
+    if let ReturnConvention::PartOf(params) = &declaration.returns {
+        facts
+            .into_result
+            .extend(params.iter().map(|&p| u32::try_from(p).unwrap()));
     }
     facts
 }

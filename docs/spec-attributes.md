@@ -509,6 +509,8 @@ Declares that a bodyless function is imported rather than defined. Used in `core
 
 ```wado
 #[canonical("wasi", "stream-new")]
+#[trap]
+#[linear_memory(none)]
 pub fn stream_new() -> i64;
 ```
 
@@ -516,6 +518,8 @@ pub fn stream_new() -> i64;
 
 ```wado
 #[canonical("mem", "realloc")]
+#[trap]
+#[linear_memory(write)]
 pub fn realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32;
 ```
 
@@ -525,12 +529,16 @@ Binds a stdlib declaration to the language item of that name, such as `#[compile
 
 ### `#[retain(...)]` / `#[result(...)]`
 
-These attributes state what a call does with the reference parameters it is
-handed: whether its result aliases one, and whether it keeps one past the
-return. They are for a declaration with no body, whose retention cannot be read
-from one: a `core:builtin` primitive, a Component Model import, a `.wasm` /
-`.wat` asset import. [Reference Retention](./spec-memory.md#reference-retention)
-states what retention is, and that no function type carries it.
+These attributes state what a call does with the storage it is handed: where
+its result's storage lives, and what it keeps past the return.
+[Reference Retention](./spec-memory.md#reference-retention) states what
+retention is, and that no function type carries it.
+
+`#[result]`, `#[retain]`, [`#[trap]`](#trap) and
+[`#[linear_memory]`](#linear_memory) state the facts of a `core:builtin`
+declaration with no body, which has nothing they could be read from. Each fact
+it owes is written, or proved from its signature as below. Leaving out one it
+owes is an error.
 
 <!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
 
@@ -538,6 +546,8 @@ states what retention is, and that no function type carries it.
 #[result(part_of = arr)]
 #[trap(outside = arr, at = idx)]
 #[trap(unset = arr)]
+#[retain(none)]
+#[linear_memory(none)]
 pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
 ```
 
@@ -546,6 +556,7 @@ pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
 ```wado
 #[retain(value, into = arr)]
 #[trap(outside = arr, at = idx)]
+#[linear_memory(none)]
 pub fn array_set<T>(arr: &mut Array<T>, idx: i32, value: T);
 ```
 
@@ -555,38 +566,39 @@ pub fn array_set<T>(arr: &mut Array<T>, idx: i32, value: T);
 #[retain(elements_of = src, into = dst)]
 #[trap(outside = dst, at = dst_offset, len = len)]
 #[trap(outside = src, at = src_offset, len = len)]
+#[linear_memory(none)]
 pub fn array_copy<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_offset: i32, len: i32);
 ```
 
-`#[result(owned)]` says the result is freshly allocated; `#[result(part_of = p)]`
-says it is part of `p`. `#[result]` takes exactly one of the two. An `owned`
-result holds nothing it was handed, except what a `#[retain(...)]` clause says.
-A declaration with a reference parameter whose result can share storage must
-state one, and leaving it out is an error. A Component Model import needs none,
-since the boundary copies and its result is always owned. Nor does an
-[`#[unavailable]`](#unavailablereason) declaration, which is never called.
-
-Silence reads as `owned` storage that may hold what any argument holds. A result
-built from a by-value argument, as `builtin::select` returns one of its
-operands, is a new value, but a reference inside that argument is now inside
-the result as well.
+`#[result(fresh)]` says the result's storage is new. `#[result(part_of = p)]`
+says the result is `p`, or a part of it, and repeats for a second parameter,
+one name per attribute. `fresh` stands alone. A declaration owes `#[result]`
+where its result type can carry storage and some parameter, by value or by
+reference, can too. Otherwise the result is `fresh` by proof.
 
 `#[retain(...)]` names one retained thing and repeats where there is more than
 one, so each carries its own destination. A bare name is the parameter itself
-and `elements_of = p` is that parameter's elements; `into = q` names the
-parameter it lands in, and without it the destination is unknown. Silence says
-the call keeps nothing.
+and `elements_of = p` is what that parameter holds. `into = q` names the
+parameter it lands in, `into = result` the result, and without `into` the
+destination is unknown. `#[retain(none)]` says the call keeps nothing, and
+stands alone. A declaration owes `#[retain]` where some parameter can carry
+storage. Otherwise nothing can be kept, by proof.
 
 Every parameter is named bare, never quoted, and a name that is not a parameter
 of the declaration is an error. An argument the attribute does not take, or a
-second retained thing in one `#[retain]`, is an error too. A malformed attribute
-is never read as silence.
+second retained thing in one `#[retain]`, is an error too.
 
-Both are an error on a function with a body, which states these facts itself,
-and on a `trait` or `interface` method requirement: a call to one is statically
-dispatched to an impl that has a body, so the impl states it.
+The four attributes are an error on a function with a body, which states these
+facts itself. They are an error on a `trait` or `interface` method requirement:
+a call to one is statically dispatched to an impl that has a body, so the impl
+states them. And they are an error on an import, whose facts are read off its
+kind. A Component Model import copies at the boundary, so its result is fresh
+and it retains nothing. A `.wasm` / `.wat` asset import takes and returns only
+numbers, so the same holds. Either may trap and may write linear memory. An
+[`#[unavailable]`](#unavailablereason) declaration is never called, so it owes
+none.
 
-Rationale: [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
+Rationale: [WEP: Bodyless Declarations State Every Fact](./wep-2026-10-03-bodyless-declaration-facts.md).
 
 ### `#[immediate(...)]`
 
@@ -597,7 +609,9 @@ encoded into the instruction itself.
 
 ```wado
 #[immediate(value)]
+#[retain(none)]
 #[trap(never)]
+#[linear_memory(none)]
 pub fn v128_const(value: i128) -> v128;
 ```
 
@@ -609,15 +623,15 @@ called.
 
 ### `#[trap(...)]`
 
-States when a call to a declaration with no body traps. Silence means it may
-trap.
-`#[trap(never)]` says it never traps, and a check names the one condition it
-traps on:
+States when a call to a declaration with no body traps. Every one states it.
+`#[trap]` says it may trap, `#[trap(never)]` says it never traps, and a check
+names the one condition it traps on:
 
 <!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
 
 ```wado
 #[trap(never)]
+#[linear_memory(none)]
 pub fn f64_sqrt(x: f64) -> f64;
 ```
 
@@ -627,14 +641,17 @@ pub fn f64_sqrt(x: f64) -> f64;
 #[result(part_of = arr)]
 #[trap(outside = arr, at = idx)]
 #[trap(unset = arr)]
+#[retain(none)]
+#[linear_memory(none)]
 pub fn array_get_value<T>(arr: &Array<T>, idx: i32) -> T;
 ```
 
 <!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
 
 ```wado
-#[result(owned)]
+#[result(fresh)]
 #[trap(negative = len, result_len = len)]
+#[linear_memory(none)]
 pub fn array_new<T>(len: i32) -> Array<T>;
 ```
 
@@ -651,20 +668,21 @@ is no check: it says the returned array holds `p` elements, so a later check
 against it can be proved. Running out of memory is not a trap any of these
 describe.
 
-It is an error on a function with a body, which states when it traps itself,
-and on a `trait` or `interface` method requirement, for the reason `#[retain]`
-is.
+`#[trap]` and `#[trap(never)]` each stand alone. The attribute is an error where
+[`#[retain]`](#retain--result) is.
 
 ### `#[linear_memory(...)]`
 
-States how a call to a declaration with no body touches linear memory: `read`
-or `write`. Silence means it touches none. A linear-memory address is a plain
-`i32`, so no parameter type says this, and the attribute is the only source.
+States how a call to a declaration with no body touches linear memory: `none`,
+`read` or `write`, where `write` covers reading too. Every one states it. A
+linear-memory address is a plain `i32`, so no parameter type proves this, and
+the attribute is the only source.
 
 <!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
 
 ```wado
 #[linear_memory(read)]
+#[trap]
 pub fn i32_load(addr: i32) -> i32;
 ```
 
@@ -672,7 +690,8 @@ pub fn i32_load(addr: i32) -> i32;
 
 ```wado
 #[linear_memory(write)]
+#[trap]
 pub fn i32_store(addr: i32, value: i32);
 ```
 
-It is written once, and is an error where `#[trap]` is.
+It is written once, and is an error where [`#[retain]`](#retain--result) is.

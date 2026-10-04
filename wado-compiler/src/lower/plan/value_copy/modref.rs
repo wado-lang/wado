@@ -490,7 +490,7 @@ impl TirRefVisitor for Walker<'_> {
                     });
                 }
                 let aliases_only = func.module_source.is_core_builtin()
-                    && self.builtins.part_of(&**func).is_some();
+                    && self.builtins.part_of_params(&**func).is_some();
                 if !aliases_only {
                     for (position, arg) in args
                         .iter()

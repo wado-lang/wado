@@ -888,13 +888,13 @@ fn has_safepoint(
     body: &Body,
     type_table: &TypeTable,
     descriptors: &[FunctionRef],
-    safepoint_calls: &[bool],
+    safepoint_calls: &[SafepointCall],
 ) -> bool {
     struct Walk<'a> {
         body: &'a Body,
         type_table: &'a TypeTable,
         descriptors: &'a [FunctionRef],
-        safepoint_calls: &'a [bool],
+        safepoint_calls: &'a [SafepointCall],
     }
     impl Walk<'_> {
         fn block(&self, block: BlockId) -> bool {
@@ -936,7 +936,13 @@ fn has_safepoint(
 
         fn is_safepoint(&self, e: ExprId) -> bool {
             match &self.body.exprs[e].kind {
-                ExprKind::Call { func_id, .. } => self.safepoint_calls[func_id.index()],
+                ExprKind::Call { func_id, .. } => match self.safepoint_calls[func_id.index()] {
+                    SafepointCall::Always => true,
+                    SafepointCall::Never => false,
+                    SafepointCall::IfResultHoldsReference => {
+                        arena_query::holds_reference(self.type_table, self.body.exprs[e].type_id)
+                    }
+                },
                 ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => true,
                 kind => allocates(kind),
             }
@@ -965,21 +971,38 @@ fn has_safepoint(
     .block(body.root)
 }
 
+/// Whether a call to one function is a safepoint.
+#[derive(Clone, Copy)]
+enum SafepointCall {
+    Always,
+    Never,
+    /// A builtin whose result is fresh. It allocates only where the result can
+    /// hold a reference: one that cannot is fresh by proof.
+    IfResultHoldsReference,
+}
+
 /// Whether a call to each function, by `FuncId` index, is a safepoint: any call
 /// to a function with a body, a component-model operation (which leaves for the
 /// host), and a builtin whose result is freshly allocated. The other builtins
 /// are Wasm instructions.
-fn safepoint_calls(project: &NirPackage, descriptors: &[FunctionRef]) -> Vec<bool> {
+fn safepoint_calls(project: &NirPackage, descriptors: &[FunctionRef]) -> Vec<SafepointCall> {
     descriptors
         .iter()
         .map(|callee| {
-            callee.intrinsic().is_none_or(|name| {
-                project
-                    .builtin_registry
-                    .intrinsic(name)
-                    .is_some_and(|info| info.canonical_name.is_some())
-                    || project.builtin_declarations.returns_owned(callee)
-            })
+            let Some(name) = callee.intrinsic() else {
+                return SafepointCall::Always;
+            };
+            if project
+                .builtin_registry
+                .intrinsic(name)
+                .is_some_and(|info| info.canonical_name.is_some())
+            {
+                SafepointCall::Always
+            } else if project.builtin_declarations.returns_fresh(callee) {
+                SafepointCall::IfResultHoldsReference
+            } else {
+                SafepointCall::Never
+            }
         })
         .collect()
 }
@@ -1486,7 +1509,7 @@ fn classify_callee(
     descriptors: &[FunctionRef],
     foldable: &[bool],
     loopy: &[bool],
-    safepoint_calls: &[bool],
+    safepoint_calls: &[SafepointCall],
     sites: usize,
     spliced: &[usize],
     hopeful: &IndexSet<u32>,

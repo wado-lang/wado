@@ -5457,7 +5457,8 @@ fn unparse_retain_attr(retain: &tir::RetainSpec<String>) -> String {
         retain.source.clone()
     };
     match &retain.into {
-        Some(dest) => format!("#[retain({source}, into = {dest})]"),
+        Some(tir::RetainInto::Param(dest)) => format!("#[retain({source}, into = {dest})]"),
+        Some(tir::RetainInto::Result) => format!("#[retain({source}, into = result)]"),
         None => format!("#[retain({source})]"),
     }
 }

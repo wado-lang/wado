@@ -263,7 +263,7 @@ where it cannot prove move / share / fresh; no elision pass):
   returns owned), plus the literals that materialize their own storage: a string
   _and_ a bytes literal, both of which lower to a fresh aggregate over a packed
   array. Where a result comes from is one fact: a body is read for it, a
-  `core:builtin` declares it. `#[result(owned)]` says the result is a fresh
+  `core:builtin` declares it. `#[result(fresh)]` says the result is a fresh
   place; `#[result(part_of = p)]` says it names a component of parameter `p`.
   The declaration is mandatory. A bodyless declaration reading through a
   reference and returning storage is refused without one, at the declaration,

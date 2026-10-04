@@ -15,7 +15,8 @@ use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind,
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 use crate::tir::{
-    BuiltinDeclaration, ResolvedType, RetainSpec, ReturnConvention, TypeId, TypeKey, TypeTable,
+    BuiltinDeclaration, ResolvedType, RetainInto, RetainSpec, ReturnConvention, TypeId, TypeKey,
+    TypeTable,
 };
 
 use super::arena_query::holds_reference;
@@ -594,8 +595,10 @@ impl HeapEffects<'_> {
                         };
                         Kept {
                             in_result: returns_part_of(declaration, j)
-                                || retains().any(|r| r.into.is_none()),
-                            stored: retains().any(|r| r.into.is_some_and(|q| q != j)),
+                                || retains()
+                                    .any(|r| matches!(r.into, None | Some(RetainInto::Result))),
+                            stored: retains()
+                                .any(|r| matches!(r.into, Some(RetainInto::Param(q)) if q != j)),
                         }
                     }
                     Target::Opaque => Kept {
@@ -1487,8 +1490,10 @@ impl HeapFrame {
                     }
                     let source = nodes.get(r.source).copied().unwrap_or(OperandNode::None);
                     let into = match r.into {
-                        Some(q) => nodes.get(q).copied().unwrap_or(OperandNode::None),
-                        None => result,
+                        Some(RetainInto::Param(q)) => {
+                            nodes.get(q).copied().unwrap_or(OperandNode::None)
+                        }
+                        Some(RetainInto::Result) | None => result,
                     };
                     self.unify_nodes(into, source);
                 }
@@ -1875,10 +1880,9 @@ fn for_each_value_source(body: &Body, v: ValueId, f: &mut impl FnMut(Option<Opaq
 
 /// Whether a builtin's result may be part of its argument `j`.
 fn returns_part_of(declaration: &BuiltinDeclaration, j: usize) -> bool {
-    match declaration.returns {
-        Some(ReturnConvention::Owned) => false,
-        Some(ReturnConvention::PartOf(p)) => p == j,
-        None => true,
+    match &declaration.returns {
+        ReturnConvention::Fresh => false,
+        ReturnConvention::PartOf(params) => params.contains(&j),
     }
 }
 

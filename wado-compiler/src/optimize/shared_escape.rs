@@ -308,9 +308,8 @@ impl<'a> SharedEscape<'a> {
 
     /// What a bodyless callee's clauses say about the argument at `pos`.
     fn declared_arg(&self, callee: &NirFunction, pos: usize) -> ArgClauses {
-        // Every declaration answers the same way, wherever it comes from: an
-        // absent `#[retain]` keeps nothing, and a silent `#[result]` may hand
-        // any argument back. Only a callee nothing describes is refused.
+        // Every declaration answers the same way, wherever it comes from. Only a
+        // callee nothing describes is refused.
         let reference = FunctionRef::from_resolved(callee, callee.module_source.clone());
         let declarations = &self.project.builtin_declarations;
         if declarations.get(&reference).is_none() {
@@ -327,12 +326,15 @@ impl<'a> SharedEscape<'a> {
             return ArgClauses::REFUSED;
         }
         // Only a result that can hold a reference is a way out of the call. Two
-        // clauses answer for it: `#[result(owned)]` says the object handed back
+        // clauses answer for it: `#[result(fresh)]` says the object handed back
         // is not the one given, and `#[result(part_of = p)]` says it is — which
         // makes the result the caller's to account for, under `Slot::Ret`.
         let escapes = holds_reference(&self.project.type_table.borrow(), callee.return_type);
-        let hands_back = escapes && declarations.part_of(&reference) == Some(pos);
-        if escapes && !hands_back && !declarations.returns_owned(&reference) {
+        let hands_back = escapes
+            && declarations
+                .part_of_params(&reference)
+                .is_some_and(|params| params.contains(&pos));
+        if escapes && !hands_back && !declarations.returns_fresh(&reference) {
             return ArgClauses::REFUSED;
         }
         ArgClauses {

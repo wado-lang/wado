@@ -18,7 +18,7 @@ use crate::optimize::arena_query::{
 };
 use crate::optimize::bounds::{self, Builtin, Proofs};
 use crate::optimize::inline::recursive_scc_members;
-use crate::tir::{BuiltinDeclarations, LinearMemory, TypeTable};
+use crate::tir::{BuiltinDeclarations, LinearMemory, ReturnConvention, TypeTable};
 
 /// Read / write flags for a single state channel (e.g., GC heap or
 /// linear memory).
@@ -704,10 +704,10 @@ impl FnEffect {
 /// What a `#[linear_memory(...)]` access does to state a caller can observe.
 /// Wado spells a linear-memory address as a plain `i32`, so no `&mut` gives
 /// one away: the declaration is the ground truth.
-fn linear_memory_effect(access: Option<LinearMemory>) -> FnEffect {
+fn linear_memory_effect(access: LinearMemory) -> FnEffect {
     FnEffect {
-        reads_mutable_state: access.is_some(),
-        writes_state: access == Some(LinearMemory::Write),
+        reads_mutable_state: access != LinearMemory::None,
+        writes_state: access == LinearMemory::Write,
         ..FnEffect::default()
     }
 }
@@ -737,7 +737,7 @@ fn leaf_effect<'a>(
         return (FnEffect::opaque(), None);
     }
     // One the compiler mints itself (`array_clone_shallow`) declares nothing.
-    let Some(mut_params) = declarations.mut_params(&fref) else {
+    let Some(declaration) = declarations.get(&fref) else {
         let effect = FnEffect {
             may_trap: true,
             writes_shared_heap: true,
@@ -746,14 +746,14 @@ fn leaf_effect<'a>(
         return (effect, None);
     };
     let builtin = Builtin {
-        trap: declarations.trap(&fref),
-        mut_params,
-        owned: declarations.returns_owned(&fref),
+        trap: declaration.trap.as_ref(),
+        mut_params: &declaration.mut_params,
+        fresh: declaration.returns == ReturnConvention::Fresh,
     };
     let effect = FnEffect {
         may_trap: builtin.trap.is_none_or(|spec| !spec.checks.is_empty()),
-        writes_shared_heap: !mut_params.is_empty(),
-        ..linear_memory_effect(declarations.linear_memory(&fref))
+        writes_shared_heap: !declaration.mut_params.is_empty(),
+        ..linear_memory_effect(declaration.linear_memory)
     };
     (effect, Some(builtin))
 }

@@ -1175,7 +1175,7 @@ impl ClosureLowerer {
             compiler_item: callee.compiler_item,
             export_name: callee.export_name.clone(),
             allocator_tag: callee.allocator_tag.clone(),
-            declared_return_convention: callee.declared_return_convention,
+            declared_return_convention: callee.declared_return_convention.clone(),
             kind: FunctionKind::Regular,
 
             return_abi: tir::ReturnAbi::default(),

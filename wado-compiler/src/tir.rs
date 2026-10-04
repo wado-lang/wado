@@ -7105,8 +7105,10 @@ pub struct TirFunction {
     /// argument must still be a literal when codegen reads it.
     pub immediates: Vec<String>,
     /// `#[trap(...)]` on a bodyless declaration — when the call can trap.
+    /// `None` is `#[trap]`: it may trap, on no stated condition.
     pub trap: Option<TrapSpec<String>>,
-    /// `#[linear_memory(...)]` on a bodyless declaration.
+    /// `#[linear_memory(...)]` on a bodyless declaration, `None` for a body
+    /// and for a declared absence.
     pub linear_memory: Option<LinearMemory>,
     pub body: Option<TirBlock>,
     pub span: Span,
@@ -7164,8 +7166,9 @@ pub struct TirFunction {
     /// Allocator tag from `#[allocator("...")]` attribute (e.g., `"bump"`, `"debug"`).
     pub allocator_tag: Option<String>,
 
-    /// What `#[result(...)]` declared. Read only where there is no body to
-    /// infer from, so one written on a body is recorded and ignored.
+    /// What a bodyless declaration's result is, stated by `#[result(...)]`
+    /// or proved from its signature or kind. `None` for a body, which is read
+    /// instead, and for a declared absence, which no call reaches.
     pub declared_return_convention: Option<ReturnConvention>,
 
     /// Categorizes the function for kind-specific optimizations. Most functions
@@ -7244,17 +7247,18 @@ pub enum InlineHint {
     Never,
 }
 
-/// Where a bodyless declaration's result comes from. A body is read for the
-/// same fact, so this is the declared half of one notion: the result is either
-/// a fresh place or a projection of one parameter.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Where a bodyless declaration's result lives. A body is read for the same
+/// fact, so this is the declared half of one notion: the result is either a
+/// fresh place or a projection of some parameters.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReturnConvention {
-    /// `#[result(owned)]` — every returned value is freshly materialized, so a
-    /// caller may consume it as a move.
-    Owned,
-    /// `#[result(part_of = p)]` — the result names a component of parameter `p`
-    /// in place, so it lives as long as that argument's storage does.
-    PartOf(usize),
+    /// `#[result(fresh)]` — every returned value is freshly materialized, so a
+    /// caller may consume it as a move. What it holds is `#[retain]`'s to say.
+    Fresh,
+    /// One `#[result(part_of = p)]` per parameter, by position, ascending —
+    /// the result is one of these parameters or a component of one, in place,
+    /// so it lives as long as that argument's storage does.
+    PartOf(Vec<usize>),
 }
 
 /// One `#[retain(...)]` clause on a bodyless declaration: what the call keeps
@@ -7265,9 +7269,18 @@ pub struct RetainSpec<Param> {
     pub source: Param,
     /// `elements_of = p` — what is retained is what `p` holds, not `p`.
     pub elements: bool,
-    /// `into = q` — the parameter the retained reference lands in, `None`
-    /// where the declaration names no destination.
-    pub into: Option<Param>,
+    /// `into = …` — where the retained reference lands, `None` where the
+    /// declaration names no destination.
+    pub into: Option<RetainInto<Param>>,
+}
+
+/// Where a `#[retain(...)]` clause says the retained reference lands.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RetainInto<Param> {
+    /// `into = q` — the parameter `q`.
+    Param(Param),
+    /// `into = result` — the call's result.
+    Result,
 }
 
 /// One `#[trap(...)]` condition: the call traps exactly where one fails.
@@ -7287,8 +7300,8 @@ pub enum TrapCheck<Param> {
     Unset(Param),
 }
 
-/// What a bodyless declaration's `#[trap(...)]` attributes state. Silence is
-/// "may trap"; `#[trap(never)]` is a spec with no checks.
+/// What a bodyless declaration's `#[trap(...)]` attributes state. Bare
+/// `#[trap]` is no spec at all; `#[trap(never)]` is a spec with no checks.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrapSpec<Param> {
     pub checks: Vec<TrapCheck<Param>>,
@@ -7320,6 +7333,7 @@ impl<P> TrapSpec<P> {
 /// `#[linear_memory(...)]`: how a bodyless declaration touches linear memory.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LinearMemory {
+    None,
     Read,
     /// Writes, and reads too: a store is ordered against every other access.
     Write,
@@ -7327,12 +7341,12 @@ pub enum LinearMemory {
 
 /// What a bodyless `core:builtin` declared about storage, by parameter position.
 /// Link snapshots it because monomorphization drops the generic declarations.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct BuiltinDeclaration {
     /// How many parameters the declaration takes.
     pub arity: usize,
-    /// `#[result(...)]`, or `None` where the declaration states none.
-    pub returns: Option<ReturnConvention>,
+    /// `#[result(...)]`, stated or proved.
+    pub returns: ReturnConvention,
     /// `#[retain(...)]` — what this call keeps beyond it.
     pub retains: Vec<RetainSpec<usize>>,
     /// Positions the declaration takes by `&mut`, the only ones it can write
@@ -7343,10 +7357,10 @@ pub struct BuiltinDeclaration {
     /// reads the argument's literal value, so nothing may rewrite it into a
     /// load.
     pub immediate_params: IndexSet<usize>,
-    /// `#[trap(...)]`, or `None` where the declaration states none.
+    /// `#[trap(...)]`, or `None` where it may trap on no stated condition.
     pub trap: Option<TrapSpec<usize>>,
-    /// `#[linear_memory(...)]`, or `None` where it touches none.
-    pub linear_memory: Option<LinearMemory>,
+    /// `#[linear_memory(...)]`, stated or read off the declaration's kind.
+    pub linear_memory: LinearMemory,
 }
 
 /// All a declaration lookup reads of a call. TIR and NIR each carry their own
@@ -7424,12 +7438,10 @@ impl<V> DeclarationTable<V> {
 pub type BuiltinDeclarations = DeclarationTable<BuiltinDeclaration>;
 
 impl DeclarationTable<BuiltinDeclaration> {
-    /// Whether `call` names a body-less declaration that stated a convention or
-    /// a retention — the calls that answer from a declaration rather than from
-    /// the fixpoint.
+    /// Whether `call` names a body-less declaration — a call that answers from
+    /// what it states rather than from the fixpoint.
     pub fn declares<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {
-        self.get(call.into())
-            .is_some_and(|d| d.returns.is_some() || !d.retains.is_empty())
+        self.get(call.into()).is_some()
     }
 
     /// Whether the call leaves the argument *object* at `pos` where the caller
@@ -7461,46 +7473,19 @@ impl DeclarationTable<BuiltinDeclaration> {
             .unwrap_or_default()
     }
 
-    /// What `call` declared with `#[trap(...)]`; `None` is "may trap".
-    pub fn trap<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> Option<&TrapSpec<usize>> {
-        self.get(call.into())?.trap.as_ref()
-    }
-
-    /// What `call` declared with `#[linear_memory(...)]`.
-    pub fn linear_memory<'a>(
-        &self,
-        call: impl Into<DeclarationLookup<'a>>,
-    ) -> Option<LinearMemory> {
-        self.get(call.into())?.linear_memory
-    }
-
-    /// The positions `call` takes by `&mut`, `None` where nothing was snapshot.
-    pub fn mut_params<'a>(
-        &self,
-        call: impl Into<DeclarationLookup<'a>>,
-    ) -> Option<&IndexSet<usize>> {
-        self.get(call.into()).map(|d| &d.mut_params)
-    }
-
-    /// Whether the call declared `#[result(owned)]`: the object it hands back
-    /// is freshly allocated, and so never one it was given.
-    pub fn returns_owned<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {
+    /// Whether the call's result is `#[result(fresh)]`: the object it hands
+    /// back is freshly allocated, and so never one it was given.
+    pub fn returns_fresh<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {
         self.get(call.into())
-            .is_some_and(|d| d.returns == Some(ReturnConvention::Owned))
+            .is_some_and(|d| d.returns == ReturnConvention::Fresh)
     }
 
-    /// The parameter a declaration's result is a component of, for a call that
-    /// declared `#[result(part_of = p)]`.
-    pub fn part_of<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> Option<usize> {
-        self.part_of_params(call).map(|params| params[0])
-    }
-
-    /// [`Self::part_of`] as the parameter set a result projects, which for a
-    /// declaration is that one parameter.
+    /// The parameters a declaration's result is one of or a component of, by
+    /// position, for a call that declared `#[result(part_of = p)]`.
     pub fn part_of_params<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> Option<&[usize]> {
         match &self.get(call.into())?.returns {
-            Some(ReturnConvention::PartOf(param)) => Some(std::slice::from_ref(param)),
-            Some(ReturnConvention::Owned) | None => None,
+            ReturnConvention::PartOf(params) => Some(params),
+            ReturnConvention::Fresh => None,
         }
     }
 
@@ -7573,7 +7558,10 @@ impl TirFunction {
         self.retains.iter().map(move |r| RetainSpec {
             source: self.param_position(&r.source),
             elements: r.elements,
-            into: r.into.as_deref().map(|name| self.param_position(name)),
+            into: r.into.as_ref().map(|into| match into {
+                RetainInto::Param(name) => RetainInto::Param(self.param_position(name)),
+                RetainInto::Result => RetainInto::Result,
+            }),
         })
     }
 

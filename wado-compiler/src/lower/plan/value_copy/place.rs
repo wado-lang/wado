@@ -287,9 +287,11 @@ impl<'a> Resolver<'a> {
         let TirExprKind::Call { func, args, .. } = &expr.kind else {
             return false;
         };
-        self.builtins
-            .part_of(&**func)
-            .is_some_and(|p| !is_reference(arg_at(func, args, p).type_id, self.type_table))
+        self.builtins.part_of_params(&**func).is_some_and(|params| {
+            params
+                .iter()
+                .any(|&p| !is_reference(arg_at(func, args, p).type_id, self.type_table))
+        })
     }
 
     /// What `expr` names. Total over the expression kinds: a shape with no arm
@@ -354,12 +356,12 @@ impl<'a> Resolver<'a> {
             // further in. `Index` is the honest selector: the index is a runtime
             // value, so which component it lands on is not known here.
             TirExprKind::Call { func, args, .. } if func.module_source.is_core_builtin() => {
-                match self.builtins.part_of(&**func) {
-                    Some(p) => self.project(arg_at(func, args, p), Selector::Index),
-                    // `builtin::select` names no component and still hands one
-                    // back, so a storage-carrying result is no value of its own.
-                    None if carries_storage(expr.type_id, self.type_table) => Names::Unknown,
-                    None => Names::Value,
+                match self.builtins.part_of_params(&**func) {
+                    Some(&[p]) => self.project(arg_at(func, args, p), Selector::Index),
+                    // One of several parameters, as `builtin::select` hands back,
+                    // is no one place, and no value of its own either.
+                    Some(_) if carries_storage(expr.type_id, self.type_table) => Names::Unknown,
+                    Some(_) | None => Names::Value,
                 }
             }
             TirExprKind::Call { func, args, .. } => {
