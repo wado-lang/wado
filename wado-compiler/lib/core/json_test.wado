@@ -600,6 +600,11 @@ test "deserialize unpaired surrogate errors" {
     assert no_pair matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
 }
 
+test "serialize i128 and u128 as a string whatever the value" {
+    assert to_string(&5_i128) matches { Ok(s) && s == `"5"` };
+    assert to_string(&5_u128) matches { Ok(s) && s == `"5"` };
+}
+
 test "deserialize i128 range limits" {
     let max: Result<i128, DeserializeError> = from_string("170141183460469231731687303715884105727");
     assert max matches { Ok(_) };
