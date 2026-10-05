@@ -24,7 +24,7 @@ use { CharRange } from "./ir.wado";
 use { CodeWriter } from "lib:wadopoet";
 use { MemberDecls, MemberField, MemberMethod } from "./java2wado/jmembers.wado";
 use { SuperOp } from "./superclass.wado";
-use { GaleMap } from "./gale_map.wado";
+use { HashMap } from "core:collections";
 
 fn parse_grammar<S: AsStrSlice>(input: S) -> Grammar {
     let mut g = parse(input).unwrap();
@@ -135,7 +135,7 @@ test "gen_lexer: case-colliding rule names emit distinct try fns" {
     let g = parse_grammar("lexer grammar T; ID : 'a' ; Id : 'b' ;");
     let lits: List<LitToken> = [];
     let mut w = CodeWriter::new();
-    let atn_class = GaleMap::<String, i32>::new();
+    let atn_class = HashMap::<String, i32>::new();
     let fields: List<MemberField> = [];
     let methods: List<MemberMethod> = [];
     let members = MemberDecls { fields, methods };
@@ -150,7 +150,7 @@ fn lexer_source<S: AsStrSlice>(src: S) -> String {
     let g = parse_grammar(src);
     let lits: List<LitToken> = [];
     let mut w = CodeWriter::new();
-    let atn_class = GaleMap::<String, i32>::new();
+    let atn_class = HashMap::<String, i32>::new();
     let fields: List<MemberField> = [];
     let methods: List<MemberMethod> = [];
     let members = MemberDecls { fields, methods };

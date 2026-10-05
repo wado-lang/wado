@@ -434,6 +434,11 @@ fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectE
                         check_function_effects_sem(sem, src, method, index, own, out);
                     }
                 }
+                // What the initializer performs is the purity check's; only an
+                // unknown name is reported here, as on a function.
+                Item::Global(global) => {
+                    benign_effects(&global.name, &global.attributes, src, index, out);
+                }
                 _ => {}
             }
         }
@@ -925,19 +930,7 @@ fn check_function_effects_sem(
     out: &mut Vec<EffectError>,
 ) {
     // `#[benign(E)]` admits `E` in the body without a `with E` clause.
-    let mut benign = Vec::new();
-    for (name, span) in benign_effect_names(&func.attrs) {
-        match effect_named_in(&name, module, index) {
-            Some(effect) => benign.push(effect),
-            None => out.push(EffectError {
-                callee: func.name.clone(),
-                missing_effect: name,
-                fault: EffectFault::UnknownBenign,
-                span,
-                module: module.source_path(),
-            }),
-        }
-    }
+    let benign = benign_effects(&func.name, &func.attrs, module, index, out);
     let Some(body) = &func.body else {
         return;
     };
@@ -1256,7 +1249,32 @@ impl AstVisitor for TypePatternSites {
     }
 }
 
-/// `#[benign(E, F)]` effect names declared on a function, each with its
+/// The effects a `#[benign(E, F)]` on `owner`, a function or a global, admits,
+/// reporting each name that reaches no effect in `module`.
+fn benign_effects(
+    owner: &str,
+    attrs: &[Attribute],
+    module: &ModuleSource,
+    index: &EffectIndex,
+    out: &mut Vec<EffectError>,
+) -> Vec<EffectRef> {
+    let mut benign = Vec::new();
+    for (name, span) in benign_effect_names(attrs) {
+        match effect_named_in(&name, module, index) {
+            Some(effect) => benign.push(effect),
+            None => out.push(EffectError {
+                callee: owner.to_string(),
+                missing_effect: name,
+                fault: EffectFault::UnknownBenign,
+                span,
+                module: module.source_path(),
+            }),
+        }
+    }
+    benign
+}
+
+/// `#[benign(E, F)]` effect names declared on an item, each with its
 /// attribute's span.
 fn benign_effect_names(attrs: &[Attribute]) -> Vec<(String, Span)> {
     attrs
@@ -2012,7 +2030,13 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityE
                     }
                 }
                 Item::Global(global) => {
+                    // An unknown name is the effect check's to report.
+                    walker.granted = benign_effect_names(&global.attributes)
+                        .into_iter()
+                        .filter_map(|(name, _)| effect_named_in(&name, src, index))
+                        .collect();
                     walker.check(PureContext::GlobalInitializer, &global.initializer);
+                    walker.granted.clear();
                 }
                 // No expression a position requires to be pure.
                 Item::Use(_)

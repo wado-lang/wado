@@ -24,7 +24,7 @@ assert primes.len() == 4;
 assert primes.contains(5);
 assert !primes.contains(4);
 
-let mut seen = HashSet::<String>::new(HashSeed::fixed(1, 2));
+let mut seen = HashSet::<String>::new();
 assert seen.insert("b");
 assert seen.insert("a");
 assert !seen.insert("b");
@@ -321,26 +321,26 @@ can predict keeps keys an attacker chooses from colliding.
 
 _Fields are private._
 
-#### `pub fn random() -> HashSeed with InsecureSeed`
-
-A seed from the host, for a map holding keys from outside the program.
-The host is asked to make it unpredictable but is not obliged to, and
-it asks to be called once: fetch one seed and pass it down.
-
 #### `pub fn fixed(k0: u64, k1: u64) -> HashSeed`
 
-A seed of the caller's choosing, for a map whose keys the program trusts.
+A seed of the caller's choosing, for a map whose keys the program trusts
+and whose hashing must be the same on every run.
 
 ### `pub struct HashMap<K, V>`
 
 A map that iterates in insertion order, found by hashing its keys.
 
-Its hash function is keyed by the `HashSeed` it is built with. Build one
-with `HashSeed::random()` wherever an attacker may choose its keys.
+Its hash function is keyed by a `HashSeed`: the host's under `new()`, which
+holds up against keys an attacker chooses, or the caller's under
+`with_seed`.
 
 _Fields are private._
 
-#### `pub fn new(seed: HashSeed) -> HashMap<K, V>`
+#### `pub fn new() -> HashMap<K, V>`
+
+An empty map hashing under the host's seed.
+
+#### `pub fn with_seed(seed: HashSeed) -> HashMap<K, V>`
 
 An empty map hashing with `seed`.
 
@@ -430,13 +430,37 @@ Returns a reference to the value stored under text equal to `key`.
 
 ##### `fn index_ref_mut(&mut self, key: K) -> &mut V`
 
+#### `impl From<Array<[String, V]>> for HashMap<String, V>`
+
+##### `fn from(entries: Array<[String, V]>) -> HashMap<String, V>`
+
+#### `impl LiteralSpread for HashMap<String, V>`
+
+##### `fn spread_literal(&mut self, base: HashMap<String, V>)`
+
+#### `impl Default for HashMap<K, V>`
+
+##### `fn default() -> HashMap<K, V>`
+
+#### `impl Serialize for HashMap<K, V>`
+
+##### `fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>`
+
+#### `impl Deserialize for HashMap<K, V>`
+
+##### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<HashMap<K, V>, DeserializeError>`
+
 ### `pub struct HashSet<T>`
 
 A set that iterates in insertion order, found by hashing its elements.
 
 _Fields are private._
 
-#### `pub fn new(seed: HashSeed) -> HashSet<T>`
+#### `pub fn new() -> HashSet<T>`
+
+An empty set hashing under the host's seed.
+
+#### `pub fn with_seed(seed: HashSeed) -> HashSet<T>`
 
 An empty set hashing with `seed`.
 
@@ -479,3 +503,19 @@ The elements, in insertion order.
 #### `impl IntoIterator for HashSet<T>`
 
 ##### `fn into_iter(&self) -> MapKeysValueIter<T, ()>`
+
+#### `impl From<Array<T>> for HashSet<T>`
+
+##### `fn from(elements: Array<T>) -> HashSet<T>`
+
+#### `impl Default for HashSet<T>`
+
+##### `fn default() -> HashSet<T>`
+
+#### `impl Serialize for HashSet<T>`
+
+##### `fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>`
+
+#### `impl Deserialize for HashSet<T>`
+
+##### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<HashSet<T>, DeserializeError>`

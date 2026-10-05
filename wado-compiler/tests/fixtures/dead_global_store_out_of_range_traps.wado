@@ -1,5 +1,6 @@
-// A dead global's initializer whose loop runs past the end of its array traps,
-// and the trap is observable: the call stays although nothing reads the global.
+// A store to a dead global whose value's loop runs past the end of its array
+// traps, and the trap is observable: the call stays although nothing reads the
+// global.
 use { println, Stdout } from "core:cli";
 
 #[inline(never)]
@@ -11,13 +12,14 @@ fn build_table() -> ByteList {
     return table;
 }
 
-global TABLE: ByteList = build_table();
+global mut TABLE: ByteList = [];
 
 fn decode(b: u8) -> u8 {
     return TABLE[b as i32];
 }
 
 export fn run() with Stdout {
+    TABLE = build_table();
     println("unreachable");
 }
 
