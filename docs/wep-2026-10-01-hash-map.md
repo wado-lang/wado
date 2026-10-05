@@ -102,31 +102,14 @@ program that reaches none of its readers imports nothing for it.
   best-effort output and lifts the check from the whole body. `eval`'s case is
   the one `#[benign]` names: an effect that does not show through the interface.
 
-### Trusted keys get a newtype
+### `GaleMap` and `GaleSet` go
 
-A package whose maps all hold trusted keys declares a newtype over `HashMap`
-under its own fixed seed. Its hashing is the same on every run, and it needs no
-`insecure-seed` import. The newtype implements `Default`, `Serialize` and
-`Deserialize` itself, under its own seed. It must: a newtype inherits its base's
-trait impls, so one it leaves out builds the map under `DEFAULT_HASH_SEED`. A
-fixed seed reveals nothing when written out, so the reason that refuses
-`Serialize` on `HashMap` does not hold. The choice of seed is made once, where
-the newtype is declared, rather than at every construction site.
-
-```wado
-global SEED: HashSeed = HashSeed::fixed(0x243F6A8885A308D3, 0x13198A2E03707344);
-
-pub type GaleMap<K, V> = HashMap<K, V>;
-
-impl<K: Hash, V> GaleMap<K, V> {
-    pub fn new() -> GaleMap<K, V> {
-        return HashMap::<K, V>::with_seed(SEED) as GaleMap<K, V>;
-    }
-}
-```
-
-Gale does this for its generator, its corpus tools, and the baselines they read
-and write.
+Gale's `GaleMap` and `GaleSet` are newtypes over `HashMap` and `HashSet` under a
+fixed seed. They exist because `HashMap::new` used to require a seed: the
+newtypes gave Gale a seedless `new()`, and `Default`, `Serialize` and
+`Deserialize`. A seedless `new()`, `Default` and `Deserialize` now come with
+`HashMap` itself, so Gale uses `HashMap` and `HashSet` and the newtypes are
+deleted.
 
 ### Iteration keeps insertion order
 
@@ -232,17 +215,19 @@ function does ([WEP: Declared absence](./wep-2026-09-13-declared-absence.md)).
   `with_seed`.
 - [ ] `Default` and `Deserialize` on `HashMap` and `HashSet`. Done when a JSON
   object decodes into a `HashMap<String, V>` in input order.
+- [ ] Gale uses `HashMap` and `HashSet`. Done when `GaleMap` and `GaleSet` are
+  deleted.
 
 ## Known gaps
 
 - Every map built under `DEFAULT_HASH_SEED` in one instance shares it. A
   long-lived instance, such as an HTTP service, gives an attacker many requests
   against one seed to learn its collisions from timing.
-- A trusted-key newtype that leaves out `Default` or `Deserialize` hashes under
-  the default seed without a diagnostic.
-- The newtype's own `new()` and the `new()` it inherits from `HashMap` have the
-  same signature. The specification says a newtype's own trait impl wins over
-  the inherited one, but says nothing of an associated function.
+- Gale runs as a Kiln generator, and the Kiln host links no `insecure-seed`
+  (`wado-cli/src/kiln_runtime.rs`). A generator that reaches
+  `DEFAULT_HASH_SEED` fails to instantiate, which blocks deleting `GaleMap`.
+- `package-gale/src/corpus.wado` writes a `GaleMap` of counts out as JSON, and
+  `HashMap` has no `Serialize`, which also blocks deleting `GaleMap`.
 - A hand-written `Serialize` that writes the entries alone would leak nothing,
   but whether `HashMap` and `HashSet` offer one is undecided.
 - Floating-point keys have no `Hash`. Their `==` treats every NaN as one value
