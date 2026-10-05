@@ -1115,12 +1115,20 @@ test "every scalar key width round-trips through its spelling" {
     assert_key_round_trips('x', "x");
 }
 
-test "a non-finite map key is a string, spelled as core:value spells it" {
-    // A key is a JSON string, so the rule barring NaN from a number is no bar.
-    assert_key_round_trips(f64::NAN, "NaN");
-    assert_key_round_trips(f64::INFINITY, "inf");
-    let low: f32 = f32::NEG_INFINITY;
-    assert_key_round_trips(low, "-inf");
+test "a numeric map key holds a number by the rules a bare one is" {
+    // As serde_json reads and writes one.
+    assert key_write_error(f64::NAN) == SerializeErrorKind::UnsupportedValue;
+    assert key_write_error(f64::INFINITY) == SerializeErrorKind::UnsupportedValue;
+    assert key_write_error(f32::NEG_INFINITY) == SerializeErrorKind::UnsupportedValue;
+    assert de_err::<TreeMap<f64, i32>>(`{"NaN":1}`).kind == DeserializeErrorKind::InvalidValue;
+    assert de_err::<TreeMap<f64, i32>>(`{"inf":1}`).kind == DeserializeErrorKind::InvalidValue;
+    let over = de_err::<TreeMap<f64, i32>>(`{"1e400":1}`);
+    assert over.kind == DeserializeErrorKind::Overflow && over.offset == 1;
+    assert de_err::<TreeMap<i32, i32>>(`{"+5":1}`).kind == DeserializeErrorKind::InvalidValue;
+    assert de_err::<TreeMap<i32, i32>>(`{"5 ":1}`).kind == DeserializeErrorKind::InvalidValue;
+    assert de_err::<TreeMap<i32, i32>>(`{"1.5":1}`).kind == DeserializeErrorKind::UnexpectedType;
+    assert from_string::<TreeMap<i32, i32>>(`{"1e2":1}`) matches { Ok(m) && m.get(100) == Option::Some(1) };
+    // core:value has no number rules to hold a key to, so it keeps the spelling.
     let mut keyed = TreeMap::<f64, i32>::new();
     keyed[f64::NAN] = 1;
     assert to_value(&keyed) matches { Ok(Object(o)) && o.contains_key("NaN") };
@@ -1136,7 +1144,7 @@ test "a map key that does not parse as its type names the key" {
 }
 
 test "a repeated scalar key is rejected like a string one" {
-    let e = de_err::<TreeMap<i32, i32>>(`{"1":1,"01":2,"1":3}`);
+    let e = de_err::<TreeMap<i32, i32>>(`{"1":1,"1.0":2}`);
     assert e.kind == DeserializeErrorKind::DuplicateField;
 }
 
@@ -1657,7 +1665,7 @@ test "JsonDeserializer reads a token stream by hand" {
     assert de.expect_char(b',') matches { Ok };
     assert de.parse_i64_direct() == Result::Ok(i64::MIN);
     assert de.expect_char(b',') matches { Ok };
-    assert de.read_number_raw() == Result::Ok("-1.5e+3");
+    assert de.parse_f64_direct() == Result::Ok(-1500.0);
     assert de.expect_char(b',') matches { Ok };
     assert de.skip_value(0) matches { Ok };
     assert de.expect_char(b']') matches { Ok };
@@ -1755,8 +1763,6 @@ test "a skipped number is held to the read path's grammar" {
     assert zeros.skip_number().unwrap_err() == DeserializeError::malformed("leading zero in number", 0);
     let mut point = JsonDeserializer { input: " 1.e5".as_bytes(), pos: 0 };
     assert point.skip_value(0).unwrap_err() == DeserializeError::malformed("expected digit after '.'", 3);
-    let mut raw = JsonDeserializer { input: "[1e+]".as_bytes(), pos: 1 };
-    assert raw.read_number_raw().unwrap_err() == DeserializeError::malformed("expected digit in exponent", 4);
-    let mut raw_zeros = JsonDeserializer { input: "012".as_bytes(), pos: 0 };
-    assert raw_zeros.read_number_raw().unwrap_err() == DeserializeError::malformed("leading zero in number", 0);
+    let mut exponent = JsonDeserializer { input: "[1e+]".as_bytes(), pos: 1 };
+    assert exponent.skip_number().unwrap_err() == DeserializeError::malformed("expected digit in exponent", 4);
 }

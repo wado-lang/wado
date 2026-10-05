@@ -52,9 +52,11 @@ one document as different values. This module settles each one as follows.
   writes them sorted.
 - A struct ignores a key it has no field for. The value under it is held
   to the grammar alone, so `1e400` there is no error.
-- A map key is a string, and a numeric key type reads it with its own
-  `from_str`, not by the number rules above: `"inf"`, `"NaN"` and `"1e400"`
-  all read as an `f64` key.
+- A map key is a string, and a numeric key type holds what it spells to the
+  number rules above, as serde_json does: `"1e2"` is the `i32` key `100`,
+  `"1e400"` an `Overflow` as an `f64` key, and `"NaN"`, `"inf"` and `"+5"`
+  no number. Writing a NaN or infinite key is an error, as writing such a
+  value is.
 
 ### Documents
 
@@ -342,11 +344,6 @@ the input costs another bounds check and load.
 #### `pub fn expect_char(&mut self, c: i32) -> Result<(), DeserializeError>`
 
 #### `pub fn read_json_string(&mut self) -> Result<String, DeserializeError>`
-
-#### `pub fn read_number_raw(&mut self) -> Result<String, DeserializeError>`
-
-Reads a JSON number token as a String, held to the grammar every
-number read is.
 
 #### `pub fn skip_number(&mut self) -> Result<(), DeserializeError>`
 
