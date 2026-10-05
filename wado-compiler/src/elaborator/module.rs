@@ -176,9 +176,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Check each trait impl's header against what its trait requires: the
-    /// bounds on its associated types, and its supertraits.
+    /// bounds on its associated types, and its supertraits. First, the bounds
+    /// on type declarations' arguments the decl pass met before the solver.
     pub(super) fn check_impl_headers(&mut self, module: &Module, module_source: ModuleSource) {
         self.current_module_source = module_source;
+        self.check_deferred_decl_arg_bounds();
         for item in &module.items {
             if let Item::Impl(impl_block) = item
                 && impl_block.trait_type.is_some()

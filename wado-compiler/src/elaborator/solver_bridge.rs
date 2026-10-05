@@ -173,6 +173,15 @@ impl Lowering {
             TypeHead::Builtin(builtin) => {
                 SolverType::Decl(self.known_type(&DeclKey::Builtin(builtin.clone()))?, args)
             }
+            TypeHead::Function {
+                is_mut, signature, ..
+            } => SolverType::Decl(
+                self.known_type(&DeclKey::Builtin(fn_shape_name(*is_mut).to_string()))?,
+                signature
+                    .iter()
+                    .map(|ty| self.named_arg(ty))
+                    .collect::<Option<Vec<_>>>()?,
+            ),
             head => SolverType::Decl(self.known_type(&DeclKey::Def(head.def()?))?, args),
         };
         Some(
@@ -919,6 +928,14 @@ impl SolverBridge {
         // A struct or newtype declared in a body has its identity here and its
         // members only once annotate reaches the body.
         let defs = tysys.resolutions.defs();
+        // An interface is a trait to a bound, and one no impl names is still
+        // one no type implements.
+        for def in defs
+            .iter()
+            .filter(|&def| matches!(defs.kind(def), DefKind::Trait | DefKind::Effect))
+        {
+            lowering.trait_decl(def);
+        }
         for def in defs.iter().filter(|&def| {
             matches!(defs.kind(def), DefKind::Struct | DefKind::Newtype)
                 && defs.is_function_local(def)
@@ -1480,7 +1497,7 @@ impl SolverBridge {
 
     /// Whether `type_id` satisfies `asked`, with the bodies the answer owes,
     /// each keyed as synthesis keys one: the head, its module, and the trait.
-    /// `None` where the lowering states nothing about the question.
+    /// `None` where it does not hold.
     pub(super) fn answer_owing(
         &self,
         tysys: &TypeSystem,
@@ -1488,12 +1505,26 @@ impl SolverBridge {
         scope: &TypeLookup,
         type_id: TypeId,
         asked: &FqTraitName,
-    ) -> Option<Option<Vec<OwedBody>>> {
-        let q = self.question(tysys, ctx, scope, type_id, asked)?;
-        let Some(held) = holds_with_args(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args)
-        else {
-            return Some(None);
-        };
+    ) -> Option<Vec<OwedBody>> {
+        // A type that failed to resolve was reported where it failed: it holds
+        // what every type holds, and no impl answers for it.
+        if matches!(tysys.type_table.borrow().get(type_id), ResolvedType::Error) {
+            let holds = asked
+                .canonical()
+                .and_then(|decl| self.lowering.known_trait(decl))
+                .and_then(|trait_| self.program.traits.get(&trait_))
+                .is_some_and(|def| def.holds_for_all);
+            return holds.then(Vec::new);
+        }
+        let q = self
+            .question(tysys, ctx, scope, type_id, asked)
+            .unwrap_or_else(|| {
+                panic!(
+                    "the lowering states no `{}: {asked}`",
+                    tysys.type_table.borrow().type_name(type_id)
+                )
+            });
+        let held = holds_with_args(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args)?;
         let owed = owed(&self.program, &q.env, q.module, held.requests);
         let table = tysys.type_table.borrow();
         let shape_heads = [
@@ -1542,7 +1573,7 @@ impl SolverBridge {
                 }
             })
             .collect();
-        Some(Some(bodies))
+        Some(bodies)
     }
 
     /// Each anonymous shape `id` is built over, with its lowering: what a

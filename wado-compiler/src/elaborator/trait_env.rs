@@ -1359,25 +1359,6 @@ impl TraitEnv {
         fq.with_args(args)
     }
 
-    /// The trait's declared default at `index` where it names a type. `None`
-    /// for a `= Self` default, which says whatever target is answering rather
-    /// than a type of its own.
-    pub(super) fn named_default_arg(
-        &self,
-        trait_: DefId,
-        index: usize,
-    ) -> Option<&name::FqTypeName> {
-        match self
-            .trait_decl_headers
-            .get(&trait_)?
-            .default_args
-            .get(index)?
-        {
-            Some(DefaultArg::Named(name)) => Some(name),
-            Some(DefaultArg::SelfTarget) | None => None,
-        }
-    }
-
     /// The type parameters `trait_` declares, empty for one that declares none
     /// and for a name reaching no declaration.
     pub(super) fn trait_decl_params(&self, trait_: DefId) -> &[ast::GenericParam] {
@@ -2831,14 +2812,7 @@ pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> nam
             written_type_arg(inner, resolutions).with_reference(name::RefKind::Mut)
         }
         ast::Type::Tuple(elems) => name::FqTypeName::tuple(nested(elems)),
-        // Spelled by the whole shape, matching the resolved form: the two
-        // sides of a lookup have to render one type one way.
         ast::Type::Function(ft) => {
-            let params: Vec<String> = ft
-                .params
-                .iter()
-                .map(|param| written_type_arg(param, resolutions).to_mangled())
-                .collect();
             let with_clause: Vec<String> = ft
                 .effects
                 .iter()
@@ -2848,13 +2822,12 @@ pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> nam
                         .map_or_else(|| effect.name.clone(), |e| name::mangle_effect_ref(&e))
                 })
                 .collect();
-            name::FqTypeName::builtin(&name::mangle_fn_type(
+            name::FqTypeName::function(
                 ft.is_mut,
-                &params,
-                &written_type_arg(&ft.return_type, resolutions).to_mangled(),
-                matches!(ft.return_type, ast::Type::Function(_)),
-                &with_clause,
-            ))
+                nested(&ft.params),
+                written_type_arg(&ft.return_type, resolutions),
+                with_clause,
+            )
         }
         _ => {
             let head = match head_site(ty).map(|site| resolutions.get(site)) {

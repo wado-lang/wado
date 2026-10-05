@@ -557,7 +557,26 @@ Nothing flips at once. The fixture corpus is the drift detector, as
 a question the solver answers is asserted against the compiler's own path in
 debug builds over every fixture before the compiler's path is retired. `holds`
 ran that way beside `type_implements_trait` until it answered every question the
-lowering states.
+lowering states. The lowering then grew to state every question the corpus
+asks, and the compiler's own rules were deleted: `type_implements_trait` is the
+solver's answer, and a question it cannot state is a compiler bug.
+
+The growth that took:
+
+- A function type is a name with structure, its parameters and return
+  reachable by substitution, rather than one opaque spelling.
+- An interface no impl names is still a trait, one no type implements.
+- A type that failed to resolve holds what every type holds.
+- A bound on a type declaration's arguments is checked once the solver is built,
+  since any module's impl may answer it.
+- A supertrait clause writing `Self` is read with `Self` bound to the subject.
+
+The bodies the solver's answer owes are what synthesis emits: `owed` closes a
+structural body over its members, since the body calls the trait on each. A
+late declaration is stated when its members are known. An anonymous struct and
+a template shape lower as one variadic declaration each, their fields the pack's
+elements, and a struct or newtype declared in a body is stated when annotate
+hoists it (`trait_late_declaration_derives.wado`).
 
 Selection has one candidate set. The order names the impls that answer, each an
 impl block, or for a derived body the `Reflect*` blanket it comes from. Lookup
@@ -579,17 +598,6 @@ Method lookup decides nothing of its own: it asks the order, materializes a
 match from each impl the order names, and reports what the order tied.
 
 ## Known gaps
-
-### A projection inside a function type is never answered
-
-A trait argument spelled as a function type carries its projection unanswered.
-`U: Uses<fn(P::Item) -> i32>` passes `wado check` and then fails where the call
-is monomorphized, reported as `User` not implementing `Uses<fn(P::Item)->i32>`.
-A function type stands in a trait's name as one opaque spelling, holding no
-position a substitution can reach, so `P::Item` stays written there while every
-other shape answers it — `Uses<P::Item>` and `Uses<List<P::Item>>` both
-dispatch. This admits a valid program the compiler rejects, at that one shape,
-naming a parameter the call site never wrote.
 
 ### Scope does not gate a call through a bound
 
@@ -637,25 +645,6 @@ name. They share which impls reach the receiver, and nothing after that. Ranks
 0-3 exist on none of them; they agree with the order only by coincidence of scan
 order. Each path holds a different amount of the call: a receiver type, an
 operand class, a bound list.
-
-### The compiler answers what the lowering cannot state
-
-The solver answers every bound the lowering states, and the bodies its answer
-owes are what synthesis emits: `owed` closes a structural body over its
-members, since the body calls the trait on each. A late declaration is stated
-when its members are known. An anonymous struct and a template shape lower as
-one variadic declaration each, their fields the pack's elements, and a struct or
-newtype declared in a body is stated when annotate hoists it
-(`trait_late_declaration_derives.wado`).
-
-A question the lowering cannot state still falls to `type_implements_trait`'s
-own rules: a bound in scope the lowering cannot spell, or a type it has no way
-to say (an inference variable, a closure environment, a mapped pack). Those
-rules carry a second copy of what the solver states for reflection and
-`Default`. They read an instance's row of the comparison table from the solver,
-as every other phase does, and apply it themselves. They walk no members, so a
-structural trait asked there holds only through an impl. No fixture asks one
-about a structural trait.
 
 ### Specificity is refused, and now has a named cost
 

@@ -7,6 +7,7 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::TypeId;
+use crate::token::Span;
 
 use super::super::sig::{DeclSig, MethodSig};
 use super::super::types::{DataDecls, StructFieldInfo};
@@ -120,6 +121,10 @@ pub(crate) struct ModuleDecls {
     /// `TirModule::synthesis_requests`. Decouples annotate
     /// (which records) from reify (which emits).
     pub(crate) pending_synthesis_requests: Vec<tir::SynthesisRequest>,
+
+    /// Generic type applications the decl pass met before the solver that
+    /// answers their bounds was built: `(declaration, type arguments, span)`.
+    pub(crate) pending_decl_arg_bounds: Vec<(DefId, Vec<TypeId>, Span)>,
 
     /// Additions to the data tables made during this module's walk, read by
     /// `TypeLookup` ahead of the program's. Keyed by declaration, never spelling.
