@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791200245790,
+  "lastUpdate": 1791207765932,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -63989,6 +63989,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/307fef7f8708d3e83ec75e6175418c5d20f4dae7"
         },
         "date": 1791200245330,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338523,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "74a1ed0ecdc2ae489d6127784fd169da710b9234",
+          "message": "Merge pull request #2279 from wado-lang/ccr-0689c1c1-5wow2q\n\nfix(lexer): make whitespace and identifiers ASCII-only",
+          "timestamp": "2026-10-05T22:22:47+09:00",
+          "tree_id": "56f476dd36429acc0acd95f3fd0cc7c6b3cf54fc",
+          "url": "https://github.com/wado-lang/wado/commit/74a1ed0ecdc2ae489d6127784fd169da710b9234"
+        },
+        "date": 1791207765420,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
