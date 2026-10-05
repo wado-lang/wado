@@ -163,7 +163,7 @@ object:
 <!-- {"source": "package-loam/conformance/specialize_test.wado"} -->
 
 ```wado
-use { Batch, Merged, Col, Row, Tensor, Weights, forward } from "./specialize.onnxtext"
+use { Batch, Merged, Col, Cpu, Row, Tensor, Weights, forward } from "./specialize.onnxtext"
     with {
         generator: {
             module: "../src/generator.wado",
