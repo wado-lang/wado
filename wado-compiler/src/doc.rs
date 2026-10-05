@@ -9,6 +9,7 @@ use crate::ast::{
 };
 use crate::attribute::SYNOPSIS;
 use crate::comment::{Comment, CommentKind, TriviaMap};
+use crate::lexer::is_ident_continue;
 use crate::loader::resolve_wasm_asset_path;
 use crate::module_source::ModuleSourceInterner;
 use crate::primitive::PrimitiveType;
@@ -1115,9 +1116,8 @@ fn extract_item_name<'a>(sig: &'a str, keyword: &str) -> &'a str {
         .find(keyword)
         .map(|i| &sig[i + keyword.len()..])
         .unwrap_or(sig);
-    // Take until first non-identifier char
     let end = rest
-        .find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+        .find(|c: char| !is_ident_continue(c))
         .unwrap_or(rest.len());
     &rest[..end]
 }
