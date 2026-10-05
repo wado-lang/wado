@@ -96,8 +96,8 @@ struct core:prelude/slice.wado//Slice<u8> {  // TypeId(16)
 }
 
 variant core:prelude/types.wado//Option<char> {  // TypeId(17)
-    Some(char),
     None,
+    Some(char),
 }
 
 struct core:prelude/types.wado//Option<char>::Some {  // TypeId(18)
@@ -326,7 +326,7 @@ fn "serde_json_synth_enum.wado/$test_0_enum_serialize_red"() {
     let $mv$r$0: i32;
     let $mv$r$1: ref null "core:prelude/string.wado//String";
     let $mv$r$2: ref null "core:serde//SerializeError";
-    multivalue_bind [$mv$r$0, $mv$r$1, $mv$r$2] = "core:json/core/json/to_string<serde_json_synth_enum.wado/Color>$scalar$spec0"(struct.new "core:prelude/types.wado//Option<char>" { 1 });
+    multivalue_bind [$mv$r$0, $mv$r$1, $mv$r$2] = "core:json/core/json/to_string<serde_json_synth_enum.wado/Color>$scalar$spec0"(struct.new "core:prelude/types.wado//Option<char>" { 0 });
     if @likely($mv$r$0 == 0) {
         s = ref.as_non_null($mv$r$1);
         if @unlikely(local.tee i($inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
@@ -392,7 +392,7 @@ fn "serde_json_synth_enum.wado/$test_1_enum_roundtrip_green"() {
     let $mv$json_r$0: i32;
     let $mv$json_r$1: ref null "core:prelude/string.wado//String";
     let $mv$json_r$2: ref null "core:serde//SerializeError";
-    multivalue_bind [$mv$json_r$0, $mv$json_r$1, $mv$json_r$2] = "core:json/core/json/to_string<serde_json_synth_enum.wado/Color>$scalar$spec1"(struct.new "core:prelude/types.wado//Option<char>" { 1 });
+    multivalue_bind [$mv$json_r$0, $mv$json_r$1, $mv$json_r$2] = "core:json/core/json/to_string<serde_json_synth_enum.wado/Color>$scalar$spec1"(struct.new "core:prelude/types.wado//Option<char>" { 0 });
     if @likely($mv$json_r$0 == 0) {
         json = ref.as_non_null($mv$json_r$1);
         if @unlikely(local.tee i($inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
@@ -2611,7 +2611,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
             $sroa_slot_156 = 0;
             $inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_9: block {
                 if start_20 >= $mv$content$used {
-                    $sroa_slot_156 = 1;
+                    $sroa_slot_156 = 0;
                     break $inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_9;
                 }
                 $sroa_slot_196 = 0;
@@ -2638,11 +2638,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
                     break $inline_decode_char_at_0;
                 };
                 start_20 = start_20 + $sroa_slot_196;
-                $sroa_slot_156 = 0;
+                $sroa_slot_156 = 1;
                 break $inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_9;
             };
             let $match_scrut_0: i32;
-            if local.tee $match_scrut_0($sroa_slot_156) == 0 {
+            if local.tee $match_scrut_0($sroa_slot_156) == 1 {
                 new_used_19 = new_used_19 + 1;
             } else {
                 break b315;

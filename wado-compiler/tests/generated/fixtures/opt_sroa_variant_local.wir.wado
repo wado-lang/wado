@@ -34,8 +34,8 @@ struct core:prelude/format.wado//Formatter {  // TypeId(5)
 array Array<i64> (mut i64);  // TypeId(6)
 
 variant core:prelude/types.wado//Option<i32> {  // TypeId(7)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(8)
@@ -44,8 +44,8 @@ struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(8)
 }
 
 variant core:prelude/types.wado//Option<i64> {  // TypeId(9)
-    Some(i64),
     None,
+    Some(i64),
 }
 
 struct core:prelude/types.wado//Option<i64>::Some {  // TypeId(10)
@@ -211,7 +211,7 @@ fn "opt_sroa_variant_local.wado/last_even"(xs) {
     let $sroa_found_1_15: i64;
     let $sroa_$iter_0_repr_19: ref Array<i64>;
     let $sroa_$iter_0_index_20: i32;
-    $sroa_found_0_14 = 1;
+    $sroa_found_0_14 = 0;
     $sroa_found_1_15 = 0_i64;
     end = xs.used;
     $sroa_$iter_0_repr_19 = xs.repr;
@@ -222,16 +222,16 @@ fn "opt_sroa_variant_local.wado/last_even"(xs) {
             ref_val = builtin::array_get_value<i64>($sroa_$iter_0_repr_19, $sroa_$iter_0_index_20);
             $sroa_$iter_0_index_20 = $sroa_$iter_0_index_20 + 1;
             if (ref_val % 2_i64) == 0_i64 {
-                $sroa_found_0_14 = 0;
+                $sroa_found_0_14 = 1;
                 $sroa_found_1_15 = ref_val;
             }
             continue l1;
         };
     };
-    $sroa_$iter_0_index_20 = $sroa_found_0_14 == 0;
-    return (if $sroa_found_0_14 == 0 -> i64 {
+    $sroa_$iter_0_index_20 = $sroa_found_0_14 == 1;
+    return (if $sroa_found_0_14 == 1 -> i64 {
         select i64($sroa_$iter_0_index_20, $sroa_found_1_15, -2_i64);
-    } else if @likely($sroa_found_0_14 == 1) -> i64 {
+    } else if @likely($sroa_found_0_14 == 0) -> i64 {
         -1_i64;
     } else {
         unreachable;
@@ -248,9 +248,9 @@ fn "opt_sroa_variant_local.wado/describe"(v) {
 
 fn "opt_sroa_variant_local.wado/passed_whole"(n) {
     let kept: ref "core:prelude/types.wado//Option<i64>";
-    kept = struct.new "core:prelude/types.wado//Option<i64>" { 1 };
+    kept = struct.new "core:prelude/types.wado//Option<i64>" { 0 };
     if n > 0_i64 {
-        kept = struct.new "core:prelude/types.wado//Option<i64>::Some" { discriminant: 0, payload_0: n };
+        kept = struct.new "core:prelude/types.wado//Option<i64>::Some" { discriminant: 1, payload_0: n };
     }
     return "opt_sroa_variant_local.wado/describe"(kept);
 }
@@ -261,7 +261,7 @@ fn "opt_sroa_variant_local.wado/nested"(n) {
     let $local_3: ref "core:prelude/types.wado//Option<i32>";
     o = ref.null none;
     if n > 0 {
-        o = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: n };
+        o = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: n };
     }
     return (if (if ref.is_null(o) == 0 -> i32 {
         if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $local_3(ref.as_non_null(o))) -> i32 {
@@ -275,7 +275,7 @@ fn "opt_sroa_variant_local.wado/nested"(n) {
     }) -> i32 {
         v;
     } else if (if ref.is_null(o) == 0 -> i32 {
-        local.tee $local_3(ref.as_non_null(o)).discriminant == 1;
+        local.tee $local_3(ref.as_non_null(o)).discriminant == 0;
     } else {
         0;
     }) -> i32 {
@@ -290,14 +290,14 @@ fn "opt_sroa_variant_local.wado/nested"(n) {
 fn "opt_sroa_variant_local.wado/guard_resets"(n, reset) {
     let s: ref "core:prelude/types.wado//Option<i64>";
     let v_3: i64;
-    s = struct.new "core:prelude/types.wado//Option<i64>" { 1 };
+    s = struct.new "core:prelude/types.wado//Option<i64>" { 0 };
     if n > 0_i64 {
-        s = struct.new "core:prelude/types.wado//Option<i64>::Some" { discriminant: 0, payload_0: n };
+        s = struct.new "core:prelude/types.wado//Option<i64>::Some" { discriminant: 1, payload_0: n };
     }
     return let $match_scrut_0: ref "core:prelude/types.wado//Option<i64>", (if (if ref.test "core:prelude/types.wado//Option<i64>::Some"(local.tee $match_scrut_0(s)) -> i32 {
         v_3 = ref.cast "core:prelude/types.wado//Option<i64>::Some"($match_scrut_0).payload_0;
         if reset -> bool {
-            s = struct.new "core:prelude/types.wado//Option<i64>" { 1 };
+            s = struct.new "core:prelude/types.wado//Option<i64>" { 0 };
             0;
         } else {
             0;
@@ -308,7 +308,7 @@ fn "opt_sroa_variant_local.wado/guard_resets"(n, reset) {
         v_3;
     } else if ref.test "core:prelude/types.wado//Option<i64>::Some"($match_scrut_0) -> i64 {
         ref.cast "core:prelude/types.wado//Option<i64>::Some"($match_scrut_0).payload_0 + 1_i64;
-    } else if @likely($match_scrut_0.discriminant == 1) -> i64 {
+    } else if @likely($match_scrut_0.discriminant == 0) -> i64 {
         0_i64;
     } else {
         unreachable;
@@ -318,7 +318,7 @@ fn "opt_sroa_variant_local.wado/guard_resets"(n, reset) {
 fn "opt_sroa_variant_local.wado/payload_breaks"(c) {
     let $sroa_s_0_3: i32;
     let $sroa_s_1_4: i32;
-    $sroa_s_0_3 = 1;
+    $sroa_s_0_3 = 0;
     $sroa_s_1_4 = 0;
     block {
         c = (if c -> i32 {
@@ -326,12 +326,12 @@ fn "opt_sroa_variant_local.wado/payload_breaks"(c) {
         } else {
             1;
         });
-        $sroa_s_0_3 = 0;
+        $sroa_s_0_3 = 1;
         $sroa_s_1_4 = c;
     };
-    return (if $sroa_s_0_3 == 0 -> i32 {
+    return (if $sroa_s_0_3 == 1 -> i32 {
         $sroa_s_1_4;
-    } else if @likely($sroa_s_0_3 == 1) -> i32 {
+    } else if @likely($sroa_s_0_3 == 0) -> i32 {
         -1;
     } else {
         unreachable;

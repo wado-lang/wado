@@ -87,8 +87,8 @@ struct core:prelude/slice.wado//Slice<u8> {  // TypeId(17)
 }
 
 variant core:prelude/types.wado//Option<char> {  // TypeId(18)
-    Some(char),
     None,
+    Some(char),
 }
 
 struct core:prelude/types.wado//Option<char>::Some {  // TypeId(19)
@@ -343,7 +343,7 @@ fn "serde_json_array_string.wado/$test_0_serialize_list_string_"() {
     let $mv$r$0: i32;
     let $mv$r$1: ref null "core:prelude/string.wado//String";
     let $mv$r$2: ref null "core:serde//SerializeError";
-    multivalue_bind [$mv$r$0, $mv$r$1, $mv$r$2] = "core:json/core/json/to_string<core:prelude/list.wado/List<core:prelude/string.wado/String>>"(v, struct.new "core:prelude/types.wado//Option<char>" { 1 });
+    multivalue_bind [$mv$r$0, $mv$r$1, $mv$r$2] = "core:json/core/json/to_string<core:prelude/list.wado/List<core:prelude/string.wado/String>>"(v, struct.new "core:prelude/types.wado//Option<char>" { 0 });
     if @likely($mv$r$0 == 0) {
         s = ref.as_non_null($mv$r$1);
         if @unlikely(local.tee i($inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
@@ -411,7 +411,7 @@ fn "serde_json_array_string.wado/$test_1_serialize_list_i32_"() {
     let $mv$r$0: i32;
     let $mv$r$1: ref null "core:prelude/string.wado//String";
     let $mv$r$2: ref null "core:serde//SerializeError";
-    multivalue_bind [$mv$r$0, $mv$r$1, $mv$r$2] = "core:json/core/json/to_string<core:prelude/list.wado/List<i32>>"(v, struct.new "core:prelude/types.wado//Option<char>" { 1 });
+    multivalue_bind [$mv$r$0, $mv$r$1, $mv$r$2] = "core:json/core/json/to_string<core:prelude/list.wado/List<i32>>"(v, struct.new "core:prelude/types.wado//Option<char>" { 0 });
     if @likely($mv$r$0 == 0) {
         s = ref.as_non_null($mv$r$1);
         if @unlikely(local.tee i($inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
@@ -468,7 +468,7 @@ fn "serde_json_array_string.wado/$test_2_roundtrip_i32"() {
     let $mv$json$0: i32;
     let $mv$json$1: ref null "core:prelude/string.wado//String";
     let $mv$json$2: ref null "core:serde//SerializeError";
-    multivalue_bind [$mv$json$0, $mv$json$1, $mv$json$2] = "core:json/core/json/to_string<i32>$scalar"(42, struct.new "core:prelude/types.wado//Option<char>" { 1 });
+    multivalue_bind [$mv$json$0, $mv$json$1, $mv$json$2] = "core:json/core/json/to_string<i32>$scalar"(42, struct.new "core:prelude/types.wado//Option<char>" { 0 });
     if @likely($mv$json$0 == 0) {
         repr_13 = local.tee s(ref.as_non_null($mv$json$1)).repr;
         let $mv$parsed$1: i32;

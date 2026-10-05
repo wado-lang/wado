@@ -179,7 +179,7 @@ fn "iterator_assoc_type_chain.wado/run"() {
             let $mv$$local_3$0: i32;
             let $mv$$local_3$1: i32;
             multivalue_bind [$mv$$local_3$0, $mv$$local_3$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>^core:prelude/traits.wado/Iterator::next"(self_24);
-            if $mv$$local_3$0 == 0 {
+            if $mv$$local_3$0 == 1 {
                 if @unlikely(local.tee used(result.used) >= builtin::array_len(result.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result);
@@ -1305,7 +1305,7 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/sl
         l186: loop {
             if $hfs_index_10 >= $licm_end_8 {
                 $licm_inner_6.index = $hfs_index_10;
-                return 1, 0;
+                return 0, 0;
             }
             item_4 = builtin::array_get_value<i32>($licm_repr_9, $hfs_index_10);
             $hfs_index_10 = $hfs_index_10 + 1;
@@ -1314,7 +1314,7 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/sl
                 call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($licm_pred_7)).env, item_4);
             } {
                 $licm_inner_6.index = $hfs_index_10;
-                return 0, item_4;
+                return 1, item_4;
             }
             continue l186;
         };

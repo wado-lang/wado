@@ -120,7 +120,7 @@ fn "opt_field_scalarize_diverging_tail.wado/run"() with Stdout {
     let $mv$$vr_12$0: i32;
     let $mv$$vr_12$1: i32;
     multivalue_bind [$mv$$vr_12$0, $mv$$vr_12$1] = "opt_field_scalarize_diverging_tail.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>^core:prelude/traits.wado/Iterator::reduce$$Closure_1"(struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_arr_repr_68, index: 0, end: 4 }, pred: struct.new "canonical//CanonicalClosure_0" { env: pred_18, func: ref.func "closure/opt_field_scalarize_diverging_tail.wado/$closure_wrapper_0" } });
-    if @unlikely(local.tee $mv$$vr_12$1((if $mv$$vr_12$0 == 0 -> bool {
+    if @unlikely(local.tee $mv$$vr_12$1((if $mv$$vr_12$0 == 1 -> bool {
         $mv$$vr_12$1 == 12;
     } else {
         0;
@@ -131,14 +131,14 @@ fn "opt_field_scalarize_diverging_tail.wado/run"() with Stdout {
     }
     pred_21 = struct.new "opt_field_scalarize_diverging_tail.wado//$Closure_2" {  };
     multivalue_bind [$mv$$vr_12$1, $mv$$vr_12$0] = "opt_field_scalarize_diverging_tail.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>^core:prelude/traits.wado/Iterator::reduce$$Closure_3"(struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_arr_repr_68, index: 0, end: 4 }, pred: struct.new "canonical//CanonicalClosure_0" { env: pred_21, func: ref.func "closure/opt_field_scalarize_diverging_tail.wado/$closure_wrapper_1" } });
-    if @unlikely(local.tee $mv$$vr_12$1($mv$$vr_12$1 == 1) == 0) {
+    if @unlikely(local.tee $mv$$vr_12$1($mv$$vr_12$1 == 0) == 0) {
         cold_path;
         "opt_field_scalarize_diverging_tail.wado/run$cold1"();
         unreachable;
     }
     pred_25 = struct.new "opt_field_scalarize_diverging_tail.wado//$Closure_4" {  };
     multivalue_bind [$mv$$vr_12$1, $mv$$vr_12$0] = "opt_field_scalarize_diverging_tail.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>^core:prelude/traits.wado/Iterator::reduce$$Closure_5"(struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_arr_repr_68, index: 0, end: 4 }, pred: struct.new "canonical//CanonicalClosure_0" { env: pred_25, func: ref.func "closure/opt_field_scalarize_diverging_tail.wado/$closure_wrapper_2" } });
-    if @unlikely(local.tee $mv$$vr_12$0((if $mv$$vr_12$1 == 0 -> bool {
+    if @unlikely(local.tee $mv$$vr_12$0((if $mv$$vr_12$1 == 1 -> bool {
         $mv$$vr_12$0 == 7;
     } else {
         0;
@@ -281,7 +281,7 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/sl
         l16: loop {
             if $hfs_index_10 >= $licm_end_8 {
                 $licm_inner_6.index = $hfs_index_10;
-                return 1, 0;
+                return 0, 0;
             }
             item_4 = builtin::array_get_value<i32>($licm_repr_9, $hfs_index_10);
             $hfs_index_10 = $hfs_index_10 + 1;
@@ -290,7 +290,7 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/sl
                 call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($licm_pred_7)).env, item_4);
             } {
                 $licm_inner_6.index = $hfs_index_10;
-                return 0, item_4;
+                return 1, item_4;
             }
             continue l16;
         };
@@ -313,12 +313,12 @@ fn "opt_field_scalarize_diverging_tail.wado/core:prelude/traits.wado/IterFilter<
     let $mv$$match_5$0: i32;
     let $mv$$match_5$1: i32;
     multivalue_bind [$mv$$match_5$0, $mv$$match_5$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>^core:prelude/traits.wado/Iterator::next"(self);
-    if $mv$$match_5$0 == 0 {
+    if $mv$$match_5$0 == 1 {
         b21: block {
             l22: loop {
                 let $mv$$local_6$1: i32;
                 multivalue_bind [$mv$$match_5$0, $mv$$local_6$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>^core:prelude/traits.wado/Iterator::next"(self);
-                if $mv$$match_5$0 == 0 {
+                if $mv$$match_5$0 == 1 {
                     $mv$$match_5$1 = $mv$$match_5$1 * $mv$$local_6$1;
                 } else {
                     break b21;
@@ -326,22 +326,22 @@ fn "opt_field_scalarize_diverging_tail.wado/core:prelude/traits.wado/IterFilter<
                 continue l22;
             };
         };
-        return 0, $mv$$match_5$1;
+        return 1, $mv$$match_5$1;
     } else {
     }
-    return 1, 0;
+    return 0, 0;
 }
 
 fn "opt_field_scalarize_diverging_tail.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>^core:prelude/traits.wado/Iterator::reduce$$Closure_3"(self) {
     let $mv$$match_5$0: i32;
     let $mv$$match_5$1: i32;
     multivalue_bind [$mv$$match_5$0, $mv$$match_5$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>^core:prelude/traits.wado/Iterator::next"(self);
-    if $mv$$match_5$0 == 0 {
+    if $mv$$match_5$0 == 1 {
         b25: block {
             l26: loop {
                 let $mv$$local_6$1: i32;
                 multivalue_bind [$mv$$match_5$0, $mv$$local_6$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>^core:prelude/traits.wado/Iterator::next"(self);
-                if $mv$$match_5$0 == 0 {
+                if $mv$$match_5$0 == 1 {
                     $mv$$match_5$1 = $mv$$match_5$1 * $mv$$local_6$1;
                 } else {
                     break b25;
@@ -349,22 +349,22 @@ fn "opt_field_scalarize_diverging_tail.wado/core:prelude/traits.wado/IterFilter<
                 continue l26;
             };
         };
-        return 0, $mv$$match_5$1;
+        return 1, $mv$$match_5$1;
     } else {
     }
-    return 1, 0;
+    return 0, 0;
 }
 
 fn "opt_field_scalarize_diverging_tail.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>^core:prelude/traits.wado/Iterator::reduce$$Closure_5"(self) {
     let $mv$$match_5$0: i32;
     let $mv$$match_5$1: i32;
     multivalue_bind [$mv$$match_5$0, $mv$$match_5$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>^core:prelude/traits.wado/Iterator::next"(self);
-    if $mv$$match_5$0 == 0 {
+    if $mv$$match_5$0 == 1 {
         b29: block {
             l30: loop {
                 let $mv$$local_6$1: i32;
                 multivalue_bind [$mv$$match_5$0, $mv$$local_6$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>^core:prelude/traits.wado/Iterator::next"(self);
-                if $mv$$match_5$0 == 0 {
+                if $mv$$match_5$0 == 1 {
                     $mv$$match_5$1 = $mv$$match_5$1 + $mv$$local_6$1;
                 } else {
                     break b29;
@@ -372,10 +372,10 @@ fn "opt_field_scalarize_diverging_tail.wado/core:prelude/traits.wado/IterFilter<
                 continue l30;
             };
         };
-        return 0, $mv$$match_5$1;
+        return 1, $mv$$match_5$1;
     } else {
     }
-    return 1, 0;
+    return 0, 0;
 }
 
 fn "closure/opt_field_scalarize_diverging_tail.wado/$closure_wrapper_0"($env, $p0) {

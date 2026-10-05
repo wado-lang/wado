@@ -193,8 +193,8 @@ struct tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<cor
 }
 
 variant core:prelude/types.wado//Option<u64> {  // TypeId(30)
-    Some(u64),
     None,
+    Some(u64),
 }
 
 struct core:prelude/types.wado//Option<u64>::Some {  // TypeId(31)
@@ -203,8 +203,8 @@ struct core:prelude/types.wado//Option<u64>::Some {  // TypeId(31)
 }
 
 variant core:prelude/types.wado//Option<u8> {  // TypeId(32)
-    Some(u8),
     None,
+    Some(u8),
 }
 
 struct core:prelude/types.wado//Option<u8>::Some {  // TypeId(33)
@@ -213,8 +213,8 @@ struct core:prelude/types.wado//Option<u8>::Some {  // TypeId(33)
 }
 
 variant core:prelude/types.wado//Option<u16> {  // TypeId(34)
-    Some(u16),
     None,
+    Some(u16),
 }
 
 struct core:prelude/types.wado//Option<u16>::Some {  // TypeId(35)
@@ -223,8 +223,8 @@ struct core:prelude/types.wado//Option<u16>::Some {  // TypeId(35)
 }
 
 variant core:prelude/types.wado//Option<u32> {  // TypeId(36)
-    Some(u32),
     None,
+    Some(u32),
 }
 
 struct core:prelude/types.wado//Option<u32>::Some {  // TypeId(37)
@@ -233,8 +233,8 @@ struct core:prelude/types.wado//Option<u32>::Some {  // TypeId(37)
 }
 
 variant core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>> {  // TypeId(38)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some {  // TypeId(39)
@@ -243,8 +243,8 @@ struct core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some
 }
 
 variant core:prelude/types.wado//Option<wasi:http/types.wado/Fields> {  // TypeId(40)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some {  // TypeId(41)
@@ -383,7 +383,7 @@ import fn wasi/resource-drop:wasi/http/types.wado#request from "wasi/resource-dr
 import fn wasi/future-write from "wasi/future-write";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
-global global:spec_worlds_http_response.wado::$const_obj_4: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>" = struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } };
+global global:spec_worlds_http_response.wado::$const_obj_4: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>" = struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 0 } };
 global global:spec_worlds_http_response.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(99, 114, 101, 97, 116, 101, 100);
 global global:spec_worlds_http_response.wado::$const_obj_6: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 114, 101, 115, 112, 111, 110, 115, 101, 46, 115, 101, 116, 95, 115, 116, 97, 116, 117, 115, 95, 99, 111, 100, 101, 40, 50, 48, 49, 41, 32, 109, 97, 116, 99, 104, 101, 115, 32, 123, 32, 79, 107, 40, 95, 41, 32, 125, 10), used: 60 };
 global mut global:spec_worlds_http_response.wado::$const_obj_7: ref null "core:prelude/string.wado//String" = ref.null none;
@@ -540,7 +540,7 @@ condition: headers.append(\"content-type\" as FieldName, b\"text/plain\") matche
     tx_190 = builtin::i32_wrap_i64(packed_188 >> 32_i64);
     rx_192 = builtin::i32_wrap_i64(local.tee packed_188("wasi/future-new"()));
     tx_193 = builtin::i32_wrap_i64(packed_188 >> 32_i64);
-    rx_192 = "spec_worlds_http_response.wado/$cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 0, payload_0: $cond_2 }, rx_192).0;
+    rx_192 = "spec_worlds_http_response.wado/$cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: $cond_2 }, rx_192).0;
     if @unlikely(local.tee $cond_2("spec_worlds_http_response.wado/$cm_binding__Response_set_status_code"(rx_192, 201).discriminant == 0) == 0) {
         cold_path;
         $cond_2 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_10("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(133)), 61);

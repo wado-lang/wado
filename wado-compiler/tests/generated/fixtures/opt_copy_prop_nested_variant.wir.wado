@@ -58,8 +58,8 @@ array Array<i32> (mut i32);  // TypeId(11)
 array Array<u64> (mut u64);  // TypeId(12)
 
 variant core:prelude/types.wado//Option<i32> {  // TypeId(13)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(14)
@@ -249,12 +249,12 @@ global global:core:prelude/primitive.wado::$const_obj_154: ref "core:prelude/str
 
 fn "opt_copy_prop_nested_variant.wado/find_item"(key) {
     if key == 0 {
-        return 0, struct.new "core:prelude/types.wado//Option<i32>" { 1 }, ref.null none;
+        return 0, struct.new "core:prelude/types.wado//Option<i32>" { 0 }, ref.null none;
     }
     if key < 0 {
         return 1, ref.null none, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not found"), used: 9 };
     }
-    return 0, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: key * 10 }, ref.null none;
+    return 0, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: key * 10 }, ref.null none;
 }
 
 fn "opt_copy_prop_nested_variant.wado/sum_until_none"(keys) {
@@ -789,19 +789,19 @@ fn "opt_copy_prop_nested_variant.wado/run$cold9"($v0) {
 }
 
 fn "opt_copy_prop_nested_variant.wado/find_item$spec0"() {
-    return 0, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 10 }, ref.null none;
+    return 0, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 10 }, ref.null none;
 }
 
 fn "opt_copy_prop_nested_variant.wado/find_item$spec1"() {
-    return 0, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 20 }, ref.null none;
+    return 0, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 20 }, ref.null none;
 }
 
 fn "opt_copy_prop_nested_variant.wado/find_item$spec2"() {
-    return 0, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 50 }, ref.null none;
+    return 0, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 50 }, ref.null none;
 }
 
 fn "opt_copy_prop_nested_variant.wado/find_item$spec3"() {
-    return 0, struct.new "core:prelude/types.wado//Option<i32>" { 1 }, ref.null none;
+    return 0, struct.new "core:prelude/types.wado//Option<i32>" { 0 }, ref.null none;
 }
 
 fn "opt_copy_prop_nested_variant.wado/parse_shape$spec0"() {

@@ -154,8 +154,8 @@ struct tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<cor
 }
 
 variant core:prelude/types.wado//Option<u64> {  // TypeId(24)
-    Some(u64),
     None,
+    Some(u64),
 }
 
 struct core:prelude/types.wado//Option<u64>::Some {  // TypeId(25)
@@ -164,8 +164,8 @@ struct core:prelude/types.wado//Option<u64>::Some {  // TypeId(25)
 }
 
 variant core:prelude/types.wado//Option<u8> {  // TypeId(26)
-    Some(u8),
     None,
+    Some(u8),
 }
 
 struct core:prelude/types.wado//Option<u8>::Some {  // TypeId(27)
@@ -174,8 +174,8 @@ struct core:prelude/types.wado//Option<u8>::Some {  // TypeId(27)
 }
 
 variant core:prelude/types.wado//Option<u16> {  // TypeId(28)
-    Some(u16),
     None,
+    Some(u16),
 }
 
 struct core:prelude/types.wado//Option<u16>::Some {  // TypeId(29)
@@ -184,8 +184,8 @@ struct core:prelude/types.wado//Option<u16>::Some {  // TypeId(29)
 }
 
 variant core:prelude/types.wado//Option<u32> {  // TypeId(30)
-    Some(u32),
     None,
+    Some(u32),
 }
 
 struct core:prelude/types.wado//Option<u32>::Some {  // TypeId(31)
@@ -209,8 +209,8 @@ struct core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/t
 }
 
 variant core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>> {  // TypeId(35)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some {  // TypeId(36)
@@ -219,8 +219,8 @@ struct core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some
 }
 
 variant core:prelude/types.wado//Option<wasi:http/types.wado/Fields> {  // TypeId(37)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some {  // TypeId(38)
@@ -229,8 +229,8 @@ struct core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some {  // 
 }
 
 variant core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions> {  // TypeId(39)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>::Some {  // TypeId(40)
@@ -346,7 +346,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
-global global:spec_worlds_test_handler.wado::$const_obj_3: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>" = struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } };
+global global:spec_worlds_test_handler.wado::$const_obj_3: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>" = struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 0 } };
 global global:spec_worlds_test_handler.wado::$const_obj_4: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(47, 97, 100, 109, 105, 110), used: 6 };
 global mut global:spec_worlds_test_handler.wado::$const_obj_5: ref null "core:prelude/string.wado//String" = ref.null none;
 
@@ -354,45 +354,51 @@ fn "spec_worlds_test_handler.wado/handle"(request) {
     let $task_result: ref null "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let self_9: ref null "core:prelude/string.wado//String";
     let other_10: ref null "core:prelude/string.wado//String";
-    let a_11: ref "core:prelude/string.wado//String";
-    let b_12: ref "core:prelude/string.wado//String";
+    let $eq_self_Some_2: ref "core:prelude/string.wado//String";
+    let $eq_other_Some_3: ref "core:prelude/string.wado//String";
     let packed: i64;
-    let a_22: ref Array<u8>;
+    let a: ref Array<u8>;
     let a_end: i32;
-    let b_25: ref Array<u8>;
+    let b: ref Array<u8>;
     let i: i32;
     $task_result = ref.null none;
-    if self_9 = "spec_worlds_test_handler.wado/$cm_binding__Request_get_path_with_query"(request); other_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(47), used: 1 }; (if ref.is_null(self_9) == 0 -> bool {
-        a_11 = ref.as_non_null(self_9);
-        b_12 = ref.as_non_null(other_10);
-        $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0__$inline_core_prelude_array_wado_seq_eq_u8__0: block -> bool {
-            a_22 = a_11.repr;
-            a_end = a_11.used;
-            b_25 = b_12.repr;
-            if a_end != b_12.used {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0__$inline_core_prelude_array_wado_seq_eq_u8__0: 0;
-            }
-            i = 0;
-            b3: block {
-                l4: loop {
-                    break_if b3 i >= a_end;
-                    if builtin::array_get_value<u8>(a_22, i) != builtin::array_get_value<u8>(b_25, i) {
-                        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0__$inline_core_prelude_array_wado_seq_eq_u8__0: 0;
-                    }
-                    i = i + 1;
-                    continue l4;
+    if $inline_core_prelude_types_wado_Option_core_prelude_string_wado_String__core_prelude_traits_wado_Eq__eq_scalar_1: block -> bool {
+        self_9 = "spec_worlds_test_handler.wado/$cm_binding__Request_get_path_with_query"(request);
+        other_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(47), used: 1 };
+        if ref.is_null(self_9) {
+            break $inline_core_prelude_types_wado_Option_core_prelude_string_wado_String__core_prelude_traits_wado_Eq__eq_scalar_1: 0;
+        } else {
+            $eq_self_Some_2 = ref.as_non_null(self_9);
+            $eq_other_Some_3 = ref.as_non_null(other_10);
+            $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0__$inline_core_prelude_array_wado_seq_eq_u8__0: block -> bool {
+                a = $eq_self_Some_2.repr;
+                a_end = $eq_self_Some_2.used;
+                b = $eq_other_Some_3.repr;
+                if a_end != $eq_other_Some_3.used {
+                    break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0__$inline_core_prelude_array_wado_seq_eq_u8__0: 0;
+                }
+                i = 0;
+                b3: block {
+                    l4: loop {
+                        break_if b3 i >= a_end;
+                        if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0__$inline_core_prelude_array_wado_seq_eq_u8__0: 0;
+                        }
+                        i = i + 1;
+                        continue l4;
+                    };
                 };
+                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0__$inline_core_prelude_array_wado_seq_eq_u8__0: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0__$inline_core_prelude_array_wado_seq_eq_u8__0: 1;
-        };
-    } else {
-        0;
-    }) == 0 {
+            break $inline_core_prelude_types_wado_Option_core_prelude_string_wado_String__core_prelude_traits_wado_Eq__eq_scalar_1;
+        }
+        unreachable;
+    } == 0 {
         $task_result = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: struct.new "wasi:http/types.wado//ErrorCode" { 15 } };
     } else {
         i = builtin::i32_wrap_i64(local.tee packed("wasi/future-new"()));
         a_end = builtin::i32_wrap_i64(packed >> 32_i64);
-        i = "spec_worlds_test_handler.wado/$cm_binding__Response_new"("spec_worlds_test_handler.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, i).0;
+        i = "spec_worlds_test_handler.wado/$cm_binding__Response_new"("spec_worlds_test_handler.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 0 }, i).0;
         $task_result = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: i };
         "spec_worlds_test_handler.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(a_end, global:spec_worlds_test_handler.wado::$const_obj_3);
     }
@@ -407,7 +413,7 @@ fn "spec_worlds_test_handler.wado/handle"(request) {
 fn "spec_worlds_test_handler.wado/request_for"($mv$path$repr, $mv$path$used) {
     let $sroa_$pattern_temp_0_0_11: i32;
     $sroa_$pattern_temp_0_0_11 = builtin::i32_wrap_i64("wasi/future-new"());
-    drop("spec_worlds_test_handler.wado/$cm_binding__Request_set_path_with_query"(local.tee $sroa_$pattern_temp_0_0_11("spec_worlds_test_handler.wado/$cm_binding__Request_new"("spec_worlds_test_handler.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, $sroa_$pattern_temp_0_0_11, struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>" { 1 }).0), struct.new "core:prelude/string.wado//String" { repr: let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($mv$path$used)), 0, $mv$path$repr, 0, $mv$path$used); $array_clone_dst_2, used: $mv$path$used }));
+    drop("spec_worlds_test_handler.wado/$cm_binding__Request_set_path_with_query"(local.tee $sroa_$pattern_temp_0_0_11("spec_worlds_test_handler.wado/$cm_binding__Request_new"("spec_worlds_test_handler.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 0 }, $sroa_$pattern_temp_0_0_11, struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>" { 0 }).0), struct.new "core:prelude/string.wado//String" { repr: let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($mv$path$used)), 0, $mv$path$repr, 0, $mv$path$used); $array_clone_dst_2, used: $mv$path$used }));
     return $sroa_$pattern_temp_0_0_11;
 }
 

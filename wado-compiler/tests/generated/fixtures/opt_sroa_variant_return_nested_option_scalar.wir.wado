@@ -189,7 +189,7 @@ fn "opt_sroa_variant_return_nested_option_scalar.wado/sum_all"(data) {
             } else {
                 unreachable;
             }
-            if $vr_discriminant_$mv$$vr_7$1 == 0 {
+            if $vr_discriminant_$mv$$vr_7$1 == 1 {
                 v_6 = $vr_payload_0_$mv$$vr_7$1;
                 total = total + v_6;
             } else {
@@ -831,7 +831,7 @@ fn "opt_sroa_variant_return_nested_option_scalar.wado/opt_sroa_variant_return_ne
     let $load_2: i32;
     let v: i64;
     if local.tee $load_0(self.pos) >= local.tee $load_2(local.tee $load_1(self.data).used) {
-        return 0, 1, 0_i64, ref.null none;
+        return 0, 0, 0_i64, ref.null none;
     }
     if @unlikely($load_0 >= $load_2) {
         cold_path;
@@ -839,10 +839,10 @@ fn "opt_sroa_variant_return_nested_option_scalar.wado/opt_sroa_variant_return_ne
         unreachable;
     }
     if local.tee v(builtin::array_get_value<i64>($load_1.repr, $load_0)) < 0_i64 {
-        return 1, 1, 0_i64, struct.new "opt_sroa_variant_return_nested_option_scalar.wado//StepErr" { 0 };
+        return 1, 0, 0_i64, struct.new "opt_sroa_variant_return_nested_option_scalar.wado//StepErr" { 0 };
     }
     self.pos = $load_0 + 1;
-    return 0, 0, v, ref.null none;
+    return 0, 1, v, ref.null none;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(self, is_negative, $mv$alt_prefix$repr, $mv$alt_prefix$used, digit_count) {

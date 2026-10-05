@@ -246,13 +246,13 @@ fn "variant_deref_cross_module.wado/$cm_export__$test_0_recursive_variant_deref_
 fn "variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/Alt"(v) {
     let $load_2: i32;
     let v_1: ref null "core:prelude/string.wado//String";
-    let $vc_payload_0: ref "core:prelude/string.wado//String";
+    let $vc_payload_1: ref "core:prelude/string.wado//String";
     let v_3: ref "core:prelude//List<./sub/variant_deref_helper.wado/Elem>";
-    return struct.new "./sub/variant_deref_helper.wado//Alt" { label: (if ref.is_null(local.tee v_1(v.label)) == 0 -> ref null "core:prelude/string.wado//String" {
-        $vc_payload_0 = ref.as_non_null(v_1);
-        struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = $vc_payload_0.repr; $load_2 = $vc_payload_0.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_2)), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 };
-    } else {
+    return struct.new "./sub/variant_deref_helper.wado//Alt" { label: (if ref.is_null(local.tee v_1(v.label)) -> ref null "core:prelude/string.wado//String" {
         v_1;
+    } else {
+        $vc_payload_1 = ref.as_non_null(v_1);
+        struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = $vc_payload_1.repr; $load_2 = $vc_payload_1.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_2)), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 };
     }), elements: v_3 = v.elements; struct.new "core:prelude//List<./sub/variant_deref_helper.wado/Elem>" { repr: let $array_clone_src_4: ref "Array<./sub/variant_deref_helper.wado/Elem>"; $array_clone_src_4 = v_3.repr; $load_2 = v_3.used; let $array_clone_dst_5: ref "Array<./sub/variant_deref_helper.wado/Elem>"; $array_clone_dst_5 = builtin::array_new<ref "./sub/variant_deref_helper.wado//Elem">($load_2); let $array_clone_i_7: i32; $array_clone_i_7 = 0; let $array_clone_elem_8: ref null "./sub/variant_deref_helper.wado//Elem"; $array_clone_deep_prefix: block {
         l6: loop {
             break_if $array_clone_deep_prefix $array_clone_i_7 >= $load_2;
@@ -384,11 +384,11 @@ fn "variant_deref_cross_module.wado/process$scalar"(elem, out) {
         b23: block {
             l24: loop {
                 break_if b23 start_30 >= n_25;
-                drop((if ref.is_null(local.tee v_69(local.tee v_68(builtin::array_get_value<ref "./sub/variant_deref_helper.wado//Alt">($sroa_$iter_0_repr_75, start_30)).label)) == 0 -> ref null "core:prelude/string.wado//String" {
+                drop((if ref.is_null(local.tee v_69(local.tee v_68(builtin::array_get_value<ref "./sub/variant_deref_helper.wado//Alt">($sroa_$iter_0_repr_75, start_30)).label)) -> ref null "core:prelude/string.wado//String" {
+                    v_69;
+                } else {
                     name_2 = ref.as_non_null(v_69);
                     struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = name_2.repr; new_used_29 = name_2.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(new_used_29)), 0, $array_clone_src_1, 0, new_used_29); $array_clone_dst_2, used: new_used_29 };
-                } else {
-                    v_69;
                 }));
                 v_71 = v_68.elements;
                 v_71 = struct.new "core:prelude//List<./sub/variant_deref_helper.wado/Elem>" { repr: let $array_clone_src_4: ref "Array<./sub/variant_deref_helper.wado/Elem>"; $array_clone_src_4 = v_71.repr; let $array_clone_len_6: i32; $array_clone_len_6 = v_71.used; let $array_clone_dst_5: ref "Array<./sub/variant_deref_helper.wado/Elem>"; $array_clone_dst_5 = builtin::array_new<ref "./sub/variant_deref_helper.wado//Elem">($array_clone_len_6); let $array_clone_i_7: i32; $array_clone_i_7 = 0; let $array_clone_elem_8: ref null "./sub/variant_deref_helper.wado//Elem"; $array_clone_deep_prefix: block {
