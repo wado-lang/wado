@@ -63,6 +63,11 @@ This is distinct from:
 
 ## Decision
 
+[WEP: HashMap](./wep-2026-10-01-hash-map.md) replaces the `HashMap` API sketched
+here. `HashMap::new()` does not ask the host for a seed on each call. It reads
+one global, `DEFAULT_HASH_SEED`, whose initializer carries
+`#[benign(InsecureSeed)]`. The observational-purity argument below is unchanged.
+
 ### Both Maps Preserve Insertion Order
 
 Wado provides two map types. Both iterate in **insertion order**; they differ only in the lookup backing and the trait bound on keys. The type name reflects the lookup data structure, not the iteration semantics:

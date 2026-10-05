@@ -50,17 +50,17 @@ impl<K: Hash + Eq, V> HashMap<K, V> {
 ```
 
 `HashSet` has the same two constructors. `DEFAULT_HASH_SEED` is private to
-`core:collections`.
+`core:collections`. Three things read it: `new()`, and the `Default` and
+`Deserialize` impls (below).
 
 `HashSeed::random()` calls `get-insecure-seed`, which the host is not obliged to
 fill with randomness. Its doc comment says so. The interface asks to be called
-only once, and a global initializer is the one place a program runs once. The
-seed never shows through a map: iteration keeps insertion order (below), so the
-effect is unobservable, which is what `#[benign]` asserts.
+only once, and an initializer runs at most once (below). The seed never shows
+through a map: iteration keeps insertion order (below), so the effect is
+unobservable, which is what `#[benign]` asserts.
 
 `with_seed(HashSeed::fixed(…))` is for maps whose keys the program trusts and
-whose hashing must be the same on every run. `with_seed(HashSeed::random())`
-gives a map a seed of its own.
+whose hashing must be the same on every run.
 
 ### `#[benign]` extends to globals
 
@@ -72,14 +72,15 @@ world import of each listed effect is still required. Only the listed effects
 are admitted: an initializer that may do anything would hide I/O behind every
 export.
 
-No handler is installed while an initializer runs. An effect a host import
-serves, such as `InsecureSeed`, works there. An `interface` effect falls to its
-default implementation, or traps without one.
+An initializer runs outside every handler, including those installed where the
+global is first read. Only a handler the initializer installs itself is in
+scope. An effect a host import serves, such as `InsecureSeed`, works there. An
+`interface` effect falls to its default implementation, or traps without one.
 
 ### Whether and when an initializer runs is unspecified
 
 The order in which initializers run, and whether one runs at all, is
-unspecified. The one guarantee is that a
+unspecified. Two things are guaranteed: an initializer runs at most once, and a
 global's initializer has run before the global is read. A cycle among
 initializers stays an error. A `#[benign]` global is no exception.
 
@@ -87,11 +88,11 @@ This replaces the rule that an initializer runs at module initialization whether
 or not anything reads the global. Under the old rule `DEFAULT_HASH_SEED` would
 ask the host for a seed, and keep the `insecure-seed` import, in every program
 that imports `core:collections`, `TreeMap` users included. Under the new one, a
-program that never reaches `HashMap::new()` imports nothing for it.
+program that reaches none of its readers imports nothing for it.
 
 ### `#[benign]` on functions stays
 
-`#[ambient]` cannot take over the two functions that carry `#[benign]`:
+`#[ambient]` cannot take over a function that carries `#[benign]`:
 
 - `coverage_probe` (`#[benign(CoverageHost)]`) must never be removed. An
   `#[ambient]` call whose result goes unused may be removed, and a probe returns
@@ -106,10 +107,11 @@ program that never reaches `HashMap::new()` imports nothing for it.
 A package whose maps all hold trusted keys declares a newtype over `HashMap`
 under its own fixed seed. Its hashing is the same on every run, and it needs no
 `insecure-seed` import. The newtype implements `Default`, `Serialize` and
-`Deserialize` itself, under its own seed. A fixed seed reveals nothing when
-written out, so the reason that refuses `Serialize` on `HashMap` does not hold.
-The choice of seed is made
-once, where the newtype is declared, rather than at every construction site.
+`Deserialize` itself, under its own seed. It must: a newtype inherits its base's
+trait impls, so one it leaves out builds the map under `DEFAULT_HASH_SEED`. A
+fixed seed reveals nothing when written out, so the reason that refuses
+`Serialize` on `HashMap` does not hold. The choice of seed is made once, where
+the newtype is declared, rather than at every construction site.
 
 ```wado
 global SEED: HashSeed = HashSeed::fixed(0x243F6A8885A308D3, 0x13198A2E03707344);
@@ -235,6 +237,11 @@ function does ([WEP: Declared absence](./wep-2026-09-13-declared-absence.md)).
 - Every map built by `new()` in one instance shares `DEFAULT_HASH_SEED`. A
   long-lived instance, such as an HTTP service, gives an attacker many requests
   against one seed to learn its collisions from timing.
+- A trusted-key newtype that leaves out `Default` or `Deserialize` hashes under
+  the default seed without a diagnostic.
+- The newtype's own `new()` and the `new()` it inherits from `HashMap` have the
+  same signature. The specification says a newtype's own trait impl wins over
+  the inherited one, but says nothing of an associated function.
 - A hand-written `Serialize` that writes the entries alone would leak nothing,
   but whether `HashMap` and `HashSet` offer one is undecided.
 - Floating-point keys have no `Hash`. Their `==` treats every NaN as one value

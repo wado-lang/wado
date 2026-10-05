@@ -56,7 +56,7 @@ fn fresh() -> HashIndex {   // declares no effect, and needs none
 }
 ```
 
-Rationale: [WEP: Effect System and Randomness in Collections](./wep-2026-01-20-effect-system-randomness.md).
+Rationale: [WEP: Effect System and Randomness in Collections](./wep-2026-01-20-effect-system-randomness.md) and [WEP: HashMap](./wep-2026-10-01-hash-map.md).
 
 ### `#[ambient]`
 
