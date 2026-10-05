@@ -1326,13 +1326,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         reached: &[String],
         span: Span,
     ) {
+        // A pack the caller declares, forwarded (`[..Bs]` over the caller's
+        // own `Bs`), is as settled as the caller's, as
+        // [`Self::settle_unreached_packs`] reads it.
+        let scope = self.scope_type_param_ids();
         let open: Vec<String> = own_params
             .iter()
             .zip(type_args)
             .filter(|(p, _)| p.is_pack && reached.contains(&p.name))
             .filter(|&(_, &arg)| {
-                self.tysys.is_unbound_type_param(arg)
-                    || self.tysys.type_table.borrow().contains_type_pack(arg)
+                (self.tysys.is_unbound_type_param(arg) && !scope.contains(&arg))
+                    || self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .any_type_pack(arg, &|pack| !scope.contains(&pack))
             })
             .map(|(p, _)| p.name.clone())
             .collect();

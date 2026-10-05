@@ -4979,10 +4979,15 @@ impl TypeTable {
     /// Whether `id` is a `TypePack` or a tuple whose elements transitively
     /// contain one.
     pub fn contains_type_pack(&self, id: TypeId) -> bool {
+        self.any_type_pack(id, &|_| true)
+    }
+
+    /// Whether `id` is, or is a tuple spreading, a pack `pred` holds of.
+    pub fn any_type_pack(&self, id: TypeId, pred: &impl Fn(TypeId) -> bool) -> bool {
         match self.get(id) {
-            ResolvedType::TypePack { .. } => true,
+            ResolvedType::TypePack { .. } => pred(id),
             ResolvedType::GenericInstance { def, type_args } if self.is_tuple_def(*def) => {
-                type_args.iter().any(|e| self.contains_type_pack(*e))
+                type_args.iter().any(|e| self.any_type_pack(*e, pred))
             }
             _ => false,
         }

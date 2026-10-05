@@ -1,0 +1,45 @@
+//! A generic caller forwards its own pack to an instance method as it does to
+//! a free function: an argument of `[..Bs, M]` settles the method's `..Bs` as
+//! the caller's, inferred or spelled. The method path reported the pack as
+//! not inferred, since the caller's spread reaches it as `[..Bs]`.
+
+struct Shape<Axes> {
+    n: i32,
+}
+
+struct Kernels {}
+
+impl Kernels {
+    fn last<..Bs, M>(&self, a: &Shape<[..Bs, M]>) -> Shape<[..Bs, M]> {
+        return Shape { n: a.n + 1 };
+    }
+}
+
+fn last<..Bs, M>(a: &Shape<[..Bs, M]>) -> Shape<[..Bs, M]> {
+    return Shape { n: a.n + 1 };
+}
+
+fn through_free<..Bs, M>(a: &Shape<[..Bs, M]>) -> i32 {
+    return last(a).n;
+}
+
+fn through_method<..Bs, M>(k: &Kernels, a: &Shape<[..Bs, M]>) -> i32 {
+    return k.last(a).n;
+}
+
+fn through_turbofish<..Bs, M>(k: &Kernels, a: &Shape<[..Bs, M]>) -> i32 {
+    return k.last::<[..Bs], M>(a).n;
+}
+
+struct Row {}
+struct Col {}
+
+test "a method takes the caller's pack as a free function does" {
+    let s = Shape::<[Row, Col]> { n: 3 };
+    assert through_free(&s) == 4;
+    assert through_method(&Kernels {}, &s) == 4;
+    assert through_turbofish(&Kernels {}, &s) == 4;
+}
+
+__DATA__
+{"test": {}}
