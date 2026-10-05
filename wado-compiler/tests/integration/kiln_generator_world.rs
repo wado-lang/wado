@@ -472,9 +472,13 @@ export fn generate(req: Request) -> Result<Response, Error> {
 fn generator_hashing_under_a_fixed_seed_adds_no_wasi_import() {
     for opt_level in [OptLevel::O0, OptLevel::O2] {
         let imports = wasi_imports_at(FIXED_SEED_MAP_GENERATOR, "fixed-seed generator", opt_level);
+        let provided: Vec<&(String, ImportKind)> = imports
+            .iter()
+            .filter(|(_, kind)| *kind != ImportKind::SharedTypes)
+            .collect();
         assert!(
-            imports.is_empty(),
-            "a fixed-seed map imported {imports:?} at {opt_level:?}"
+            provided.is_empty(),
+            "a fixed-seed map imported {provided:?} at {opt_level:?}"
         );
     }
 }

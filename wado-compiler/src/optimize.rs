@@ -72,7 +72,7 @@ use container_sroa::scalarize_containers;
 use copy_prop::propagate_copies;
 use dae::eliminate_dead_arguments;
 use dce::{
-    analyze_dce, filter_bytes_literals, filter_string_literals,
+    Initializers, analyze_dce, filter_bytes_literals, filter_string_literals,
     remove_unreachable_closure_functors, remove_unreachable_functions, remove_unreachable_globals,
     remove_unreachable_types, unhoist_unobserved_globals,
 };
@@ -173,7 +173,7 @@ pub fn optimize(
     match opt_level {
         OptLevel::O0 => {
             // No optimizations, but still run DCE to reduce codegen work
-            run_dce(&mut project, profiler, &mut descriptors);
+            run_dce(&mut project, profiler, &mut descriptors, Initializers::DropUnread);
             // Dense-int / dense-enum `Match` → `Switch` is a codegen-
             // friendly late lowering. The translator emits a canonical
             // `Match` (see WEP 2026-05-11). Materialising `Switch` here
@@ -197,10 +197,10 @@ pub fn optimize(
             };
             // Early DCE: remove unreachable functions/types before optimization
             // to reduce the working set for subsequent passes
-            run_dce(&mut project, profiler, &mut descriptors);
+            run_dce(&mut project, profiler, &mut descriptors, Initializers::DropUnread);
             run_optimization_passes(&mut project, &config, profiler, &mut descriptors);
             // Final DCE: clean up code made dead by optimizations
-            run_dce(&mut project, profiler, &mut descriptors);
+            run_dce(&mut project, profiler, &mut descriptors, Initializers::KeepEffects);
         }
         OptLevel::O2 | OptLevel::Os => {
             let config = OptConfig {
@@ -225,9 +225,9 @@ pub fn optimize(
                 inline_growth,
                 cap_is_defect: opt_iterations.is_none(),
             };
-            run_dce(&mut project, profiler, &mut descriptors);
+            run_dce(&mut project, profiler, &mut descriptors, Initializers::DropUnread);
             run_optimization_passes(&mut project, &config, profiler, &mut descriptors);
-            run_dce(&mut project, profiler, &mut descriptors);
+            run_dce(&mut project, profiler, &mut descriptors, Initializers::KeepEffects);
             if opt_level == OptLevel::Os {
                 project.strip_names = true;
             }
@@ -247,9 +247,9 @@ pub fn optimize(
                 inline_growth,
                 cap_is_defect: opt_iterations.is_none(),
             };
-            run_dce(&mut project, profiler, &mut descriptors);
+            run_dce(&mut project, profiler, &mut descriptors, Initializers::DropUnread);
             run_optimization_passes(&mut project, &config, profiler, &mut descriptors);
-            run_dce(&mut project, profiler, &mut descriptors);
+            run_dce(&mut project, profiler, &mut descriptors, Initializers::KeepEffects);
         }
     }
 
@@ -327,6 +327,7 @@ fn run_dce(
     project: &mut NirPackage,
     profiler: &dyn SpanEmitter,
     descriptors: &mut dce::DescriptorCache,
+    initializers: Initializers,
 ) {
     profiler.span_start("nir/dce");
     // Removing callers exposes unobserved globals; removing their stores can
@@ -348,7 +349,7 @@ fn run_dce(
         // Clearing an unreachable function's body leaves its entry describing
         // the body it had, which no surviving body calls.
         remove_unreachable_functions(project, &analysis.functions);
-        remove_unreachable_globals(project, &analysis.globals, &summaries);
+        remove_unreachable_globals(project, &analysis.globals, &summaries, initializers);
         let functions_after = live_bodies(project);
         profiler.span_end(&span);
         round += 1;
