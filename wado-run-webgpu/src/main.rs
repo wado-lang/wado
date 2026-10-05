@@ -7,13 +7,20 @@ mod host;
 
 use std::process::ExitCode;
 
-use args::Args;
+use args::{Args, Invocation, USAGE};
 
 #[tokio::main]
 async fn main() -> ExitCode {
     let args = match Args::parse(std::env::args_os().skip(1)) {
-        Ok(Some(args)) => args,
-        Ok(None) => return ExitCode::SUCCESS,
+        Ok(Invocation::Run(args)) => args,
+        Ok(Invocation::Help) => {
+            print!("{USAGE}\n{}", host::adapter_list());
+            return ExitCode::SUCCESS;
+        }
+        Ok(Invocation::Version) => {
+            println!("wado-run-webgpu {}", env!("CARGO_PKG_VERSION"));
+            return ExitCode::SUCCESS;
+        }
         Err(error) => {
             eprintln!("wado-run-webgpu: {error}");
             return ExitCode::FAILURE;
@@ -32,7 +39,7 @@ async fn main() -> ExitCode {
 async fn run(args: Args) -> anyhow::Result<()> {
     // The GPU first: a machine without one has nothing to run on, and saying so
     // before the compile beats saying it after.
-    let gpu = host::gpu()?;
+    let gpu = host::gpu(&args)?;
     let component = compile::component_for(&args)?;
     host::run(component.path(), &args, gpu).await
 }

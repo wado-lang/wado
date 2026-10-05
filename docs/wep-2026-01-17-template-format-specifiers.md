@@ -157,9 +157,8 @@ the flag, or ignores it:
 `${x:#X}` prefixes `0x`, not `0X` — the flag changes the prefix, the type
 character changes the digits.
 
-A hand-written `impl Display` may branch on `f.alternate`: `core:temporal`'s
-`Instant` renders whole seconds plainly and milliseconds under `#`. Every
-primitive ignores it.
+A hand-written `impl Display` may branch on `f.alternate`. Every primitive
+ignores it.
 
 ### Precision
 

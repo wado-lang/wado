@@ -101,6 +101,7 @@ impl Walk<'_> {
                     None => Visibility::narrower(declared, head),
                 };
                 for binding in &block.associated_types {
+                    self.type_params(&binding.type_params, &binding.name, head);
                     self.ty(&binding.ty, &binding.name, head);
                 }
                 for method in &block.methods {
@@ -115,6 +116,7 @@ impl Walk<'_> {
                 self.bounds(&decl.supertraits, &decl.name, decl.visibility);
                 self.type_params(&decl.type_params, &decl.name, decl.visibility);
                 for assoc in &decl.associated_types {
+                    self.type_params(&assoc.type_params, &assoc.name, decl.visibility);
                     self.bounds(&assoc.bounds, &assoc.name, decl.visibility);
                 }
                 for method in &decl.methods {

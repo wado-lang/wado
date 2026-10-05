@@ -285,6 +285,9 @@ pub fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
 /// per descent, so classification never interns substituted types.
 struct EnvFrame<'a> {
     args: &'a [TypeId],
+    /// The arguments a generic associated type's projection gives the
+    /// family's own parameters, in the parent frame's terms.
+    family: &'a [TypeId],
     parent: Option<&'a EnvFrame<'a>>,
 }
 
@@ -354,6 +357,7 @@ fn needs_copy_in_env(
             if let Some(cases) = type_table.variant_template_cases(*def) {
                 let frame = EnvFrame {
                     args: type_args,
+                    family: &[],
                     parent: env,
                 };
                 return cases.iter().any(|(_, _, payload)| {
@@ -383,11 +387,28 @@ fn needs_copy_in_env(
         ResolvedType::AssocTypeProjection {
             param_id,
             assoc_name,
+            args,
             ..
         } => match resolve_projection_in_env(*param_id, assoc_name, env, type_table) {
-            Some(payload) => needs_copy_in_env(payload, None, type_table, depth + 1),
+            Some(payload) => {
+                let frame = EnvFrame {
+                    args: &[],
+                    family: args,
+                    parent: env,
+                };
+                needs_copy_in_env(payload, Some(&frame), type_table, depth + 1)
+            }
             None => true,
         },
+        ResolvedType::AssocParam { index, .. } => {
+            let frame = env.expect("a family parameter is read under its projection's frame");
+            needs_copy_in_env(
+                frame.family[*index as usize],
+                frame.parent,
+                type_table,
+                depth + 1,
+            )
+        }
         // A bare param with no frame is an unmonomorphized template
         // body — no copy decision applies.
         ResolvedType::TypeParam { index, .. } => {

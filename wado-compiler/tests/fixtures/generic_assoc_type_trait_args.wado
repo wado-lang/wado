@@ -1,0 +1,71 @@
+// An associated type's bounds are written in its trait's frame, so a bound
+// reading the trait's parameter means the argument the trait was reached at:
+// `Store<i32>`'s `Buf<E>` owes `E: Conv<i32>`, and `Holder<i32>`'s `Out`
+// answers `Into<i32>`'s method at `i32`.
+
+trait Conv<X> with () {
+    fn conv(&self) -> X;
+}
+
+impl Conv<i32> for i32 {
+    fn conv(&self) -> i32 {
+        return *self * 10;
+    }
+}
+
+trait Store<X> with () {
+    type Buf<E: Conv<X>>;
+
+    fn hold<E: Conv<X>>(&self, e: E) -> Self::Buf<E>;
+}
+
+struct Boxes {}
+
+impl Store<i32> for Boxes {
+    type Buf<E: Conv<i32>> = List<E>;
+
+    fn hold<E: Conv<i32>>(&self, e: E) -> List<E> {
+        return [e];
+    }
+}
+
+trait Into<X> with () {
+    fn into_it(&self) -> X;
+}
+
+struct Meters {
+    n: i32,
+}
+
+impl Into<i32> for Meters {
+    fn into_it(&self) -> i32 {
+        return self.n;
+    }
+}
+
+trait Holder<X> with () {
+    type Out: Into<X>;
+
+    fn out(&self) -> Self::Out;
+}
+
+struct Tape {}
+
+impl Holder<i32> for Tape {
+    type Out = Meters;
+
+    fn out(&self) -> Meters {
+        return Meters { n: 7 };
+    }
+}
+
+fn read<H: Holder<i32>>(h: &H) -> i32 {
+    let x: i32 = h.out().into_it();
+    return x;
+}
+
+test "a bound on an associated type reads the trait's arguments" {
+    let held = Boxes {}.hold(4);
+    assert held[0].conv() == 40;
+    assert read(&Tape {}) == 7;
+}

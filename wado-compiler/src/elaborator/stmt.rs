@@ -174,8 +174,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 break;
             }
         }
-        for item in items {
+        for item in &items {
             self.resolve_local_item(item);
+        }
+        if let Some(solver) = &self.tysys.solver {
+            let defs: Vec<DefId> = items
+                .iter()
+                .filter(|item| matches!(item, ast::Item::Struct(_) | ast::Item::Newtype(_)))
+                .map(|item| self.tysys.def_at(item.id()))
+                .collect();
+            solver
+                .borrow_mut()
+                .state_local(&self.tysys, &self.sem.decls.local, &defs);
         }
     }
 

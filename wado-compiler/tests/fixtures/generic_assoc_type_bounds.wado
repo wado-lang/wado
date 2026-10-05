@@ -1,0 +1,57 @@
+// A generic associated type bounds its own parameters and itself. A
+// parameter's bound is in scope in the impl's binding and is owed by each
+// projection's argument; the type's own bound answers for every member of the
+// family, so a generic body calls through it.
+
+trait Elem with () {
+    fn weight(&self) -> i32;
+}
+
+impl Elem for i32 {
+    fn weight(&self) -> i32 {
+        return *self;
+    }
+}
+
+trait Len with () {
+    fn len(&self) -> i32;
+}
+
+struct Weighed<E: Elem> {
+    items: List<E>,
+}
+
+impl<E: Elem> Len for Weighed<E> {
+    fn len(&self) -> i32 {
+        let mut total = 0;
+        for let e of self.items {
+            total += e.weight();
+        }
+        return total;
+    }
+}
+
+trait Store with () {
+    type Buf<E: Elem>: Len;
+
+    fn hold<E: Elem>(&self, items: List<E>) -> Self::Buf<E>;
+}
+
+struct Weigher {}
+
+impl Store for Weigher {
+    type Buf<E: Elem> = Weighed<E>;
+
+    fn hold<E: Elem>(&self, items: List<E>) -> Weighed<E> {
+        return Weighed { items };
+    }
+}
+
+fn measure<S: Store, E: Elem>(s: &S, items: List<E>) -> i32 {
+    let held: S::Buf<E> = s.hold(items);
+    return held.len();
+}
+
+test "the type's own bound answers for each member of the family" {
+    assert measure(&Weigher {}, [3, 4] as List<i32>) == 7;
+}

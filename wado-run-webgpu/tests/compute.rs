@@ -59,6 +59,8 @@ fn a_compute_shader_writes_what_the_guest_reads_back() {
         "stdout: {stdout}\nstderr: {stderr}"
     );
     assert!(output.status.success(), "stderr: {stderr}");
+    // Below `--log-level info` the adapter goes unnamed.
+    assert!(!stderr.contains("request-adapter"), "stderr: {stderr}");
 }
 
 #[test]
@@ -86,9 +88,149 @@ fn a_machine_without_an_adapter_is_told_what_to_install() {
     assert!(stderr.contains("mesa-vulkan-drivers"), "stderr: {stderr}");
 }
 
+/// The names of this machine's adapters, in index order, as the refusal of a
+/// name nothing matches lists them, so no test assumes which GPU or driver is
+/// installed. Every test that calls it also holds that refusal to its wording.
+fn adapter_names() -> Vec<String> {
+    let output = run(&["--gpu-adapter", "no-such-gpu", "app.wado"]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success());
+    let (_, listing) = stderr
+        .split_once("no GPU adapter matches 'no-such-gpu'. The adapters here:\n")
+        .unwrap_or_else(|| panic!("no listing in stderr: {stderr}"));
+    listing
+        .lines()
+        .enumerate()
+        .map(|(index, line)| {
+            let described = line
+                .trim_start()
+                .strip_prefix(&format!("{index}: "))
+                .unwrap_or_else(|| panic!("no index {index} on: {line}"));
+            name_of(described)
+        })
+        .collect()
+}
+
+/// The name an adapter description starts with, which ends where its
+/// bracketed details begin.
+fn name_of(described: &str) -> String {
+    let (name, _) = described
+        .split_once(" [")
+        .unwrap_or_else(|| panic!("no details on: {described}"));
+    name.to_owned()
+}
+
+/// Run the compute fixture on the adapter `selector` picks and return the
+/// adapter `--log-level info` says the guest got.
+fn adapter_selected_by(selector: &str) -> String {
+    let output = run(&[
+        "--gpu-adapter",
+        selector,
+        "--log-level",
+        "info",
+        fixture("compute_double.wado").to_str().unwrap(),
+    ]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "stderr: {stderr}");
+    assert!(stdout.contains("compute ok"), "stdout: {stdout}");
+    let (_, line) = stderr
+        .split_once("info: request-adapter: ")
+        .unwrap_or_else(|| panic!("no adapter named in stderr: {stderr}"));
+    name_of(line.lines().next().unwrap())
+}
+
+/// A name selects the adapter it is part of, and only when it is part of one.
+/// Which half runs depends on the machine: every name is part of another on
+/// one with two GPUs of a model and nothing else.
 #[test]
-fn the_usage_names_the_subcommand_it_serves() {
+fn a_name_selects_the_one_adapter_it_is_part_of_and_refuses_more() {
+    let names = adapter_names();
+    let matching = |name: &str| {
+        let needle = name.to_lowercase();
+        names
+            .iter()
+            .filter(|other| other.to_lowercase().contains(&needle))
+            .count()
+    };
+    if let Some(name) = names.iter().find(|name| matching(name) == 1) {
+        assert_eq!(&adapter_selected_by(&name.to_uppercase()), name);
+    } else {
+        let output = run(&["--gpu-adapter", &names[0], "app.wado"]);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success());
+        assert!(
+            stderr.contains("matches more than one GPU adapter; name one by its index"),
+            "stderr: {stderr}"
+        );
+    }
+}
+
+/// An index tells apart adapters a name cannot, two of one model among them.
+#[test]
+fn an_integer_selects_the_adapter_at_that_index() {
+    let names = adapter_names();
+    let last = names.len() - 1;
+    assert_eq!(adapter_selected_by(&last.to_string()), names[last]);
+}
+
+#[test]
+fn an_index_past_the_last_adapter_is_refused_with_the_adapters_there_are() {
+    let count = adapter_names().len();
+    let output = run(&["--gpu-adapter", &count.to_string(), "app.wado"]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success());
+    assert!(
+        stderr.contains(&format!("no GPU adapter at index {count}"))
+            && stderr.contains("The adapters here:\n  0: "),
+        "stderr: {stderr}"
+    );
+}
+
+/// The runner reads the level itself and hands it to `wado compile`, so the
+/// two must accept the same spellings.
+#[test]
+fn the_log_level_spellings_are_the_ones_wado_takes() {
+    for level in [
+        "debug", "info", "warn", "warning", "error", "off", "none", "INFO", "loud",
+    ] {
+        let runner_accepts = run(&["--log-level", level, "--help"]).status.success();
+        let wado_accepts = Command::new(&*WADO)
+            .args(["check", "--log-level", level])
+            .arg(fixture("compute_double.wado"))
+            .output()
+            .expect("running wado check")
+            .status
+            .success();
+        assert_eq!(runner_accepts, wado_accepts, "--log-level {level}");
+    }
+}
+
+#[test]
+fn the_help_names_the_subcommand_and_lists_the_adapters_under_their_indices() {
     let output = run(&["--help"]);
     let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success());
     assert!(stdout.contains("wado run-webgpu"), "stdout: {stdout}");
+    for (index, name) in adapter_names().iter().enumerate() {
+        assert!(
+            stdout.contains(&format!("\n  {index}: {name} [")),
+            "stdout: {stdout}"
+        );
+    }
+}
+
+/// Help is still help on a machine with nothing to run on.
+#[test]
+#[cfg(target_os = "linux")]
+fn the_help_says_when_there_is_no_adapter() {
+    let output = runner()
+        .env("VK_DRIVER_FILES", "/nonexistent.json")
+        .arg("--help")
+        .output()
+        .expect("running wado-run-webgpu");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success());
+    assert!(stdout.contains("wado run-webgpu"), "stdout: {stdout}");
+    assert!(stdout.contains("no GPU adapter found"), "stdout: {stdout}");
 }

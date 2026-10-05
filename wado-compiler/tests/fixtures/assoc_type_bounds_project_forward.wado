@@ -1,0 +1,52 @@
+// An associated type's bound may project another associated type declared
+// later, of its own trait or of another, or one bounded back by it: each
+// declaration is read where it is asked of, not in file order.
+
+trait Holder<T> with () {
+    fn held(&self) -> i32;
+}
+
+trait Other with () {
+    type Thing;
+}
+
+trait Store<O: Other> with () {
+    type Buf: Holder<O::Thing>;
+    type Later;
+    type Pair: Holder<Self::Later>;
+}
+
+trait Mutual with () {
+    type A: Holder<Self::B>;
+    type B: Holder<Self::A>;
+}
+
+struct Box {}
+
+impl Holder<i32> for Box {
+    fn held(&self) -> i32 {
+        return 7;
+    }
+}
+
+struct Ints {}
+
+impl Other for Ints {
+    type Thing = i32;
+}
+
+struct Boxes {}
+
+impl Store<Ints> for Boxes {
+    type Buf = Box;
+    type Later = i32;
+    type Pair = Box;
+}
+
+fn hold<O: Other<Thing = i32>, S: Store<O>>(b: S::Buf) -> i32 {
+    return b.held();
+}
+
+test "a bound projecting a later associated type reads it" {
+    assert hold::<Ints, Boxes>(Box {}) == 7;
+}

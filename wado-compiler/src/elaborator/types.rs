@@ -753,6 +753,9 @@ pub enum TypeError {
         param: String,
         /// The bounds that declare it, in bound-list order.
         traits: Vec<String>,
+        /// Whether it takes parameters of its own, which no bound can pin, so
+        /// binding it is no way out.
+        family: bool,
         span: Span,
     },
 
@@ -1131,11 +1134,37 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// An `impl` binds a name its trait does not declare — a typo for one it
-    /// does, which leaves the real associated type unbound.
-    ImplAssocTypeNotInTrait {
+    /// An `impl` or a bound binds a name its trait does not declare — a typo
+    /// for one it does, which leaves the real associated type unbound.
+    AssocTypeNotInTrait {
         trait_name: String,
         assoc_name: String,
+        span: Span,
+    },
+
+    /// A bound binds a generic associated type (`S: Store<Buf = X>`), which
+    /// names a family rather than a type until a projection gives it arguments.
+    BoundBindsAssocFamily {
+        assoc_name: String,
+        span: Span,
+    },
+
+    /// An `impl` binds a generic associated type with parameters other than
+    /// the trait declares: another count, or another bound at a position.
+    ImplAssocTypeParamsMismatch {
+        trait_name: String,
+        assoc_name: String,
+        /// The parameter lists as written, `<E: Elem>` or nothing.
+        declared: String,
+        written: String,
+        span: Span,
+    },
+
+    /// A generic associated type declares a parameter that is not a plain
+    /// type parameter: a pack, an effect, or one with a default.
+    UnsupportedAssocTypeParam {
+        assoc_name: String,
+        param_name: String,
         span: Span,
     },
 
@@ -1907,20 +1936,24 @@ impl TypeError {
                 assoc,
                 param,
                 traits,
+                family,
                 span,
-            } => (
-                Code::AmbiguousCandidate,
-                format!(
-                    "ambiguous associated type '{param}::{assoc}': declared by {}; name the trait's own binding, e.g. '{param}: {}<{assoc} = ...>'",
-                    traits
-                        .iter()
-                        .map(|t| format!("'{t}'"))
-                        .collect::<Vec<_>>()
-                        .join(" and "),
-                    traits.first().map(String::as_str).unwrap_or(assoc)
-                ),
-                *span,
-            ),
+            } => {
+                let declared = traits
+                    .iter()
+                    .map(|t| format!("'{t}'"))
+                    .collect::<Vec<_>>()
+                    .join(" and ");
+                let message = if *family {
+                    format!("ambiguous associated type '{param}::{assoc}': declared by {declared}")
+                } else {
+                    format!(
+                        "ambiguous associated type '{param}::{assoc}': declared by {declared}; name the trait's own binding, e.g. '{param}: {}<{assoc} = ...>'",
+                        traits.first().map(String::as_str).unwrap_or(assoc)
+                    )
+                };
+                (Code::AmbiguousCandidate, message, *span)
+            }
             TypeError::AmbiguousValueBlankets {
                 trait_name,
                 receiver,
@@ -2408,13 +2441,44 @@ impl TypeError {
                 format!("impl of trait '{trait_name}' does not bind associated type '{assoc_name}'"),
                 *span,
             ),
-            TypeError::ImplAssocTypeNotInTrait {
+            TypeError::AssocTypeNotInTrait {
                 trait_name,
                 assoc_name,
                 span,
             } => (
                 Code::TraitDeclInvalid,
                 format!("trait '{trait_name}' declares no associated type '{assoc_name}'"),
+                *span,
+            ),
+            TypeError::BoundBindsAssocFamily { assoc_name, span } => (
+                Code::TraitDeclInvalid,
+                format!(
+                    "associated type `{assoc_name}` takes type parameters, so a bound cannot bind it to one type"
+                ),
+                *span,
+            ),
+            TypeError::ImplAssocTypeParamsMismatch {
+                trait_name,
+                assoc_name,
+                declared,
+                written,
+                span,
+            } => (
+                Code::TraitDeclInvalid,
+                format!(
+                    "trait '{trait_name}' declares `type {assoc_name}{declared}`, but the impl binds `type {assoc_name}{written}`"
+                ),
+                *span,
+            ),
+            TypeError::UnsupportedAssocTypeParam {
+                assoc_name,
+                param_name,
+                span,
+            } => (
+                Code::TraitDeclInvalid,
+                format!(
+                    "associated type `{assoc_name}` takes only plain type parameters, which `{param_name}` is not"
+                ),
                 *span,
             ),
             TypeError::ImplMissingMethod {
@@ -3948,6 +4012,24 @@ impl DataDecls {
             .chain(newtypes.keys())
             .chain(generic_newtypes.keys())
             .copied()
+    }
+
+    /// The entries of `defs` alone.
+    pub(crate) fn restricted_to(&self, defs: &[DefId]) -> Self {
+        fn kept<V: Clone>(table: &IndexMap<DefId, V>, defs: &[DefId]) -> IndexMap<DefId, V> {
+            defs.iter()
+                .filter_map(|def| Some((*def, table.get(def)?.clone())))
+                .collect()
+        }
+        Self {
+            newtypes: kept(&self.newtypes, defs),
+            generic_newtypes: kept(&self.generic_newtypes, defs),
+            struct_fields: kept(&self.struct_fields, defs),
+            variant_cases: kept(&self.variant_cases, defs),
+            enum_cases: kept(&self.enum_cases, defs),
+            flags_cases: kept(&self.flags_cases, defs),
+            resource_types: kept(&self.resource_types, defs),
+        }
     }
 }
 

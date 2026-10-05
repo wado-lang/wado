@@ -15,8 +15,8 @@ use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName, TUPLE_TYPE_NAME};
 use crate::tir::{
-    FunctionRef, ResolvedType, SlotProjections, SubstitutionContext, TargetBinding, TemplateId,
-    TypeId, TypeTable, positional_substitution,
+    FunctionRef, ProjectionAnswer, ResolvedType, SlotProjections, SubstitutionContext,
+    TargetBinding, TemplateId, TypeId, TypeTable, positional_substitution,
 };
 use crate::token::Span;
 
@@ -1977,12 +1977,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let impl_sig = signatures
             .impl_sig(impl_ref.0)
             .instantiate_slots(&scope.tysys.type_table, &impl_slots);
-        scope.annotate_ctx.trait_ctx.assoc_type_bindings.extend(
-            impl_sig
-                .associated_types
-                .iter()
-                .map(|(n, &t)| (n.clone(), t)),
-        );
+        scope
+            .annotate_ctx
+            .trait_ctx
+            .assoc_type_bindings
+            .resolved
+            .extend(
+                impl_sig
+                    .associated_types
+                    .iter()
+                    .map(|(n, &t)| (n.clone(), t)),
+            );
 
         let blanket_type_param = is_blanket_type_param.then(|| impl_struct_name.clone());
         // The block names the receiver — not the letter, which another blanket
@@ -2138,7 +2143,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let own_assoc = impl_sig
                     .associated_types
                     .iter()
-                    .map(|(name, &ty)| (trait_decl, name.clone(), ty))
+                    .map(|(name, &ty)| ProjectionAnswer::at_any(trait_decl, name.clone(), ty))
                     .collect();
                 let instantiated = default_method.sig.decl.instantiate_slots_with(
                     tt,
@@ -2238,7 +2243,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return Some(Ordered::One(Some(*def)));
         }
-        let bridge = self.tysys.solver.as_ref()?;
+        let bridge = self.tysys.solver.as_ref()?.borrow();
         let required = match required_trait.map(|r| r.decl) {
             Some(Resolution::Def(def)) => Some(def),
             // A qualified trait that resolved to nothing is already reported.

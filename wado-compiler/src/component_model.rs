@@ -152,6 +152,7 @@ pub fn map_key_rejection(type_table: &TypeTable, key: TypeId) -> Option<String> 
         | ResolvedType::Function { .. }
         | ResolvedType::Reactive(_)
         | ResolvedType::TypeParam { .. }
+        | ResolvedType::AssocParam { .. }
         | ResolvedType::TypePack { .. }
         | ResolvedType::InferVar(_)
         | ResolvedType::AssocTypeProjection { .. }

@@ -1,0 +1,21 @@
+// An impl writing its pack spread in a trait argument (`Conv<[..T]>`) answers
+// a bound at the tuple the pack stands for: the spread splices its elements
+// in rather than nesting them.
+
+trait Conv<T> with () {
+    fn n(&self) -> i32;
+}
+
+impl<..T> Conv<[..T]> for [..T] {
+    fn n(&self) -> i32 {
+        return 2;
+    }
+}
+
+fn f<C: Conv<[i32, bool]>>(c: &C) -> i32 {
+    return c.n();
+}
+
+test "a pack spread in a trait argument answers the tuple it stands for" {
+    assert f(&[1, true]) == 2;
+}

@@ -674,9 +674,8 @@ implementation reads, or ignores.
 `${x:#X}` prefixes `0x`, not `0X`. The flag chooses the prefix, and the type
 character chooses the case of the digits.
 
-A hand-written `Display` may branch on the flag. `core:temporal`'s `Instant`
-renders whole seconds plainly and milliseconds under `#`. Every primitive's
-`Display` ignores it.
+A hand-written `Display` may branch on the flag. Every primitive's `Display`
+ignores it.
 
 ### Precision
 

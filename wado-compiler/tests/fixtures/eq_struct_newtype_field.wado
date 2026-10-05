@@ -1,0 +1,55 @@
+// A struct derives `Eq` and `Ord` over a newtype field: the field compares as
+// its base does, since the newtype inherits the base's impls.
+
+type Meters = f64;
+type Id = i32;
+type Name = String;
+
+struct Row {
+    id: Id,
+    name: Name,
+    len: Meters,
+}
+
+test "a newtype field compares as its base" {
+    let a = Row { id: 1, name: "a", len: 1.5 };
+    let b = Row { id: 1, name: "a", len: 1.5 };
+    let c = Row { id: 1, name: "a", len: 2.5 };
+    assert a == b;
+    assert a != c;
+    assert a < c;
+}
+
+variant Shape {
+    Line(Meters),
+    Dot,
+}
+
+struct Boxed<T> {
+    v: T,
+}
+
+test "a newtype payload compares as its base" {
+    assert Shape::Line(1.5) == Shape::Line(1.5);
+    assert Shape::Line(1.5) != Shape::Line(2.5);
+    assert Shape::Line(1.5) != Shape::Dot;
+}
+
+test "a generic struct at a newtype argument compares as its base" {
+    let a: Boxed<Id> = Boxed { v: 1 };
+    let b: Boxed<Id> = Boxed { v: 2 };
+    assert a == a;
+    assert a < b;
+}
+
+test "a body-local struct over a newtype field compares as its base" {
+    type Local = i32;
+    struct Pair {
+        v: Local,
+    }
+    assert Pair { v: 1 } == Pair { v: 1 };
+    assert Pair { v: 1 } < Pair { v: 2 };
+}
+
+__DATA__
+{"test": {}}

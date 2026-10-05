@@ -16,6 +16,7 @@ pub struct Component {
 }
 
 impl Component {
+    /// The component file.
     pub fn path(&self) -> &Path {
         &self.path
     }
@@ -36,6 +37,7 @@ pub fn component_for(args: &Args) -> Result<Component> {
     let status = Command::new(&wado)
         .arg("compile")
         .arg(args.opt_level.flag())
+        .args(["--log-level", args.log_level.flag_value()])
         .arg("-o")
         .arg(&path)
         .arg(&args.input)

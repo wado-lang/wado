@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use {
     AtnSim,
     ATN_RULE_STOP,
@@ -28,8 +30,8 @@ global ATN_READS_HIDDEN: i32 = -6;
 global CTX_EMPTY: i32 = 0;
 global CTX_UNKNOWN: i32 = 1;
 
-pub struct AtnState {
-    pub stack: List<i32>,
+internal struct AtnState {
+    internal stack: List<i32>,
     floor: i32,
     reach: i32,
     verdict_index: AtnKeyMap,
@@ -40,13 +42,13 @@ pub struct AtnState {
     verdict_keys: List<i32>,
 }
 
-pub struct AtnFloor {
+internal struct AtnFloor {
     depth: i32,
     reach: i32,
 }
 
 impl AtnState {
-    pub fn new() -> AtnState {
+    internal fn new() -> AtnState {
         return AtnState {
             stack: [],
             floor: 0,
@@ -60,21 +62,21 @@ impl AtnState {
         };
     }
 
-    pub fn hide_callers(&mut self) -> AtnFloor {
+    internal fn hide_callers(&mut self) -> AtnFloor {
         let saved = AtnFloor { depth: self.floor, reach: self.reach };
         self.floor = self.stack.len();
         self.reach = self.floor;
         return saved;
     }
 
-    pub fn reveal_callers(&mut self, saved: AtnFloor) -> bool {
+    internal fn reveal_callers(&mut self, saved: AtnFloor) -> bool {
         let read = self.reach < self.floor;
         self.floor = saved.depth;
         self.reach = i32::min(saved.reach, self.reach);
         return read;
     }
 
-    pub fn predict(
+    internal fn predict(
         &mut self,
         sim: &AtnSim,
         decision: i32,
@@ -158,7 +160,7 @@ impl AtnState {
         return v;
     }
 
-    pub fn record_verdict(&mut self, decision: i32, pos: i32, min_prec: i32, depth: i32, alt: i32, reach: i32) {
+    internal fn record_verdict(&mut self, decision: i32, pos: i32, min_prec: i32, depth: i32, alt: i32, reach: i32) {
         let h = self.question_hash(decision, pos, min_prec, depth);
         if self.recorded_verdict(h, decision, pos, min_prec, depth) >= 0 {
             return;
@@ -473,7 +475,7 @@ fn atn_state_pr_key(state: i32, pr: i32) -> i64 {
     return (state + 2) as i64 * CFG_KEY_PR_SLOT as i64 + (pr + 2) as i64;
 }
 
-pub fn atn_invocation_prec(sim: &AtnSim, rstk: &List<i32>, k: i32) -> i32 {
+internal fn atn_invocation_prec(sim: &AtnSim, rstk: &List<i32>, k: i32) -> i32 {
     if k < 0 || rstk[k] < 0 {
         return 0;
     }
@@ -781,9 +783,9 @@ fn atn_all_at_end(sim: &AtnSim, configs: &List<AtnConfig>) -> bool {
     return true;
 }
 
-pub global ATN_NO_DISABLED: List<i32> = [];
+internal global ATN_NO_DISABLED: List<i32> = [];
 
-pub fn atn_predict_once(
+internal fn atn_predict_once(
     sim: &AtnSim,
     decision: i32,
     atn: &mut AtnState,
@@ -804,7 +806,7 @@ pub fn atn_predict_once(
     return alt;
 }
 
-pub fn atn_predict_with_stack(
+internal fn atn_predict_with_stack(
     sim: &AtnSim,
     decision: i32,
     rule_stack: &List<i32>,

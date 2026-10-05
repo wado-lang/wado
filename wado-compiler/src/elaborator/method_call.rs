@@ -206,9 +206,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The trait bounds `ty` carries, which answer a method or an operator on
     /// it: a type parameter's declared ones, or those the trait's
     /// `type A: Bound` puts on the projection `ty`. Empty for any other type.
-    /// A projection's rebuilt bound has no walked site, so it carries its
-    /// declaration; one naming none was reported where written.
-    pub(super) fn carried_bounds(&self, ty: TypeId, span: Span) -> Vec<ScopedBound> {
+    ///
+    /// A projection's are the declaration's own, read in its trait's frame
+    /// at the projection: `Self` its base, the trait's parameters the
+    /// arguments it was reached at, the family's parameters its arguments.
+    /// Which of them it carries is the signature's to say
+    /// ([`TypeTable::says_at`]), here as in [`TypeTable::projection_bounds`];
+    /// the declaration only spells them. A binding reading a trait parameter
+    /// the projection does not know is left out.
+    pub(super) fn carried_bounds(&self, ty: TypeId) -> Vec<ScopedBound> {
         if let Some(name) = self.tysys.binder_name(ty) {
             return self
                 .annotate_ctx
@@ -219,24 +225,60 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .unwrap_or_default();
         }
         let tt = self.tysys.type_table.borrow();
-        let ResolvedType::AssocTypeProjection { bounds, .. } = tt.get(ty) else {
+        let ResolvedType::AssocTypeProjection {
+            param_id,
+            assoc_name,
+            args,
+            owning_trait,
+            trait_args,
+            ..
+        } = tt.get(ty)
+        else {
             return Vec::new();
         };
-        bounds
+        let decl = self
+            .tysys
+            .trait_env
+            .assoc_type_decl(owning_trait, assoc_name)
+            .expect("a projection's trait declares its associated type");
+        let written_self = Some(SelfBinding {
+            type_id: *param_id,
+            declaring_trait: Some(*owning_trait),
+        });
+        let declaring = self.declaring_space(*owning_trait, assoc_name, trait_args.as_deref());
+        let mut space = declaring.space.clone();
+        space.extend(
+            decl.type_params
+                .iter()
+                .map(|param| param.name.clone())
+                .zip(args.iter().copied()),
+        );
+        let sig = tt
+            .assoc_type_sig(*owning_trait, assoc_name)
+            .expect("a projection's signature is built before a method is looked up on it");
+        // `sig.bounds` was read off these, one per bound naming a trait.
+        let written: Vec<&ast::TraitBound> = decl
+            .bounds
             .iter()
-            .filter_map(|b| {
-                Some(ScopedBound::new(
-                    ast::TraitBound {
-                        id: AstId::fresh(),
-                        name: b.base_name().to_string(),
-                        type_args: Vec::new(),
-                        assoc_types: Vec::new(),
-                        span,
-                        fn_signature: None,
-                        resolved: Some(b.canonical()?),
-                    },
-                    None,
-                ))
+            .filter(|bound| {
+                bound.names_a_trait() && self.tysys.resolutions.bound_decl(bound).is_some()
+            })
+            .collect();
+        assert_eq!(
+            written.len(),
+            sig.bounds.len(),
+            "a signature's bounds are its declaration's naming a trait"
+        );
+        written
+            .into_iter()
+            .zip(&sig.bounds)
+            .filter(|(_, typed)| tt.says_at(sig, typed, trait_args.is_some()))
+            .map(|(bound, _)| {
+                let mut bound = bound.clone();
+                bound
+                    .assoc_types
+                    .retain(|binding| !declaring.reads_unknown(&binding.ty));
+                ScopedBound::new(bound, written_self).in_space(space.clone())
             })
             .collect()
     }
@@ -550,7 +592,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `T: Ord` gives `T` its `cmp`, and `type Seq: SerializeSeq` gives
         // `S::Seq` its `element`.
         if method_info.is_none() {
-            let bounds = self.carried_bounds(base_type_id, span);
+            let bounds = self.carried_bounds(base_type_id);
             if !bounds.is_empty()
                 && let Some((found_trait, info)) = self.find_method_in_trait_bounds(
                     call_id,
@@ -949,14 +991,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (mangled, base, type_arg_names, Some(type_args))
             }
             // Named by its declaring module: a bare head names no definition,
-            // and re-resolution would peel past the impl to the base.
+            // and re-resolution would peel past the impl to the base. A block
+            // written at one instantiation is named at it, as a struct's is.
             ResolvedType::Newtype { def, .. } if matched_impl_decl == Some(def) => {
-                let base = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .fq_base_type_name(method_impl_type_id);
-                (base.clone(), base, vec![], None)
+                let tt = self.tysys.type_table.borrow();
+                let base = tt.fq_base_type_name(method_impl_type_id);
+                let name = if from_concrete_impl {
+                    tt.fq_type_name(method_impl_type_id)
+                } else {
+                    base.clone()
+                };
+                (name, base, vec![], None)
             }
             // The newtype's own arguments, not the base's: a base may re-shape
             // them, and the `impl` header names the newtype.

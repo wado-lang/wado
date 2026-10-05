@@ -6,7 +6,7 @@
 // Output example (in Asia/Tokyo):
 //   IANA:  Asia/Tokyo
 //   UTC:   2026-05-07T12:34:56.789Z
-//   Local: 2026-05-07T21:34:56.789+09:00
+//   Local: 2026-05-07T21:34:56.789+09:00[+09:00]
 //
 // `wasi:clocks/timezone` is not implemented by upstream wasmtime, so
 // `wado run` / `wado serve` provide their own host (see
@@ -17,8 +17,9 @@
 //
 // All the calendar math (epoch seconds → civil date, offset rendering) lives
 // in `core:temporal`; here we just copy the `wasi:clocks` instant into a
-// `core:temporal` `Instant` and let `ZonedDateTime` format it. The `{x:#}`
-// format prints milliseconds (the alternate form of the same `Display`).
+// `core:temporal` `Instant` and let it and `ZonedDateTime` format it. The
+// `{x:.3}` precision is Temporal's `fractionalSecondDigits`: three digits,
+// milliseconds.
 
 use { println, Stdout } from "core:cli";
 use { SystemClock, Instant as ClockInstant, Timezone } from "wasi:clocks";
@@ -35,24 +36,23 @@ export fn run() with (Stdout, SystemClock, Timezone) {
         println(`IANA:  ${name}`);
     }
 
-    let utc = ZonedDateTime { instant, time_zone: "UTC" };
-    println(`UTC:   ${utc:#}`);
+    println(`UTC:   ${instant:.3}`);
 
     let zone = match Timezone::utc_offset(now) {
         Some(ns) => offset_zone(ns / 1_000_000_000),
         None => "UTC",
     };
     let local = ZonedDateTime { instant, time_zone: zone };
-    println(`Local: ${local:#}`);
+    println(`Local: ${local:.3}`);
 }
 
 // Format a UTC offset in whole seconds as a fixed-offset zone string
-// (`±HH:MM`) that `ZonedDateTime` can interpret. A zero offset renders as
-// `+00:00`, which `core:temporal` normalizes to the `Z` suffix.
+// (`±HH:MM`) that `ZonedDateTime` can interpret. Seconds are dropped, since a
+// Temporal offset zone has minute precision; the sign is taken after, so a
+// sub-minute offset is `+00:00` rather than the `-00:00` Temporal refuses.
 fn offset_zone(offset_secs: i64) -> String {
-    let sign = if offset_secs < 0 { "-" } else { "+" };
-    let abs = i64::abs(offset_secs);
-    let h = abs / 3600;
-    let m = abs % 3600 / 60;
-    return `${sign}${h:02}:${m:02}`;
+    let minutes = offset_secs / 60;
+    let sign = if minutes < 0 { "-" } else { "+" };
+    let abs = i64::abs(minutes);
+    return `${sign}${abs / 60:02}:${abs % 60:02}`;
 }

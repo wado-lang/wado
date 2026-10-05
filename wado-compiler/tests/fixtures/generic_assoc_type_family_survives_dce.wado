@@ -1,0 +1,44 @@
+// A family an impl binds is reached through no other type: a variant payload
+// projecting it is answered from the registry once optimization substitutes
+// it, so pruning unreachable types keeps what the registry answers with.
+
+trait Store with () {
+    type Buf<E>;
+
+    fn filled<E>(&self, n: i32, value: E) -> Self::Buf<E>;
+}
+
+struct Lists {}
+
+struct Box2<E> {
+    items: List<E>,
+}
+
+impl Store for Lists {
+    type Buf<E> = Box2<E>;
+
+    fn filled<E>(&self, n: i32, value: E) -> Box2<E> {
+        return Box2 { items: List::<E>::filled(n, value) };
+    }
+}
+
+variant V<S: Store> {
+    A(S::Buf<i32>),
+    B,
+}
+
+fn make<S: Store>(s: S) -> V<S> {
+    return V::<S>::A(s.filled(3, 1));
+}
+
+test "a projected payload keeps the family it is answered with" {
+    let v = make(Lists {});
+    let mut w = v;
+    if let V::A(mut b) = w {
+        b.items.push(1);
+    }
+    let V::A(b) = v else {
+        unreachable();
+    };
+    assert b.items.len() == 3;
+}

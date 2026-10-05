@@ -1156,6 +1156,19 @@ impl Container for IntBox {
     type Item = i32;
     fn get(&self) -> Self::Item { return self.value; }
 }
+
+// Generic associated type: a family, one type per argument list
+trait Store {
+    type Buf<E: Elem>: Len;          // bounds on the parameter and on the type
+    fn hold<E: Elem>(&self, items: List<E>) -> Self::Buf<E>;
+}
+impl Store for Weigher {
+    type Buf<E: Elem> = Weighed<E>;  // the trait's parameters, names the impl's own
+    ...
+}
+fn measure<S: Store, E: Elem>(s: &S, items: List<E>) -> i32 {
+    return s.hold(items).len();      // S::Buf<E>: Len
+}
 ```
 
 Traits use static dispatch. Use `Self::TypeName` to refer to associated types.

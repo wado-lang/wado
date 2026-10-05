@@ -4,7 +4,7 @@
 //! system itself: per-call mutable state does not, even when cache-shaped, since
 //! sharing a recursion stack across module walks would leak frames between them.
 
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -15,7 +15,7 @@ use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::resource_move_check::carries_affine_resource;
-use crate::synthesis::template::eq_from_written_cmp;
+use crate::synthesis::template::{eq_from_written_cmp, written_impl_reaches};
 use crate::tir::{ResolvedType, StructDef, TypeId, TypeKey, TypeTable, range_item};
 
 use super::sem::decls::ModuleDecls;
@@ -60,8 +60,9 @@ pub(crate) struct TypeSystem {
     /// The solver's view of the program, built once every declaration is
     /// resolved and `None` until then. Selection asks it in every profile, so
     /// that a debug and a release build cannot choose different impls
-    /// (WEP 2026-09-01).
-    pub(crate) solver: Option<Rc<SolverBridge>>,
+    /// (WEP 2026-09-01). A body's own declarations reach it as annotate
+    /// resolves them, so it is shared mutable state, as the type table is.
+    pub(crate) solver: Option<Rc<RefCell<SolverBridge>>>,
 
     /// Registries the elaborator queries. The Component-Model
     /// `WorldRegistry` is built by the same `CmInterfaceRegistry::build_from_stdlib`
@@ -205,6 +206,7 @@ impl TypeSystem {
             | ResolvedType::Enum { .. }
             | ResolvedType::Flags { .. }
             | ResolvedType::TypeParam { .. }
+            | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::InferVar(_)
@@ -364,18 +366,25 @@ impl TypeSystem {
         }
     }
 
+    /// The solver, which the module passes ask once every declaration is
+    /// resolved.
+    pub(crate) fn solver(&self) -> Ref<'_, SolverBridge> {
+        self.solver
+            .as_ref()
+            .expect("the solver is built before the module passes")
+            .borrow()
+    }
+
     /// The first link at or below `type_id` — itself included — owning an impl
-    /// of `trait_`. A link owns what it writes, and the `Eq` a `cmp` it writes
-    /// alone gives it.
+    /// of `trait_`. A link owns what it writes where it reaches the link, and
+    /// the `Eq` a `cmp` it writes alone gives it.
     pub(crate) fn impl_link(&self, type_id: TypeId, trait_: DefId) -> Option<TypeId> {
         let tt = self.type_table.borrow();
+        let solver = self.solver();
         let mut tid = type_id;
         loop {
-            let key = tt.impl_receiver_key(tid);
-            if self
-                .trait_env
-                .has_any_methodful_impl_by_receiver(&key, trait_)
-                || eq_from_written_cmp(&self.trait_env, trait_, &key, &tt)
+            if written_impl_reaches(&self.trait_env, trait_, tid, &tt)
+                || eq_from_written_cmp(&self.trait_env, &solver, trait_, tid, &tt).is_some()
             {
                 return Some(tid);
             }
@@ -602,7 +611,7 @@ impl TypeSystem {
                 let ret_str = self.type_id_to_string(return_type);
                 format!("fn({}) -> {}", param_strs.join(", "), ret_str)
             }
-            ResolvedType::TypeParam { name, .. } => name,
+            ResolvedType::TypeParam { name, .. } | ResolvedType::AssocParam { name, .. } => name,
             ResolvedType::InferVar(var) => var.to_string(),
             ResolvedType::Enum { def }
             | ResolvedType::Resource { def }
@@ -624,8 +633,18 @@ impl TypeSystem {
             ResolvedType::AssocTypeProjection {
                 param_id,
                 assoc_name,
+                args,
                 ..
-            } => format!("{}::{}", self.type_id_to_string(param_id), assoc_name),
+            } => {
+                let base = format!("{}::{}", self.type_id_to_string(param_id), assoc_name);
+                if args.is_empty() {
+                    base
+                } else {
+                    let args: Vec<String> =
+                        args.iter().map(|&t| self.type_id_to_string(t)).collect();
+                    format!("{base}<{}>", args.join(", "))
+                }
+            }
             ResolvedType::Unit => UNIT_TYPE_NAME.to_string(),
             ResolvedType::Never => NEVER_TYPE_NAME.to_string(),
             ResolvedType::Unknown => "<unknown>".to_string(),

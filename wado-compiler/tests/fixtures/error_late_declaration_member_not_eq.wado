@@ -1,0 +1,23 @@
+// A shape met only in a body derives no `Eq` when a member has none: the
+// anonymous struct and the body-local struct are refused alike.
+
+fn same<T: Eq>(a: T, b: T) -> bool {
+    return a == b;
+}
+
+fn one() -> i32 {
+    return 1;
+}
+
+fn main() {
+    struct Holder {
+        f: fn() -> i32,
+    }
+    let h = Holder { f: one };
+    let _ = same(h, h);
+    let a = { f: one };
+    let _ = same(a, a);
+}
+
+__DATA__
+{"compile_error": "`$anon_{f:fn()->i32}` does not implement `Eq` because field `f` of type `fn() -> i32` does not implement `Eq`", "compile_error_codes":["TRAIT_BOUND_NOT_SATISFIED", "TRAIT_BOUND_NOT_SATISFIED"]}

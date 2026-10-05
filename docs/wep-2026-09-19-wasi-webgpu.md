@@ -157,6 +157,16 @@ binding is covered end to end and not only to the point of compiling.
   computes nothing. `mesa-vulkan-drivers` supplies a software adapter
   (lavapipe), a 98.5 MB install, and that is what `test-webgpu` runs on. A
   developer machine without it gets the runner's diagnostic and no run.
+- The runner defines `request-adapter` itself, over the one `wasi-webgpu-wasmtime`
+  links. The host crate has no hook for choosing an adapter or reporting the one
+  it chose, and the runner needs both: `--gpu-adapter` hands the guest the one
+  adapter it names, and `--log-level info` names the adapter each request
+  returned. So a change to the host crate's `request-adapter` does not reach the
+  runner until the runner's copy is changed to match.
+- The runner defines `on-submitted-work-done` too. The host crate's 0.3.1 awaits
+  a wgpu callback but polls no device, so the callback never fires and the guest
+  hangs; 0.3.0 returned without waiting. The runner's copy polls every device
+  until it is idle. Once the host crate polls, the copy is redundant.
 - The version rides in every `#[cm]` path, so an `rc.3` rewrites all 2588 lines.
   Regenerating handles that. What nothing records is which version the bundled
   module was cut from, beyond the submodule the generated header names.

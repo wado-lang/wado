@@ -12,11 +12,12 @@ use {
     ParserRule,
     is_parser_members,
     is_lexer_members,
+    push_alt_actions,
 } from "./ir.wado";
 use { DiagnosticKind, DiagnosticOwner, DiagnosticSite, LoweredGrammar, Op, Rule, RuleCallOp } from "./gir.wado";
 use { GenContext, RuleCaptures } from "./gen_context.wado";
 use { GaleMap } from "./gale_map.wado";
-use { elements_match, follow_forward_args, to_snake_case } from "./gen_util.wado";
+use { and_operand, elements_match, follow_forward_args, negate_cond, to_snake_case } from "./gen_util.wado";
 use { CallForm, CallStmt, CodeWriter, FnSpec, ImplSpec, ParamSpec, wado } from "lib:wadopoet";
 use {
     AmbiguousNode,
@@ -331,32 +332,12 @@ fn collect_rule_action_ids(rule: &ParserRule, out: &mut List<i32>) {
     if let Some(a) = &rule.after_action {
         out.push(a.action_id);
     }
+    let mut actions: List<&AltAction> = [];
     for let alt of &rule.alternatives {
-        collect_alt_action_ids(alt, out);
+        push_alt_actions(alt, &mut actions);
     }
-}
-
-fn collect_alt_action_ids(alt: &Alternative, out: &mut List<i32>) {
-    for let a of &alt.actions {
+    for let a of &actions {
         out.push(a.source.action_id);
-    }
-    for let e of &alt.elements {
-        collect_element_action_ids(e, out);
-    }
-}
-
-fn collect_element_action_ids(elem: &Element, out: &mut List<i32>) {
-    match *elem {
-        Group(g) => {
-            for let alt of &g.alternatives {
-                collect_alt_action_ids(alt, out);
-            }
-        },
-        Repeat(rep) => collect_element_action_ids(&rep.element, out),
-        Label(lab) => collect_element_action_ids(&lab.element, out),
-        Not(n) => collect_element_action_ids(&n.element, out),
-        _ => {
-        },
     }
 }
 
@@ -682,7 +663,7 @@ fn gate_condition_for(a: &AltAction, ctx: &GenContext, handle: &String = &PARSER
         // the dispatch calls it rather than inlining the condition. Only for the
         // parser: the fn takes one, and a scan has none. A scan asks for its own
         // handle and falls through to the translator, which renders against it.
-        return Option::Some(`${pred_fn_name(a.source.action_id)}(p)`);
+        return Option::Some(`${pred_fn_name(ctx.predicate_fn_id(a.source.action_id))}(p)`);
     }
     let rule = ctx.current_rule();
     let vals_in_scope = rule_emits_vals(ctx, rule);
@@ -1090,18 +1071,10 @@ pub fn emit_alt_exit(w: &mut CodeWriter, ctx: &GenContext) {
     w.line(if emits_vals { `break ${label}: vals;` } else { `break ${label};` });
 }
 
-/// Join predicate conditions into one short-circuit `(c0) && (c1)` guard.
+/// Join predicate conditions into one short-circuit `c0 && c1` guard, each
+/// parenthesized only where `&&` would bind to part of it.
 pub fn join_gate_conds(conds: &List<String>) -> String {
-    let mut out = String::new();
-    for let mut i = 0; i < conds.len(); i += 1 {
-        if i > 0 {
-            out.push_str(" && ");
-        }
-        out.push('(');
-        out.push_str(&conds[i]);
-        out.push(')');
-    }
-    return out;
+    return conds.iter_ref().map(|c| and_operand(c)).collect().join(" && ");
 }
 
 /// Emit one action body under the identity translator (`language = Wado`):
@@ -1212,7 +1185,7 @@ fn gen_predicate_guard(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenCont
         },
     };
     w.begin("if !p.speculating");
-    w.begin(`if !(${cond})`);
+    w.begin(`if ${negate_cond(&cond)}`);
     w.line(`p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);`);
     if current_rule_emits_vals(ctx) {
         w.line("return vals;");

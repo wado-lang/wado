@@ -15,7 +15,7 @@ impl Span {
     }
 }
 
-pub fn push_chars(out: &mut String, chars: &List<char>, start: i32, end: i32) {
+internal fn push_chars(out: &mut String, chars: &List<char>, start: i32, end: i32) {
     let mut bytes = 0;
     for let mut i = start; i < end; i += 1 {
         bytes += chars[i].len_utf8();
@@ -26,13 +26,13 @@ pub fn push_chars(out: &mut String, chars: &List<char>, start: i32, end: i32) {
     }
 }
 
-pub fn chars_text(chars: &List<char>, start: i32, end: i32) -> String {
+internal fn chars_text(chars: &List<char>, start: i32, end: i32) -> String {
     let mut s = String::new();
     push_chars(&mut s, chars, start, end);
     return s;
 }
 
-pub fn push_chars_escaped(out: &mut String, chars: &List<char>, start: i32, end: i32) {
+internal fn push_chars_escaped(out: &mut String, chars: &List<char>, start: i32, end: i32) {
     for let mut i = start; i < end; i += 1 {
         match chars[i] {
             '\n' => out.push_str("\\n"),
@@ -43,7 +43,7 @@ pub fn push_chars_escaped(out: &mut String, chars: &List<char>, start: i32, end:
     }
 }
 
-pub fn kind_set_has(set: &List<i32>, kind: i32) -> bool {
+internal fn kind_set_has(set: &List<i32>, kind: i32) -> bool {
     let w = kind >> 5;
     if w >= set.len() {
         return false;
@@ -51,7 +51,7 @@ pub fn kind_set_has(set: &List<i32>, kind: i32) -> bool {
     return set[w] >> (kind & 31) & 1 == 1;
 }
 
-pub fn with_expected<S: AsStrSlice>(message: S, expected: &List<String>) -> String {
+internal fn with_expected<S: AsStrSlice>(message: S, expected: &List<String>) -> String {
     let n = expected.len();
     if n == 0 {
         return message.to_string();
@@ -69,7 +69,7 @@ pub fn with_expected<S: AsStrSlice>(message: S, expected: &List<String>) -> Stri
     return out;
 }
 
-pub fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
+internal fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
     let mut j = if i < chars.len() { i } else { chars.len() };
     let mut col = 0;
     while j > 0 && chars[j - 1] != '\n' {
@@ -79,7 +79,7 @@ pub fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
     return col;
 }
 
-pub fn line_starts(chars: &List<char>) -> List<i32> {
+internal fn line_starts(chars: &List<char>) -> List<i32> {
     let mut starts: List<i32> = [0];
     for let mut i = 0; i < chars.len(); i += 1 {
         if chars[i] == '\n' {
@@ -89,7 +89,7 @@ pub fn line_starts(chars: &List<char>) -> List<i32> {
     return starts;
 }
 
-pub fn line_col_at(starts: &List<i32>, pos: i32) -> [i32, i32] {
+internal fn line_col_at(starts: &List<i32>, pos: i32) -> [i32, i32] {
     let mut lo = 0;
     let mut hi = starts.len() - 1;
     while lo < hi {
@@ -125,7 +125,7 @@ pub struct TokenStream {
 }
 
 impl TokenStream {
-    pub fn new(chars: &List<char>) -> TokenStream {
+    internal fn new(chars: &List<char>) -> TokenStream {
         let cap = chars.len() / 4 + 1;
         return TokenStream {
             kinds: List::with_capacity(cap),
@@ -146,11 +146,11 @@ impl TokenStream {
         return self.kinds.len();
     }
 
-    pub fn trivia_mark(&self) -> i32 {
+    internal fn trivia_mark(&self) -> i32 {
         return self.triv_kinds.len();
     }
 
-    pub fn push_trivia(&mut self, kind: i32, start: i32, end: i32, channel: i32) {
+    internal fn push_trivia(&mut self, kind: i32, start: i32, end: i32, channel: i32) {
         if self.triv_kinds.len() >= self.triv_kinds.capacity() {
             builtin::cold_path();
             self.triv_kinds.grow();
@@ -167,11 +167,11 @@ impl TokenStream {
         self.triv_chans.push_within_capacity(channel);
     }
 
-    pub fn push_token(&mut self, kind: i32, start: i32, end: i32, triv_lo: i32, triv_hi: i32) {
+    internal fn push_token(&mut self, kind: i32, start: i32, end: i32, triv_lo: i32, triv_hi: i32) {
         self.push_token_flagged(kind, start, end, triv_lo, triv_hi, TokenFlags::none());
     }
 
-    pub fn push_token_flagged(
+    internal fn push_token_flagged(
         &mut self,
         kind: i32,
         start: i32,
@@ -204,7 +204,7 @@ impl TokenStream {
         return idx;
     }
 
-    pub fn push_synthetic(&mut self, expected_kind: i32, at: i32) -> i32 {
+    internal fn push_synthetic(&mut self, expected_kind: i32, at: i32) -> i32 {
         let m = self.trivia_mark();
         return self.push_token_flagged(expected_kind, at, at, m, m, TokenFlags::Synthetic);
     }
@@ -213,11 +213,11 @@ impl TokenStream {
         return self.flags[i];
     }
 
-    pub fn set_flag(&mut self, i: i32, flag: TokenFlags) {
+    internal fn set_flag(&mut self, i: i32, flag: TokenFlags) {
         self.flags[i] |= flag;
     }
 
-    pub fn mark_skipped(&mut self, i: i32) {
+    internal fn mark_skipped(&mut self, i: i32) {
         self.set_flag(i, TokenFlags::Skipped);
     }
 
@@ -327,7 +327,7 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
-    pub fn error<S: AsStrSlice>(
+    internal fn error<S: AsStrSlice>(
         code: DiagnosticCode,
         message: S,
         span: Span,
@@ -380,7 +380,7 @@ fn lex_error_at(tokens: &TokenStream, i: i32) -> Diagnostic {
     );
 }
 
-pub fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagnostic>, max_errors: i32) {
+internal fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagnostic>, max_errors: i32) {
     let mut merged: List<Diagnostic> = [];
     for let mut i = 0; i < tokens.len(); i += 1 {
         if tokens.is_lex_error(i) {
@@ -393,7 +393,7 @@ pub fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagnostic>
     *diagnostics = merged;
 }
 
-pub fn resolve_positions(diagnostics: &mut List<Diagnostic>, chars: &List<char>) {
+internal fn resolve_positions(diagnostics: &mut List<Diagnostic>, chars: &List<char>) {
     if diagnostics.is_empty() {
         return;
     }
@@ -552,7 +552,7 @@ fn bubble_to_parent(stack: &List<i32>, end: &mut List<i32>, flags: &mut List<Nod
     }
 }
 
-pub struct TreeBuilder {
+internal struct TreeBuilder {
     tag: List<EventTag>,
     id: List<i32>,
     offset: List<i32>,
@@ -563,7 +563,7 @@ pub struct TreeBuilder {
 }
 
 impl TreeBuilder {
-    pub fn with_capacity(rows: i32) -> TreeBuilder {
+    internal fn with_capacity(rows: i32) -> TreeBuilder {
         return TreeBuilder {
             tag: List::with_capacity(rows),
             id: List::with_capacity(rows),
@@ -592,27 +592,27 @@ impl TreeBuilder {
         self.alt.push_within_capacity(-1);
     }
 
-    pub fn start_node(&mut self, kind: NodeKind, start: i32) {
+    internal fn start_node(&mut self, kind: NodeKind, start: i32) {
         let row = self.tag.len();
         self.push_row(EventTag::Open, kind as i32, start);
         self.open.push(row);
     }
 
-    pub fn start_error(&mut self, start: i32) {
+    internal fn start_error(&mut self, start: i32) {
         let row = self.tag.len();
         self.push_row(EventTag::Open, K_ERROR as i32, start);
         self.open.push(row);
     }
 
-    pub fn set_alt(&mut self, alt: i32) {
+    internal fn set_alt(&mut self, alt: i32) {
         self.alt[self.open[self.open.len() - 1]] = alt;
     }
 
-    pub fn checkpoint(&self) -> i32 {
+    internal fn checkpoint(&self) -> i32 {
         return self.tag.len();
     }
 
-    pub fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
+    internal fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
         assert self.innermost_open() < checkpoint, "a node wraps only rows finished before it";
         self.tag.insert(checkpoint, EventTag::Open);
         self.id.insert(checkpoint, kind as i32);
@@ -627,7 +627,7 @@ impl TreeBuilder {
         }
     }
 
-    pub fn truncate(&mut self, checkpoint: i32) {
+    internal fn truncate(&mut self, checkpoint: i32) {
         self.tag.truncate(checkpoint);
         self.id.truncate(checkpoint);
         self.offset.truncate(checkpoint);
@@ -643,25 +643,25 @@ impl TreeBuilder {
         }
     }
 
-    pub fn finish_node(&mut self, end: i32) {
+    internal fn finish_node(&mut self, end: i32) {
         let row = self.open[self.open.len() - 1];
         self.push_row(EventTag::Close, self.id[row], end);
         self.last_finished = row;
         let _ = self.open.pop();
     }
 
-    pub fn innermost_open(&self) -> i32 {
+    internal fn innermost_open(&self) -> i32 {
         if self.open.is_empty() {
             return -1;
         }
         return self.open[self.open.len() - 1];
     }
 
-    pub fn node_kind(&self, row: i32) -> NodeKind {
+    internal fn node_kind(&self, row: i32) -> NodeKind {
         return self.id[row] as NodeKind;
     }
 
-    pub fn resume_node(&mut self, row: i32, end: i32) {
+    internal fn resume_node(&mut self, row: i32, end: i32) {
         while self.innermost_open() > row {
             self.finish_node(end);
         }
@@ -673,11 +673,11 @@ impl TreeBuilder {
         self.open.push(row);
     }
 
-    pub fn mark_error(&mut self) {
+    internal fn mark_error(&mut self) {
         self.error_row = self.tag.len();
     }
 
-    pub fn in_error_mode(&self) -> bool {
+    internal fn in_error_mode(&self) -> bool {
         if self.error_row < 0 {
             return false;
         }
@@ -689,7 +689,7 @@ impl TreeBuilder {
         return true;
     }
 
-    pub fn push_open_rule_names(&self, rule_names: &List<String>, out: &mut List<String>) {
+    internal fn push_open_rule_names(&self, rule_names: &List<String>, out: &mut List<String>) {
         for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
             let kind = self.id[self.open[i]];
             if kind != K_ERROR as i32 {
@@ -698,19 +698,19 @@ impl TreeBuilder {
         }
     }
 
-    pub fn token(&mut self, idx: i32) {
+    internal fn token(&mut self, idx: i32) {
         self.push_row(EventTag::Tok, idx, 0);
     }
 
-    pub fn missing(&mut self, syn_idx: i32) {
+    internal fn missing(&mut self, syn_idx: i32) {
         self.push_row(EventTag::Miss, syn_idx, 0);
     }
 
-    pub fn skip(&mut self, idx: i32) {
+    internal fn skip(&mut self, idx: i32) {
         self.push_row(EventTag::Skip, idx, 0);
     }
 
-    pub fn finish(&self) -> CstStore {
+    internal fn finish(&self) -> CstStore {
         let n = self.tag.len();
         let mut end = List::filled(n, 0);
         let mut flags = List::filled(n, NodeFlags::none());
@@ -755,14 +755,14 @@ impl TreeBuilder {
         return CstStore { tag: self.tag, id: self.id, offset: self.offset, alt: self.alt, end, flags, next };
     }
 
-    pub fn render_open(&self, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
+    internal fn render_open(&self, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
         if self.open.len() == 0 {
             return String::new();
         }
         return self.render_from(self.open[self.open.len() - 1], toks, rule_names, token_names);
     }
 
-    pub fn render_at(
+    internal fn render_at(
         &self,
         row: i32,
         toks: &TokenStream,
@@ -775,7 +775,7 @@ impl TreeBuilder {
         return self.render_from(row, toks, rule_names, token_names);
     }
 
-    pub fn open_rule_names(&self, rule_names: &List<String>) -> String {
+    internal fn open_rule_names(&self, rule_names: &List<String>) -> String {
         let mut out = String::from("[");
         for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
             if i < self.open.len() - 1 {
@@ -789,7 +789,7 @@ impl TreeBuilder {
         return out;
     }
 
-    pub fn render_last_finished(
+    internal fn render_last_finished(
         &self,
         toks: &TokenStream,
         rule_names: &List<String>,
@@ -933,7 +933,7 @@ fn emit_lexer_token(
     }
     out.push_str(`${lc.0}:${lc.1}]\n`);
 }
-pub struct ScanMemo<G> {
+internal struct ScanMemo<G> {
     heads: Array<i32>,
     entries: List<ScanMemoEntry<G>>,
 }
@@ -950,11 +950,11 @@ struct ScanMemoEntry<G> {
 }
 
 impl<G: Eq> ScanMemo<G> {
-    pub fn new(positions: i32) -> ScanMemo<G> {
+    internal fn new(positions: i32) -> ScanMemo<G> {
         return ScanMemo { heads: Array::<i32>::filled(positions + 1, -1), entries: [] };
     }
 
-    pub fn find(&self, rule: i32, pos: i32, min_prec: i32, follow: i64, cont: i64, gate: &G) -> i32 {
+    internal fn find(&self, rule: i32, pos: i32, min_prec: i32, follow: i64, cont: i64, gate: &G) -> i32 {
         let mut at = self.heads[pos];
         while at >= 0 {
             let e = &self.entries[at];
@@ -966,61 +966,71 @@ impl<G: Eq> ScanMemo<G> {
         return -1;
     }
 
-    pub fn end_of(&self, entry: i32) -> i32 {
+    internal fn end_of(&self, entry: i32) -> i32 {
         return self.entries[entry].end;
     }
 
-    pub fn gate_of(&self, entry: i32) -> G {
+    internal fn gate_of(&self, entry: i32) -> G {
         return self.entries[entry].gate_out;
     }
 
-    pub fn put(&mut self, rule: i32, pos: i32, min_prec: i32, follow: i64, cont: i64, gate_in: G, end: i32, gate_out: G) {
+    internal fn put(
+        &mut self,
+        rule: i32,
+        pos: i32,
+        min_prec: i32,
+        follow: i64,
+        cont: i64,
+        gate_in: G,
+        end: i32,
+        gate_out: G,
+    ) {
         self.entries.push(ScanMemoEntry { next: self.heads[pos], rule, min_prec, follow, cont, gate_in, end, gate_out });
         self.heads[pos] = self.entries.len() - 1;
     }
 }
-pub global ATN_BASIC: i32 = 1;
-pub global ATN_RULE_START: i32 = 2;
-pub global ATN_RULE_STOP: i32 = 3;
-pub global ATN_BLOCK_START: i32 = 4;
-pub global ATN_BLOCK_END: i32 = 5;
-pub global ATN_STAR_LOOP_ENTRY: i32 = 6;
-pub global ATN_STAR_LOOP_BACK: i32 = 7;
-pub global ATN_PLUS_LOOP_BACK: i32 = 8;
-pub global ATN_LOOP_END: i32 = 9;
+internal global ATN_BASIC: i32 = 1;
+internal global ATN_RULE_START: i32 = 2;
+internal global ATN_RULE_STOP: i32 = 3;
+internal global ATN_BLOCK_START: i32 = 4;
+internal global ATN_BLOCK_END: i32 = 5;
+internal global ATN_STAR_LOOP_ENTRY: i32 = 6;
+internal global ATN_STAR_LOOP_BACK: i32 = 7;
+internal global ATN_PLUS_LOOP_BACK: i32 = 8;
+internal global ATN_LOOP_END: i32 = 9;
 
-pub global ATN_TR_EPSILON: i32 = 0;
-pub global ATN_TR_ATOM: i32 = 1;
-pub global ATN_TR_NOT_ATOM: i32 = 2;
-pub global ATN_TR_WILDCARD: i32 = 3;
-pub global ATN_TR_RULE: i32 = 4;
-pub global ATN_TR_PRECEDENCE: i32 = 5;
+internal global ATN_TR_EPSILON: i32 = 0;
+internal global ATN_TR_ATOM: i32 = 1;
+internal global ATN_TR_NOT_ATOM: i32 = 2;
+internal global ATN_TR_WILDCARD: i32 = 3;
+internal global ATN_TR_RULE: i32 = 4;
+internal global ATN_TR_PRECEDENCE: i32 = 5;
 
-pub struct AtnSim {
-    pub state_kind: List<i32>,
-    pub state_tr_start: List<i32>,
-    pub state_tr_count: List<i32>,
-    pub tr_kind: List<i32>,
-    pub tr_target: List<i32>,
-    pub tr_label: List<i32>,
-    pub tr_follow: List<i32>,
-    pub tr_prec: List<i32>,
-    pub decision_state: List<i32>,
-    pub rule_start: List<i32>,
-    pub rule_nullable: List<bool> = [],
-    pub rule_first: List<List<i32>> = [],
-    pub rule_first_neg: List<List<i32>> = [],
-    pub rule_first_open: List<bool> = [],
-    pub state_cont_nullable: List<bool> = [],
-    pub state_cont_first_start: List<i32> = [],
-    pub state_cont_first_count: List<i32> = [],
-    pub state_cont_neg_start: List<i32> = [],
-    pub state_cont_neg_count: List<i32> = [],
-    pub cont_first_label: List<i32> = [],
-    pub cont_neg_label: List<i32> = [],
-    pub state_cont_first_open: List<bool> = [],
-    pub state_collapse_to: List<i32> = [],
-    pub state_call_prec: List<i32>,
+internal struct AtnSim {
+    internal state_kind: List<i32>,
+    internal state_tr_start: List<i32>,
+    internal state_tr_count: List<i32>,
+    internal tr_kind: List<i32>,
+    internal tr_target: List<i32>,
+    internal tr_label: List<i32>,
+    internal tr_follow: List<i32>,
+    internal tr_prec: List<i32>,
+    internal decision_state: List<i32>,
+    internal rule_start: List<i32>,
+    internal rule_nullable: List<bool> = [],
+    internal rule_first: List<List<i32>> = [],
+    internal rule_first_neg: List<List<i32>> = [],
+    internal rule_first_open: List<bool> = [],
+    internal state_cont_nullable: List<bool> = [],
+    internal state_cont_first_start: List<i32> = [],
+    internal state_cont_first_count: List<i32> = [],
+    internal state_cont_neg_start: List<i32> = [],
+    internal state_cont_neg_count: List<i32> = [],
+    internal cont_first_label: List<i32> = [],
+    internal cont_neg_label: List<i32> = [],
+    internal state_cont_first_open: List<bool> = [],
+    internal state_collapse_to: List<i32> = [],
+    internal state_call_prec: List<i32>,
 }
 
 fn atn_read_u8(bytes: &ByteList, pos: i32) -> i32 {
@@ -1040,7 +1050,7 @@ fn atn_read_u24(bytes: &ByteList, pos: i32) -> i32 {
     return b0 | b1 << 8 | b2 << 16;
 }
 
-pub fn atn_decode(bytes: &ByteList) -> AtnSim {
+internal fn atn_decode(bytes: &ByteList) -> AtnSim {
     let mut p = 0;
     let nrules = atn_read_u16(bytes, p);
     p += 2;
@@ -1144,8 +1154,8 @@ global ATN_READS_HIDDEN: i32 = -6;
 global CTX_EMPTY: i32 = 0;
 global CTX_UNKNOWN: i32 = 1;
 
-pub struct AtnState {
-    pub stack: List<i32>,
+internal struct AtnState {
+    internal stack: List<i32>,
     floor: i32,
     reach: i32,
     verdict_index: AtnKeyMap,
@@ -1156,13 +1166,13 @@ pub struct AtnState {
     verdict_keys: List<i32>,
 }
 
-pub struct AtnFloor {
+internal struct AtnFloor {
     depth: i32,
     reach: i32,
 }
 
 impl AtnState {
-    pub fn new() -> AtnState {
+    internal fn new() -> AtnState {
         return AtnState {
             stack: [],
             floor: 0,
@@ -1176,21 +1186,21 @@ impl AtnState {
         };
     }
 
-    pub fn hide_callers(&mut self) -> AtnFloor {
+    internal fn hide_callers(&mut self) -> AtnFloor {
         let saved = AtnFloor { depth: self.floor, reach: self.reach };
         self.floor = self.stack.len();
         self.reach = self.floor;
         return saved;
     }
 
-    pub fn reveal_callers(&mut self, saved: AtnFloor) -> bool {
+    internal fn reveal_callers(&mut self, saved: AtnFloor) -> bool {
         let read = self.reach < self.floor;
         self.floor = saved.depth;
         self.reach = i32::min(saved.reach, self.reach);
         return read;
     }
 
-    pub fn predict(
+    internal fn predict(
         &mut self,
         sim: &AtnSim,
         decision: i32,
@@ -1274,7 +1284,7 @@ impl AtnState {
         return v;
     }
 
-    pub fn record_verdict(&mut self, decision: i32, pos: i32, min_prec: i32, depth: i32, alt: i32, reach: i32) {
+    internal fn record_verdict(&mut self, decision: i32, pos: i32, min_prec: i32, depth: i32, alt: i32, reach: i32) {
         let h = self.question_hash(decision, pos, min_prec, depth);
         if self.recorded_verdict(h, decision, pos, min_prec, depth) >= 0 {
             return;
@@ -1589,7 +1599,7 @@ fn atn_state_pr_key(state: i32, pr: i32) -> i64 {
     return (state + 2) as i64 * CFG_KEY_PR_SLOT as i64 + (pr + 2) as i64;
 }
 
-pub fn atn_invocation_prec(sim: &AtnSim, rstk: &List<i32>, k: i32) -> i32 {
+internal fn atn_invocation_prec(sim: &AtnSim, rstk: &List<i32>, k: i32) -> i32 {
     if k < 0 || rstk[k] < 0 {
         return 0;
     }
@@ -1897,9 +1907,9 @@ fn atn_all_at_end(sim: &AtnSim, configs: &List<AtnConfig>) -> bool {
     return true;
 }
 
-pub global ATN_NO_DISABLED: List<i32> = [];
+internal global ATN_NO_DISABLED: List<i32> = [];
 
-pub fn atn_predict_once(
+internal fn atn_predict_once(
     sim: &AtnSim,
     decision: i32,
     atn: &mut AtnState,
@@ -1920,7 +1930,7 @@ pub fn atn_predict_once(
     return alt;
 }
 
-pub fn atn_predict_with_stack(
+internal fn atn_predict_with_stack(
     sim: &AtnSim,
     decision: i32,
     rule_stack: &List<i32>,
@@ -2022,17 +2032,15 @@ impl Lexer {
 fn try_ID(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !((chars[pos] matches { 'a'..='z' })) { return -1; }
+    if !(chars[pos] matches { 'a'..='z' }) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_0 = pos;
         rep_0: {
             if pos >= chars.len() { break rep_0; }
-            if !((chars[pos] matches { 'a'..='z' })) { break rep_0; }
+            if !(chars[pos] matches { 'a'..='z' }) { break rep_0; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_0;
         break;
     }
     return pos;
@@ -2041,36 +2049,28 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !((chars[pos] matches { ' ' | '\t' | '\r' | '\n' })) { return -1; }
+    if !(chars[pos] matches { ' ' | '\t' | '\r' | '\n' }) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_2 = pos;
         rep_2: {
             if pos >= chars.len() { break rep_2; }
-            if !((chars[pos] matches { ' ' | '\t' | '\r' | '\n' })) { break rep_2; }
+            if !(chars[pos] matches { ' ' | '\t' | '\r' | '\n' }) { break rep_2; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_2;
         break;
     }
     return pos;
 }
 
 fn try_lit_else(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != 'e' { return -1; }
-    if pos + 1 >= chars.len() || chars[pos + 1] != 'l' { return -1; }
-    if pos + 2 >= chars.len() || chars[pos + 2] != 's' { return -1; }
-    if pos + 3 >= chars.len() || chars[pos + 3] != 'e' { return -1; }
-    return pos + 4;
+    if start + 4 > chars.len() || chars[start] != 'e' || chars[start + 1] != 'l' || chars[start + 2] != 's' || chars[start + 3] != 'e' { return -1; }
+    return start + 4;
 }
 
 fn try_lit_if(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != 'i' { return -1; }
-    if pos + 1 >= chars.len() || chars[pos + 1] != 'f' { return -1; }
-    return pos + 2;
+    if start + 2 > chars.len() || chars[start] != 'i' || chars[start + 1] != 'f' { return -1; }
+    return start + 2;
 }
 
 pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {

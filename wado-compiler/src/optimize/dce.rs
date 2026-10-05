@@ -31,7 +31,7 @@ use crate::nir_visitor::{NirRefVisitor, reachable_exprs};
 use crate::optimize::arena_query::{
     expr_node_may_trap, operand_values_may_trap, promoted_local_reads,
 };
-use crate::tir::{ResolvedType, StructDef, TypeId, TypeTable};
+use crate::tir::{ResolvedType, StructDef, TypeId, TypeTable, projection_arguments};
 use crate::{hashmap, nir, tir};
 
 /// Call graph: function ID -> set of called function IDs
@@ -687,14 +687,16 @@ fn build_analysis_graph(project: &NirPackage, descriptors: &[FunctionRef]) -> An
             }
         }
 
-        let prior = func_positions.insert(func_id.clone(), pos);
-        assert!(
-            prior.is_none(),
-            "function_id_for collision in project.functions: two distinct \
-             functions map to the same FunctionId {func_id:?}. \
-             `function_id_for` must be injective; check the synthesis or \
-             monomorphize layer for duplicate emission."
-        );
+        if let Some(prior) = func_positions.insert(func_id.clone(), pos) {
+            let prior = project.functions[prior].borrow();
+            panic!(
+                "function_id_for collision in project.functions: `{}` and `{}` \
+                 map to the same FunctionId {func_id:?}. `function_id_for` \
+                 must be injective; check the synthesis or monomorphize layer \
+                 for duplicate emission.",
+                prior.name, func.name,
+            );
+        }
         call_graph.insert(func_id.clone(), analysis.callees);
         if !analysis.effect_calls.is_empty() {
             effect_usage.insert(func_id.clone(), analysis.effect_calls);
@@ -1746,8 +1748,16 @@ fn collect_type_dependencies(
         // surviving projection (e.g. a field type of a retained generic
         // template) would dangle when the parameter type is pruned,
         // crashing later name-mangling.
-        ResolvedType::AssocTypeProjection { param_id, .. } => {
+        ResolvedType::AssocTypeProjection {
+            param_id,
+            args,
+            trait_args,
+            ..
+        } => {
             collect_type_transitive(*param_id, type_table, reachable);
+            for arg in projection_arguments(args, trait_args) {
+                collect_type_transitive(arg, type_table, reachable);
+            }
         }
 
         // Leaf types - no dependencies
@@ -1761,6 +1771,7 @@ fn collect_type_dependencies(
         | ResolvedType::Variant { .. }
         | ResolvedType::Resource { .. }
         | ResolvedType::TypeParam { .. }
+        | ResolvedType::AssocParam { .. }
         | ResolvedType::TypePack { .. } => {}
         ResolvedType::InferVar(var) => panic!("{var} reached DCE"),
 

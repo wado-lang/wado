@@ -49,6 +49,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use tysys::TypeSystem;
 
+pub(crate) use solver_bridge::SolverBridge;
+
 use crate::hashmap::IndexMap;
 
 use crate::ast::{
@@ -238,6 +240,7 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
                 Vec::new(),
             );
         }
+        self.bind_fn_bound_params(&impl_block.type_params);
         // Between the names and their bounds: the target is resolved from the
         // names, and a bound's `Self::Assoc` projects off the target.
         let implementing = self.impl_self_binding(&impl_block.ty, impl_block.trait_type.as_ref());
@@ -1156,16 +1159,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.type_lookup().declaration(name)
     }
 
-    /// The trait `bound` names; one naming no declaration keeps its spelling,
-    /// which the mangle falls back to.
-    pub(super) fn fq_trait_name_of(&self, bound: &ast::TraitBound) -> FqTraitName {
-        let resolutions = &self.tysys.resolutions;
-        resolutions.bound_decl(bound).map_or_else(
-            || FqTraitName::binder(&bound.name),
-            |def| FqTraitName::declared(resolutions.defs(), def),
-        )
-    }
-
     /// The trait a reference site names, with the type arguments it writes; one
     /// naming no declaration keeps its spelling.
     pub(super) fn fq_trait_name(&self, ty: &ast::Type) -> FqTraitName {
@@ -1946,14 +1939,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .as_ref()
             .zip(trait_name.and_then(FqTraitName::canonical))
             .map(|(written, trait_key)| self.impl_trait_ref(written, &impl_block.ty, trait_key));
-
-        for binding in &impl_block.associated_types {
-            let type_id = self.resolve_type(&binding.ty);
-            self.annotate_ctx
-                .trait_ctx
-                .assoc_type_bindings
-                .insert(binding.name.clone(), type_id);
-
+        for (name, type_id) in self.bind_impl_assoc_types(impl_block) {
             let Some(trait_ref) = impl_trait_ref.clone() else {
                 continue;
             };
@@ -1961,12 +1947,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 self.tysys
                     .type_table
                     .borrow_mut()
-                    .register_assoc_type_resolution(
-                        target_type_id,
-                        trait_ref,
-                        binding.name.clone(),
-                        type_id,
-                    );
+                    .register_assoc_type_resolution(target_type_id, trait_ref, name, type_id);
             } else {
                 // A generic impl registers the definition instead, which the
                 // monomorphizer reads to answer a `GenericInstance`.
@@ -1975,12 +1956,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     self.tysys
                         .type_table
                         .borrow_mut()
-                        .register_generic_assoc_type_def(
-                            base_decl,
-                            trait_ref,
-                            binding.name.clone(),
-                            type_id,
-                        );
+                        .register_generic_assoc_type_def(base_decl, trait_ref, name, type_id);
                 }
             }
         }
@@ -2052,10 +2028,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     let tt = scope.tysys.type_table.borrow();
                     let peeled = tt.peel_refs(self_type);
                     let is_instantiation = match tt.get(peeled) {
-                        ResolvedType::Newtype { type_args, .. } => {
-                            // A trait impl needs none: the trait index keys it.
-                            !type_args.is_empty() && trait_name.is_none()
-                        }
+                        ResolvedType::Newtype { type_args, .. } => !type_args.is_empty(),
                         // The shapes a call site mangles with their arguments.
                         _ => tt.nominal_type_args(peeled).is_some(),
                     };

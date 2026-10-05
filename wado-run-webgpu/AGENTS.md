@@ -13,8 +13,9 @@ runs the component on a wasmtime host that serves `wasi:webgpu`.
   is not documentation.
 - A program behaves the same here as under `wado run`, which is the only reason
   to have both: the arguments after the input file go to the guest unparsed,
-  `--dir` and `--no-dir` grant what they grant there, and the engine takes the
-  same collector and Cranelift level. A divergence is a defect, not a variant.
+  `--dir` and `--no-dir` grant what they grant there, `--log-level` takes the
+  same values and reaches the compile too, and the engine takes the same
+  collector and Cranelift level. A divergence is a defect, not a variant.
 - It compiles nothing itself. `WADO` names the binary that dispatched the
   subcommand ([External Subcommands](../docs/wep-2026-09-19-external-subcommands.md)),
   and the tests set it the same way, so the tests and a real invocation reach
@@ -29,9 +30,15 @@ runs the component on a wasmtime host that serves `wasi:webgpu`.
 
 ## Module Map
 
-- `args.rs` — the command line: `-O<level>`, `--dir`, `--no-dir`, and the
-  program's own arguments after the input file.
+- `args.rs` — the command line: `-O<level>`, `--dir`, `--no-dir`,
+  `--gpu-adapter`, `--log-level`, and the program's own arguments after the
+  input file.
 - `compile.rs` — the input as a component: a `.wasm` is taken as given, a
   `.wado` goes through `WADO compile` into a temporary directory.
 - `host.rs` — the wasmtime engine, the WASI P3 and `wasi:webgpu` linkers, and
-  the wgpu instance the latter draws on.
+  the wgpu instance the latter draws on, whose adapters `--help` lists under
+  the indices `--gpu-adapter` takes. It replaces two of the host crate's
+  functions. `request-adapter` has no hook for `--gpu-adapter` to pin an adapter
+  or for `--log-level info` to name the one returned.
+  `on-submitted-work-done` (0.3.1) awaits a callback no device poll ever fires,
+  so the guest would hang.
