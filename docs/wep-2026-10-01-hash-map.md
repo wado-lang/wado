@@ -26,11 +26,11 @@ every caller.
 
 ## Decision
 
-`core:collections` adds `HashMap<K, V>` and `HashSet<T>`. Both take their seed as
-a value. The one call that asks the host for a seed is separate, and it is the
-only one with an effect.
+`core:collections` adds `HashMap<K, V>` and `HashSet<T>`. `new()` hashes under a
+default seed that the host supplies once per instance, and `with_seed` takes a
+seed of the caller's choosing. Neither carries an effect.
 
-### The seed is a value, and every map takes one
+### The default seed, and a seed of the caller's choosing
 
 ```wado
 pub struct HashSeed { k0: u64, k1: u64 }
@@ -40,33 +40,75 @@ impl HashSeed {
     pub fn fixed(k0: u64, k1: u64) -> HashSeed;
 }
 
+#[benign(InsecureSeed)]
+global DEFAULT_HASH_SEED: HashSeed = HashSeed::random();
+
 impl<K: Hash + Eq, V> HashMap<K, V> {
-    pub fn new(seed: HashSeed) -> HashMap<K, V>;
+    pub fn new() -> HashMap<K, V>;                    // under DEFAULT_HASH_SEED
+    pub fn with_seed(seed: HashSeed) -> HashMap<K, V>;
 }
 ```
 
-`HashSeed::random()` is for maps that hold keys from outside the program.
-`HashSeed::fixed` is for maps whose keys the program trusts, such as a generator
-reading its own grammar. The two names pair, so the choice is visible at every
-construction site.
+`HashSet` has the same two constructors. `DEFAULT_HASH_SEED` is private to
+`core:collections`.
 
-`random()` calls `get-insecure-seed`, which the host is not obliged to fill with
-randomness. Its doc comment says so. The interface asks to be called only once,
-so a program fetches one seed at its entry and passes it down. Nothing caches it
-in a global.
+`HashSeed::random()` calls `get-insecure-seed`, which the host is not obliged to
+fill with randomness. Its doc comment says so. The interface asks to be called
+only once, and a global initializer is the one place a program runs once. The
+seed never shows through a map: iteration keeps insertion order (below), so the
+effect is unobservable, which is what `#[benign]` asserts.
 
-There is no `HashMap::new()` without a seed and no `impl Default`. A default
-seed would have to be fixed, and a fixed seed reached by accident is the hazard
-this design exists to prevent.
+`with_seed(HashSeed::fixed(…))` is for maps whose keys the program trusts and
+whose hashing must be the same on every run. `with_seed(HashSeed::random())`
+gives a map a seed of its own.
+
+### `#[benign]` extends to globals
+
+A global's initializer may not perform an effect
+([Global Variables](./spec-expressions.md#global-variables)). `#[benign(E, …)]`
+on a global admits the listed effects in its initializer, as it admits them in a
+function body. Nothing propagates, since an initializer has no caller, and the
+world import of each listed effect is still required. Only the listed effects
+are admitted: an initializer that may do anything would hide I/O behind every
+export.
+
+No handler is installed while an initializer runs. An effect a host import
+serves, such as `InsecureSeed`, works there. An `interface` effect falls to its
+default implementation, or traps without one.
+
+### Whether and when an initializer runs is unspecified
+
+The rule for every initializer changes: the order in which initializers run,
+and whether one runs at all, is unspecified. The one guarantee is that a
+global's initializer has run before the global is read. A cycle among
+initializers stays an error. A `#[benign]` global is no exception.
+
+This replaces the rule that an initializer runs at module initialization whether
+or not anything reads the global. Under the old rule `DEFAULT_HASH_SEED` would
+ask the host for a seed, and keep the `insecure-seed` import, in every program
+that imports `core:collections`, `TreeMap` users included. Under the new one, a
+program that never reaches `HashMap::new()` imports nothing for it.
+
+### `#[benign]` on functions stays
+
+`#[ambient]` cannot take over the two functions that carry `#[benign]`:
+
+- `coverage_probe` (`#[benign(CoverageHost)]`) must never be removed. An
+  `#[ambient]` call whose result goes unused may be removed, and a probe returns
+  `()`. [WEP: Test Coverage](./wep-2026-09-28-test-coverage.md) rests on no pass
+  removing a probe that could run.
+- `eval` (`#[benign(EvalHost)]`) would still work, but `#[ambient]` is for
+  best-effort output and lifts the check from the whole body. `eval`'s case is
+  the one `#[benign]` names: an effect that does not show through the interface.
 
 ### Trusted keys get a newtype
 
 A package whose maps all hold trusted keys declares a newtype over `HashMap`
-under its own fixed seed. The newtype's `new()` takes no seed, and it implements
-`Default`, `Serialize` and `Deserialize` itself. A fixed seed reveals nothing
-when written out, so none of the reasons that refuse these on `HashMap` hold.
-The choice of seed is made once, where the newtype is declared, rather than at
-every construction site.
+under its own fixed seed. Its hashing is the same on every run, and it needs no
+`insecure-seed` import. The newtype implements `Default`, `Serialize` and
+`Deserialize` itself. A fixed seed reveals nothing when written out, so none of
+the reasons that refuse these on `HashMap` hold. The choice of seed is made
+once, where the newtype is declared, rather than at every construction site.
 
 ```wado
 global SEED: HashSeed = HashSeed::fixed(0x243F6A8885A308D3, 0x13198A2E03707344);
@@ -75,7 +117,7 @@ pub type GaleMap<K, V> = HashMap<K, V>;
 
 impl<K: Hash, V> GaleMap<K, V> {
     pub fn new() -> GaleMap<K, V> {
-        return HashMap::<K, V>::new(SEED) as GaleMap<K, V>;
+        return HashMap::<K, V>::with_seed(SEED) as GaleMap<K, V>;
     }
 }
 ```
@@ -133,15 +175,16 @@ slow for the role.
 ### `TreeMap` stays
 
 `TreeMap` needs no seed, and its worst case is logarithmic. It stays the map for
-code that cannot pass a seed along, and the Component Model `map<K, V>` stays
+a world without `insecure-seed`, and the Component Model `map<K, V>` stays
 `TreeMap` ([WEP: CM map type](./wep-2026-08-25-cm-map-type.md)). `core:value`
 objects, which hold parsed external input, stay `TreeMap` as well.
 
 ### No serialization, refused by declaration
 
 `HashMap` and `HashSet` implement neither `Serialize` nor `Deserialize`.
-Deserializing has no way to receive a seed. Serializing a derived form would
-write the seed out, and a leaked seed disables the defence.
+Serializing a derived form would write the seed out, and a leaked seed disables
+the defence. A derived `Deserialize` would read the seed back in from the
+input, which is the attacker's to choose.
 
 Leaving the impls out is not enough. Bound-driven derivation reaches private
 fields across modules, so a type without a hand-written impl serializes its
@@ -167,8 +210,25 @@ function does ([WEP: Declared absence](./wep-2026-09-13-declared-absence.md)).
   benchmark row is re-measured.
 - [ ] `#[unavailable]` on trait impls, and the `Serialize` and `Deserialize`
   refusals on `HashMap` and `HashSet`.
+- [ ] `#[benign(E, …)]` on a global. Done when a fixture shows the listed
+  effects admitted in its initializer, an unlisted one still rejected, and the
+  world import still required.
+- [ ] The unspecified-initializer rule in `spec-expressions.md`, replacing the
+  fixture that pins an unread global's trapping initializer as run. Done when
+  the optimizer removes an unread global whose initializer performs a benign
+  effect, along with the import that only it reached.
+- [ ] `DEFAULT_HASH_SEED`, `new()` under it and `with_seed(seed)` on `HashMap`
+  and `HashSet`. Done when every caller of the old `new(seed)` has moved to
+  `with_seed`.
 
 ## Known gaps
+
+- Every map built by `new()` in one instance shares `DEFAULT_HASH_SEED`. A
+  long-lived instance, such as an HTTP service, gives an attacker many requests
+  against one seed to learn its collisions from timing.
+- `new()` makes a default construction possible, but whether `HashMap` and
+  `HashSet` implement `Default`, and `Deserialize` under the default seed, is
+  undecided.
 
 - Floating-point keys have no `Hash`. Their `==` treats every NaN as one value
   and `-0.0` as equal to `0.0`, so a `Hash` has to agree on each of those
