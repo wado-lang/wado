@@ -31,7 +31,7 @@ use {
 } from "./superclass.wado";
 use { MemberDecls, members_present } from "./java2wado/jmembers.wado";
 use { action_language_is_emittable } from "./java2wado.wado";
-use { clip_to_scalars } from "./g4/unicode.wado";
+use { clip_to_scalars, scalar_count, SCALAR_COUNT } from "./g4/unicode.wado";
 use { is_ident_char } from "./text.wado";
 use {
     ModeAttrUse,
@@ -5268,6 +5268,7 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
 
     let mut groups: List<DispatchGroup> = [];
     let mut group_by_calls = GaleMap::<List<i32>, i32>::new();
+    let mut claimed_scalars = 0;
     for let mut i = 0; i + 1 < points.len(); i += 1 {
         let mut spans: List<CharRange> = [];
         clip_to_scalars(&mut spans, points[i], points[i + 1] - 1);
@@ -5288,6 +5289,7 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
         if members.is_empty() {
             continue;
         }
+        claimed_scalars += scalar_count(&spans);
         for let ci of &branch_catch_all_calls(calls, &members) {
             members.push(*ci);
         }
@@ -5303,6 +5305,11 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
         }
     }
 
+    // The arms claim every char, so a `_` arm after them would be unreachable,
+    // which a match rejects.
+    if claimed_scalars == SCALAR_COUNT {
+        return groups;
+    }
     // A char no interval claims is outside every bounded first set, so only a
     // rule with an unbounded one can match it.
     let last_resort = last_resort_calls(calls);
@@ -5312,7 +5319,7 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
             wildcard_calls.push(i);
         }
     }
-    if !wildcard_calls.is_empty() {
+    if !wildcard_calls.is_empty() || !groups.is_empty() {
         groups.push(DispatchGroup { pattern: String::from(FALLBACK_PATTERN), calls: wildcard_calls });
     }
 
@@ -5403,16 +5410,15 @@ fn gen_dispatch_groups(
     } else if !groups.is_empty() {
         // The arms are a partition, so an else-if chain's order buys nothing and
         // would put the letters and digits behind every punctuation branch.
-        let has_wildcard_arm = groups.iter_ref().any(|g| g.pattern == FALLBACK_PATTERN);
         w.begin("match first_char");
         for let g of groups {
+            if g.calls.is_empty() {
+                w.line(`${g.pattern} => {},`);
+                continue;
+            }
             w.begin(`${g.pattern} =>`);
             gen_second_char_dispatch(w, calls, &g.calls, needs_extras, has_actions, has_members);
             w.end_with(",");
-        }
-        // `char` has no finite case list, so the arms alone never exhaust it.
-        if !has_wildcard_arm {
-            w.line("_ => {},");
         }
         w.end();
     }
@@ -5484,12 +5490,14 @@ fn second_char_arms(calls: &List<TryCall>, members: &List<i32>) -> List<Dispatch
     points.sort();
     let mut arms: List<DispatchGroup> = [];
     let mut arm_by_calls = GaleMap::<List<i32>, i32>::new();
+    let mut claimed_scalars = 0;
     for let mut i = 0; i + 1 < points.len(); i += 1 {
         let mut spans: List<CharRange> = [];
         clip_to_scalars(&mut spans, points[i], points[i + 1] - 1);
         if spans.is_empty() {
             continue;
         }
+        claimed_scalars += scalar_count(&spans);
         let at = points[i];
         let arm_calls: List<i32> = members.iter_value().filter(|m| second_char_admits(&calls[m], at)).collect();
         let pattern = spans.iter_ref().map(|s| char_pat(s.start, s.end)).collect().join(" | ");
@@ -5501,8 +5509,7 @@ fn second_char_arms(calls: &List<TryCall>, members: &List<i32>) -> List<Dispatch
         }
     }
     let rest: List<i32> = members.iter_value().filter(|m| second_char_admits(&calls[m], -1)).collect();
-    let covers_every_char = !points.is_empty() && points[0] == 0 && points[points.len() - 1] == 0x110000;
-    if covers_every_char && !arms.iter_ref().any(|a| a.calls == rest) {
+    if claimed_scalars == SCALAR_COUNT && !arms.iter_ref().any(|a| a.calls == rest) {
         return arms;
     }
     let mut out: List<DispatchGroup> = arms.into_iter().filter(|a| a.calls != rest).collect();

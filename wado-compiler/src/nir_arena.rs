@@ -10,7 +10,7 @@ use cranelift_entity::{EntityRef, PrimaryMap, entity_impl};
 
 use crate::call_args::CallArgs;
 use crate::canonical::CmCallTarget;
-use crate::const_eval::{MAX_SEQ_ELEMENTS, Value, non_nan_float, truncate_int};
+use crate::const_eval::{MAX_SEQ_ELEMENTS, Value, truncate_int};
 use crate::hashmap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
@@ -274,8 +274,19 @@ impl PackedData {
     fn element(&self, bits: u64) -> Option<Value> {
         let prim = self.elem;
         match prim {
-            PrimitiveType::F32 => non_nan_float(f64::from(f32::from_bits(bits as u32)), prim),
-            PrimitiveType::F64 => non_nan_float(f64::from_bits(bits), prim),
+            // A read keeps a NaN's bits exactly, and widening an f32 NaN to the
+            // f64 a `Value` holds may quiet it.
+            PrimitiveType::F32 => {
+                let value = f32::from_bits(bits as u32);
+                (!value.is_nan()).then(|| Value::Float {
+                    value: f64::from(value),
+                    prim,
+                })
+            }
+            PrimitiveType::F64 => Some(Value::Float {
+                value: f64::from_bits(bits),
+                prim,
+            }),
             _ => Some(Value::Int {
                 value: truncate_int(bits, prim),
                 prim,

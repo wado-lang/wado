@@ -1,0 +1,15 @@
+// The missing range a `char` match reports leaves out the surrogates, which
+// are not `char` values.
+
+fn below(c: char) -> i32 {
+    return match c {
+        '\0'..='\u{D7FF}' => 0,
+    };
+}
+
+export fn run() {
+    let _ = below('a');
+}
+
+__DATA__
+{"compile_error": "missing case `'\\u{e000}'..='\\u{10ffff}'`"}

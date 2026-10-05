@@ -5323,10 +5323,12 @@ impl TypeSystem {
         let ResolvedType::Primitive(prim) = *self.type_table.borrow().get(scrutinee_type) else {
             return None;
         };
+        let is_char = prim == PrimitiveType::Char;
         primitive_range(prim).map(|(min, max)| IntDomain {
             min,
             max,
-            is_char: prim == PrimitiveType::Char,
+            hole: is_char.then_some(SURROGATES),
+            is_char,
         })
     }
 
@@ -5408,6 +5410,10 @@ fn primitive_range(prim: PrimitiveType) -> Option<(i128, i128)> {
         other => other.int_range(),
     }
 }
+
+/// The code points inside `char`'s range that no `char` holds: it is a Unicode
+/// scalar value.
+const SURROGATES: [i128; 2] = [0xD800, 0xDFFF];
 
 enum LiteralOrdValue {
     Int(i128),
