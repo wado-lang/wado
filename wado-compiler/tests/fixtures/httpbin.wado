@@ -94,7 +94,7 @@ fn headers_to_json(headers: List<[String, String]>) -> Value {
 
 fn get_header(headers: List<[String, String]>, name: String) -> String {
     for let [n, v] of headers {
-        if n == name {
+        if n.eq_ignore_ascii_case(&name) {
             return v;
         }
     }
@@ -233,7 +233,7 @@ test "/ip falls back to unknown" {
 }
 
 test "/user-agent echoes the header" {
-    let r = route(&{ path_with_query: "/user-agent", headers: [["user-agent", "wado"]] });
+    let r = route(&{ path_with_query: "/user-agent", headers: [["User-Agent", "wado"]] });
     assert r.body == "{\"user-agent\":\"wado\"}";
 }
 
