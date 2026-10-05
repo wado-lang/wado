@@ -833,20 +833,14 @@ impl SolverBridge {
     ) -> Vec<TypeDeclId> {
         let Self { program, lowering } = self;
         let mut stated = Self::state_newtype_bases(tysys, data, table, lowering, program);
-        let (mut structs, variants, handles) = Self::declarations(tysys, data, table, lowering);
+        let (mut members, handles) = Self::declarations(tysys, data, table, lowering);
         let shape_kinds: Vec<(TypeDeclId, OnBoundTrait)> = shapes
             .iter()
             .map(|(shape, kind)| (shape.id, *kind))
             .collect();
-        structs.extend(shapes.into_iter().map(|(shape, _)| shape));
-        stated.extend(
-            structs
-                .iter()
-                .chain(&variants)
-                .chain(&handles)
-                .map(|decl| decl.id),
-        );
-        Self::derive_all(tysys, lowering, program, structs, variants, handles);
+        members.extend(shapes.into_iter().map(|(shape, _)| shape));
+        stated.extend(members.iter().chain(&handles).map(|decl| decl.id));
+        Self::derive_all(tysys, lowering, program, members, handles);
         Self::name_derived_impls(data, lowering, program, named_from);
         Self::state_reflect_facts(tysys, data, &shape_kinds, table, lowering, program);
         Self::state_type_facts(tysys, data, lowering, program);
@@ -1163,9 +1157,9 @@ impl SolverBridge {
         stated
     }
 
-    /// The impls the declarations derive. A variant never derives `Ord`, so
-    /// the variants come last and `Ord` stops before them. `Eq` and `Ord`
-    /// derive from each other before from the members, by the impls
+    /// The impls the declarations derive. A handle derives `Eq` alone, so the
+    /// handles come last and every other trait stops before them. `Eq`
+    /// and `Ord` derive from each other before from the members, by the impls
     /// `pair_comparisons` stated: a written `cmp` gives `Eq`, and a written
     /// `eq` gives no `Ord` (spec-traits.md §Derivation Policy).
     fn derive_all(
@@ -1173,11 +1167,8 @@ impl SolverBridge {
         lowering: &mut Lowering,
         program: &mut Program,
         mut declarations: Vec<Declaration>,
-        variants: Vec<Declaration>,
         handles: Vec<Declaration>,
     ) {
-        let variants_from = declarations.len();
-        declarations.extend(variants);
         let handles_from = declarations.len();
         declarations.extend(handles);
         let traits: Vec<(CompilerItem, TraitDeclId)> = Self::DERIVED
@@ -1187,8 +1178,7 @@ impl SolverBridge {
         for &(item, trait_) in &traits {
             let eligible = match item {
                 CompilerItem::Eq => &declarations[..],
-                CompilerItem::Ord => &declarations[..variants_from],
-                CompilerItem::Serialize | CompilerItem::Deserialize => {
+                CompilerItem::Ord | CompilerItem::Serialize | CompilerItem::Deserialize => {
                     &declarations[..handles_from]
                 }
                 other => unreachable!("{other:?} is not derived"),
@@ -1359,14 +1349,14 @@ impl SolverBridge {
     }
 
     /// Every declaration of `data` as [`derive`] reads it: structs, plain
-    /// enums and flags, then the variants, then the unrestricted resources.
-    /// One with a member the lowering cannot express is left out.
+    /// enums, flags and variants, then the unrestricted resources. One with a
+    /// member the lowering cannot express is left out.
     fn declarations(
         tysys: &TypeSystem,
         data: &DataDecls,
         table: &TypeTable,
         lowering: &Lowering,
-    ) -> (Vec<Declaration>, Vec<Declaration>, Vec<Declaration>) {
+    ) -> (Vec<Declaration>, Vec<Declaration>) {
         let by_index = |_: &str, index: u32| Some(index);
         let lowered = |def: DefId,
                        params: usize,
@@ -1405,9 +1395,8 @@ impl SolverBridge {
         for (def, module) in memberless {
             out.extend(lowered(def, 0, &mut std::iter::empty(), module));
         }
-        let mut variants = Vec::new();
         for (&def, info) in &data.variant_cases {
-            variants.extend(lowered(
+            out.extend(lowered(
                 def,
                 info.type_param_type_ids.len(),
                 &mut info
@@ -1431,7 +1420,7 @@ impl SolverBridge {
                 )
             })
             .collect();
-        (out, variants, handles)
+        (out, handles)
     }
 
     /// `type_id` lowered, and the bounds in force around it. `None` where a

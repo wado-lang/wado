@@ -1,6 +1,6 @@
 // Test: bounded impl block method unavailable for unbounded type
 variant NoOrd {
-    A(i32),
+    A(fn() -> i32),
     B,
 }
 
@@ -15,8 +15,8 @@ impl<T: Ord> Holder<T> {
 }
 
 export fn run() {
-    let h = Holder { items: [NoOrd::A(1)] as List<NoOrd> };
-    // NoOrd (variant) doesn't implement Ord, so min() should not be available
+    let h = Holder { items: [NoOrd::A(|| 1)] as List<NoOrd> };
+    // NoOrd's `fn` payload has no Ord, so min() should not be available
     let m = h.min();
 }
 

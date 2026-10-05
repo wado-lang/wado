@@ -331,6 +331,7 @@ pub fn synthesize_traits(project: Package) -> Package {
         generate_enum_ord_impls(module, &mut ctx);
         generate_flags_ord_impls(module, &mut ctx);
         generate_struct_ord_impls(module, &mut ctx);
+        generate_variant_ord_impls(module, &mut ctx);
         generate_inspect_impls(module, &mut ctx);
         // `Display` is auto-derived only for plain `enum`s (the bare case name).
         // A newtype inherits its base's `Display` at the format call site
@@ -4052,6 +4053,54 @@ fn generate_struct_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
     module.functions.extend(generated);
 }
 
+/// Generate `V^Ord::cmp` for each requested variant of `module`: an earlier
+/// case orders first, and one case compares its payloads.
+fn generate_variant_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
+    if module.variants.is_empty() {
+        return;
+    }
+    let module_source = module.module_source.clone();
+    let mut tt = module.type_table.borrow_mut();
+    let ord_trait_name = tt.compiler_trait_fq(CompilerItem::Ord);
+    let ord_key = ord_trait_name.canonical().expect(KEYED);
+
+    let plain = collect_variant_cases(module)
+        .into_iter()
+        .map(|(_, cases, span, def)| (Vec::new(), cases, span, def));
+    let generic = collect_generic_variant_cases(module)
+        .into_iter()
+        .map(|(_, type_params, cases, span, def)| (type_params, cases, span, def));
+    let mut generated = Vec::new();
+    for (type_params, cases, span, def) in plain.chain(generic) {
+        let receiver = FqTypeName::declared(tt.defs(), def);
+        if !ctx.should_synthesize(&receiver, &ord_key) {
+            continue;
+        }
+        let variant_type = if type_params.is_empty() {
+            tt.make_variant(def)
+        } else {
+            let ids = make_type_param_ids(&type_params, &mut tt);
+            tt.make_generic_instance(def, ids)
+        };
+        let func = generate_variant_ord_fn(
+            &receiver,
+            &type_params,
+            &cases,
+            variant_type,
+            &ord_trait_name,
+            ctx.trait_env,
+            &module_source,
+            &mut tt,
+            span,
+            ctx.names,
+        );
+        generated.push(Rc::new(RefCell::new(func)));
+        ctx.record_impl(&receiver, &ord_key);
+    }
+    drop(tt);
+    module.functions.extend(generated);
+}
+
 /// Auto-derive `S^Default::default() -> S` for a non-generic struct whose fields
 /// all declare a default, returning `S { f0: e0, … }`. Skips a struct with any
 /// undefaulted field, one already carrying a user `impl Default`, and generic
@@ -4854,8 +4903,51 @@ fn generate_enum_ord_fn(
     let method_info = trait_method_info(receiver, ord_trait_name, "cmp");
     let qualified_name = method_info.to_mangled_name();
 
-    let local_a = || local_expr(2, "a", enum_type, span);
-    let local_b = || local_expr(3, "b", enum_type, span);
+    let mut stmts = scalar_order_stmts(
+        deref_local(0, "self", ref_enum_type, enum_type, span),
+        deref_local(1, "other", ref_enum_type, enum_type, span),
+        enum_type,
+        ordering_type,
+        span,
+        names,
+    );
+    stmts.push(return_stmt(
+        ordering_construct(ordering_type, names.equal_index, &names.equal_name, span),
+        span,
+    ));
+
+    let mut locals = binary_method_locals(ref_enum_type);
+    locals.push(TirLocal::synth(2, enum_type, false));
+    locals.push(TirLocal::synth(3, enum_type, false));
+
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        binary_method_params(ref_enum_type, span),
+        ordering_type,
+        TirBlock::new(stmts, span),
+        locals,
+    )
+}
+
+/// `return value;`
+fn return_stmt(value: TirExpr, span: Span) -> TirStmt {
+    TirStmt::new(TirStmtKind::Return { value: Some(value) }, span)
+}
+
+/// `let a = left; let b = right;`, then `return Less` where `a < b` and
+/// `return Greater` where `a > b`, the two scalars of type `ty` taking locals 2
+/// and 3. What follows answers for `a == b`.
+fn scalar_order_stmts(
+    left: TirExpr,
+    right: TirExpr,
+    ty: TypeId,
+    ordering_type: TypeId,
+    span: Span,
+    names: &TraitsStdlibNames,
+) -> Vec<TirStmt> {
+    let local_a = || local_expr(2, "a", ty, span);
+    let local_b = || local_expr(3, "b", ty, span);
 
     let cmp_branch = |op, ordering_case_index, ordering_case_name: &str| {
         let cond = TirExpr::new(
@@ -4871,15 +4963,13 @@ fn generate_enum_ord_fn(
             TirStmtKind::If {
                 condition: cond,
                 then_block: TirBlock::new(
-                    vec![TirStmt::new(
-                        TirStmtKind::Return {
-                            value: Some(ordering_construct(
-                                ordering_type,
-                                ordering_case_index,
-                                ordering_case_name,
-                                span,
-                            )),
-                        },
+                    vec![return_stmt(
+                        ordering_construct(
+                            ordering_type,
+                            ordering_case_index,
+                            ordering_case_name,
+                            span,
+                        ),
                         span,
                     )],
                     span,
@@ -4897,7 +4987,7 @@ fn generate_enum_ord_fn(
                 local_index,
                 is_mut: false,
                 is_reactive: false,
-                type_id: enum_type,
+                type_id: ty,
                 value,
                 storage: LetStorage::Planned,
             },
@@ -4905,47 +4995,12 @@ fn generate_enum_ord_fn(
         )
     };
 
-    let body = TirBlock::new(
-        vec![
-            let_local(
-                "a",
-                2,
-                deref_local(0, "self", ref_enum_type, enum_type, span),
-            ),
-            let_local(
-                "b",
-                3,
-                deref_local(1, "other", ref_enum_type, enum_type, span),
-            ),
-            cmp_branch(TirBinaryOp::Lt, names.less_index, &names.less_name),
-            cmp_branch(TirBinaryOp::Gt, names.greater_index, &names.greater_name),
-            TirStmt::new(
-                TirStmtKind::Return {
-                    value: Some(ordering_construct(
-                        ordering_type,
-                        names.equal_index,
-                        &names.equal_name,
-                        span,
-                    )),
-                },
-                span,
-            ),
-        ],
-        span,
-    );
-
-    let mut locals = binary_method_locals(ref_enum_type);
-    locals.push(TirLocal::synth(2, enum_type, false));
-    locals.push(TirLocal::synth(3, enum_type, false));
-
-    make_synthetic_method(
-        qualified_name,
-        method_info,
-        binary_method_params(ref_enum_type, span),
-        ordering_type,
-        body,
-        locals,
-    )
+    vec![
+        let_local("a", 2, left),
+        let_local("b", 3, right),
+        cmp_branch(TirBinaryOp::Lt, names.less_index, &names.less_name),
+        cmp_branch(TirBinaryOp::Gt, names.greater_index, &names.greater_name),
+    ]
 }
 
 /// Build a trait method call on a value: `value.Trait::method(args...)`.
@@ -5628,4 +5683,161 @@ fn variant_eq_body(
         span,
     );
     vec![TirStmt::new(TirStmtKind::Expr(outer_match), span)]
+}
+
+/// Generate `V^Ord::cmp(&self, &Self) -> Ordering`: the case tags decide
+/// first, then `match *self { C(x) => match *other { C(y) => return
+/// x.cmp(&y), _ => unreachable() }, U => return Equal }`, the tags being equal
+/// by then. Pass an empty `impl_type_params` slice for a non-generic variant.
+fn generate_variant_ord_fn(
+    receiver: &FqTypeName,
+    impl_type_params: &[TirTypeParam],
+    cases: &[VariantCaseInfo],
+    variant_type: TypeId,
+    ord_trait_name: &FqTraitName,
+    trait_env: &TraitEnv,
+    module_source: &ModuleSource,
+    tt: &mut TypeTable,
+    span: Span,
+    names: &TraitsStdlibNames,
+) -> TirFunction {
+    let method_info = trait_method_info(receiver, ord_trait_name, "cmp");
+    let qualified_name = method_info.to_mangled_name();
+    let ref_variant_type = tt.make_ref(variant_type);
+    let ordering_type = tt.make_compiler_enum(CompilerItem::Ordering);
+
+    let tag = |index, name| {
+        TirExpr::new(
+            TirExprKind::VariantTag {
+                expr: Box::new(deref_local(index, name, ref_variant_type, variant_type, span)),
+            },
+            TypeTable::I32,
+            span,
+        )
+    };
+    let mut stmts = scalar_order_stmts(
+        tag(0, "self"),
+        tag(1, "other"),
+        TypeTable::I32,
+        ordering_type,
+        span,
+        names,
+    );
+    let mut locals = binary_method_locals(ref_variant_type);
+    locals.push(TirLocal::synth(2, TypeTable::I32, false));
+    locals.push(TirLocal::synth(3, TypeTable::I32, false));
+
+    let equal = || ordering_construct(ordering_type, names.equal_index, &names.equal_name, span);
+    let returning = |value| {
+        TirExpr::new(
+            TirExprKind::Block(TirBlock::new(vec![return_stmt(value, span)], span)),
+            TypeTable::UNIT,
+            span,
+        )
+    };
+    let case_pattern = |case_name: &str, case_index, payload_type, bindings| TirPattern::Variant {
+        enum_type: variant_type,
+        variant_name: case_name.to_string(),
+        case_index,
+        bindings,
+        payload_type,
+    };
+    let binding = |name: String, local_index, type_id| TirPattern::Binding {
+        name,
+        local_index,
+        type_id,
+    };
+
+    let mut arms = Vec::with_capacity(cases.len());
+    for (case_name, case_index, payload_type) in cases {
+        let (case_index, payload_type) = (*case_index, *payload_type);
+        if payload_type == TypeTable::UNIT {
+            arms.push(TirMatchArm {
+                pattern: case_pattern(case_name, case_index, payload_type, Vec::new()),
+                guard: None,
+                body: returning(equal()),
+                span,
+            });
+            continue;
+        }
+        let self_idx = locals.len() as u32;
+        let self_name = eq_payload_local("self", case_name, self_idx);
+        locals.push(param_local(&self_name, payload_type, false));
+        let other_idx = locals.len() as u32;
+        let other_name = eq_payload_local("other", case_name, other_idx);
+        locals.push(param_local(&other_name, payload_type, false));
+
+        let order = cmp_call_expr(
+            local_expr(self_idx, &self_name, payload_type, span),
+            local_expr(other_idx, &other_name, payload_type, span),
+            payload_type,
+            ordering_type,
+            trait_env,
+            module_source,
+            tt,
+            span,
+        );
+        let inner_arms = vec![
+            TirMatchArm {
+                pattern: case_pattern(
+                    case_name,
+                    case_index,
+                    payload_type,
+                    vec![binding(other_name, other_idx, payload_type)],
+                ),
+                guard: None,
+                body: returning(order),
+                span,
+            },
+            TirMatchArm {
+                pattern: TirPattern::Wildcard,
+                guard: None,
+                body: unreachable_call(TypeTable::UNIT, span),
+                span,
+            },
+        ];
+        let inner_match = TirExpr::new(
+            TirExprKind::Match {
+                expr: Box::new(deref_local(1, "other", ref_variant_type, variant_type, span)),
+                arms: inner_arms,
+            },
+            TypeTable::UNIT,
+            span,
+        );
+        arms.push(TirMatchArm {
+            pattern: case_pattern(
+                case_name,
+                case_index,
+                payload_type,
+                vec![binding(self_name, self_idx, payload_type)],
+            ),
+            guard: None,
+            body: inner_match,
+            span,
+        });
+    }
+    if arms.is_empty() {
+        stmts.push(return_stmt(equal(), span));
+    } else {
+        let outer_match = TirExpr::new(
+            TirExprKind::Match {
+                expr: Box::new(deref_local(0, "self", ref_variant_type, variant_type, span)),
+                arms,
+            },
+            TypeTable::UNIT,
+            span,
+        );
+        stmts.push(TirStmt::new(TirStmtKind::Expr(outer_match), span));
+    }
+
+    make_trait_method(
+        qualified_name,
+        method_info,
+        impl_type_params.to_vec(),
+        binary_method_params(ref_variant_type, span),
+        ordering_type,
+        TirBlock::new(stmts, span),
+        locals,
+        span,
+    )
 }

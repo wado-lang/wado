@@ -475,8 +475,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Enforce a trait's supertraits against `impl Trait for T`. The whole
     /// closure, not just the direct ones: a supertrait satisfied structurally
-    /// has no impl block of its own to carry the rest of the chain.
+    /// has no impl block of its own to carry the rest of the chain. A marker is
+    /// held to the derivation's own check, which a member lacking a supertrait
+    /// already fails.
     pub(super) fn enforce_impl_supertraits(&mut self, impl_block: &ast::ImplBlock) {
+        if impl_block.is_synthesize_request {
+            return;
+        }
         let Some((trait_type, trait_name, trait_decl)) = self.impl_trait_head(impl_block) else {
             return;
         };
@@ -1134,21 +1139,15 @@ impl TypeSystem {
                 Some(walk_struct(info, &[], visit))
             }
             ResolvedType::Variant { def } => {
-                if tr == OnBoundTrait::Ord {
-                    return None;
-                }
                 let info = scope.variant_cases_of(*def)?;
                 Some(walk_variant(info, &[], visit))
             }
             ResolvedType::GenericInstance { def, type_args } => {
                 if let Some(info) = scope.struct_fields_of(*def) {
                     Some(walk_struct(info, type_args, visit))
-                } else if tr != OnBoundTrait::Ord
-                    && let Some(info) = scope.variant_cases_of(*def)
-                {
-                    Some(walk_variant(info, type_args, visit))
                 } else {
-                    None
+                    let info = scope.variant_cases_of(*def)?;
+                    Some(walk_variant(info, type_args, visit))
                 }
             }
             _ => None,
@@ -1204,6 +1203,29 @@ impl TypeSystem {
                 }) == Some(true)
             }
         }
+    }
+
+    /// Why `type_id` derives no `Default`, which only a non-generic struct
+    /// whose every field declares a default does.
+    pub(super) fn default_withheld_note(&self, scope: &TypeLookup, type_id: TypeId) -> String {
+        let def = match self.type_table.borrow().get(type_id) {
+            ResolvedType::Struct { def, .. } => def.decl(),
+            ResolvedType::GenericInstance { def, .. } => Some(*def),
+            _ => None,
+        };
+        let Some(info) = def.and_then(|def| scope.struct_fields_of(def)) else {
+            return "only a struct derives `Default`; write the impl".to_string();
+        };
+        if !info.type_param_type_ids.is_empty() {
+            return "a generic struct derives no `Default`; write the impl".to_string();
+        }
+        let (name, _, _) = info
+            .fields
+            .iter()
+            .zip(&info.field_defaults)
+            .find_map(|(field, default)| default.is_none().then_some(field))
+            .expect("a non-generic struct deriving no `Default` has a field without one");
+        format!("field `{name}` has no default expression")
     }
 
     fn is_defaultable_struct(&self, scope: &TypeLookup, type_id: TypeId) -> bool {
@@ -1691,18 +1713,13 @@ impl TypeSystem {
         }
     }
 
-    /// Why `type_id` has no `Ord`, where a written `eq` is the cause. A variant
-    /// derives no `Ord` whatever it writes, so its `eq` is no cause.
+    /// Why `type_id` has no `Ord`, where a written `eq` is the cause.
     pub(super) fn ord_withheld_note(&self, type_id: TypeId) -> Option<String> {
         let link = self.ord_withheld_by(type_id)?;
-        let derives_ord =
-            self.type_table.borrow().reflect_kind(link) != Some(CompilerItem::ReflectVariant);
-        derives_ord.then(|| {
-            format!(
-                "`{}` writes `eq`, so no `Ord` is derived for it; write `cmp` beside it",
-                self.type_id_to_string(link)
-            )
-        })
+        Some(format!(
+            "`{}` writes `eq`, so no `Ord` is derived for it; write `cmp` beside it",
+            self.type_id_to_string(link)
+        ))
     }
 
     /// Whether a bound writing `wanted` selects the header — see
