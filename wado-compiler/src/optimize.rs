@@ -173,7 +173,12 @@ pub fn optimize(
     match opt_level {
         OptLevel::O0 => {
             // No optimizations, but still run DCE to reduce codegen work
-            run_dce(&mut project, profiler, &mut descriptors, Initializers::DropUnread);
+            run_dce(
+                &mut project,
+                profiler,
+                &mut descriptors,
+                Initializers::DropUnread,
+            );
             // Dense-int / dense-enum `Match` → `Switch` is a codegen-
             // friendly late lowering. The translator emits a canonical
             // `Match` (see WEP 2026-05-11). Materialising `Switch` here
@@ -197,10 +202,20 @@ pub fn optimize(
             };
             // Early DCE: remove unreachable functions/types before optimization
             // to reduce the working set for subsequent passes
-            run_dce(&mut project, profiler, &mut descriptors, Initializers::DropUnread);
+            run_dce(
+                &mut project,
+                profiler,
+                &mut descriptors,
+                Initializers::DropUnread,
+            );
             run_optimization_passes(&mut project, &config, profiler, &mut descriptors);
             // Final DCE: clean up code made dead by optimizations
-            run_dce(&mut project, profiler, &mut descriptors, Initializers::KeepEffects);
+            run_dce(
+                &mut project,
+                profiler,
+                &mut descriptors,
+                Initializers::KeepEffects,
+            );
         }
         OptLevel::O2 | OptLevel::Os => {
             let config = OptConfig {
@@ -225,9 +240,19 @@ pub fn optimize(
                 inline_growth,
                 cap_is_defect: opt_iterations.is_none(),
             };
-            run_dce(&mut project, profiler, &mut descriptors, Initializers::DropUnread);
+            run_dce(
+                &mut project,
+                profiler,
+                &mut descriptors,
+                Initializers::DropUnread,
+            );
             run_optimization_passes(&mut project, &config, profiler, &mut descriptors);
-            run_dce(&mut project, profiler, &mut descriptors, Initializers::KeepEffects);
+            run_dce(
+                &mut project,
+                profiler,
+                &mut descriptors,
+                Initializers::KeepEffects,
+            );
             if opt_level == OptLevel::Os {
                 project.strip_names = true;
             }
@@ -247,9 +272,19 @@ pub fn optimize(
                 inline_growth,
                 cap_is_defect: opt_iterations.is_none(),
             };
-            run_dce(&mut project, profiler, &mut descriptors, Initializers::DropUnread);
+            run_dce(
+                &mut project,
+                profiler,
+                &mut descriptors,
+                Initializers::DropUnread,
+            );
             run_optimization_passes(&mut project, &config, profiler, &mut descriptors);
-            run_dce(&mut project, profiler, &mut descriptors, Initializers::KeepEffects);
+            run_dce(
+                &mut project,
+                profiler,
+                &mut descriptors,
+                Initializers::KeepEffects,
+            );
         }
     }
 
