@@ -1322,27 +1322,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         receiver_type: TypeId,
         own_params: &[ast::GenericParam],
+        slots: &[TypeId],
         type_args: &[TypeId],
         reached: &[String],
         span: Span,
     ) {
-        // A pack the caller declares, forwarded (`[..Bs]` over the caller's
-        // own `Bs`), is as settled as the caller's, as
-        // [`Self::settle_unreached_packs`] reads it.
-        let scope = self.scope_type_param_ids();
-        let open: Vec<String> = own_params
+        let reached_packs: Vec<(&ast::GenericParam, TypeId, TypeId)> = own_params
             .iter()
+            .zip(slots)
             .zip(type_args)
-            .filter(|(p, _)| p.is_pack && reached.contains(&p.name))
-            .filter(|&(_, &arg)| {
-                (self.tysys.is_unbound_type_param(arg) && !scope.contains(&arg))
+            .filter(|((p, _), _)| p.is_pack && reached.contains(&p.name))
+            .map(|((p, &slot), &arg)| (p, slot, arg))
+            .collect();
+        if reached_packs.is_empty() {
+            return;
+        }
+        // A pack left answering for itself is unanswered, whatever a caller's
+        // pack of the same name interns to. One spread over the caller's own
+        // (`[..Bs]`) is the caller forwarding it, settled as the caller's.
+        let scope = self.scope_type_param_ids();
+        let open: Vec<String> = reached_packs
+            .into_iter()
+            .filter(|&(_, slot, arg)| {
+                arg == slot
+                    || (self.tysys.is_unbound_type_param(arg) && !scope.contains(&arg))
                     || self
                         .tysys
                         .type_table
                         .borrow()
                         .any_type_pack(arg, &|pack| !scope.contains(&pack))
             })
-            .map(|(p, _)| p.name.clone())
+            .map(|(p, _, _)| p.name.clone())
             .collect();
         if open.is_empty() {
             return;
@@ -1381,6 +1391,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &method_name,
             receiver_type,
             own_params,
+            slots,
             &type_args,
             &reached,
             span,
