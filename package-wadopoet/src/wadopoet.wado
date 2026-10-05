@@ -462,7 +462,7 @@ impl CodeWriter {
     pub fn prune(&mut self) {
         self.flush_text();
         let items = self.items();
-        let mut item_of = HashMap::<String, i32>::new(SOURCE_SEED);
+        let mut item_of = HashMap::<String, i32>::with_seed(SOURCE_SEED);
         for let mut k = 0; k < items.len(); k += 1 {
             let head = &self.segs[items[k].start];
             item_of[self.slice(head.name_start, head.name_end).to_string()] = k;
@@ -480,7 +480,7 @@ impl CodeWriter {
 
     /// Every name the text `note`s or a call statement calls.
     pub fn references(&self) -> HashSet<String> {
-        let mut found = HashSet::<String>::new(SOURCE_SEED);
+        let mut found = HashSet::<String>::with_seed(SOURCE_SEED);
         for let seg of &self.segs {
             if seg.kind matches { Call } {
                 found.insert(self.slice(seg.text_start, seg.text_end).to_string());

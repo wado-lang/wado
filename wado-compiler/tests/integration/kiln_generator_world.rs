@@ -14,15 +14,20 @@
 
 use crate::common::{MapHost, block_on};
 use wado_compiler::{
-    Code, CompileResult, CompilerOptions, Diagnostic, LogLevel, Severity, compile_with_options,
-    wir::ImportKind,
+    Code, CompileResult, CompilerOptions, Diagnostic, LogLevel, OptLevel, Severity,
+    compile_with_options, wir::ImportKind,
 };
 
 fn kiln_options() -> CompilerOptions {
+    kiln_options_at(OptLevel::default())
+}
+
+fn kiln_options_at(opt_level: OptLevel) -> CompilerOptions {
     // The typed-request adapter produces a valid component, so no
     // `skip_validation` is needed: `generate(primary, inputs, module, options)`
     // lifts and lowers through the CM ABI cleanly.
     CompilerOptions {
+        opt_level,
         log_level: Some(LogLevel::Warn),
         target_world: Some("core:kiln/generator".to_string()),
         retain_wir: true,
@@ -41,12 +46,16 @@ fn diag_list(diags: &[Diagnostic]) -> String {
 /// Compile `source` in the generator world, panicking with the diagnostics if it
 /// does not. `what` names the generator in that message.
 fn compile_generator(source: &str, what: &str) -> CompileResult {
+    compile_generator_at(source, what, OptLevel::default())
+}
+
+fn compile_generator_at(source: &str, what: &str, opt_level: OptLevel) -> CompileResult {
     let host = MapHost::new(&[]);
     let result = block_on(compile_with_options(
         source,
         &host,
         Some("generator.wado"),
-        kiln_options(),
+        kiln_options_at(opt_level),
     ));
     let Ok(result) = result else {
         panic!(
@@ -353,7 +362,11 @@ export fn generate(req: Request) -> Result<Response, Error> {
 /// codegen emits it as. `wit_import_plan` pins the plan against the component's
 /// actual imports, so reading the plan reads what the linker will be asked for.
 fn wasi_imports_of(source: &str, what: &str) -> Vec<(String, ImportKind)> {
-    let package = compile_generator(source, what)
+    wasi_imports_at(source, what, OptLevel::default())
+}
+
+fn wasi_imports_at(source: &str, what: &str, opt_level: OptLevel) -> Vec<(String, ImportKind)> {
+    let package = compile_generator_at(source, what, opt_level)
         .wir_package
         .expect("wir package retained");
     let mut entries: Vec<(String, ImportKind)> = package
@@ -417,4 +430,51 @@ fn generator_installing_a_stamped_sink_is_rejected() {
         "wasi:clocks",
         "a generator reaching wasi:clocks through a sink",
     );
+}
+
+/// `HashMap::new()` reads `DEFAULT_HASH_SEED`, whose `#[benign]` initializer
+/// asks the host: `#[benign]` waives the effect, not the world import.
+const DEFAULT_SEED_MAP_GENERATOR: &str = r#"
+use { Request, Response, Error } from "core:kiln";
+use { HashMap } from "core:collections";
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    let mut seen = HashMap::<String, i32>::new();
+    seen[req.primary.path] = 1;
+    return Result::Ok(Response { files: [] });
+}
+"#;
+
+#[test]
+fn generator_hashing_under_the_default_seed_is_rejected() {
+    expect_forbidden_import(
+        DEFAULT_SEED_MAP_GENERATOR,
+        "wasi:random",
+        "a generator reaching DEFAULT_HASH_SEED",
+    );
+}
+
+/// A map under a fixed seed leaves `DEFAULT_HASH_SEED` unread, so its
+/// initializer goes, and the import only it reached goes with it, at every
+/// optimization level.
+const FIXED_SEED_MAP_GENERATOR: &str = r#"
+use { Request, Response, Error } from "core:kiln";
+use { HashMap, HashSeed } from "core:collections";
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    let mut seen = HashMap::<String, i32>::with_seed(HashSeed::fixed(1, 2));
+    seen[req.primary.path] = 1;
+    return Result::Ok(Response { files: [] });
+}
+"#;
+
+#[test]
+fn generator_hashing_under_a_fixed_seed_adds_no_wasi_import() {
+    for opt_level in [OptLevel::O0, OptLevel::O2] {
+        let imports = wasi_imports_at(FIXED_SEED_MAP_GENERATOR, "fixed-seed generator", opt_level);
+        assert!(
+            imports.is_empty(),
+            "a fixed-seed map imported {imports:?} at {opt_level:?}"
+        );
+    }
 }
