@@ -91,6 +91,11 @@ fn stmt_always_exits(ctx: CtrlFlowCtx<'_>, stmt: &ast::Stmt, exit_labels: &[&str
         ast::Stmt::While(w) if condition_is_always_true(&w.condition) => {
             !loop_body_can_escape(ctx, &w.body, exit_labels)
         }
+        // So is a C-style `for` with no condition, or one always true: its
+        // `init` and `update` cannot leave it.
+        ast::Stmt::For(f) if f.condition.as_ref().is_none_or(condition_is_always_true) => {
+            !loop_body_can_escape(ctx, &f.body, exit_labels)
+        }
         ast::Stmt::LabeledBlock(lb) => {
             block_always_exits_past(ctx, &lb.block, exit_labels)
                 && !block_can_break_to_label(ctx, &lb.block, &lb.label)

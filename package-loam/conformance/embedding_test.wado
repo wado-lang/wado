@@ -1,7 +1,7 @@
 //! Row gathers over an int64 input, and position ids the build folds into a
 //! literal tensor.
 
-use { Batch, Hidden, Seq, Tensor, Weights, forward } from "./embedding.onnxtext"
+use { Batch, Cpu, Hidden, Seq, Tensor, Weights, forward } from "./embedding.onnxtext"
     with {
         generator: {
             module: "../src/generator.wado",
@@ -30,6 +30,7 @@ use { Batch, Hidden, Seq, Tensor, Weights, forward } from "./embedding.onnxtext"
 
 test "each token's row adds its position's row, and -1 names the last token" {
     let got: Tensor<f32, [Batch, Seq, Hidden]> = forward(
+        &mut Cpu {},
         &Tensor::<i64, [Batch, Seq]> {
             data: [3, 0, -1],
             extents: [1, 3],

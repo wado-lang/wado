@@ -281,6 +281,7 @@ fn decode(
 ) -> [step::Tensor<f32, [step::Batch, step::Seq, step::Vocab]>, Cache] {
     let length = cache[0].1[2] + 1;
     let o = step::forward(
+        &mut step::Cpu {},
         &step::Tensor::<i64, [step::Batch, step::Seq]> {
             data: [token],
             extents: [1, 1],
@@ -321,6 +322,7 @@ fn prefill(input_ids: ByteList) -> [prompt::Tensor<f32, [prompt::Batch, prompt::
     let [ids, extents] = ints_of(input_ids);
     let weights = prompt::Weights::load(&#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
     let o = prompt::forward(
+        &mut prompt::Cpu {},
         &prompt::Tensor::<i64, [prompt::Batch, prompt::Seq]> { data: ids, extents },
         &prompt::Tensor::<i64, [prompt::Batch, prompt::Seq]> { data: List::<i64>::filled(extents[1], 1), extents },
         &weights,
@@ -383,6 +385,7 @@ test "each step after the prompt computes one position against the cache, as onn
 test "a mask that is not one position longer than the cache stops the step" {
     let [_, cache] = prefill(#include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"));
     step::forward(
+        &mut step::Cpu {},
         &step::Tensor::<i64, [step::Batch, step::Seq]> {
             data: [11],
             extents: [1, 1],

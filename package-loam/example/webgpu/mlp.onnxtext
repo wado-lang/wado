@@ -1,0 +1,14 @@
+# A three-layer MLP wide enough that its products, not dispatch, take the time.
+<ir_version: 7, opset_import: [ "" : 14 ]>
+mlp (float[N, 1024] X) => (float[N, 512] Y)
+<float[1024, 2048] W1, float[2048] B1, float[2048, 2048] W2, float[2048] B2, float[2048, 512] W3, float[512] B3>
+{
+    H1 = MatMul(X, W1)
+    A1 = Add(H1, B1)
+    R1 = Relu(A1)
+    H2 = MatMul(R1, W2)
+    A2 = Add(H2, B2)
+    R2 = Sigmoid(A2)
+    H3 = MatMul(R2, W3)
+    Y = Add(H3, B3)
+}

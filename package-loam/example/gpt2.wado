@@ -195,6 +195,7 @@ fn decode(tokens: &List<i32>, cache: &Cache, weights: &gpt2::Weights) -> [i32, C
     let length = past + tokens.len();
     let ids: List<i64> = tokens.into_iter().map(|id| id as i64).collect();
     let o = gpt2::forward(
+        &mut gpt2::Cpu {},
         &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
             data: ids,
             extents: [gpt2::Batch::EXTENT, tokens.len()],
