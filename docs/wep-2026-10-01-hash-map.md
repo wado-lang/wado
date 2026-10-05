@@ -110,6 +110,14 @@ newtypes gave Gale a seedless `new()`, and `Default`, `Serialize` and
 `Deserialize`. All four now come with `HashMap` itself, so Gale uses `HashMap`
 and `HashSet` and the newtypes are deleted.
 
+Code that runs as a Kiln generator builds every map with
+`with_seed(HashSeed::fixed(…))`. A generator may import no `wasi:*` interface
+([The Sandbox](./spec-kiln.md#the-sandbox)), so one that reaches
+`DEFAULT_HASH_SEED` through `new()`, `Default` or `Deserialize` is a compile
+error (`KILN_GENERATOR_FORBIDDEN_IMPORT`). The Kiln host stays as it is: a
+constant `insecure-seed` would widen what it provides, for no gain over a fixed
+seed in the generator.
+
 ### Iteration keeps insertion order
 
 A `HashMap` iterates in insertion order, as `TreeMap` does. With a random seed,
@@ -200,18 +208,15 @@ an all-zero seed.
 - [ ] `Default`, `Serialize` and `Deserialize` on `HashMap` and `HashSet`. Done
   when a `HashMap<String, V>` round-trips through a JSON object in insertion
   order, and the output holds no seed.
-- [ ] Gale uses `HashMap` and `HashSet`. Done when `GaleMap` and `GaleSet` are
-  deleted.
+- [ ] Gale uses `HashMap` and `HashSet`, under a fixed seed wherever the
+  generator reaches. Done when `GaleMap` and `GaleSet` are deleted and the
+  generator still compiles.
 
 ## Known gaps
 
 - Every map built under `DEFAULT_HASH_SEED` in one instance shares it. A
   long-lived instance, such as an HTTP service, gives an attacker many requests
   against one seed to learn its collisions from timing.
-- Gale runs as a Kiln generator, and a generator may import no `wasi:*`
-  interface ([The Sandbox](./spec-kiln.md#the-sandbox)). One that reaches
-  `DEFAULT_HASH_SEED` is a compile error (`KILN_GENERATOR_FORBIDDEN_IMPORT`),
-  which blocks deleting `GaleMap`.
 - Floating-point keys have no `Hash`. Their `==` treats every NaN as one value
   and `-0.0` as equal to `0.0`, so a `Hash` has to agree on each of those
   groups, which bit patterns do not.
