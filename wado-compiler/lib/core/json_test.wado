@@ -607,6 +607,8 @@ test "every integer type reads a number by one rule" {
     // A fraction or an exponent, at every width.
     assert from_string::<i128>("1e2") matches { Ok(100) };
     assert from_string::<u128>("2.5e1") matches { Ok(25) };
+    assert from_string::<i64>("0.5e1") matches { Ok(5) };
+    assert from_string::<i64>("-150e-1") matches { Ok(-15) };
     let half: Result<i128, DeserializeError> = from_string("1.5");
     assert half matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
     // A negative zero is zero, unsigned or not; any other negative is not.
@@ -1644,11 +1646,13 @@ test "a Value read reports a missing or malformed token" {
 }
 
 test "JsonDeserializer reads a token stream by hand" {
-    let text = ` [18446744073709551615, -9223372036854775808, -1.5e+3, {"k": [true]}]`;
+    let text = ` [-2147483648, 18446744073709551615, -9223372036854775808, -1.5e+3, {"k": [true]}]`;
     let mut de = JsonDeserializer { input: text.as_bytes(), pos: 0 };
     assert de.peek() == b' ';
     assert de.peek_after_whitespace() == b'[';
     de.advance();
+    assert de.parse_i32_direct() == Result::Ok(i32::MIN);
+    assert de.expect_char(b',') matches { Ok };
     assert de.parse_u64_direct() == Result::Ok(u64::MAX);
     assert de.expect_char(b',') matches { Ok };
     assert de.parse_i64_direct() == Result::Ok(i64::MIN);
