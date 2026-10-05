@@ -314,7 +314,9 @@ pub fn followed_by_units(extents: &List<i32>, count: i32) -> List<i32> {
     return out;
 }
 
-fn ends_with(whole: &List<i32>, suffix: &List<i32>) -> bool {
+/// Whether `whole`'s trailing extents are `suffix`, as `zip_suffix` reads
+/// them. The caller's types put `suffix` no longer than `whole`.
+pub fn ends_with(whole: &List<i32>, suffix: &List<i32>) -> bool {
     assert suffix.len() <= whole.len();
     let offset = whole.len() - suffix.len();
     for let mut i = 0; i < suffix.len(); i += 1 {

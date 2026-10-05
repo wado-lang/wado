@@ -6,7 +6,19 @@
 //! other element type stays on the host. A kernel with no shader yet runs on
 //! the CPU, downloading what the device holds first.
 
-use { Backend, BinaryOp, Cpu, Element, Expr, Step, Tensor, UnaryOp, Window, element_count } from "./tensor.wado";
+use {
+    Backend,
+    BinaryOp,
+    Cpu,
+    Element,
+    Expr,
+    Step,
+    Tensor,
+    UnaryOp,
+    Window,
+    element_count,
+    ends_with,
+} from "./tensor.wado";
 use {
     Webgpu,
     Gpu,
@@ -66,14 +78,15 @@ struct Pipeline {
     compiled: GpuComputePipeline,
 }
 
-/// Invocations per workgroup of an elementwise shader.
+/// Invocations per workgroup of an elementwise shader, which
+/// `ELEMENTWISE_PRELUDE` spells in its `@workgroup_size`.
 global LANES: i32 = 64;
 
 /// The most workgroups one dispatch dimension takes, as WebGPU's default limit
 /// sets it.
 global MAX_GROUPS: i32 = 65535;
 
-/// The side of a matrix product's tile.
+/// The side of a matrix product's tile, which `MATMUL_SHADER` spells as `16u`.
 global TILE: i32 = 16;
 
 impl WebGpuBackend {
@@ -115,7 +128,11 @@ impl WebGpuBackend {
         &mut self,
         t: &DeviceTensor,
     ) -> List<f32> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let size = byte_size(element_count(&t.extents));
+        let count = element_count(&t.extents);
+        if count == 0 {
+            return [];
+        }
+        let size = byte_size(count);
         let readback = self.device.create_buffer(GpuBufferDescriptor {
             size,
             usage: GpuBufferUsage::MapRead | GpuBufferUsage::CopyDst,
@@ -133,8 +150,7 @@ impl WebGpuBackend {
         let Ok(bytes) = readback.get_mapped_range_get_with_copy(null, null) else {
             panic("loam: a mapped device buffer gave no bytes");
         };
-        let values = List::<f32>::from_le_bytes(bytes as ByteList);
-        return values[0..<element_count(&t.extents)].to_list();
+        return List::<f32>::from_le_bytes(bytes as ByteList);
     }
 
     /// A storage buffer holding `bytes`, whole 4-byte words.
@@ -191,6 +207,7 @@ impl WebGpuBackend {
         for let [i, p] of (&self.pipelines).into_iter().enumerate() {
             if p.shader == *shader {
                 found = i;
+                break;
             }
         }
         if found < 0 {
@@ -245,21 +262,29 @@ impl WebGpuBackend {
 
     /// `op` over `a` and `b` on the device, into `extents`. Each operand holds
     /// the output's trailing axes, so its element at output position `i` is
-    /// its `i % len`.
+    /// its `i % len`. With no `b`, as `map` has, `a` is bound in its place.
     fn elementwise<A, B, Out>(
         &mut self,
         a: &Placed<f32, A>,
-        b: &Placed<f32, B>,
+        b: Option<&Placed<f32, B>>,
         extents: List<i32>,
         op: &Expr,
     ) -> Placed<f32, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let count = element_count(&extents);
         let a_staged = self.staged(a);
-        let b_staged = self.staged(b);
         let a_buffer = bound(a, &a_staged);
-        let b_buffer = bound(b, &b_staged);
         let a_len = placed_count(a);
-        let b_len = placed_count(b);
+        let mut b_staged: Option<GpuBuffer> = null;
+        let [b_buffer, b_len] = match b {
+            Some(other) => {
+                b_staged = self.staged(other);
+                [
+                    bound(other, &b_staged),
+                    placed_count(other),
+                ];
+            },
+            None => [a_buffer, a_len],
+        };
         let groups = covering(count, LANES);
         let x = i32::min(groups, MAX_GROUPS);
         let y = covering(groups, x);
@@ -355,14 +380,6 @@ fn push_word(out: &mut List<u8>, bits: u32) {
     out.push((bits >> 8) as u8);
     out.push((bits >> 16) as u8);
     out.push((bits >> 24) as u8);
-}
-
-/// Whether `whole` ends with `part`.
-fn ends_in(whole: &List<i32>, part: &List<i32>) -> bool {
-    if part.len() > whole.len() {
-        return false;
-    }
-    return whole[whole.len() - part.len()..<whole.len()].to_list() == *part;
 }
 
 /// The WGSL an elementwise kernel runs: `op` over each output position.
@@ -527,7 +544,7 @@ impl Backend for WebGpuBackend {
         t: &Placed<f32, Axes>,
         op: &Expr,
     ) -> Placed<f32, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        return self.elementwise(t, t, placed_extents(t), op);
+        return self.elementwise::<Axes, Axes, Axes>(t, null, placed_extents(t), op);
     }
 
     fn cast<A: Element, B: Element, Axes>(
@@ -545,7 +562,7 @@ impl Backend for WebGpuBackend {
     ) -> Placed<f32, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let extents = placed_extents(a);
         if extents == placed_extents(b) {
-            return self.elementwise(a, b, extents, op);
+            return self.elementwise(a, Option::Some(b), extents, op);
         }
         return Placed::Host(self.cpu.zip(&self.host(a), &self.host(b), op));
     }
@@ -557,8 +574,8 @@ impl Backend for WebGpuBackend {
         op: &Expr,
     ) -> Placed<f32, [..Pre, ..Suf]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let extents = placed_extents(a);
-        if ends_in(&extents, &placed_extents(b)) {
-            return self.elementwise(a, b, extents, op);
+        if ends_with(&extents, &placed_extents(b)) {
+            return self.elementwise(a, Option::Some(b), extents, op);
         }
         return Placed::Host(self.cpu.zip_suffix::<[..Pre], [..Suf]>(&self.host(a), &self.host(b), op));
     }
@@ -570,8 +587,8 @@ impl Backend for WebGpuBackend {
         op: &Expr,
     ) -> Placed<f32, [..Pre, ..Suf]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let extents = placed_extents(b);
-        if ends_in(&extents, &placed_extents(a)) {
-            return self.elementwise(a, b, extents, op);
+        if ends_with(&extents, &placed_extents(a)) {
+            return self.elementwise(a, Option::Some(b), extents, op);
         }
         return Placed::Host(self.cpu.zip_suffix_lhs::<[..Pre], [..Suf]>(&self.host(a), &self.host(b), op));
     }
