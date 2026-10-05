@@ -1,6 +1,6 @@
 //! Shared rustls trust-anchor configuration for `wado run`'s outbound
-//! TLS, covering both the high-level `wasi:http` client (`http_hooks`)
-//! and the raw `wasi:tls` connector (`runtime`).
+//! TLS, covering both the high-level `wasi:http` client (`wado-cli`'s
+//! `http_hooks`) and the raw `wasi:tls` connector (its `runtime`).
 //!
 //! `webpki-roots` (Mozilla's curated list) is the baseline. On top of
 //! that we honour the same env-var conventions OpenSSL/curl use so a
