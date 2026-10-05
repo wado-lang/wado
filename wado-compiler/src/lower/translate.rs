@@ -587,7 +587,7 @@ impl Translator<'_> {
     /// The parameters `func` keeps past its return, as the NIR passes ask it.
     ///
     /// The fixpoint's answer, not the declaration's: a function with a body
-    /// declares no `#[retain(...)]`, so reading the declaration here would tell
+    /// declares no `#[storage(...)]`, so reading the declaration here would tell
     /// every NIR pass that every bodied function keeps nothing.
     fn retained_param_names(&self, func: &TirFunction) -> Vec<String> {
         let Some(retained) = self.value_copy.retention.of_body(func) else {

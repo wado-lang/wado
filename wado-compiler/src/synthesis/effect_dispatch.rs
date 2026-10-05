@@ -939,10 +939,8 @@ fn build_dispatch_wrapper_function(
         // dispatches into the installed handler, its `else` branch emits the
         // placeholder cm_binding rewrites. `$cm_binding__*` adapters likewise.
         effects: vec![],
-        retains: vec![],
         immediates: vec![],
-        trap: None,
-        linear_memory: None,
+        declared: None,
         body: Some(body),
         span,
         local_count: next_local,
@@ -957,7 +955,6 @@ fn build_dispatch_wrapper_function(
         compiler_item: None,
         export_name: None,
         allocator_tag: None,
-        declared_return_convention: None,
         kind: FunctionKind::Regular,
 
         return_abi: tir::ReturnAbi::default(),

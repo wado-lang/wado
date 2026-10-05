@@ -905,7 +905,7 @@ pub struct WirFunction {
     pub generic_origin: Option<WirGenericOrigin>,
     /// Effect requirements (for unparse display).
     pub effects: Vec<EffectRef>,
-    /// Parameter names a `#[retain(...)]` declaration names as retained.
+    /// Parameter names the function keeps past its return.
     /// Used by WIR optimizations for retention-aware alias analysis.
     pub retains: Vec<String>,
     /// The compiler-recognized stdlib role this function fills, if any.

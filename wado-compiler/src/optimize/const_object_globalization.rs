@@ -17,7 +17,7 @@ use crate::nir_arena::{
     StmtKind, StmtNode,
 };
 use crate::nir_package::NirPackage;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ArrayElementAccess, ResolvedType, TypeId, TypeTable};
 
 use super::arena_query::{
     bare_promoted_local, bare_promoted_reads, buried_promoted_reads, collect_reads,
@@ -25,7 +25,7 @@ use super::arena_query::{
 };
 use crate::ast::Visibility;
 use crate::name::{CONST_OBJ_GLOBAL_PREFIX, MODULE_INIT_FUNCTION, MODULES_INIT_FUNCTION};
-use crate::nir::{ArrayElementAccess, FuncId, NirParam, NirStruct};
+use crate::nir::{FuncId, NirParam, NirStruct};
 use crate::nir_arena::ArenaCallArg;
 use crate::nir_value_graph::builder::is_const_value;
 use crate::nir_value_graph::{ValueId, ValueKind};
@@ -141,35 +141,29 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         .zip(&fn_effects)
         .map(|(f, e)| e.is_pure() && is_ctfe_eligible(&f.borrow()))
         .collect();
-    // A bodyless callee `mod_ref` did not mark opaque is a Wasm instruction:
-    // `leaf_effect` opaques every component-model builtin and every bodyless
-    // non-builtin, so what is left has no channel to store a reference in.
     let instruction_leaf: Vec<bool> = project
         .functions
         .iter()
-        .zip(&fn_effects)
-        .map(|(f, e)| f.borrow().body.is_none() && !e.opaque)
+        .map(|f| {
+            project
+                .builtin_declarations
+                .get(&*f.borrow())
+                .is_some_and(|declaration| !declaration.stores_unseen())
+        })
         .collect();
     // Fixed per function, and asked of every `Call` node on every walk of the
     // fixpoint, so it is classified once here rather than per query.
-    let element_access: Vec<Option<ArrayElementAccess>> = project
+    let element_access: Vec<Option<(usize, ArrayElementAccess)>> = project
         .functions
         .iter()
-        .map(|f| {
-            let f = f.borrow();
-            nir::FunctionRef::from_resolved(&f, f.module_source.clone()).array_element_access()
-        })
+        .map(|f| project.builtin_declarations.element_access(&*f.borrow()))
         .collect();
     // Asked of every argument of every call, and fixed per function, so the
     // declaration lookup happens once here rather than per argument.
     let immediate_params: Vec<IndexSet<usize>> = project
         .functions
         .iter()
-        .map(|f| {
-            let f = f.borrow();
-            let reference = nir::FunctionRef::from_resolved(&f, f.module_source.clone());
-            project.builtin_declarations.immediate_params(&reference)
-        })
+        .map(|f| project.builtin_declarations.immediate_params(&*f.borrow()))
         .collect();
     let shared_escape = SharedEscape::new(project);
     let gate = Gate {
@@ -1466,14 +1460,14 @@ struct Gate<'a> {
     type_table: &'a Rc<RefCell<TypeTable>>,
     /// Indexed by `func_id.index()`.
     hoistable_pure: &'a [bool],
-    /// Indexed by `func_id.index()`: a bodyless callee that is a plain Wasm
-    /// instruction (`array.get`, `array.copy`, a linear-memory load), as
-    /// opposed to a component-model builtin or an extern with no body at all —
-    /// both of which `mod_ref` marks opaque. See [`Gate::instruction_arg_captures`].
+    /// Indexed by `func_id.index()`: a builtin whose declaration says where it
+    /// stores (`array.get`, `array.copy`, a linear-memory load), as opposed to
+    /// one that may store where nothing shows and to a function with no
+    /// declaration at all. See [`Gate::instruction_arg_captures`].
     instruction_leaf: &'a [bool],
-    /// Indexed by `func_id.index()`: how the callee reaches an array element,
-    /// or `None` when it is not an accessor.
-    element_access: &'a [Option<ArrayElementAccess>],
+    /// Indexed by `func_id.index()`: the position of the array the callee
+    /// reaches an element of and how, or `None` when it is not an accessor.
+    element_access: &'a [Option<(usize, ArrayElementAccess)>],
     structs: &'a [NirStruct],
     /// `(callee index, parameter position)` → [`Gate::callee_param_readonly`].
     /// Each verdict costs two walks of the callee body, and one helper taking a
@@ -1606,15 +1600,19 @@ impl Gate<'_> {
         })
     }
 
-    /// Whether `func_id` is one of the array element accessors.
-    fn element_accessor(&self, func_id: FuncId) -> bool {
-        self.element_access[func_id.index()].is_some()
+    /// The position of the array `func_id` reaches an element of, when it is
+    /// one of the array element accessors.
+    fn element_accessor(&self, func_id: FuncId) -> Option<usize> {
+        self.element_access[func_id.index()].map(|(array, _)| array)
     }
 
     /// Whether `func_id` reaches an array element without writing through it.
     /// `array_get_ref_mut` is excluded: a mutable element handle is a write.
     fn reads_element(&self, func_id: FuncId) -> bool {
-        self.element_access[func_id.index()] == Some(ArrayElementAccess::Read)
+        matches!(
+            self.element_access[func_id.index()],
+            Some((_, ArrayElementAccess::Read))
+        )
     }
 
     /// Whether a handle handed to `func_id`'s parameter `param_pos` merely
@@ -2179,10 +2177,10 @@ fn projection_root_of(body: &Body, expr: ExprId, gate: &Gate<'_>) -> Option<u32>
             .and_then(|e| projection_root_of(body, e, gate)),
         // An element accessor names the array's storage as an `Index` node
         // does; it is the same projection, spelled as a call.
-        ExprKind::Call { func_id, args, .. } if gate.element_accessor(*func_id) => args
-            .first()
-            .and_then(|a| a.expr.as_expr())
-            .and_then(|e| projection_root_of(body, e, gate)),
+        ExprKind::Call { func_id, args, .. } => {
+            let array = gate.element_accessor(*func_id)?;
+            projection_root_of(body, args[array].expr.as_expr()?, gate)
+        }
         _ => None,
     }
 }

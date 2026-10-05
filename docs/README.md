@@ -194,6 +194,7 @@
 - [A Function Without `with` Performs No Effects](./wep-2026-09-30-effect-free-functions.md)
 - [HashMap](./wep-2026-10-01-hash-map.md)
 - [Numeric Literal Suffixes](./wep-2026-10-01-numeric-literal-suffixes.md)
+- [Builtin Storage and Side-Effect Attributes](./wep-2026-10-04-builtin-storage-side-effect.md)
 
 ## Standard Library
 

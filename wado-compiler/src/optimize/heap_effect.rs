@@ -6,16 +6,18 @@ use std::rc::Rc;
 
 use cranelift_entity::EntityRef;
 
+use crate::builtin_facts::Storage;
 use crate::graph::strongly_connected_components;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::is_closure_call_name;
-use crate::nir::{FuncId, FunctionRef, NirFunction, NirUnaryOp};
+use crate::nir::{FuncId, NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 use crate::tir::{
-    BuiltinDeclaration, ResolvedType, RetainSpec, ReturnConvention, TypeId, TypeKey, TypeTable,
+    BuiltinDeclaration, ResolvedType, RetainInto, RetainSpec, ReturnConvention, TypeId, TypeKey,
+    TypeTable,
 };
 
 use super::arena_query::holds_reference;
@@ -211,12 +213,8 @@ impl Summary {
 /// How a callee is summarised.
 enum Callee {
     Body,
-    /// A `core:builtin` declaration; `array` marks the array intrinsics, which
-    /// write only the array they are handed.
-    Builtin {
-        declaration: Box<BuiltinDeclaration>,
-        array: bool,
-    },
+    /// A `core:builtin` declaration.
+    Builtin(Box<BuiltinDeclaration>),
     /// No body and nothing declared: it may read, write and keep anything it is
     /// handed.
     Opaque,
@@ -586,7 +584,7 @@ impl HeapEffects<'_> {
                                 .enumerate()
                                 .any(|(k, into)| k != j && into.has_param(j)),
                     },
-                    Target::Builtin { declaration, .. } => {
+                    Target::Builtin(declaration) => {
                         let retains = || {
                             declaration
                                 .retains
@@ -595,8 +593,14 @@ impl HeapEffects<'_> {
                         };
                         Kept {
                             in_result: returns_part_of(declaration, j)
-                                || retains().any(|r| r.into.is_none()),
-                            stored: retains().any(|r| r.into.is_some_and(|q| q != j)),
+                                || retains().any(|r| {
+                                    matches!(r.into, RetainInto::Result | RetainInto::Anywhere)
+                                }),
+                            stored: retains().any(|r| match r.into {
+                                RetainInto::Param(q) => q != j,
+                                RetainInto::Anywhere => true,
+                                RetainInto::Result => false,
+                            }),
                         }
                     }
                     Target::Opaque => Kept {
@@ -808,17 +812,11 @@ fn classify_callee(f: &NirFunction, project: &NirPackage) -> Callee {
     if f.body.is_some() {
         return Callee::Body;
     }
-    let reference = FunctionRef::from_resolved(f, f.module_source.clone());
-    let Some(intrinsic) = reference.intrinsic() else {
-        return Callee::Opaque;
-    };
-    let Some(declaration) = project.builtin_declarations.get(&reference) else {
-        return Callee::Opaque;
-    };
-    let array = intrinsic.starts_with("array_");
-    Callee::Builtin {
-        declaration: Box::new(declaration.clone()),
-        array,
+    match project.builtin_declarations.get(f) {
+        Some(declaration) if !declaration.facts.is_opaque() => {
+            Callee::Builtin(Box::new(declaration.clone()))
+        }
+        _ => Callee::Opaque,
     }
 }
 
@@ -1481,17 +1479,23 @@ impl HeapFrame {
                     }
                 }
             }
-            Target::Builtin { declaration, .. } => {
+            Target::Builtin(declaration) => {
                 for r in &declaration.retains {
                     if !effects.retains_reference(body, r, &args) {
                         continue;
                     }
                     let source = nodes.get(r.source).copied().unwrap_or(OperandNode::None);
-                    let into = match r.into {
-                        Some(q) => nodes.get(q).copied().unwrap_or(OperandNode::None),
-                        None => result,
-                    };
-                    self.unify_nodes(into, source);
+                    match r.into {
+                        RetainInto::Param(q) => self.unify_nodes(
+                            nodes.get(q).copied().unwrap_or(OperandNode::None),
+                            source,
+                        ),
+                        RetainInto::Result => self.unify_nodes(result, source),
+                        RetainInto::Anywhere => {
+                            self.unify_nodes(result, source);
+                            self.unify_nodes(OperandNode::Node(ELSEWHERE), source);
+                        }
+                    }
                 }
                 for (j, &n) in nodes.iter().enumerate() {
                     if returns_part_of(declaration, j) {
@@ -1573,8 +1577,8 @@ impl HeapFrame {
                     s.reads.record_meet(prov, &t.reads.through_args, &reach);
                     s.writes.record_meet(prov, &t.writes.through_args, &reach);
                 }
-                Target::Builtin { declaration, array } => {
-                    let touched = builtin_touches(effects, ty, array);
+                Target::Builtin(declaration) => {
+                    let touched = builtin_touches(effects, declaration, ty);
                     s.reads.record(prov, &touched);
                     if declaration.mut_params.contains(&j) {
                         s.writes.record(prov, &touched);
@@ -1718,9 +1722,9 @@ impl HeapFrame {
                 Target::Summary(t) => {
                     keys.meets_both(&t.access(effect).through_args, &effects.reach(ty))
                 }
-                Target::Builtin { declaration, array } => {
+                Target::Builtin(declaration) => {
                     (effect == Effect::Read || declaration.mut_params.contains(&j))
-                        && keys.meets(&builtin_touches(effects, ty, array))
+                        && keys.meets(&builtin_touches(effects, declaration, ty))
                 }
                 Target::Opaque => keys.meets(&effects.reach(ty)),
             }
@@ -1830,10 +1834,26 @@ pub(super) fn field_path(body: &Body, mut e: ExprId) -> Option<(ExprId, Vec<(Typ
     Some((e, path))
 }
 
-/// What a builtin touches through an argument of type `ty`: an array intrinsic
-/// only the array, anything else all it reaches.
-fn builtin_touches(effects: &HeapEffects, ty: TypeId, array: bool) -> Rc<TypeSet> {
-    if !array {
+/// What a builtin touches through an argument of type `ty`. An `Array<T>` is
+/// reached as the array, its length and element slots, unless the declaration
+/// copies what the elements reach or states nothing of its storage; anything
+/// else is reached whole.
+fn builtin_touches(
+    effects: &HeapEffects,
+    declaration: &BuiltinDeclaration,
+    ty: TypeId,
+) -> Rc<TypeSet> {
+    let reaches_elements = matches!(
+        declaration.facts.storage,
+        Storage::CopiesArgs | Storage::Opaque
+    );
+    let is_array = matches!(
+        effects
+            .type_table
+            .get(strip_handles(ty, effects.type_table)),
+        ResolvedType::BuiltinArray(_)
+    );
+    if reaches_elements || !is_array {
         return effects.reach(ty);
     }
     Rc::new(
@@ -1874,9 +1894,9 @@ fn for_each_value_source(body: &Body, v: ValueId, f: &mut impl FnMut(Option<Opaq
 
 /// Whether a builtin's result may be part of its argument `j`.
 fn returns_part_of(declaration: &BuiltinDeclaration, j: usize) -> bool {
-    match declaration.returns {
+    match &declaration.returns {
         Some(ReturnConvention::Owned) => false,
-        Some(ReturnConvention::PartOf(p)) => p == j,
+        Some(ReturnConvention::PartOf(params)) => params.contains(&j),
         None => true,
     }
 }
@@ -1884,10 +1904,7 @@ fn returns_part_of(declaration: &BuiltinDeclaration, j: usize) -> bool {
 /// What a call runs, as far as its heap effects go.
 enum Target<'s> {
     Summary(&'s Summary),
-    Builtin {
-        declaration: &'s BuiltinDeclaration,
-        array: bool,
-    },
+    Builtin(&'s BuiltinDeclaration),
     Opaque,
 }
 
@@ -1899,10 +1916,7 @@ fn call_parts<'s>(effects: &'s HeapEffects, body: &Body, e: ExprId) -> (Target<'
             let cache = effects.cache;
             let target = match cache.functions.get(func_id.index()).map(|f| &f.callee) {
                 Some(Callee::Body) => Target::Summary(&cache.summaries[func_id.index()]),
-                Some(Callee::Builtin { declaration, array }) => Target::Builtin {
-                    declaration,
-                    array: *array,
-                },
+                Some(Callee::Builtin(declaration)) => Target::Builtin(declaration),
                 Some(Callee::Opaque) | None => Target::Opaque,
             };
             (target, args.iter().map(|a| a.expr).collect())

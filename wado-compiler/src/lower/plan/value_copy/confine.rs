@@ -176,9 +176,9 @@ struct Ctx<'a> {
 }
 
 impl Ctx<'_> {
-    /// A body-less callee reads its declaration wherever it comes from — a
-    /// `core:builtin`, a CM import, a Wasm asset — so a monomorphized instance
-    /// absent from the table is found by the generic name link snapshot.
+    /// A body-less callee reads the declaration link snapshot, found by the
+    /// generic name for a monomorphized instance absent from the table. One
+    /// with no snapshot states nothing, so it is opaque.
     fn kind(&self, func: &FunctionRef) -> Kind {
         if let Some(kind) = self.kinds.get(&func.module_source, &func.name) {
             return *kind;
@@ -209,8 +209,8 @@ impl Ctx<'_> {
     }
 
     /// Whether `operand`, at `param_index`, outlives this call. A value-copy
-    /// helper keeps nothing, a builtin keeps what `#[retain(p)]` names — and
-    /// under `elements_of = p` only elements that carry an identity — a body
+    /// helper keeps nothing, a builtin keeps what its `#[storage]` implies — and
+    /// through a reference only elements that carry an identity — a body
     /// answers from the fixpoint, and a callee this scan cannot read keeps all.
     fn callee_keeps(&self, func: &FunctionRef, param_index: usize, operand: &TirExpr) -> bool {
         match self.kind(func) {
@@ -590,13 +590,13 @@ fn carries_identity(type_id: TypeId, type_table: &TypeTable) -> bool {
         )
 }
 
-/// Whether the elements of the array `type_id` refers to carry an identity: an
-/// array of plain data hands on nothing. `elements_of` is declared on arrays
-/// alone.
+/// Whether what the reference `type_id` points to hands on an identity: an
+/// array's elements, or any other referent itself. Plain data hands on nothing.
 fn holds_identity(type_id: TypeId, type_table: &TypeTable) -> bool {
-    match type_table.get(type_table.peel_refs(type_id)) {
+    let referent = type_table.peel_refs(type_id);
+    match type_table.get(referent) {
         ResolvedType::BuiltinArray(element) => carries_identity(*element, type_table),
-        other => unreachable!("`elements_of` names a non-array operand: {other:?}"),
+        _ => carries_identity(referent, type_table),
     }
 }
 

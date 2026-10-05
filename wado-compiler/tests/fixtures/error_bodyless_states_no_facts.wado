@@ -1,0 +1,19 @@
+// A body-less declaration states what a call does, wherever it is declared:
+// `#[canonical(...)]` names an import without making it a Component Model one,
+// so nothing else states the facts. The attributes are the standard library's,
+// so this file is one of its modules.
+#![stdlib("core:simd")]
+
+#[immediate(x)]
+#[canonical("wasi", "demo")]
+fn demo(x: i32) -> i32;
+
+export fn run() {
+    let _ = demo(1);
+}
+
+__DATA__
+{
+  "compile_error": "core:simd:9:4: analysis error: `demo` has no body, so it states what a call does: declare #[storage(...)] and #[side_effect(...)]",
+  "compile_error_codes": ["STORAGE_ATTR"]
+}

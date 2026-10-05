@@ -18,6 +18,7 @@ use crate::ast::{
     VariantDecl, Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport, spell_number,
     written_params,
 };
+use crate::builtin_facts::BuiltinFacts;
 use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::escape::{quoted, quoted_char};
 use crate::flat_package::FlatPackage;
@@ -4090,6 +4091,13 @@ fn unparse_attr_arg_into(arg: &AttrArg, output: &mut String) {
                 out.push_str(&quoted(v));
             });
         }
+        AttrArg::KeyIdentArray(k, vs) => {
+            output.push_str(k);
+            output.push_str(" = ");
+            delimited_into("[", "]", vs, output, |v: &String, out: &mut String| {
+                out.push_str(v);
+            });
+        }
         AttrArg::KeyNumber(k, v) => {
             output.push_str(k);
             output.push_str(" = ");
@@ -4728,9 +4736,9 @@ impl<'a> TirUnparser<'a> {
             self.output.push_str(attr);
             self.output.push('\n');
         }
-        for retain in &f.retains {
+        for attr in f.declared.iter().flat_map(BuiltinFacts::written) {
             self.write_indent();
-            self.output.push_str(&unparse_retain_attr(retain));
+            self.output.push_str(&attr);
             self.output.push('\n');
         }
         self.write_indent();
@@ -5508,19 +5516,6 @@ fn inline_hint_attr(hint: tir::InlineHint) -> Option<&'static str> {
         tir::InlineHint::Hint => Some("#[inline]"),
         tir::InlineHint::Always => Some("#[inline(always)]"),
         tir::InlineHint::Never => Some("#[inline(never)]"),
-    }
-}
-
-/// Render a `#[retain(...)]` clause back as it is written.
-fn unparse_retain_attr(retain: &tir::RetainSpec<String>) -> String {
-    let source = if retain.elements {
-        format!("elements_of = {}", retain.source)
-    } else {
-        retain.source.clone()
-    };
-    match &retain.into {
-        Some(dest) => format!("#[retain({source}, into = {dest})]"),
-        None => format!("#[retain({source})]"),
     }
 }
 

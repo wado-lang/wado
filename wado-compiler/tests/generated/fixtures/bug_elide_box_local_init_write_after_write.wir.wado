@@ -68,6 +68,8 @@ fn "bug_elide_box_local_init_write_after_write.wado/run"() with Stdout {
     let $sroa_$f_buf_71: ref "core:prelude/string.wado//String";
     let new_used_141: i32;
     let start_142: i32;
+    drop(black_box(1));
+    drop(black_box(0));
     $sroa_$f_buf_71 = local.tee $local_4_4(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
     if @unlikely(local.tee new_used_141(0 + 3) > builtin::array_len($sroa_$f_buf_71.repr)) {
         cold_path;

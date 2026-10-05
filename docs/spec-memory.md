@@ -161,7 +161,7 @@ keeps. Retention is not an effect either. It grants no authority and no handler
 intercepts it, so it has no place in a `with` clause.
 
 A declaration with no body has nothing to infer from, so it states what it keeps with
-[`#[retain(...)]` / `#[result(...)]`](./spec-attributes.md#retain--result).
+[`#[storage(...)]`](./spec-attributes.md#storage).
 
 Rationale: [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
 
