@@ -2388,6 +2388,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(sig) = self.unique_qualified_method_sig(prefix, suffix) {
                 return Some(CalleeSignature::of(&sig.decl));
             }
+            if let Some(sig) = self.derived_method_signature(prefix, suffix) {
+                return Some(sig);
+            }
 
             // Builtin functions resolve through the `core:builtin` module,
             // slots and all: a generic builtin takes its type parameter from
@@ -2435,6 +2438,45 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // spelling, and a default expression's callee scope.
         let sig = callee_site.and_then(|site| self.tysys.free_function_sig_at(site))?;
         Some(CalleeSignature::of(&sig.decl))
+    }
+
+    /// The signature of a derived `eq` / `cmp` on a type that declares no
+    /// method of the name, as its qualified spelling calls it: `(&Self, &Self)`,
+    /// with a generic type's own parameters as the slots, so the receiver
+    /// argument settles the other's type.
+    fn derived_method_signature(
+        &mut self,
+        type_name: &str,
+        method_name: &str,
+    ) -> Option<CalleeSignature> {
+        let (_, _, return_type) = self.tysys.auto_derive_by_method(method_name)?;
+        let key = self.impl_target(type_name);
+        if self
+            .qualified_method_decl_ids(&key, method_name)
+            .next()
+            .is_some()
+        {
+            return None;
+        }
+        let def = key.decl()?;
+        let lookup = self.type_lookup();
+        let mut table = self.tysys.type_table.borrow_mut();
+        let (receiver, slots) = match lookup.declared_type_param_ids(def) {
+            Some(params) => (
+                table.make_generic_instance(def, params.to_vec()),
+                params.to_vec(),
+            ),
+            None => (Self::nominal_type_of(def, &mut table, &lookup), Vec::new()),
+        };
+        if receiver == TypeTable::UNKNOWN {
+            return None;
+        }
+        let receiver_ref = table.intern(ResolvedType::Ref(receiver));
+        Some(CalleeSignature {
+            param_types: vec![receiver_ref, receiver_ref],
+            slots,
+            return_type: Some(return_type),
+        })
     }
 
     /// [`Self::apply_param_defaults`] against the callee's own declaration, for
@@ -3758,7 +3800,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.tysys.inherited_default_method_sig(&key, method_name)
             })
         else {
-            return (self.derived_impl_args(struct_name, receiver_key, method_name, args), vec![]);
+            return (
+                self.derived_impl_args(struct_name, receiver_key, method_name, args),
+                vec![],
+            );
         };
         if sig.decl.type_params.is_empty() {
             return (vec![], vec![]);

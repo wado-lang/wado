@@ -412,10 +412,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         arg_types: &[TypeId],
     ) -> Option<TypeId> {
         let lookup = self.type_lookup();
-        if lookup
-            .declared_type_param_ids(def)
-            .is_some_and(|params| !params.is_empty())
-        {
+        if lookup.declared_type_param_ids(def).is_some() {
             let tt = self.tysys.type_table.borrow();
             let receiver = tt.peel_refs(*arg_types.first()?);
             return (tt.nominal_def(receiver) == Some(def)).then_some(receiver);
