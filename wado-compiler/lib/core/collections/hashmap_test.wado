@@ -1,6 +1,13 @@
 use { HashMap, HashSeed, HashSet } from "core:collections";
 use { to_string, from_string } from "core:json";
-use { DeserializeErrorKind } from "core:serde";
+use {
+    DeserializeErrorKind,
+    Serialize,
+    Serializer,
+    SerializeError,
+    SerializeErrorKind,
+    TextKeySerializer,
+} from "core:serde";
 
 fn keys_of(map: &HashMap<String, i32>) -> List<String> {
     let mut out: List<String> = [];
@@ -297,6 +304,48 @@ test "a set round-trips through a JSON array in insertion order" {
     let back: HashSet<i32> = from_string(&json).unwrap();
     assert back == set;
     assert from_string::<HashSet<i32>>("[1,1]") matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
+}
+
+/// A key or element no format can write.
+struct Unwritable {
+    n: i32,
+}
+
+impl Hash for Unwritable {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        self.n.hash(h);
+    }
+}
+
+impl Serialize for Unwritable {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return Result::Err(SerializeError::unsupported_value("unwritable"));
+    }
+}
+
+fn refused<T: Serialize>(value: &T) -> bool {
+    return to_string(value) matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
+}
+
+test "a map or a set passes on what its entries and its shape fail with" {
+    let mut keys = HashMap::<Unwritable, i32>::new();
+    keys[Unwritable { n: 1 }] = 1;
+    assert refused(&keys);
+    let mut values = HashMap::<String, f64>::new();
+    values["nan"] = f64::NAN;
+    assert refused(&values);
+    let mut set = HashSet::<Unwritable>::new();
+    set.insert(Unwritable { n: 1 });
+    assert refused(&set);
+    let mut out = String::new();
+    assert HashMap::<String, i32>::new().serialize(&mut TextKeySerializer { out: &mut out }) matches { Err };
+    assert HashSet::<i32>::new().serialize(&mut TextKeySerializer { out: &mut out }) matches { Err };
+
+    assert from_string::<HashMap<String, i32>>("[]") matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+    assert from_string::<HashMap<i32, i32>>(`{"x":1}`) matches { Err };
+    assert from_string::<HashMap<String, i32>>(`{"a":"x"}`) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+    assert from_string::<HashSet<i32>>("{}") matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+    assert from_string::<HashSet<i32>>(`["x"]`) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
 }
 
 test "the default map and set are empty" {

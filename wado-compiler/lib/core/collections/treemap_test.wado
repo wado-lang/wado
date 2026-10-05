@@ -1,4 +1,4 @@
-use { TreeMap, TreeSet } from "core:collections";
+use { HashMap, HashSet, TreeMap, TreeSet } from "core:collections";
 use { to_string, from_string } from "core:json";
 use {
     SerializeError,
@@ -833,6 +833,8 @@ test "a map or a set passes on the error its close raises" {
     let unclosed = DeserializeError::invalid_value("unclosed");
     assert TreeMap::<String, i32>::deserialize(&mut FailingClose {}).unwrap_err() == unclosed;
     assert TreeSet::<i32>::deserialize(&mut FailingClose {}).unwrap_err() == unclosed;
+    assert HashMap::<String, i32>::deserialize(&mut FailingClose {}).unwrap_err() == unclosed;
+    assert HashSet::<i32>::deserialize(&mut FailingClose {}).unwrap_err() == unclosed;
 }
 
 test "try_insert reports whether the key was new" {
