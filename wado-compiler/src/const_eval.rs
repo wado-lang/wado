@@ -810,8 +810,8 @@ fn float_result(value: f64, prim: PrimitiveType) -> Value {
     Value::Float { value, prim }
 }
 
-/// A float stored as `bits`, or `None` for a NaN: reading a stored NaN keeps
-/// its bits, which a fold through `f64` may not.
+/// A float read from storage, or `None` for a NaN: a read keeps a NaN's bits
+/// exactly, which a fold through `f64` may not.
 pub(crate) fn non_nan_float(value: f64, prim: PrimitiveType) -> Option<Value> {
     if value.is_nan() {
         return None;
