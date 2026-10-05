@@ -805,18 +805,12 @@ pub(crate) fn eval_float_comparison(lval: f64, op: NirBinaryOp, rval: f64) -> Op
 
 /// The value a float operation produced. A NaN result folds too: the bit
 /// pattern of a NaN an operation produces is host-defined, so the compiler may
-/// fix it (spec-standard-traits.md, Float Comparison).
+/// fix it (spec-standard-traits.md, Float Comparison). It fixes the canonical
+/// quiet NaN rather than whatever the compiler's own FPU gave, so one source
+/// compiles to the same Wasm on every build machine.
 fn float_result(value: f64, prim: PrimitiveType) -> Value {
+    let value = if value.is_nan() { f64::NAN } else { value };
     Value::Float { value, prim }
-}
-
-/// A float read from storage, or `None` for a NaN: a read keeps a NaN's bits
-/// exactly, which a fold through `f64` may not.
-pub(crate) fn non_nan_float(value: f64, prim: PrimitiveType) -> Option<Value> {
-    if value.is_nan() {
-        return None;
-    }
-    Some(Value::Float { value, prim })
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -918,6 +912,9 @@ pub(crate) fn format_char_repr(c: char) -> String {
 /// values so the result parses back as a float literal.
 #[must_use]
 pub(crate) fn format_float_repr(value: f64) -> String {
+    if value.is_nan() {
+        return "NaN".to_string();
+    }
     if value.is_infinite() {
         return if value.is_sign_positive() {
             "Infinity".to_string()
