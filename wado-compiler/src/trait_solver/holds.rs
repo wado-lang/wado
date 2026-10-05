@@ -83,21 +83,24 @@ pub fn owed(
     owed
 }
 
-/// Whether a bound in force answers `trait_` at `wanted`, comparing what the
-/// walk to the trait writes there against `wanted`, defaulted where it writes
-/// none.
+/// Whether a bound in force on `subject` answers `trait_` at `wanted`,
+/// comparing what the walk to the trait writes there against `wanted`,
+/// defaulted where it writes none.
 fn bound_answers(
     program: &Program,
+    subject: &SolverType,
     bound: &ParamBound,
     trait_: TraitDeclId,
     wanted: &[SolverType],
 ) -> bool {
-    program.args_reaching(bound, trait_).iter().any(|args| {
-        wanted
-            .iter()
-            .enumerate()
-            .all(|(i, want)| args.get(i).or_else(|| program.named_default(trait_, i)) == Some(want))
-    })
+    program
+        .args_reaching(bound, trait_, subject)
+        .iter()
+        .any(|args| {
+            wanted.iter().enumerate().all(|(i, want)| {
+                program.arg_at(trait_, args, i, subject).as_ref() == Some(want)
+            })
+        })
 }
 
 /// One question and the questions open under it.
@@ -161,7 +164,7 @@ impl Query<'_> {
             && let Some(bounds) = self.env.param_bounds.get(*index as usize)
             && bounds
                 .iter()
-                .any(|bound| bound_answers(program, bound, trait_, args))
+                .any(|bound| bound_answers(program, ty, bound, trait_, args))
         {
             return Some(Holds::default());
         }
@@ -177,7 +180,7 @@ impl Query<'_> {
                 .is_some_and(|bounds| {
                     bounds
                         .iter()
-                        .any(|&bound| program.bound_reaches(bound, trait_))
+                        .any(|&bound| program.bound_reaches(bound, trait_, ty))
                 })
         {
             return Some(Holds::default());
@@ -798,6 +801,29 @@ mod tests {
         assert_eq!(ask(SUB, &[decl(I32)]), Some(Holds::default()));
         assert_eq!(ask(BASE, &[decl(I32)]), Some(Holds::default()));
         assert_eq!(ask(BASE, &[decl(POINT)]), None);
+    }
+
+    /// A parameter the bound leaves at a `Self` default is the bounded type
+    /// itself, down the clause: `trait Top<X = Self>: Sub<X>` and `T: Top`
+    /// answer `Sub<T>`.
+    #[test]
+    fn a_self_default_reaches_a_clause_as_the_subject() {
+        let mut p = Builder::default()
+            .supertrait_args(
+                ALPHA,
+                ParamBound {
+                    trait_: SUB,
+                    args: vec![SolverType::Param(0)],
+                },
+            )
+            .build();
+        p.traits.entry(ALPHA).or_default().arg_defaults = vec![Some(ArgDefault::SelfType)];
+        let bound = env(vec![vec![ALPHA]]);
+        let ask = |args: &[SolverType]| {
+            holds_with_args(&p, &bound, &SolverType::Param(0), SUB, HERE, args)
+        };
+        assert_eq!(ask(&[SolverType::Param(0)]), Some(Holds::default()));
+        assert_eq!(ask(&[decl(I32)]), None);
     }
 
     /// A clause writing no argument says the supertrait's declared defaults, so

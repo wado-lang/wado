@@ -2199,14 +2199,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let root_args = self.with_type_params_bound(&site, type_args, |e| {
                     e.trait_args_of_bound(&bounds, root)
                 });
-                let space = self.inherited_space(root, &root_args, &via);
                 let pick = vec![true; bound.type_args.len()];
-                let subjects = subjects.clone();
-                self.in_space(&space, |e| {
-                    for subject in subjects {
-                        // `Self` in the clause is the subject, so `Make<Self::Base>`
-                        // asks the subject's own `Base`, as its impl answers it.
-                        let binding = e.tysys.base_self_binding(subject, Some(root));
+                for &subject in &subjects {
+                    // `Self` in the clause, or in a default the chain fills, is
+                    // the subject: `Make<Self::Base>` asks the subject's own
+                    // `Base`, as its impl answers it.
+                    let binding = self.tysys.base_self_binding(subject, Some(root));
+                    let space =
+                        self.with_self_binding(binding, |e| e.inherited_space(root, &root_args, &via));
+                    self.in_space(&space, |e| {
                         let inherited = e.tysys.bound_written(&bound).map(|trait_| {
                             e.with_self_binding(binding, |e| {
                                 e.trait_named_with_resolved_args(trait_, &bound, &pick)
@@ -2218,8 +2219,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             e.check_and_register_bound(subject, &trait_);
                         }
                         e.enforce_assoc_type_bounds(subject, &bound, self_binding, span);
-                    }
-                });
+                    });
+                }
             }
         }
     }

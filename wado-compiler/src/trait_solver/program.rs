@@ -440,30 +440,53 @@ impl Program {
     /// The default `def`'s trait declares for its argument at `index`, at
     /// `def`'s target; `None` where it declares none or cannot spell it.
     pub(super) fn default_arg(&self, def: &ImplDef, index: usize) -> Option<SolverType> {
+        self.arg_at(def.trait_?, &[], index, &def.target)
+    }
+
+    /// `trait_`'s argument at `index` in a bound on `subject` writing `args`:
+    /// the written one, else the declared default there. `None` where neither
+    /// spells one.
+    pub(super) fn arg_at(
+        &self,
+        trait_: TraitDeclId,
+        args: &[SolverType],
+        index: usize,
+        subject: &SolverType,
+    ) -> Option<SolverType> {
+        if let Some(arg) = args.get(index) {
+            return Some(arg.clone());
+        }
         self.traits
-            .get(&def.trait_?)?
+            .get(&trait_)?
             .arg_defaults
             .get(index)?
             .as_ref()?
-            .at(&def.target)
+            .at(subject)
     }
 
-    /// Whether a bound on `bound` answers for `wanted`: itself or a supertrait,
-    /// transitively.
-    pub(super) fn bound_reaches(&self, bound: TraitDeclId, wanted: TraitDeclId) -> bool {
+    /// Whether a bound on `subject` naming `bound` answers for `wanted`: itself
+    /// or a supertrait, transitively.
+    pub(super) fn bound_reaches(
+        &self,
+        bound: TraitDeclId,
+        wanted: TraitDeclId,
+        subject: &SolverType,
+    ) -> bool {
         !self
-            .args_reaching(&ParamBound::bare(bound), wanted)
+            .args_reaching(&ParamBound::bare(bound), wanted, subject)
             .is_empty()
     }
 
-    /// Every argument list `bound` writes for `wanted`'s own parameters — its
-    /// own arguments where it names `wanted`, and each clause that reaches it.
-    /// Two edges to one trait writing different arguments are two answers, so
-    /// the walk carries on past the first rather than deciding on it.
+    /// Every argument list a bound on `subject` writing `bound` reaches
+    /// `wanted` with — its own arguments where it names `wanted`, and each
+    /// clause that reaches it. Two edges to one trait writing different
+    /// arguments are two answers, so the walk carries on past the first rather
+    /// than deciding on it.
     pub(super) fn args_reaching(
         &self,
         bound: &ParamBound,
         wanted: TraitDeclId,
+        subject: &SolverType,
     ) -> Vec<Vec<SolverType>> {
         let mut reaching = Vec::new();
         let mut stack = vec![bound.clone()];
@@ -481,7 +504,7 @@ impl Program {
                 stack.extend(
                     def.supertraits
                         .iter()
-                        .map(|clause| self.clause_at(clause, &next)),
+                        .filter_map(|clause| self.clause_at(clause, &next, subject)),
                 );
             }
             seen.push(next);
@@ -489,43 +512,29 @@ impl Program {
         reaching
     }
 
-    /// The trait's declared default at `index` where it names a type. A `Self`
-    /// default names whatever is answering, which no written argument equals,
-    /// so it answers nothing here.
-    pub(super) fn named_default(&self, trait_: TraitDeclId, index: usize) -> Option<&SolverType> {
-        match self
-            .traits
-            .get(&trait_)?
-            .arg_defaults
-            .get(index)?
-            .as_ref()?
-        {
-            ArgDefault::Type(ty) => Some(ty),
-            ArgDefault::SelfType | ArgDefault::Opaque => None,
+    /// `clause`, written in `sub`'s trait's space, at the arguments a bound on
+    /// `subject` writing `sub` supplies. `None` where the clause names a
+    /// parameter that bound neither writes nor defaults, or spreads the
+    /// trait's pack, which a flat argument list cannot place: the edge then
+    /// answers nothing rather than a guess.
+    fn clause_at(
+        &self,
+        clause: &ParamBound,
+        sub: &ParamBound,
+        subject: &SolverType,
+    ) -> Option<ParamBound> {
+        let spreads = |ty: &SolverType| ty.mentions(&|p| matches!(p, SolverType::Pack(_)));
+        if clause.args.iter().any(spreads) {
+            return None;
         }
-    }
-
-    /// `clause`, written in `sub`'s trait's space, at the arguments `sub`
-    /// supplies. A parameter `sub` leaves out takes its declared default; one
-    /// with neither states nothing, which answers at the clause trait's own
-    /// defaults.
-    fn clause_at(&self, clause: &ParamBound, sub: &ParamBound) -> ParamBound {
-        let arg = |i: u32| {
-            let i = i as usize;
-            sub.args
-                .get(i)
-                .or_else(|| self.named_default(sub.trait_, i))
-                .cloned()
-        };
-        let args = clause
-            .args
-            .iter()
-            .map(|ty| ty.map_params(&arg))
-            .collect::<Option<Vec<_>>>()
-            .unwrap_or_default();
-        ParamBound {
+        let arg = |i: u32| self.arg_at(sub.trait_, &sub.args, i as usize, subject);
+        Some(ParamBound {
             trait_: clause.trait_,
-            args,
-        }
+            args: clause
+                .args
+                .iter()
+                .map(|ty| ty.map_params(&arg))
+                .collect::<Option<_>>()?,
+        })
     }
 }
