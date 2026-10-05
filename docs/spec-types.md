@@ -543,7 +543,7 @@ buffer it refers to.
 `get(i)` returns `Option<T>` on all three types. `xs[i]` traps when `i` is
 outside `0..<len()`. On a slice that includes a negative index, even where the
 backing array holds an element, since a view never reads outside itself. The
-trap is the whole contract, and its message is
+trap is the whole contract: its message may be any text, and which text is
 [unspecified](./spec-overview.md#behavior-classes).
 
 `get_unchecked(i)` leaves the check to the caller, who must guarantee

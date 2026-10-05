@@ -147,11 +147,14 @@ breaks a type's invariant.
 
 1. The specification defines the classes and the term, and the sites it
    already had take them: initialization order, the ambient call, `ref_eq`, the
-   trap message, relaxed SIMD, NaN bits, `get_unchecked` and `slice_unchecked`.
-   Done.
+   trap message, relaxed SIMD, NaN bits, what a world import returns,
+   `get_unchecked` and `slice_unchecked`. Done.
 2. Each `_unchecked` function in `core:prelude` states its class in its doc
-   comment. Finishing it means every such function names unspecified or
-   unconstrained.
+   comment, under a `# Contract` heading rather than Rust's `# Safety`. Done.
+3. Coverage holds a `char` to its values: a match over ranges on either side of
+   the surrogate gap is exhaustive, so a `_` after them is unreachable. Gale's
+   first-char dispatch emits no `_` when its arms already take every char.
+   Done.
 
 ## Known gaps
 

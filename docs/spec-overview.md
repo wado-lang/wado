@@ -40,7 +40,9 @@ the behavior belongs to.
   program is correct under every listed outcome.
 - _Host-defined_: unspecified, except that the host chooses. The same compiled
   program may behave differently on two hosts. Each case says whether the choice
-  stays fixed on one host.
+  stays fixed on one host. What a world import returns is host-defined within
+  what its interface promises: `InsecureSeed` may return the same value every
+  time, for one.
 - _Unconstrained_: the specification lists no outcomes, and the compiler may
   assume the case never arises. Its effects may appear anywhere in the program
   and at any later time. Only these guarantees remain: the Wasm instance stays
