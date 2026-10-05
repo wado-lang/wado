@@ -69,21 +69,14 @@ fn read_body(request: Request) -> String {
     return body;
 }
 
-fn split_path_query(full: String) -> [String, String] {
-    if let Some(i) = full.find("?") {
-        return [full.substr_bytes(0, i), full.substr_bytes(i + 1, full.len())];
-    }
-    return [full, ""];
-}
-
 fn parse_query_params(query: String) -> TreeMap<String, Value> {
     let mut params = TreeMap::<String, Value>::new();
     for let pair of query.split("&") {
         if pair.is_empty() {
             continue;
         }
-        if let Some(eq) = pair.find("=") {
-            params[pair.substr_bytes(0, eq)] = Value::String(pair.substr_bytes(eq + 1, pair.len()));
+        if let Some([key, value]) = pair.split_once("=") {
+            params[key.to_string()] = Value::String(value.to_string());
         } else {
             params[pair] = Value::String("");
         }
@@ -108,8 +101,8 @@ fn get_header(headers: List<[String, String]>, name: String) -> String {
     return "";
 }
 
-fn parse_status_code(s: String) -> Option<u16> {
-    if let Ok(code) = i32::from_str(&s) {
+fn parse_status_code(s: StrSlice) -> Option<u16> {
+    if let Ok(code) = i32::from_str(s) {
         if code >= 100 && code <= 599 {
             return Some(code as u16);
         }
@@ -142,7 +135,10 @@ fn echo(request: &MockRequest, path: String, query: String, with_body: bool) -> 
 }
 
 fn route(request: &MockRequest) -> MockResponse {
-    let [path, query] = split_path_query(request.path_with_query);
+    let [path, query] = match request.path_with_query.split_once("?") {
+        Some([p, q]) => [p.to_string(), q.to_string()],
+        None => [request.path_with_query, ""],
+    };
     let method = request.method;
     let sends_body = method == "POST" || method == "PUT" || method == "PATCH";
 
@@ -176,14 +172,14 @@ fn route(request: &MockRequest) -> MockResponse {
         obj["user-agent"] = Value::String(get_header(request.headers, "user-agent"));
         return json(obj);
     }
-    if path.starts_with("/status/") {
-        if let Some(code) = parse_status_code(path.substr_bytes(8, path.len())) {
+    if let Some(code_text) = path.strip_prefix("/status/") {
+        if let Some(code) = parse_status_code(code_text) {
             return { status: code as i32, content_type: "text/plain", body: "" };
         }
         return json_error(400, "Invalid status code");
     }
-    if path.starts_with("/base64/") {
-        if let Some(decoded) = decode(&path.substr_bytes(8, path.len())) {
+    if let Some(encoded) = path.strip_prefix("/base64/") {
+        if let Some(decoded) = decode(&encoded.to_string()) {
             return { status: 200, content_type: "text/plain", body: String::from_utf8_lossy(decoded) };
         }
         return json_error(400, "Invalid base64");
