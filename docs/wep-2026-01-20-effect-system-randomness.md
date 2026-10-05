@@ -264,8 +264,8 @@ Because `HashMap::new` is `#[benign(InsecureSeed)]`, the coercion does not impos
 
 - [x] `InsecureSeed` declared in `lib/wasi/random/insecure_seed.wado`.
 - [x] `TreeMap` implemented in `core:collections` (insertion-order, tree-indexed).
-- [ ] `#[benign(E)]` attribute: parsing, effect-check integration (suppress propagation while still requiring the world import), and diagnostics.
-- [ ] `HashMap`: insertion-order, hash-indexed, `SipHash 1-3`, and a `Hash` / `Eq` trait pair, with `#[benign(InsecureSeed)]` on `new`.
+- [x] `#[benign(E)]` attribute: parsing, effect-check integration (suppress propagation while still requiring the world import), and diagnostics.
+- [x] `HashMap`, insertion-order and hash-indexed. [WEP: HashMap](./wep-2026-10-01-hash-map.md) replaced `SipHash 1-3` and `#[benign(InsecureSeed)]` on `new` with its own design, and carries the work left.
 
 ## Relationship with wasi-keyvalue
 

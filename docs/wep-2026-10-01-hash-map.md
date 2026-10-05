@@ -27,8 +27,8 @@ every caller.
 ## Decision
 
 `core:collections` adds `HashMap<K, V>` and `HashSet<T>`. `new()` hashes under a
-default seed that the host supplies once per instance, and `with_seed` takes a
-seed of the caller's choosing. Neither carries an effect.
+default seed that the host supplies once per component instance, and
+`with_seed` takes a seed of the caller's choosing. Neither carries an effect.
 
 ### The default seed, and a seed of the caller's choosing
 
@@ -74,8 +74,8 @@ export.
 
 An initializer runs outside every handler, including those installed where the
 global is first read. Only a handler the initializer installs itself is in
-scope. An effect a host import serves, such as `InsecureSeed`, works there. An
-`interface` effect falls to its default implementation, or traps without one.
+scope, so `InsecureSeed` reaches the host. A handler a test installs around its
+first `HashMap::new()` cannot pick the default seed for the whole instance.
 
 ### Whether and when an initializer runs is unspecified
 
@@ -88,7 +88,9 @@ This replaces the rule that an initializer runs at module initialization whether
 or not anything reads the global. Under the old rule `DEFAULT_HASH_SEED` would
 ask the host for a seed, and keep the `insecure-seed` import, in every program
 that imports `core:collections`, `TreeMap` users included. Under the new one, a
-program that reaches none of its readers imports nothing for it.
+program that reaches none of its readers imports nothing for it, at every
+optimization level. A Kiln generator depends on that, since it may import no
+`wasi:*` interface even at `-O0`.
 
 ### `#[benign]` on functions stays
 
@@ -108,13 +110,16 @@ Gale's `GaleMap` and `GaleSet` are newtypes over `HashMap` and `HashSet` under a
 fixed seed. They exist because `HashMap::new` used to require a seed: the
 newtypes gave Gale a seedless `new()`, and `Default`, `Serialize` and
 `Deserialize`. All four now come with `HashMap` itself, so Gale uses `HashMap`
-and `HashSet` and the newtypes are deleted.
+and `HashSet` and the newtypes are deleted. `wado-lang:gale` re-exports both,
+so the deletion breaks a package that names them.
 
 Code that runs as a Kiln generator builds every map with
 `with_seed(HashSeed::fixed(…))`. A generator may import no `wasi:*` interface
 ([The Sandbox](./spec-kiln.md#the-sandbox)), so one that reaches
 `DEFAULT_HASH_SEED` through `new()`, `Default` or `Deserialize` is a compile
-error (`KILN_GENERATOR_FORBIDDEN_IMPORT`). The Kiln host stays as it is: a
+error (`KILN_GENERATOR_FORBIDDEN_IMPORT`). A struct the generator builds that
+holds a map takes a hand-written constructor in place of a derived `Default`.
+The Kiln host stays as it is: a
 constant `insecure-seed` would widen what it provides, for no gain over a fixed
 seed in the generator.
 
@@ -168,8 +173,9 @@ slow for the role.
 ### `TreeMap` stays
 
 `TreeMap` needs no seed, and its worst case is logarithmic. The Component Model
-`map<K, V>` stays `TreeMap` ([WEP: CM map type](./wep-2026-08-25-cm-map-type.md)). `core:value`
-objects, which hold parsed external input, stay `TreeMap` as well.
+`map<K, V>` stays `TreeMap`
+([WEP: CM map type](./wep-2026-08-25-cm-map-type.md)). `core:value` objects,
+which hold parsed external input, stay `TreeMap` as well.
 
 ### `Default`, `Serialize` and `Deserialize`, by hand
 
@@ -193,14 +199,14 @@ an all-zero seed.
   offer `TreeMap`'s and `TreeSet`'s lookup and iteration API.
 - [x] `gale_gen` builds its maps as `GaleMap` and `GaleSet`. Done when its
   benchmark row is re-measured.
-- [ ] `#[benign(E, …)]` on a global, stated in `spec-attributes.md`. Done when a
-  fixture shows the listed effects admitted in its initializer, an unlisted one
-  still rejected, and the world import still required.
-- [ ] The unspecified-initializer rule and its handler scope in
-  `spec-expressions.md`, replacing the
-  fixture that pins an unread global's trapping initializer as run. Done when
-  the optimizer removes an unread global whose initializer performs a benign
-  effect, along with the import that only it reached.
+- [ ] `#[benign(E, …)]` on a global. Done when a fixture shows the listed
+  effects admitted in its initializer, an unlisted one still rejected, and the
+  world import still required, and the not-yet-implemented note in
+  `spec-attributes.md` is gone.
+- [ ] The initializer rule in `spec-expressions.md`. Done when an unread global
+  is dropped with its initializer, and the imports only it reached, at every
+  optimization level; the fixture that pins an unread global's trapping
+  initializer as run is replaced; and the not-yet-implemented note is gone.
 - [ ] `DEFAULT_HASH_SEED`, `new()` under it and `with_seed(seed)` on `HashMap`
   and `HashSet`. Done when every caller of the old `new(seed)` has moved to
   `with_seed`.

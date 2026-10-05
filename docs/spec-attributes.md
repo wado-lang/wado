@@ -32,7 +32,7 @@ test {
 
 ### `#[benign(E, ...)]`
 
-Lets a function perform the listed effects without declaring `with E`, and stops them from propagating to callers. It is meant for effects that no caller can observe through the function's interface. Only the named effects are suppressed. Others propagate normally, and the world import for each is still required. The compiler cannot verify that they are unobservable, so this is an unchecked assertion that must be audited.
+Lets a function perform the listed effects without declaring `with E`, and stops them from propagating to callers. On a global, it lets the initializer perform them. It is meant for effects that no caller can observe through the function's interface, or through the global's value. Only the named effects are suppressed. Others propagate normally, and the world import for each is still required. The compiler cannot verify that they are unobservable, so this is an unchecked assertion that must be audited.
 
 An argument names an effect the way a `with` clause does, by the name the function's module gives it, an import alias included. A name that reaches no effect there is an error. An effect of the same name declared in another module is a different effect, and stays required.
 
@@ -55,6 +55,8 @@ fn fresh() -> HashIndex {   // declares no effect, and needs none
     return HashIndex::new();
 }
 ```
+
+> Not yet implemented: `#[benign]` on a global.
 
 Rationale: [WEP: Effect System and Randomness in Collections](./wep-2026-01-20-effect-system-randomness.md) and [WEP: HashMap](./wep-2026-10-01-hash-map.md).
 
