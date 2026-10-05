@@ -533,13 +533,13 @@ bound on that parameter (`..C: Arbitrary`) waits for monomorphization
 
 #### The five questions
 
-| Function                                            | Rules it owns                                                                          |
-| --------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `coherence_errors(program)`                         | a duplicate impl, an unbounded value blanket, orphans |
-| `derive(program, trait_, declarations)`             | which declarations derive `trait_`, and the impls that says                            |
-| `holds(program, env, ty, trait_, scope)`            | bound satisfaction, supertraits, the cycle rule                                        |
-| `candidates(program, env, receiver, method, scope)` | the three candidate lists, the scope gate, each candidate's depth                      |
-| `rank(candidates)`                                  | ranks 0-3 and the ties the ambiguities report                                          |
+| Function                                            | Rules it owns                                                     |
+| --------------------------------------------------- | ----------------------------------------------------------------- |
+| `coherence_errors(program)`                         | a duplicate impl, an unbounded value blanket, orphans             |
+| `derive(program, trait_, declarations)`             | which declarations derive `trait_`, and the impls that says       |
+| `holds(program, env, ty, trait_, scope)`            | bound satisfaction, supertraits, the cycle rule                   |
+| `candidates(program, env, receiver, method, scope)` | the three candidate lists, the scope gate, each candidate's depth |
+| `rank(candidates)`                                  | ranks 0-3 and the ties the ambiguities report                     |
 
 Two disciplines keep them functions rather than passes:
 

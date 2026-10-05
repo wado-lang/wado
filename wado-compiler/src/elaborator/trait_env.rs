@@ -2286,12 +2286,7 @@ fn report_supertrait_cycle(
 /// tuple (`[..T]`). Only a tuple can carry one.
 fn is_unsupported_variadic_target(ty: &ast::Type) -> bool {
     match ty {
-        ast::Type::Tuple(elems) => {
-            elems.len() > 1
-                && elems
-                    .iter()
-                    .any(|e| matches!(e, ast::Type::TypePackSpread(..)))
-        }
+        ast::Type::Tuple(elems) => elems.len() > 1 && spreads_pack(ty),
         // A pack under a reference never reaches the impl's type-param scope,
         // so type resolution would report the declared pack as unknown.
         ast::Type::Reference(inner) | ast::Type::MutReference(inner) => spreads_pack(inner),
