@@ -9,8 +9,8 @@ use crate::hashmap::IndexMap;
 /// span and a message, because only the caller knows what anything is called.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum CoherenceError {
-    /// Two impls of one `(Trait, Type)` pair. `first` is the one that keeps the
-    /// pair, in program order.
+    /// One impl written twice: the same trait arguments, target and bounds.
+    /// `first` is the one that keeps its place, in program order.
     DuplicateImpl { first: ImplId, second: ImplId },
     /// `impl<T> Tr for T` — a value blanket whose receiver parameter carries no
     /// bound, so nothing could ever select it.
@@ -18,7 +18,7 @@ pub enum CoherenceError {
 }
 
 /// Every coherence violation in `program`, in program order. The orphan rule
-/// and variadic overlap still run over the AST in `elaborator::trait_env`.
+/// still runs over the AST in `elaborator::trait_env`.
 #[must_use]
 pub fn coherence_errors(program: &Program) -> Vec<CoherenceError> {
     let mut errors = Vec::new();

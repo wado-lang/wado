@@ -1011,21 +1011,9 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// Coherence violation: two variadic impls of the same trait accepting a
-    /// common tuple. They apply at every such arity and bounds do not separate
-    /// them.
-    OverlappingVariadicImpls {
-        trait_name: String,
-        self_type_name: String,
-        /// Where the impl this one collides with lives, named so the other
-        /// half of the pair is not left for the reader to hunt down.
-        conflicting_impl: String,
-        span: Span,
-    },
-
-    /// Coherence violation: two impls of one `(Trait, Type)` pair. No rank
-    /// separates them, so without this the collection order decides which body
-    /// every call runs.
+    /// Coherence violation: one impl written twice, at the same trait arguments,
+    /// target and bounds. No rank separates them, so without this the
+    /// collection order decides which body every call runs.
     DuplicateTraitImpl {
         trait_name: String,
         self_type_name: String,
@@ -2302,18 +2290,6 @@ impl TypeError {
                 Code::OrphanRule,
                 format!(
                     "orphan rule violation: cannot implement foreign trait `{trait_name}` for foreign type `{self_type_name}`"
-                ),
-                *span,
-            ),
-            TypeError::OverlappingVariadicImpls {
-                trait_name,
-                self_type_name,
-                conflicting_impl,
-                span,
-            } => (
-                Code::OrphanRule,
-                format!(
-                    "overlapping variadic impls of `{trait_name}` for `{self_type_name}`: this one and {conflicting_impl} accept the same tuples, and a pack's bounds are only checked at monomorphization, so neither can be selected over the other"
                 ),
                 *span,
             ),

@@ -535,7 +535,7 @@ bound on that parameter (`..C: Arbitrary`) waits for monomorphization
 
 | Function                                            | Rules it owns                                                                          |
 | --------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `coherence_errors(program)`                         | duplicate `(Trait, Type)` pairs, an unbounded value blanket, variadic overlap, orphans |
+| `coherence_errors(program)`                         | a duplicate impl, an unbounded value blanket, orphans |
 | `derive(program, trait_, declarations)`             | which declarations derive `trait_`, and the impls that says                            |
 | `holds(program, env, ty, trait_, scope)`            | bound satisfaction, supertraits, the cycle rule                                        |
 | `candidates(program, env, receiver, method, scope)` | the three candidate lists, the scope gate, each candidate's depth                      |
@@ -616,16 +616,13 @@ prelude's `Inspect for &T` works because the compiler answers that bound itself.
 - [ ] Collect a reference blanket as a match, or materialize the match from the
   winning `ImplId` (above), which makes the collection moot.
 
-### Two coherence rules still read the AST
+### The orphan rule still reads the AST
 
-`coherence_errors` owns four rules and answers the duplicate pair and the
-unbounded value blanket. The other two still run over the AST:
+`coherence_errors` owns three rules and answers the duplicate impl and the
+unbounded value blanket. The orphan rule still runs over the AST:
 
-- [ ] Variadic overlap, `check_variadic_impl_overlap`. Moving it needs `Program`
-  to carry a pack's bounds, which the key it compares on deliberately
-  ignores (WEP 2026-03-14 §5 Rule 2).
-- [ ] The orphan rule. Moving it needs each declaration's module and the
-  package boundary, which `Program` does not carry yet.
+- [ ] Moving it needs each declaration's module and the package boundary, which
+  `Program` does not carry yet.
 
 ### The other dispatch paths do not share the order
 

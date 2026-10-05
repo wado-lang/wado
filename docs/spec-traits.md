@@ -907,18 +907,23 @@ impl Box_<i32> { fn a(&self) -> i32 { return self.v; } }   // ERROR: duplicate d
 
 Inherent blocks that reach no receiver in common may share a name.
 
-Two impls that are general in the same way cannot be ordered at all, so a second
-variadic impl of one trait is rejected where it is written:
+Two variadic impls of one trait are separated as two head impls are. A tuple
+takes the one whose bounds it meets, and one meeting both reports at the call
+([Ambiguity](#ambiguity)):
 
-<!-- {"fixture":"spec_traits_variadic_overlap.wado"} -->
+<!-- {"fixture":"spec_traits_variadic_bounds.wado"} -->
 
 ```wado
-impl<..T: Inspect> Tag for [..T] { fn tag(&self) -> String { return "inspect"; } }
-impl<..T: Eq> Tag for [..T] { fn tag(&self) -> String { return "eq"; } }     // ERROR: overlapping variadic impls
+impl<..T: Small> Tag for [..T] { fn tag(&self) -> String { return "small"; } }
+impl<..T: Flag> Tag for [..T] { fn tag(&self) -> String { return "flag"; } }
+
+test {
+    assert [1, 2].tag() == "small" && [true, false].tag() == "flag";
+}
 ```
 
-Bounds do not separate them. A trait's own arguments do, since they make the
-two impls of different traits:
+A trait's own arguments separate them too, since they make the two impls of
+different traits:
 
 <!-- {"fixture":"spec_traits_variadic_args.wado"} -->
 
@@ -927,7 +932,7 @@ impl<..T> Conv<i32> for [..T] { fn conv(&self, x: i32) -> String { return "i32";
 impl<..T> Conv<String> for [..T] { fn conv(&self, x: String) -> String { return "String"; } } // OK — a different trait
 
 test {
-    assert [1, true].conv(7 as i32) == "i32" && [1, true].conv("s") == "String";
+    assert [1, true].conv(7_i32) == "i32" && [1, true].conv("s") == "String";
 }
 ```
 

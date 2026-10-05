@@ -2185,9 +2185,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Report a tie the order left among one trait's impls
     /// (`docs/wep-2026-09-01-trait-resolution.md`), naming value blankets by
-    /// their bounds and impls generic over the receiver's head by their targets.
-    /// A tie among impls with neither — two variadic impls of one trait — is
-    /// coherence's, rejected where the second is written (WEP 2026-03-14 §5 Rule 2).
+    /// their bounds and every other impl, a variadic one included, by its target.
     pub(super) fn report_tied_impls(
         &mut self,
         tied: &[Option<DefId>],
