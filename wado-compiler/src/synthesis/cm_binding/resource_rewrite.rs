@@ -710,10 +710,8 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
         return_type: write_type_id,
         task_return_type: None,
         effects: vec![],
-        retains: vec![],
         immediates: vec![],
-        trap: None,
-        linear_memory: None,
+        declared: None,
         body: Some(TirBlock {
             stmts,
             span: synth_span(),
@@ -731,7 +729,6 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
         compiler_item: None,
         export_name: None,
         allocator_tag: None,
-        declared_return_convention: None,
         kind: FunctionKind::Regular,
         return_abi: tir::ReturnAbi::default(),
     }
@@ -944,10 +941,8 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         return_type: TypeTable::UNIT,
         task_return_type: None,
         effects: vec![],
-        retains: vec![],
         immediates: vec![],
-        trap: None,
-        linear_memory: None,
+        declared: None,
         body: Some(TirBlock {
             stmts,
             span: synth_span(),
@@ -965,7 +960,6 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         compiler_item: None,
         export_name: None,
         allocator_tag: None,
-        declared_return_convention: None,
         kind: FunctionKind::Regular,
         return_abi: tir::ReturnAbi::default(),
     }
@@ -1165,10 +1159,8 @@ fn synthesize_future_read_func(
         return_type: option_type_id,
         task_return_type: None,
         effects: vec![],
-        retains: vec![],
         immediates: vec![],
-        trap: None,
-        linear_memory: None,
+        declared: None,
         body: Some(TirBlock {
             stmts,
             span: synth_span(),
@@ -1186,7 +1178,6 @@ fn synthesize_future_read_func(
         compiler_item: None,
         export_name: None,
         allocator_tag: None,
-        declared_return_convention: None,
         kind: FunctionKind::Regular,
         return_abi: tir::ReturnAbi::default(),
     }
@@ -1572,10 +1563,8 @@ fn synthesize_stream_read_func(
         return_type: chunk_type_id,
         task_return_type: None,
         effects: vec![],
-        retains: vec![],
         immediates: vec![],
-        trap: None,
-        linear_memory: None,
+        declared: None,
         body: Some(TirBlock {
             stmts,
             span: synth_span(),
@@ -1593,7 +1582,6 @@ fn synthesize_stream_read_func(
         compiler_item: None,
         export_name: None,
         allocator_tag: None,
-        declared_return_convention: None,
         kind: FunctionKind::Regular,
 
         return_abi: tir::ReturnAbi::default(),

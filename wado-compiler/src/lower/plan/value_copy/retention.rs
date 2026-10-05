@@ -24,8 +24,9 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::analyze;
 use crate::tir::{
     BuiltinDeclaration, BuiltinDeclarations, DeclarationTable, FunctionRef, ResolvedType,
-    RetainSpec, ReturnConvention, TirBlock, TirExpr, TirExprKind, TirFunction, TirPattern, TirStmt,
-    TirStmtKind, TirStruct, TirUnaryOp, TypeId, TypeTable, capture_source_locals,
+    RetainInto, RetainSpec, ReturnConvention, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId, TypeTable,
+    capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
@@ -45,9 +46,10 @@ struct RetentionFacts {
     /// own argument there, and only what lands somewhere it cannot see escapes.
     into_param: IndexMap<u32, IndexSet<u32>>,
     /// Positions whose claim is on what the referent's elements hold rather
-    /// than on the reference itself (`elements_of = p`). An array of plain data
-    /// hands on nothing, so the claim is gated on the argument's type at each
-    /// call. Only a declaration states one; a body walk never does.
+    /// than on the reference itself: a reference parameter of `holds_args`,
+    /// `copies_args` or `stores_args`. An array of plain data hands on nothing,
+    /// so the claim is gated on the argument's type at each call. Only a
+    /// declaration states one; a body walk never does.
     elements: IndexSet<u32>,
 }
 
@@ -138,8 +140,8 @@ impl RetentionFacts {
 /// reference to the same parameter — so the two are not disjoint, and what the
 /// value carries altogether is their union.
 ///
-/// The split is what an element claim reads: `elements_of = p` asks what the
-/// referent's elements hold, which is `holds` and never `is`.
+/// The split is what an element claim reads: one through a reference asks what
+/// the referent's elements hold, which is `holds` and never `is`.
 #[derive(Clone, Default)]
 struct Carried {
     is: IndexSet<u32>,
@@ -792,45 +794,53 @@ pub fn compute_retention(
     RetentionSummary { calls, rows }
 }
 
-/// What one `#[retain(...)]` clause states, by parameter position. The single
-/// reading of a clause, so a declaration cannot mean two things by it.
+/// What one retention a declaration's storage implies states, by parameter
+/// position. The single reading of one, so a declaration cannot mean two
+/// things by it.
 ///
-/// `into = q` names the destination, so the clause takes the bounded channel
-/// alone. Without one the reference persists and the declaration does not say
-/// where, so both unbounded channels take it: the result is one of the places
-/// it could be. `elements_of = p` claims what the referent holds rather than
+/// A named destination takes the bounded channel alone, and the result takes
+/// `into_result`. A reference kept anywhere persists where the declaration
+/// does not say, so both unbounded channels take it: the result is one of the
+/// places it could be. `elements` claims what the referent holds rather than
 /// the reference, which each call gates on the argument's own type.
 fn declare_retention(facts: &mut RetentionFacts, retain: &RetainSpec<usize>) {
     let source = u32::try_from(retain.source).unwrap();
     if retain.elements {
         facts.elements.insert(source);
     }
-    if let Some(destination) = retain.into {
-        facts
-            .into_param
-            .entry(source)
-            .or_default()
-            .insert(u32::try_from(destination).unwrap());
-    } else {
-        facts.escapes.insert(source);
-        facts.into_result.insert(source);
+    match retain.into {
+        RetainInto::Param(destination) => {
+            facts
+                .into_param
+                .entry(source)
+                .or_default()
+                .insert(u32::try_from(destination).unwrap());
+        }
+        RetainInto::Result => {
+            facts.into_result.insert(source);
+        }
+        RetainInto::Anywhere => {
+            facts.escapes.insert(source);
+            facts.into_result.insert(source);
+        }
     }
 }
 
-/// What a body-less declaration states, by parameter position: its
-/// `#[retain(...)]` clauses, and what its result is made of. `part_of = p` is
-/// `p`, and `owned` is nothing a clause does not route there. Silence is any
-/// argument: the rule that makes a declaration state `#[result]` covers only
-/// its reference parameters, so `select` hands back a by-value operand while
-/// stating nothing.
+/// What a body-less declaration states, by parameter position: what it keeps,
+/// and what its result is made of. `part_of_args` is the parameters it names,
+/// and an owned result is nothing a retention does not route there. A
+/// declaration whose storage implies no convention may hand back any
+/// argument.
 fn declared_facts(declaration: &BuiltinDeclaration) -> RetentionFacts {
     let mut facts = RetentionFacts::default();
     for retain in &declaration.retains {
         declare_retention(&mut facts, retain);
     }
-    match declaration.returns {
-        Some(ReturnConvention::PartOf(p)) => {
-            facts.into_result.insert(u32::try_from(p).unwrap());
+    match &declaration.returns {
+        Some(ReturnConvention::PartOf(params)) => {
+            facts
+                .into_result
+                .extend(params.iter().map(|&p| u32::try_from(p).unwrap()));
         }
         Some(ReturnConvention::Owned) => {}
         None => {
@@ -908,9 +918,9 @@ impl RefCarrying<'_> {
         match self.type_table.get(type_id) {
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => (true, false),
             // What a type parameter stands for is not known here.
-            ResolvedType::TypeParam { .. } | ResolvedType::AssocTypeProjection { .. } => {
-                (true, false)
-            }
+            ResolvedType::TypeParam { .. }
+            | ResolvedType::AssocParam { .. }
+            | ResolvedType::AssocTypeProjection { .. } => (true, false),
             ResolvedType::Reactive(inner) | ResolvedType::BuiltinArray(inner) => {
                 let inner = *inner;
                 self.walk(inner, open)
@@ -1390,10 +1400,11 @@ impl StoresWalker<'_> {
             .collect()
     }
 
-    /// What the argument at `position` hands the callee. A position claimed by
-    /// `elements_of` asks after the referent's elements, so it reads what the
-    /// argument holds and never what it is: a reference to a container is a
-    /// carrier by pointing at the container, not by anything the container keeps.
+    /// What the argument at `position` hands the callee. A position claimed
+    /// through a reference asks after the referent's elements, so it reads what
+    /// the argument holds and never what it is: a reference to a container is
+    /// a carrier by pointing at the container, not by anything the container
+    /// keeps.
     fn claimed(&self, position: u32, arg: &TirExpr, facts: &RetentionFacts) -> IndexSet<u32> {
         let carried = self.carried(arg);
         if facts.elements.contains(&position) {

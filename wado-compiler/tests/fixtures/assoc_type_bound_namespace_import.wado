@@ -1,0 +1,42 @@
+// An associated type's bound reads its module's namespace imports, however
+// early its signature is built: `m::Tag` names the dependency's struct.
+
+use m from "./sub/assoc_type_bound_namespace_dep.wado";
+
+trait Conv<X> with () {
+    fn conv(&self) -> X;
+}
+
+trait Store with () {
+    type Buf<E>: Conv<m::Tag>;
+
+    fn hold<E>(&self, e: E) -> Self::Buf<E>;
+}
+
+struct Held<E> {
+    e: E,
+}
+
+impl<E> Conv<m::Tag> for Held<E> {
+    fn conv(&self) -> m::Tag {
+        return m::Tag { n: 3 };
+    }
+}
+
+struct Holds {}
+
+impl Store for Holds {
+    type Buf<E> = Held<E>;
+
+    fn hold<E>(&self, e: E) -> Held<E> {
+        return Held { e };
+    }
+}
+
+fn tag_of<S: Store>(s: &S) -> i32 {
+    return s.hold(1).conv().n;
+}
+
+test "a bound reads the module's namespace imports" {
+    assert tag_of(&Holds {}) == 3;
+}

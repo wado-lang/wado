@@ -1,0 +1,20 @@
+// A bound binding an associated type names one its trait declares, and one
+// that takes no parameters of its own: a family is no type until a projection
+// gives it arguments.
+
+trait Store with () {
+    type Item;
+    type Buf<E>;
+}
+
+fn misspelled<S: Store<Itme = i32>>(s: &S) {}
+
+fn family<S: Store<Buf = List<i32>>>(s: &S) {}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":10:24: analysis error: trait 'Store' declares no associated type 'Itme'",
+  "compile_errors_contains": ["associated type `Buf` takes type parameters, so a bound cannot bind it to one type"]
+}

@@ -34,9 +34,12 @@ use crate::{ast, format_spec, hashmap};
 pub struct Parser {
     tokens: Vec<Token>,
     pos: usize,
-    /// Tracks when we've split a `GtGt` into two Gt tokens for nested generics.
-    /// When true, the next `expect_gt` call should succeed without consuming a token.
-    pending_gt: bool,
+    /// The second half of a `GtGt` split into two `>` for nested generics,
+    /// until it is consumed. It is the current token meanwhile, so every
+    /// lookahead and span reads it before `tokens[pos]`.
+    pending_gt: Option<Token>,
+    /// The half [`Self::advance`] last consumed, which it hands back.
+    consumed_gt: Option<Token>,
     /// When true, `Name {` is not parsed as a struct literal. This is set in
     /// expression contexts where a block `{` follows the expression (e.g.,
     /// if/while/match conditions), preventing ambiguity between struct literals
@@ -136,7 +139,8 @@ struct ParserCheckpoint {
     pos: usize,
     comment_cursor: usize,
     next_ast_id: u32,
-    pending_gt: bool,
+    pending_gt: Option<Span>,
+    consumed_gt: Option<Span>,
     errors_len: usize,
     contextual_keywords_len: usize,
 }
@@ -224,7 +228,8 @@ impl Parser {
         Self {
             tokens,
             pos: 0,
-            pending_gt: false,
+            pending_gt: None,
+            consumed_gt: None,
             restrict_struct_literals: false,
             shebang,
             data_section,
@@ -314,7 +319,8 @@ impl Parser {
             pos: self.pos,
             comment_cursor: self.comment_cursor,
             next_ast_id: self.next_ast_id,
-            pending_gt: self.pending_gt,
+            pending_gt: self.pending_gt.as_ref().map(|half| half.span),
+            consumed_gt: self.consumed_gt.as_ref().map(|half| half.span),
             errors_len: self.errors.len(),
             contextual_keywords_len: self.contextual_keywords.len(),
         }
@@ -344,7 +350,12 @@ impl Parser {
         self.trivia
             .discard_from(AstId::new(self.ast_id_space, cp.next_ast_id));
         self.next_ast_id = cp.next_ast_id;
-        self.pending_gt = cp.pending_gt;
+        let half = |span| Token {
+            kind: TokenKind::Gt,
+            span,
+        };
+        self.pending_gt = cp.pending_gt.map(half);
+        self.consumed_gt = cp.consumed_gt.map(half);
         // Drop errors recorded inside the speculative branch being rolled back.
         self.errors.truncate(cp.errors_len);
         // Likewise the keyword readings: the branch that replaces this one
@@ -589,23 +600,26 @@ impl Parser {
 
     // Token handling
 
+    /// The current token. The second half of a split `>>` is a `>` of its
+    /// own, so a lookahead taken between the halves sees it rather than the
+    /// token after it.
     fn peek(&self) -> &Token {
-        &self.tokens[self.pos]
+        self.peek_nth(0)
     }
 
     fn peek_kind(&self) -> &TokenKind {
-        &self.tokens[self.pos].kind
+        &self.peek().kind
     }
 
     /// Peek at the nth token ahead (0 = current, 1 = next, etc.)
     fn peek_nth(&self, n: usize) -> &Token {
-        let idx = self.pos + n;
-        if idx < self.tokens.len() {
-            &self.tokens[idx]
-        } else {
-            // Return the last token (should be Eof)
-            &self.tokens[self.tokens.len() - 1]
-        }
+        let idx = match (&self.pending_gt, n) {
+            (Some(half), 0) => return half,
+            (Some(_), n) => self.pos + n - 1,
+            (None, n) => self.pos + n,
+        };
+        // Past the end is the last token, `Eof`.
+        &self.tokens[idx.min(self.tokens.len() - 1)]
     }
 
     fn is_at_end(&self) -> bool {
@@ -613,10 +627,22 @@ impl Parser {
     }
 
     fn advance(&mut self) -> &Token {
+        if let Some(half) = self.pending_gt.take() {
+            return self.consumed_gt.insert(half);
+        }
+        self.consumed_gt = None;
         if !self.is_at_end() {
             self.pos += 1;
         }
         &self.tokens[self.pos - 1]
+    }
+
+    /// The token last consumed: a half where a `>>` was split, since each half
+    /// closes a list of its own.
+    fn previous(&self) -> &Token {
+        self.consumed_gt
+            .as_ref()
+            .unwrap_or(&self.tokens[self.pos - 1])
     }
 
     fn check(&self, kind: &TokenKind) -> bool {
@@ -655,13 +681,7 @@ impl Parser {
     /// Handles the case where >> is lexed as `GtGt` instead of two separate Gt tokens.
     /// This is necessary for nested generics like List<Tuple<String, String>>.
     fn expect_gt(&mut self) -> ParseResult<()> {
-        // First check if we have a pending > from a previous GtGt split
-        if self.pending_gt {
-            self.pending_gt = false;
-            return Ok(());
-        }
-
-        // Check for a regular Gt token
+        // A `>` of its own, or the second half of a split `>>`.
         if self.check(&TokenKind::Gt) {
             self.advance();
             return Ok(());
@@ -669,8 +689,24 @@ impl Parser {
 
         // Check for GtGt (>>) - split it into two Gt tokens
         if self.check(&TokenKind::GtGt) {
-            self.advance();
-            self.pending_gt = true; // Remember we have one more > to consume
+            let span = self.advance().span;
+            self.consumed_gt = Some(Token {
+                kind: TokenKind::Gt,
+                span: Span {
+                    end: span.start + 1,
+                    end_line: span.line,
+                    end_column: span.column + 1,
+                    ..span
+                },
+            });
+            self.pending_gt = Some(Token {
+                kind: TokenKind::Gt,
+                span: Span {
+                    start: span.start + 1,
+                    column: span.column + 1,
+                    ..span
+                },
+            });
             return Ok(());
         }
 
@@ -796,7 +832,7 @@ impl Parser {
         if self.pos <= before {
             return start;
         }
-        start.merge(&self.tokens[self.pos - 1].span)
+        start.merge(&self.previous().span)
     }
 
     /// Parse an expression at statement granularity, recovering on failure by
@@ -868,11 +904,9 @@ impl Parser {
         self.skipped_span(before)
     }
 
-    /// Consume the `,` separating two entries of an angle-bracket list. A `>`
-    /// left pending by splitting `>>` has already closed the list, so the `,`
-    /// after it belongs to the enclosing one.
+    /// Consume the `,` separating two entries of an angle-bracket list.
     fn eat_angle_list_comma(&mut self) -> bool {
-        if self.pending_gt || !self.check(&TokenKind::Comma) {
+        if !self.check(&TokenKind::Comma) {
             return false;
         }
         self.advance();
@@ -1355,7 +1389,8 @@ impl Parser {
 
     /// Parse a comma-separated list of attribute arguments up to the closing
     /// delimiter. Shared between inner attributes (`#![...]`) and outer
-    /// attributes (`#[...]`). Does not consume the closing `)`.
+    /// attributes (`#[...]`). Does not consume the closing `)`. An array holds
+    /// parameter names where `names`, and text everywhere else.
     fn parse_attr_arg_list(&mut self) -> ParseResult<Vec<AttrArg>> {
         let mut args: Vec<AttrArg> = Vec::new();
         loop {
@@ -1375,18 +1410,32 @@ impl Parser {
                             }
                             TokenKind::LBracket => {
                                 self.advance();
+                                // The first item decides: an array holds strings
+                                // or identifiers, and the attribute's reader
+                                // rejects the kind it does not take.
+                                let names = self.peek_kind().as_ident_name().is_some();
                                 let mut items: Vec<String> = Vec::new();
                                 if !self.check(&TokenKind::RBracket) {
                                     loop {
-                                        if let TokenKind::StringLit(item) = self.peek_kind().clone()
-                                        {
-                                            items.push(self.take_attr_string(&item)?);
-                                        } else {
-                                            let span = self.peek().span;
-                                            return Err(self.error_at_span(
-                                                span,
-                                                "expected string literal in attribute array",
-                                            ));
+                                        let kind = self.peek_kind().clone();
+                                        match (&kind, kind.as_ident_name()) {
+                                            (TokenKind::StringLit(item), _) if !names => {
+                                                items.push(self.take_attr_string(item)?);
+                                            }
+                                            (_, Some(named)) if names => {
+                                                items.push(named.to_string());
+                                                self.mark_keyword_name();
+                                                self.advance();
+                                            }
+                                            _ => {
+                                                let span = self.peek().span;
+                                                let expected = if names {
+                                                    "expected an identifier in attribute array"
+                                                } else {
+                                                    "expected string literal in attribute array"
+                                                };
+                                                return Err(self.error_at_span(span, expected));
+                                            }
                                         }
                                         if self.check(&TokenKind::Comma) {
                                             self.advance();
@@ -1399,7 +1448,11 @@ impl Parser {
                                     }
                                 }
                                 self.expect(&TokenKind::RBracket)?;
-                                AttrArg::KeyArray(value, items)
+                                if names {
+                                    AttrArg::KeyIdentArray(value, items)
+                                } else {
+                                    AttrArg::KeyArray(value, items)
+                                }
                             }
                             TokenKind::NumberLit(number) => {
                                 let number = self.unsuffixed_number(number)?;
@@ -1418,7 +1471,7 @@ impl Parser {
                                 AttrArg::KeyNumber(value, format!("-{number}"))
                             }
                             _ => {
-                                // `part_of = arr` names something in the source,
+                                // `negative = len` names something in the source,
                                 // so it stays unquoted and keeps its own shape.
                                 let Some(named) =
                                     self.peek_kind().as_ident_name().map(str::to_string)
@@ -1859,7 +1912,7 @@ impl Parser {
     /// The raw text of the string literal at the cursor, escapes unresolved.
     /// [`Self::take_attr_string`] is the one that resolves them.
     fn consume_string(&mut self) -> ParseResult<String> {
-        match &self.peek().kind {
+        match self.peek_kind() {
             TokenKind::StringLit(raw) => {
                 let raw = raw.clone();
                 self.advance();
@@ -2111,7 +2164,7 @@ impl Parser {
             self_kind: SelfKind::None,
             is_mut,
             default,
-            span: start_span.merge(&self.tokens[self.pos - 1].span),
+            span: start_span.merge(&self.previous().span),
         })
     }
 
@@ -2863,7 +2916,7 @@ impl Parser {
             // Try to parse a let-pattern followed by 'of'
             let pattern = self.parse_pattern();
             if let Ok(binding) = pattern
-                && matches!(self.peek().kind, TokenKind::Of)
+                && matches!(self.peek_kind(), TokenKind::Of)
             {
                 // This is a for-of loop
                 self.advance(); // consume 'of'
@@ -3350,7 +3403,7 @@ impl Parser {
         }
 
         // Check for compound assignment operators
-        let compound_op = match self.peek().kind {
+        let compound_op = match self.peek_kind() {
             TokenKind::PlusEq => Some(CompoundAssignOp::Add),
             TokenKind::MinusEq => Some(CompoundAssignOp::Sub),
             TokenKind::StarEq => Some(CompoundAssignOp::Mul),
@@ -3830,7 +3883,7 @@ impl Parser {
                 TokenKind::ColonColon => {
                     // Check if this is turbofish (:: followed by <)
                     // Peek at the token after ::
-                    let checkpoint = self.pos;
+                    let checkpoint = self.checkpoint();
                     self.advance(); // consume ::
                     if self.check(&TokenKind::Lt) {
                         let callee_span = expr.span();
@@ -3893,7 +3946,7 @@ impl Parser {
                         }
                     } else {
                         // Not turbofish, backtrack
-                        self.pos = checkpoint;
+                        self.restore(checkpoint);
                         break;
                     }
                 }
@@ -3905,7 +3958,7 @@ impl Parser {
                     // Support identifier and number literal for field access
                     // Integer literals are used for tuple field access: t.0, t.1, etc.
                     // Number literals like "0.0" after a dot are split into two field accesses.
-                    let (field, second_field) = if let TokenKind::NumberLit(s) = &self.peek().kind {
+                    let (field, second_field) = if let TokenKind::NumberLit(s) = self.peek_kind() {
                         // Check if it's a simple integer or contains a dot
                         if s.contains('.') {
                             // Handle cases like `t.0.0` where the lexer tokenizes "0.0" as a number
@@ -3924,7 +3977,7 @@ impl Parser {
                                 return Err(ParseError {
                                     message: format!(
                                         "expected field name, found {}",
-                                        self.peek().kind
+                                        self.peek_kind()
                                     ),
                                     span: field_span,
                                 });
@@ -4965,7 +5018,7 @@ impl Parser {
         // Detect trailing comma: pos moved past at least one comma, and we're at RParen
         let has_trailing_comma = !args.is_empty()
             && self.check(&TokenKind::RParen)
-            && self.tokens[self.pos - 1].kind == TokenKind::Comma;
+            && self.previous().kind == TokenKind::Comma;
         let _ = pos_before;
         Ok((args, has_trailing_comma))
     }
@@ -5170,7 +5223,7 @@ impl Parser {
                 let args = self.parse_type_args()?;
                 // Span through the closing `>`; otherwise an inner type-arg node
                 // to the right wins trailing-comment ownership (drops the comment).
-                let end_span = self.tokens[self.pos - 1].span;
+                let end_span = self.previous().span;
 
                 return Ok(Type::NamespacedGeneric(Box::new(NamespacedGenericType {
                     id: self.alloc_ast_id(),
@@ -5182,7 +5235,7 @@ impl Parser {
                 })));
             } else {
                 // Namespaced type without generics: namespace::type
-                let end_span = self.tokens[self.pos - 1].span;
+                let end_span = self.previous().span;
                 return Ok(Type::NamespacedGeneric(Box::new(NamespacedGenericType {
                     id: self.alloc_ast_id(),
                     namespace: name,
@@ -5198,7 +5251,7 @@ impl Parser {
             self.advance();
             let args = self.parse_type_args()?;
             // Span through the closing `>` (see the namespaced case above).
-            let end_span = self.tokens[self.pos - 1].span;
+            let end_span = self.previous().span;
 
             Ok(Type::Generic(GenericType {
                 id: self.alloc_ast_id(),
@@ -5528,7 +5581,7 @@ impl Parser {
             // Through the last token consumed, as a parameter does: a parent
             // shorter than its descendants breaks the AstId-keyed trivia
             // attribution that picks the outermost node ending on a line.
-            let span = start_span.merge(&self.tokens[self.pos - 1].span);
+            let span = start_span.merge(&self.previous().span);
 
             fields.push(StructField {
                 id,
@@ -5912,6 +5965,7 @@ impl Parser {
                 let type_span = self.peek().span;
                 self.advance();
                 let assoc_name = self.consume_ident()?;
+                let type_params = self.parse_generic_params()?;
                 self.expect(&TokenKind::Eq)?;
                 let assoc_ty = self.parse_type()?;
                 let end = self.expect(&TokenKind::Semicolon)?.span;
@@ -5919,6 +5973,7 @@ impl Parser {
                     id: assoc_id,
                     attrs,
                     name: assoc_name,
+                    type_params,
                     ty: assoc_ty,
                     span: type_span.merge(&end),
                 });
@@ -6056,7 +6111,7 @@ impl Parser {
         }
 
         self.expect_gt()?;
-        let end_span = self.tokens[self.pos - 1].span; // span of >
+        let end_span = self.previous().span; // span of >
 
         Ok(Type::Generic(GenericType {
             id: self.alloc_ast_id(),
@@ -6114,6 +6169,7 @@ impl Parser {
                 let assoc_id = self.alloc_ast_id();
                 self.advance();
                 let assoc_name = self.consume_ident()?;
+                let type_params = self.parse_generic_params()?;
                 let bounds = if self.check(&TokenKind::Colon) {
                     self.advance();
                     self.parse_trait_bounds()?
@@ -6124,6 +6180,7 @@ impl Parser {
                 associated_types.push(AssociatedTypeDecl {
                     id: assoc_id,
                     name: assoc_name,
+                    type_params,
                     bounds,
                     span: type_span.merge(&end),
                 });
@@ -6831,6 +6888,7 @@ fn serde_attr_advice(args: &[AttrArg]) -> String {
                 let items: Vec<String> = values.iter().map(|v| quoted(v)).collect();
                 format!("{key} = [{}]", items.join(", "))
             }
+            AttrArg::KeyIdentArray(key, named) => format!("{key} = [{}]", named.join(", ")),
             AttrArg::KeyIdent(key, named) => format!("{key} = {named}"),
             AttrArg::KeyNumber(key, number) => format!("{key} = {number}"),
         })
@@ -6898,6 +6956,42 @@ mod tests {
         let module = parser.parse();
         let errors = parser.take_errors();
         (module, errors)
+    }
+
+    /// The second half of a split `>>` is the current token until consumed:
+    /// every lookahead counts from it, and it spans its own character.
+    #[test]
+    fn test_a_pending_half_of_a_split_shift_is_the_current_token() {
+        let mut parser = Parser::from_lex_no_trivia(lex("a >> b c"));
+        parser.advance();
+        parser.expect_gt().unwrap();
+        assert_matches!(parser.peek_kind(), TokenKind::Gt);
+        assert_eq!(parser.peek().span.column, 4);
+        assert_matches!(&parser.peek_nth(1).kind, TokenKind::Ident(name) if name == "b");
+        assert_matches!(&parser.peek_nth(2).kind, TokenKind::Ident(name) if name == "c");
+        let consumed = parser.advance();
+        assert_matches!(consumed.kind, TokenKind::Gt);
+        assert_eq!(consumed.span.column, 4);
+        assert_matches!(&parser.peek_nth(0).kind, TokenKind::Ident(name) if name == "b");
+    }
+
+    /// Each half of a split `>>` closes its own list, so the inner generic's
+    /// span ends at the first `>`, not past the outer one's.
+    #[test]
+    fn test_an_inner_generic_ends_at_its_half_of_a_split_shift() {
+        let src = "fn f(x: List<List<i32>>) {}\n";
+        let module = parse(src).unwrap();
+        let Item::Function(func) = &module.items[0] else {
+            panic!("expected a function");
+        };
+        let Type::Generic(outer) = &func.params[0].ty else {
+            panic!("expected a generic type");
+        };
+        let Type::Generic(inner) = &outer.args[0] else {
+            panic!("expected a generic argument");
+        };
+        assert_eq!(&src[inner.span.start..inner.span.end], "List<i32>");
+        assert_eq!(&src[outer.span.start..outer.span.end], "List<List<i32>>");
     }
 
     /// A parameter's span covers the whole parameter, and the parameter list's

@@ -23,17 +23,17 @@ pub const EXPORT_NAME: &str = "export_name";
 pub const GENERATED: &str = "generated";
 pub const IMMEDIATE: &str = "immediate";
 pub const INLINE: &str = "inline";
-pub const LINEAR_MEMORY: &str = "linear_memory";
 pub const NO_PRELUDE: &str = "no_prelude";
 pub const PARAM: &str = "param";
-pub const RESULT: &str = "result";
-pub const RETAIN: &str = "retain";
 pub const SECRET: &str = "secret";
+/// See [WEP: Builtin Storage and Side-Effect Attributes](../../docs/wep-2026-10-04-builtin-storage-side-effect.md).
+pub const SIDE_EFFECT: &str = "side_effect";
 pub const STDLIB: &str = "stdlib";
+/// See [WEP: Builtin Storage and Side-Effect Attributes](../../docs/wep-2026-10-04-builtin-storage-side-effect.md).
+pub const STORAGE: &str = "storage";
 pub const SYNOPSIS: &str = "synopsis";
 pub const TIMEOUT_MS: &str = "timeout_ms";
 pub const TODO: &str = "TODO";
-pub const TRAP: &str = "trap";
 /// See [WEP: Declared Absence](../../docs/wep-2026-09-13-declared-absence.md).
 pub const UNAVAILABLE: &str = "unavailable";
 pub const WASM_MODULE: &str = "wasm_module";
@@ -427,19 +427,6 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         bodyless: None,
     },
     AttributeSchema {
-        name: LINEAR_MEMORY,
-        targets: FUNCTION_TARGET,
-        args: AttrArgs::Read("`read` or `write`"),
-        summary: "how a call to this declaration touches linear memory",
-        stdlib_only: true,
-        bodyless: Some(Bodyless {
-            on_body: "a body states what it touches",
-            on_requirement: "the impl it dispatches to has the body that says what it \
-                             touches, so stating it here binds every call site to a \
-                             promise no implementation makes",
-        }),
-    },
-    AttributeSchema {
         name: NO_PRELUDE,
         targets: MODULE_TARGET,
         args: AttrArgs::None,
@@ -456,32 +443,6 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         bodyless: None,
     },
     AttributeSchema {
-        name: RESULT,
-        targets: FUNCTION_TARGET,
-        args: AttrArgs::Read("`owned`, or `part_of = param`"),
-        summary: "what the returned storage belongs to",
-        stdlib_only: true,
-        bodyless: Some(Bodyless {
-            on_body: "a body states what it returns",
-            on_requirement: "the impl it dispatches to has the body that says what its \
-                             result is made of, so stating it here binds every call site \
-                             to a promise no implementation makes",
-        }),
-    },
-    AttributeSchema {
-        name: RETAIN,
-        targets: FUNCTION_TARGET,
-        args: AttrArgs::Read("a parameter name, with an optional `into = param`"),
-        summary: "what this declaration retains a reference to",
-        stdlib_only: true,
-        bodyless: Some(Bodyless {
-            on_body: "a body states what it retains",
-            on_requirement: "the impl it dispatches to has the body that says what it \
-                             keeps, so stating it here binds every call site to a \
-                             promise no implementation makes",
-        }),
-    },
-    AttributeSchema {
         name: SECRET,
         targets: &[AttrTarget::StructField],
         args: AttrArgs::None,
@@ -490,12 +451,46 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         bodyless: None,
     },
     AttributeSchema {
+        name: SIDE_EFFECT,
+        targets: FUNCTION_TARGET,
+        args: AttrArgs::Read(
+            "`none`, `opaque`, `black_box`, or any of `trap`, `read`, `write` and `hint`, \
+             with trap conditions `outside = [a, …]`, `at = [p, …]`, `count = p`, `unset = a` \
+             and `negative = p`",
+        ),
+        summary: "what a call to this declaration does beyond what its signature states",
+        stdlib_only: true,
+        bodyless: Some(Bodyless {
+            on_body: "a body states what it does",
+            on_requirement: "the impl it dispatches to has the body that says what it does, \
+                             so stating it here binds every call site to a promise no \
+                             implementation makes",
+        }),
+    },
+    AttributeSchema {
         name: STDLIB,
         targets: MODULE_TARGET,
         args: AttrArgs::OneString,
         summary: "the bundled stdlib path this file is",
         stdlib_only: false,
         bodyless: None,
+    },
+    AttributeSchema {
+        name: STORAGE,
+        targets: FUNCTION_TARGET,
+        args: AttrArgs::Read(
+            "one of `none`, `fresh`, `part_of_args`, `holds_args`, `copies_args`, `stores_args` \
+             and `opaque`, \
+             with an optional `len = p`",
+        ),
+        summary: "what a call's result shares with its arguments, and what the call keeps",
+        stdlib_only: true,
+        bodyless: Some(Bodyless {
+            on_body: "a body states what it shares and keeps",
+            on_requirement: "the impl it dispatches to has the body that says what it shares \
+                             and keeps, so stating it here binds every call site to a promise \
+                             no implementation makes",
+        }),
     },
     AttributeSchema {
         name: SYNOPSIS,
@@ -520,22 +515,6 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         summary: "the tests are expected to fail until the work lands",
         stdlib_only: false,
         bodyless: None,
-    },
-    AttributeSchema {
-        name: TRAP,
-        targets: FUNCTION_TARGET,
-        args: AttrArgs::Read(
-            "`never`, or `negative = p` / `outside = a` (with `at = i`, `len = n`) / `unset = a`, \
-             with an optional `result_len = p`",
-        ),
-        summary: "when a call to this declaration traps",
-        stdlib_only: true,
-        bodyless: Some(Bodyless {
-            on_body: "a body states when it traps",
-            on_requirement: "the impl it dispatches to has the body that says when it \
-                             traps, so stating it here binds every call site to a \
-                             promise no implementation makes",
-        }),
     },
     AttributeSchema {
         name: UNAVAILABLE,

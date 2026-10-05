@@ -447,9 +447,8 @@ impl<'a> PatternLowerer<'a> {
             }
         }
 
-        // Check if value is a builtin call
         let is_builtin_call = match &value.kind {
-            TirExprKind::Call { func: func_ref, .. } => func_ref.module_source.is_core_builtin(),
+            TirExprKind::Call { func: func_ref, .. } => func_ref.intrinsic().is_some(),
             _ => false,
         };
 

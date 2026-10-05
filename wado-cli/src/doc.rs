@@ -478,6 +478,19 @@ mod format_contract_tests {
         render_single(&doc, "markdown", "demo.wado", OutputFormat::Markdown)
     }
 
+    /// An associated type is listed as declared: its own parameters and its
+    /// bounds are part of what an impl owes.
+    #[test]
+    fn an_associated_type_keeps_its_parameters_and_bounds() {
+        let out = simple_all_of(
+            "//! Demo.\n\npub trait Store {\n    type Buf<E: Elem>: Len;\n    type Plain;\n}\n",
+        );
+        assert!(
+            out.contains("    type Buf<E: Elem>: Len;\n    type Plain;\n"),
+            "an associated type must be listed as declared:\n{out}"
+        );
+    }
+
     /// `--all` documents a struct at every visibility.
     #[test]
     fn an_internal_struct_heads_its_impl_block_with_its_own_name() {

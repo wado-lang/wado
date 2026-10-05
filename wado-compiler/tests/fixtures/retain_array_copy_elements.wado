@@ -1,9 +1,8 @@
 // `builtin::array_copy` hands the source's elements to the destination, so a
-// reference that reached the source reaches the caller's array too. Silence on
-// `#[retain]` reads as "keeps nothing", which is why the declaration carries
-// `#[retain(elements_of = src, into = dst)]`: without it the caller is told
-// `hand_over` retains nothing at `d`, and `x` is free to be scalarized or moved
-// while `out` still names it.
+// reference that reached the source reaches the caller's array too, which is
+// why the declaration carries `#[storage(stores_args)]`. Without it the caller
+// is told `hand_over` retains nothing at `d`, and `x` is free to be
+// scalarized or moved while `out` still names it.
 
 struct Data {
     v: i32,

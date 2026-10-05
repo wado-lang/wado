@@ -127,6 +127,10 @@ for a programmer to discharge.
 A body-less declaration is the exception: there is nothing to read, so it states
 its facts itself, as attributes.
 
+[WEP: Builtin Storage and Side-Effect
+Attributes](./wep-2026-10-04-builtin-storage-side-effect.md) replaces the
+`#[result]` and `#[retain]` below with `#[storage]` and `#[side_effect]`.
+
 ```wado
 #[result(part_of = arr)]
 pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;

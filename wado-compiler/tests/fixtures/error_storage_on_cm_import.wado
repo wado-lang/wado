@@ -1,0 +1,19 @@
+// A Component Model import states no facts: the raw call its adapter makes
+// carries them, the same for every import. The attributes are the standard
+// library's, so this file is one of its modules.
+#![stdlib("core:simd")]
+
+#[cm("wasi:demo/clock@0.1.0#tick")]
+#[storage(none)]
+#[side_effect(none)]
+fn tick(step: u32) -> u32;
+
+export fn run() {
+    let _ = tick(1);
+}
+
+__DATA__
+{
+  "compile_error": "core:simd:7:1: analysis error: #[storage] does not belong on a Component Model import",
+  "compile_error_codes": ["STORAGE_ATTR", "SIDE_EFFECT_ATTR"]
+}

@@ -1,0 +1,41 @@
+// An impl's binding may name a sibling written after it: each is resolved
+// where it is first named, whichever order the impl writes them in.
+
+trait Store with () {
+    type Buf<E>;
+    type Ints;
+    type Plain;
+    type Strings;
+
+    fn ints(&self) -> Self::Ints;
+    fn strings(&self) -> Self::Strings;
+}
+
+struct Lists {}
+
+impl Store for Lists {
+    type Ints = Self::Buf<i32>;
+    type Strings = Self::Plain;
+    type Buf<E> = List<E>;
+    type Plain = List<String>;
+
+    fn ints(&self) -> Self::Ints {
+        let v: Self::Buf<i32> = [1, 2];
+        return v;
+    }
+
+    fn strings(&self) -> Self::Strings {
+        let v: Self::Plain = ["a"];
+        return v;
+    }
+}
+
+fn counted<S: Store>(s: &S) -> [S::Ints, S::Strings] {
+    return [s.ints(), s.strings()];
+}
+
+test "a binding names a sibling written after it" {
+    let [ints, strings] = counted(&Lists {});
+    assert ints.len() == 2;
+    assert strings.len() == 1;
+}

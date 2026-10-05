@@ -206,6 +206,7 @@ impl TypeSystem {
             | ResolvedType::Enum { .. }
             | ResolvedType::Flags { .. }
             | ResolvedType::TypeParam { .. }
+            | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::InferVar(_)
@@ -610,7 +611,7 @@ impl TypeSystem {
                 let ret_str = self.type_id_to_string(return_type);
                 format!("fn({}) -> {}", param_strs.join(", "), ret_str)
             }
-            ResolvedType::TypeParam { name, .. } => name,
+            ResolvedType::TypeParam { name, .. } | ResolvedType::AssocParam { name, .. } => name,
             ResolvedType::InferVar(var) => var.to_string(),
             ResolvedType::Enum { def }
             | ResolvedType::Resource { def }
@@ -632,8 +633,18 @@ impl TypeSystem {
             ResolvedType::AssocTypeProjection {
                 param_id,
                 assoc_name,
+                args,
                 ..
-            } => format!("{}::{}", self.type_id_to_string(param_id), assoc_name),
+            } => {
+                let base = format!("{}::{}", self.type_id_to_string(param_id), assoc_name);
+                if args.is_empty() {
+                    base
+                } else {
+                    let args: Vec<String> =
+                        args.iter().map(|&t| self.type_id_to_string(t)).collect();
+                    format!("{base}<{}>", args.join(", "))
+                }
+            }
             ResolvedType::Unit => UNIT_TYPE_NAME.to_string(),
             ResolvedType::Never => NEVER_TYPE_NAME.to_string(),
             ResolvedType::Unknown => "<unknown>".to_string(),

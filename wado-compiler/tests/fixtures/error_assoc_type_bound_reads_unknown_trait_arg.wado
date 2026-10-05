@@ -1,0 +1,25 @@
+// A bound written with no argument for a parameter that has no default leaves
+// it unknown, and an associated type's bound reading it, through a sibling
+// associated type too, says nothing there: `H::A` has no `into2`.
+
+trait Into2<T> with () {
+    fn into2(&self) -> i32;
+}
+
+trait Holder<T> with () {
+    type B;
+    type A: Into2<Self::B>;
+
+    fn a(&self) -> Self::A;
+}
+
+fn go<H: Holder>(h: &H) -> i32 {
+    return h.a().into2();
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":17:12: analysis error: no method 'into2' found on type 'H::A'"
+}

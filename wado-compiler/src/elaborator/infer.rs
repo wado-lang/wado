@@ -164,6 +164,44 @@ pub(super) fn unify(
                 unify(type_table, expected_args[0], first_elem_type, bindings);
             }
         }
+        // A projection over a rigid base answers nothing yet, so two of one
+        // family meet argument by argument, as Rust relates rigid aliases.
+        (
+            ResolvedType::AssocTypeProjection {
+                param_id: expected_base,
+                assoc_name: expected_name,
+                args: expected_args,
+                owning_trait: expected_trait,
+                trait_args: expected_trait_args,
+                ..
+            },
+            ResolvedType::AssocTypeProjection {
+                param_id: actual_base,
+                assoc_name: actual_name,
+                args: actual_args,
+                owning_trait: actual_trait,
+                trait_args: actual_trait_args,
+                ..
+            },
+        ) if {
+            let table = type_table.borrow();
+            table.type_key(*expected_base) == table.type_key(*actual_base)
+        } && expected_name == actual_name
+            && expected_trait == actual_trait
+            && expected_args.len() == actual_args.len() =>
+        {
+            let trait_args = expected_trait_args
+                .iter()
+                .flatten()
+                .zip(actual_trait_args.iter().flatten());
+            for (&exp_arg, &act_arg) in expected_args
+                .iter()
+                .zip(actual_args.iter())
+                .chain(trait_args)
+            {
+                unify(type_table, exp_arg, act_arg, bindings);
+            }
+        }
         // Raw builtin array (`Array<T>`).
         (ResolvedType::BuiltinArray(expected_elem), ResolvedType::BuiltinArray(actual_elem)) => {
             unify(type_table, *expected_elem, *actual_elem, bindings);

@@ -1,0 +1,40 @@
+// An operator on a family's member is answered by the type's own bound, read
+// at the projection's arguments: `S::Buf<E>: Add<E, Output = E>` gives
+// `S::Buf<String>` a `+` taking and yielding a `String`.
+
+struct Line<T> {
+    at: T,
+}
+
+impl<T> Add<T> for Line<T> {
+    type Output = T;
+
+    fn add(&self, rhs: &T) -> T {
+        return self.at;
+    }
+}
+
+trait Store with () {
+    type Buf<E>: Add<E, Output = E>;
+
+    fn put<E>(&self, value: E) -> Self::Buf<E>;
+}
+
+struct Lines {}
+
+impl Store for Lines {
+    type Buf<E> = Line<E>;
+
+    fn put<E>(&self, value: E) -> Line<E> {
+        return Line { at: value };
+    }
+}
+
+fn snap<S: Store>(s: &S) -> String {
+    let line = s.put("on");
+    return line + "off";
+}
+
+test "an operator through the family's bound takes and yields the argument" {
+    assert snap(&Lines {}) == "on";
+}

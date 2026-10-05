@@ -352,6 +352,8 @@ fn example() {
 Initializers run in dependency order, so one may read another global whatever
 the declaration order. This holds across modules, and whether the initializer
 names the global or reaches it through a call. A cycle among them is an error.
+The order between two initializers that do not depend on each other is
+[unspecified](./spec-overview.md#behavior-classes).
 
 ## Operators
 

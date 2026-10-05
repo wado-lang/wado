@@ -1,0 +1,39 @@
+// A trait's arguments are its type parameters' alone, so one declaring an
+// effect parameter (`with _` mints one) still reaches its associated type's
+// bound at them: `Store<String>`'s `Buf` owes `Mix<String>`, not `Mix<Self>`.
+
+trait Mix<R = Self> with () {
+    fn mix(&self, r: R) -> i32;
+}
+
+trait Store<X> with _ {
+    type Buf: Mix<X>;
+
+    fn buf(&self) -> Self::Buf;
+}
+
+struct S {}
+
+struct B {}
+
+impl Mix<String> for B {
+    fn mix(&self, r: String) -> i32 {
+        return r.len();
+    }
+}
+
+impl Store<String> for S {
+    type Buf = B;
+
+    fn buf(&self) -> B {
+        return B {};
+    }
+}
+
+fn go<X, S: Store<X>>(s: &S, x: X) -> i32 with _ {
+    return s.buf().mix(x);
+}
+
+test "an effect parameter is no trait argument" {
+    assert go(&S {}, "abcd") == 4;
+}

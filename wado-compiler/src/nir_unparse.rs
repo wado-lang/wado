@@ -281,9 +281,10 @@ impl<'a> NirUnparser<'a> {
             self.output.push_str(attr);
             self.output.push('\n');
         }
-        for retained in &f.retains {
+        if !f.retains.is_empty() {
             self.write_indent();
-            self.output.push_str(&format!("#[retain({retained})]\n"));
+            self.output
+                .push_str(&format!("// retains: {}\n", f.retains.join(", ")));
         }
         self.write_indent();
         self.emit_kw_if(f.visibility.is_public(), "pub ");
