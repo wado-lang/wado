@@ -1,0 +1,22 @@
+// An anonymous struct whose field type no inference settled reports once.
+//
+// `TreeMap::new()` fixes neither `K` nor `V`, so the literal's field named the
+// callee's binders. The check that a type is settled was a walk of its own
+// that skipped an anonymous struct's fields, so `T: Eq` was asked of a shape
+// the lowering could not state, and the question panicked.
+
+use { TreeMap } from "core:collections";
+
+fn same<T: Eq>(a: T) -> bool {
+    return true;
+}
+
+test {
+    assert same({ m: TreeMap::new() });
+}
+
+__DATA__
+{
+    "compile_error": "cannot infer type parameter `K`, `V` of `TreeMap::new`",
+    "compile_errors_not_contains": ["does not implement"]
+}

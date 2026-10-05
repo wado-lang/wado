@@ -84,8 +84,8 @@ pub fn owed(
 }
 
 /// Whether a bound in force on `subject` answers `trait_` at `wanted`,
-/// comparing what the walk to the trait writes there against `wanted`,
-/// defaulted where it writes none.
+/// comparing what the walk to the trait writes for each parameter against
+/// `wanted`, defaulted where it writes none.
 fn bound_answers(
     program: &Program,
     subject: &SolverType,
@@ -93,12 +93,17 @@ fn bound_answers(
     trait_: TraitDeclId,
     wanted: &[SolverType],
 ) -> bool {
+    let wanted = program.per_param(trait_, wanted);
     program
         .args_reaching(bound, trait_, subject)
         .iter()
         .any(|args| {
+            let args = program.per_param(trait_, args);
             wanted.iter().enumerate().all(|(i, want)| {
-                program.arg_at(trait_, args.get(i), i, subject).as_ref() == Some(want)
+                want.as_ref().is_none_or(|want| {
+                    let given = args.get(i).and_then(Option::as_ref);
+                    program.arg_at(trait_, given, i, subject).as_ref() == Some(want)
+                })
             })
         })
 }
@@ -503,8 +508,9 @@ pub(super) fn newtype_base(program: &Program, ty: &SolverType) -> Option<SolverT
     )
 }
 
-/// Whether the impl answers a bound writing `args`: at every position each side
-/// says its written argument, or the trait's default at `ty` where it wrote none.
+/// Whether the impl answers a bound writing `args`: at every parameter each
+/// side says its written argument, or the trait's default at `ty` where it
+/// wrote none.
 pub(super) fn answers_args(
     program: &Program,
     def: &ImplDef,
@@ -513,6 +519,11 @@ pub(super) fn answers_args(
     written: &[SolverType],
     args: &[SolverType],
 ) -> bool {
+    let per_param = |args: &[SolverType]| match def.trait_ {
+        Some(trait_) => program.per_param(trait_, args),
+        None => args.iter().cloned().map(Some).collect(),
+    };
+    let (written, args) = (per_param(written), per_param(args));
     // A `Self` default lowers to the impl's target, which the match bound to
     // `ty` — and to the newtype a peeled question was asked at, which the
     // inherited impl also spells `Self`.
@@ -526,10 +537,13 @@ pub(super) fn answers_args(
         },
     };
     (0..written.len().max(args.len())).all(|i| {
-        let asks = said(i, args.get(i));
+        let asks = said(i, args.get(i).and_then(Option::as_ref));
         // A position the bound leaves open and the trait gives no default is
         // one no bound can name, so every impl answers there.
-        asks.is_empty() || asks.iter().any(|ask| said(i, written.get(i)).contains(ask))
+        asks.is_empty()
+            || asks
+                .iter()
+                .any(|ask| said(i, written.get(i).and_then(Option::as_ref)).contains(ask))
     })
 }
 
@@ -1205,7 +1219,6 @@ mod tests {
             DURATION,
             TypeDef {
                 newtype_base: Some(decl(I32)),
-                ..TypeDef::default()
             },
         );
         assert_eq!(
@@ -1292,7 +1305,6 @@ mod tests {
             MY_LIST,
             TypeDef {
                 newtype_base: Some(list_of(SolverType::Param(0))),
-                ..TypeDef::default()
             },
         );
         assert_eq!(
@@ -1332,7 +1344,6 @@ mod tests {
             DURATION,
             TypeDef {
                 newtype_base: Some(decl(I32)),
-                ..TypeDef::default()
             },
         );
         // Answered through the marker, so it owes the body; through the base

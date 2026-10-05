@@ -306,7 +306,7 @@ pub struct ModuleScope {
 
 /// A type declaration, reduced to what `holds` reads of it at a query. Its
 /// members arrive at `derive` as a [`Declaration`].
-#[derive(Clone, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct TypeDef {
     /// For a newtype, the base it inherits impls from, spelled with the
     /// newtype's own parameters by position.
@@ -477,6 +477,19 @@ impl Program {
             .at(subject)
     }
 
+    /// What `args`, written for `trait_`, say for each of its parameters, as
+    /// [`args_per_param`] reads them.
+    pub(super) fn per_param(
+        &self,
+        trait_: TraitDeclId,
+        args: &[SolverType],
+    ) -> Vec<Option<SolverType>> {
+        match self.traits.get(&trait_) {
+            Some(def) => args_per_param(args, def.arg_defaults.len(), def.pack, SolverType::Tuple),
+            None => args.iter().cloned().map(Some).collect(),
+        }
+    }
+
     /// Whether a bound on `subject` naming `bound` answers for `wanted`: itself
     /// or a supertrait, transitively.
     pub(super) fn bound_reaches(
@@ -514,12 +527,7 @@ impl Program {
                 reaching.push(next.args.clone());
             }
             if let Some(def) = self.traits.get(&next.trait_) {
-                let args = args_per_param(
-                    &next.args,
-                    def.arg_defaults.len(),
-                    def.pack,
-                    SolverType::Tuple,
-                );
+                let args = self.per_param(next.trait_, &next.args);
                 stack.extend(
                     def.supertraits
                         .iter()

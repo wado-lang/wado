@@ -2088,15 +2088,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(&type_arg) = type_args.get(i) else {
                 continue;
             };
-            let asked = {
-                let table = self.tysys.type_table.borrow();
-                match rigid {
-                    RigidArgs::Asked => {
-                        let type_params = &self.annotate_ctx.trait_ctx.type_params;
-                        table.is_rigid_under(type_arg, &|name| type_params.contains_key(name))
-                    }
-                    RigidArgs::Skipped => !table.contains_type_param(type_arg),
+            let asked = match rigid {
+                RigidArgs::Asked => {
+                    self.tysys
+                        .solver()
+                        .is_rigid(&self.tysys, &self.annotate_ctx, type_arg)
                 }
+                RigidArgs::Skipped => !self.tysys.type_table.borrow().contains_type_param(type_arg),
             };
             if !asked {
                 // A hole carries its own slot's bounds to finalize; this slot's

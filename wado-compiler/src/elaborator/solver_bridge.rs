@@ -18,7 +18,9 @@ use crate::trait_solver::{
     holds_with_args, owed, pair_comparisons, rank,
 };
 
-use super::trait_env::{BlanketReceiver, ImplHeader, ImplTargetKey, written_arg_nodes};
+use super::trait_env::{
+    BlanketReceiver, ImplHeader, ImplTargetKey, TraitDeclHeader, written_arg_nodes,
+};
 use super::trait_query::{OnBoundTrait, primitive_has_operator};
 use super::tysys::TypeSystem;
 use crate::elaborator::scope;
@@ -53,6 +55,47 @@ enum DeclKey {
     UndeclaredEffect,
 }
 
+/// Why the lowering states nothing about a type, most telling first: a type
+/// holding several reasons answers to the first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Unsaid {
+    /// It names a type that failed to resolve or to infer, which was reported
+    /// where it failed.
+    Failed,
+    /// It names an inference variable, or a binder the scope does not declare.
+    Open,
+    /// A shape the solver has no way to say.
+    Unsayable,
+}
+
+/// Every part lowered, or the most telling reason one was not.
+fn said(
+    parts: impl IntoIterator<Item = Result<SolverType, Unsaid>>,
+) -> Result<Vec<SolverType>, Unsaid> {
+    let mut out = Vec::new();
+    let mut unsaid: Option<Unsaid> = None;
+    for part in parts {
+        match part {
+            Ok(ty) => out.push(ty),
+            Err(Unsaid::Failed) => return Err(Unsaid::Failed),
+            Err(reason) => unsaid = Some(unsaid.map_or(reason, |u| u.min(reason))),
+        }
+    }
+    unsaid.map_or(Ok(out), Err)
+}
+
+/// What the names in a written type mean where it is written.
+struct Written<'a> {
+    resolutions: &'a Resolutions,
+    /// The binders in scope.
+    param: &'a dyn Fn(&str) -> Option<ParamKind>,
+    /// The trait among a binder's bounds declaring an associated type, which
+    /// is what `T::Item` projects through.
+    declaring: &'a dyn Fn(&str, &str) -> Option<DefId>,
+    /// What `Self` means, where anything does.
+    self_type: Option<&'a SolverType>,
+}
+
 /// How a declaration's parameter is spelled where a type mentions it.
 #[derive(Clone, Copy)]
 enum ParamKind {
@@ -82,7 +125,6 @@ impl ParamKind {
 
 /// The interning both directions share, so an impl lowered from its header
 /// and a receiver lowered from the type table name one declaration by one id.
-#[derive(Default)]
 pub(super) struct Lowering {
     decls: IndexMap<DeclKey, u32>,
     /// Each declared effect's head, by the spelling
@@ -124,7 +166,17 @@ impl Lowering {
     /// an impl header and a resolved type alike name them, and coherence
     /// lowers headers alone.
     pub(super) fn new() -> Self {
-        let mut lowering = Self::default();
+        let mut lowering = Self {
+            decls: IndexMap::default(),
+            effects: IndexMap::default(),
+            modules: IndexMap::default(),
+            tuple: None,
+            assocs: IndexMap::default(),
+            methods: IndexMap::default(),
+            impl_defs: IndexMap::default(),
+            derivation_source: IndexMap::default(),
+            unstated: IndexSet::default(),
+        };
         for key in [
             DeclKey::FnShape { is_mut: false },
             DeclKey::FnShape { is_mut: true },
@@ -133,6 +185,67 @@ impl Lowering {
             intern(&mut lowering.decls, key);
         }
         lowering
+    }
+
+    /// A lowering with every head a written type can name interned: each
+    /// type, trait and effect declaration, and each builtin shape.
+    pub(super) fn over(resolutions: &Resolutions) -> Self {
+        let mut lowering = Self::new();
+        let defs = resolutions.defs();
+        for def in defs.iter() {
+            match defs.kind(def) {
+                DefKind::Struct
+                | DefKind::Enum
+                | DefKind::Flags
+                | DefKind::Variant
+                | DefKind::Newtype
+                | DefKind::BuiltinType
+                | DefKind::Resource => {
+                    lowering.head_of(defs, def);
+                }
+                DefKind::Trait => {
+                    lowering.trait_decl(def);
+                }
+                // An interface is a trait to a bound, and an effect to a
+                // function type's `with` clause.
+                DefKind::Effect => {
+                    let head = lowering.type_decl(def);
+                    if let Some(effect) = resolutions.effect_decl(def) {
+                        lowering.effects.insert(mangle_effect_ref(&effect), head);
+                    }
+                }
+                DefKind::Function
+                | DefKind::World
+                | DefKind::Global
+                | DefKind::Variable
+                | DefKind::Field
+                | DefKind::EnumCase
+                | DefKind::VariantCase
+                | DefKind::FlagsMember
+                | DefKind::Impl
+                | DefKind::Method => {}
+            }
+        }
+        // `type_id` spells a resolved type under these heads whether or not a
+        // written type names one.
+        for name in [TypeTable::ARRAY_TYPE_NAME, UNIT_TYPE_NAME, NEVER_TYPE_NAME]
+            .into_iter()
+            .chain(PrimitiveType::all_primitive_names())
+        {
+            lowering.builtin(name);
+        }
+        lowering
+    }
+
+    /// Every trait's associated types, which a projection reads by the
+    /// declaring trait.
+    pub(super) fn intern_assocs(&mut self, trait_headers: &IndexMap<DefId, TraitDeclHeader>) {
+        for (&trait_, header) in trait_headers {
+            let id = self.trait_decl(trait_);
+            for assoc in &header.assoc_types {
+                self.assoc(id, &assoc.name);
+            }
+        }
     }
 
     fn type_decl(&mut self, def: DefId) -> TypeDeclId {
@@ -233,47 +346,59 @@ impl Lowering {
     }
 
     /// A written trait argument as the solver spells it, `param` placing the
-    /// binders of the space it is written in; `None` for a name the lowering
-    /// states nothing about.
+    /// binders of the space it is written in.
     fn named_arg(
         &self,
         name: &FqTypeName,
         param: &dyn Fn(&str) -> Option<ParamKind>,
-    ) -> Option<SolverType> {
-        let args = name
-            .args()
-            .iter()
-            .map(|arg| self.named_arg(arg, param))
-            .collect::<Option<Vec<_>>>()?;
+    ) -> Result<SolverType, Unsaid> {
+        let args = said(name.args().iter().map(|arg| self.named_arg(arg, param)))?;
         let pointee = match name.head() {
-            TypeHead::Binder { name, .. } => param(name)?.spelled(),
+            TypeHead::Binder { name, .. } => param(name).ok_or(Unsaid::Open)?.spelled(),
             TypeHead::Tuple => SolverType::Tuple(args),
-            TypeHead::Builtin(builtin) => {
-                SolverType::Decl(self.known_type(&DeclKey::Builtin(builtin.clone()))?, args)
-            }
+            TypeHead::Builtin(builtin) => SolverType::Decl(
+                self.known_type(&DeclKey::Builtin(builtin.clone()))
+                    .ok_or(Unsaid::Unsayable)?,
+                args,
+            ),
             TypeHead::Function {
                 is_mut,
                 signature,
                 effects,
             } => self.fn_type(
                 *is_mut,
-                signature
-                    .iter()
-                    .map(|ty| self.named_arg(ty, param))
-                    .collect::<Option<Vec<_>>>()?,
+                said(signature.iter().map(|ty| self.named_arg(ty, param)))?,
                 effects.iter().map(|e| self.effect_spelled(e)),
             ),
-            head => SolverType::Decl(self.known_type(&DeclKey::Def(head.def()?))?, args),
+            TypeHead::Projection {
+                base,
+                assoc,
+                owning_trait,
+            } => {
+                let trait_ = self
+                    .known_trait(owning_trait.def())
+                    .ok_or(Unsaid::Unsayable)?;
+                SolverType::Projection {
+                    base: Box::new(self.named_arg(base, param)?),
+                    trait_,
+                    assoc: self.known_assoc(trait_, assoc).ok_or(Unsaid::Unsayable)?,
+                }
+            }
+            head => SolverType::Decl(
+                head.def()
+                    .and_then(|def| self.known_type(&DeclKey::Def(def)))
+                    .ok_or(Unsaid::Unsayable)?,
+                args,
+            ),
         };
-        Some(
-            name.references()
-                .iter()
-                .rev()
-                .fold(pointee, |inner, kind| SolverType::Ref {
-                    is_mut: *kind == RefKind::Mut,
-                    inner: Box::new(inner),
-                }),
-        )
+        Ok(name
+            .references()
+            .iter()
+            .rev()
+            .fold(pointee, |inner, kind| SolverType::Ref {
+                is_mut: *kind == RefKind::Mut,
+                inner: Box::new(inner),
+            }))
     }
 
     /// The declaration a trait id was given for. Every trait id is minted from
@@ -306,88 +431,113 @@ impl Lowering {
             .expect("every module is interned before the program is read")
     }
 
-    /// One AST type as the solver reads it, or `None` for a shape it has no way
-    /// to say. `param` names the surrounding item's own parameters and
-    /// `self_type` what `Self` means here.
-    fn ast_type(
-        &mut self,
-        ty: &Type,
-        param: &dyn Fn(&str) -> Option<ParamKind>,
-        resolutions: &Resolutions,
-        self_type: Option<&SolverType>,
-    ) -> Option<SolverType> {
+    /// The head a written type reaching `def` lowers under, interned up front.
+    fn known_head(&self, defs: &DefTable, def: DefId) -> Result<TypeDeclId, Unsaid> {
+        let key = match ImplTargetKey::of_decl(defs, def) {
+            ImplTargetKey::Builtin(name) => DeclKey::Builtin(name),
+            ImplTargetKey::Decl(def) => DeclKey::Def(def),
+            key => unreachable!("a declaration keys as itself or a builtin, not {key:?}"),
+        };
+        self.known_type(&key).ok_or(Unsaid::Unsayable)
+    }
+
+    /// One AST type as the solver reads it, in the space `written` describes.
+    fn ast_type(&self, ty: &Type, written: &Written) -> Result<SolverType, Unsaid> {
+        let resolutions = written.resolutions;
+        let all = |types: &[Type]| said(types.iter().map(|ty| self.ast_type(ty, written)));
+        let declared = |id| match resolutions.get(id) {
+            Resolution::Def(def) => self.known_head(resolutions.defs(), def),
+            // A name reaching nothing was reported where it is written.
+            Resolution::Unresolved => Err(Unsaid::Failed),
+            Resolution::Binder(_) | Resolution::Projection(_) => Err(Unsaid::Unsayable),
+        };
         match ty {
-            Type::Named(named) if named.name == "Self" => self_type.cloned(),
-            Type::Named(named) => match param(&named.name) {
-                Some(kind) => Some(kind.spelled()),
-                None => resolutions
-                    .declared(named.id)
-                    .map(|def| SolverType::Decl(self.head_of(resolutions.defs(), def), Vec::new())),
+            Type::Named(named) if named.name == "Self" => {
+                written.self_type.cloned().ok_or(Unsaid::Unsayable)
+            }
+            Type::Named(named) => match (written.param)(&named.name) {
+                Some(kind) => Ok(kind.spelled()),
+                None => Ok(SolverType::Decl(declared(named.id)?, Vec::new())),
             },
             Type::Generic(generic) => {
-                let head = self.head_of(resolutions.defs(), resolutions.declared(generic.id)?);
-                let args = generic
-                    .args
-                    .iter()
-                    .map(|arg| self.ast_type(arg, param, resolutions, self_type))
-                    .collect::<Option<Vec<_>>>()?;
-                Some(SolverType::Decl(head, args))
+                let args = all(&generic.args)?;
+                Ok(SolverType::Decl(declared(generic.id)?, args))
             }
-            Type::Tuple(elems) => elems
-                .iter()
-                .map(|elem| self.ast_type(elem, param, resolutions, self_type))
-                .collect::<Option<Vec<_>>>()
-                .map(SolverType::Tuple),
-            Type::TypePackSpread(name, _) => match param(name)? {
-                ParamKind::Pack(index) | ParamKind::Type(index) => Some(SolverType::Pack(index)),
+            Type::Tuple(elems) => all(elems).map(SolverType::Tuple),
+            Type::TypePackSpread(name, _) => match (written.param)(name).ok_or(Unsaid::Open)? {
+                ParamKind::Pack(index) | ParamKind::Type(index) => Ok(SolverType::Pack(index)),
             },
-            Type::Reference(inner) | Type::MutReference(inner) => Some(SolverType::Ref {
+            Type::Reference(inner) | Type::MutReference(inner) => Ok(SolverType::Ref {
                 is_mut: matches!(ty, Type::MutReference(_)),
-                inner: Box::new(self.ast_type(inner, param, resolutions, self_type)?),
+                inner: Box::new(self.ast_type(inner, written)?),
             }),
+            // `T::Item` reads the trait among `T`'s bounds that declares
+            // `Item`, as the elaborator resolves it.
+            Type::NamespacedGeneric(projection)
+                if matches!(resolutions.get(projection.id), Resolution::Projection(_)) =>
+            {
+                let base = if projection.namespace == "Self" {
+                    written.self_type.cloned().ok_or(Unsaid::Unsayable)?
+                } else {
+                    (written.param)(&projection.namespace)
+                        .ok_or(Unsaid::Open)?
+                        .spelled()
+                };
+                let trait_ = (written.declaring)(&projection.namespace, &projection.name)
+                    .and_then(|def| self.known_trait(def))
+                    .ok_or(Unsaid::Unsayable)?;
+                Ok(SolverType::Projection {
+                    base: Box::new(base),
+                    trait_,
+                    assoc: self
+                        .known_assoc(trait_, &projection.name)
+                        .ok_or(Unsaid::Unsayable)?,
+                })
+            }
             Type::NamespacedGeneric(generic) => {
-                let head = self.head_of(resolutions.defs(), resolutions.declared(generic.id)?);
-                let args = generic
-                    .args
-                    .iter()
-                    .map(|arg| self.ast_type(arg, param, resolutions, self_type))
-                    .collect::<Option<Vec<_>>>()?;
-                Some(SolverType::Decl(head, args))
+                let args = all(&generic.args)?;
+                Ok(SolverType::Decl(declared(generic.id)?, args))
             }
             Type::Function(f) => {
-                let signature = f
-                    .params
-                    .iter()
-                    .chain(std::iter::once(&f.return_type))
-                    .map(|ty| self.ast_type(ty, param, resolutions, self_type))
-                    .collect::<Option<Vec<_>>>()?;
+                let signature = said(
+                    f.params
+                        .iter()
+                        .chain(std::iter::once(&f.return_type))
+                        .map(|ty| self.ast_type(ty, written)),
+                )?;
                 let effects: Vec<TypeDeclId> = f
                     .effects
                     .iter()
                     .map(|effect| match resolutions.get(effect.id) {
-                        Resolution::Def(def) if resolutions.defs().kind(def).is_effect() => {
-                            self.type_decl(def)
-                        }
+                        Resolution::Def(def) if resolutions.defs().kind(def).is_effect() => self
+                            .known_type(&DeclKey::Def(def))
+                            .expect("every effect is interned up front"),
                         _ => self.undeclared_effect(),
                     })
                     .collect();
-                Some(self.fn_type(f.is_mut, signature, effects))
+                Ok(self.fn_type(f.is_mut, signature, effects))
             }
-            Type::Infer(_) | Type::Error(_) => None,
+            // A placeholder no inference fills, or the parser's recovery from
+            // a reported error.
+            Type::Infer(_) => Err(Unsaid::Unsayable),
+            Type::Error(_) => Err(Unsaid::Failed),
         }
     }
 
-    /// One resolved type as the solver reads it, or `None` for a shape it has
-    /// no way to say. `param` gives a rigid type parameter its position.
+    /// One resolved type as the solver reads it. `param` gives a rigid type
+    /// parameter its position.
     fn type_id(
         &self,
         table: &TypeTable,
         id: TypeId,
         param: &dyn Fn(&str, u32) -> Option<u32>,
-    ) -> Option<SolverType> {
+    ) -> Result<SolverType, Unsaid> {
         let decl = |key: DeclKey, args: Vec<SolverType>| {
-            self.known_type(&key).map(|id| SolverType::Decl(id, args))
+            self.known_type(&key)
+                .map(|id| SolverType::Decl(id, args))
+                .ok_or(Unsaid::Unsayable)
         };
+        let placed = |name: &str, index: u32| param(name, index).ok_or(Unsaid::Open);
         // A pack spliced into a tuple is the pack; a mapped one (`R[F := F_i]`
         // per element) is a shape the solver has no way to say.
         let tuple_elem = |a: TypeId| {
@@ -399,24 +549,20 @@ impl Lowering {
             else {
                 return self.type_id(table, a, param);
             };
+            let pack = placed(name, *index)?;
             match mapped_elem {
-                None => param(name, *index).map(SolverType::Pack),
-                Some(_) => None,
+                None => Ok(SolverType::Pack(pack)),
+                Some(_) => Err(Unsaid::Unsayable),
             }
         };
         let instance = |def: DefId, type_args: &[TypeId]| {
             if self.tuple == Some(def) {
-                let elems = type_args
-                    .iter()
-                    .map(|&a| tuple_elem(a))
-                    .collect::<Option<Vec<_>>>()?;
-                return Some(SolverType::Tuple(elems));
+                return said(type_args.iter().map(|&a| tuple_elem(a))).map(SolverType::Tuple);
             }
-            let args = type_args
-                .iter()
-                .map(|&a| self.type_id(table, a, param))
-                .collect::<Option<Vec<_>>>()?;
-            decl(DeclKey::Def(def), args)
+            decl(
+                DeclKey::Def(def),
+                said(type_args.iter().map(|&a| self.type_id(table, a, param)))?,
+            )
         };
         match table.get(id) {
             ResolvedType::Primitive(p) => decl(DeclKey::Builtin(p.as_str().to_string()), vec![]),
@@ -440,31 +586,28 @@ impl Lowering {
                 ..
             } => {
                 if let Some(template) = table.template_shape(*shape) {
-                    let fields = template
-                        .holes
-                        .iter()
-                        .map(|hole| {
-                            let held = self.type_id(table, hole.ty, param)?;
-                            Some(if table.hole_held_by_ref(hole.ty) {
-                                SolverType::Ref {
-                                    is_mut: false,
-                                    inner: Box::new(held),
-                                }
-                            } else {
-                                held
-                            })
+                    let fields = said(template.holes.iter().map(|hole| {
+                        let held = self.type_id(table, hole.ty, param)?;
+                        Ok(if table.hole_held_by_ref(hole.ty) {
+                            SolverType::Ref {
+                                is_mut: false,
+                                inner: Box::new(held),
+                            }
+                        } else {
+                            held
                         })
-                        .collect::<Option<Vec<_>>>()?;
+                    }))?;
                     return decl(DeclKey::TemplateShape, vec![SolverType::Tuple(fields)]);
                 }
                 if table.anon_struct_is_synthetic(*shape) {
-                    return None;
+                    return Err(Unsaid::Unsayable);
                 }
-                let fields = table
-                    .anon_struct_fields(*shape)
-                    .iter()
-                    .map(|(_, ty)| self.type_id(table, *ty, param))
-                    .collect::<Option<Vec<_>>>()?;
+                let fields = said(
+                    table
+                        .anon_struct_fields(*shape)
+                        .iter()
+                        .map(|(_, ty)| self.type_id(table, *ty, param)),
+                )?;
                 decl(DeclKey::AnonymousStruct, vec![SolverType::Tuple(fields)])
             }
             ResolvedType::Enum { def }
@@ -474,11 +617,11 @@ impl Lowering {
             ResolvedType::GenericResource { def, type_args }
             | ResolvedType::GenericInstance { def, type_args }
             | ResolvedType::Newtype { def, type_args, .. } => instance(*def, type_args),
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Some(SolverType::Ref {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Ok(SolverType::Ref {
                 is_mut: matches!(table.get(id), ResolvedType::MutRef(_)),
                 inner: Box::new(self.type_id(table, *inner, param)?),
             }),
-            ResolvedType::TypeParam { name, index } => param(name, *index).map(SolverType::Param),
+            ResolvedType::TypeParam { name, index } => placed(name, *index).map(SolverType::Param),
             // Outside a tuple, a pack stands for one of its elements: a rigid
             // type carrying the pack's bounds, at the pack's slot. A mapped
             // one is `R` at that element.
@@ -486,7 +629,7 @@ impl Lowering {
                 name,
                 index,
                 mapped_elem: None,
-            } => param(name, *index).map(SolverType::Param),
+            } => placed(name, *index).map(SolverType::Param),
             ResolvedType::TypePack {
                 mapped_elem: Some(mapped),
                 ..
@@ -497,20 +640,19 @@ impl Lowering {
                 return_type,
                 effects,
             } => {
-                let signature = params
-                    .iter()
-                    .chain(std::iter::once(return_type))
-                    .map(|&a| self.type_id(table, a, param))
-                    .collect::<Option<Vec<_>>>()?;
-                Some(
-                    self.fn_type(
-                        *is_mut,
-                        signature,
-                        effects
-                            .iter()
-                            .map(|e| self.effect_spelled(&mangle_effect_ref(e))),
-                    ),
-                )
+                let signature = said(
+                    params
+                        .iter()
+                        .chain(std::iter::once(return_type))
+                        .map(|&a| self.type_id(table, a, param)),
+                )?;
+                Ok(self.fn_type(
+                    *is_mut,
+                    signature,
+                    effects
+                        .iter()
+                        .map(|e| self.effect_spelled(&mangle_effect_ref(e))),
+                ))
             }
             // `impl Inspect for !` is written in the prelude, so the receiver
             // side names the same shape.
@@ -523,46 +665,67 @@ impl Lowering {
                 owning_trait,
                 ..
             } => {
-                let trait_ = self.known_trait(*owning_trait)?;
-                Some(SolverType::Projection {
-                    base: Box::new(self.type_id(table, *param_id, param)?),
+                let base = self.type_id(table, *param_id, param)?;
+                let trait_ = self.known_trait(*owning_trait).ok_or(Unsaid::Unsayable)?;
+                Ok(SolverType::Projection {
+                    base: Box::new(base),
                     trait_,
-                    assoc: self.known_assoc(trait_, assoc_name)?,
+                    assoc: self
+                        .known_assoc(trait_, assoc_name)
+                        .ok_or(Unsaid::Unsayable)?,
                 })
             }
-            ResolvedType::Reactive(_)
-            | ResolvedType::InferVar(_)
-            | ResolvedType::Unknown
-            | ResolvedType::Error => None,
+            ResolvedType::Reactive(_) => Err(Unsaid::Unsayable),
+            ResolvedType::InferVar(_) => Err(Unsaid::Open),
+            ResolvedType::Unknown | ResolvedType::Error => Err(Unsaid::Failed),
         }
     }
 }
 
 /// Lower the impl headers into the program, and hand back the header each
 /// [`ImplId`](crate::trait_solver::ImplId) stands for. A header the lowering
-/// cannot express is dropped, never approximated.
+/// cannot express is dropped, never approximated. `declaring` picks, among
+/// some traits, the one declaring an associated type, which is what a
+/// projection in a header reads.
 pub(super) fn lower_impls<'a>(
     lowering: &mut Lowering,
     program: &mut Program,
     impl_headers: impl IntoIterator<Item = (&'a DefId, &'a ImplHeader)>,
     resolutions: &Resolutions,
+    declaring: &dyn Fn(&[DefId], &str) -> Option<DefId>,
 ) -> Vec<&'a ImplHeader> {
     let mut sources: Vec<&ImplHeader> = Vec::new();
     for (&def, header) in impl_headers {
         let param = |name: &str| ParamKind::of(&header.type_params, name);
-        let Some(target) = lowering.ast_type(&header.ty, &param, resolutions, None) else {
+        let declaring_here = |base: &str, assoc: &str| {
+            let traits: Vec<DefId> = if base == "Self" {
+                header.trait_def().into_iter().collect()
+            } else {
+                header
+                    .type_params
+                    .iter()
+                    .filter(|p| p.name == base)
+                    .flat_map(|p| p.bounds.iter().filter_map(|b| resolutions.bound_decl(b)))
+                    .collect()
+            };
+            declaring(&traits, assoc)
+        };
+        let mut space = Written {
+            resolutions,
+            param: &param,
+            declaring: &declaring_here,
+            self_type: None,
+        };
+        let Ok(target) = lowering.ast_type(&header.ty, &space) else {
             continue;
         };
+        space.self_type = Some(&target);
         let written = header.trait_ty().map_or(&[][..], written_arg_nodes);
-        let Some(trait_args) = written
-            .iter()
-            .map(|arg| lowering.ast_type(arg, &param, resolutions, Some(&target)))
-            .collect::<Option<Vec<_>>>()
-        else {
+        let Ok(trait_args) = said(written.iter().map(|arg| lowering.ast_type(arg, &space))) else {
             continue;
         };
         let implemented = header.trait_def().map(|t| lowering.trait_decl(t));
-        let params = header
+        let Some(params) = header
             .type_params
             .iter()
             .map(|p| {
@@ -572,15 +735,10 @@ pub(super) fn lower_impls<'a>(
                         continue;
                     };
                     let bound = lowering.trait_decl(bound);
-                    // A bound writing an argument the lowering cannot spell
-                    // asks for the defaults, which every impl of the trait
-                    // answers — never for something narrower than written.
-                    let args = b
-                        .type_args
-                        .iter()
-                        .map(|arg| lowering.ast_type(arg, &param, resolutions, Some(&target)))
-                        .collect::<Option<Vec<_>>>()
-                        .unwrap_or_default();
+                    // A bound the lowering cannot spell drops the header: any
+                    // other reading says more or less than it writes.
+                    let args =
+                        said(b.type_args.iter().map(|arg| lowering.ast_type(arg, &space))).ok()?;
                     def.bounds.push(ParamBound {
                         trait_: bound,
                         args,
@@ -589,9 +747,7 @@ pub(super) fn lower_impls<'a>(
                     // compiler's own check drops one to anything but the
                     // receiver.
                     for constraint in &b.assoc_types {
-                        let Some(ty) =
-                            lowering.ast_type(&constraint.ty, &param, resolutions, Some(&target))
-                        else {
+                        let Ok(ty) = lowering.ast_type(&constraint.ty, &space) else {
                             continue;
                         };
                         def.pins.push(Pin {
@@ -601,9 +757,12 @@ pub(super) fn lower_impls<'a>(
                         });
                     }
                 }
-                def
+                Some(def)
             })
-            .collect();
+            .collect::<Option<Vec<_>>>()
+        else {
+            continue;
+        };
         let id = program.push_impl(ImplDef {
             trait_: implemented,
             trait_args,
@@ -624,8 +783,7 @@ pub(super) fn lower_impls<'a>(
                 .collect();
             program.impl_methods.insert(id, own);
             for binding in &header.associated_types {
-                let Some(ty) = lowering.ast_type(&binding.ty, &param, resolutions, Some(&target))
-                else {
+                let Ok(ty) = lowering.ast_type(&binding.ty, &space) else {
                     continue;
                 };
                 program
@@ -687,7 +845,7 @@ fn representative(
                 return Some(table.get(id).clone());
             }
             (name == TypeTable::ARRAY_TYPE_NAME)
-                .then(|| ResolvedType::BuiltinArray(TypeTable::UNIT))
+                .then_some(ResolvedType::BuiltinArray(TypeTable::UNIT))
         }
         DeclKey::FnShape { is_mut } => Some(ResolvedType::Function {
             is_mut: *is_mut,
@@ -763,7 +921,7 @@ impl SolverBridge {
     ];
 
     pub(crate) fn build(tysys: &TypeSystem, modules: &[ModuleSource]) -> Self {
-        let mut lowering = Lowering::new();
+        let mut lowering = Lowering::over(&tysys.resolutions);
         let mut program = Program::default();
         let table = tysys.type_table.borrow();
         lowering.tuple = table.compiler_item_def(CompilerItem::Tuple);
@@ -785,6 +943,11 @@ impl SolverBridge {
                 .iter()
                 .filter(|(def, _)| !derivation_sources.contains_key(*def)),
             &tysys.resolutions,
+            &|traits, assoc| {
+                tysys
+                    .trait_env
+                    .trait_among_declaring_assoc_type(traits, assoc)
+            },
         );
         Self::state_primitive_impls(tysys, &mut lowering, &mut program);
         Self::state_traits(tysys, &mut lowering, &mut program);
@@ -991,27 +1154,8 @@ impl SolverBridge {
         }
         lowering.anonymous_struct();
         lowering.template_shape();
-        // `type_id` spells a resolved type under these heads whether or not an
-        // impl header named one.
-        for name in [TypeTable::ARRAY_TYPE_NAME, UNIT_TYPE_NAME, NEVER_TYPE_NAME]
-            .into_iter()
-            .chain(PrimitiveType::all_primitive_names())
-        {
-            lowering.builtin(name);
-        }
         let defs = tysys.resolutions.defs();
-        // An interface is a trait to a bound, and one no impl names is still
-        // one no type implements.
-        for def in defs
-            .iter()
-            .filter(|&def| matches!(defs.kind(def), DefKind::Trait | DefKind::Effect))
-        {
-            lowering.trait_decl(def);
-            if let Some(effect) = tysys.resolutions.effect_decl(def) {
-                let head = lowering.type_decl(def);
-                lowering.effects.insert(mangle_effect_ref(&effect), head);
-            }
-        }
+        lowering.intern_assocs(&tysys.trait_env.trait_decl_headers);
         // A struct or newtype declared in a body has its identity here and its
         // members only once annotate reaches the body.
         for def in defs.iter().filter(|&def| {
@@ -1072,18 +1216,32 @@ impl SolverBridge {
             let id = lowering.trait_decl(*trait_);
             let own = &tysys.trait_env.trait_decl_headers[trait_].type_params;
             let place = |name: &str| ParamKind::of(own, name);
+            let space = Written {
+                resolutions: &tysys.resolutions,
+                param: &place,
+                declaring: &|base, assoc| {
+                    let bounds = own.iter().find(|p| p.name == base)?;
+                    tysys.trait_env.bound_declaring_assoc_type(
+                        &bounds.bounds,
+                        assoc,
+                        &tysys.resolutions,
+                    )
+                },
+                self_type: None,
+            };
             // An edge whose arguments the lowering cannot say states nothing:
             // answering it at the supertrait's defaults would be a guess.
             program.traits.entry(id).or_default().supertraits = closure
                 .iter()
                 .filter(|b| b.via.is_empty())
                 .filter_map(|b| {
-                    let args = b
-                        .bound
-                        .type_args
-                        .iter()
-                        .map(|arg| lowering.ast_type(arg, &place, &tysys.resolutions, None))
-                        .collect::<Option<Vec<_>>>()?;
+                    let args = said(
+                        b.bound
+                            .type_args
+                            .iter()
+                            .map(|arg| lowering.ast_type(arg, &space)),
+                    )
+                    .ok()?;
                     Some(ParamBound {
                         trait_: lowering.trait_decl(b.decl),
                         args,
@@ -1100,6 +1258,13 @@ impl SolverBridge {
             .into_iter()
             .filter_map(|item| tysys.compiler_trait_def(item))
             .collect();
+        // A default naming another parameter is opaque to the solver.
+        let closed = Written {
+            resolutions: &tysys.resolutions,
+            param: &|_| None,
+            declaring: &|_, _| None,
+            self_type: None,
+        };
         for (&trait_, header) in &tysys.trait_env.trait_decl_headers {
             let defaults: Vec<Option<ArgDefault>> = header
                 .type_params
@@ -1108,7 +1273,7 @@ impl SolverBridge {
                     p.default.as_ref().map(|default| match default {
                         Type::Named(named) if named.name == "Self" => ArgDefault::SelfType,
                         other => lowering
-                            .ast_type(other, &|_| None, &tysys.resolutions, None)
+                            .ast_type(other, &closed)
                             .map_or(ArgDefault::Opaque, ArgDefault::Type),
                     })
                 })
@@ -1192,21 +1357,32 @@ impl SolverBridge {
                 head,
                 TypeDef {
                     newtype_base: Some(base),
-                    ..TypeDef::default()
                 },
             );
             stated.push(head);
         };
         for (def, base_type) in newtype_decls(data, table) {
-            if let Some(base) = lowering.type_id(table, base_type, &|_, _| None) {
+            if let Ok(base) = lowering.type_id(table, base_type, &|_, _| None) {
                 newtype_base(lowering.declared_type(def), base);
             }
         }
         for (&def, info) in &data.generic_newtypes {
             let param = |name: &str| ParamKind::of(&info.type_params, name);
-            if let Some(base) =
-                lowering.ast_type(&info.base_type_ast, &param, &tysys.resolutions, None)
-            {
+            let declaring = |base: &str, assoc: &str| {
+                let bounds = info.type_params.iter().find(|p| p.name == base)?;
+                tysys.trait_env.bound_declaring_assoc_type(
+                    &bounds.bounds,
+                    assoc,
+                    &tysys.resolutions,
+                )
+            };
+            let space = Written {
+                resolutions: &tysys.resolutions,
+                param: &param,
+                declaring: &declaring,
+                self_type: None,
+            };
+            if let Ok(base) = lowering.ast_type(&info.base_type_ast, &space) {
                 newtype_base(lowering.declared_type(def), base);
             }
         }
@@ -1429,9 +1605,7 @@ impl SolverBridge {
                        members: &mut dyn Iterator<Item = TypeId>,
                        module: &ModuleSource|
          -> Option<Declaration> {
-            let members = members
-                .map(|ty| lowering.type_id(table, ty, &by_index))
-                .collect::<Option<Vec<_>>>()?;
+            let members = said(members.map(|ty| lowering.type_id(table, ty, &by_index))).ok()?;
             Some(Declaration {
                 id: lowering.declared_type(def),
                 params: u32::try_from(params).expect("fewer than 2^32 params"),
@@ -1490,7 +1664,7 @@ impl SolverBridge {
         (out, variants, handles)
     }
 
-    /// `type_id` lowered, and the bounds in force around it. `None` where a
+    /// `type_id` lowered, and the bounds in force around it. Unsaid where a
     /// bound the lowering cannot state is on a parameter this receiver mentions:
     /// its list is short of what the source declares, and answering from a short
     /// list says more than the lowering saw.
@@ -1499,55 +1673,105 @@ impl SolverBridge {
         tysys: &TypeSystem,
         ctx: &scope::Scope,
         type_id: TypeId,
-    ) -> Option<(Env, SolverType)> {
+    ) -> Result<(Env, SolverType), Unsaid> {
         // Every parameter in scope takes a position, bounded or not: an
         // unbounded `T` still appears in a receiver such as `Array<T>`, and a
         // receiver the environment cannot place lowers to nothing.
         let place = place_in(ctx);
+        let table = tysys.type_table.borrow();
+        let param = |name: &str| place(name).map(ParamKind::Type);
+        let declaring = |base: &str, assoc: &str| {
+            if base == "Self" {
+                let trait_ = ctx.trait_ctx.self_trait?;
+                return tysys.trait_env.trait_declaring_assoc_type(&trait_, assoc);
+            }
+            let bounds = ctx.trait_ctx.type_param_bounds.get(base)?;
+            tysys
+                .trait_env
+                .bound_declaring_assoc_type(bounds, assoc, &tysys.resolutions)
+        };
         let mut env = Env::default();
         let mut unstated = Vec::new();
         for (position, name) in ctx.trait_ctx.type_params.keys().enumerate() {
             let mut ids = Vec::new();
-            for bound in ctx
+            for scoped in ctx
                 .trait_ctx
                 .type_param_bounds
                 .get(name)
                 .into_iter()
                 .flatten()
             {
-                let stated = tysys.resolutions.bound_decl(bound).and_then(|def| {
-                    let args = tysys
-                        .bound_written(bound)?
-                        .args()
-                        .iter()
-                        .map(|arg| {
-                            self.lowering
-                                .named_arg(arg, &|name| place(name).map(ParamKind::Type))
-                        })
-                        .collect::<Option<Vec<_>>>()?;
-                    Some(ParamBound {
-                        trait_: self.lowering.known_trait(def)?,
-                        args,
+                let self_type = scoped
+                    .self_binding
+                    .map(|binding| {
+                        self.lowering
+                            .type_id(&table, binding.type_id, &|name, _| place(name))
                     })
-                });
+                    .transpose();
+                // A bound naming no trait was reported where it is written.
+                let stated = tysys
+                    .resolutions
+                    .bound_decl(&scoped.bound)
+                    .ok_or(Unsaid::Failed)
+                    .and_then(|def| {
+                        let self_type = self_type?;
+                        let space = Written {
+                            resolutions: &tysys.resolutions,
+                            param: &param,
+                            declaring: &declaring,
+                            self_type: self_type.as_ref(),
+                        };
+                        let args = said(
+                            scoped
+                                .bound
+                                .type_args
+                                .iter()
+                                .map(|arg| self.lowering.ast_type(arg, &space)),
+                        )?;
+                        Ok(ParamBound {
+                            trait_: self.lowering.known_trait(def).ok_or(Unsaid::Unsayable)?,
+                            args,
+                        })
+                    });
                 match stated {
-                    Some(bound) => ids.push(bound),
-                    None => unstated.push(position as u32),
+                    Ok(bound) => ids.push(bound),
+                    Err(unsaid) => unstated.push((position as u32, unsaid)),
                 }
             }
             env.param_bounds.push(ids);
         }
         let ty = self
             .lowering
-            .type_id(&tysys.type_table.borrow(), type_id, &|name, _| place(name))?;
-        unstated
-            .iter()
-            .all(|&position| !ty.mentions_param(position))
-            .then_some((env, ty))
+            .type_id(&table, type_id, &|name, _| place(name))?;
+        said(
+            unstated
+                .into_iter()
+                .filter(|&(position, _)| ty.mentions_param(position))
+                .map(|(_, unsaid)| Err(unsaid)),
+        )?;
+        Ok((env, ty))
     }
 
-    /// The question `type_implements_trait` answered, as the solver reads it;
-    /// `None` where the lowering states nothing about it.
+    /// Whether `type_id` is one type in `ctx`: no resolution or inference left
+    /// it open, and it names no binder `ctx` does not declare, nor a pack,
+    /// which stands for many.
+    pub(super) fn is_rigid(&self, tysys: &TypeSystem, ctx: &scope::Scope, type_id: TypeId) -> bool {
+        let table = tysys.type_table.borrow();
+        let place = place_in(ctx);
+        let rigid = |name: &str, _| {
+            let binder = ctx.trait_ctx.type_params.get(name)?;
+            if matches!(table.get(binder.type_id), ResolvedType::TypePack { .. }) {
+                return None;
+            }
+            place(name)
+        };
+        matches!(
+            self.lowering.type_id(&table, type_id, &rigid),
+            Ok(_) | Err(Unsaid::Unsayable)
+        )
+    }
+
+    /// The question `type_implements_trait` answered, as the solver reads it.
     fn question(
         &self,
         tysys: &TypeSystem,
@@ -1555,24 +1779,25 @@ impl SolverBridge {
         scope: &TypeLookup,
         type_id: TypeId,
         asked: &FqTraitName,
-    ) -> Option<Question> {
-        let decl = asked.canonical()?;
-        let trait_ = self.lowering.known_trait(decl)?;
+    ) -> Result<Question, Unsaid> {
         let (env, ty) = self.env_for(tysys, ctx, type_id)?;
+        let trait_ = asked
+            .canonical()
+            .and_then(|decl| self.lowering.known_trait(decl))
+            .ok_or(Unsaid::Unsayable)?;
         if ty.mentions_decl(&|h| self.lowering.unstated.contains(&h)) {
-            return None;
+            return Err(Unsaid::Unsayable);
         }
-        let module = self.lowering.known_module(scope.current_module_source)?;
+        let module = self
+            .lowering
+            .known_module(scope.current_module_source)
+            .ok_or(Unsaid::Unsayable)?;
         let place = place_in(ctx);
-        let args = asked
-            .args()
-            .iter()
-            .map(|name| {
-                self.lowering
-                    .named_arg(name, &|name| place(name).map(ParamKind::Type))
-            })
-            .collect::<Option<Vec<_>>>()?;
-        Some(Question {
+        let args = said(asked.args().iter().map(|name| {
+            self.lowering
+                .named_arg(name, &|name| place(name).map(ParamKind::Type))
+        }))?;
+        Ok(Question {
             env,
             ty,
             trait_,
@@ -1592,30 +1817,27 @@ impl SolverBridge {
         type_id: TypeId,
         asked: &FqTraitName,
     ) -> Option<Vec<OwedBody>> {
-        // A type that failed to resolve or to infer, or that names a binder this
-        // scope does not declare, was reported where it failed: it holds what
-        // every type holds, and no impl answers for it.
+        let q = match self.question(tysys, ctx, scope, type_id, asked) {
+            Ok(q) => q,
+            // Its failure was reported where it failed, so it meets every
+            // bound rather than failing them over again.
+            Err(Unsaid::Failed) => return Some(Vec::new()),
+            // No impl answers for a type still open, so it holds what every
+            // type holds.
+            Err(Unsaid::Open) => {
+                let holds = asked
+                    .canonical()
+                    .and_then(|decl| self.lowering.known_trait(decl))
+                    .and_then(|trait_| self.program.traits.get(&trait_))
+                    .is_some_and(|def| def.holds_for_all);
+                return holds.then(Vec::new);
+            }
+            Err(Unsaid::Unsayable) => panic!(
+                "the lowering states no `{}: {asked}`",
+                tysys.type_table.borrow().type_name(type_id)
+            ),
+        };
         let place = place_in(ctx);
-        if !tysys
-            .type_table
-            .borrow()
-            .is_settled_under(type_id, &|name| place(name).is_some())
-        {
-            let holds = asked
-                .canonical()
-                .and_then(|decl| self.lowering.known_trait(decl))
-                .and_then(|trait_| self.program.traits.get(&trait_))
-                .is_some_and(|def| def.holds_for_all);
-            return holds.then(Vec::new);
-        }
-        let q = self
-            .question(tysys, ctx, scope, type_id, asked)
-            .unwrap_or_else(|| {
-                panic!(
-                    "the lowering states no `{}: {asked}`",
-                    tysys.type_table.borrow().type_name(type_id)
-                )
-            });
         let held = holds_with_args(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args)?;
         let owed = owed(&self.program, &q.env, q.module, held.requests);
         let table = tysys.type_table.borrow();
@@ -1698,7 +1920,7 @@ impl SolverBridge {
                         .collect(),
                 };
                 each(&members);
-                if let Some(lowered) = self.lowering.type_id(table, id, param) {
+                if let Ok(lowered) = self.lowering.type_id(table, id, param) {
                     out.push((lowered, shape));
                 }
             }
@@ -1735,7 +1957,7 @@ impl SolverBridge {
         type_id: TypeId,
         asked: &FqTraitName,
     ) -> Vec<Option<DefId>> {
-        let Some(q) = self.question(tysys, ctx, scope, type_id, asked) else {
+        let Ok(q) = self.question(tysys, ctx, scope, type_id, asked) else {
             return Vec::new();
         };
         let found = bound_candidates(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args);
@@ -1776,7 +1998,7 @@ impl SolverBridge {
             Some(def) => Some(self.lowering.known_trait(def)?),
             None => None,
         };
-        let (env, ty) = self.env_for(tysys, ctx, type_id)?;
+        let (env, ty) = self.env_for(tysys, ctx, type_id).ok()?;
         let ty = match through_ref {
             Some(is_mut) => SolverType::Ref {
                 is_mut,
@@ -1859,7 +2081,8 @@ impl SolverBridge {
         // impl reaches it.
         let ty = self
             .lowering
-            .type_id(table, instance, &|_, index| Some(index))?;
+            .type_id(table, instance, &|_, index| Some(index))
+            .ok()?;
         let (written, impl_) = comparison_row(&self.program, &ty)?;
         let item = if written == eq {
             CompilerItem::Eq

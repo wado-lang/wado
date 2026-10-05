@@ -1184,7 +1184,11 @@ impl TraitEnv {
         let trait_impl_modules = index_impl_modules(&impl_headers, defs, false);
         let concrete_trait_impl_modules = index_impl_modules(&impl_headers, defs, true);
 
-        violations.extend(check_impl_coherence(&impl_headers, resolutions));
+        violations.extend(check_impl_coherence(
+            &impl_headers,
+            &trait_decl_headers,
+            resolutions,
+        ));
         violations.extend(check_variadic_impl_overlap(defs, &impl_headers));
 
         let (supertrait_closures, cycles) =
@@ -1795,17 +1799,29 @@ impl TraitEnv {
         assoc_name: &str,
         resolutions: &Resolutions,
     ) -> Option<DefId> {
-        let decls = || {
-            bounds
-                .iter()
-                .filter_map(|bound| resolutions.bound_decl(bound.borrow()))
-        };
-        decls()
+        let decls: Vec<DefId> = bounds
+            .iter()
+            .filter_map(|bound| resolutions.bound_decl(bound.borrow()))
+            .collect();
+        self.trait_among_declaring_assoc_type(&decls, assoc_name)
+    }
+
+    /// Which of `decls`, or of their supertraits, declares `assoc_name`.
+    pub(super) fn trait_among_declaring_assoc_type(
+        &self,
+        decls: &[DefId],
+        assoc_name: &str,
+    ) -> Option<DefId> {
+        decls
+            .iter()
+            .copied()
             .find(|decl| self.declares_assoc_type(decl, assoc_name))
             // Searched after every direct bound, so a trait redeclaring the
             // name still wins for itself.
             .or_else(|| {
-                decls().find_map(|decl| self.supertrait_declaring_assoc_type(&decl, assoc_name))
+                decls
+                    .iter()
+                    .find_map(|decl| self.supertrait_declaring_assoc_type(decl, assoc_name))
             })
     }
 
@@ -2389,13 +2405,30 @@ fn conflicting_impl_location(conflict: &ModuleSource, here: &ModuleSource) -> St
 
 fn check_impl_coherence(
     impl_headers: &IndexMap<DefId, ImplHeader>,
+    trait_decl_headers: &IndexMap<DefId, TraitDeclHeader>,
     resolutions: &Resolutions,
 ) -> Vec<(ModuleSource, TypeError)> {
     use super::solver_bridge::{Lowering, lower_impls};
     use crate::trait_solver::{CoherenceError, ImplId, Program, coherence_errors};
-    let mut lowering = Lowering::new();
+    let mut lowering = Lowering::over(resolutions);
+    lowering.intern_assocs(trait_decl_headers);
     let mut program = Program::default();
-    let sources = lower_impls(&mut lowering, &mut program, impl_headers, resolutions);
+    // Supertrait closures are built after this check, so a projection reads
+    // only a trait its own bounds name.
+    let declaring = |traits: &[DefId], assoc: &str| {
+        traits.iter().copied().find(|t| {
+            trait_decl_headers
+                .get(t)
+                .is_some_and(|header| header.assoc_types.iter().any(|a| a.name == assoc))
+        })
+    };
+    let sources = lower_impls(
+        &mut lowering,
+        &mut program,
+        impl_headers,
+        resolutions,
+        &declaring,
+    );
     let header_of = |id: ImplId| -> &ImplHeader { sources[id.0 as usize] };
     let trait_name = |header: &ImplHeader| {
         header

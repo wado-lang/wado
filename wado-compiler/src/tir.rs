@@ -4362,28 +4362,6 @@ impl TypeTable {
         }
     }
 
-    /// Whether `id` is settled up to the type parameters `in_scope` names: it
-    /// mentions no other, and no pack, inference variable or unresolved type.
-    pub fn is_rigid_under(&self, id: TypeId, in_scope: &dyn Fn(&str) -> bool) -> bool {
-        self.settled_under(id, in_scope, false)
-    }
-
-    /// [`Self::is_rigid_under`] admitting a pack `in_scope` names as well.
-    pub fn is_settled_under(&self, id: TypeId, in_scope: &dyn Fn(&str) -> bool) -> bool {
-        self.settled_under(id, in_scope, true)
-    }
-
-    /// The walk both of the above are, differing only in whether a pack in
-    /// scope is settled.
-    fn settled_under(&self, id: TypeId, in_scope: &dyn Fn(&str) -> bool, packs: bool) -> bool {
-        match self.get(id) {
-            ResolvedType::TypeParam { name, .. } => in_scope(name),
-            ResolvedType::TypePack { name, .. } => packs && in_scope(name),
-            ResolvedType::InferVar(_) | ResolvedType::Unknown | ResolvedType::Error => false,
-            _ => !self.any_constituent(id, &mut |t| !self.settled_under(t, in_scope, packs)),
-        }
-    }
-
     /// Whether `f` holds of any type `id` is built over, through the
     /// constructors a use site substitutes into (`Self::subst_rec`).
     fn any_constituent(&self, id: TypeId, f: &mut dyn FnMut(TypeId) -> bool) -> bool {

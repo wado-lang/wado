@@ -1,9 +1,10 @@
 // A receiver whose type arguments no inference settled reports once and stops.
 //
-// `TreeMap::new()` has nothing to fix `K` or `V`, so its type still names the
-// callee's own binders. `.len()` lives in `impl<K: Ord, V>`, and checking that
-// bound asked the solver about a `K` the test's scope does not declare: no
-// lowering states it, and the question panicked on top of the diagnostic.
+// `TreeMap::new()` has nothing to fix `K` or `V`. Its type kept the callee's
+// own binders, so `.len()`, which lives in `impl<K: Ord, V>`, asked `K: Ord`
+// of a `K` the test's scope does not declare: first a panic, then a second
+// error saying `len` is missing. A slot reported unanswered is now the error
+// type, which meets every bound.
 
 use { TreeMap } from "core:collections";
 
@@ -13,4 +14,7 @@ test {
 }
 
 __DATA__
-{"compile_error": "cannot infer type parameter `K`, `V` of `TreeMap::new`"}
+{
+    "compile_error": "cannot infer type parameter `K`, `V` of `TreeMap::new`",
+    "compile_errors_not_contains": ["no method"]
+}

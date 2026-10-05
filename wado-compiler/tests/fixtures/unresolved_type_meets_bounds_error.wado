@@ -1,0 +1,21 @@
+// A type that failed to resolve reports once, where it is written.
+//
+// `List<Missing>` holds the error type. `sort` lives in `impl<T: Ord>`, and
+// the error type failed `T: Ord`, so `sort` was reported missing beside the
+// unknown type. A failed type now meets every bound.
+
+fn same<T: Eq>(a: T) -> bool {
+    return true;
+}
+
+test {
+    let mut s: List<Missing> = [];
+    s.sort();
+    assert same(s);
+}
+
+__DATA__
+{
+    "compile_error": "unknown type 'Missing'",
+    "compile_errors_not_contains": ["no method", "does not implement"]
+}

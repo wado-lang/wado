@@ -1,0 +1,22 @@
+// A bound in force answers a pack trait at the run it writes, not a prefix.
+//
+// `T: B<i32, bool>` says nothing of `B<i32>`. The bound's arguments were
+// compared position by position up to the asked list's length, so it
+// answered `U: B<i32>` at the call in `via`.
+
+trait B<..Y> with () {
+    fn b(&self) -> i32;
+}
+
+fn need<U: B<i32>>(u: &U) -> i32 {
+    return 7;
+}
+
+fn via<T: B<i32, bool>>(t: &T) -> i32 {
+    return need(t);
+}
+
+test {}
+
+__DATA__
+{"compile_error": "type 'T' does not implement trait 'B<i32>' required by bound on 'U'"}

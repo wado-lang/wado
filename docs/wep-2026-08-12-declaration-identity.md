@@ -971,11 +971,13 @@ render it into that pair, and nothing checks that the two agree.
 ## Known gap: a type parameter is its name and its position
 
 A `TypeParam` carries the name and the position its declaration gave it, not the
-declaration, and a scope places it by the name alone. A callee's binder that
-inference left in a result type, after reporting it cannot infer it, is then
-the caller's own parameter of that name: the caller's bounds answer for it, and
-no second diagnostic follows. What it admits is a question about one
-declaration's parameter answered under another's bounds.
+declaration, and a scope places it by the name alone. Two items' parameters with
+the same name and position are one `TypeId`. What it admits is a question about
+one declaration's parameter answered under another's bounds.
+
+One way in is closed. A callee's binder that inference cannot settle is reported
+once, and its slot becomes the error type, so it never reaches the caller's
+scope as the caller's parameter of that name.
 
 ## Known gap: a CM operation is bound by its spelling
 

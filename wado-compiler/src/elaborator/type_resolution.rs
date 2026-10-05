@@ -61,15 +61,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let resolved = self.resolve_type(element);
                     // A pack a space has bound to its arguments' tuple splices
                     // them here, as `[..X]` at `X = [i32, bool]` is `[i32, bool]`.
-                    let spliced = match element {
-                        Type::TypePackSpread(..) => {
-                            self.tysys.type_table.borrow().generic_type_args(resolved)
-                        }
-                        _ => None,
-                    };
-                    match spliced {
-                        Some(elems) => elem_types.extend(elems),
-                        None => elem_types.push(resolved),
+                    match element {
+                        Type::TypePackSpread(..) => elem_types
+                            .extend(self.tysys.type_table.borrow().elem_types_or_self(resolved)),
+                        _ => elem_types.push(resolved),
                     }
                 }
                 self.tysys.type_table.borrow_mut().make_tuple(elem_types)
