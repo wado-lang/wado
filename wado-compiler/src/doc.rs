@@ -9,13 +9,15 @@ use crate::ast::{
 };
 use crate::attribute::SYNOPSIS;
 use crate::comment::{Comment, CommentKind, TriviaMap};
+use crate::lexer::is_ident_continue;
 use crate::loader::resolve_wasm_asset_path;
 use crate::module_source::ModuleSourceInterner;
 use crate::primitive::PrimitiveType;
 use crate::token::Span;
 use crate::unparse::{
-    get_item_id, unparse_attributes, unparse_bound_arguments_into, unparse_enum_signature,
-    unparse_function_signature, unparse_struct_signature, unparse_trait_header, unparse_type_into,
+    get_item_id, unparse_assoc_type_decl, unparse_attributes, unparse_bound_arguments_into,
+    unparse_enum_signature, unparse_function_signature, unparse_struct_signature,
+    unparse_trait_header, unparse_type_into,
 };
 use crate::wit_consume::build_bindings;
 use crate::{ParseResult, ast, parse, stdlib};
@@ -70,6 +72,8 @@ pub struct DocTrait {
     pub signature: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doc: Option<String>,
+    /// Each associated type as declared, parameters and bounds included:
+    /// `Buf<E: Elem>: Len`.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub associated_types: Vec<String>,
     pub methods: Vec<DocFunction>,
@@ -343,7 +347,11 @@ fn dedent_synopsis(body: &str) -> String {
 fn build_doc_trait(t: &TraitDecl, trivia: &TriviaMap) -> DocTrait {
     let sig = unparse_trait_header(t);
 
-    let associated_types: Vec<String> = t.associated_types.iter().map(|a| a.name.clone()).collect();
+    let associated_types: Vec<String> = t
+        .associated_types
+        .iter()
+        .map(unparse_assoc_type_decl)
+        .collect();
 
     let methods: Vec<DocFunction> = t
         .methods
@@ -1108,9 +1116,8 @@ fn extract_item_name<'a>(sig: &'a str, keyword: &str) -> &'a str {
         .find(keyword)
         .map(|i| &sig[i + keyword.len()..])
         .unwrap_or(sig);
-    // Take until first non-identifier char
     let end = rest
-        .find(|c: char| !c.is_alphanumeric() && c != '_')
+        .find(|c: char| !is_ident_continue(c))
         .unwrap_or(rest.len());
     &rest[..end]
 }

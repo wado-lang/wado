@@ -1,0 +1,132 @@
+//! The WebGPU backend computes what `Cpu` computes. `forward` runs once on
+//! each, and this prints how far apart their outputs are. `wado test` cannot
+//! reach a device, so `wado-run-webgpu`'s tests run it:
+//!
+//!     wado run-webgpu package-loam/conformance/webgpu.wado
+
+use { println, Stdout } from "core:cli";
+use {
+    Webgpu,
+    Gpu,
+    GpuAdapter,
+    GpuDevice,
+    GpuQueue,
+    GpuCommandEncoder,
+    GpuCommandBuffer,
+    GpuBuffer,
+    GpuBindGroupLayout,
+    GpuBindGroup,
+    GpuShaderModule,
+    GpuComputePipeline,
+    GpuComputePassEncoder,
+} from "wasi:webgpu";
+use { deviation, noise } from "../example/webgpu/compare.wado";
+use { Cpu, Tensor, WebGpuBackend, Weights, element_count, forward } from "./webgpu.onnxtext"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: {
+                layout: [
+                    {
+                        pattern: "X",
+                        axes: ["Batch", "Row", "Inner"],
+                    },
+                    {
+                        pattern: "Y",
+                        axes: ["Batch", "Inner", "Col"],
+                    },
+                    {
+                        pattern: "W",
+                        axes: ["Inner", "Col"],
+                    },
+                    {
+                        pattern: "C",
+                        axes: ["Col"],
+                    },
+                    {
+                        pattern: "V",
+                        axes: ["Long"],
+                    },
+                    {
+                        pattern: "Z",
+                        axes: ["Batch", "Row", "Col"],
+                    },
+                    {
+                        pattern: "S",
+                        axes: ["Batch", "Col", "Row"],
+                    },
+                    {
+                        pattern: "R",
+                        axes: ["Long"],
+                    },
+                    {
+                        pattern: "O",
+                        axes: ["Batch", "Row", "Col"],
+                    },
+                    {
+                        pattern: "N",
+                        axes: ["Vacant"],
+                    },
+                    {
+                        pattern: "G",
+                        axes: ["Vacant"],
+                    },
+                    {
+                        pattern: "BX",
+                        axes: ["Many", "Single", "Pair"],
+                    },
+                    {
+                        pattern: "BY",
+                        axes: ["Many", "Pair", "Single"],
+                    },
+                    {
+                        pattern: "BW",
+                        axes: ["Pair", "Single"],
+                    },
+                    {
+                        pattern: "B?",
+                        axes: ["Many", "Single", "Single"],
+                    },
+                ],
+                webgpu: true,
+            },
+        },
+    };
+
+/// More elements than one row of workgroups holds, 65535 of 64 each.
+global LONG: i32 = 4_200_000;
+
+/// More batch elements than one dispatch dimension holds, 65535.
+global MANY: i32 = 70_000;
+
+fn tensor<Axes>(extents: List<i32>, seed: u32) -> Tensor<f32, Axes> {
+    return Tensor { data: noise(element_count(&extents), seed, 1.0), extents };
+}
+
+export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let Some(mut gpu) = WebGpuBackend::new() else {
+        println("no WebGPU adapter");
+        return;
+    };
+    // Extents no tile divides, so every product reaches a tile's edge.
+    let x = tensor([3, 37, 50], 1);
+    let y = tensor([3, 50, 29], 2);
+    let v = tensor([LONG], 3);
+    let n = tensor([0], 6);
+    let bx = tensor([MANY, 1, 2], 7);
+    let by = tensor([MANY, 2, 1], 8);
+    let w = Weights {
+        W: tensor([50, 29], 4),
+        C: tensor([29], 5),
+        BW: tensor([2, 1], 9),
+    };
+    let on_cpu = forward(&mut Cpu {}, &x, &y, &v, &n, &bx, &by, &w);
+    let on_gpu = forward(&mut gpu, &x, &y, &v, &n, &bx, &by, &w);
+    println(`Z ${on_gpu.Z.extents:?} ${deviation(&on_gpu.Z.data, &on_cpu.Z.data)}`);
+    println(`S ${on_gpu.S.extents:?} ${deviation(&on_gpu.S.data, &on_cpu.S.data)}`);
+    println(`R ${on_gpu.R.extents:?} ${deviation(&on_gpu.R.data, &on_cpu.R.data)}`);
+    println(`O ${on_gpu.O.extents:?} ${deviation(&on_gpu.O.data, &on_cpu.O.data)}`);
+    println(`G ${on_gpu.G.extents:?} ${deviation(&on_gpu.G.data, &on_cpu.G.data)}`);
+    println(`BZ ${on_gpu.BZ.extents:?} ${deviation(&on_gpu.BZ.data, &on_cpu.BZ.data)}`);
+    println(`BS ${on_gpu.BS.extents:?} ${deviation(&on_gpu.BS.data, &on_cpu.BS.data)}`);
+}

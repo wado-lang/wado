@@ -1,0 +1,90 @@
+//! The backend seam: the MLP runs through a backend whose tensor is a handle
+//! with no field a `Tensor` has, as every operator and semantics case does, and
+//! computes what it computes on `Cpu`.
+
+use { generated, program_over, ran } from "./oracle.wado";
+use { read } from "../src/onnx_text.wado";
+use { LayoutRule, Schema } from "../src/schema.wado";
+
+global MLP: String = #include_str("../example/mlp.onnxtext");
+
+fn rule(pattern: String, axes: List<String>) -> LayoutRule {
+    return LayoutRule { pattern, axes };
+}
+
+test "the MLP runs through an opaque backend as it does on the CPU" {
+    let graph = read(&MLP).unwrap();
+    let source = generated(&graph, &Schema {
+        layout: [
+            rule("X", ["Batch", "In"]),
+            rule("W1", ["In", "Hidden"]),
+            rule("B1", ["Hidden"]),
+            rule("W2", ["Hidden", "Out"]),
+            rule("B2", ["Out"]),
+        ],
+    }).unwrap();
+    let program = `${program_over(&source)}
+fn weight<A>(extents: List<i32>, value: f32) -> Tensor<f32, A> {
+    let mut count = 1;
+    for let e of extents {
+        count *= e;
+    }
+    return Tensor { data: List::<f32>::filled(count, value), extents };
+}
+
+export fn run() with Stdout {
+    let weights = Weights {
+        W1: weight([128, 64], 1.0),
+        B1: weight([64], 0.0),
+        W2: weight([64, 10], 0.5),
+        B2: weight([10], 1.0),
+    };
+    let mut data = List::<f32>::with_capacity(2 * 128);
+    for let i of 0..<2 * 128 {
+        data.push((i % 7) as f32 - 3.0);
+    }
+    let x = Tensor::<f32, [Batch, In]> { data, extents: [2, 128] };
+    let mut opaque = Opaque::new();
+    let through = forward(&mut opaque, &x, &weights);
+    let direct = forward(&mut Cpu {}, &x, &weights);
+    println(\`\${through.extents:?} \${through.data == direct.data} \${opaque.uploads} \${opaque.downloads}\`);
+}
+`;
+    // The input and the four weights cross in, the logits out.
+    assert ran(program) == "[2, 10] true 5 1\n";
+}
+
+global BRANCH: String = #include_str("./branch.onnxtext");
+
+test "an If reads its condition back through the opaque backend" {
+    let graph = read(&BRANCH).unwrap();
+    let source = generated(&graph, &Schema {
+        layout: [
+            rule("C", ["One"]),
+            rule("X", ["Seq", "Embed"]),
+            rule("P", ["Past", "Embed"]),
+            rule("V", ["Seq", "Embed"]),
+            rule("K", ["Embed"]),
+            rule("W", ["Embed"]),
+            LayoutRule {
+                pattern: "T",
+                axes: ["Total", "Embed"],
+                graph: Option::Some("with_past"),
+            },
+            rule("Y", ["Total", "Embed"]),
+        ],
+    }).unwrap();
+    let program = `${program_over(&source)}
+export fn run() with Stdout {
+    for let taken of [true, false] {
+        let c = Tensor::<bool, [One]> { data: [taken], extents: [1] };
+        let x = Tensor::<f32, [Seq, Embed]> { data: [1.0, 2.0], extents: [1, 2] };
+        let p = Tensor::<f32, [Past, Embed]> { data: [3.0, 4.0], extents: [1, 2] };
+        let through = forward(&mut Opaque::new(), &c, &x, &p, &x, &Weights::embedded());
+        let direct = forward(&mut Cpu {}, &c, &x, &p, &x, &Weights::embedded());
+        println(\`\${through.Y.data == direct.Y.data && through.Z.data == direct.Z.data}\`);
+    }
+}
+`;
+    assert ran(program) == "true\ntrue\n";
+}

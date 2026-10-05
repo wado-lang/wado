@@ -1,0 +1,110 @@
+//! One generated module run on the CPU and on a WebGPU device: the same
+//! `forward`, instantiated at two backends, gives the same logits within
+//! tolerance, and the device gives them sooner.
+//!
+//!     wado run-webgpu package-loam/example/webgpu/mlp.wado
+
+use { println, Stdout } from "core:cli";
+use { MonotonicClock } from "wasi:clocks";
+use {
+    Webgpu,
+    Gpu,
+    GpuAdapter,
+    GpuDevice,
+    GpuQueue,
+    GpuCommandEncoder,
+    GpuCommandBuffer,
+    GpuBuffer,
+    GpuBindGroupLayout,
+    GpuBindGroup,
+    GpuShaderModule,
+    GpuComputePipeline,
+    GpuComputePassEncoder,
+} from "wasi:webgpu";
+use { deviation, noise } from "./compare.wado";
+use { Batch, Cpu, In, Tensor, WebGpuBackend, Weights, element_count, forward } from "./mlp.onnxtext"
+    with {
+        generator: {
+            module: "../../src/generator.wado",
+            options: {
+                layout: [
+                    {
+                        pattern: "X",
+                        axes: ["Batch", "In"],
+                    },
+                    {
+                        pattern: "W1",
+                        axes: ["In", "Wide"],
+                    },
+                    {
+                        pattern: "B1",
+                        axes: ["Wide"],
+                    },
+                    {
+                        pattern: "W2",
+                        axes: ["Wide", "Deep"],
+                    },
+                    {
+                        pattern: "B2",
+                        axes: ["Deep"],
+                    },
+                    {
+                        pattern: "W3",
+                        axes: ["Deep", "Out"],
+                    },
+                    {
+                        pattern: "B3",
+                        axes: ["Out"],
+                    },
+                ],
+                webgpu: true,
+            },
+        },
+    };
+
+global BATCH: i32 = 256;
+
+fn tensor<Axes>(extents: List<i32>, seed: u32, scale: f32) -> Tensor<f32, Axes> {
+    return Tensor { data: noise(element_count(&extents), seed, scale), extents };
+}
+
+fn weights() -> Weights {
+    return Weights {
+        W1: tensor([1024, 2048], 1, 0.05),
+        B1: tensor([2048], 2, 0.1),
+        W2: tensor([2048, 2048], 3, 0.05),
+        B2: tensor([2048], 4, 0.1),
+        W3: tensor([2048, 512], 5, 0.05),
+        B3: tensor([512], 6, 0.1),
+    };
+}
+
+fn millis(elapsed: u64) -> u64 {
+    return elapsed / 1_000_000;
+}
+
+export fn run() with (Stdout, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let Some(mut gpu) = WebGpuBackend::new() else {
+        println("no WebGPU adapter");
+        return;
+    };
+    let w = weights();
+    let x = tensor::<[Batch, In]>([BATCH, 1024], 7, 1.0);
+
+    let t0 = MonotonicClock::now();
+    let on_cpu = forward(&mut Cpu {}, &x, &w);
+    let t1 = MonotonicClock::now();
+    // The first call compiles the shaders, which the second finds compiled.
+    let _ = forward(&mut gpu, &x, &w);
+    let t2 = MonotonicClock::now();
+    let on_gpu = forward(&mut gpu, &x, &w);
+    let t3 = MonotonicClock::now();
+
+    println(`logits ${on_gpu.extents:?}, largest deviation from the CPU ${deviation(&on_gpu.data, &on_cpu.data)}`);
+    let [cpu, first, second] = [
+        millis((t1 - t0) as u64),
+        millis((t2 - t1) as u64),
+        millis((t3 - t2) as u64),
+    ];
+    println(`cpu ${cpu} ms, webgpu ${second} ms (first call ${first} ms)`);
+}

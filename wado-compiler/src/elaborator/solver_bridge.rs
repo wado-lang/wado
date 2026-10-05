@@ -1,7 +1,13 @@
 //! The lowering from the compiler's tables into the solver's [`Program`], and
 //! the solver's answers read back as the compiler keys them.
 
+<<<<<<< HEAD
 use crate::ast::{GenericParam, Type};
+||||||| c296641f9
+use crate::ast::Type;
+=======
+use crate::ast::{FunctionType, Type};
+>>>>>>> origin/main
 use crate::compiler_item::CompilerItem;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::hashmap::{IndexMap, IndexSet};
@@ -55,6 +61,7 @@ enum DeclKey {
     UndeclaredEffect,
 }
 
+<<<<<<< HEAD
 /// Why the lowering states nothing about a type, most telling first: a type
 /// holding several reasons answers to the first.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -111,9 +118,18 @@ fn declaring_among(
 
 /// How a declaration's parameter is spelled where a type mentions it.
 #[derive(Clone, Copy)]
+||||||| c296641f9
+/// How an impl's parameter is spelled where a type mentions it.
+#[derive(Clone, Copy)]
+=======
+/// How an impl's parameter is spelled where a type mentions it.
+#[derive(Clone)]
+>>>>>>> origin/main
 enum ParamKind {
     Type(u32),
     Pack(u32),
+    /// `<F: fn(...)>`: the parameter is that signature, a type and no slot.
+    Signature(Box<FunctionType>),
 }
 
 impl ParamKind {
@@ -465,20 +481,60 @@ impl Lowering {
             Resolution::Binder(_) | Resolution::Projection(_) => Err(Unsaid::Unsayable),
         };
         match ty {
+<<<<<<< HEAD
             Type::Named(named) if named.name == "Self" => {
                 written.self_type.cloned().ok_or(Unsaid::Unsayable)
             }
             Type::Named(named) => match (written.param)(&named.name) {
                 Some(kind) => Ok(kind.spelled()),
                 None => Ok(SolverType::Decl(declared(named.id)?, Vec::new())),
+||||||| c296641f9
+            Type::Named(named) if named.name == "Self" => self_type.cloned(),
+            Type::Named(named) => match param(&named.name) {
+                Some(ParamKind::Type(index)) => Some(SolverType::Param(index)),
+                Some(ParamKind::Pack(index)) => Some(SolverType::Pack(index)),
+                None => resolutions
+                    .declared(named.id)
+                    .map(|def| SolverType::Decl(self.head_of(resolutions.defs(), def), Vec::new())),
+=======
+            Type::Named(named) if named.name == "Self" => self_type.cloned(),
+            Type::Named(named) => match param(&named.name) {
+                Some(ParamKind::Type(index)) => Some(SolverType::Param(index)),
+                Some(ParamKind::Pack(index)) => Some(SolverType::Pack(index)),
+                Some(ParamKind::Signature(sig)) => {
+                    self.ast_type(&Type::Function(sig), param, resolutions, self_type)
+                }
+                None => resolutions
+                    .declared(named.id)
+                    .map(|def| SolverType::Decl(self.head_of(resolutions.defs(), def), Vec::new())),
+>>>>>>> origin/main
             },
             Type::Generic(generic) => {
                 let args = all(&generic.args)?;
                 Ok(SolverType::Decl(declared(generic.id)?, args))
             }
+<<<<<<< HEAD
             Type::Tuple(elems) => all(elems).map(SolverType::Tuple),
             Type::TypePackSpread(name, _) => match (written.param)(name).ok_or(Unsaid::Open)? {
                 ParamKind::Pack(index) | ParamKind::Type(index) => Ok(SolverType::Pack(index)),
+||||||| c296641f9
+            Type::Tuple(elems) => elems
+                .iter()
+                .map(|elem| self.ast_type(elem, param, resolutions, self_type))
+                .collect::<Option<Vec<_>>>()
+                .map(SolverType::Tuple),
+            Type::TypePackSpread(name, _) => match param(name)? {
+                ParamKind::Pack(index) | ParamKind::Type(index) => Some(SolverType::Pack(index)),
+=======
+            Type::Tuple(elems) => elems
+                .iter()
+                .map(|elem| self.ast_type(elem, param, resolutions, self_type))
+                .collect::<Option<Vec<_>>>()
+                .map(SolverType::Tuple),
+            Type::TypePackSpread(name, _) => match param(name)? {
+                ParamKind::Pack(index) | ParamKind::Type(index) => Some(SolverType::Pack(index)),
+                ParamKind::Signature(_) => None,
+>>>>>>> origin/main
             },
             Type::Reference(inner) | Type::MutReference(inner) => Ok(SolverType::Ref {
                 is_mut: matches!(ty, Type::MutReference(_)),
@@ -675,22 +731,50 @@ impl Lowering {
             ResolvedType::AssocTypeProjection {
                 param_id,
                 assoc_name,
+                args,
                 owning_trait,
                 ..
             } => {
+<<<<<<< HEAD
                 let base = self.type_id(table, *param_id, param)?;
                 let trait_ = self.known_trait(*owning_trait).ok_or(Unsaid::Unsayable)?;
                 Ok(SolverType::Projection {
                     base: Box::new(base),
+||||||| c296641f9
+                let trait_ = self.known_trait(*owning_trait)?;
+                Some(SolverType::Projection {
+                    base: Box::new(self.type_id(table, *param_id, param)?),
+=======
+                // The solver's projection names no arguments of its own.
+                if !args.is_empty() {
+                    return None;
+                }
+                let trait_ = self.known_trait(*owning_trait)?;
+                Some(SolverType::Projection {
+                    base: Box::new(self.type_id(table, *param_id, param)?),
+>>>>>>> origin/main
                     trait_,
                     assoc: self
                         .known_assoc(trait_, assoc_name)
                         .ok_or(Unsaid::Unsayable)?,
                 })
             }
+<<<<<<< HEAD
             ResolvedType::Reactive(_) => Err(Unsaid::Unsayable),
             ResolvedType::InferVar(_) => Err(Unsaid::Open),
             ResolvedType::Unknown | ResolvedType::Error => Err(Unsaid::Failed),
+||||||| c296641f9
+            ResolvedType::Reactive(_)
+            | ResolvedType::InferVar(_)
+            | ResolvedType::Unknown
+            | ResolvedType::Error => None,
+=======
+            ResolvedType::Reactive(_)
+            | ResolvedType::AssocParam { .. }
+            | ResolvedType::InferVar(_)
+            | ResolvedType::Unknown
+            | ResolvedType::Error => None,
+>>>>>>> origin/main
         }
     }
 }
@@ -720,6 +804,7 @@ pub(super) fn lower_impls<'a>(
         binding.next().filter(|_| binding.next().is_none())
     };
     let mut sources: Vec<&ImplHeader> = Vec::new();
+<<<<<<< HEAD
     for &(&def, header) in &impl_headers {
         let param = |name: &str| ParamKind::of(&header.type_params, name);
         let declaring_here = |base: &str, assoc: &str| {
@@ -734,6 +819,33 @@ pub(super) fn lower_impls<'a>(
                 .flat_map(|p| p.bounds.iter().filter_map(|b| resolutions.bound_decl(b)))
                 .collect();
             declaring(&traits, assoc)
+||||||| c296641f9
+    for (&def, header) in impl_headers {
+        let param = |name: &str| -> Option<ParamKind> {
+            let index =
+                |i: usize| u32::try_from(i).expect("an impl declares fewer than 2^32 params");
+            let i = header.type_params.iter().position(|p| p.name == name)?;
+            Some(if header.type_params[i].is_pack {
+                ParamKind::Pack(index(i))
+            } else {
+                ParamKind::Type(index(i))
+            })
+=======
+    for (&def, header) in impl_headers {
+        let param = |name: &str| -> Option<ParamKind> {
+            let index =
+                |i: usize| u32::try_from(i).expect("an impl declares fewer than 2^32 params");
+            let i = header.type_params.iter().position(|p| p.name == name)?;
+            let declared = &header.type_params[i];
+            let signature = (!declared.is_pack)
+                .then(|| declared.bounds.iter().find_map(|b| b.fn_signature.as_ref()))
+                .flatten();
+            Some(match signature {
+                Some(sig) => ParamKind::Signature(sig.clone()),
+                None if declared.is_pack => ParamKind::Pack(index(i)),
+                None => ParamKind::Type(index(i)),
+            })
+>>>>>>> origin/main
         };
         let mut space = Written {
             resolutions,
@@ -807,8 +919,24 @@ pub(super) fn lower_impls<'a>(
                 .map(|m| lowering.method(&m.name))
                 .collect();
             program.impl_methods.insert(id, own);
+<<<<<<< HEAD
             for binding in &header.associated_types {
                 let Ok(ty) = lowering.ast_type(&binding.ty, &space) else {
+||||||| c296641f9
+            for binding in &header.associated_types {
+                let Some(ty) = lowering.ast_type(&binding.ty, &param, resolutions, Some(&target))
+                else {
+=======
+            // A generic associated type binds a family, which the solver's
+            // projection, naming no arguments, cannot ask for.
+            for binding in header
+                .associated_types
+                .iter()
+                .filter(|binding| binding.type_params.is_empty())
+            {
+                let Some(ty) = lowering.ast_type(&binding.ty, &param, resolutions, Some(&target))
+                else {
+>>>>>>> origin/main
                     continue;
                 };
                 program

@@ -1,0 +1,12 @@
+// A generic associated type's parameter bounds are owed by every projection
+// of it, so a user of the public trait has to be able to name them.
+trait Hidden with () {}
+
+pub trait Store with () {
+    type Buf<E: Hidden>;
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "names `Hidden`, which is private to its defining file"}

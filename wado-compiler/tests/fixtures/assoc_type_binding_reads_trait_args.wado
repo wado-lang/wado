@@ -1,0 +1,48 @@
+// A trait's associated-type bound written over the trait's parameter means
+// the argument the trait is reached at, through a supertrait as directly:
+// `Sub: Seq<i32>` makes `T::It`'s `Item` an `i32`, not the caller's `T`.
+
+trait Seq<T> with () {
+    type It: Iterator<Item = T>;
+
+    fn it(&self) -> Self::It;
+}
+
+trait Sub: Seq<i32> with () {}
+
+struct Ones {
+    left: i32,
+}
+
+impl Iterator for Ones {
+    type Item = i32;
+
+    fn next(&mut self) -> Option<i32> {
+        if self.left == 0 {
+            return null;
+        }
+        self.left -= 1;
+        return Some(1);
+    }
+}
+
+struct Src {}
+
+impl Seq<i32> for Src {
+    type It = Ones;
+
+    fn it(&self) -> Ones {
+        return Ones { left: 2 };
+    }
+}
+
+impl Sub for Src {}
+
+fn first<T: Sub>(t: &T) -> i32 {
+    let mut i = t.it();
+    return i.next().unwrap();
+}
+
+test "a bound's binding reads the trait's arguments" {
+    assert first(&Src {}) == 1;
+}

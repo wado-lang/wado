@@ -24,7 +24,7 @@ use crate::nir::{
     ClosureFunctor, FuncId, FunctionRef, NirEnum, NirFlags, NirFunction, NirGlobal, NirImport,
     NirStruct, NirTest, NirVariantDecl,
 };
-use crate::tir::{BuiltinDeclarations, TypeId, TypeTable};
+use crate::tir::{BuiltinDeclaration, BuiltinDeclarations, TypeId, TypeTable};
 use crate::wir_build::component_plan::ComponentPlan;
 use crate::world_registry::{self, GENERATOR_HOST_INTERFACE, WorldRegistry};
 
@@ -235,11 +235,11 @@ impl NirPackage {
         })
     }
 
-    /// The [`FuncId`]s of pure builtin / monomorphized-builtin intrinsics
-    /// (`array_get_value`, `array_len`, `select`, every `core:builtin` / wasm-asset
-    /// function, …). The value-graph builder reads this to know a call writes no
-    /// heap, so a field version forwards across a loop body that only calls such
-    /// intrinsics. Resolved by `func_id` off the callee's arena record now that
+    /// The [`FuncId`]s of the calls that write no struct field: a builtin whose
+    /// declared storage reaches nothing it could write but array elements, a
+    /// value-copy helper, or a function that never returns. The value-graph
+    /// builder reads this so a field version forwards across a loop body that
+    /// only calls these. Resolved by `func_id` off the callee's arena record now that
     /// the call node carries no `FunctionRef`. O(functions); a pass computes it
     /// once before its per-function loop.
     pub fn pure_builtin_callee_ids(&self) -> IndexSet<FuncId> {
@@ -248,11 +248,13 @@ impl NirPackage {
             .iter()
             .filter_map(|f| {
                 let f = f.borrow();
-                // An intrinsic below the field layer, a value-copy helper, or a
-                // bodied function that never returns. Bodied only: an extern
-                // stub's `return_type` is not an id this table resolves.
-                let writes_no_slot = f.module_source.is_builtin()
+                let writes_no_slot = self
+                    .builtin_declarations
+                    .get(&*f)
+                    .is_some_and(BuiltinDeclaration::writes_no_field)
                     || f.is_value_copy()
+                    // Bodied only: an extern stub's `return_type` is not an id
+                    // this table resolves.
                     || (f.body.is_some() && type_table.is_never(f.return_type));
                 writes_no_slot.then(|| f.id.expect("func_id assigned at lower"))
             })

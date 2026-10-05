@@ -101,46 +101,19 @@ fn is_copy_value_call(expr: &TirExpr) -> bool {
     )
 }
 
-/// Whether the callee is `builtin::select`, which hands back one of its two
-/// operands rather than calling anything: `wir_build` lowers it to
-/// `WirInstr::Select`. It is a merge wearing a call's spelling, so it is planned
-/// as one — no copy defends an operand, and the result is owned exactly when
-/// both are, the rule `If` and `Match` follow. [`builtin_projected_params`]
-/// says so for both readers: [`passes_through`] skips the copy at the
-/// operands, and [`OwnedCalls::projected_params`] moves it to the result.
-pub fn is_select(func: &FunctionRef) -> bool {
-    func.is_builtin_named("select")
-}
-
-/// The operand positions [`is_select`] merges. Position 0 is the condition.
-pub const SELECT_OPERANDS: [usize; 2] = [1, 2];
-
 /// Whether the builtin `func` hands parameter `pos` straight back instead of
 /// keeping it, so the copy that makes the result independent belongs at the
 /// result — where the freshness analysis puts one only if the caller can still
 /// reach the argument. Copying at the argument would pay unconditionally, and
-/// for `select` would pay for both operands where the equivalent `if` pays for
-/// one.
-///
-/// `#[result(part_of = p)]` states it for one parameter. `builtin::select`
-/// merges two, which that clause cannot name.
+/// for `builtin::select`, a merge wearing a call's spelling, would pay for both
+/// operands where the equivalent `if` pays for one.
 pub fn passes_through(builtins: &BuiltinDeclarations, func: &FunctionRef, pos: usize) -> bool {
     // A retained position outlives the call, so the caller's storage would be
     // the callee's to keep and the result's copy comes too late to defend it.
-    builtin_projected_params(builtins, func).is_some_and(|ps| ps.contains(&pos))
+    builtins
+        .part_of_params(func)
+        .is_some_and(|ps| ps.contains(&pos))
         && !builtins.retain_specs(func).any(|r| r.source == pos)
-}
-
-/// The parameters a builtin's result is a projection of: the one
-/// `#[result(part_of = p)]` names, or both operands of `builtin::select`.
-pub fn builtin_projected_params<'a>(
-    builtins: &'a BuiltinDeclarations,
-    func: &FunctionRef,
-) -> Option<&'a [usize]> {
-    if is_select(func) {
-        return Some(&SELECT_OPERANDS);
-    }
-    builtins.part_of_params(func)
 }
 
 /// What a `return` actually delivers. `return` is no wrap site, so

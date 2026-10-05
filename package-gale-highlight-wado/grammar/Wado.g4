@@ -226,7 +226,7 @@ traitMember
     ;
 
 traitMemberBody
-    : 'type' name (':' traitBounds)? ';'
+    : 'type' name genericParams? (':' traitBounds)? ';'
     | functionDecl
     ;
 
@@ -239,7 +239,7 @@ implMember
     ;
 
 implMemberBody
-    : 'type' name '=' typeRef ';'
+    : 'type' name genericParams? '=' typeRef ';'
     | '..' ('trap' | 'forward')
     | 'export' 'async'? 'fn' funcSig
     | ('pub' | 'internal')? implPubMember
@@ -793,7 +793,7 @@ fragment UNICODE_ESCAPE
     ;
 
 IDENTIFIER
-    : [a-zA-Z_] [\p{Alphabetic}\p{N}_]*
+    : [a-zA-Z_] [a-zA-Z0-9_]*
     ;
 
 SHEBANG
@@ -813,7 +813,7 @@ BLOCK_COMMENT
     ;
 
 WS
-    : [ \t\r\n]+ -> skip
+    : [ \t\r\n\f]+ -> skip
     ;
 
 // A format specifier's fill character when it is not ASCII: `${x:あ>8}`.

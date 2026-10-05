@@ -5,6 +5,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::builtin_facts::{ParamShape, ReturnShape};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 #[cfg(debug_assertions)]
@@ -12,17 +13,18 @@ use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::package::Package;
 use crate::tir::{
-    BuiltinDeclaration, BuiltinDeclarations, ResolvedType, RetainSpec, TirFunction, TypeTable,
+    BuiltinDeclaration, BuiltinDeclarations, DeclarationShape, TirFunction, TypeTable,
 };
 use crate::wir_build::component_plan;
 use crate::world_registry::TEST_WORLD;
 
-/// Snapshot what a `core:builtin` declared about storage, before
+/// Snapshot what a body-less declaration states about a call, before
 /// monomorphization drops the generic declarations the plan phase would read.
 ///
-/// Every body-less declaration is snapshot, not only `core:builtin`'s: a CM
-/// import or a `.wasm` / `.wat` asset declares the same way, and each is keyed
-/// by its module so two of a name stay apart.
+/// Only a declaration stating `#[storage]` and `#[side_effect]` is snapshot, so
+/// a reader finding none knows nothing here says what the call does: a CM
+/// import's raw call states its facts instead. Each is keyed by its module so
+/// two of a name stay apart.
 fn record_declaration(
     func: &TirFunction,
     module_source: &ModuleSource,
@@ -32,45 +34,37 @@ fn record_declaration(
     if func.body.is_some() {
         return;
     }
-    let retains: Vec<RetainSpec<usize>> = func.retains_by_position().collect();
-    // A call re-homes a method's key to the impl block's module, so only a free
-    // function is found again under the module declaring it. A reader takes the
-    // absent method as one it knows nothing about.
-    if func.method_info.is_some() {
+    let Some(facts) = func.declared_by_position() else {
         assert!(
-            func.declared_return_convention.is_none()
-                && retains.is_empty()
-                && func.immediates.is_empty()
-                && func.trap.is_none()
-                && func.linear_memory.is_none(),
-            "`{}` is a method with a bodyless attribute; key the snapshot by `DefId` first",
+            func.immediates.is_empty(),
+            "`{}` states `#[immediate]` without `#[storage]` and `#[side_effect]`",
             func.name
         );
         return;
-    }
-    // Every bodyless free function is snapshot, not only one carrying an
-    // attribute: a reader asking what this call does with an argument must be
-    // able to tell "it says it keeps nothing" from "nothing here says".
+    };
+    // A call re-homes a method's key to the impl block's module, so only a free
+    // function is found again under the module declaring it.
+    assert!(
+        func.method_info.is_none(),
+        "`{}` is a method with a bodyless attribute; key the snapshot by `DefId` first",
+        func.name
+    );
+    // Read from the type, as validation did: `TirParam::is_mut_ref` is filled by
+    // `lower::plan`, which runs after link, so every one of them is still
+    // `false`.
+    let params: Vec<ParamShape<'_>> = func
+        .params
+        .iter()
+        .map(|p| ParamShape::of(&p.name, p.type_id, type_table))
+        .collect();
+    let shape = DeclarationShape::new(
+        &params,
+        ReturnShape::of(func.return_type, type_table),
+        func.immediates_by_position().collect(),
+    );
     out.insert(
         (module_source.clone(), declaration_key(func)),
-        BuiltinDeclaration {
-            arity: func.params.len(),
-            returns: func.declared_return_convention,
-            retains,
-            // Read from the type, which is the only thing that says `&mut` here:
-            // `TirParam::is_mut_ref` is filled by `lower::plan`, which runs
-            // after link, so every one of them is still `false`.
-            mut_params: func
-                .params
-                .iter()
-                .enumerate()
-                .filter(|(_, p)| matches!(type_table.get(p.type_id), ResolvedType::MutRef(_)))
-                .map(|(pos, _)| pos)
-                .collect(),
-            immediate_params: func.immediates_by_position().collect(),
-            trap: func.trap_by_position(),
-            linear_memory: func.linear_memory,
-        },
+        BuiltinDeclaration::new(facts, shape),
     );
 }
 

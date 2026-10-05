@@ -1,0 +1,17 @@
+// A binding's own parameters are its family's, not the impl's: an impl
+// parameter the binding's parameter shares a name with is constrained by
+// nothing in the head, and the binding does not constrain it either.
+trait Store with () {
+    type Buf<E>;
+}
+
+struct Lists {}
+
+impl<E> Store for Lists {
+    type Buf<E> = List<E>;
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "the type parameter `E` is not constrained by the impl target or the trait reference"}

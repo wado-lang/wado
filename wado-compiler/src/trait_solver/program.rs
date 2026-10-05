@@ -105,6 +105,7 @@ impl SolverType {
         Some(match self {
             Self::Param(index) | Self::Pack(index) => arg(*index)?,
             Self::Decl(head, inner) => Self::Decl(*head, each(inner)?),
+<<<<<<< HEAD
             Self::Tuple(inner) => {
                 let mut spliced = Vec::with_capacity(inner.len());
                 for elem in inner {
@@ -114,6 +115,21 @@ impl SolverType {
                     }
                 }
                 Self::Tuple(spliced)
+||||||| c296641f9
+            Self::Tuple(inner) => Self::Tuple(each(inner)?),
+=======
+            // A pack spread in a tuple splices its elements in: `[..T]` at
+            // `T = [i32, bool]` is `[i32, bool]`, not `[[i32, bool]]`.
+            Self::Tuple(inner) => {
+                let mut elems = Vec::with_capacity(inner.len());
+                for elem in inner {
+                    match (elem, elem.map_params(arg)?) {
+                        (Self::Pack(_), Self::Tuple(spliced)) => elems.extend(spliced),
+                        (_, mapped) => elems.push(mapped),
+                    }
+                }
+                Self::Tuple(elems)
+>>>>>>> origin/main
             }
             Self::Ref { is_mut, inner } => Self::Ref {
                 is_mut: *is_mut,

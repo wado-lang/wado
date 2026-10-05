@@ -58,8 +58,9 @@ impl ByteList {
     /// Byte at `index` without bounds checking — the `ByteList` parallel to
     /// `String::get_byte_unchecked`.
     ///
-    /// The caller must guarantee `0 <= index < len()`; an out-of-range `index`
-    /// reads past the buffer or traps. Intended for hot byte-scanning loops
+    /// The caller must guarantee `0 <= index < len()`. Any other `index` is a
+    /// contract violation, and the result is unspecified: a byte of the
+    /// backing array past the buffer, or a trap. Intended for hot byte-scanning loops
     /// that have already range-checked `index`.
     pub fn get_byte_unchecked(&self, index: i32) -> u8 {
         return self.get_unchecked(index);

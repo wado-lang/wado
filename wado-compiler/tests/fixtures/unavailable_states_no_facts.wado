@@ -1,0 +1,25 @@
+// `#[unavailable]` reserves a name, not a signature: nothing ever calls one, so
+// the parameters it lists describe no call. A body-less declaration states
+// what a call does, and this one states nothing, since there is no call.
+
+pub struct Data {
+    a: i32,
+}
+
+#[unavailable("removed in 0.2.0; use `read` instead")]
+pub fn peek(d: &Data) -> Data;
+
+impl Data {
+    #[unavailable("write `Data { a }` instead")]
+    pub fn sibling(&self) -> Data;
+}
+
+test "a reserved name compiles without stating facts" {
+    let d = Data { a: 1 };
+    assert d.a == 1;
+}
+
+__DATA__
+{
+    "test": {}
+}

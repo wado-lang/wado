@@ -1,0 +1,28 @@
+// A trait parameter bounded by a function type is a trait argument like any
+// other: the projection a call returns and the one its signature names are
+// one type.
+
+trait Run<F: fn(i32) -> i32> with () {
+    type Out;
+
+    fn run(&self, f: F) -> Self::Out;
+}
+
+struct R {}
+
+impl<F: fn(i32) -> i32> Run<F> for R {
+    type Out = i32;
+
+    fn run(&self, f: F) -> i32 {
+        return f(3);
+    }
+}
+
+fn go<F: fn(i32) -> i32, X: Run<F>>(r: &X, f: F) -> X::Out {
+    let o: X::Out = r.run(f);
+    return o;
+}
+
+test "a fn-bound trait parameter is a trait argument" {
+    assert go(&R {}, |x: i32| x * 2) == 6;
+}

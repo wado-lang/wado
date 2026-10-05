@@ -1,0 +1,13 @@
+// A projection of a generic associated type supplies its arguments: the
+// associated type alone names a family, not a type.
+
+trait Store with () {
+    type Buf<E>;
+}
+
+fn take<S: Store>(b: S::Buf) {}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": ":8:22: analysis error: `S::Buf` takes 1 type argument, but 0 were supplied"}

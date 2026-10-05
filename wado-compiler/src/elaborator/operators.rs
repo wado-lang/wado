@@ -515,7 +515,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // A bounded operand compares through its bounds. Monomorphization
             // substitutes it with the concrete type and either resolves the
             // method call normally, or converts back to a binary op for primitives.
-            if let Some(operand) = self.bounded_operand(left, span) {
+            if let Some(operand) = self.bounded_operand(left) {
                 let is_eq = matches!(op, BinaryOp::Eq | BinaryOp::NotEq);
                 let item = if is_eq {
                     CompilerItem::Eq
@@ -1614,13 +1614,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let _local_index = ctx.add_local(name, type_id, false, None);
     }
 
-    /// `T::Output` for an operator applied to a type parameter — what the
-    /// frame's bound pins it to (`T: Mul<Output = T>`), else the projection
-    /// under that same trait, since `T: Add + Mul` declares `Output` twice.
+    /// `Output` for an operator dispatched through a bound: what the method
+    /// was typed to return at the bound that answered, `typed`, which reads
+    /// that bound's own `Output` (`T: Mul<Output = T>`) at its arguments.
     fn operator_output_type(
         &mut self,
         operand_type_id: TypeId,
         found_trait: &FqTraitName,
+        typed: TypeId,
     ) -> TypeId {
         let Some(trait_) = self.tysys.trait_env.trait_def_of_fq(found_trait) else {
             return operand_type_id;
@@ -1628,13 +1629,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !self.tysys.trait_env.declares_assoc_type(&trait_, "Output") {
             return operand_type_id;
         }
-        let Some(name) = self.tysys.binder_name(operand_type_id) else {
-            return operand_type_id;
-        };
-        self.frame_projection_of_trait(&name, trait_, "Output")
-            .unwrap_or_else(|| {
-                self.make_frame_projection_of_trait(operand_type_id, &name, trait_, "Output")
-            })
+        // `Output = Self::Size` names the operand's own projection again,
+        // which is the operand, whatever bindings the bound's frame carried.
+        let table = self.tysys.type_table.borrow();
+        if table.projects_alike(typed, operand_type_id) {
+            operand_type_id
+        } else {
+            typed
+        }
     }
 
     /// Report that `left` does not implement the trait `op` dispatches to, with
@@ -1759,7 +1761,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
         origin: Option<AstId>,
     ) -> Option<TypeId> {
-        let operand = self.bounded_operand(receiver, span)?;
+        let operand = self.bounded_operand(receiver)?;
         let Some((found_trait, info)) = self.find_operator_in_bounds(
             &operand.bounds,
             receiver,
@@ -1771,7 +1773,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.report_operator_bound_missing(&operand.spelled, item, span);
             return Some(TypeTable::ERROR);
         };
-        let return_type = self.operator_output_type(receiver, &found_trait);
+        let return_type = self.operator_output_type(receiver, &found_trait, info.return_type);
         let mut resolved =
             ResolvedTraitMethod::through_bound(operand.receiver, found_trait, method_name, info);
         resolved.return_type = return_type;
@@ -1780,7 +1782,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// `ty` as an operand its bounds give operators to: a type parameter, or a
     /// projection its trait bounds (`type Item: Eq`). `None` for any other type.
-    fn bounded_operand(&self, ty: TypeId, span: Span) -> Option<BoundedOperand> {
+    fn bounded_operand(&self, ty: TypeId) -> Option<BoundedOperand> {
         let (receiver, spelled) = {
             let tt = self.tysys.type_table.borrow();
             let resolved = tt.get(ty);
@@ -1795,7 +1797,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(BoundedOperand {
             receiver,
             spelled,
-            bounds: self.carried_bounds(ty, span),
+            bounds: self.carried_bounds(ty),
         })
     }
 

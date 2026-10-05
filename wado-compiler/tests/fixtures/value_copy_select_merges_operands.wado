@@ -4,7 +4,7 @@
 // only the result — twice the copies, for a branchless form that buys nothing
 // back on a reference-typed operand.
 //
-// `#[result(part_of = value)]` says the same of `black_box`, which emits no
+// `#[storage(part_of_args)]` says the same of `black_box`, which emits no
 // instruction at all. Whether a copy is needed is then the analysis's answer,
 // and it lands on the result.
 
@@ -42,7 +42,7 @@ fn select_operand_written_after(c: bool, x: P, z: P) -> String {
     return `${s.a}${y.a}`;
 }
 
-// The same for a by-value `#[result(part_of)]` hand-back. Every other one takes
+// The same for a by-value `part_of_args` hand-back. Every other one takes
 // its parameter by `&`, so `AccessPath::through_borrow` refused the share; a
 // by-value operand has no lender and reaches that rule with nothing set.
 #[inline(never)]

@@ -1,7 +1,7 @@
-use { HashSet, HashSeed } from "core:collections";
+use { HashSet } from "core:collections";
 
 test "a set iterates in insertion order" {
-    let mut set = HashSet::<String>::new(HashSeed::fixed(1, 2));
+    let mut set = HashSet::<String>::new();
     assert set.insert("c");
     assert set.insert("a");
     assert !set.insert("c");
@@ -20,7 +20,7 @@ test "a set iterates in insertion order" {
 }
 
 test "clear empties the set" {
-    let mut set = HashSet::<i32>::new(HashSeed::fixed(1, 2));
+    let mut set = HashSet::<i32>::new();
     assert set.insert(1);
     set.clear();
     assert set.is_empty();

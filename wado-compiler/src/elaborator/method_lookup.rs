@@ -15,8 +15,8 @@ use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName, TUPLE_TYPE_NAME};
 use crate::tir::{
-    FunctionRef, ResolvedType, SlotProjections, SubstitutionContext, TargetBinding, TemplateId,
-    TypeId, TypeTable, positional_substitution,
+    FunctionRef, ProjectionAnswer, ResolvedType, SlotProjections, SubstitutionContext,
+    TargetBinding, TemplateId, TypeId, TypeTable, positional_substitution,
 };
 use crate::token::Span;
 
@@ -1322,19 +1322,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         receiver_type: TypeId,
         own_params: &[ast::GenericParam],
+        slots: &[TypeId],
         type_args: &[TypeId],
         reached: &[String],
         span: Span,
     ) {
-        let open: Vec<String> = own_params
+        let reached_packs: Vec<(&ast::GenericParam, TypeId, TypeId)> = own_params
             .iter()
+            .zip(slots)
             .zip(type_args)
-            .filter(|(p, _)| p.is_pack && reached.contains(&p.name))
-            .filter(|&(_, &arg)| {
-                self.tysys.is_unbound_type_param(arg)
-                    || self.tysys.type_table.borrow().contains_type_pack(arg)
+            .filter(|((p, _), _)| p.is_pack && reached.contains(&p.name))
+            .map(|((p, &slot), &arg)| (p, slot, arg))
+            .collect();
+        if reached_packs.is_empty() {
+            return;
+        }
+        // A pack left answering for itself is unanswered, whatever a caller's
+        // pack of the same name interns to. One spread over the caller's own
+        // (`[..Bs]`) is the caller forwarding it, settled as the caller's.
+        let scope = self.scope_type_param_ids();
+        let open: Vec<String> = reached_packs
+            .into_iter()
+            .filter(|&(_, slot, arg)| {
+                arg == slot
+                    || (self.tysys.is_unbound_type_param(arg) && !scope.contains(&arg))
+                    || self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .any_type_pack(arg, &|pack| !scope.contains(&pack))
             })
-            .map(|(p, _)| p.name.clone())
+            .map(|(p, _, _)| p.name.clone())
             .collect();
         if open.is_empty() {
             return;
@@ -1373,6 +1391,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &method_name,
             receiver_type,
             own_params,
+            slots,
             &type_args,
             &reached,
             span,
@@ -1983,12 +2002,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let impl_sig = signatures
             .impl_sig(impl_ref.0)
             .instantiate_slots(&scope.tysys.type_table, &impl_slots);
-        scope.annotate_ctx.trait_ctx.assoc_type_bindings.extend(
-            impl_sig
-                .associated_types
-                .iter()
-                .map(|(n, &t)| (n.clone(), t)),
-        );
+        scope
+            .annotate_ctx
+            .trait_ctx
+            .assoc_type_bindings
+            .resolved
+            .extend(
+                impl_sig
+                    .associated_types
+                    .iter()
+                    .map(|(n, &t)| (n.clone(), t)),
+            );
 
         let blanket_type_param = is_blanket_type_param.then(|| impl_struct_name.clone());
         // The block names the receiver — not the letter, which another blanket
@@ -2144,7 +2168,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let own_assoc = impl_sig
                     .associated_types
                     .iter()
-                    .map(|(name, &ty)| (trait_decl, name.clone(), ty))
+                    .map(|(name, &ty)| ProjectionAnswer::at_any(trait_decl, name.clone(), ty))
                     .collect();
                 let instantiated = default_method.sig.decl.instantiate_slots_with(
                     tt,

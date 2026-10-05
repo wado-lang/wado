@@ -1,9 +1,10 @@
 //! Bounds a body establishes on its own, without a value graph: the range of an
 //! integer operand, the length of a GC array, and which loops count up to a
 //! constant. [`FnEffect`](super::mod_ref::FnEffect) reads them to clear the trap
-//! of a builtin whose `#[trap(...)]` checks all hold, and the divergence of a
+//! of a builtin whose trap conditions all hold, and the divergence of a
 //! loop that runs out.
 
+use crate::builtin_facts::{Trap, TrapCheck};
 use crate::const_eval;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
@@ -13,32 +14,9 @@ use crate::nir_arena::{
 use crate::nir_value_graph::ValueKind;
 use crate::optimize::arena_query::{binary_parts, local_written_by, operand_local, storage_root};
 use crate::primitive::PrimitiveType;
-use crate::tir::{ResolvedType, TrapCheck, TrapSpec, TypeTable};
+use crate::tir::{BuiltinDeclaration, ResolvedType, TypeTable};
 
-/// What a bodyless builtin declared, as a call to it is read here.
-#[derive(Debug, Clone, Copy)]
-pub(super) struct Builtin<'a> {
-    /// `#[trap(...)]`; `None` is "may trap".
-    pub trap: Option<&'a TrapSpec<usize>>,
-    /// The positions it takes by `&mut`.
-    pub mut_params: &'a IndexSet<usize>,
-    /// `#[result(owned)]`.
-    pub owned: bool,
-}
-
-impl Builtin<'_> {
-    /// Positions of arrays whose bounds the call checks, and so leaves in place.
-    fn checked_arrays(&self) -> impl Iterator<Item = usize> + '_ {
-        self.trap.into_iter().flat_map(|spec| {
-            spec.checks.iter().filter_map(|check| match check {
-                TrapCheck::Outside { array, .. } => Some(*array),
-                TrapCheck::Negative(_) | TrapCheck::Unset(_) => None,
-            })
-        })
-    }
-}
-
-/// The builtin calls in one body whose every `#[trap(...)]` check holds, each
+/// The builtin calls in one body whose every trap condition holds, each
 /// with the callee its checks were proven against.
 #[derive(Debug, Default)]
 pub(super) struct Proofs(IndexMap<ExprId, FuncId>);
@@ -78,7 +56,7 @@ const MAX_DEPTH: u32 = 16;
 pub(super) fn analyze<'b>(
     body: &Body,
     types: &TypeTable,
-    builtin: impl Fn(FuncId) -> Option<Builtin<'b>>,
+    builtin: impl Fn(FuncId) -> Option<&'b BuiltinDeclaration>,
 ) -> Bounds {
     let mut scan = Scan {
         body,
@@ -108,7 +86,7 @@ struct Scan<'a, F> {
     out: Bounds,
 }
 
-impl<'b, F: Fn(FuncId) -> Option<Builtin<'b>>> Scan<'_, F> {
+impl<'b, F: Fn(FuncId) -> Option<&'b BuiltinDeclaration>> Scan<'_, F> {
     fn count_writes(&mut self) {
         let body = self.body;
         // A builtin checking an array's bounds does not rebind that array, so
@@ -134,7 +112,7 @@ impl<'b, F: Fn(FuncId) -> Option<Builtin<'b>>> Scan<'_, F> {
                 if let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind
                     && let Some(builtin) = (self.builtin)(*func_id)
                 {
-                    for pos in builtin.checked_arrays() {
+                    for &pos in &builtin.ranged_params {
                         if let Some(Operand::Expr(arr)) = args.get(pos).map(|a| a.expr) {
                             element_writes.insert(arr);
                         }
@@ -343,7 +321,12 @@ impl<'b, F: Fn(FuncId) -> Option<Builtin<'b>>> Scan<'_, F> {
         let ExprKind::Call { func_id, args, .. } = &self.body.exprs[e].kind else {
             return;
         };
-        let Some(spec) = (self.builtin)(*func_id).and_then(|b| b.trap) else {
+        let Some(builtin) = (self.builtin)(*func_id) else {
+            return;
+        };
+        // A call to a `!` declaration traps whatever its conditions say.
+        let (Some(Trap::Only(checks)), false) = (builtin.facts.trap(), builtin.never_returns)
+        else {
             return;
         };
         let arg = |pos: usize| args[pos].expr;
@@ -353,13 +336,13 @@ impl<'b, F: Fn(FuncId) -> Option<Builtin<'b>>> Scan<'_, F> {
         };
         let holds = |check: &TrapCheck<usize>| match *check {
             TrapCheck::Negative(pos) => nonneg(Some(pos), 0).is_some(),
-            TrapCheck::Outside { array, at, len } => matches!(
-                (self.array_len(arg(array), 0), nonneg(at, 0), nonneg(len, 1)),
+            TrapCheck::Outside { array, at, count } => matches!(
+                (self.array_len(arg(array), 0), nonneg(at, 0), nonneg(count, 1)),
                 (Some(l), Some(at), Some(n)) if at.checked_add(n).is_some_and(|end| end <= l)
             ),
             TrapCheck::Unset(array) => self.elements_never_unset(arg(array)),
         };
-        if spec.checks.iter().all(holds) {
+        if checks.iter().all(holds) {
             self.out.proofs.0.insert(e, *func_id);
         }
     }
@@ -369,7 +352,7 @@ impl<'b, F: Fn(FuncId) -> Option<Builtin<'b>>> Scan<'_, F> {
     fn elements_never_unset(&self, op: Operand) -> bool {
         let array = self.types.peel_refs(self.body.operand_type(op));
         let Some(ResolvedType::BuiltinArray(element)) = self.types.get_pruned(array) else {
-            panic!("`#[trap(unset = ...)]` names a parameter that is not an `Array<T>`");
+            panic!("`#[side_effect(unset = ...)]` names a parameter that is not an `Array<T>`");
         };
         self.types.is_primitive_like(*element)
     }
@@ -413,7 +396,9 @@ impl<'b, F: Fn(FuncId) -> Option<Builtin<'b>>> Scan<'_, F> {
                 op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
                 expr,
             } => self.fresh(*expr, depth + 1),
-            ExprKind::Call { func_id, .. } => (self.builtin)(*func_id).is_some_and(|b| b.owned),
+            ExprKind::Call { func_id, .. } => {
+                (self.builtin)(*func_id).is_some_and(BuiltinDeclaration::allocates)
+            }
             ExprKind::StructLiteral { .. }
             | ExprKind::TupleLiteral { .. }
             | ExprKind::ArrayLiteral { .. }
@@ -506,7 +491,7 @@ impl<'b, F: Fn(FuncId) -> Option<Builtin<'b>>> Scan<'_, F> {
                 expr,
             } => self.array_len(*expr, depth + 1),
             ExprKind::Call { func_id, args, .. } => {
-                let pos = (self.builtin)(*func_id)?.trap?.result_len?;
+                let pos = (self.builtin)(*func_id)?.facts.len?;
                 let (lo, _) = self.range(args[pos].expr, depth + 1)?;
                 (lo >= 0).then_some(lo)
             }

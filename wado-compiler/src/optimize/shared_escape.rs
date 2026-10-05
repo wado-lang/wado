@@ -7,12 +7,12 @@ use std::ops::ControlFlow;
 
 use crate::compiler_trace;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{FuncId, FunctionRef, NirFunction};
+use crate::nir::{FuncId, NirFunction};
 use crate::nir_arena::{
     ArenaStructPatternField, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind,
 };
 use crate::nir_package::NirPackage;
-use crate::tir::TypeTable;
+use crate::tir::{DeclarationLookup, TypeTable};
 
 use super::arena_query::{bare_promoted_local, collect_pattern_bindings, holds_reference};
 
@@ -308,35 +308,39 @@ impl<'a> SharedEscape<'a> {
 
     /// What a bodyless callee's clauses say about the argument at `pos`.
     fn declared_arg(&self, callee: &NirFunction, pos: usize) -> ArgClauses {
-        // Every declaration answers the same way, wherever it comes from: an
-        // absent `#[retain]` keeps nothing, and a silent `#[result]` may hand
-        // any argument back. Only a callee nothing describes is refused.
-        let reference = FunctionRef::from_resolved(callee, callee.module_source.clone());
+        // Every declaration answers the same way, wherever it comes from, from
+        // what its `#[storage]` implies. Only a callee nothing describes is
+        // refused.
+        let reference = DeclarationLookup::from(callee);
         let declarations = &self.project.builtin_declarations;
-        if declarations.get(&reference).is_none() {
+        if declarations.get(reference).is_none() {
             return ArgClauses::REFUSED;
         }
-        // `#[retain(elements_of = p)]` leaves `p` alone and re-homes what `p`
-        // holds — into another parameter, or into an owned result. Either lands
-        // the elements under a name this walk never sees, so a write through
-        // that name would reach the shared object's contents unobserved.
+        // Keeping what a reference `p` points to leaves `p` alone and re-homes
+        // what it holds — into another parameter, or into an owned result.
+        // Either lands the elements under a name this walk never sees, so a
+        // write through that name would reach the shared object's contents
+        // unobserved.
         if declarations
-            .retain_specs(&reference)
+            .retain_specs(reference)
             .any(|r| r.source == pos && r.elements)
         {
             return ArgClauses::REFUSED;
         }
-        // Only a result that can hold a reference is a way out of the call. Two
-        // clauses answer for it: `#[result(owned)]` says the object handed back
-        // is not the one given, and `#[result(part_of = p)]` says it is — which
-        // makes the result the caller's to account for, under `Slot::Ret`.
+        // Only a result that can hold a reference is a way out of the call. An
+        // owned result is not the object given, and `part_of_args` says it may
+        // be — which makes the result the caller's to account for, under
+        // `Slot::Ret`.
         let escapes = holds_reference(&self.project.type_table.borrow(), callee.return_type);
-        let hands_back = escapes && declarations.part_of(&reference) == Some(pos);
-        if escapes && !hands_back && !declarations.returns_owned(&reference) {
+        let hands_back = escapes
+            && declarations
+                .part_of_params(reference)
+                .is_some_and(|params| params.contains(&pos));
+        if escapes && !hands_back && !declarations.returns_owned(reference) {
             return ArgClauses::REFUSED;
         }
         ArgClauses {
-            reads: declarations.reads_param(&reference, pos),
+            reads: declarations.reads_param(reference, pos),
             hands_back,
         }
     }

@@ -1,0 +1,19 @@
+// An impl binds a generic associated type with as many parameters as the
+// trait declares, whatever else the trait's header leaves unsettled.
+
+trait Store<effect E> with () {
+    type Pair<A, B>;
+}
+
+struct Lists {}
+
+impl Store for Lists {
+    type Pair<A> = List<A>;
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":11:5: analysis error: trait 'Store' declares `type Pair<A, B>`, but the impl binds `type Pair<A>`"
+}

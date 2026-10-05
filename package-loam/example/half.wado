@@ -7,7 +7,7 @@
 //!     wado run package-loam/example/half.wado
 
 use { println, Stdout } from "core:cli";
-use { Batch, In, Out, Tensor, Weights, forward } from "./half.onnxtext"
+use { Batch, Cpu, In, Out, Tensor, Weights, forward } from "./half.onnxtext"
     with {
         generator: {
             module: "../src/generator.wado",
@@ -56,12 +56,12 @@ fn ones_input() -> Tensor<f16, [Batch, In]> {
 }
 
 export fn run() with Stdout {
-    let y = forward(&ones_input(), &weights());
+    let y = forward(&mut Cpu {}, &ones_input(), &weights());
     println(`logits ${y.extents[1]}, first ${y.data[0]}`);
 }
 
 test "a float16 boundary runs through the f32 kernels and comes back half" {
-    let y = forward(&ones_input(), &weights());
+    let y = forward(&mut Cpu {}, &ones_input(), &weights());
 
     assert y.extents == [1, 2] as List<i32>;
     // Four ones at 0.5 each, plus the bias. Every value here is exact in f16.

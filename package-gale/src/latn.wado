@@ -51,7 +51,8 @@ use {
     ATN_TR_ATOM,
     ATN_TR_RULE,
 } from "./runtime/atn.wado";
-use { GaleMap } from "./gale_map.wado";
+use { HashMap } from "core:collections";
+use { GALE_SEED } from "./hash_seed.wado";
 
 /// Highest Unicode scalar value; the upper bound of a `.` / negated set.
 global CHAR_MAX: i32 = 0x10FFFF;
@@ -63,7 +64,7 @@ global CHAR_MAX: i32 = 0x10FFFF;
 /// need not re-run `lexer_rule_is_atn_class`.
 pub struct LatnResult {
     pub atn: Atn,
-    pub rule_index: GaleMap<String, i32>,
+    pub rule_index: HashMap<String, i32>,
     pub atn_class_rules: List<String>,
 }
 
@@ -358,7 +359,7 @@ struct LatnBuilder {
     states: List<AtnState>,
     rule_start: List<i32>,
     rule_stop: List<i32>,
-    name_to_idx: GaleMap<String, i32>,
+    name_to_idx: HashMap<String, i32>,
     ci: bool,
 }
 
@@ -396,7 +397,7 @@ pub fn build_latn(grammar: &Grammar) -> LatnResult {
         states: [],
         rule_start: [],
         rule_stop: [],
-        name_to_idx: GaleMap::<String, i32>::new(),
+        name_to_idx: HashMap::<String, i32>::with_seed(GALE_SEED),
         ci: false,
     };
     for let mut i = 0; i < incl.len(); i += 1 {

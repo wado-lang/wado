@@ -9,7 +9,7 @@ use crate::compiler_item::CompilerItem;
 use crate::elaborator::trait_env::{BlanketImpl, BlanketReceiver, TraitEnv};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, RefKind, mangle_generic_name};
+use crate::name::{FqTypeName, LocalMethodName, Projected, RefKind, mangle_generic_name};
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, LetStorage, MonomorphInfo, ResolvedType,
     TemplateId, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule,
@@ -1116,10 +1116,8 @@ impl Monomorphizer {
             return_type,
             task_return_type: None,
             effects: generic.effects.clone(),
-            retains: generic.retains.clone(),
             immediates: generic.immediates.clone(),
-            trap: generic.trap.clone(),
-            linear_memory: generic.linear_memory,
+            declared: generic.declared.clone(),
             body,
             span: generic.span,
             local_count,
@@ -1135,7 +1133,6 @@ impl Monomorphizer {
             compiler_item: generic.compiler_item,
             export_name: generic.export_name.clone(),
             allocator_tag: generic.allocator_tag.clone(),
-            declared_return_convention: generic.declared_return_convention,
             kind: FunctionKind::Regular,
 
             return_abi: tir::ReturnAbi::default(),
@@ -2371,6 +2368,24 @@ impl Monomorphizer {
         type_table: &TypeTable,
     ) -> FqTypeName {
         arg.rewrite(&|node| {
+            // A family's projection is named at its arguments, which may be
+            // any type, so it is spelled rather than looked up.
+            if let Some(projected) = node.projected()
+                && !node.args().is_empty()
+            {
+                let family = Self::family_at_instance(&projected, bound, type_table)?;
+                let args: Vec<FqTypeName> = node
+                    .args()
+                    .iter()
+                    .map(|arg| Self::trait_arg_at_instance(arg, bound, type_table))
+                    .collect();
+                return Some(type_table.family_name_at(
+                    projected.owning_trait,
+                    projected.assoc,
+                    family,
+                    &args,
+                ));
+            }
             let answer = Self::type_at_instance(node, bound, type_table)?;
             Some(type_table.fq_type_name(answer))
         })
@@ -2384,14 +2399,34 @@ impl Monomorphizer {
         bound: &impl Fn(&str) -> Option<TypeId>,
         type_table: &TypeTable,
     ) -> Option<TypeId> {
-        if let Some((base, assoc, owning_trait)) = node.projected() {
-            let base_id = Self::type_at_instance(base, bound, type_table)?;
-            return type_table.resolve_assoc_type_qualified(base_id, &owning_trait, assoc);
-        }
         if !node.args().is_empty() {
             return None;
         }
+        if let Some(projected) = node.projected() {
+            return Self::family_at_instance(&projected, bound, type_table);
+        }
         bound(node.binder_name()?)
+    }
+
+    /// What the projection `projected` binds at the instance, its own
+    /// parameters still open: answered by the impl its trait is reached at.
+    fn family_at_instance(
+        projected: &Projected<'_>,
+        bound: &impl Fn(&str) -> Option<TypeId>,
+        type_table: &TypeTable,
+    ) -> Option<TypeId> {
+        let base_id = Self::type_at_instance(projected.base, bound, type_table)?;
+        let trait_args: Option<Vec<TypeId>> = projected.trait_args.and_then(|args| {
+            args.iter()
+                .map(|arg| Self::type_at_instance(arg, bound, type_table))
+                .collect()
+        });
+        type_table.resolve_assoc_type_qualified(
+            base_id,
+            &projected.owning_trait,
+            trait_args.as_deref(),
+            projected.assoc,
+        )
     }
 
     /// The name with the trait's arguments cut back to what the answering impl

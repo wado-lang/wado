@@ -18,7 +18,7 @@ use crate::token::Span;
 use super::callee::CalleeRef;
 use super::method_lookup::ImplParamSlots;
 use super::scope::{
-    BinderInScope, BoundSelf, ElaboratedBound, Scope, ScopedBound, TraitCheckFrame,
+    BinderInScope, BoundSelf, ElaboratedBound, FamilySite, Scope, ScopedBound, TraitCheckFrame,
     trait_params_from_impl,
 };
 use super::trait_env::{ImplMethodHeader, InheritedBound, ViaClause};
@@ -41,7 +41,8 @@ use crate::elaborator::types::{RequiredTrait, StructFieldInfo, VariantInfo};
 use crate::name::FqTraitName;
 use crate::resolve::{Resolution, Resolutions};
 use crate::synthesis::template::{PairedEq, eq_from_written_cmp, written_impl_reaches};
-use crate::tir::{SlotProjections, TraitRef};
+use crate::tir::{AssocTypeSig, ProjectionAnswer, SlotProjections, TraitRef};
+use crate::unparse::unparse_generic_params_into;
 
 /// Proof that a bound was asked and answered no. Its field is private here, so
 /// [`TypeError::TraitBoundNotSatisfied`] can be raised from nowhere else.
@@ -213,9 +214,12 @@ fn mentions_type_pack(ty: &ast::Type) -> bool {
 /// declaring item's parameter space, and become what the site wrote there.
 /// `None` where one stays a binder, which belongs to the site's own caller.
 fn asked_at(trait_: FqTraitName, at_call: &[(FqTypeName, FqTypeName)]) -> Option<FqTraitName> {
-    let asked = at_call
-        .iter()
-        .fold(trait_, |trait_, (param, arg)| trait_.substitute(param, arg));
+    let asked = trait_.rewrite_args(&|name| {
+        at_call
+            .iter()
+            .find(|(param, _)| param == name)
+            .map(|(_, arg)| arg.clone())
+    });
     (!asked.args_mention_binder()).then_some(asked)
 }
 
@@ -384,42 +388,101 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// bindings. Only the bound's trait is checked, not its associated-type
     /// equality constraints (`Iterator<Item = Self::Item>`).
     pub(super) fn enforce_impl_assoc_type_bounds(&mut self, impl_block: &ast::ImplBlock) {
-        let Some((_, _, trait_decl)) = self.impl_trait_head(impl_block) else {
+        let Some(impl_site) = self.impl_family_site(impl_block) else {
             return;
         };
+        let (owner, site) = &impl_site;
         for binding in &impl_block.associated_types {
-            let bounds: Vec<(String, Option<FqTraitName>)> = self
+            let Some(decl) = self
                 .tysys
                 .trait_env
-                .assoc_type_decl(&trait_decl, &binding.name)
-                .into_iter()
-                .flat_map(|decl| &decl.bounds)
-                .filter(|bound| bound.names_a_trait())
-                .map(|bound| self.tysys.bound_named_written(bound))
-                .collect();
-            if bounds.is_empty() {
+                .assoc_type_decl(owner, &binding.name)
+                .cloned()
+            else {
+                continue;
+            };
+            let sig = self
+                .assoc_type_sig(*owner, &binding.name)
+                .expect("an impl is checked outside any signature's build");
+            self.check_assoc_binding_params(*owner, &decl, &sig, site, binding);
+            if sig.bounds.is_empty() {
                 continue;
             }
             let type_id = self
                 .annotate_ctx
                 .trait_ctx
                 .assoc_type_bindings
+                .resolved
                 .get(&binding.name)
                 .copied()
-                .unwrap_or_else(|| self.resolve_type(&binding.ty));
-            if self.tysys.type_table.borrow().contains_type_param(type_id) {
+                .unwrap_or_else(|| self.resolve_assoc_binding(Some(&impl_site), binding));
+            if !self.tysys.type_table.borrow().binding_is_concrete(type_id) {
                 continue;
             }
-            for (bound_name, bound_trait) in &bounds {
-                self.enforce_single_bound_args(
-                    type_id,
-                    bound_name,
-                    bound_trait.as_ref(),
-                    &binding.name,
-                    binding.span,
-                );
-            }
+            // The binding answers for every argument the declaration admits,
+            // so it is checked over the family's own parameters, which carry
+            // the bounds the declaration gives them and nothing more.
+            self.with_assoc_params(*owner, &decl.name, &decl.type_params, Some(site), |scope| {
+                let owed = scope.bounds_at(*owner, &decl.name, site, &sig.params);
+                scope.enforce_trait_refs(type_id, &owed, &binding.name, binding.span);
+            });
         }
+    }
+
+    /// Report an impl binding `decl` with parameters other than the trait
+    /// declares: another count, or other bounds at a position, arguments
+    /// included. Names may differ, since each is read as the family's own.
+    fn check_assoc_binding_params(
+        &mut self,
+        owning_trait: DefId,
+        decl: &ast::AssociatedTypeDecl,
+        sig: &AssocTypeSig,
+        site: &FamilySite,
+        binding: &ast::AssociatedTypeBinding,
+    ) {
+        // A header whose trait arguments name no type is reported as such, and
+        // a declared bound reading them has nothing to be compared at; the
+        // count needs no arguments.
+        let agrees = decl.type_params.len() == binding.type_params.len()
+            && (site.trait_args.is_none() || {
+                let declared = self.param_bounds_at(owning_trait, &decl.name, site, &sig.params);
+                let written: Vec<Vec<TraitRef>> = self.with_assoc_params(
+                    owning_trait,
+                    &decl.name,
+                    &binding.type_params,
+                    None,
+                    |e| e.family_param_bounds(owning_trait, &decl.name, &binding.type_params),
+                );
+                let table = self.tysys.type_table.borrow();
+                let same = |a: &TraitRef, b: &TraitRef| {
+                    a.decl == b.decl && table.same_types(&a.args, &b.args)
+                };
+                declared.iter().zip(&written).all(|(d, w)| {
+                    d.len() == w.len() && d.iter().all(|bound| w.iter().any(|b| same(bound, b)))
+                })
+            });
+        if agrees {
+            return;
+        }
+        let params_as_written = |params: &[ast::GenericParam]| {
+            let mut out = String::new();
+            unparse_generic_params_into(params, &mut out);
+            out
+        };
+        let trait_name = self
+            .tysys
+            .trait_env
+            .decl_header_of(&owning_trait)
+            .expect("the trait declaring `decl` has a header")
+            .name
+            .clone();
+        let _ = self.emit(TypeError::ImplAssocTypeParamsMismatch {
+            trait_name,
+            assoc_name: binding.name.clone(),
+            declared: params_as_written(&decl.type_params),
+            written: params_as_written(&binding.type_params),
+            span: binding.span,
+        });
     }
 
     /// Enforce a trait's supertraits against `impl Trait for T`. The whole
@@ -667,6 +730,7 @@ impl TypeSystem {
         )
     }
 
+<<<<<<< HEAD
     /// [`Self::bound_written`] with the bound's spelling, for the diagnostics
     /// that name a trait the resolution did not reach.
     pub(super) fn bound_named_written(
@@ -674,6 +738,72 @@ impl TypeSystem {
         bound: &ast::TraitBound,
     ) -> (String, Option<FqTraitName>) {
         (bound.name.clone(), self.bound_written(bound))
+||||||| c296641f9
+    /// Each transitive supertrait in `closure`, written in `params`' own
+    /// parameter space and re-spelled at `written`.
+    ///
+    /// Substitution over names, not over a spelling: an argument that projects
+    /// travels as a base, a member and the trait declaring it, which no
+    /// spelling holds (WEP-2026-08-12).
+    fn supertrait_names(
+        &self,
+        params: &[ast::GenericParam],
+        closure: &[InheritedBound],
+        written: &[FqTypeName],
+    ) -> Vec<(DefId, FqTraitName)> {
+        closure
+            .iter()
+            .map(|inherited| {
+                let named = self.bound_written(&inherited.bound).unwrap_or_else(|| {
+                    FqTraitName::declared(self.resolutions.defs(), inherited.decl)
+                });
+                let at_site = params.iter().zip(written).fold(named, |acc, (param, arg)| {
+                    acc.substitute(&FqTypeName::binder(&param.name), arg)
+                });
+                (inherited.decl, at_site)
+            })
+            .collect()
+    }
+
+    /// [`Self::bound_written`] with the bound's spelling, for the diagnostics
+    /// that name a trait the resolution did not reach.
+    pub(super) fn bound_named_written(
+        &self,
+        bound: &ast::TraitBound,
+    ) -> (String, Option<FqTraitName>) {
+        (bound.name.clone(), self.bound_written(bound))
+    }
+
+=======
+    /// Each transitive supertrait in `closure`, written in `params`' own
+    /// parameter space and re-spelled at `written`.
+    ///
+    /// Substitution over names, not over a spelling: an argument that projects
+    /// travels as a base, a member and the trait declaring it, which no
+    /// spelling holds (WEP-2026-08-12).
+    fn supertrait_names(
+        &self,
+        params: &[ast::GenericParam],
+        closure: &[InheritedBound],
+        written: &[FqTypeName],
+    ) -> Vec<(DefId, FqTraitName)> {
+        closure
+            .iter()
+            .map(|inherited| {
+                let named = self.bound_written(&inherited.bound).unwrap_or_else(|| {
+                    FqTraitName::declared(self.resolutions.defs(), inherited.decl)
+                });
+                let at_site = named.rewrite_args(&|name| {
+                    params
+                        .iter()
+                        .zip(written)
+                        .find(|(param, _)| *name == FqTypeName::binder(&param.name))
+                        .map(|(_, arg)| arg.clone())
+                });
+                (inherited.decl, at_site)
+            })
+            .collect()
+>>>>>>> origin/main
     }
 
     /// Whether `type_id` answers every one of `bounds`, each at the arguments it
@@ -856,6 +986,129 @@ impl TypeSystem {
         self.compiler_trait_def(CompilerItem::Display) == Some(trait_)
     }
 
+<<<<<<< HEAD
+||||||| c296641f9
+    /// Whether what a bound writes for `trait_`'s own parameters answers
+    /// `wanted`, a position it leaves open taking the trait's declared default.
+    /// A `Self` default names whatever is answering, which no written argument
+    /// equals, so only a default naming a type answers here.
+    fn args_answer(&self, args: &[FqTypeName], trait_: DefId, wanted: &[FqTypeName]) -> bool {
+        wanted.iter().enumerate().all(|(i, want)| {
+            args.get(i)
+                .or_else(|| self.trait_env.named_default_arg(trait_, i))
+                == Some(want)
+        })
+    }
+
+    /// Whether `bound` on a type parameter supplies `trait_` at the arguments
+    /// `wanted` writes — the bound itself writing them, or a supertrait that
+    /// does (`AsStrSlice: Eq<String>`).
+    fn bound_supplies(
+        &self,
+        bound: &ast::TraitBound,
+        trait_: DefId,
+        wanted: &[FqTypeName],
+    ) -> bool {
+        let args_of = |named: Option<FqTraitName>| {
+            self.args_answer(
+                &named.map(|n| n.args().to_vec()).unwrap_or_default(),
+                trait_,
+                wanted,
+            )
+        };
+        let Some(named) = self
+            .resolutions
+            .bound_decl(bound)
+            .filter(|def| self.trait_env.declares_trait(def))
+        else {
+            return false;
+        };
+        if named == trait_ {
+            return args_of(self.bound_written(bound));
+        }
+        let written: Vec<FqTypeName> = bound
+            .type_args
+            .iter()
+            .map(|arg| written_type_arg(arg, &self.resolutions))
+            .collect();
+        let (params, closure) = self.trait_env.supertrait_closure_declared(&named);
+        self.supertrait_names(params, closure, &written)
+            .iter()
+            .any(|(decl, named)| *decl == trait_ && self.args_answer(named.args(), trait_, wanted))
+    }
+
+=======
+    /// Whether what a bound writes for `trait_`'s own parameters answers
+    /// `wanted`, a position it leaves open taking the trait's declared default.
+    /// A `Self` default names whatever is answering, which no written argument
+    /// equals, so only a default naming a type answers here.
+    fn args_answer(&self, args: &[FqTypeName], trait_: DefId, wanted: &[FqTypeName]) -> bool {
+        wanted.iter().enumerate().all(|(i, want)| {
+            args.get(i)
+                .or_else(|| self.trait_env.named_default_arg(trait_, i))
+                == Some(want)
+        })
+    }
+
+    /// Whether `bound` on a type parameter supplies `trait_` at the arguments
+    /// `wanted` writes — the bound itself writing them, or a supertrait that
+    /// does (`AsStrSlice: Eq<String>`).
+    fn bound_supplies(
+        &self,
+        bound: &ast::TraitBound,
+        trait_: DefId,
+        wanted: &[FqTypeName],
+    ) -> bool {
+        let args_of = |named: Option<FqTraitName>| {
+            self.args_answer(
+                &named.map(|n| n.args().to_vec()).unwrap_or_default(),
+                trait_,
+                wanted,
+            )
+        };
+        let Some(named) = self
+            .resolutions
+            .bound_decl(bound)
+            .filter(|def| self.trait_env.declares_trait(def))
+        else {
+            return false;
+        };
+        if named == trait_ {
+            return args_of(self.bound_written(bound));
+        }
+        let written: Vec<FqTypeName> = bound
+            .type_args
+            .iter()
+            .map(|arg| written_type_arg(arg, &self.resolutions))
+            .collect();
+        let (params, closure) = self.trait_env.supertrait_closure_declared(&named);
+        self.supertrait_names(params, closure, &written)
+            .iter()
+            .any(|(decl, named)| *decl == trait_ && self.args_answer(named.args(), trait_, wanted))
+    }
+
+    /// Whether the family parameter `param` supplies `trait_` at `wanted`, by
+    /// the bounds the declaration gives it where the frame stands.
+    fn assoc_param_supplies(
+        &self,
+        ctx: &Scope,
+        param: TypeId,
+        trait_: DefId,
+        wanted: &[FqTypeName],
+    ) -> bool {
+        let key = self.type_table.borrow().type_key(param);
+        ctx.trait_ctx
+            .assoc_param_bounds
+            .get(&key)
+            .is_some_and(|bounds| {
+                bounds.iter().any(|bound| {
+                    bound.canonical() == Some(trait_)
+                        && self.args_answer(bound.args(), trait_, wanted)
+                })
+            })
+    }
+
+>>>>>>> origin/main
     fn walk_structural_derive_members(
         &self,
         scope: &TypeLookup,
@@ -1018,6 +1271,7 @@ impl TypeSystem {
             | ResolvedType::Unknown
             | ResolvedType::Error
             | ResolvedType::TypeParam { .. }
+            | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::AssocTypeProjection { .. } => false,
@@ -1085,6 +1339,609 @@ impl TypeSystem {
                 .any(|p| p.bounds.iter().any(ast::TraitBound::writes_self))
     }
 
+<<<<<<< HEAD
+||||||| c296641f9
+    /// Whether `type_id` implements `trait_` with an impl of its own, or else
+    /// through `underlying`, the type it wraps.
+    fn implements_itself_or_through(
+        &self,
+        ctx: &Scope,
+        scope: &TypeLookup,
+        type_id: TypeId,
+        trait_: &FqTraitName,
+        underlying: TypeId,
+    ) -> bool {
+        let decl = trait_
+            .canonical()
+            .expect("the caller answered a binder-headed trait");
+        let receiver = self.type_table.borrow().impl_receiver_key(type_id);
+        self.find_trait_impl_for_subject(
+            ctx,
+            scope,
+            Some(type_id),
+            &receiver,
+            decl,
+            NewtypePeel::Follow,
+            trait_.args(),
+        ) || self.type_implements_trait(ctx, scope, underlying, trait_)
+    }
+
+    fn type_implements_trait_inner(
+        &self,
+        ctx: &Scope,
+        scope: &TypeLookup,
+        type_id: TypeId,
+        resolved: &ResolvedType,
+        trait_: &FqTraitName,
+    ) -> bool {
+        let Some(decl) = trait_.canonical() else {
+            return false;
+        };
+        let wanted = trait_.args();
+        let on_bound = self.on_bound_of(decl);
+
+        if on_bound.is_some_and(OnBoundTrait::is_total) {
+            return true;
+        }
+
+        // A plain `enum` auto-derives `Display` (the bare case name), so its
+        // bound holds before `synthesize_traits` emits the body.
+        if matches!(resolved, ResolvedType::Enum { .. }) && self.is_display_trait_of(decl) {
+            return true;
+        }
+
+        if let Some(name) = bound_param_name(resolved) {
+            return ctx
+                .trait_ctx
+                .type_param_bounds
+                .get(name)
+                .is_some_and(|bounds| bounds.iter().any(|b| self.bound_supplies(b, decl, wanted)));
+        }
+
+        if on_bound == Some(OnBoundTrait::Ref) {
+            return self.is_ref_identity(resolved);
+        }
+
+        if on_bound == Some(OnBoundTrait::RefMut) {
+            return self
+                .is_ref_mut_identity(&|def| scope.variant_cases_of(def).is_some(), resolved);
+        }
+
+        let is_eq = on_bound == Some(OnBoundTrait::Eq);
+        let is_eq_or_ord = is_eq || on_bound == Some(OnBoundTrait::Ord);
+
+        // Primitives have built-in implementations for certain traits
+        if let ResolvedType::Primitive(prim) = &resolved {
+            // A derived impl writes no argument, so it answers `Eq<Self>` and
+            // `Ord<Self>`. A bound writing one needs an impl that writes it.
+            if is_eq_or_ord && wanted.is_empty() {
+                return true;
+            }
+            // Numeric primitives implement the operator traits the compiler
+            // supplies — the items, so a user `trait Rem` gets none of it.
+            if self
+                .compiler_item_of_trait(decl)
+                .is_some_and(|op| primitive_has_operator(prim.as_str(), op))
+            {
+                return true;
+            }
+            return self.find_trait_impl_for_subject(
+                ctx,
+                scope,
+                Some(type_id),
+                &Receiver::Type(FqTypeName::builtin(prim.as_str())),
+                decl,
+                NewtypePeel::Follow,
+                wanted,
+            );
+        }
+
+        // Read the head out before the block: a `borrow()` held in a
+        // `let`-chain lives for the whole body, and the body borrows mutably
+        // to record the synthesis request.
+        let nominal = self.type_table.borrow().nominal_head(type_id);
+        // A written `eq` leaves `Ord` to be written beside it, whether the
+        // members or a newtype's base would supply one, and a written `cmp`
+        // gives `==` whatever the members are (spec-traits.md §Derivation
+        // Policy).
+        if on_bound == Some(OnBoundTrait::Ord)
+            && wanted.is_empty()
+            && self.ord_withheld_by(type_id).is_some()
+        {
+            return false;
+        }
+        if is_eq
+            && wanted.is_empty()
+            && let Some((_, module_source)) = &nominal
+            && self.comparison_written_alone(type_id) == Some(OnBoundTrait::Ord)
+        {
+            let ord = self
+                .compiler_trait_def(CompilerItem::Ord)
+                .expect("a written `Ord` names the trait");
+            // At the instance's arguments, so the derived impl carries the
+            // written one's bounds.
+            let receiver = self.type_table.borrow().impl_receiver_key(type_id);
+            let holds = self.find_trait_impl_for_type_with_args(
+                ctx,
+                scope,
+                Some(type_id),
+                &receiver,
+                ord,
+                self.impl_position_args(type_id).as_deref(),
+                NewtypePeel::Here,
+                &[],
+            );
+            if holds {
+                self.type_table
+                    .borrow_mut()
+                    .record_bound_driven_synth_request_for(type_id, module_source, &decl);
+            }
+            return holds;
+        }
+
+        if let ResolvedType::Struct { def, .. } = &resolved
+            && on_bound == Some(OnBoundTrait::Default)
+            && self.is_defaultable_struct(scope, type_id)
+        {
+            if let Some(key) = on_bound.and_then(|t| self.compiler_trait_def(t.compiler_item())) {
+                let module_source = self
+                    .type_table
+                    .borrow()
+                    .def_module(def.decl().unwrap())
+                    .clone();
+                self.type_table
+                    .borrow_mut()
+                    .record_bound_driven_synth_request_for(type_id, &module_source, &key);
+            }
+            return true;
+        }
+
+        // Which kind the type is has one answer, `TypeTable::reflect_kind`;
+        // this adds what the type table cannot see, whether the members the
+        // kind exposes are visible here (WEP 2026-06-13). The identity root
+        // skips that gate — naming a type is not enumerating it — and a kind
+        // a newtype does not own is left to the recursion below.
+        let reflect_kind = self.type_table.borrow().reflect_kind(type_id);
+        if let Some(bound) = on_bound.filter(|b| b.is_reflect())
+            && let Some(kind) = reflect_kind
+            && (bound == OnBoundTrait::Reflect
+                || (kind == bound.compiler_item()
+                    && self.reflect_members_visible(scope, resolved, kind)))
+            && self.is_reflect_eligible(type_id)
+        {
+            // A declaration's impl is synthesized in the module walk; an
+            // instance's is minted on request, so record one here.
+            if matches!(resolved, ResolvedType::GenericInstance { .. })
+                && let Some(key) = self.compiler_trait_def(bound.compiler_item())
+            {
+                let (_, module_source) = self
+                    .type_table
+                    .borrow()
+                    .nominal_head(type_id)
+                    .expect("a generic instance names a declaration");
+                self.type_table
+                    .borrow_mut()
+                    .record_bound_driven_synth_request_for(type_id, &module_source, &key);
+            }
+            return true;
+        }
+
+        // A newtype inherits its base's impls (WEP 2026-01-29), so a structure
+        // kind holds for it exactly when it holds for what it wraps. Asked of
+        // the base, not of the ultimate one, so a chain answers a link at a
+        // time and each still names itself.
+        if let ResolvedType::Newtype { base_type, .. } = &resolved
+            && !matches!(on_bound, Some(OnBoundTrait::ReflectNewtype))
+            && on_bound.is_some_and(OnBoundTrait::is_reflect)
+        {
+            let base = *base_type;
+            let base_resolved = self.type_table.borrow().get(base).clone();
+            return self.type_implements_trait_inner(ctx, scope, base, &base_resolved, trait_);
+        }
+
+        // Get the type name and type args for looking up implementations
+        let (type_name, type_args) = match &resolved {
+            ResolvedType::Struct { .. }
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Resource { .. } => {
+                (self.type_table.borrow().fq_base_type_name(type_id), None)
+            }
+            // The raw GC array `Array<T>` carries its element as a single type
+            // arg, so trait impls (`impl IntoIterator for Array<T>`) resolve
+            // under the canonical name "Array".
+            ResolvedType::BuiltinArray(_) => (
+                FqTypeName::builtin(TypeTable::ARRAY_TYPE_NAME),
+                self.impl_position_args(type_id),
+            ),
+            ResolvedType::GenericInstance { .. } | ResolvedType::GenericResource { .. } => (
+                self.type_table.borrow().fq_base_type_name(type_id),
+                self.impl_position_args(type_id),
+            ),
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                let inner_id = *inner;
+                // The prelude's `Eq for &T` makes `&T: Eq` wherever `T: Eq`.
+                // Where it is not, an impl written for the reference may still
+                // answer, as the solver finds.
+                if is_eq
+                    && wanted.is_empty()
+                    && self.type_implements_trait(ctx, scope, inner_id, trait_)
+                {
+                    return true;
+                }
+                let kind = RefKind::from_resolved(resolved)
+                    .expect("a reference type has a reference kind");
+                // Check for a specific impl Trait for &T first (e.g., impl Inspect for &T)
+                if self.find_trait_impl_for_type_with_args(
+                    ctx,
+                    scope,
+                    Some(type_id),
+                    &Receiver::Ref(kind),
+                    decl,
+                    self.impl_position_args(type_id).as_deref(),
+                    NewtypePeel::Follow,
+                    wanted,
+                ) {
+                    return true;
+                }
+                if self.ref_denies_bound(on_bound, decl) {
+                    return false;
+                }
+                return self.type_implements_trait(ctx, scope, inner_id, trait_);
+            }
+            ResolvedType::AssocTypeProjection { bounds, .. } => {
+                // An associated type projection T::Assoc implements a trait if
+                // the trait declaration for Assoc declares that bound, at the
+                // arguments the bound writes.
+                return bounds.iter().any(|b| {
+                    b.canonical() == Some(decl) && self.args_answer(b.args(), decl, wanted)
+                });
+            }
+            ResolvedType::Newtype { base_type, .. } => {
+                return self.implements_itself_or_through(ctx, scope, type_id, trait_, *base_type);
+            }
+            // `()` names no declaring module, so an `impl Trait for ()` is
+            // indexed under the builtin spelling the unit type mangles as.
+            ResolvedType::Unit => (FqTypeName::builtin(UNIT_TYPE_NAME), None),
+            ResolvedType::Flags { .. } => {
+                return self.implements_itself_or_through(
+                    ctx,
+                    scope,
+                    type_id,
+                    trait_,
+                    TypeTable::U32,
+                );
+            }
+            ResolvedType::Primitive(_) => unreachable!("a primitive is answered above"),
+            ResolvedType::Never
+            | ResolvedType::Function { .. }
+            | ResolvedType::Reactive(_)
+            | ResolvedType::TypeParam { .. }
+            | ResolvedType::InferVar(_)
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::Unknown
+            | ResolvedType::Error => return false,
+        };
+
+        self.find_trait_impl_for_type_with_args(
+            ctx,
+            scope,
+            Some(type_id),
+            &Receiver::Type(type_name),
+            decl,
+            type_args.as_deref(),
+            NewtypePeel::Follow,
+            wanted,
+        )
+    }
+
+=======
+    /// Whether `type_id` implements `trait_` with an impl of its own, or else
+    /// through `underlying`, the type it wraps.
+    fn implements_itself_or_through(
+        &self,
+        ctx: &Scope,
+        scope: &TypeLookup,
+        type_id: TypeId,
+        trait_: &FqTraitName,
+        underlying: TypeId,
+    ) -> bool {
+        let decl = trait_
+            .canonical()
+            .expect("the caller answered a binder-headed trait");
+        let receiver = self.type_table.borrow().impl_receiver_key(type_id);
+        self.find_trait_impl_for_subject(
+            ctx,
+            scope,
+            Some(type_id),
+            &receiver,
+            decl,
+            NewtypePeel::Follow,
+            trait_.args(),
+        ) || self.type_implements_trait(ctx, scope, underlying, trait_)
+    }
+
+    fn type_implements_trait_inner(
+        &self,
+        ctx: &Scope,
+        scope: &TypeLookup,
+        type_id: TypeId,
+        resolved: &ResolvedType,
+        trait_: &FqTraitName,
+    ) -> bool {
+        let Some(decl) = trait_.canonical() else {
+            return false;
+        };
+        let wanted = trait_.args();
+        let on_bound = self.on_bound_of(decl);
+
+        if on_bound.is_some_and(OnBoundTrait::is_total) {
+            return true;
+        }
+
+        // A plain `enum` auto-derives `Display` (the bare case name), so its
+        // bound holds before `synthesize_traits` emits the body.
+        if matches!(resolved, ResolvedType::Enum { .. }) && self.is_display_trait_of(decl) {
+            return true;
+        }
+
+        if let Some(name) = bound_param_name(resolved) {
+            return ctx
+                .trait_ctx
+                .type_param_bounds
+                .get(name)
+                .is_some_and(|bounds| bounds.iter().any(|b| self.bound_supplies(b, decl, wanted)));
+        }
+
+        if let ResolvedType::AssocParam { .. } = resolved {
+            return self.assoc_param_supplies(ctx, type_id, decl, wanted);
+        }
+
+        if on_bound == Some(OnBoundTrait::Ref) {
+            return self.is_ref_identity(resolved);
+        }
+
+        if on_bound == Some(OnBoundTrait::RefMut) {
+            return self
+                .is_ref_mut_identity(&|def| scope.variant_cases_of(def).is_some(), resolved);
+        }
+
+        let is_eq = on_bound == Some(OnBoundTrait::Eq);
+        let is_eq_or_ord = is_eq || on_bound == Some(OnBoundTrait::Ord);
+
+        // Primitives have built-in implementations for certain traits
+        if let ResolvedType::Primitive(prim) = &resolved {
+            // A derived impl writes no argument, so it answers `Eq<Self>` and
+            // `Ord<Self>`. A bound writing one needs an impl that writes it.
+            if is_eq_or_ord && wanted.is_empty() {
+                return true;
+            }
+            // Numeric primitives implement the operator traits the compiler
+            // supplies — the items, so a user `trait Rem` gets none of it.
+            if self
+                .compiler_item_of_trait(decl)
+                .is_some_and(|op| primitive_has_operator(prim.as_str(), op))
+            {
+                return true;
+            }
+            return self.find_trait_impl_for_subject(
+                ctx,
+                scope,
+                Some(type_id),
+                &Receiver::Type(FqTypeName::builtin(prim.as_str())),
+                decl,
+                NewtypePeel::Follow,
+                wanted,
+            );
+        }
+
+        // Read the head out before the block: a `borrow()` held in a
+        // `let`-chain lives for the whole body, and the body borrows mutably
+        // to record the synthesis request.
+        let nominal = self.type_table.borrow().nominal_head(type_id);
+        // A written `eq` leaves `Ord` to be written beside it, whether the
+        // members or a newtype's base would supply one, and a written `cmp`
+        // gives `==` whatever the members are (spec-traits.md §Derivation
+        // Policy).
+        if on_bound == Some(OnBoundTrait::Ord)
+            && wanted.is_empty()
+            && self.ord_withheld_by(type_id).is_some()
+        {
+            return false;
+        }
+        if is_eq
+            && wanted.is_empty()
+            && let Some((_, module_source)) = &nominal
+            && self.comparison_written_alone(type_id) == Some(OnBoundTrait::Ord)
+        {
+            let ord = self
+                .compiler_trait_def(CompilerItem::Ord)
+                .expect("a written `Ord` names the trait");
+            // At the instance's arguments, so the derived impl carries the
+            // written one's bounds.
+            let receiver = self.type_table.borrow().impl_receiver_key(type_id);
+            let holds = self.find_trait_impl_for_type_with_args(
+                ctx,
+                scope,
+                Some(type_id),
+                &receiver,
+                ord,
+                self.impl_position_args(type_id).as_deref(),
+                NewtypePeel::Here,
+                &[],
+            );
+            if holds {
+                self.type_table
+                    .borrow_mut()
+                    .record_bound_driven_synth_request_for(type_id, module_source, &decl);
+            }
+            return holds;
+        }
+
+        if let ResolvedType::Struct { def, .. } = &resolved
+            && on_bound == Some(OnBoundTrait::Default)
+            && self.is_defaultable_struct(scope, type_id)
+        {
+            if let Some(key) = on_bound.and_then(|t| self.compiler_trait_def(t.compiler_item())) {
+                let module_source = self
+                    .type_table
+                    .borrow()
+                    .def_module(def.decl().unwrap())
+                    .clone();
+                self.type_table
+                    .borrow_mut()
+                    .record_bound_driven_synth_request_for(type_id, &module_source, &key);
+            }
+            return true;
+        }
+
+        // Which kind the type is has one answer, `TypeTable::reflect_kind`;
+        // this adds what the type table cannot see, whether the members the
+        // kind exposes are visible here (WEP 2026-06-13). The identity root
+        // skips that gate — naming a type is not enumerating it — and a kind
+        // a newtype does not own is left to the recursion below.
+        let reflect_kind = self.type_table.borrow().reflect_kind(type_id);
+        if let Some(bound) = on_bound.filter(|b| b.is_reflect())
+            && let Some(kind) = reflect_kind
+            && (bound == OnBoundTrait::Reflect
+                || (kind == bound.compiler_item()
+                    && self.reflect_members_visible(scope, resolved, kind)))
+            && self.is_reflect_eligible(type_id)
+        {
+            // A declaration's impl is synthesized in the module walk; an
+            // instance's is minted on request, so record one here.
+            if matches!(resolved, ResolvedType::GenericInstance { .. })
+                && let Some(key) = self.compiler_trait_def(bound.compiler_item())
+            {
+                let (_, module_source) = self
+                    .type_table
+                    .borrow()
+                    .nominal_head(type_id)
+                    .expect("a generic instance names a declaration");
+                self.type_table
+                    .borrow_mut()
+                    .record_bound_driven_synth_request_for(type_id, &module_source, &key);
+            }
+            return true;
+        }
+
+        // A newtype inherits its base's impls (WEP 2026-01-29), so a structure
+        // kind holds for it exactly when it holds for what it wraps. Asked of
+        // the base, not of the ultimate one, so a chain answers a link at a
+        // time and each still names itself.
+        if let ResolvedType::Newtype { base_type, .. } = &resolved
+            && !matches!(on_bound, Some(OnBoundTrait::ReflectNewtype))
+            && on_bound.is_some_and(OnBoundTrait::is_reflect)
+        {
+            let base = *base_type;
+            let base_resolved = self.type_table.borrow().get(base).clone();
+            return self.type_implements_trait_inner(ctx, scope, base, &base_resolved, trait_);
+        }
+
+        // Get the type name and type args for looking up implementations
+        let (type_name, type_args) = match &resolved {
+            ResolvedType::Struct { .. }
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Resource { .. } => {
+                (self.type_table.borrow().fq_base_type_name(type_id), None)
+            }
+            // The raw GC array `Array<T>` carries its element as a single type
+            // arg, so trait impls (`impl IntoIterator for Array<T>`) resolve
+            // under the canonical name "Array".
+            ResolvedType::BuiltinArray(_) => (
+                FqTypeName::builtin(TypeTable::ARRAY_TYPE_NAME),
+                self.impl_position_args(type_id),
+            ),
+            ResolvedType::GenericInstance { .. } | ResolvedType::GenericResource { .. } => (
+                self.type_table.borrow().fq_base_type_name(type_id),
+                self.impl_position_args(type_id),
+            ),
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                let inner_id = *inner;
+                // The prelude's `Eq for &T` makes `&T: Eq` wherever `T: Eq`.
+                // Where it is not, an impl written for the reference may still
+                // answer, as the solver finds.
+                if is_eq
+                    && wanted.is_empty()
+                    && self.type_implements_trait(ctx, scope, inner_id, trait_)
+                {
+                    return true;
+                }
+                let kind = RefKind::from_resolved(resolved)
+                    .expect("a reference type has a reference kind");
+                // Check for a specific impl Trait for &T first (e.g., impl Inspect for &T)
+                if self.find_trait_impl_for_type_with_args(
+                    ctx,
+                    scope,
+                    Some(type_id),
+                    &Receiver::Ref(kind),
+                    decl,
+                    self.impl_position_args(type_id).as_deref(),
+                    NewtypePeel::Follow,
+                    wanted,
+                ) {
+                    return true;
+                }
+                if self.ref_denies_bound(on_bound, decl) {
+                    return false;
+                }
+                return self.type_implements_trait(ctx, scope, inner_id, trait_);
+            }
+            ResolvedType::AssocTypeProjection { .. } => {
+                // An associated type projection T::Assoc implements a trait if
+                // the trait declaration for Assoc declares that bound, at the
+                // arguments the bound writes. One whose signature is still
+                // being built is asked from inside its own declaration, which
+                // has said nothing of it yet.
+                let Some(bounds) = self.type_table.borrow_mut().projection_bounds(type_id) else {
+                    return false;
+                };
+                return bounds.iter().filter(|b| b.decl == decl).any(|b| {
+                    let named = self.type_table.borrow().trait_ref_name(b);
+                    self.args_answer(named.args(), decl, wanted)
+                });
+            }
+            ResolvedType::Newtype { base_type, .. } => {
+                return self.implements_itself_or_through(ctx, scope, type_id, trait_, *base_type);
+            }
+            // `()` names no declaring module, so an `impl Trait for ()` is
+            // indexed under the builtin spelling the unit type mangles as.
+            ResolvedType::Unit => (FqTypeName::builtin(UNIT_TYPE_NAME), None),
+            ResolvedType::Flags { .. } => {
+                return self.implements_itself_or_through(
+                    ctx,
+                    scope,
+                    type_id,
+                    trait_,
+                    TypeTable::U32,
+                );
+            }
+            ResolvedType::Primitive(_) => unreachable!("a primitive is answered above"),
+            ResolvedType::Never
+            | ResolvedType::Function { .. }
+            | ResolvedType::Reactive(_)
+            | ResolvedType::TypeParam { .. }
+            | ResolvedType::AssocParam { .. }
+            | ResolvedType::InferVar(_)
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::Unknown
+            | ResolvedType::Error => return false,
+        };
+
+        self.find_trait_impl_for_type_with_args(
+            ctx,
+            scope,
+            Some(type_id),
+            &Receiver::Type(type_name),
+            decl,
+            type_args.as_deref(),
+            NewtypePeel::Follow,
+            wanted,
+        )
+    }
+
+>>>>>>> origin/main
     /// Whether an impl block makes `type_key` implement `decl`. `subject` is
     /// the receiver's own `TypeId` where the caller holds one: a blanket
     /// pinning an assoc type to its receiver is decidable only against that.
@@ -1175,16 +2032,57 @@ impl TypeSystem {
     }
 
     /// Whether a bound writing `wanted` selects the header — see
-    /// [`super::trait_env::header_answers_bound_args`].
-    fn header_answers_bound_args(&self, header: &ImplHeader, wanted: &[FqTypeName]) -> bool {
+    /// [`super::trait_env::header_answers_bound_args`] — at the receiver whose
+    /// arguments are `type_args`: an impl parameter the target places stands
+    /// for the receiver's argument there, not for any type. One whose argument
+    /// inference has yet to settle stays open.
+    fn header_answers_bound_args(
+        &self,
+        header: &ImplHeader,
+        wanted: &[FqTypeName],
+        type_args: Option<&[TypeId]>,
+    ) -> bool {
         let Some(decl) = header.trait_def() else {
             return true;
         };
         let Some(decl_header) = self.trait_env.decl_header_of(&decl) else {
             return true;
         };
+        // Most headers write no argument an impl parameter stands in.
+        let written = header.trait_arg_ids();
+        if type_args.is_none() || !written.iter().any(FqTypeName::mentions_binder) {
+            return header_answers_bound_args(
+                written,
+                &header.ty,
+                &decl_header.type_params,
+                &self.resolutions,
+                wanted,
+            );
+        }
+        let slots = ImplParamSlots::of(&header.ty, &header.type_params);
+        let at_receiver: Vec<FqTypeName> = {
+            let table = self.type_table.borrow();
+            // A pack's slot is where its spread stands in the target, not one
+            // receiver argument, so it stays open.
+            let settled: IndexMap<FqTypeName, FqTypeName> = header
+                .type_params
+                .iter()
+                .filter(|param| !param.is_pack)
+                .filter_map(|param| {
+                    let &arg = type_args?.get(slots.of_name(&param.name)? as usize)?;
+                    (!table.awaits_inference(arg))
+                        .then(|| (FqTypeName::binder(&param.name), table.fq_type_name(arg)))
+                })
+                .collect();
+            // All at once: a receiver argument spelled like another impl
+            // parameter is not that parameter.
+            written
+                .iter()
+                .map(|written| written.rewrite(&|node| settled.get(node).cloned()))
+                .collect()
+        };
         header_answers_bound_args(
-            header.trait_arg_ids(),
+            &at_receiver,
             &header.ty,
             &decl_header.type_params,
             &self.resolutions,
@@ -1229,7 +2127,7 @@ impl TypeSystem {
                 // made an aliased bound unsatisfiable and a same-named foreign
                 // trait satisfied (#1785).
                 if header.trait_def() == Some(trait_)
-                    && self.header_answers_bound_args(header, wanted)
+                    && self.header_answers_bound_args(header, wanted, type_args)
                     && self.impl_reaches(entry, type_args)
                     && self.check_impl_block_bounds(ctx, scope, entry, subject, type_args)
                 {
@@ -1569,28 +2467,54 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The declaration cannot say: `I: IntoIterator<Item = u8>` is written at
     /// the caller. Every name gets an answer, because the projection over the
     /// receiver carries the caller's bindings and instantiating the recorded
-    /// one would not.
+    /// one would not. A generic associated type's answer is its family, over
+    /// its own parameters, which each projection's arguments then fill.
+    ///
+    /// The trait `bound` names is reached at the arguments `slots` give it, so
+    /// of two bounds on it (`Holder<i32> + Holder<String>`) the one answering
+    /// is the one read.
     fn trait_assoc_answers(
         &mut self,
         assoc_types: &[DeclaredAssocType],
         self_type_id: TypeId,
-    ) -> Vec<(DefId, String, TypeId)> {
-        let self_name = match self.tysys.type_table.borrow().get(self_type_id) {
-            ResolvedType::TypeParam { name, .. } => name.clone(),
-            _ => String::new(),
-        };
+        candidate: &BoundCandidate,
+    ) -> Vec<ProjectionAnswer> {
+        let self_name = self.tysys.binder_name(self_type_id).unwrap_or_default();
+        let read_as = ScopedBound::new(
+            candidate.bound.clone(),
+            candidate.written_self.at(self_type_id, candidate.decl),
+        );
+        let bound_args =
+            self.bound_trait_args(self_type_id, &read_as, &candidate.space, candidate.decl);
         let mut answers = Vec::with_capacity(assoc_types.len());
         for (declaring, decl) in assoc_types {
-            let known = self.frame_projection(self_type_id, &self_name, &decl.name);
+            let at_bound = *declaring == candidate.decl;
+            let trait_args = if at_bound {
+                bound_args.clone()
+            } else {
+                self.trait_args_for(self_type_id, &self_name, *declaring)
+            };
+            // Reached at the bound's own arguments, only what that bound binds
+            // answers: another bound on the trait is another instantiation.
+            let known = match (at_bound, trait_args.as_deref()) {
+                (true, Some(args)) => self
+                    .frame_projection_of_trait(&self_name, *declaring, Some(args), &decl.name)
+                    .or_else(|| self.carried_binding(self_type_id, &decl.name)),
+                _ => self.frame_projection(self_type_id, &self_name, &decl.name),
+            };
             let answer = known.unwrap_or_else(|| {
-                self.make_frame_projection_of_trait(
-                    self_type_id,
-                    &self_name,
-                    *declaring,
-                    &decl.name,
-                )
+                let open = self.family_params(*declaring, &decl.name);
+                let site = FamilySite {
+                    base: self_type_id,
+                    trait_args,
+                };
+                self.make_projection_at(site, &self_name, *declaring, &decl.name, &open)
             });
-            answers.push((*declaring, decl.name.clone(), answer));
+            answers.push(ProjectionAnswer::at_any(
+                *declaring,
+                decl.name.clone(),
+                answer,
+            ));
         }
         answers
     }
@@ -1599,10 +2523,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// frame wrote itself, and for an inherited one the chain from what `bounds`
     /// writes down to the trait that declared it.
     fn bound_space(&mut self, bounds: &[ScopedBound], elaborated: &ElaboratedBound) -> ParamSpace {
+        let own = elaborated.space.clone();
         let Some((root, via)) = elaborated.inherited.clone() else {
-            return ParamSpace::new();
+            return own;
         };
-        let root_args = self.trait_args_of_bound(bounds, root);
+        let root_args = self.in_space(&own, |e| e.trait_args_of_bound(bounds, root));
         self.inherited_space(root, &root_args, &via)
     }
 
@@ -1737,8 +2662,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<Vec<TypeId>> {
         let decl = candidate.decl;
         let (sig, trait_assoc_types) = self.trait_method_of(&decl, method_name)?;
-        let answers = self.trait_assoc_answers(&trait_assoc_types, self_type_id);
         let slots = self.bound_slots_in_space(candidate, self_type_id);
+        let answers = self.trait_assoc_answers(&trait_assoc_types, self_type_id, candidate);
         let instantiated = sig.decl.instantiate_slots_with(
             &self.tysys.type_table,
             &slots,
@@ -1846,6 +2771,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
         let (candidate, (sig, trait_assoc_types)) = resolved?;
+        let answers = self.trait_assoc_answers(&trait_assoc_types, self_type_id, &candidate);
         let BoundCandidate {
             bound,
             space,
@@ -1879,7 +2805,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             e.trait_named_with_resolved_args(fq_trait_name, &bound, &pick)
         });
 
-        let answers = self.trait_assoc_answers(&trait_assoc_types, self_type_id);
         let slots = self.in_space(&space, |e| {
             e.bound_slots(&bound, decl, self_type_id, written_self)
         });
@@ -2204,6 +3129,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|ty| e.resolve_type(ty))
                 .collect()
         })
+    }
+
+    /// [`Self::enforce_single_bound_args`] for each of `refs`, bounds already
+    /// instantiated as types, owed by `param_name`.
+    pub(super) fn enforce_trait_refs(
+        &mut self,
+        type_arg: TypeId,
+        refs: &[TraitRef],
+        param_name: &str,
+        span: Span,
+    ) {
+        for trait_ref in refs {
+            let (trait_name, trait_) = {
+                let table = self.tysys.type_table.borrow();
+                (
+                    table.def_name(trait_ref.decl).to_string(),
+                    table.trait_ref_name(trait_ref),
+                )
+            };
+            self.enforce_single_bound_args(type_arg, &trait_name, Some(&trait_), param_name, span);
+        }
     }
 
     /// Whether one concrete type argument meets one trait bound — the primitive
@@ -2649,10 +3595,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_ref: &TraitRef,
         bindings: &[ast::AssociatedTypeBinding],
     ) {
+        let impl_site = (
+            trait_ref.decl,
+            self.family_site(trait_ref.decl, concrete, &trait_ref.args),
+        );
         for binding in bindings {
-            let resolved_id = self.resolve_type(&binding.ty);
+            let resolved_id = self.resolve_assoc_binding(Some(&impl_site), binding);
             let mut table = self.tysys.type_table.borrow_mut();
-            if !table.contains_type_param(resolved_id) {
+            if table.binding_is_concrete(resolved_id) {
                 table.register_assoc_type_resolution(
                     concrete,
                     trait_ref.clone(),

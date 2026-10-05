@@ -16,9 +16,9 @@ use crate::defs::DefId;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FqTraitName, FqTypeName, FreeFunctionName, FunctionId, MethodName, UNIT_TYPE_NAME,
-    closure_call_method_name, closure_call_name, closure_functor_type, is_fn_type_name,
-    mangle_generic_name, mangle_local_trait_method, mangle_method_generic,
+    FqTraitName, FqTypeName, FreeFunctionName, FunctionId, MODULE_INIT_FUNCTION, MethodName,
+    UNIT_TYPE_NAME, closure_call_method_name, closure_call_name, closure_functor_type,
+    is_fn_type_name, mangle_generic_name, mangle_local_trait_method, mangle_method_generic,
 };
 use crate::nir::{FuncId, FunctionRef, NirFunction, NirImport, NirStruct};
 use crate::nir_arena::{
@@ -31,7 +31,7 @@ use crate::nir_visitor::{NirRefVisitor, reachable_exprs};
 use crate::optimize::arena_query::{
     expr_node_may_trap, operand_values_may_trap, promoted_local_reads,
 };
-use crate::tir::{ResolvedType, StructDef, TypeId, TypeTable};
+use crate::tir::{ResolvedType, StructDef, TypeId, TypeTable, projection_arguments};
 use crate::{hashmap, nir, tir};
 
 /// Call graph: function ID -> set of called function IDs
@@ -1748,8 +1748,16 @@ fn collect_type_dependencies(
         // surviving projection (e.g. a field type of a retained generic
         // template) would dangle when the parameter type is pruned,
         // crashing later name-mangling.
-        ResolvedType::AssocTypeProjection { param_id, .. } => {
+        ResolvedType::AssocTypeProjection {
+            param_id,
+            args,
+            trait_args,
+            ..
+        } => {
             collect_type_transitive(*param_id, type_table, reachable);
+            for arg in projection_arguments(args, trait_args) {
+                collect_type_transitive(arg, type_table, reachable);
+            }
         }
 
         // Leaf types - no dependencies
@@ -1763,6 +1771,7 @@ fn collect_type_dependencies(
         | ResolvedType::Variant { .. }
         | ResolvedType::Resource { .. }
         | ResolvedType::TypeParam { .. }
+        | ResolvedType::AssocParam { .. }
         | ResolvedType::TypePack { .. } => {}
         ResolvedType::InferVar(var) => panic!("{var} reached DCE"),
 
@@ -1905,8 +1914,16 @@ pub(super) fn deletable_value(
     body.find_in_live_node_under(NodeRef::Expr(root), |node| match node {
         _ if operand_values_may_trap(body, node) => Some(()),
         NodeRef::Expr(id) => match &body.exprs[id].kind {
+            // A hint goes with the code containing it, but `cold_path();` on
+            // its own is what it marks.
             ExprKind::Call { func_id, .. } => {
-                (!calls.call(id, *func_id).is_deletable()).then_some(())
+                let effect = calls.call(id, *func_id);
+                let deletable = if id == root {
+                    effect.is_deletable()
+                } else {
+                    effect.is_unobservable()
+                };
+                (!deletable).then_some(())
             }
             ExprKind::GlobalVarSet { .. }
             | ExprKind::Assign { .. }
@@ -2005,8 +2022,7 @@ impl GlobalGuards<'_> {
         let ExprKind::Call { func_id, args, .. } = &body.exprs[expr].kind else {
             return false;
         };
-        (self.inert_functions.contains(func_id)
-            || callee_descriptor(self.descriptors, *func_id).is_builtin_named("cold_path"))
+        (self.inert_functions.contains(func_id) || calls.call(expr, *func_id).is_unobservable())
             && args
                 .iter()
                 .all(|arg| deletable_value(body, arg.expr, self.types, calls))
@@ -2314,10 +2330,18 @@ fn compute_global_reachability(
 /// `GlobalVarSet` for a dead global from surviving function bodies
 /// (covers both the original `$initialize_module` and any inlined
 /// copies).
+///
+/// Whether a global's initializer runs is unspecified, except that it has run
+/// before the global is read. So under `Initializers::DropUnread`, which only
+/// the DCE ahead of every rewrite asks for, a dead global's initializer goes
+/// whole, effects and traps included, and takes with it the functions and
+/// imports only it reached. Later, a global is dead because a rewrite removed
+/// the program's reads, and its initializer keeps its effect.
 pub(super) fn remove_unreachable_globals(
     project: &mut NirPackage,
     used_globals: &IndexSet<(String, String)>,
     summaries: &FnSummaries,
+    initializers: Initializers,
 ) {
     project.globals.retain(|global| {
         let global_module_key = global.module_source.to_path().join("::");
@@ -2328,11 +2352,41 @@ pub(super) fn remove_unreachable_globals(
     for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
         let calls = summaries.of_body(i);
+        let is_module_init = func.name == MODULE_INIT_FUNCTION;
         if let Some(body) = func.body.as_mut() {
+            if is_module_init && initializers == Initializers::DropUnread {
+                drop_dead_initializers(body, used_globals);
+            }
             let root = body.root;
             remove_dead_global_sets(body, NodeRef::Block(root), used_globals, &type_table, calls);
         }
     }
+}
+
+/// What becomes of a dead global's initializer.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Initializers {
+    /// No rewrite has run, so a dead global is one the program never reads,
+    /// and its initializer goes whole.
+    DropUnread,
+    /// A rewrite may have removed a read the program performs, so the
+    /// initializer keeps its effect.
+    KeepEffects,
+}
+
+/// Drop each top-level store of `$initialize_module` to a dead global: before
+/// inlining copies it elsewhere, such a store is an initializer, and the
+/// program's assignments are elsewhere.
+fn drop_dead_initializers(body: &mut Body, used: &IndexSet<(String, String)>) {
+    let root = body.root;
+    let stmts = std::mem::take(&mut body.blocks[root].stmts);
+    body.blocks[root].stmts = stmts
+        .into_iter()
+        .filter(|&s| match body.stmts[s].kind {
+            StmtKind::Expr(Operand::Expr(store)) => dead_store_value(body, store, used).is_none(),
+            _ => true,
+        })
+        .collect();
 }
 
 /// Strip every store to a dead global under `node`, keeping a value that is not

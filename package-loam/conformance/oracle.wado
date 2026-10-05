@@ -9,6 +9,19 @@ use { infer } from "../src/infer.wado";
 use { known_tensor, read_tensor } from "../src/onnx_proto.wado";
 use { Schema } from "../src/schema.wado";
 
+/// The backend a generated module's `forward` runs through in these tests,
+/// spliced after the module; see `opaque_backend.wado`.
+global OPAQUE_BACKEND: String = #include_str("./opaque_backend.wado");
+
+/// The head of a program `ran` runs over the generated `source`: the module,
+/// `Opaque` beside its `Cpu`, and what a `run` prints with.
+pub fn program_over(source: &String) -> String {
+    return `${*source}
+${OPAQUE_BACKEND}
+use { println, Stdout } from "core:cli";
+`;
+}
+
 /// The module the generator writes for `graph` under `schema`, or why the
 /// build refuses it.
 pub fn generated(graph: &Graph, schema: &Schema) -> Result<String, String> {

@@ -161,7 +161,7 @@ keeps. Retention is not an effect either. It grants no authority and no handler
 intercepts it, so it has no place in a `with` clause.
 
 A declaration with no body has nothing to infer from, so it states what it keeps with
-[`#[retain(...)]` / `#[result(...)]`](./spec-attributes.md#retain--result).
+[`#[storage(...)]`](./spec-attributes.md#storage).
 
 Rationale: [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
 
@@ -195,8 +195,8 @@ always `ref_eq`: `&x` taken twice of one variable, or a reference and a copy of
 it. References to distinct places may also be `ref_eq`, because the copies value
 semantics promise are as-if: the implementation may store equal content once,
 by eliding a copy or by interning a constant `String` or `List`. Whether it
-does can change with the optimization level and with the Wado version, so a
-`ref_eq` that is true only by such sharing is unpredictable. Java's `==` on
+does is [unspecified](./spec-overview.md#behavior-classes), so a `ref_eq` that
+is true only by such sharing is unpredictable. Java's `==` on
 strings behaves the same way.
 
 <!-- {"fixture": "spec_memory_ref_identity.wado"} -->

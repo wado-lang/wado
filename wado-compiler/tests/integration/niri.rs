@@ -539,15 +539,31 @@ fn f64_div_by_zero_is_infinity() {
 }
 
 #[test]
-fn f64_zero_div_zero_is_nan_unreducible() {
-    // 0/0 is NaN; nondeterministic NaN bits → don't fold.
+fn f64_zero_div_zero_folds_to_a_nan() {
+    // A NaN's bits are host-defined, which the compiler may fix by folding. It
+    // fixes the canonical NaN, whatever the FPU running the compiler gives.
     let e = binary(
         NirBinaryOp::Div,
         float_lit(0.0, TypeTable::F64, "0.0"),
         float_lit(0.0, TypeTable::F64, "0.0"),
         TypeTable::F64,
     );
-    assert_eq!(eval(&e), None);
+    match eval(&e) {
+        Some(Value::Float {
+            value,
+            prim: PrimitiveType::F64,
+        }) => assert_eq!(value.to_bits(), f64::NAN.to_bits()),
+        other => panic!("expected an f64 NaN, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_folded_nan_renders_as_nan() {
+    let nan = Value::Float {
+        value: f64::NAN,
+        prim: PrimitiveType::F64,
+    };
+    assert_eq!(nan.format_repr(), "NaN");
 }
 
 #[test]
@@ -4677,7 +4693,7 @@ fn a_run_that_bails_part_way_writes_nothing() {
 
 #[test]
 fn a_retain_declaration_does_not_stop_a_run() {
-    // `#[retain]` names a *reference* the callee keeps, and the engine has
+    // A retained parameter is a *reference* the callee keeps, and the engine has
     // no references: an argument reduces to its referent's value, and a
     // referent it can bind is one nothing in the frame can go on to change.
     let table = TypeTable::new();
@@ -8161,7 +8177,7 @@ fn a_ref_returning_callee_does_not_fold_through_the_lost_alias() {
 
 #[test]
 fn a_stored_reference_parameter_does_not_fold_into_a_snapshot() {
-    // #[retain(p)] fn keep(p: &Inner) -> Holder;
+    // fn keep(p: &Inner) -> Holder;  // retains: p
     // fn scenario() -> i32 {
     //     let mut p = Inner { x: 7 };
     //     let h = keep(&p);
