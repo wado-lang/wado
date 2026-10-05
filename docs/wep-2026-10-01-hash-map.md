@@ -59,8 +59,8 @@ impl<K: Hash + Eq, V> HashMap<K, V> {
 
 The seed comes from `get-insecure-seed`, which the host is not obliged to fill
 with randomness. The interface asks to be called only once. `DEFAULT_HASH_SEED`
-is the only caller, since `HashSeed` has no public way to ask the host, and an
-initializer runs at most once (below). The seed never shows
+is the standard library's only caller, since `HashSeed` has no public way to ask
+the host, and an initializer runs at most once (below). The seed never shows
 through a map: iteration keeps insertion order (below), so the effect is
 unobservable, which is what `#[benign]` asserts.
 
