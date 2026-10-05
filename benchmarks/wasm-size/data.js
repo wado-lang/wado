@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791194378785,
+  "lastUpdate": 1791200245790,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -63945,6 +63945,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7c7b0cc0ab7c4f5060f48e1b40c26b28312625c6"
         },
         "date": 1791194378279,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338523,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "307fef7f8708d3e83ec75e6175418c5d20f4dae7",
+          "message": "Merge pull request #2277 from wado-lang/claude/funny-tesla-eaqgjj\n\nfix(core:json)!: settle the points where JSON readers disagree, and state each one",
+          "timestamp": "2026-10-05T20:19:23+09:00",
+          "tree_id": "979ddeb6eaa42f31159998a1ed9417b37e5423d8",
+          "url": "https://github.com/wado-lang/wado/commit/307fef7f8708d3e83ec75e6175418c5d20f4dae7"
+        },
+        "date": 1791200245330,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
