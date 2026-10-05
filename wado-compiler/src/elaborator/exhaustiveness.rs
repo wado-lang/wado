@@ -1,6 +1,7 @@
 //! Match coverage: which values no arm's pattern takes, found by specializing
 //! the arm matrix one constructor at a time (Maranget, "Warnings for pattern matching").
 
+use std::ops::Range;
 use std::rc::Rc;
 
 use crate::tir::TypeId;
@@ -314,6 +315,9 @@ fn signature<'p, R: MatrixRow<'p>>(rows: &[R]) -> Option<Vec<Ctor>> {
 /// wholly inside or outside every range.
 fn split_domain<'p, R: MatrixRow<'p>>(rows: &[R], domain: IntDomain) -> Vec<Ctor> {
     let mut cuts = vec![domain.min, domain.max + 1];
+    if domain.is_char {
+        cuts.extend([SURROGATES.start, SURROGATES.end]);
+    }
     for row in rows {
         if let Pat::Int { lo, hi, .. } = row.pats()[0] {
             cuts.extend([
@@ -325,9 +329,13 @@ fn split_domain<'p, R: MatrixRow<'p>>(rows: &[R], domain: IntDomain) -> Vec<Ctor
     cuts.sort_unstable();
     cuts.dedup();
     cuts.windows(2)
+        .filter(|w| !(domain.is_char && SURROGATES.contains(&w[0])))
         .map(|w| Ctor::Int(w[0], w[1] - 1, domain.is_char))
         .collect()
 }
+
+/// The code points a `char` never holds: it is a Unicode scalar value.
+const SURROGATES: Range<i128> = 0xD800..0xE000;
 
 /// `rows` specialized to each of `ctors`, which [`signature`] and [`split_domain`]
 /// list in order. A row reaches only the constructors its head can take.
