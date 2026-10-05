@@ -31,6 +31,7 @@ use {
     bits_is_empty,
     bits_equal,
     bits_ids,
+    bits_set,
     bits_test,
     bits_union_into,
 } from "./token_kinds.wado";
@@ -124,6 +125,8 @@ pub struct GenContext {
     /// rebuilt lazily whenever the table has grown. Kind-set canonicalisation
     /// sorts ids by rank, i.e. by token name.
     kind_rank: List<i32>,
+    /// The inverse of `kind_rank`: the id at each rank.
+    kind_by_rank: List<i32>,
     /// Per-rule memo caches indexed by dense rule id (position in
     /// `parser_rules`, i.e. what `rule_index_of` returns). `null` means
     /// "not yet computed"; `Some(v)` is the memoized value. A cache probe on
@@ -401,6 +404,7 @@ impl GenContext {
             gate_bodies: HashMap::<i32, String>::with_seed(GALE_SEED),
             token_kinds: TokenKinds::empty(),
             kind_rank: [],
+            kind_by_rank: [],
             first_cache: none_int_list_cache(rule_count),
             single_token_cache: none_bool_cache(rule_count),
             nullable_cache: none_bool_cache(rule_count),
@@ -2684,15 +2688,15 @@ impl GenContext {
         return self.canonical_ids(self.names_to_ids(tokens));
     }
 
-    fn canonical_ids(&mut self, mut ids: List<i32>) -> List<i32> {
+    fn canonical_ids(&mut self, ids: List<i32>) -> List<i32> {
         self.ensure_kind_rank();
-        let rank = &self.kind_rank;
-        ids.sort_by(|a: &i32, b: &i32| rank[*a].cmp(&rank[*b]));
+        let mut ranks: List<u64> = [];
+        for let id of &ids {
+            bits_set(&mut ranks, self.kind_rank[*id]);
+        }
         let mut out: List<i32> = [];
-        for let mut i = 0; i < ids.len(); i += 1 {
-            if i == 0 || ids[i] != ids[i - 1] {
-                out.push(ids[i]);
-            }
+        for let rank of bits_ids(&ranks) {
+            out.push(self.kind_by_rank[rank]);
         }
         return out;
     }
@@ -2718,6 +2722,7 @@ impl GenContext {
             rank[order[pos]] = pos;
         }
         self.kind_rank = rank;
+        self.kind_by_rank = order;
     }
 
     /// All interned kind sets in helper-ID order (i.e. insertion order).

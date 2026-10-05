@@ -177,14 +177,10 @@ pub fn bits_equal(a: &List<u64>, b: &List<u64>) -> bool {
 pub fn bits_ids(bits: &List<u64>) -> List<i32> {
     let mut ids: List<i32> = [];
     for let mut w = 0; w < bits.len(); w += 1 {
-        let word = bits[w];
-        if word == 0_u64 {
-            continue;
-        }
-        for let mut b = 0; b < 64; b += 1 {
-            if word & 1_u64 << b as u64 != 0_u64 {
-                ids.push(w * 64 + b);
-            }
+        let mut word = bits[w];
+        while word != 0_u64 {
+            ids.push(w * 64 + i64::ctz(word as i64) as i32);
+            word &= word - 1_u64;
         }
     }
     return ids;
