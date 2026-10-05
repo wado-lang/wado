@@ -1,7 +1,6 @@
 //! Match coverage: which values no arm's pattern takes, found by specializing
 //! the arm matrix one constructor at a time (Maranget, "Warnings for pattern matching").
 
-use std::ops::Range;
 use std::rc::Rc;
 
 use crate::tir::TypeId;
@@ -46,7 +45,20 @@ pub(super) struct Case {
 pub(super) struct IntDomain {
     pub(super) min: i128,
     pub(super) max: i128,
+    /// The values between `min` and `max` the type never holds, inclusive.
+    pub(super) hole: Option<[i128; 2]>,
     pub(super) is_char: bool,
+}
+
+impl IntDomain {
+    fn in_hole(self, value: i128) -> bool {
+        self.hole.is_some_and(|[lo, hi]| lo <= value && value <= hi)
+    }
+
+    /// Whether no value of the domain lies between `hi` and `lo`.
+    fn adjacent(self, hi: i128, lo: i128) -> bool {
+        hi + 1 == lo || self.hole == Some([hi + 1, lo - 1])
+    }
 }
 
 /// A value no arm takes, as a pattern that would take it.
@@ -61,7 +73,7 @@ pub(super) enum Witness {
     Int {
         lo: i128,
         hi: i128,
-        is_char: bool,
+        domain: IntDomain,
     },
     Product {
         fields: Option<Rc<[String]>>,
@@ -72,7 +84,7 @@ pub(super) enum Witness {
 enum Ctor {
     Case(Rc<[Case]>, usize),
     Bool(bool),
-    Int(i128, i128, bool),
+    Int(i128, i128, IntDomain),
     Product(Option<Rc<[String]>>, usize),
 }
 
@@ -161,9 +173,9 @@ pub(super) fn uncovered(patterns: &[&Pat]) -> Vec<Witness> {
                     Witness::Int {
                         lo: next_lo,
                         hi: next_hi,
-                        is_char,
+                        domain,
                     },
-                ) if adjacent(*hi, *next_lo, *is_char) => *hi = *next_hi,
+                ) if domain.adjacent(*hi, *next_lo) => *hi = *next_hi,
                 _ => missing.push(witness),
             }
         }
@@ -314,9 +326,8 @@ fn signature<'p, R: MatrixRow<'p>>(rows: &[R]) -> Option<Vec<Ctor>> {
 /// The domain cut at every range boundary in the column, so each piece lies
 /// wholly inside or outside every range.
 fn split_domain<'p, R: MatrixRow<'p>>(rows: &[R], domain: IntDomain) -> Vec<Ctor> {
-    let hole = hole(domain.is_char);
     let mut cuts = vec![domain.min, domain.max + 1];
-    cuts.extend(hole.iter().flat_map(|h| [h.start, h.end]));
+    cuts.extend(domain.hole.iter().flat_map(|[lo, hi]| [*lo, hi + 1]));
     for row in rows {
         if let Pat::Int { lo, hi, .. } = row.pats()[0] {
             cuts.extend([
@@ -328,20 +339,9 @@ fn split_domain<'p, R: MatrixRow<'p>>(rows: &[R], domain: IntDomain) -> Vec<Ctor
     cuts.sort_unstable();
     cuts.dedup();
     cuts.windows(2)
-        .filter(|w| !hole.as_ref().is_some_and(|h| h.contains(&w[0])))
-        .map(|w| Ctor::Int(w[0], w[1] - 1, domain.is_char))
+        .filter(|w| !domain.in_hole(w[0]))
+        .map(|w| Ctor::Int(w[0], w[1] - 1, domain))
         .collect()
-}
-
-/// The values between a domain's bounds that its type never holds: a `char` is
-/// a Unicode scalar value, so it holds no surrogate.
-fn hole(is_char: bool) -> Option<Range<i128>> {
-    is_char.then_some(0xD800..0xE000)
-}
-
-/// Whether no value of the domain lies between `hi` and `lo`.
-fn adjacent(hi: i128, lo: i128, is_char: bool) -> bool {
-    hi + 1 == lo || hole(is_char).is_some_and(|h| h.start == hi + 1 && h.end == lo)
 }
 
 /// `rows` specialized to each of `ctors`, which [`signature`] and [`split_domain`]
@@ -430,7 +430,7 @@ fn build(rows: &[Row<'_>], ctor: Ctor, args: Vec<Witness>) -> Witness {
             }
         }
         Ctor::Bool(value) => Witness::Bool(value),
-        Ctor::Int(lo, hi, is_char) => Witness::Int { lo, hi, is_char },
+        Ctor::Int(lo, hi, domain) => Witness::Int { lo, hi, domain },
         Ctor::Product(fields, _) => Witness::Product {
             fields,
             elements: args,
@@ -451,12 +451,12 @@ impl std::fmt::Display for Witness {
                 payload: Some(payload),
             } => write!(f, "{name}({payload})"),
             Witness::Bool(value) => write!(f, "{value}"),
-            Witness::Int { lo, hi, is_char } => {
+            Witness::Int { lo, hi, domain } => {
                 let show = |f: &mut std::fmt::Formatter<'_>, v: i128| match u32::try_from(v)
                     .ok()
                     .and_then(char::from_u32)
                 {
-                    Some(c) if *is_char => write!(f, "{c:?}"),
+                    Some(c) if domain.is_char => write!(f, "{c:?}"),
                     _ => write!(f, "{v}"),
                 };
                 show(f, *lo)?;
