@@ -241,6 +241,19 @@ impl Drop for OpenQuestion<'_> {
     }
 }
 
+/// Whether a bound check asks a type argument built over the parameters in
+/// scope. A body's parameters carry every bound in force on them, and a rigid
+/// one meets a bound only from those (spec-traits.md §Trait Bounds). Type
+/// resolution may bind a parameter before its bounds, as an impl's target is
+/// resolved between its names and its bounds (`register_impl_block_params`).
+#[derive(Clone, Copy, Debug)]
+pub(super) enum RigidArgs {
+    /// A call or a literal in a body.
+    Asked,
+    /// A type the source writes.
+    Skipped,
+}
+
 /// What a bound's `Self::Assoc` projects off at a call: the receiver, and the
 /// trait whose declaration wrote the constraint.
 #[derive(Clone, Copy, Debug)]
@@ -2051,7 +2064,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .into_iter()
             .filter(ast::GenericParam::is_real_type_param)
             .collect();
-        self.enforce_type_arg_bounds(&type_params, type_args, None, span);
+        self.enforce_type_arg_bounds(&type_params, type_args, None, span, RigidArgs::Asked);
     }
 
     /// Check the bounds on a generic type declaration's type arguments, for
@@ -2061,10 +2074,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         def: DefId,
         type_args: &[TypeId],
         span: Span,
+        rigid: RigidArgs,
     ) {
         // Any module's impl may answer a bound, so a decl pass leaves its
         // checks to `check_deferred_decl_arg_bounds`.
         if self.tysys.solver.is_none() {
+            assert!(
+                matches!(rigid, RigidArgs::Skipped),
+                "a decl pass walks no body"
+            );
             self.sem
                 .decls
                 .pending_decl_arg_bounds
@@ -2078,26 +2096,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return;
         };
-        self.enforce_type_arg_bounds(&params, type_args, None, span);
+        self.enforce_type_arg_bounds(&params, type_args, None, span, rigid);
     }
 
     /// Check the bounds the decl pass met before the solver was built.
     pub(super) fn check_deferred_decl_arg_bounds(&mut self) {
         for (def, type_args, span) in std::mem::take(&mut self.sem.decls.pending_decl_arg_bounds) {
-            self.check_type_decl_arg_bounds(def, &type_args, span);
+            self.check_type_decl_arg_bounds(def, &type_args, span, RigidArgs::Skipped);
         }
     }
 
     /// The single enforcement of trait bounds on a generic decl's type args,
-    /// shared by every generic-call kind so the rule cannot drift. Only a fully
-    /// concrete arg is enforced, and `self_binding` is what a bound's
-    /// `Self::Assoc` projects off where the call binds one.
+    /// shared by every generic-call kind so the rule cannot drift. Only a
+    /// settled arg is enforced, as `rigid` says, and `self_binding` is what a
+    /// bound's `Self::Assoc` projects off where the call binds one.
     pub(super) fn enforce_type_arg_bounds(
         &mut self,
         params: &[ast::GenericParam],
         type_args: &[TypeId],
         self_binding: Option<SelfBinding>,
         span: Span,
+        rigid: RigidArgs,
     ) {
         let at_call = self.tysys.call_site_types(params, type_args);
         let site: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
@@ -2105,7 +2124,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(&type_arg) = type_args.get(i) else {
                 continue;
             };
-            if self.tysys.type_table.borrow().contains_type_param(type_arg) {
+            let asked = {
+                let table = self.tysys.type_table.borrow();
+                match rigid {
+                    RigidArgs::Asked => {
+                        let type_params = &self.annotate_ctx.trait_ctx.type_params;
+                        table.is_rigid_under(type_arg, &|name| type_params.contains_key(name))
+                    }
+                    RigidArgs::Skipped => !table.contains_type_param(type_arg),
+                }
+            };
+            if !asked {
                 // A hole carries its own slot's bounds to finalize; this slot's
                 // go with an answer an enclosing call is still to give.
                 if self.awaits_pending_call(type_arg) {

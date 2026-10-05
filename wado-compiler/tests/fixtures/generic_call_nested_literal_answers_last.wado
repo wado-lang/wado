@@ -20,19 +20,19 @@ fn second<T: Eq>(p: Pair<T>, fallback: T) -> T {
     return if p.a == p.b { fallback } else { p.b };
 }
 
-fn second_ref<T>(p: &Pair<T>, fallback: T) -> T {
+fn second_ref<T: Eq>(p: &Pair<T>, fallback: T) -> T {
     return second(*p, fallback);
 }
 
-fn inner<T>(o: Outer<T>, fallback: T) -> T {
+fn inner<T: Eq>(o: Outer<T>, fallback: T) -> T {
     return second(o.p, fallback);
 }
 
-fn from_closure<T>(f: fn() -> T, p: Pair<T>) -> T {
+fn from_closure<T: Eq>(f: fn() -> T, p: Pair<T>) -> T {
     return second(p, f());
 }
 
-fn doubled<T: Add<Output = T>>(f: fn(T) -> T, p: Pair<T>, fallback: T) -> T {
+fn doubled<T: Add<Output = T> + Eq>(f: fn(T) -> T, p: Pair<T>, fallback: T) -> T {
     return f(second(p, fallback));
 }
 
@@ -47,7 +47,7 @@ fn same<T>(a: T, b: T) -> T {
 struct Picker {}
 
 impl Picker {
-    fn second<T>(&self, p: Pair<T>, fallback: T) -> T {
+    fn second<T: Eq>(&self, p: Pair<T>, fallback: T) -> T {
         return second(p, fallback);
     }
 

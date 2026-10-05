@@ -4362,6 +4362,19 @@ impl TypeTable {
         }
     }
 
+    /// Whether `id` is settled up to the type parameters `in_scope` names: it
+    /// mentions no other, and no pack, inference variable or unresolved type.
+    pub fn is_rigid_under(&self, id: TypeId, in_scope: &dyn Fn(&str) -> bool) -> bool {
+        match self.get(id) {
+            ResolvedType::TypeParam { name, .. } => in_scope(name),
+            ResolvedType::TypePack { .. }
+            | ResolvedType::InferVar(_)
+            | ResolvedType::Unknown
+            | ResolvedType::Error => false,
+            _ => !self.any_constituent(id, &mut |t| !self.is_rigid_under(t, in_scope)),
+        }
+    }
+
     /// Whether `f` holds of any type `id` is built over, through the
     /// constructors a use site substitutes into (`Self::subst_rec`).
     fn any_constituent(&self, id: TypeId, f: &mut dyn FnMut(TypeId) -> bool) -> bool {

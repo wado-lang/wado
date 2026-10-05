@@ -28,6 +28,7 @@ use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::orchestration::first_infer_span;
 use super::synth::ArgClass;
+use super::trait_query::RigidArgs;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
 use super::tysys::TypeSystem;
@@ -4173,7 +4174,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             // Check trait bounds on inferred type arguments
             if let Some(def) = struct_decl {
-                self.check_type_decl_arg_bounds(def, &type_args, struct_lit.span);
+                self.check_type_decl_arg_bounds(def, &type_args, struct_lit.span, RigidArgs::Asked);
             }
 
             // The declaration comes from the node that declares it where the

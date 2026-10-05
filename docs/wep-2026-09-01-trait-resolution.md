@@ -358,7 +358,10 @@ in a pointee (`impl<T: B> Tr for &T`), or in a pack's elements
 from the bounds in force on it and from nothing else. So `[..T]: Ord` does not
 hold of `[A, B]` under `A: Inspect, B: Inspect`, and the body that wants it
 says `A: Ord, B: Ord` (`trait_bound_on_rigid_param_is_checked.wado`,
-`trait_error_bound_missing_on_rigid_param.wado`).
+`trait_error_bound_missing_on_rigid_param.wado`). A call or a struct literal
+passing a rigid parameter to a bounded one asks the same question, in the
+generic body rather than at an instantiation (`bound_unmet_by_rigid_param.wado`,
+`error_forwarded_type_param_violates_bound.wado`).
 
 A marker on a generic declaration is the other question and keeps its own
 answer: `impl<T> Eq for Pair<T>;` asks whether the _declaration_ derives, and
@@ -611,6 +614,14 @@ the bounds path resolves without the order (above).
 
 - [ ] Gate the bounds path on the supertrait's declaration being in scope
   (`trait_error_unimported_supertrait_method.wado`).
+
+### A written type is not checked at a rigid parameter
+
+A call checks a rigid parameter against the bounds it passes it to, but a type
+the source writes does not: `fn f<O>(w: Wrap<O>)` under `struct Wrap<T: Eq>` is
+accepted, and so is `impl<T> Tr for Wrap<T>`. A value of `Wrap<X>` is still
+checked where `X` is concrete, so nothing is miscompiled; the generic
+declaration that names `Wrap<O>` is not.
 
 ### A ref blanket never dispatches
 

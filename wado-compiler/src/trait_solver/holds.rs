@@ -780,6 +780,41 @@ mod tests {
         assert_eq!(ask(&[decl(POINT)]), None);
     }
 
+    /// A clause writing the subtrait's own parameter answers at what the bound
+    /// supplies for it, through every step of a chain:
+    /// `trait Top<X>: Sub<X>`, `trait Sub<Y>: Base<Y>`, and `T: Top<i32>`.
+    #[test]
+    fn a_supertrait_clause_answers_at_the_bounds_arguments() {
+        let p = Builder::default()
+            .supertrait_args(
+                ALPHA,
+                ParamBound {
+                    trait_: SUB,
+                    args: vec![SolverType::Param(0)],
+                },
+            )
+            .supertrait_args(
+                SUB,
+                ParamBound {
+                    trait_: BASE,
+                    args: vec![SolverType::Param(0)],
+                },
+            )
+            .build();
+        let bound = Env {
+            param_bounds: vec![vec![ParamBound {
+                trait_: ALPHA,
+                args: vec![decl(I32)],
+            }]],
+        };
+        let ask = |trait_: TraitDeclId, args: &[SolverType]| {
+            holds_with_args(&p, &bound, &SolverType::Param(0), trait_, HERE, args)
+        };
+        assert_eq!(ask(SUB, &[decl(I32)]), Some(Holds::default()));
+        assert_eq!(ask(BASE, &[decl(I32)]), Some(Holds::default()));
+        assert_eq!(ask(BASE, &[decl(POINT)]), None);
+    }
+
     /// A clause writing no argument says the supertrait's declared defaults, so
     /// `T: Ord` does not answer `Eq<i32>`.
     #[test]

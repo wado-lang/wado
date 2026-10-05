@@ -24,7 +24,7 @@ use super::sig::{DeclSig, MethodSig, Param};
 use super::static_call::StaticQuery;
 use super::trait_env;
 use super::trait_env::ImplTargetKey;
-use super::trait_query::SelfBinding;
+use super::trait_query::{RigidArgs, SelfBinding};
 use super::types::{FunctionContext, TypeError, VarRef, newtype_member_owner};
 use super::tysys::TypeSystem;
 use super::util;
@@ -1472,6 +1472,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &method_type_args,
                         Some(self_binding),
                         call.span,
+                        RigidArgs::Asked,
                     );
                 }
                 // Handle From conversions with no explicit impl: reflexive and newtype.

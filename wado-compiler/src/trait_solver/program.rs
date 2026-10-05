@@ -252,9 +252,11 @@ pub enum RefRule {
 /// A trait declaration, reduced to what the rules read.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct TraitDef {
-    /// The traits an implementor must also implement, so a bound naming this
-    /// one answers for them too, each with what the clause writes for that
-    /// trait's own parameters (`trait AsStrSlice: Eq<String>`).
+    /// The traits its clause names, which an implementor must also implement,
+    /// so a bound naming this one answers for them too. Each carries what the
+    /// clause writes for that trait's own parameters (`trait AsStrSlice:
+    /// Eq<String>`), in this trait's space: [`SolverType::Param`] is this
+    /// trait's parameter at that position (`trait Gauge<X>: Measure<X>`).
     pub supertraits: Vec<ParamBound>,
     /// Holds of every type before any body exists — `Inspect`. The unbounded
     /// blanket that would say so is rejected, so the trait says it itself.
@@ -463,17 +465,11 @@ impl Program {
         bound: &ParamBound,
         wanted: TraitDeclId,
     ) -> Vec<Vec<SolverType>> {
-        if bound.trait_ == wanted {
-            return vec![bound.args.clone()];
-        }
-        let Some(def) = self.traits.get(&bound.trait_) else {
-            return Vec::new();
-        };
         let mut reaching = Vec::new();
-        let mut stack = def.supertraits.clone();
+        let mut stack = vec![bound.clone()];
         // An edge is its trait and what it writes, so a second instantiation of
         // one trait is walked rather than taken for a revisit.
-        let mut seen: Vec<ParamBound> = vec![bound.clone()];
+        let mut seen: Vec<ParamBound> = Vec::new();
         while let Some(next) = stack.pop() {
             if seen.contains(&next) {
                 continue;
@@ -482,10 +478,42 @@ impl Program {
                 reaching.push(next.args.clone());
             }
             if let Some(def) = self.traits.get(&next.trait_) {
-                stack.extend(def.supertraits.iter().cloned());
+                stack.extend(
+                    def.supertraits
+                        .iter()
+                        .map(|clause| self.clause_at(clause, &next)),
+                );
             }
             seen.push(next);
         }
         reaching
+    }
+
+    /// `clause`, written in `sub`'s trait's space, at the arguments `sub`
+    /// supplies. A parameter `sub` leaves out takes its declared default; one
+    /// with neither states nothing, which answers at the clause trait's own
+    /// defaults.
+    fn clause_at(&self, clause: &ParamBound, sub: &ParamBound) -> ParamBound {
+        let defaults = self
+            .traits
+            .get(&sub.trait_)
+            .map_or(&[][..], |def| def.arg_defaults.as_slice());
+        let arg = |i: u32| {
+            let i = i as usize;
+            sub.args.get(i).cloned().or_else(|| match defaults.get(i)? {
+                Some(ArgDefault::Type(ty)) => Some(ty.clone()),
+                _ => None,
+            })
+        };
+        let args = clause
+            .args
+            .iter()
+            .map(|ty| ty.map_params(&arg))
+            .collect::<Option<Vec<_>>>()
+            .unwrap_or_default();
+        ParamBound {
+            trait_: clause.trait_,
+            args,
+        }
     }
 }

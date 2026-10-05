@@ -2,7 +2,7 @@
 
 use super::scope::{BinderInScope, ScopedBound, trait_params_from_impl};
 use super::trait_env::ImplTargetKey;
-use super::trait_query::SelfBinding;
+use super::trait_query::{RigidArgs, SelfBinding};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -1380,7 +1380,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut subst = SubstitutionContext::new();
         if !type_args.is_empty() {
             subst = subst.bind(slots, &type_args);
-            self.enforce_type_arg_bounds(own_params, &type_args, Some(self_binding), span);
+            self.enforce_type_arg_bounds(
+                own_params,
+                &type_args,
+                Some(self_binding),
+                span,
+                RigidArgs::Asked,
+            );
         }
         (type_args, subst)
     }
