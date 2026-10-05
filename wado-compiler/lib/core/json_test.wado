@@ -425,6 +425,29 @@ test "deserialize f64 cancels a large exponent against the digits' scale" {
     assert large matches { Ok(v) && v == 1.0 };
 }
 
+test "deserialize a float past the format's range errors rather than reading infinity" {
+    let over: Result<f64, DeserializeError> = from_string("1e400");
+    assert over matches { Err(e) && e.kind == DeserializeErrorKind::Overflow && e.offset == 0 };
+    let under: Result<f64, DeserializeError> = from_string(" -1e400");
+    assert under matches { Err(e) && e.kind == DeserializeErrorKind::Overflow && e.offset == 1 };
+    let narrow: Result<f32, DeserializeError> = from_string("3.5e38");
+    assert narrow matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+    let half: Result<f16, DeserializeError> = from_string("65520");
+    assert half matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+    let brain: Result<bf16, DeserializeError> = from_string("3.4e39");
+    assert brain matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+    let dynamic: Result<Value, DeserializeError> = from_string("[1e400]");
+    assert dynamic matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+    // The largest finite value of each format still reads.
+    let max: Result<f64, DeserializeError> = from_string("1.7976931348623157e308");
+    assert max matches { Ok(v) && v == f64::MAX };
+    let half_max: Result<f16, DeserializeError> = from_string("65519");
+    assert half_max matches { Ok(v) && v == f16::MAX };
+    // Underflow rounds to a signed zero, as it does in every other reader.
+    let tiny: Result<f64, DeserializeError> = from_string("-1e-400");
+    assert tiny matches { Ok(v) && v.to_bits() == 0x8000000000000000 };
+}
+
 test "deserialize f64 reads digits past the nineteenth" {
     // 1 + 2^-53 exactly is the midpoint and ties to even; one more digit is above it.
     let tie: Result<f64, DeserializeError> = from_string("1.00000000000000011102230246251565404236316680908203125");
