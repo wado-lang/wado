@@ -544,7 +544,7 @@ pub fn inline_block_label(callee: &str, serial: u32) -> String {
     let callee: String = callee
         .chars()
         .map(|c| {
-            if c.is_alphanumeric() || c == '_' {
+            if c.is_ascii_alphanumeric() || c == '_' {
                 c
             } else {
                 '_'

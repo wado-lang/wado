@@ -1117,7 +1117,7 @@ fn extract_item_name<'a>(sig: &'a str, keyword: &str) -> &'a str {
         .unwrap_or(sig);
     // Take until first non-identifier char
     let end = rest
-        .find(|c: char| !c.is_alphanumeric() && c != '_')
+        .find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
         .unwrap_or(rest.len());
     &rest[..end]
 }

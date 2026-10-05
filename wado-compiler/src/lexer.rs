@@ -765,7 +765,7 @@ impl<'a> Lexer<'a> {
     fn skip_whitespace_and_comments(&mut self) {
         loop {
             // Skip whitespace
-            self.advance_while(char::is_whitespace);
+            self.advance_while(|ch| ch.is_ascii_whitespace());
 
             // Check for __DATA__ at the start of a line
             if self.column == 1 && self.check_data_section() {
@@ -936,7 +936,7 @@ impl<'a> Lexer<'a> {
     fn lex_ident_or_keyword(&mut self) -> TokenKind {
         let start = self.pos;
 
-        self.advance_while(|ch| ch.is_alphanumeric() || ch == '_');
+        self.advance_while(|ch| ch.is_ascii_alphanumeric() || ch == '_');
 
         let text = &self.input[start..self.pos];
 
