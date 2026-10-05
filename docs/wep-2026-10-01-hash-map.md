@@ -107,8 +107,7 @@ program that reaches none of its readers imports nothing for it.
 Gale's `GaleMap` and `GaleSet` are newtypes over `HashMap` and `HashSet` under a
 fixed seed. They exist because `HashMap::new` used to require a seed: the
 newtypes gave Gale a seedless `new()`, and `Default`, `Serialize` and
-`Deserialize`. A seedless `new()`, `Default` and `Deserialize` now come with
-`HashMap` itself, so Gale uses `HashMap` and `HashSet` and the newtypes are
+`Deserialize`. All four now come with `HashMap` itself, so Gale uses `HashMap` and `HashSet` and the newtypes are
 deleted.
 
 ### Iteration keeps insertion order
@@ -165,31 +164,17 @@ a world without `insecure-seed`, and the Component Model `map<K, V>` stays
 `TreeMap` ([WEP: CM map type](./wep-2026-08-25-cm-map-type.md)). `core:value`
 objects, which hold parsed external input, stay `TreeMap` as well.
 
-### `Default` and `Deserialize` under the default seed
+### `Default`, `Serialize` and `Deserialize`, by hand
 
-`HashMap` and `HashSet` implement `Default` and `Deserialize`, by hand. Both
-build the map under `DEFAULT_HASH_SEED`, as `new()` does. `Deserialize` reads
-the entries alone and inserts them in input order, as `TreeMap`'s does. A
-derived `Deserialize` would instead read the seed from the input, which is the
-attacker's to choose.
+`HashMap` and `HashSet` implement `Default`, `Serialize` and `Deserialize`, each
+by hand, as `TreeMap` and `TreeSet` do. The wire form is the entries alone, in
+insertion order. `Default` and `Deserialize` build the map under
+`DEFAULT_HASH_SEED`, as `new()` does.
 
-### `Serialize`, refused by declaration
-
-`HashMap` and `HashSet` do not implement `Serialize`. A derived form would write
-the seed out, and a leaked seed disables the defence.
-
-Leaving the impl out is not enough. Bound-driven derivation reaches private
-fields across modules, so a type without a hand-written impl serializes its
-internals. `#[unavailable(reason)]` therefore extends to trait impls, and
-`HashMap` declares its refusal:
-
-```wado
-#[unavailable("a HashMap's layout holds its hash seed")]
-impl<K, V> Serialize for HashMap<K, V>;
-```
-
-A use that needs the impl reports the reason, as a call to a declared-absent
-function does ([WEP: Declared absence](./wep-2026-09-13-declared-absence.md)).
+None of them may be derived. Bound-driven derivation reaches private fields
+across modules, so a derived `Serialize` would write the seed out, and a leaked
+seed disables the defence. A derived `Deserialize` would read the seed from the
+input, which is the attacker's to choose.
 
 ## Roadmap
 
@@ -200,8 +185,6 @@ function does ([WEP: Declared absence](./wep-2026-09-13-declared-absence.md)).
   offer `TreeMap`'s and `TreeSet`'s lookup and iteration API.
 - [x] `gale_gen` builds its maps as `GaleMap` and `GaleSet`. Done when its
   benchmark row is re-measured.
-- [ ] `#[unavailable]` on trait impls, and the `Serialize` refusals on `HashMap`
-  and `HashSet`.
 - [ ] `#[benign(E, …)]` on a global, stated in `spec-attributes.md`. Done when a
   fixture shows the listed effects admitted in its initializer, an unlisted one
   still rejected, and the world import still required.
@@ -213,8 +196,9 @@ function does ([WEP: Declared absence](./wep-2026-09-13-declared-absence.md)).
 - [ ] `DEFAULT_HASH_SEED`, `new()` under it and `with_seed(seed)` on `HashMap`
   and `HashSet`. Done when every caller of the old `new(seed)` has moved to
   `with_seed`.
-- [ ] `Default` and `Deserialize` on `HashMap` and `HashSet`. Done when a JSON
-  object decodes into a `HashMap<String, V>` in input order.
+- [ ] `Default`, `Serialize` and `Deserialize` on `HashMap` and `HashSet`. Done
+  when a `HashMap<String, V>` round-trips through a JSON object in insertion
+  order, and the output holds no seed.
 - [ ] Gale uses `HashMap` and `HashSet`. Done when `GaleMap` and `GaleSet` are
   deleted.
 
@@ -223,18 +207,15 @@ function does ([WEP: Declared absence](./wep-2026-09-13-declared-absence.md)).
 - Every map built under `DEFAULT_HASH_SEED` in one instance shares it. A
   long-lived instance, such as an HTTP service, gives an attacker many requests
   against one seed to learn its collisions from timing.
-- Gale runs as a Kiln generator, and the Kiln host links no `insecure-seed`
-  (`wado-cli/src/kiln_runtime.rs`). A generator that reaches
-  `DEFAULT_HASH_SEED` fails to instantiate, which blocks deleting `GaleMap`.
-- `package-gale/src/corpus.wado` writes a `GaleMap` of counts out as JSON, and
-  `HashMap` has no `Serialize`, which also blocks deleting `GaleMap`.
-- A hand-written `Serialize` that writes the entries alone would leak nothing,
-  but whether `HashMap` and `HashSet` offer one is undecided.
+- Gale runs as a Kiln generator, and a generator may import no `wasi:*`
+  interface ([The Sandbox](./spec-kiln.md#the-sandbox)). One that reaches
+  `DEFAULT_HASH_SEED` is a compile error (`KILN_GENERATOR_FORBIDDEN_IMPORT`),
+  which blocks deleting `GaleMap`.
 - Floating-point keys have no `Hash`. Their `==` treats every NaN as one value
   and `-0.0` as equal to `0.0`, so a `Hash` has to agree on each of those
   groups, which bit patterns do not.
-- Until the refusal lands, a `HashMap` is refused `Serialize` only because the
+- Until its own `Serialize` lands, a `HashMap` is refused one only because the
   `Array` behind its entries has none. The error walks the private fields to
-  `Array` rather than stating the reason.
+  `Array`.
 - Derivation serializes private fields of any type without a hand-written impl.
   `core:prng`'s `Seed` serializes its state words this way.
