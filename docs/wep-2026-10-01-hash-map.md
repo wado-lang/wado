@@ -78,8 +78,8 @@ default implementation, or traps without one.
 
 ### Whether and when an initializer runs is unspecified
 
-The rule for every initializer changes: the order in which initializers run,
-and whether one runs at all, is unspecified. The one guarantee is that a
+The order in which initializers run, and whether one runs at all, is
+unspecified. The one guarantee is that a
 global's initializer has run before the global is read. A cycle among
 initializers stays an error. A `#[benign]` global is no exception.
 
@@ -210,7 +210,8 @@ function does ([WEP: Declared absence](./wep-2026-09-13-declared-absence.md)).
   benchmark row is re-measured.
 - [ ] `#[unavailable]` on trait impls, and the `Serialize` and `Deserialize`
   refusals on `HashMap` and `HashSet`.
-- [ ] `#[benign(E, …)]` on a global. Done when a fixture shows the listed
+- [ ] `#[benign(E, …)]` on a global, stated in `spec-attributes.md`. Done when a
+  fixture shows the listed
   effects admitted in its initializer, an unlisted one still rejected, and the
   world import still required.
 - [ ] The unspecified-initializer rule in `spec-expressions.md`, replacing the
@@ -229,7 +230,6 @@ function does ([WEP: Declared absence](./wep-2026-09-13-declared-absence.md)).
 - `new()` makes a default construction possible, but whether `HashMap` and
   `HashSet` implement `Default`, and `Deserialize` under the default seed, is
   undecided.
-
 - Floating-point keys have no `Hash`. Their `==` treats every NaN as one value
   and `-0.0` as equal to `0.0`, so a `Hash` has to agree on each of those
   groups, which bit patterns do not.

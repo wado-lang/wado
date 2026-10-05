@@ -50,7 +50,7 @@ fn bad() {
 
 ### Benign Effects
 
-`#[benign(E)]` marks a function that performs effect `E` but whose effect is observationally pure — unobservable through the function's interface — so `E` is not propagated to callers. Unlike an ambient effect, a benign effect still requires the world import; only the `with E` propagation is elided. The canonical use is `HashMap::new` consuming `InsecureSeed` for Hash DoS resistance without leaking it (the seed is unobservable because the map iterates in insertion order). See `wep-2026-01-20-effect-system-randomness.md`.
+`#[benign(E)]` marks a function that performs effect `E` but whose effect is observationally pure — unobservable through the function's interface — so `E` is not propagated to callers. Unlike an ambient effect, a benign effect still requires the world import; only the `with E` propagation is elided. The canonical use is the global holding `HashMap`'s default seed, whose initializer consumes `InsecureSeed` for Hash DoS resistance without leaking it (the seed is unobservable because the map iterates in insertion order). See [WEP: HashMap](./wep-2026-10-01-hash-map.md).
 
 ### Generic Effects
 
