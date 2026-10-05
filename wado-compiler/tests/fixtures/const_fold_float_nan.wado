@@ -11,10 +11,13 @@ export fn run() with Stdout {
     let zero32: f32 = 0.0;
     let q32 = zero32 * f32::INFINITY;
     println(`${q32.is_nan()} ${q32}`);
+    // A NaN read from storage is no operation's result: its bits stay exact.
+    let stored = List::<f64>::from_le_bytes(b"\x01\x00\x00\x00\x00\x00\xf8\x7f");
+    println(`${stored[0].to_bits():x}`);
 }
 
 __DATA__
 {
-    "stdout": "true true NaN\ntrue NaN\n",
+    "stdout": "true true NaN\ntrue NaN\n7ff8000000000001\n",
     "wir_not_expect:O2": ["0 / 0", "0_f32 * inf_f32"]
 }
