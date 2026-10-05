@@ -425,6 +425,26 @@ impl<K: Hash, V: RefMut> IndexRefMut<K> for HashMap<K, V> {
     }
 }
 
+// `{ key: value, … }` as a `HashMap<String, V>` under the host's seed, last
+// write wins (WEP 2026-08-24).
+impl<V> From<Array<[String, V]>> for HashMap<String, V> {
+    fn from(entries: Array<[String, V]>) -> HashMap<String, V> {
+        let mut map = HashMap::<String, V>::new();
+        for let [key, value] of entries {
+            map.insert(key, value);
+        }
+        return map;
+    }
+}
+
+impl<V> LiteralSpread for HashMap<String, V> {
+    fn spread_literal(&mut self, base: HashMap<String, V>) {
+        for let [k, v] of base.entries() {
+            self.insert(*k, *v);
+        }
+    }
+}
+
 /// A set that iterates in insertion order, found by hashing its elements.
 pub struct HashSet<T> {
     inner: HashMap<T, ()>,
@@ -494,6 +514,18 @@ impl<T: Hash> IntoIterator for HashSet<T> {
 
     fn into_iter(&self) -> MapKeysValueIter<T, ()> {
         return self.iter_value();
+    }
+}
+
+// `[e0, e1, …]` as a `HashSet<T>` under the host's seed, last duplicate
+// ignored (WEP 2026-08-24).
+impl<T: Hash> From<Array<T>> for HashSet<T> {
+    fn from(elements: Array<T>) -> HashSet<T> {
+        let mut set = HashSet::<T>::new();
+        for let element of elements {
+            set.insert(element);
+        }
+        return set;
     }
 }
 

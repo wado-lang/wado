@@ -54,8 +54,8 @@ impl<K: Hash + Eq, V> HashMap<K, V> {
 ```
 
 `HashSet` has the same two constructors. `DEFAULT_HASH_SEED` is private to
-`core:collections`. Three things read it: `new()`, and the `Default` and
-`Deserialize` impls (below).
+`core:collections`. Four things read it: `new()`, the literal coercions, and
+the `Default` and `Deserialize` impls (below).
 
 The seed comes from `get-insecure-seed`, which the host is not obliged to fill
 with randomness. The interface asks to be called only once. `DEFAULT_HASH_SEED`
@@ -121,8 +121,8 @@ so the deletion breaks a package that names them.
 Code that runs as a Kiln generator builds every map with
 `with_seed(HashSeed::fixed(…))`. A generator may import no `wasi:*` interface
 ([The Sandbox](./spec-kiln.md#the-sandbox)), so one that reaches
-`DEFAULT_HASH_SEED` through `new()`, `Default` or `Deserialize` is a compile
-error (`KILN_GENERATOR_FORBIDDEN_IMPORT`). A struct the generator builds that
+`DEFAULT_HASH_SEED` through `new()`, a literal, `Default` or `Deserialize` is a
+compile error (`KILN_GENERATOR_FORBIDDEN_IMPORT`). A struct the generator builds that
 holds a map takes a hand-written constructor in place of a derived `Default`.
 The Kiln host stays as it is: a
 constant `insecure-seed` would widen what it provides, for no gain over a fixed
@@ -182,6 +182,14 @@ slow for the role.
 ([WEP: CM map type](./wep-2026-08-25-cm-map-type.md)). `core:value` objects,
 which hold parsed external input, stay `TreeMap` as well.
 
+### Literals coerce, as to `TreeMap` and `TreeSet`
+
+`{ key: value, … }` coerces to a `HashMap<String, V>`, spread included, and
+`[e0, e1, …]` to a `HashSet<T>`, through the same `From<Array<…>>` impls
+`TreeMap` and `TreeSet` carry
+([WEP: Literal Coercion](./wep-2026-08-24-literal-from-array.md)). A literal
+names no seed, so it builds the map under `DEFAULT_HASH_SEED`, as `new()` does.
+
 ### `Default`, `Serialize` and `Deserialize`, by hand
 
 `HashMap` and `HashSet` implement `Default`, `Serialize` and `Deserialize`, each
@@ -219,6 +227,8 @@ an all-zero seed.
 - [x] `Default`, `Serialize` and `Deserialize` on `HashMap` and `HashSet`. Done
   when a `HashMap<String, V>` round-trips through a JSON object in insertion
   order, and the output holds no seed.
+- [x] Map and list literals coerce to `HashMap<String, V>` and `HashSet<T>`.
+  Done when a literal and a spread keep source order, last write wins.
 - [x] Gale uses `HashMap` and `HashSet`, under a fixed seed wherever the
   generator reaches. Done when `GaleMap` and `GaleSet` are deleted and the
   generator still compiles.

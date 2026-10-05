@@ -348,6 +348,15 @@ test "a map or a set passes on what its entries and its shape fail with" {
     assert from_string::<HashSet<i32>>(`["x"]`) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
 }
 
+test "a map literal and a list literal coerce in source order" {
+    let map: HashMap<String, i32> = { b: 2, a: 1 };
+    assert keys_of(&map) == ["b", "a"] && map["b"] == 2;
+    let spread: HashMap<String, i32> = { ..map, c: 4, b: 3 };
+    assert keys_of(&spread) == ["b", "a", "c"] && spread["b"] == 3;
+    let set = [3, 1, 3] as HashSet<i32>;
+    assert set.iter_value().collect() == [3, 1];
+}
+
 test "the default map and set are empty" {
     let map = HashMap::<String, i32>::default();
     let set = HashSet::<i32>::default();

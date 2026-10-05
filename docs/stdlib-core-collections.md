@@ -430,6 +430,14 @@ Returns a reference to the value stored under text equal to `key`.
 
 ##### `fn index_ref_mut(&mut self, key: K) -> &mut V`
 
+#### `impl From<Array<[String, V]>> for HashMap<String, V>`
+
+##### `fn from(entries: Array<[String, V]>) -> HashMap<String, V>`
+
+#### `impl LiteralSpread for HashMap<String, V>`
+
+##### `fn spread_literal(&mut self, base: HashMap<String, V>)`
+
 #### `impl Default for HashMap<K, V>`
 
 ##### `fn default() -> HashMap<K, V>`
@@ -495,6 +503,10 @@ The elements, in insertion order.
 #### `impl IntoIterator for HashSet<T>`
 
 ##### `fn into_iter(&self) -> MapKeysValueIter<T, ()>`
+
+#### `impl From<Array<T>> for HashSet<T>`
+
+##### `fn from(elements: Array<T>) -> HashSet<T>`
 
 #### `impl Default for HashSet<T>`
 
