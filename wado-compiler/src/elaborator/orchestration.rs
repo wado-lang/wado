@@ -1438,7 +1438,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     sem.decls.current_module_globals.clone(),
                 );
             }
-            signatures.inherit_trait_param_defaults(state.tysys.resolutions.defs());
+            let tysys = &state.tysys;
+            signatures.inherit_trait_param_defaults(tysys.resolutions.defs(), &|block, param| {
+                tysys
+                    .trait_env
+                    .in_impl_frame(block, param, &tysys.resolutions)
+            });
             state.tysys.signatures = Rc::new(signatures);
         }
         for (module_source, violation) in inherent_impl_overlaps(

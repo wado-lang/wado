@@ -5796,18 +5796,12 @@ impl TypeTable {
                 assoc_name,
                 &self.defs,
                 *owning_trait,
-<<<<<<< HEAD
-            ),
-            resolved @ ResolvedType::Function { .. } => {
-                self.fq_fn_name(resolved, |t| self.fq_type_name_spelled(t, unboxed))
-            }
-||||||| c296641f9
-            ),
-=======
                 trait_args.as_ref().map(|given| args_of(given)),
             )
             .with_args(args_of(args)),
->>>>>>> origin/main
+            resolved @ ResolvedType::Function { .. } => {
+                self.fq_fn_name(resolved, |t| self.fq_type_name_spelled(t, unboxed))
+            }
             // Shapes that name no declaration — packs, `Unknown`. They carry no
             // module, so the rendered spelling is already their whole identity.
             _ => FqTypeName::builtin(&self.mangle_type_name(id)),

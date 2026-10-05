@@ -46,6 +46,9 @@ pub enum SolverType {
         base: Box<SolverType>,
         trait_: TraitDeclId,
         assoc: AssocId,
+        /// The associated type's own arguments (`i32` in `S::Buf<i32>`),
+        /// empty for one that declares no parameters.
+        args: Vec<SolverType>,
     },
 }
 
@@ -70,7 +73,10 @@ impl SolverType {
         match self {
             Self::Param(_) | Self::Pack(_) => pred(self),
             Self::Decl(_, inner) | Self::Tuple(inner) => inner.iter().any(|t| t.mentions(pred)),
-            Self::Ref { inner, .. } | Self::Projection { base: inner, .. } => inner.mentions(pred),
+            Self::Ref { inner, .. } => inner.mentions(pred),
+            Self::Projection { base, args, .. } => {
+                base.mentions(pred) || args.iter().any(|t| t.mentions(pred))
+            }
         }
     }
 
@@ -82,8 +88,9 @@ impl SolverType {
             Self::Param(_) | Self::Pack(_) => false,
             Self::Decl(id, inner) => pred(*id) || inner.iter().any(|t| t.mentions_decl(pred)),
             Self::Tuple(inner) => inner.iter().any(|t| t.mentions_decl(pred)),
-            Self::Ref { inner, .. } | Self::Projection { base: inner, .. } => {
-                inner.mentions_decl(pred)
+            Self::Ref { inner, .. } => inner.mentions_decl(pred),
+            Self::Projection { base, args, .. } => {
+                base.mentions_decl(pred) || args.iter().any(|t| t.mentions_decl(pred))
             }
         }
     }
@@ -95,8 +102,7 @@ impl SolverType {
     }
 
     /// `self` with each parameter and pack replaced by `arg` at its position;
-    /// `None` where `arg` has none for one. A pack spread in a tuple whose
-    /// argument is a tuple splices its elements there.
+    /// `None` where `arg` has none for one.
     #[must_use]
     pub fn map_params(&self, arg: &dyn Fn(u32) -> Option<Self>) -> Option<Self> {
         let each = |inner: &[Self]| -> Option<Vec<Self>> {
@@ -105,19 +111,6 @@ impl SolverType {
         Some(match self {
             Self::Param(index) | Self::Pack(index) => arg(*index)?,
             Self::Decl(head, inner) => Self::Decl(*head, each(inner)?),
-<<<<<<< HEAD
-            Self::Tuple(inner) => {
-                let mut spliced = Vec::with_capacity(inner.len());
-                for elem in inner {
-                    match (elem, elem.map_params(arg)?) {
-                        (Self::Pack(_), Self::Tuple(elems)) => spliced.extend(elems),
-                        (_, mapped) => spliced.push(mapped),
-                    }
-                }
-                Self::Tuple(spliced)
-||||||| c296641f9
-            Self::Tuple(inner) => Self::Tuple(each(inner)?),
-=======
             // A pack spread in a tuple splices its elements in: `[..T]` at
             // `T = [i32, bool]` is `[i32, bool]`, not `[[i32, bool]]`.
             Self::Tuple(inner) => {
@@ -129,7 +122,6 @@ impl SolverType {
                     }
                 }
                 Self::Tuple(elems)
->>>>>>> origin/main
             }
             Self::Ref { is_mut, inner } => Self::Ref {
                 is_mut: *is_mut,
@@ -139,10 +131,12 @@ impl SolverType {
                 base,
                 trait_,
                 assoc,
+                args,
             } => Self::Projection {
                 base: Box::new(base.map_params(arg)?),
                 trait_: *trait_,
                 assoc: *assoc,
+                args: each(args)?,
             },
         })
     }
@@ -401,7 +395,9 @@ pub struct Program {
     /// trait they answer for.
     pub facts: IndexMap<(TypeDeclId, TraitDeclId), Fact>,
     /// Each impl's `type X = …;` bindings, spelled with the impl's own
-    /// parameters. What a [`Pin`] is checked against.
+    /// parameters. What a [`Pin`] is checked against. A family's binding
+    /// (`type Buf<E> = List<E>;`) spells its own parameters past the impl's:
+    /// `E` is [`SolverType::Param`] at the impl's parameter count.
     pub assoc_bindings: IndexMap<ImplId, Vec<(AssocId, SolverType)>>,
     /// The methods each impl block's body declares. One its trait does not
     /// declare — a helper the bodies call on `self` — is a candidate through

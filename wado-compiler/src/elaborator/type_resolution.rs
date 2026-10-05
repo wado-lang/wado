@@ -9,16 +9,8 @@ use crate::tir::{ProjectionAnswer, ResolvedType, SlotProjections, TypeId, TypeTa
 use crate::token::Span;
 
 use super::Elaborator;
-<<<<<<< HEAD
-use super::scope::{BinderInScope, ScopedBound};
-use super::trait_query::{RigidArgs, SelfBinding};
-||||||| c296641f9
-use super::scope::{BinderInScope, ScopedBound};
-use super::trait_query::SelfBinding;
-=======
 use super::scope::{BinderInScope, FamilySite, ScopedBound};
-use super::trait_query::SelfBinding;
->>>>>>> origin/main
+use super::trait_query::{RigidArgs, SelfBinding};
 use super::types::{TypeError, forward_type_param_defaults};
 use crate::ast;
 use crate::ast::{NamespacedGenericType, TraitBound};

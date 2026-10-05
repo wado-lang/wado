@@ -327,12 +327,21 @@ impl Query<'_> {
                 }
             }
         }
+        // A family's own parameters stay open, at their positions in the
+        // family, for each projection's arguments to fill.
+        let own = u32::try_from(def.params.len()).expect("fewer than 2^32 params");
+        let at_impl = |i: u32| match bindings.get(i as usize) {
+            Some(binding) => binding.as_ref().map(Binding::as_type),
+            None => Some(SolverType::Param(i - own)),
+        };
         let assoc = program
             .assoc_bindings
             .get(&id)
             .into_iter()
             .flatten()
-            .filter_map(|(assoc, binding)| Some((*assoc, self.at_bindings(binding, &bindings)?)))
+            .filter_map(|(assoc, binding)| {
+                Some((*assoc, self.normalized(&binding.map_params(&at_impl)?)))
+            })
             .collect();
         Some(Answer {
             holds: Holds { requests, assoc },
@@ -356,7 +365,8 @@ impl Query<'_> {
     }
 
     /// `ty` with each projection an impl answers replaced by what that impl
-    /// binds: `<Ints as Src>::Item` is `i32` under `impl Src for Ints`. A
+    /// binds: `<Ints as Src>::Item` is `i32` under `impl Src for Ints`, and a
+    /// family's member is its binding at the projection's arguments. A
     /// projection off a parameter binds nothing here and stays as written.
     fn normalized(&mut self, ty: &SolverType) -> SolverType {
         match ty {
@@ -364,17 +374,21 @@ impl Query<'_> {
                 base,
                 trait_,
                 assoc,
+                args,
             } => {
                 let base = self.normalized(base);
+                let args: Vec<SolverType> = args.iter().map(|a| self.normalized(a)).collect();
                 let bound = self
                     .holds(&base, *trait_, &[])
                     .and_then(|held| held.assoc.into_iter().find(|(a, _)| a == assoc));
-                match bound {
-                    Some((_, ty)) => self.normalized(&ty),
+                let member = bound.and_then(|(_, ty)| ty.map_params(&|j| args.get(j as usize).cloned()));
+                match member {
+                    Some(ty) => self.normalized(&ty),
                     None => SolverType::Projection {
                         base: Box::new(base),
                         trait_: *trait_,
                         assoc: *assoc,
+                        args,
                     },
                 }
             }

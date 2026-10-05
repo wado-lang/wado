@@ -6,7 +6,7 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::tir::TypeId;
+use crate::tir::{TraitRef, TypeId};
 use crate::token::Span;
 
 use super::super::sig::{DeclSig, MethodSig};
@@ -125,6 +125,10 @@ pub(crate) struct ModuleDecls {
     /// Generic type applications the decl pass met before the solver that
     /// answers their bounds was built: `(declaration, type arguments, span)`.
     pub(crate) pending_decl_arg_bounds: Vec<(DefId, Vec<TypeId>, Span)>,
+
+    /// Settled arguments the decl pass met owing bounds already instantiated
+    /// before the solver was built: `(argument, bounds, parameter, span)`.
+    pub(crate) pending_trait_ref_bounds: Vec<(TypeId, Vec<TraitRef>, String, Span)>,
 
     /// Additions to the data tables made during this module's walk, read by
     /// `TypeLookup` ahead of the program's. Keyed by declaration, never spelling.

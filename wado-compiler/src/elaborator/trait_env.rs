@@ -1370,6 +1370,39 @@ impl TraitEnv {
             .map_or(&[], |header| header.type_params.as_slice())
     }
 
+    /// `param`, written in the frame of the trait `impl_def` implements, read in
+    /// the impl's: each of the trait's parameters it names becomes what the
+    /// impl's header writes for it. Matched by the binder a name reaches, so a
+    /// method parameter shadowing one is left alone. A parameter the header
+    /// leaves to its default, or a pack, which takes a run of arguments no
+    /// one name stands for, stays as written.
+    pub(super) fn in_impl_frame(
+        &self,
+        impl_def: DefId,
+        param: &ast::GenericParam,
+        resolutions: &Resolutions,
+    ) -> ast::GenericParam {
+        let Some(header) = self.impl_headers.get(&impl_def) else {
+            return param.clone();
+        };
+        let Some(trait_) = header.trait_def() else {
+            return param.clone();
+        };
+        let declared = self.trait_type_params(trait_);
+        if declared.iter().any(|p| p.is_pack) {
+            return param.clone();
+        }
+        let written = header.trait_ty().map_or(&[][..], written_arg_nodes);
+        param.substituted(&|named| match resolutions.walked(named.id)? {
+            Resolution::Binder(binder) => declared
+                .iter()
+                .position(|p| p.id == binder)
+                .and_then(|i| written.get(i))
+                .cloned(),
+            Resolution::Def(_) | Resolution::Projection(_) | Resolution::Unresolved => None,
+        })
+    }
+
     /// The parameters of `trait_` a reference to it gives a type argument, in
     /// order: every one but an effect, which is no type. A trait's arguments
     /// are one per these.
@@ -1780,7 +1813,7 @@ impl TraitEnv {
 
     /// `key`'s parameters and its closure as declared, both in `key`'s own
     /// parameter space. A reader re-spells them at its own arguments with
-    /// [`TypeSystem::supertrait_names`].
+    /// `Elaborator::inherited_space`.
     pub(super) fn supertrait_closure_declared(
         &self,
         key: &DefId,
@@ -2855,15 +2888,7 @@ pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> nam
             written_type_arg(inner, resolutions).with_reference(name::RefKind::Mut)
         }
         ast::Type::Tuple(elems) => name::FqTypeName::tuple(nested(elems)),
-<<<<<<< HEAD
-||||||| c296641f9
-        // Spelled by the whole shape, matching the resolved form: the two
-        // sides of a lookup have to render one type one way.
-=======
         ast::Type::TypePackSpread(name, _) => name::FqTypeName::pack_spread(name),
-        // Spelled by the whole shape, matching the resolved form: the two
-        // sides of a lookup have to render one type one way.
->>>>>>> origin/main
         ast::Type::Function(ft) => {
             let with_clause: Vec<String> = ft
                 .effects

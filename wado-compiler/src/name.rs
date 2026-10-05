@@ -3166,13 +3166,6 @@ impl FqTypeName {
     pub fn mentions_binder(&self) -> bool {
         let head_mentions = match &self.head {
             TypeHead::Binder { .. } => true,
-<<<<<<< HEAD
-            TypeHead::Projection { base, .. } => base.mentions_binder(),
-            TypeHead::Function { signature, .. } => {
-                signature.iter().any(FqTypeName::mentions_binder)
-||||||| c296641f9
-            TypeHead::Projection { base, .. } => base.mentions_binder(),
-=======
             TypeHead::Projection(head) => {
                 head.base.mentions_binder()
                     || head
@@ -3180,7 +3173,9 @@ impl FqTypeName {
                         .iter()
                         .flatten()
                         .any(FqTypeName::mentions_binder)
->>>>>>> origin/main
+            }
+            TypeHead::Function { signature, .. } => {
+                signature.iter().any(FqTypeName::mentions_binder)
             }
             _ => false,
         };
@@ -3201,7 +3196,8 @@ impl FqTypeName {
             | TypeHead::Shape { .. }
             | TypeHead::ParamBucket { .. }
             | TypeHead::Builtin(_)
-            | TypeHead::Tuple => false,
+            | TypeHead::Tuple
+            | TypeHead::Function { .. } => false,
         };
         if open(self) {
             return other.reference.starts_with(&self.reference);
@@ -3293,31 +3289,6 @@ impl FqTypeName {
                 Some(owner) => out.push_str(&format!("{name}#{}", owner.rendered())),
                 None => out.push_str(name),
             },
-<<<<<<< HEAD
-            TypeHead::Projection {
-                base,
-                assoc,
-                owning_trait,
-            } => out.push_str(&format!(
-                "{}::{assoc}#{}/{}",
-                base.to_mangled(),
-                owning_trait.module(),
-                owning_trait.rendered()
-            )),
-            TypeHead::Tuple | TypeHead::Function { .. } => unreachable!("handled above"),
-||||||| c296641f9
-            TypeHead::Projection {
-                base,
-                assoc,
-                owning_trait,
-            } => out.push_str(&format!(
-                "{}::{assoc}#{}/{}",
-                base.to_mangled(),
-                owning_trait.module(),
-                owning_trait.rendered()
-            )),
-            TypeHead::Tuple => unreachable!("handled above"),
-=======
             TypeHead::Projection(head) => {
                 out.push_str(&format!(
                     "{}::{}#{}/{}",
@@ -3331,8 +3302,7 @@ impl FqTypeName {
                     out.push_str(&format!("[{}]", args.join(",")));
                 }
             }
-            TypeHead::Tuple => unreachable!("handled above"),
->>>>>>> origin/main
+            TypeHead::Tuple | TypeHead::Function { .. } => unreachable!("handled above"),
         }
         if !self.args.is_empty() {
             let args: Vec<String> = self.args.iter().map(FqTypeName::to_mangled).collect();
@@ -3398,36 +3368,6 @@ impl FqTypeName {
     /// head's own spelling.
     fn descend(&self, at: &impl Fn(&FqTypeName) -> FqTypeName) -> FqTypeName {
         let head = match &self.head {
-<<<<<<< HEAD
-            TypeHead::Projection {
-                base,
-                assoc,
-                owning_trait,
-            } => TypeHead::Projection {
-                base: Box::new(at(base)),
-                assoc: assoc.clone(),
-                owning_trait: owning_trait.clone(),
-            },
-            TypeHead::Function {
-                is_mut,
-                signature,
-                effects,
-            } => TypeHead::Function {
-                is_mut: *is_mut,
-                signature: signature.iter().map(at).collect(),
-                effects: effects.clone(),
-            },
-||||||| c296641f9
-            TypeHead::Projection {
-                base,
-                assoc,
-                owning_trait,
-            } => TypeHead::Projection {
-                base: Box::new(at(base)),
-                assoc: assoc.clone(),
-                owning_trait: owning_trait.clone(),
-            },
-=======
             TypeHead::Projection(projected) => TypeHead::Projection(Box::new(ProjectionHead {
                 base: at(&projected.base),
                 assoc: projected.assoc.clone(),
@@ -3437,7 +3377,15 @@ impl FqTypeName {
                     .as_ref()
                     .map(|args| args.iter().map(at).collect()),
             })),
->>>>>>> origin/main
+            TypeHead::Function {
+                is_mut,
+                signature,
+                effects,
+            } => TypeHead::Function {
+                is_mut: *is_mut,
+                signature: signature.iter().map(at).collect(),
+                effects: effects.clone(),
+            },
             head => head.clone(),
         };
         FqTypeName {
@@ -3460,20 +3408,12 @@ impl FqTypeName {
             out.push_str(&mangle_tuple_type(&args));
             return out;
         }
-<<<<<<< HEAD
         if let Some(spelled) = self.fn_spelling(FqTypeName::to_display) {
             out.push_str(&spelled);
             return out;
         }
-        if let TypeHead::Projection { base, assoc, .. } = &self.head {
-            out.push_str(&format!("{}::{assoc}", base.to_display()));
-||||||| c296641f9
-        if let TypeHead::Projection { base, assoc, .. } = &self.head {
-            out.push_str(&format!("{}::{assoc}", base.to_display()));
-=======
         if let TypeHead::Projection(head) = &self.head {
             out.push_str(&format!("{}::{}", head.base.to_display(), head.assoc));
->>>>>>> origin/main
         } else {
             out.push_str(self.head.name());
         }

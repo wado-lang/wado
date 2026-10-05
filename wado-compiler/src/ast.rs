@@ -3938,6 +3938,29 @@ impl Type {
         }
     }
 
+    /// This type with each named type `at` answers for replaced by the answer,
+    /// at any depth.
+    #[must_use]
+    pub fn substituted(&self, at: &dyn Fn(&NamedType) -> Option<Type>) -> Type {
+        let each = |types: &[Type]| types.iter().map(|t| t.substituted(at)).collect();
+        match self {
+            Type::Named(named) => at(named).unwrap_or_else(|| self.clone()),
+            Type::Generic(g) => Type::Generic(GenericType {
+                args: each(&g.args),
+                ..g.clone()
+            }),
+            Type::NamespacedGeneric(g) => Type::NamespacedGeneric(Box::new(NamespacedGenericType {
+                args: each(&g.args),
+                ..(**g).clone()
+            })),
+            Type::Function(f) => Type::Function(Box::new(f.substituted(at))),
+            Type::Tuple(elems) => Type::Tuple(each(elems)),
+            Type::Reference(inner) => Type::Reference(Box::new(inner.substituted(at))),
+            Type::MutReference(inner) => Type::MutReference(Box::new(inner.substituted(at))),
+            Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => self.clone(),
+        }
+    }
+
     /// Calls `f` on this type and on every type within it, outermost first.
     pub fn for_each<'a>(&'a self, f: &mut impl FnMut(&'a Type)) {
         let _ = self.any(&mut |ty| {
@@ -4106,6 +4129,18 @@ pub struct FunctionType {
     pub effects: Vec<EffectName>,
 }
 
+impl FunctionType {
+    /// [`Type::substituted`] over the parameters and the return.
+    #[must_use]
+    pub fn substituted(&self, at: &dyn Fn(&NamedType) -> Option<Type>) -> Self {
+        Self {
+            params: self.params.iter().map(|t| t.substituted(at)).collect(),
+            return_type: self.return_type.substituted(at),
+            ..self.clone()
+        }
+    }
+}
+
 /// One effect name in a `with` clause, at the site that writes it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EffectName {
@@ -4221,6 +4256,26 @@ pub struct GenericParam {
 }
 
 impl GenericParam {
+    /// This parameter with [`Type::substituted`] applied to every type its
+    /// bounds and its default write.
+    #[must_use]
+    pub fn substituted(&self, at: &dyn Fn(&NamedType) -> Option<Type>) -> Self {
+        let mut param = self.clone();
+        for bound in &mut param.bounds {
+            for arg in &mut bound.type_args {
+                *arg = arg.substituted(at);
+            }
+            for assoc in &mut bound.assoc_types {
+                assoc.ty = assoc.ty.substituted(at);
+            }
+            if let Some(signature) = &mut bound.fn_signature {
+                **signature = signature.substituted(at);
+            }
+        }
+        param.default = param.default.map(|ty| ty.substituted(at));
+        param
+    }
+
     /// The trait bounds this param declares. An `fn`-signature bound is
     /// excluded: it is already realised in the parameter's own type, so there
     /// is no trait to check a type argument against.
