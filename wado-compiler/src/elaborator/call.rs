@@ -1373,7 +1373,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // Static method call (Type::method). Static methods are
             // registered with mangled names "Type::method".
-            else if self.is_static_method_at(receiver_site, prefix, suffix) {
+            else if self.is_static_method_at(receiver_site, prefix, suffix, &args) {
                 self.record_receiver_reference(ident, prefix);
                 // Record the method segment (suffix) as a reference to the
                 // declaration this call resolves to. The impl selection knows
@@ -3758,7 +3758,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.tysys.inherited_default_method_sig(&key, method_name)
             })
         else {
-            return (vec![], vec![]);
+            return (self.derived_impl_args(struct_name, receiver_key, method_name, args), vec![]);
         };
         if sig.decl.type_params.is_empty() {
             return (vec![], vec![]);
@@ -3798,6 +3798,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.declaring_slot_values(&sig, &inferred[..split]),
             inferred[split..].to_vec(),
         )
+    }
+
+    /// The impl level of a derived method called by type path, which declares
+    /// no signature to solve: the receiver argument's type arguments.
+    fn derived_impl_args(
+        &mut self,
+        struct_name: &str,
+        receiver_key: Option<&ImplTargetKey>,
+        method_name: &str,
+        args: &[TypeId],
+    ) -> Vec<TypeId> {
+        if self.tysys.auto_derive_by_method(method_name).is_none() {
+            return Vec::new();
+        }
+        let key = receiver_key
+            .cloned()
+            .unwrap_or_else(|| self.impl_target(struct_name));
+        key.decl()
+            .and_then(|def| self.derived_receiver_type(def, None, args))
+            .and_then(|receiver| self.tysys.type_table.borrow().nominal_type_args(receiver))
+            .unwrap_or_default()
     }
 
     /// The slot a declared type parameter's `TypeId` holds.

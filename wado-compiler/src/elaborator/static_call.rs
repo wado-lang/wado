@@ -7,7 +7,7 @@ use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
 use crate::hashmap::IndexSet;
 use crate::name::FqTraitName;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
@@ -17,7 +17,7 @@ use super::sem::types::CalleeParams;
 use super::sig::MethodSig;
 use super::synth::ArgClass;
 use super::trait_env::{ImplHeader, ImplTargetKey};
-use super::types::TypeError;
+use super::types::{TraitMethodMatch, TypeError};
 use super::tysys::TypeSystem;
 
 /// One `Type::method(...)` spelling as the resolution reads it: what it names,
@@ -367,6 +367,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_ref,
             }));
         }
+        // The auto-derived `eq` / `cmp`, which the method-call spelling reaches
+        // through the same derivation: the receiver leads the arguments.
+        let receiver_type = match key.decl() {
+            Some(def) => self.derived_receiver_type(def, receiver_type, arg_types),
+            None => receiver_type,
+        };
+        if let Some(receiver_type) = receiver_type
+            && let Some(derived) = self.try_auto_derived_method_match(method_name, receiver_type)
+        {
+            return StaticLookup::Found(Box::new(self.derived_instance_callee(
+                derived,
+                method_name,
+                receiver_type,
+            )));
+        }
 
         // A newtype and a `flags` reach what they wrap: their impls are looked
         // up on the base, so the spelling resolves there too. Read from the
@@ -383,6 +398,70 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ..StaticQuery::of(&base_name, method_name)
             }),
             None => self.out_of_scope_lookup(receiver_name, &out_of_scope),
+        }
+    }
+
+    /// The receiver a derived method on `def` is called on by type path: the
+    /// type `def` declares, or, where `def` is generic, the receiver argument's
+    /// type, since the type path names no arguments and only the call settles
+    /// them.
+    pub(super) fn derived_receiver_type(
+        &mut self,
+        def: DefId,
+        receiver_type: Option<TypeId>,
+        arg_types: &[TypeId],
+    ) -> Option<TypeId> {
+        let lookup = self.type_lookup();
+        if lookup
+            .declared_type_param_ids(def)
+            .is_some_and(|params| !params.is_empty())
+        {
+            let tt = self.tysys.type_table.borrow();
+            let receiver = tt.peel_refs(*arg_types.first()?);
+            return (tt.nominal_def(receiver) == Some(def)).then_some(receiver);
+        }
+        receiver_type.or_else(|| {
+            let ty = Self::nominal_type_of(def, &mut self.tysys.type_table.borrow_mut(), &lookup);
+            (ty != TypeTable::UNKNOWN).then_some(ty)
+        })
+    }
+
+    /// `derived` as the qualified spelling calls it: the receiver by reference,
+    /// then the method's own parameters.
+    fn derived_instance_callee(
+        &self,
+        derived: TraitMethodMatch,
+        method_name: &str,
+        receiver_type: TypeId,
+    ) -> StaticCallee {
+        let info = derived.method_info;
+        let receiver_ref = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .intern(ResolvedType::Ref(receiver_type));
+        let params = CalleeParams {
+            param_is_mut: std::iter::once(false).chain(info.param_is_mut).collect(),
+            param_defaults: std::iter::once(("self".to_string(), None))
+                .chain(info.param_names.into_iter().map(|name| (name, None)))
+                .collect(),
+            param_types: std::iter::once(receiver_ref)
+                .chain(info.param_types)
+                .collect(),
+            self_in_args: true,
+            defaults_module: None,
+        };
+        StaticCallee {
+            params,
+            own_params: Vec::new(),
+            return_type: info.return_type,
+            method_ref: StaticMethodRef::new(
+                derived.impl_module_source,
+                derived.impl_struct_fq.head().name(),
+                method_name,
+                Some(derived.trait_name),
+                info.method_def,
+            ),
         }
     }
 

@@ -1,0 +1,35 @@
+// A derived impl's method answers a static call on the type, as a written one
+// does: `P::cmp(&a, &b)` reaches the `Ord` the compiler derived for `P`.
+
+struct P {
+    x: i32,
+}
+
+variant V {
+    A(i32),
+    B,
+}
+
+test "a struct's derived methods by type path" {
+    let a = P { x: 1 };
+    let b = P { x: 2 };
+    assert P::cmp(&a, &b) matches { Less };
+    assert P::eq(&a, &a);
+    assert !P::eq(&a, &b);
+}
+
+variant Tree<T> {
+    Leaf(T),
+    Empty,
+}
+
+test "a variant's derived methods by type path" {
+    assert V::cmp(&V::A(5), &V::B) matches { Less };
+    assert V::eq(&V::B, &V::B);
+}
+
+test "a generic type's derived methods take their arguments from the receiver" {
+    assert Tree::cmp(&Tree::Leaf(1), &Tree::Leaf(2)) matches { Less };
+    assert Tree::cmp(&Tree::Leaf("b"), &Tree::Empty) matches { Less };
+    assert Tree::eq(&Tree::Leaf(1), &Tree::Leaf(1));
+}
