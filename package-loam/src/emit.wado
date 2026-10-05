@@ -724,8 +724,7 @@ fn emit_forward(
     } else {
         let mut fields: List<String> = [];
         for let [i, value] of returned.into_iter().enumerate() {
-            let field = names.get(&graph.outputs[i].name);
-            fields.push(if value == field { value } else { `${field}: ${value}` });
+            fields.push(`${names.get(&graph.outputs[i].name)}: ${value}`);
         }
         w.line(`return Outputs { ${fields.join(", ")} };`);
     }

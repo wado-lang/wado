@@ -13,6 +13,14 @@ impl Kernels {
     fn last<..Bs, M>(&self, a: &Shape<[..Bs, M]>) -> Shape<[..Bs, M]> {
         return Shape { n: a.n + 1 };
     }
+
+    fn width<..T>(&self, x: [..T]) -> i32 {
+        let mut n = 0;
+        for let _ of x {
+            n += 1;
+        }
+        return n;
+    }
 }
 
 fn last<..Bs, M>(a: &Shape<[..Bs, M]>) -> Shape<[..Bs, M]> {
@@ -31,6 +39,11 @@ fn through_turbofish<..Bs, M>(k: &Kernels, a: &Shape<[..Bs, M]>) -> i32 {
     return k.last::<[..Bs], M>(a).n;
 }
 
+// The caller's pack under the method's own name, spread whole.
+fn through_spread<..T>(k: &Kernels, x: [..T]) -> i32 {
+    return k.width(x);
+}
+
 struct Row {}
 struct Col {}
 
@@ -39,6 +52,7 @@ test "a method takes the caller's pack as a free function does" {
     assert through_free(&s) == 4;
     assert through_method(&Kernels {}, &s) == 4;
     assert through_turbofish(&Kernels {}, &s) == 4;
+    assert through_spread(&Kernels {}, [1, true, "x"]) == 3;
 }
 
 __DATA__

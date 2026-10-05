@@ -948,7 +948,7 @@ pub variant Step {
 
 /// An elementwise operator as data: each output element over the operands'
 /// elements at its position and the constants folded in. A backend reads it as
-/// it can, the CPU one element at a time and a GPU one as a shader, which a
+/// it can, the CPU one step at a time and a GPU one as a shader, which a
 /// closure could never become.
 pub struct Expr {
     steps: List<Step>,
@@ -991,43 +991,94 @@ impl Expr {
         return Expr { steps };
     }
 
-    /// The output element where the first operand's is `x` and the second's `y`.
-    pub fn at(&self, x: f32, y: f32) -> f32 {
-        return self.step_at(self.steps.len() - 1, x, y);
+    /// The output over whole operands: `x` the first's elements, `y` the
+    /// second's. Each holds as many elements as the output or one, which every
+    /// output element reads.
+    pub fn over(&self, x: &List<f32>, y: &List<f32>) -> List<f32> {
+        let count = i32::max(x.len(), y.len());
+        let mut values: List<List<f32>> = [];
+        for let step of self.steps {
+            values.push(match step {
+                Operand(_) => [],
+                Constant(c) => [c],
+                Unary([op, a]) => unary_over(op, self.value(&values, x, y, a)),
+                Binary([op, a, b]) => binary_over(op, self.value(&values, x, y, a), self.value(&values, x, y, b)),
+            });
+        }
+        let last = self.value(&values, x, y, self.steps.len() - 1);
+        return if last.len() == count { *last } else { List::<f32>::filled(count, last[0]) };
     }
 
-    fn step_at(&self, i: i32, x: f32, y: f32) -> f32 {
+    fn value(&self, values: &List<List<f32>>, x: &List<f32>, y: &List<f32>, i: i32) -> &List<f32> {
         return match self.steps[i] {
-            Operand(n) => if n == 0 { x } else { y },
-            Constant(c) => c,
-            Unary([op, a]) => apply_unary(op, self.step_at(a, x, y)),
-            Binary([op, a, b]) => apply_binary(op, self.step_at(a, x, y), self.step_at(b, x, y)),
+            Operand(0) => x,
+            Operand(_) => y,
+            _ => &values[i],
         };
     }
 }
 
-fn apply_unary(op: UnaryOp, v: f32) -> f32 {
+// Each step is one loop whose operator is fixed before it starts. Read step by
+// step per element, an `Expr` runs several times slower.
+
+fn unary_over(op: UnaryOp, v: &List<f32>) -> List<f32> {
     return match op {
-        Relu => f32::ieee754_max(v, 0.0),
-        Sigmoid => sigmoid_f32(v),
-        Tanh => f32::tanh(v),
-        Erf => f32::erf(v),
-        Exp => f32::exp(v),
-        Log => f32::ln(v),
-        Sqrt => f32::sqrt(v),
-        Neg => -v,
-        Abs => f32::abs(v),
+        Relu => each(v, |e| f32::ieee754_max(e, 0.0)),
+        Sigmoid => each(v, |e| sigmoid_f32(e)),
+        Tanh => each(v, |e| f32::tanh(e)),
+        Erf => each(v, |e| f32::erf(e)),
+        Exp => each(v, |e| f32::exp(e)),
+        Log => each(v, |e| f32::ln(e)),
+        Sqrt => each(v, |e| f32::sqrt(e)),
+        Neg => each(v, |e| -e),
+        Abs => each(v, |e| f32::abs(e)),
     };
 }
 
-fn apply_binary(op: BinaryOp, x: f32, y: f32) -> f32 {
+fn binary_over(op: BinaryOp, a: &List<f32>, b: &List<f32>) -> List<f32> {
     return match op {
-        Add => x + y,
-        Sub => x - y,
-        Mul => x * y,
-        Div => x / y,
-        Pow => f32::pow(x, y),
+        Add => pairwise(a, b, |x, y| x + y),
+        Sub => pairwise(a, b, |x, y| x - y),
+        Mul => pairwise(a, b, |x, y| x * y),
+        Div => pairwise(a, b, |x, y| x / y),
+        Pow => pairwise(a, b, |x, y| f32::pow(x, y)),
     };
+}
+
+fn each(v: &List<f32>, f: fn(f32) -> f32) -> List<f32> {
+    let mut out = List::<f32>::with_capacity(v.len());
+    for let e of *v {
+        out.push(f(e));
+    }
+    return out;
+}
+
+/// `f` over `a` and `b` element by element, a one-element side read at each.
+fn pairwise(a: &List<f32>, b: &List<f32>, f: fn(f32, f32) -> f32) -> List<f32> {
+    let count = i32::max(a.len(), b.len());
+    assert (a.len() == count || a.len() == 1) && (b.len() == count || b.len() == 1);
+    let mut out = List::<f32>::with_capacity(count);
+    if a.len() == b.len() {
+        for let i of 0..<count {
+            out.push(f(a[i], b[i]));
+        }
+    } else if a.len() == 1 {
+        let x = a[0];
+        for let y of *b {
+            out.push(f(x, y));
+        }
+    } else {
+        let y = b[0];
+        for let x of *a {
+            out.push(f(x, y));
+        }
+    }
+    return out;
+}
+
+/// `op` over `a` and `b`, both already of the output's extents.
+fn over<Axes>(a: &Tensor<f32, Axes>, b: &Tensor<f32, Axes>, op: &Expr) -> Tensor<f32, Axes> {
+    return Tensor { data: op.over(&a.data, &b.data), extents: a.extents };
 }
 
 /// Where the kernels run. `forward` is instantiated at each backend, and the
@@ -1190,7 +1241,7 @@ impl Backend for Cpu {
     }
 
     fn map<Axes>(&mut self, t: &Tensor<f32, Axes>, op: &Expr) -> Tensor<f32, Axes> {
-        return map(t, |v| op.at(v, 0.0));
+        return Tensor { data: op.over(&t.data, &[0.0]), extents: t.extents };
     }
 
     fn cast<A: Element, B: Element, Axes>(&mut self, t: &Tensor<A, Axes>) -> Tensor<B, Axes> {
@@ -1198,7 +1249,10 @@ impl Backend for Cpu {
     }
 
     fn zip<Axes>(&mut self, a: &Tensor<f32, Axes>, b: &Tensor<f32, Axes>, op: &Expr) -> Tensor<f32, Axes> {
-        return zip(a, b, |x, y| op.at(x, y));
+        if a.extents == b.extents {
+            return over(a, b, op);
+        }
+        return over(&zip(a, b, |x, y| x), &zip(a, b, |x, y| y), op);
     }
 
     fn zip_suffix<..Pre, ..Suf>(
@@ -1207,7 +1261,7 @@ impl Backend for Cpu {
         b: &Tensor<f32, [..Suf]>,
         op: &Expr,
     ) -> Tensor<f32, [..Pre, ..Suf]> {
-        return zip_suffix(a, b, |x, y| op.at(x, y));
+        return over(a, &zip_suffix(a, b, |x, y| y), op);
     }
 
     fn zip_suffix_lhs<..Pre, ..Suf>(
@@ -1216,7 +1270,7 @@ impl Backend for Cpu {
         b: &Tensor<f32, [..Pre, ..Suf]>,
         op: &Expr,
     ) -> Tensor<f32, [..Pre, ..Suf]> {
-        return zip_suffix_lhs(a, b, |x, y| op.at(x, y));
+        return over(&zip_suffix_lhs(a, b, |x, y| x), b, op);
     }
 
     fn zip_at<..Pre, ..Mid, ..Post>(
@@ -1226,7 +1280,7 @@ impl Backend for Cpu {
         trailing: i32,
         op: &Expr,
     ) -> Tensor<f32, [..Pre, ..Mid, ..Post]> {
-        return zip_at(a, b, trailing, |x, y| op.at(x, y));
+        return over(a, &zip_at(a, b, trailing, |x, y| y), op);
     }
 
     fn select<E: Element, Axes>(
