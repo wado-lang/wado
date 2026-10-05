@@ -96,6 +96,19 @@ struct Written<'a> {
     self_type: Option<&'a SolverType>,
 }
 
+/// The trait among the bounds `params` puts on `base` that declares `assoc`.
+fn declaring_among(
+    tysys: &TypeSystem,
+    params: &[GenericParam],
+    base: &str,
+    assoc: &str,
+) -> Option<DefId> {
+    let param = params.iter().find(|p| p.name == base)?;
+    tysys
+        .trait_env
+        .bound_declaring_assoc_type(&param.bounds, assoc, &tysys.resolutions)
+}
+
 /// How a declaration's parameter is spelled where a type mentions it.
 #[derive(Clone, Copy)]
 enum ParamKind {
@@ -1219,14 +1232,7 @@ impl SolverBridge {
             let space = Written {
                 resolutions: &tysys.resolutions,
                 param: &place,
-                declaring: &|base, assoc| {
-                    let bounds = own.iter().find(|p| p.name == base)?;
-                    tysys.trait_env.bound_declaring_assoc_type(
-                        &bounds.bounds,
-                        assoc,
-                        &tysys.resolutions,
-                    )
-                },
+                declaring: &|base, assoc| declaring_among(tysys, own, base, assoc),
                 self_type: None,
             };
             // An edge whose arguments the lowering cannot say states nothing:
@@ -1368,18 +1374,10 @@ impl SolverBridge {
         }
         for (&def, info) in &data.generic_newtypes {
             let param = |name: &str| ParamKind::of(&info.type_params, name);
-            let declaring = |base: &str, assoc: &str| {
-                let bounds = info.type_params.iter().find(|p| p.name == base)?;
-                tysys.trait_env.bound_declaring_assoc_type(
-                    &bounds.bounds,
-                    assoc,
-                    &tysys.resolutions,
-                )
-            };
             let space = Written {
                 resolutions: &tysys.resolutions,
                 param: &param,
-                declaring: &declaring,
+                declaring: &|base, assoc| declaring_among(tysys, &info.type_params, base, assoc),
                 self_type: None,
             };
             if let Ok(base) = lowering.ast_type(&info.base_type_ast, &space) {

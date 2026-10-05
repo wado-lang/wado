@@ -93,12 +93,12 @@ fn bound_answers(
     trait_: TraitDeclId,
     wanted: &[SolverType],
 ) -> bool {
-    let wanted = program.per_param(trait_, wanted);
+    let wanted = program.per_param(Some(trait_), wanted);
     program
         .args_reaching(bound, trait_, subject)
         .iter()
         .any(|args| {
-            let args = program.per_param(trait_, args);
+            let args = program.per_param(Some(trait_), args);
             wanted.iter().enumerate().all(|(i, want)| {
                 want.as_ref().is_none_or(|want| {
                     let given = args.get(i).and_then(Option::as_ref);
@@ -519,11 +519,8 @@ pub(super) fn answers_args(
     written: &[SolverType],
     args: &[SolverType],
 ) -> bool {
-    let per_param = |args: &[SolverType]| match def.trait_ {
-        Some(trait_) => program.per_param(trait_, args),
-        None => args.iter().cloned().map(Some).collect(),
-    };
-    let (written, args) = (per_param(written), per_param(args));
+    let written = program.per_param(def.trait_, written);
+    let args = program.per_param(def.trait_, args);
     // A `Self` default lowers to the impl's target, which the match bound to
     // `ty` — and to the newtype a peeled question was asked at, which the
     // inherited impl also spells `Self`.

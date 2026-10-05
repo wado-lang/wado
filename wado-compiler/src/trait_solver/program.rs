@@ -478,13 +478,14 @@ impl Program {
     }
 
     /// What `args`, written for `trait_`, say for each of its parameters, as
-    /// [`args_per_param`] reads them.
+    /// [`args_per_param`] reads them. With no trait declaring a pack, each
+    /// argument is its own parameter's.
     pub(super) fn per_param(
         &self,
-        trait_: TraitDeclId,
+        trait_: Option<TraitDeclId>,
         args: &[SolverType],
     ) -> Vec<Option<SolverType>> {
-        match self.traits.get(&trait_) {
+        match trait_.and_then(|trait_| self.traits.get(&trait_)) {
             Some(def) => args_per_param(args, def.arg_defaults.len(), def.pack, SolverType::Tuple),
             None => args.iter().cloned().map(Some).collect(),
         }
@@ -527,7 +528,7 @@ impl Program {
                 reaching.push(next.args.clone());
             }
             if let Some(def) = self.traits.get(&next.trait_) {
-                let args = self.per_param(next.trait_, &next.args);
+                let args = self.per_param(Some(next.trait_), &next.args);
                 stack.extend(
                     def.supertraits
                         .iter()
