@@ -1076,80 +1076,43 @@ fn token_stop_error<S: AsStrSlice>(pos: i32, len: i32, message: S) -> Deserializ
     return DeserializeError::malformed(message, pos as i64);
 }
 
+fn integer_range_error(type_name: String, start: i64) -> DeserializeError {
+    return DeserializeError::overflow(`value out of range for ${type_name}`, start);
+}
+
 /// The digits of u128::MAX, the widest integer type: a longer value overflows
 /// every type, so the digits are never built.
 global INTEGRAL_DIGITS_MAX: i64 = 39;
 
-/// The integer a number `token` spells, as plain decimal digits behind an
-/// optional `-`: `1.5e1` gives `15`, and `-0.0` gives `0`. Exact at any width,
-/// where a detour through f64 rounds past 2^53. A nonzero fraction is an
-/// `UnexpectedType` and a value past `INTEGRAL_DIGITS_MAX` digits an
-/// `Overflow`. `token` is held to JSON's number grammar, leading zeros aside,
-/// since a string-encoded one has not been scanned.
-fn integral_digits(token: &ByteSlice, range_msg: &String, start: i64) -> Result<String, DeserializeError> {
-    let len = token.len();
-    let neg = len > 0 && token.get_unchecked(0) as i32 == b'-';
-    let mut i = if neg { 1 } else { 0 };
-    let int_start = i;
-    while i < len && digit_value(token.get_unchecked(i) as i32) <= 9 {
-        i += 1;
-    }
-    let int_end = i;
-    let mut frac_end = i;
-    if i < len && token.get_unchecked(i) as i32 == b'.' {
-        i += 1;
-        let frac_start = i;
-        while i < len && digit_value(token.get_unchecked(i) as i32) <= 9 {
-            i += 1;
-        }
-        frac_end = i;
-        if frac_end == frac_start {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::invalid_value("invalid digit in number", start));
-        }
-    }
-    let mut exp: i64 = 0;
-    if i < len && token.get_unchecked(i) as i32 | 0x20 == b'e' {
-        i += 1;
-        let exp_neg = i < len && token.get_unchecked(i) as i32 == b'-';
-        if i < len && (exp_neg || token.get_unchecked(i) as i32 == b'+') {
-            i += 1;
-        }
-        let exp_start = i;
-        while i < len && digit_value(token.get_unchecked(i) as i32) <= 9 {
-            exp = push_exponent_digit(exp, token.get_unchecked(i) as i32 - b'0');
-            i += 1;
-        }
-        if i == exp_start {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::invalid_value("invalid digit in number", start));
-        }
-        if exp_neg {
-            exp = -exp;
-        }
-    }
-    if int_end == int_start || i != len {
-        builtin::cold_path();
-        return Result::Err(DeserializeError::invalid_value("invalid digit in number", start));
-    }
+/// The integer the scanned number `n` in `input` spells, as plain decimal
+/// digits behind an optional `-`: `1.5e1` gives `15`, and `-0.0` gives `0`.
+/// Exact at any width, where a detour through f64 rounds past 2^53. A nonzero
+/// fraction is an `UnexpectedType` and a value past `INTEGRAL_DIGITS_MAX`
+/// digits an `Overflow`.
+fn integral_digits(
+    n: &ScannedNumber,
+    input: &ByteSlice,
+    type_name: String,
+    start: i64,
+) -> Result<String, DeserializeError> {
     // The mantissa is the integer digits then the fraction digits, skipping
     // the '.' between them; `shift` places it, a power of ten.
-    let point = int_end;
-    let mantissa_len = (frac_end - int_start - if frac_end > int_end { 1 } else { 0 }) as i64;
-    let shift = exp - (mantissa_len - (point - int_start) as i64);
+    let has_point = n.mantissa_end - n.mantissa_start > n.int_digits;
+    let mantissa_len = (n.mantissa_end - n.mantissa_start - if has_point { 1 } else { 0 }) as i64;
+    let shift = n.exp - (mantissa_len - n.int_digits as i64);
     let kept = if shift < 0 { mantissa_len + shift } else { mantissa_len };
     let mut digits = String::with_capacity(16);
     let mut significant: i64 = 0;
     for let mut k: i64 = 0; k < mantissa_len; k += 1 {
-        let at = int_start + k as i32 + if k >= (point - int_start) as i64 { 1 } else { 0 };
-        let b = token.get_unchecked(at);
+        let at = n.mantissa_start + k as i32 + if k >= n.int_digits as i64 { 1 } else { 0 };
+        let b = input.get_unchecked(at);
         if k >= kept {
             if b as i32 != b'0' {
                 builtin::cold_path();
                 return Result::Err(DeserializeError::unexpected_type("expected integer, got float", start));
             }
         } else if significant > 0 || b as i32 != b'0' {
-            if significant == 0 && neg {
+            if significant == 0 && n.neg {
                 digits.push('-');
             }
             digits.push(b as char);
@@ -1162,7 +1125,7 @@ fn integral_digits(token: &ByteSlice, range_msg: &String, start: i64) -> Result<
     if shift > 0 {
         if significant + shift > INTEGRAL_DIGITS_MAX {
             builtin::cold_path();
-            return Result::Err(DeserializeError::overflow(range_msg, start));
+            return Result::Err(integer_range_error(type_name, start));
         }
         for let _ of 0..<shift {
             digits.push('0');
@@ -1171,20 +1134,21 @@ fn integral_digits(token: &ByteSlice, range_msg: &String, start: i64) -> Result<
     return Result::Ok(digits);
 }
 
-/// Reads the integer a number `token` spells into `T`, by `integral_digits`.
+/// Reads the integer the scanned number `n` spells into `T`, by
+/// `integral_digits`.
 fn parse_integral<T: FromStr<Err = ParseIntError>>(
-    token: &ByteSlice,
+    n: &ScannedNumber,
+    input: &ByteSlice,
     type_name: String,
     start: i64,
 ) -> Result<T, DeserializeError> {
-    let range_msg = `value out of range for ${type_name}`;
-    let digits = integral_digits(token, &range_msg, start)?;
+    let digits = integral_digits(n, input, type_name, start)?;
     return match T::from_str(&digits) {
         Ok(v) => Result::Ok(v),
         Err(e) => {
             builtin::cold_path();
             Result::Err(match e.kind() {
-                PosOverflow | NegOverflow => DeserializeError::overflow(range_msg, start),
+                PosOverflow | NegOverflow => integer_range_error(type_name, start),
                 // `digits` is a valid integer, so only an unsigned `T` refuses
                 // one, and only for its sign.
                 _ => DeserializeError::overflow(`negative value for ${type_name}`, start),
@@ -1774,7 +1738,7 @@ impl JsonDeserializer {
             let v = n.digits as i64;
             return Result::Ok((if n.neg { -v } else { v }) as i32);
         }
-        return parse_integral::<i32>(&self.input.slice(start as i32, self.pos), "i32", start);
+        return parse_integral::<i32>(n, &self.input, "i32", start);
     }
 
     /// Parses an i64 directly from `self.input`, without an intermediate
@@ -1853,7 +1817,7 @@ impl JsonDeserializer {
             }
             return Result::Ok(v);
         }
-        return parse_integral::<i64>(&self.input.slice(start as i32, self.pos), "i64", start);
+        return parse_integral::<i64>(n, &self.input, "i64", start);
     }
 
     /// Reads the integer the value at `lead` spells into `T`, from a number
@@ -1864,14 +1828,21 @@ impl JsonDeserializer {
         lead: i32,
         type_name: String,
     ) -> Result<T, DeserializeError> {
-        let start = self.pos;
+        let start = self.pos as i64;
         if lead == b'"' {
-            let s = self.read_json_string()?;
-            return parse_integral::<T>(&s.as_byte_slice(), type_name, start as i64);
+            // The string holds one number token and nothing else, held to the
+            // grammar a bare one is.
+            let mut text = JsonDeserializer { input: self.read_json_string()?.as_byte_slice(), pos: 0 };
+            let n = &mut text.scratch;
+            if text.scan_number_into(text.peek(), n) matches { Err(_) } || text.pos != text.input.len() {
+                builtin::cold_path();
+                return Result::Err(DeserializeError::invalid_value("invalid digit in number", start));
+            }
+            return parse_integral::<T>(n, &text.input, type_name, start);
         }
         let n = &mut self.scratch;
         self.scan_number_into(lead, n)?;
-        return parse_integral::<T>(&self.input.slice(start, self.pos), type_name, start as i64);
+        return parse_integral::<T>(n, &self.input, type_name, start);
     }
 
     /// Parses a u64 directly from `self.input`, without an intermediate String
@@ -1910,7 +1881,7 @@ impl JsonDeserializer {
                 start,
             ));
         }
-        return parse_integral::<u64>(&self.input.slice(start as i32, self.pos), "u64", start);
+        return parse_integral::<u64>(n, &self.input, "u64", start);
     }
 
     /// Parses an f64 directly from `self.input` using fpfmt, without an
