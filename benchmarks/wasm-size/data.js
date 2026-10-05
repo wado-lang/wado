@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791173808581,
+  "lastUpdate": 1791194378785,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -63901,6 +63901,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/99c24c4d9816827665908a5e1b4732a4b522d0cb"
         },
         "date": 1791173808193,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338523,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7c7b0cc0ab7c4f5060f48e1b40c26b28312625c6",
+          "message": "Merge pull request #2276 from wado-lang/claude/undefined-behavior-classification-holuq3\n\ndocs(spec): name the behavior classes the spec leaves open",
+          "timestamp": "2026-10-05T18:41:41+09:00",
+          "tree_id": "74541e87cb11373c26dff575885aaa4efb183186",
+          "url": "https://github.com/wado-lang/wado/commit/7c7b0cc0ab7c4f5060f48e1b40c26b28312625c6"
+        },
+        "date": 1791194378279,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
