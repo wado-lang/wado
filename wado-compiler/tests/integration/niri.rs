@@ -539,15 +539,31 @@ fn f64_div_by_zero_is_infinity() {
 }
 
 #[test]
-fn f64_zero_div_zero_is_nan_unreducible() {
-    // 0/0 is NaN; nondeterministic NaN bits → don't fold.
+fn f64_zero_div_zero_folds_to_a_nan() {
+    // A NaN's bits are host-defined, which the compiler may fix by folding. It
+    // fixes the canonical NaN, whatever the FPU running the compiler gives.
     let e = binary(
         NirBinaryOp::Div,
         float_lit(0.0, TypeTable::F64, "0.0"),
         float_lit(0.0, TypeTable::F64, "0.0"),
         TypeTable::F64,
     );
-    assert_eq!(eval(&e), None);
+    match eval(&e) {
+        Some(Value::Float {
+            value,
+            prim: PrimitiveType::F64,
+        }) => assert_eq!(value.to_bits(), f64::NAN.to_bits()),
+        other => panic!("expected an f64 NaN, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_folded_nan_renders_as_nan() {
+    let nan = Value::Float {
+        value: f64::NAN,
+        prim: PrimitiveType::F64,
+    };
+    assert_eq!(nan.format_repr(), "NaN");
 }
 
 #[test]

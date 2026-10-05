@@ -1,0 +1,17 @@
+// Ranges on either side of the surrogate gap take every `char`, so a `_` after
+// them is unreachable.
+
+fn plane(c: char) -> i32 {
+    return match c {
+        '\0'..='\u{D7FF}' => 0,
+        '\u{E000}'..='\u{10FFFF}' => 1,
+        _ => 2,
+    };
+}
+
+export fn run() {
+    let _ = plane('a');
+}
+
+__DATA__
+{"compile_error": ":8:9: analysis error: invalid pattern: unreachable arm"}
