@@ -289,10 +289,10 @@ error, as is dispatching an operation, except for the effects a
 [`#[benign(E, ...)]`](./spec-attributes.md#benigne-) on the global lists.
 
 An initializer runs outside every handler, those installed where the global is
-first read included. An operation it performs runs as it would with no handler
-installed: the host answers a host-backed interface
-([Handlers](./spec-effects.md#handlers)). An initializer may install its own
-handler, whose body holds the effect it handles as a function body's would.
+first read included. Unless it installs a handler of its own, an operation it
+performs runs as it would with no handler installed: the host answers a
+host-backed interface ([Handlers](./spec-effects.md#handlers)). The handler it
+installs has a body that holds the effect it handles as a function body's would.
 Installing it demands what the handler performs
 ([Installing a Handler](./spec-effects.md#installing-a-handler)), so only a
 handler that performs nothing can be installed here.
