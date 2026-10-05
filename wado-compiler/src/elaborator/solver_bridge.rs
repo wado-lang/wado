@@ -673,24 +673,6 @@ impl SolverBridge {
         OnBoundTrait::ReflectTemplate,
     ];
 
-    /// Whether the solver answers about `item`: the lowering states the
-    /// structural traits, `Inspect`, the reflection kinds and the operators.
-    fn states(item: CompilerItem) -> bool {
-        Self::DERIVED.contains(&item)
-            || matches!(
-                item,
-                CompilerItem::Inspect
-                    | CompilerItem::Display
-                    | CompilerItem::Default
-                    | CompilerItem::Ref
-                    | CompilerItem::RefMut
-            )
-            || Self::REFLECT
-                .iter()
-                .any(|kind| kind.compiler_item() == item)
-            || Self::OPERATORS.contains(&item)
-    }
-
     pub(crate) fn build(tysys: &TypeSystem, modules: &[ModuleSource]) -> Self {
         let mut lowering = Lowering::default();
         let mut program = Program::default();
@@ -1476,12 +1458,6 @@ impl SolverBridge {
         asked: &FqTraitName,
     ) -> Option<Question> {
         let decl = asked.canonical()?;
-        if tysys
-            .compiler_item_of_trait(decl)
-            .is_some_and(|item| !Self::states(item))
-        {
-            return None;
-        }
         let trait_ = self.lowering.known_trait(decl)?;
         let (env, ty) = self.env_for(tysys, ctx, type_id)?;
         if ty.mentions_decl(&|h| self.lowering.unstated.contains(&h)) {
