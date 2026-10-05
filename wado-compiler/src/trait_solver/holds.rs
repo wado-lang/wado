@@ -2,8 +2,8 @@
 //! this one, and every step it takes is through an impl's bounds.
 
 use super::program::{
-    ArgDefault, AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, ParamBound,
-    Program, RefRule, SolverType, TraitDeclId, TypeDeclId,
+    AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, ParamBound, Program,
+    RefRule, SolverType, TraitDeclId, TypeDeclId,
 };
 use crate::hashmap::IndexSet;
 
@@ -93,26 +93,11 @@ fn bound_answers(
     wanted: &[SolverType],
 ) -> bool {
     program.args_reaching(bound, trait_).iter().any(|args| {
-        wanted.iter().enumerate().all(|(i, want)| {
-            args.get(i).or_else(|| named_default(program, trait_, i)) == Some(want)
-        })
+        wanted
+            .iter()
+            .enumerate()
+            .all(|(i, want)| args.get(i).or_else(|| program.named_default(trait_, i)) == Some(want))
     })
-}
-
-/// The trait's declared default at `index` where it names a type. A `Self`
-/// default names whatever is answering, which no written argument equals, so it
-/// answers nothing here — as `TypeSystem::args_answer` decides it.
-fn named_default(program: &Program, trait_: TraitDeclId, index: usize) -> Option<&SolverType> {
-    match program
-        .traits
-        .get(&trait_)?
-        .arg_defaults
-        .get(index)?
-        .as_ref()?
-    {
-        ArgDefault::Type(ty) => Some(ty),
-        ArgDefault::SelfType | ArgDefault::Opaque => None,
-    }
 }
 
 /// One question and the questions open under it.
@@ -623,7 +608,7 @@ fn match_target(target: &SolverType, ty: &SolverType, bindings: &mut [Option<Bin
 
 #[cfg(test)]
 mod tests {
-    use super::super::program::{Fact, ParamDef, Pin, TraitDef, TypeDef};
+    use super::super::program::{ArgDefault, Fact, ParamDef, Pin, TraitDef, TypeDef};
     use super::super::testing::{Builder, concrete, decl, generic, ref_to};
     use super::*;
 

@@ -489,21 +489,33 @@ impl Program {
         reaching
     }
 
+    /// The trait's declared default at `index` where it names a type. A `Self`
+    /// default names whatever is answering, which no written argument equals,
+    /// so it answers nothing here.
+    pub(super) fn named_default(&self, trait_: TraitDeclId, index: usize) -> Option<&SolverType> {
+        match self
+            .traits
+            .get(&trait_)?
+            .arg_defaults
+            .get(index)?
+            .as_ref()?
+        {
+            ArgDefault::Type(ty) => Some(ty),
+            ArgDefault::SelfType | ArgDefault::Opaque => None,
+        }
+    }
+
     /// `clause`, written in `sub`'s trait's space, at the arguments `sub`
     /// supplies. A parameter `sub` leaves out takes its declared default; one
     /// with neither states nothing, which answers at the clause trait's own
     /// defaults.
     fn clause_at(&self, clause: &ParamBound, sub: &ParamBound) -> ParamBound {
-        let defaults = self
-            .traits
-            .get(&sub.trait_)
-            .map_or(&[][..], |def| def.arg_defaults.as_slice());
         let arg = |i: u32| {
             let i = i as usize;
-            sub.args.get(i).cloned().or_else(|| match defaults.get(i)? {
-                Some(ArgDefault::Type(ty)) => Some(ty.clone()),
-                _ => None,
-            })
+            sub.args
+                .get(i)
+                .or_else(|| self.named_default(sub.trait_, i))
+                .cloned()
         };
         let args = clause
             .args

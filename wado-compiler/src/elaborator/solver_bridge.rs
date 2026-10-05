@@ -1,7 +1,7 @@
 //! The lowering from the compiler's tables into the solver's [`Program`], and
 //! the solver's answers read back as the compiler keys them.
 
-use crate::ast::Type;
+use crate::ast::{GenericParam, Type};
 use crate::compiler_item::CompilerItem;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::hashmap::{IndexMap, IndexSet};
@@ -43,11 +43,31 @@ enum DeclKey {
     TemplateShape,
 }
 
-/// How an impl's parameter is spelled where a type mentions it.
+/// How a declaration's parameter is spelled where a type mentions it.
 #[derive(Clone, Copy)]
 enum ParamKind {
     Type(u32),
     Pack(u32),
+}
+
+impl ParamKind {
+    /// What `name` is among `params`.
+    fn of(params: &[GenericParam], name: &str) -> Option<Self> {
+        let at = params.iter().position(|p| p.name == name)?;
+        let index = u32::try_from(at).expect("fewer than 2^32 params");
+        Some(if params[at].is_pack {
+            Self::Pack(index)
+        } else {
+            Self::Type(index)
+        })
+    }
+
+    fn spelled(self) -> SolverType {
+        match self {
+            Self::Type(index) => SolverType::Param(index),
+            Self::Pack(index) => SolverType::Pack(index),
+        }
+    }
 }
 
 /// The interning both directions share, so an impl lowered from its header
@@ -166,7 +186,7 @@ impl Lowering {
     fn named_arg(
         &self,
         name: &FqTypeName,
-        param: &dyn Fn(&str) -> Option<u32>,
+        param: &dyn Fn(&str) -> Option<ParamKind>,
     ) -> Option<SolverType> {
         let args = name
             .args()
@@ -174,7 +194,7 @@ impl Lowering {
             .map(|arg| self.named_arg(arg, param))
             .collect::<Option<Vec<_>>>()?;
         let pointee = match name.head() {
-            TypeHead::Binder { name, .. } => SolverType::Param(param(name)?),
+            TypeHead::Binder { name, .. } => param(name)?.spelled(),
             TypeHead::Tuple => SolverType::Tuple(args),
             TypeHead::Builtin(builtin) => {
                 SolverType::Decl(self.known_type(&DeclKey::Builtin(builtin.clone()))?, args)
@@ -244,8 +264,7 @@ impl Lowering {
         match ty {
             Type::Named(named) if named.name == "Self" => self_type.cloned(),
             Type::Named(named) => match param(&named.name) {
-                Some(ParamKind::Type(index)) => Some(SolverType::Param(index)),
-                Some(ParamKind::Pack(index)) => Some(SolverType::Pack(index)),
+                Some(kind) => Some(kind.spelled()),
                 None => resolutions
                     .declared(named.id)
                     .map(|def| SolverType::Decl(self.head_of(resolutions.defs(), def), Vec::new())),
@@ -462,16 +481,7 @@ pub(super) fn lower_impls<'a>(
 ) -> Vec<&'a ImplHeader> {
     let mut sources: Vec<&ImplHeader> = Vec::new();
     for (&def, header) in impl_headers {
-        let param = |name: &str| -> Option<ParamKind> {
-            let index =
-                |i: usize| u32::try_from(i).expect("an impl declares fewer than 2^32 params");
-            let i = header.type_params.iter().position(|p| p.name == name)?;
-            Some(if header.type_params[i].is_pack {
-                ParamKind::Pack(index(i))
-            } else {
-                ParamKind::Type(index(i))
-            })
-        };
+        let param = |name: &str| ParamKind::of(&header.type_params, name);
         let Some(target) = lowering.ast_type(&header.ty, &param, resolutions, None) else {
             continue;
         };
@@ -999,11 +1009,7 @@ impl SolverBridge {
         for (trait_, closure) in tysys.trait_env.supertrait_closures_in_own_space() {
             let id = lowering.trait_decl(*trait_);
             let own = &tysys.trait_env.trait_decl_headers[trait_].type_params;
-            let place = |name: &str| {
-                own.iter()
-                    .position(|p| p.name == name)
-                    .map(|i| u32::try_from(i).expect("fewer than 2^32 params"))
-            };
+            let place = |name: &str| ParamKind::of(own, name);
             // An edge whose arguments the lowering cannot say states none,
             // which answers at the supertrait's declared defaults.
             program.traits.entry(id).or_default().supertraits = closure
@@ -1135,12 +1141,7 @@ impl SolverBridge {
             }
         }
         for (&def, info) in &data.generic_newtypes {
-            let param = |name: &str| -> Option<ParamKind> {
-                info.type_params
-                    .iter()
-                    .position(|p| p.name == name)
-                    .map(|i| ParamKind::Type(u32::try_from(i).expect("fewer than 2^32 params")))
-            };
+            let param = |name: &str| ParamKind::of(&info.type_params, name);
             if let Some(base) =
                 lowering.ast_type(&info.base_type_ast, &param, &tysys.resolutions, None)
             {
@@ -1437,6 +1438,7 @@ impl SolverBridge {
         // Every parameter in scope takes a position, bounded or not: an
         // unbounded `T` still appears in a receiver such as `Array<T>`, and a
         // receiver the environment cannot place lowers to nothing.
+        let place = place_in(ctx);
         let mut env = Env::default();
         let mut unstated = Vec::new();
         for (position, name) in ctx.trait_ctx.type_params.keys().enumerate() {
@@ -1453,7 +1455,10 @@ impl SolverBridge {
                         .bound_written(bound)?
                         .args()
                         .iter()
-                        .map(|arg| self.lowering.named_arg(arg, &place_in(ctx)))
+                        .map(|arg| {
+                            self.lowering
+                                .named_arg(arg, &|name| place(name).map(ParamKind::Type))
+                        })
                         .collect::<Option<Vec<_>>>()?;
                     Some(ParamBound {
                         trait_: self.lowering.known_trait(def)?,
@@ -1467,10 +1472,9 @@ impl SolverBridge {
             }
             env.param_bounds.push(ids);
         }
-        let names: Vec<String> = ctx.trait_ctx.type_params.keys().cloned().collect();
-        let ty =
-            self.lowering
-                .type_id(&tysys.type_table.borrow(), type_id, &param_index(&names))?;
+        let ty = self
+            .lowering
+            .type_id(&tysys.type_table.borrow(), type_id, &|name, _| place(name))?;
         unstated
             .iter()
             .all(|&position| !ty.mentions_param(position))
@@ -1494,10 +1498,14 @@ impl SolverBridge {
             return None;
         }
         let module = self.lowering.known_module(scope.current_module_source)?;
+        let place = place_in(ctx);
         let args = asked
             .args()
             .iter()
-            .map(|name| self.lowering.named_arg(name, &place_in(ctx)))
+            .map(|name| {
+                self.lowering
+                    .named_arg(name, &|name| place(name).map(ParamKind::Type))
+            })
             .collect::<Option<Vec<_>>>()?;
         Some(Question {
             env,
@@ -1549,8 +1557,8 @@ impl SolverBridge {
             .iter()
             .any(|r| matches!(&r.ty, SolverType::Decl(head, _) if shape_heads.contains(head)))
         {
-            let names: Vec<String> = ctx.trait_ctx.type_params.keys().cloned().collect();
-            self.shapes_in(&table, type_id, &param_index(&names), &mut shapes);
+            let place = place_in(ctx);
+            self.shapes_in(&table, type_id, &|name, _| place(name), &mut shapes);
         }
         let defs = tysys.resolutions.defs();
         let bodies = owed
@@ -1830,25 +1838,15 @@ pub(super) enum Ordered {
     Duplicated(Vec<Option<DefId>>),
 }
 
-/// Where each type parameter sits in the environment [`SolverBridge::env_for`]
-/// built, which is what gives a rigid parameter its [`SolverType::Param`].
-/// Where a binder `ctx` has in scope sits, as [`SolverBridge::env_for`]
-/// numbers them.
+/// Where each type parameter `ctx` has in scope sits in the environment
+/// [`SolverBridge::env_for`] built, which is what gives a rigid parameter its
+/// [`SolverType::Param`].
 fn place_in(ctx: &scope::Scope) -> impl Fn(&str) -> Option<u32> + '_ {
     |name: &str| {
         ctx.trait_ctx
             .type_params
             .get_index_of(name)
             .map(|i| u32::try_from(i).expect("fewer than 2^32 params"))
-    }
-}
-
-fn param_index(names: &[String]) -> impl Fn(&str, u32) -> Option<u32> + '_ {
-    move |name: &str, _: u32| {
-        names
-            .iter()
-            .position(|n| n == name)
-            .map(|p| u32::try_from(p).expect("fewer than 2^32 params"))
     }
 }
 

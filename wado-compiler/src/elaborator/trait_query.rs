@@ -243,7 +243,7 @@ impl Drop for OpenQuestion<'_> {
 
 /// Whether a bound check asks a type argument built over the parameters in
 /// scope. A body's parameters carry every bound in force on them, and a rigid
-/// one meets a bound only from those (spec-traits.md §Trait Bounds). Type
+/// one meets a bound only from those (spec-traits.md §Eligibility). Type
 /// resolution may bind a parameter before its bounds, as an impl's target is
 /// resolved between its names and its bounds (`register_impl_block_params`).
 #[derive(Clone, Copy, Debug)]
