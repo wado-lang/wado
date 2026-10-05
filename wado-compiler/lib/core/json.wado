@@ -1830,13 +1830,13 @@ impl JsonDeserializer {
     ) -> Result<T, DeserializeError> {
         let start = self.pos as i64;
         if lead == b'"' {
-            // The string holds one number token and nothing else, held to the
-            // grammar a bare one is.
+            // A string stands for a number only when it holds one number
+            // token and nothing else; any other is the wrong type.
             let mut text = JsonDeserializer { input: self.read_json_string()?.as_byte_slice(), pos: 0 };
             let n = &mut text.scratch;
             if text.scan_number_into(text.peek(), n) matches { Err(_) } || text.pos != text.input.len() {
                 builtin::cold_path();
-                return Result::Err(DeserializeError::invalid_value("invalid digit in number", start));
+                return Result::Err(DeserializeError::unexpected_type("expected number", start));
             }
             return parse_integral::<T>(n, &text.input, type_name, start);
         }

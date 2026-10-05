@@ -657,9 +657,9 @@ test "deserialize i128 rejects non-numeric input" {
     let arr: Result<i128, DeserializeError> = from_string("[]");
     assert arr matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
     let dash: Result<i128, DeserializeError> = from_string(`"-"`);
-    assert dash matches { Err(e) && e.kind == DeserializeErrorKind::InvalidValue };
+    assert dash matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
     let empty: Result<i128, DeserializeError> = from_string(`""`);
-    assert empty matches { Err(e) && e.kind == DeserializeErrorKind::InvalidValue };
+    assert empty matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
 }
 
 test "deserialize u128 full range" {
@@ -1539,16 +1539,16 @@ test "i64 and u64 read every sign and length" {
 test "i64 and u64 read their string form" {
     assert from_string::<i64>(`"123"`) == Result::Ok(123);
     assert from_string::<i64>(`"1e2"`) == Result::Ok(100);
-    assert de_err::<i64>(`"abc"`) == DeserializeError::invalid_value("invalid digit in number", 0);
+    assert de_err::<i64>(`"abc"`) == DeserializeError::unexpected_type("expected number", 0);
     assert de_err::<i64>(`"99999999999999999999"`) == DeserializeError::overflow("value out of range for i64", 0);
-    assert de_err::<i64>(`"1.x"`).kind == DeserializeErrorKind::InvalidValue;
+    assert de_err::<i64>(`"1.x"`).kind == DeserializeErrorKind::UnexpectedType;
     assert de_err::<i64>(`"12`) == DeserializeError::eof(3);
 
     assert from_string::<u64>(`"42"`) == Result::Ok(42);
     assert from_string::<u64>(`"1e3"`) == Result::Ok(1000);
     assert de_err::<u64>(`"-1"`) == DeserializeError::overflow("negative value for u64", 0);
-    assert de_err::<u64>(`"x"`) == DeserializeError::invalid_value("invalid digit in number", 0);
-    assert de_err::<u64>(`"1.x"`).kind == DeserializeErrorKind::InvalidValue;
+    assert de_err::<u64>(`"x"`) == DeserializeError::unexpected_type("expected number", 0);
+    assert de_err::<u64>(`"1.x"`).kind == DeserializeErrorKind::UnexpectedType;
     assert de_err::<u64>(`"12`) == DeserializeError::eof(3);
 }
 
