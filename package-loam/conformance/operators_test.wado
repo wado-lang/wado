@@ -98,7 +98,7 @@ fn computed(model: ByteList, case: &Case) -> String {
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
-    let got = forward(${args}&${weights});
+    let got = forward(&mut Cpu {}, ${args}&${weights});
     let extents: List<String> = got.extents.into_iter().map(|e| \`\${e}\`).collect();
     let data: List<String> = got.data.into_iter().map(|v| \`\${${shown}}\`).collect();
     println(\`output ${case.output.element} [\${extents.join(",")}] [\${data.join(",")}]\`);

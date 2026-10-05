@@ -1,6 +1,12 @@
 use {
+    Backend,
+    BinaryOp,
+    Cpu,
     Merged,
     Tensor,
+    UnaryOp,
+    constant,
+    operand,
     Window,
     axis_mismatch,
     ceil_div,
@@ -54,6 +60,36 @@ struct Inner {
 
 fn tensor<Axes>(extents: List<i32>, data: List<f32>) -> Tensor<f32, Axes> {
     return Tensor { data, extents };
+}
+
+test "an expression reads its operands and folds its constants in order" {
+    // relu(x - 2) * y, and a constant on the left of a non-commuting operator.
+    let shifted = operand(0).binary(BinaryOp::Sub, &constant(2.0)).unary(UnaryOp::Relu);
+    let e = shifted.binary(BinaryOp::Mul, &operand(1));
+    assert e.at(5.0, 4.0) == 12.0;
+    assert e.at(1.0, 4.0) == 0.0;
+    assert constant(1.0).binary(BinaryOp::Div, &operand(0)).at(4.0, 0.0) == 0.25;
+}
+
+test "the CPU backend runs a kernel over an expression" {
+    let mut cpu = Cpu {};
+    let a = cpu.upload(&tensor::<[Row]>([3], [1.0, -2.0, 3.0]));
+    let b = cpu.upload(&tensor::<[Row]>([3], [10.0, 10.0, 10.0]));
+    let mapped = cpu.map(&a, &operand(0).unary(UnaryOp::Abs));
+    assert cpu.download(&mapped).data == [1.0, 2.0, 3.0] as List<f32>;
+    let zipped = cpu.zip(&a, &b, &operand(0).binary(BinaryOp::Add, &operand(1)));
+    assert cpu.download(&zipped).data == [11.0, 8.0, 13.0] as List<f32>;
+}
+
+test "a cast converts as ONNX's Cast does" {
+    let mut cpu = Cpu {};
+    let floats = cpu.upload(&tensor::<[Row]>([3], [0.0, -2.5, f32::NAN]));
+    let bools = cpu.cast::<f32, bool, [Row]>(&floats);
+    assert cpu.download(&bools).data == [false, true, true] as List<bool>;
+    let ints = cpu.cast::<bool, i64, [Row]>(&bools);
+    assert cpu.download(&ints).data == [0, 1, 1] as List<i64>;
+    let back = cpu.cast::<f32, i64, [Row]>(&floats);
+    assert cpu.download(&back).data[1] == -2;
 }
 
 test "an input the graph's extents describe passes" {

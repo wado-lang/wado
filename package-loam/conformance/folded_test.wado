@@ -1,6 +1,6 @@
 //! A folded output is returned as the literal the build wrote for it.
 
-use { Feat, Tensor, Weights, forward } from "./folded.onnxtext"
+use { Cpu, Feat, Tensor, Weights, forward } from "./folded.onnxtext"
     with {
         generator: {
             module: "../src/generator.wado",
@@ -17,6 +17,7 @@ use { Feat, Tensor, Weights, forward } from "./folded.onnxtext"
 
 test "a folded scalar output comes back as a rank-0 tensor" {
     let got: Tensor<f32, []> = forward(
+        &mut Cpu {},
         &Tensor::<f32, [Feat]> {
             data: [1.0, 2.0],
             extents: [2],

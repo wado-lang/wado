@@ -2,7 +2,7 @@
 //! bias, folded into the closure. Its axis is named all the same.
 
 use { assert_close, tensor_of } from "./oracle.wado";
-use { Batch, In, Out, Tensor, Weights, forward } from "../tests/onnx/pytorch-operator/test_operator_mm/model.onnx"
+use { Batch, Cpu, In, Out, Tensor, Weights, forward } from "../tests/onnx/pytorch-operator/test_operator_mm/model.onnx"
     with {
         generator: {
             module: "../src/generator.wado",
@@ -37,6 +37,7 @@ test "a scalar Constant folds into the Gemm bias" {
     );
 
     let got = forward(
+        &mut Cpu {},
         &Tensor::<f32, [Batch, In]> { data: a, extents: a_extents },
         &Tensor::<f32, [In, Out]> { data: b, extents: b_extents },
         &Weights {},

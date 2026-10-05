@@ -851,3 +851,527 @@ pub fn widen<E: Held, Axes>(t: &Tensor<E, Axes>) -> Tensor<f32, Axes> {
 pub fn narrow<E: Held, Axes>(t: &Tensor<f32, Axes>) -> Tensor<E, Axes> {
     return map(t, |v| E::from_wide(v));
 }
+
+/// An element type a backend stores: one the kernels compute in. Each converts
+/// to another as ONNX's `Cast` does: a bool is 1 or 0, and anything nonzero is
+/// true.
+pub trait Element with () {
+    fn cast_to<T: Element>(&self) -> T;
+    fn from_f32(v: f32) -> Self;
+    fn from_i64(v: i64) -> Self;
+    fn from_bool(v: bool) -> Self;
+}
+
+impl Element for f32 {
+    fn cast_to<T: Element>(&self) -> T {
+        return T::from_f32(*self);
+    }
+
+    fn from_f32(v: f32) -> f32 {
+        return v;
+    }
+
+    fn from_i64(v: i64) -> f32 {
+        return v as f32;
+    }
+
+    fn from_bool(v: bool) -> f32 {
+        return if v { 1.0 } else { 0.0 };
+    }
+}
+
+impl Element for i64 {
+    fn cast_to<T: Element>(&self) -> T {
+        return T::from_i64(*self);
+    }
+
+    fn from_f32(v: f32) -> i64 {
+        return v as i64;
+    }
+
+    fn from_i64(v: i64) -> i64 {
+        return v;
+    }
+
+    fn from_bool(v: bool) -> i64 {
+        return if v { 1 } else { 0 };
+    }
+}
+
+impl Element for bool {
+    fn cast_to<T: Element>(&self) -> T {
+        return T::from_bool(*self);
+    }
+
+    fn from_f32(v: f32) -> bool {
+        return v != 0.0;
+    }
+
+    fn from_i64(v: i64) -> bool {
+        return v != 0;
+    }
+
+    fn from_bool(v: bool) -> bool {
+        return v;
+    }
+}
+
+/// A one-operand operator of an [`Expr`].
+pub enum UnaryOp {
+    Relu,
+    Sigmoid,
+    Tanh,
+    Erf,
+    Exp,
+    Log,
+    Sqrt,
+    Neg,
+    Abs,
+}
+
+/// A two-operand operator of an [`Expr`].
+pub enum BinaryOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Pow,
+}
+
+/// One step of an [`Expr`], reading the steps before it by position.
+pub variant Step {
+    Operand(i32),
+    Constant(f32),
+    Unary([UnaryOp, i32]),
+    Binary([BinaryOp, i32, i32]),
+}
+
+/// An elementwise operator as data: each output element over the operands'
+/// elements at its position and the constants folded in. A backend reads it as
+/// it can, the CPU one element at a time and a GPU one as a shader, which a
+/// closure could never become.
+pub struct Expr {
+    steps: List<Step>,
+}
+
+/// The kernel's operand `index`: 0 the first, 1 the second.
+pub fn operand(index: i32) -> Expr {
+    return Expr {
+        steps: [Step::Operand(index)],
+    };
+}
+
+/// A constant folded into the operator.
+pub fn constant(value: f32) -> Expr {
+    return Expr {
+        steps: [Step::Constant(value)],
+    };
+}
+
+impl Expr {
+    /// `op` applied to this.
+    pub fn unary(&self, op: UnaryOp) -> Expr {
+        let mut steps = self.steps;
+        steps.push(Step::Unary([op, self.steps.len() - 1]));
+        return Expr { steps };
+    }
+
+    /// `op` applied to this and `rhs`.
+    pub fn binary(&self, op: BinaryOp, rhs: &Expr) -> Expr {
+        let mut steps = self.steps;
+        let offset = steps.len();
+        for let step of rhs.steps {
+            steps.push(match step {
+                Unary([o, a]) => Step::Unary([o, a + offset]),
+                Binary([o, a, b]) => Step::Binary([o, a + offset, b + offset]),
+                leaf => leaf,
+            });
+        }
+        steps.push(Step::Binary([op, offset - 1, steps.len() - 1]));
+        return Expr { steps };
+    }
+
+    /// The output element where the first operand's is `x` and the second's `y`.
+    pub fn at(&self, x: f32, y: f32) -> f32 {
+        return self.step_at(self.steps.len() - 1, x, y);
+    }
+
+    fn step_at(&self, i: i32, x: f32, y: f32) -> f32 {
+        return match self.steps[i] {
+            Operand(n) => if n == 0 { x } else { y },
+            Constant(c) => c,
+            Unary([op, a]) => apply_unary(op, self.step_at(a, x, y)),
+            Binary([op, a, b]) => apply_binary(op, self.step_at(a, x, y), self.step_at(b, x, y)),
+        };
+    }
+}
+
+fn apply_unary(op: UnaryOp, v: f32) -> f32 {
+    return match op {
+        Relu => f32::ieee754_max(v, 0.0),
+        Sigmoid => sigmoid_f32(v),
+        Tanh => f32::tanh(v),
+        Erf => f32::erf(v),
+        Exp => f32::exp(v),
+        Log => f32::ln(v),
+        Sqrt => f32::sqrt(v),
+        Neg => -v,
+        Abs => f32::abs(v),
+    };
+}
+
+fn apply_binary(op: BinaryOp, x: f32, y: f32) -> f32 {
+    return match op {
+        Add => x + y,
+        Sub => x - y,
+        Mul => x * y,
+        Div => x / y,
+        Pow => f32::pow(x, y),
+    };
+}
+
+/// Where the kernels run. `forward` is instantiated at each backend, and the
+/// backend owns how a tensor is held: as a `Tensor` on the CPU, as a buffer on
+/// a GPU. Each kernel's signature is its function's, `Tensor` read as
+/// `Self::Tensor`, so a generated call is checked through the trait as it is
+/// against the function.
+pub trait Backend with _ {
+    type Tensor<E: Element, Axes>;
+
+    /// `t`, held on the host, as this backend holds it.
+    fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<E, Axes>;
+    /// `t` back on the host.
+    fn download<E: Element, Axes>(&mut self, t: &Self::Tensor<E, Axes>) -> Tensor<E, Axes>;
+
+    fn filled<E: Element, Axes>(&mut self, extents: List<i32>, value: E) -> Self::Tensor<E, Axes>;
+    fn range_i64<A>(&mut self, start: i64, count: i32, delta: i64) -> Self::Tensor<i64, [A]>;
+
+    fn map<Axes>(&mut self, t: &Self::Tensor<f32, Axes>, op: &Expr) -> Self::Tensor<f32, Axes>;
+    fn cast<A: Element, B: Element, Axes>(&mut self, t: &Self::Tensor<A, Axes>) -> Self::Tensor<B, Axes>;
+    fn zip<Axes>(
+        &mut self,
+        a: &Self::Tensor<f32, Axes>,
+        b: &Self::Tensor<f32, Axes>,
+        op: &Expr,
+    ) -> Self::Tensor<f32, Axes>;
+    fn zip_suffix<..Pre, ..Suf>(
+        &mut self,
+        a: &Self::Tensor<f32, [..Pre, ..Suf]>,
+        b: &Self::Tensor<f32, [..Suf]>,
+        op: &Expr,
+    ) -> Self::Tensor<f32, [..Pre, ..Suf]>;
+    fn zip_suffix_lhs<..Pre, ..Suf>(
+        &mut self,
+        a: &Self::Tensor<f32, [..Suf]>,
+        b: &Self::Tensor<f32, [..Pre, ..Suf]>,
+        op: &Expr,
+    ) -> Self::Tensor<f32, [..Pre, ..Suf]>;
+    fn zip_at<..Pre, ..Mid, ..Post>(
+        &mut self,
+        a: &Self::Tensor<f32, [..Pre, ..Mid, ..Post]>,
+        b: &Self::Tensor<f32, [..Mid]>,
+        trailing: i32,
+        op: &Expr,
+    ) -> Self::Tensor<f32, [..Pre, ..Mid, ..Post]>;
+    fn select<E: Element, Axes>(
+        &mut self,
+        cond: &Self::Tensor<bool, Axes>,
+        x: &Self::Tensor<E, Axes>,
+        y: &Self::Tensor<E, Axes>,
+    ) -> Self::Tensor<E, Axes>;
+
+    fn matmul<..Bs, M, K, N>(
+        &mut self,
+        a: &Self::Tensor<f32, [..Bs, M, K]>,
+        b: &Self::Tensor<f32, [..Bs, K, N]>,
+    ) -> Self::Tensor<f32, [..Bs, M, N]>;
+    fn matmul_shared<..Bs, M, K, N>(
+        &mut self,
+        a: &Self::Tensor<f32, [..Bs, M, K]>,
+        b: &Self::Tensor<f32, [K, N]>,
+    ) -> Self::Tensor<f32, [..Bs, M, N]>;
+    fn matmul_broadcast<A, B, Out>(
+        &mut self,
+        a: &Self::Tensor<f32, A>,
+        b: &Self::Tensor<f32, B>,
+    ) -> Self::Tensor<f32, Out>;
+
+    fn gather_rows<E: Element, Row, ..Rest, ..Ix>(
+        &mut self,
+        data: &Self::Tensor<E, [Row, ..Rest]>,
+        indices: &Self::Tensor<i64, [..Ix]>,
+    ) -> Self::Tensor<E, [..Ix, ..Rest]>;
+    fn gather<E: Element, ..Pre, Along, ..Post, ..Ix>(
+        &mut self,
+        data: &Self::Tensor<E, [..Pre, Along, ..Post]>,
+        indices: &Self::Tensor<i64, [..Ix]>,
+        axis: i32,
+    ) -> Self::Tensor<E, [..Pre, ..Ix, ..Post]>;
+    fn slice_axis<E: Element, ..Pre, In, Out, ..Post>(
+        &mut self,
+        t: &Self::Tensor<E, [..Pre, In, ..Post]>,
+        axis: i32,
+        start: i64,
+        length: i32,
+        step: i64,
+    ) -> Self::Tensor<E, [..Pre, Out, ..Post]>;
+    fn concat<E: Element, ..Pre, A, B, Out, ..Post>(
+        &mut self,
+        a: &Self::Tensor<E, [..Pre, A, ..Post]>,
+        b: &Self::Tensor<E, [..Pre, B, ..Post]>,
+        axis: i32,
+    ) -> Self::Tensor<E, [..Pre, Out, ..Post]>;
+    fn lift<E: Element, In, Out>(&mut self, t: &Self::Tensor<E, In>, rank: i32) -> Self::Tensor<E, Out>;
+    fn reshape<E: Element, In, Out>(&mut self, t: &Self::Tensor<E, In>, extents: List<i32>) -> Self::Tensor<E, Out>;
+    fn transpose2<E: Element, A, B>(&mut self, t: &Self::Tensor<E, [A, B]>) -> Self::Tensor<E, [B, A]>;
+    fn permute<E: Element, In, Out>(&mut self, t: &Self::Tensor<E, In>, perm: List<i32>) -> Self::Tensor<E, Out>;
+
+    fn max_pool<N, C, ..In, ..Out>(
+        &mut self,
+        x: &Self::Tensor<f32, [N, C, ..In]>,
+        window: &Window,
+    ) -> Self::Tensor<f32, [N, C, ..Out]>;
+    fn conv<N, Ci, Co, ..In, ..K, ..Out>(
+        &mut self,
+        x: &Self::Tensor<f32, [N, Ci, ..In]>,
+        w: &Self::Tensor<f32, [Co, Ci, ..K]>,
+        window: &Window,
+    ) -> Self::Tensor<f32, [N, Co, ..Out]>;
+    fn conv_bias<N, Ci, Co, ..In, ..K, ..Out>(
+        &mut self,
+        x: &Self::Tensor<f32, [N, Ci, ..In]>,
+        w: &Self::Tensor<f32, [Co, Ci, ..K]>,
+        b: &Self::Tensor<f32, [Co]>,
+        window: &Window,
+    ) -> Self::Tensor<f32, [N, Co, ..Out]>;
+    fn conv_grouped<N, Ci, Cg, Co, ..In, ..K, ..Out>(
+        &mut self,
+        x: &Self::Tensor<f32, [N, Ci, ..In]>,
+        w: &Self::Tensor<f32, [Co, Cg, ..K]>,
+        group: i32,
+        window: &Window,
+    ) -> Self::Tensor<f32, [N, Co, ..Out]>;
+    fn conv_grouped_bias<N, Ci, Cg, Co, ..In, ..K, ..Out>(
+        &mut self,
+        x: &Self::Tensor<f32, [N, Ci, ..In]>,
+        w: &Self::Tensor<f32, [Co, Cg, ..K]>,
+        b: &Self::Tensor<f32, [Co]>,
+        group: i32,
+        window: &Window,
+    ) -> Self::Tensor<f32, [N, Co, ..Out]>;
+
+    fn softmax<Axes>(&mut self, t: &Self::Tensor<f32, Axes>, axis: i32) -> Self::Tensor<f32, Axes>;
+    fn softmax_flattened<Axes>(&mut self, t: &Self::Tensor<f32, Axes>, axis: i32) -> Self::Tensor<f32, Axes>;
+    fn reduce_sum<Axes>(&mut self, t: &Self::Tensor<f32, Axes>, axes: List<i32>) -> Self::Tensor<f32, Axes>;
+    fn reduce_mean<Axes>(&mut self, t: &Self::Tensor<f32, Axes>, axes: List<i32>) -> Self::Tensor<f32, Axes>;
+}
+
+/// The kernels above, run where the module runs.
+pub struct Cpu {
+}
+
+impl Backend for Cpu {
+    type Tensor<E: Element, Axes> = Tensor<E, Axes>;
+
+    fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Tensor<E, Axes> {
+        return *t;
+    }
+
+    fn download<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Tensor<E, Axes> {
+        return *t;
+    }
+
+    fn filled<E: Element, Axes>(&mut self, extents: List<i32>, value: E) -> Tensor<E, Axes> {
+        return filled(extents, value);
+    }
+
+    fn range_i64<A>(&mut self, start: i64, count: i32, delta: i64) -> Tensor<i64, [A]> {
+        return range_i64(start, count, delta);
+    }
+
+    fn map<Axes>(&mut self, t: &Tensor<f32, Axes>, op: &Expr) -> Tensor<f32, Axes> {
+        return map(t, |v| op.at(v, 0.0));
+    }
+
+    fn cast<A: Element, B: Element, Axes>(&mut self, t: &Tensor<A, Axes>) -> Tensor<B, Axes> {
+        return map(t, |v| v.cast_to::<B>());
+    }
+
+    fn zip<Axes>(&mut self, a: &Tensor<f32, Axes>, b: &Tensor<f32, Axes>, op: &Expr) -> Tensor<f32, Axes> {
+        return zip(a, b, |x, y| op.at(x, y));
+    }
+
+    fn zip_suffix<..Pre, ..Suf>(
+        &mut self,
+        a: &Tensor<f32, [..Pre, ..Suf]>,
+        b: &Tensor<f32, [..Suf]>,
+        op: &Expr,
+    ) -> Tensor<f32, [..Pre, ..Suf]> {
+        return zip_suffix(a, b, |x, y| op.at(x, y));
+    }
+
+    fn zip_suffix_lhs<..Pre, ..Suf>(
+        &mut self,
+        a: &Tensor<f32, [..Suf]>,
+        b: &Tensor<f32, [..Pre, ..Suf]>,
+        op: &Expr,
+    ) -> Tensor<f32, [..Pre, ..Suf]> {
+        return zip_suffix_lhs(a, b, |x, y| op.at(x, y));
+    }
+
+    fn zip_at<..Pre, ..Mid, ..Post>(
+        &mut self,
+        a: &Tensor<f32, [..Pre, ..Mid, ..Post]>,
+        b: &Tensor<f32, [..Mid]>,
+        trailing: i32,
+        op: &Expr,
+    ) -> Tensor<f32, [..Pre, ..Mid, ..Post]> {
+        return zip_at(a, b, trailing, |x, y| op.at(x, y));
+    }
+
+    fn select<E: Element, Axes>(
+        &mut self,
+        cond: &Tensor<bool, Axes>,
+        x: &Tensor<E, Axes>,
+        y: &Tensor<E, Axes>,
+    ) -> Tensor<E, Axes> {
+        return select(cond, x, y);
+    }
+
+    fn matmul<..Bs, M, K, N>(
+        &mut self,
+        a: &Tensor<f32, [..Bs, M, K]>,
+        b: &Tensor<f32, [..Bs, K, N]>,
+    ) -> Tensor<f32, [..Bs, M, N]> {
+        return matmul(a, b);
+    }
+
+    fn matmul_shared<..Bs, M, K, N>(
+        &mut self,
+        a: &Tensor<f32, [..Bs, M, K]>,
+        b: &Tensor<f32, [K, N]>,
+    ) -> Tensor<f32, [..Bs, M, N]> {
+        return matmul_shared(a, b);
+    }
+
+    fn matmul_broadcast<A, B, Out>(&mut self, a: &Tensor<f32, A>, b: &Tensor<f32, B>) -> Tensor<f32, Out> {
+        return matmul_broadcast(a, b);
+    }
+
+    fn gather_rows<E: Element, Row, ..Rest, ..Ix>(
+        &mut self,
+        data: &Tensor<E, [Row, ..Rest]>,
+        indices: &Tensor<i64, [..Ix]>,
+    ) -> Tensor<E, [..Ix, ..Rest]> {
+        return gather_rows(data, indices);
+    }
+
+    fn gather<E: Element, ..Pre, Along, ..Post, ..Ix>(
+        &mut self,
+        data: &Tensor<E, [..Pre, Along, ..Post]>,
+        indices: &Tensor<i64, [..Ix]>,
+        axis: i32,
+    ) -> Tensor<E, [..Pre, ..Ix, ..Post]> {
+        return gather::<E, [..Pre], Along, [..Post], [..Ix]>(data, indices, axis);
+    }
+
+    fn slice_axis<E: Element, ..Pre, In, Out, ..Post>(
+        &mut self,
+        t: &Tensor<E, [..Pre, In, ..Post]>,
+        axis: i32,
+        start: i64,
+        length: i32,
+        step: i64,
+    ) -> Tensor<E, [..Pre, Out, ..Post]> {
+        return slice_axis::<E, [..Pre], In, Out, [..Post]>(t, axis, start, length, step);
+    }
+
+    fn concat<E: Element, ..Pre, A, B, Out, ..Post>(
+        &mut self,
+        a: &Tensor<E, [..Pre, A, ..Post]>,
+        b: &Tensor<E, [..Pre, B, ..Post]>,
+        axis: i32,
+    ) -> Tensor<E, [..Pre, Out, ..Post]> {
+        return concat::<E, [..Pre], A, B, Out, [..Post]>(a, b, axis);
+    }
+
+    fn lift<E: Element, In, Out>(&mut self, t: &Tensor<E, In>, rank: i32) -> Tensor<E, Out> {
+        return lift(t, rank);
+    }
+
+    fn reshape<E: Element, In, Out>(&mut self, t: &Tensor<E, In>, extents: List<i32>) -> Tensor<E, Out> {
+        return reshape(t, extents);
+    }
+
+    fn transpose2<E: Element, A, B>(&mut self, t: &Tensor<E, [A, B]>) -> Tensor<E, [B, A]> {
+        return transpose2(t);
+    }
+
+    fn permute<E: Element, In, Out>(&mut self, t: &Tensor<E, In>, perm: List<i32>) -> Tensor<E, Out> {
+        return permute(t, perm);
+    }
+
+    fn max_pool<N, C, ..In, ..Out>(
+        &mut self,
+        x: &Tensor<f32, [N, C, ..In]>,
+        window: &Window,
+    ) -> Tensor<f32, [N, C, ..Out]> {
+        return max_pool::<N, C, [..In], [..Out]>(x, window);
+    }
+
+    fn conv<N, Ci, Co, ..In, ..K, ..Out>(
+        &mut self,
+        x: &Tensor<f32, [N, Ci, ..In]>,
+        w: &Tensor<f32, [Co, Ci, ..K]>,
+        window: &Window,
+    ) -> Tensor<f32, [N, Co, ..Out]> {
+        return conv::<N, Ci, Co, [..In], [..K], [..Out]>(x, w, window);
+    }
+
+    fn conv_bias<N, Ci, Co, ..In, ..K, ..Out>(
+        &mut self,
+        x: &Tensor<f32, [N, Ci, ..In]>,
+        w: &Tensor<f32, [Co, Ci, ..K]>,
+        b: &Tensor<f32, [Co]>,
+        window: &Window,
+    ) -> Tensor<f32, [N, Co, ..Out]> {
+        return conv_bias::<N, Ci, Co, [..In], [..K], [..Out]>(x, w, b, window);
+    }
+
+    fn conv_grouped<N, Ci, Cg, Co, ..In, ..K, ..Out>(
+        &mut self,
+        x: &Tensor<f32, [N, Ci, ..In]>,
+        w: &Tensor<f32, [Co, Cg, ..K]>,
+        group: i32,
+        window: &Window,
+    ) -> Tensor<f32, [N, Co, ..Out]> {
+        return conv_grouped::<N, Ci, Cg, Co, [..In], [..K], [..Out]>(x, w, group, window);
+    }
+
+    fn conv_grouped_bias<N, Ci, Cg, Co, ..In, ..K, ..Out>(
+        &mut self,
+        x: &Tensor<f32, [N, Ci, ..In]>,
+        w: &Tensor<f32, [Co, Cg, ..K]>,
+        b: &Tensor<f32, [Co]>,
+        group: i32,
+        window: &Window,
+    ) -> Tensor<f32, [N, Co, ..Out]> {
+        return conv_grouped_bias::<N, Ci, Cg, Co, [..In], [..K], [..Out]>(x, w, b, group, window);
+    }
+
+    fn softmax<Axes>(&mut self, t: &Tensor<f32, Axes>, axis: i32) -> Tensor<f32, Axes> {
+        return softmax(t, axis);
+    }
+
+    fn softmax_flattened<Axes>(&mut self, t: &Tensor<f32, Axes>, axis: i32) -> Tensor<f32, Axes> {
+        return softmax_flattened(t, axis);
+    }
+
+    fn reduce_sum<Axes>(&mut self, t: &Tensor<f32, Axes>, axes: List<i32>) -> Tensor<f32, Axes> {
+        return reduce(t, axes, 0.0, |x, y| x + y);
+    }
+
+    fn reduce_mean<Axes>(&mut self, t: &Tensor<f32, Axes>, axes: List<i32>) -> Tensor<f32, Axes> {
+        return reduce_mean(t, axes);
+    }
+}

@@ -99,7 +99,7 @@ fn joined<T: Display>(values: List<T>) -> String {
 
 export fn run() with Stdout {
     for let n of ${LENGTHS:?} as List<i32> {
-        let got = forward(${args}&Weights {});
+        let got = forward(&mut Cpu {}, ${args}&Weights {});
         println(\`N = \${n}: extents [\${joined(got.extents)}], data [\${joined(got.data)}]\`);
     }
 }

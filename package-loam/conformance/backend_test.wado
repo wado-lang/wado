@@ -1,0 +1,327 @@
+//! The backend seam: the MLP runs through a backend whose tensor is a handle
+//! with no field the generated module can read. A `forward` reaching into a
+//! tensor's `data` or `extents` past the seam does not compile here.
+
+use {
+    Backend,
+    Batch,
+    Cpu,
+    Element,
+    Expr,
+    Hidden,
+    In as Features,
+    Out as Logits,
+    Tensor,
+    Weights,
+    Window,
+    forward,
+} from "../example/mlp.onnxtext"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: {
+                layout: [
+                    {
+                        pattern: "X",
+                        axes: ["Batch", "In"],
+                    },
+                    {
+                        pattern: "W1",
+                        axes: ["In", "Hidden"],
+                    },
+                    {
+                        pattern: "B1",
+                        axes: ["Hidden"],
+                    },
+                    {
+                        pattern: "W2",
+                        axes: ["Hidden", "Out"],
+                    },
+                    {
+                        pattern: "B2",
+                        axes: ["Out"],
+                    },
+                ],
+            },
+        },
+    };
+
+/// A tensor the generated module holds but cannot open: its one field is
+/// private to this file.
+struct Handle<E, Axes> {
+    held: Tensor<E, Axes>,
+}
+
+/// The CPU's kernels behind opaque handles, counting the tensors that cross
+/// the seam each way.
+struct Opaque {
+    cpu: Cpu,
+    uploads: i32,
+    downloads: i32,
+}
+
+fn handle<E, Axes>(held: Tensor<E, Axes>) -> Handle<E, Axes> {
+    return Handle { held };
+}
+
+impl Backend for Opaque {
+    type Tensor<E: Element, Axes> = Handle<E, Axes>;
+
+    fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Handle<E, Axes> {
+        self.uploads += 1;
+        return handle(*t);
+    }
+
+    fn download<E: Element, Axes>(&mut self, t: &Handle<E, Axes>) -> Tensor<E, Axes> {
+        self.downloads += 1;
+        return t.held;
+    }
+
+    fn filled<E: Element, Axes>(&mut self, extents: List<i32>, value: E) -> Handle<E, Axes> {
+        return handle(self.cpu.filled(extents, value));
+    }
+
+    fn range_i64<A>(&mut self, start: i64, count: i32, delta: i64) -> Handle<i64, [A]> {
+        return handle(self.cpu.range_i64(start, count, delta));
+    }
+
+    fn map<Axes>(&mut self, t: &Handle<f32, Axes>, op: &Expr) -> Handle<f32, Axes> {
+        return handle(self.cpu.map(&t.held, op));
+    }
+
+    fn cast<A: Element, B: Element, Axes>(&mut self, t: &Handle<A, Axes>) -> Handle<B, Axes> {
+        return handle(self.cpu.cast::<A, B, Axes>(&t.held));
+    }
+
+    fn zip<Axes>(&mut self, a: &Handle<f32, Axes>, b: &Handle<f32, Axes>, op: &Expr) -> Handle<f32, Axes> {
+        return handle(self.cpu.zip(&a.held, &b.held, op));
+    }
+
+    fn zip_suffix<..Pre, ..Suf>(
+        &mut self,
+        a: &Handle<f32, [..Pre, ..Suf]>,
+        b: &Handle<f32, [..Suf]>,
+        op: &Expr,
+    ) -> Handle<f32, [..Pre, ..Suf]> {
+        return handle(self.cpu.zip_suffix::<[..Pre], [..Suf]>(&a.held, &b.held, op));
+    }
+
+    fn zip_suffix_lhs<..Pre, ..Suf>(
+        &mut self,
+        a: &Handle<f32, [..Suf]>,
+        b: &Handle<f32, [..Pre, ..Suf]>,
+        op: &Expr,
+    ) -> Handle<f32, [..Pre, ..Suf]> {
+        return handle(self.cpu.zip_suffix_lhs::<[..Pre], [..Suf]>(&a.held, &b.held, op));
+    }
+
+    fn zip_at<..Pre, ..Mid, ..Post>(
+        &mut self,
+        a: &Handle<f32, [..Pre, ..Mid, ..Post]>,
+        b: &Handle<f32, [..Mid]>,
+        trailing: i32,
+        op: &Expr,
+    ) -> Handle<f32, [..Pre, ..Mid, ..Post]> {
+        return handle(self.cpu.zip_at::<[..Pre], [..Mid], [..Post]>(&a.held, &b.held, trailing, op));
+    }
+
+    fn select<E: Element, Axes>(
+        &mut self,
+        cond: &Handle<bool, Axes>,
+        x: &Handle<E, Axes>,
+        y: &Handle<E, Axes>,
+    ) -> Handle<E, Axes> {
+        return handle(self.cpu.select(&cond.held, &x.held, &y.held));
+    }
+
+    fn matmul<..Bs, M, K, N>(
+        &mut self,
+        a: &Handle<f32, [..Bs, M, K]>,
+        b: &Handle<f32, [..Bs, K, N]>,
+    ) -> Handle<f32, [..Bs, M, N]> {
+        return handle(self.cpu.matmul(&a.held, &b.held));
+    }
+
+    fn matmul_shared<..Bs, M, K, N>(
+        &mut self,
+        a: &Handle<f32, [..Bs, M, K]>,
+        b: &Handle<f32, [K, N]>,
+    ) -> Handle<f32, [..Bs, M, N]> {
+        return handle(self.cpu.matmul_shared(&a.held, &b.held));
+    }
+
+    fn matmul_broadcast<A, B, Out>(&mut self, a: &Handle<f32, A>, b: &Handle<f32, B>) -> Handle<f32, Out> {
+        return handle(self.cpu.matmul_broadcast::<A, B, Out>(&a.held, &b.held));
+    }
+
+    fn gather_rows<E: Element, Row, ..Rest, ..Ix>(
+        &mut self,
+        data: &Handle<E, [Row, ..Rest]>,
+        indices: &Handle<i64, [..Ix]>,
+    ) -> Handle<E, [..Ix, ..Rest]> {
+        return handle(self.cpu.gather_rows::<E, Row, [..Rest], [..Ix]>(&data.held, &indices.held));
+    }
+
+    fn gather<E: Element, ..Pre, Along, ..Post, ..Ix>(
+        &mut self,
+        data: &Handle<E, [..Pre, Along, ..Post]>,
+        indices: &Handle<i64, [..Ix]>,
+        axis: i32,
+    ) -> Handle<E, [..Pre, ..Ix, ..Post]> {
+        return handle(self.cpu.gather::<E, [..Pre], Along, [..Post], [..Ix]>(&data.held, &indices.held, axis));
+    }
+
+    fn slice_axis<E: Element, ..Pre, In, Out, ..Post>(
+        &mut self,
+        t: &Handle<E, [..Pre, In, ..Post]>,
+        axis: i32,
+        start: i64,
+        length: i32,
+        step: i64,
+    ) -> Handle<E, [..Pre, Out, ..Post]> {
+        return handle(self.cpu.slice_axis::<E, [..Pre], In, Out, [..Post]>(&t.held, axis, start, length, step));
+    }
+
+    fn concat<E: Element, ..Pre, A, B, Out, ..Post>(
+        &mut self,
+        a: &Handle<E, [..Pre, A, ..Post]>,
+        b: &Handle<E, [..Pre, B, ..Post]>,
+        axis: i32,
+    ) -> Handle<E, [..Pre, Out, ..Post]> {
+        return handle(self.cpu.concat::<E, [..Pre], A, B, Out, [..Post]>(&a.held, &b.held, axis));
+    }
+
+    fn lift<E: Element, In, Out>(&mut self, t: &Handle<E, In>, rank: i32) -> Handle<E, Out> {
+        return handle(self.cpu.lift::<E, In, Out>(&t.held, rank));
+    }
+
+    fn reshape<E: Element, In, Out>(&mut self, t: &Handle<E, In>, extents: List<i32>) -> Handle<E, Out> {
+        return handle(self.cpu.reshape::<E, In, Out>(&t.held, extents));
+    }
+
+    fn transpose2<E: Element, A, B>(&mut self, t: &Handle<E, [A, B]>) -> Handle<E, [B, A]> {
+        return handle(self.cpu.transpose2(&t.held));
+    }
+
+    fn permute<E: Element, In, Out>(&mut self, t: &Handle<E, In>, perm: List<i32>) -> Handle<E, Out> {
+        return handle(self.cpu.permute::<E, In, Out>(&t.held, perm));
+    }
+
+    fn max_pool<N, C, ..In, ..Out>(
+        &mut self,
+        x: &Handle<f32, [N, C, ..In]>,
+        window: &Window,
+    ) -> Handle<f32, [N, C, ..Out]> {
+        return handle(self.cpu.max_pool::<N, C, [..In], [..Out]>(&x.held, window));
+    }
+
+    fn conv<N, Ci, Co, ..In, ..K, ..Out>(
+        &mut self,
+        x: &Handle<f32, [N, Ci, ..In]>,
+        w: &Handle<f32, [Co, Ci, ..K]>,
+        window: &Window,
+    ) -> Handle<f32, [N, Co, ..Out]> {
+        return handle(self.cpu.conv::<N, Ci, Co, [..In], [..K], [..Out]>(&x.held, &w.held, window));
+    }
+
+    fn conv_bias<N, Ci, Co, ..In, ..K, ..Out>(
+        &mut self,
+        x: &Handle<f32, [N, Ci, ..In]>,
+        w: &Handle<f32, [Co, Ci, ..K]>,
+        b: &Handle<f32, [Co]>,
+        window: &Window,
+    ) -> Handle<f32, [N, Co, ..Out]> {
+        return handle(self.cpu.conv_bias::<N, Ci, Co, [..In], [..K], [..Out]>(&x.held, &w.held, &b.held, window));
+    }
+
+    fn conv_grouped<N, Ci, Cg, Co, ..In, ..K, ..Out>(
+        &mut self,
+        x: &Handle<f32, [N, Ci, ..In]>,
+        w: &Handle<f32, [Co, Cg, ..K]>,
+        group: i32,
+        window: &Window,
+    ) -> Handle<f32, [N, Co, ..Out]> {
+        return handle(
+            self.cpu.conv_grouped::<N, Ci, Cg, Co, [..In], [..K], [..Out]>(&x.held, &w.held, group, window),
+        );
+    }
+
+    fn conv_grouped_bias<N, Ci, Cg, Co, ..In, ..K, ..Out>(
+        &mut self,
+        x: &Handle<f32, [N, Ci, ..In]>,
+        w: &Handle<f32, [Co, Cg, ..K]>,
+        b: &Handle<f32, [Co]>,
+        group: i32,
+        window: &Window,
+    ) -> Handle<f32, [N, Co, ..Out]> {
+        return handle(
+            self.cpu.conv_grouped_bias::<N, Ci, Cg, Co, [..In], [..K], [..Out]>(
+                &x.held,
+                &w.held,
+                &b.held,
+                group,
+                window,
+            ),
+        );
+    }
+
+    fn softmax<Axes>(&mut self, t: &Handle<f32, Axes>, axis: i32) -> Handle<f32, Axes> {
+        return handle(self.cpu.softmax(&t.held, axis));
+    }
+
+    fn softmax_flattened<Axes>(&mut self, t: &Handle<f32, Axes>, axis: i32) -> Handle<f32, Axes> {
+        return handle(self.cpu.softmax_flattened(&t.held, axis));
+    }
+
+    fn reduce_sum<Axes>(&mut self, t: &Handle<f32, Axes>, axes: List<i32>) -> Handle<f32, Axes> {
+        return handle(self.cpu.reduce_sum(&t.held, axes));
+    }
+
+    fn reduce_mean<Axes>(&mut self, t: &Handle<f32, Axes>, axes: List<i32>) -> Handle<f32, Axes> {
+        return handle(self.cpu.reduce_mean(&t.held, axes));
+    }
+}
+
+fn weights() -> Weights {
+    return Weights {
+        W1: Tensor::<f32, [Features, Hidden]> {
+            data: List::<f32>::filled(128 * 64, 1.0),
+            extents: [128, 64],
+        },
+        B1: Tensor::<f32, [Hidden]> {
+            data: List::<f32>::filled(64, 0.0),
+            extents: [64],
+        },
+        W2: Tensor::<f32, [Hidden, Logits]> {
+            data: List::<f32>::filled(64 * 10, 0.5),
+            extents: [64, 10],
+        },
+        B2: Tensor::<f32, [Logits]> {
+            data: List::<f32>::filled(10, 1.0),
+            extents: [10],
+        },
+    };
+}
+
+fn input() -> Tensor<f32, [Batch, Features]> {
+    let mut data = List::<f32>::with_capacity(2 * 128);
+    for let i of 0..<2 * 128 {
+        data.push((i % 7) as f32 - 3.0);
+    }
+    return Tensor {
+        data,
+        extents: [2, 128],
+    };
+}
+
+test "the MLP runs through an opaque backend as it does on the CPU" {
+    let mut opaque = Opaque { cpu: Cpu {}, uploads: 0, downloads: 0 };
+    let through = forward(&mut opaque, &input(), &weights());
+    let direct = forward(&mut Cpu {}, &input(), &weights());
+
+    assert through.extents == [2, 10];
+    assert through.data == direct.data;
+    // The input and the four weights cross in, the logits out.
+    assert opaque.uploads == 5;
+    assert opaque.downloads == 1;
+}
