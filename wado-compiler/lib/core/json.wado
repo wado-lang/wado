@@ -1185,7 +1185,7 @@ fn read_number_text<T>(
         Ok(v) => Result::Ok(if de.pos == de.input.len() { Option::Some(v) } else { null }),
         Err(e) => match e.kind {
             MalformedInput | Eof => Result::Ok(null),
-            _ => Result::Err(DeserializeError { kind: e.kind, message: e.message, offset }),
+            _ => Result::Err(DeserializeError { ..e, offset }),
         },
     };
 }
@@ -1855,9 +1855,8 @@ impl JsonDeserializer {
         return parse_integral::<T>(n, &self.input, type_name, start);
     }
 
-    /// Reads the string at `pos` as the number `read` takes from it, where an
-    /// integer is read from a quoted one. A string holding anything but one
-    /// number token is the wrong type.
+    /// Reads the string at `pos` as the number `read` takes from a bare token.
+    /// A string holding anything but one number token is the wrong type.
     fn quoted_number<T>(
         &mut self,
         read: fn(&mut JsonDeserializer) -> Result<T, DeserializeError>,
