@@ -3095,26 +3095,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// resolution [`Elaborator::resolve_static_callee`] performs, asked for its
     /// outcome alone. The site decides which declaration `struct_name` names;
     /// see [`Elaborator::impl_target_at`].
-    ///
-    /// The name answers before the arguments do, so an argument that fits no
-    /// declaration is the call's mismatch rather than an unknown name. They are
-    /// asked only where the name alone settles nothing: a generic type's derived
-    /// method takes its type arguments from the receiver argument.
     pub(super) fn is_static_method_at(
         &mut self,
         site: Option<AstId>,
         struct_name: &str,
         method_name: &str,
-        arg_types: &[TypeId],
     ) -> bool {
-        [&[][..], arg_types].into_iter().any(|arg_types| {
-            self.resolve_static_callee(StaticQuery {
-                site,
-                arg_types,
-                ..StaticQuery::of(struct_name, method_name)
-            })
-            .resolves()
+        self.resolve_static_callee(StaticQuery {
+            site,
+            ..StaticQuery::of(struct_name, method_name)
         })
+        .resolves()
     }
 
     /// Resolve a static method call from a qualified name like `Point::origin()`
@@ -3215,14 +3206,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         };
         let declaration = resolution.declaration;
+        // A derived name resolves at the declaration alone, so an instance
+        // withholding the derivation reaches here answered by nothing.
         if declaration.is_none()
             && resolution.return_type == TypeTable::UNKNOWN
-            && self.declared_by_no_reaching_block(
-                &actual_struct_name,
-                method_name,
-                receiver_key.as_ref(),
-                impl_type_args,
-            )
+            && (self.tysys.auto_derive_by_method(method_name).is_some()
+                || self.declared_by_no_reaching_block(
+                    &actual_struct_name,
+                    method_name,
+                    receiver_key.as_ref(),
+                    impl_type_args,
+                ))
         {
             let _ = self.emit(TypeError::UnknownFunction {
                 name: format!("{actual_struct_name}::{method_name}"),

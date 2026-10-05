@@ -58,6 +58,15 @@ pub(super) enum NewtypePeel {
     Here,
 }
 
+/// What a derived method is asked of: an instance, whose bound must hold, or a
+/// generic declaration at its own parameters, which the call's arguments have
+/// yet to settle and which answers the name alone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum DerivedAt {
+    Instance,
+    Declaration,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum OnBoundTrait {
     Eq,
@@ -3415,6 +3424,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         method_name: &str,
         receiver_type_id: TypeId,
+        at: DerivedAt,
     ) -> Option<TraitMethodMatch> {
         let (item, _, return_type) = self.tysys.auto_derive_by_method(method_name)?;
         let base_type_id = self.tysys.get_base_type(receiver_type_id);
@@ -3472,12 +3482,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return None;
             }
             let trait_ = self.tysys.compiler_trait(item)?;
-            if !self.tysys.type_implements_trait(
-                &self.annotate_ctx,
-                &self.type_lookup(),
-                derive_id,
-                &trait_,
-            ) {
+            if at == DerivedAt::Instance
+                && !self.tysys.type_implements_trait(
+                    &self.annotate_ctx,
+                    &self.type_lookup(),
+                    derive_id,
+                    &trait_,
+                )
+            {
                 return None;
             }
             let home = self

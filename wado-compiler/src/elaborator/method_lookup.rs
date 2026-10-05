@@ -2,7 +2,7 @@
 
 use super::scope::{BinderInScope, ScopedBound, trait_params_from_impl};
 use super::trait_env::ImplTargetKey;
-use super::trait_query::SelfBinding;
+use super::trait_query::{DerivedAt, SelfBinding};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -1760,7 +1760,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )),
                 None => {
                     if let Some(recv_id) = receiver_type_id {
-                        found.extend(self.try_auto_derived_method_match(method_name, recv_id));
+                        found.extend(self.try_auto_derived_method_match(
+                            method_name,
+                            recv_id,
+                            DerivedAt::Instance,
+                        ));
                     }
                 }
             }

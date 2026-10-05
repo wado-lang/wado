@@ -17,6 +17,7 @@ use super::sem::types::CalleeParams;
 use super::sig::MethodSig;
 use super::synth::ArgClass;
 use super::trait_env::{ImplHeader, ImplTargetKey};
+use super::trait_query::DerivedAt;
 use super::types::{TraitMethodMatch, TypeError};
 use super::tysys::TypeSystem;
 
@@ -369,12 +370,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // The auto-derived `eq` / `cmp`, which the method-call spelling reaches
         // through the same derivation: the receiver leads the arguments.
-        let receiver_type = match key.decl() {
-            Some(def) => self.derived_receiver_type(def, receiver_type, arg_types),
-            None => receiver_type,
+        let derived_receiver = match key.decl() {
+            Some(def) if self.tysys.auto_derive_by_method(method_name).is_some() => {
+                self.derived_receiver_type(def, receiver_type, receiver_args)
+            }
+            Some(_) | None => receiver_type.map(|receiver| (receiver, DerivedAt::Instance)),
         };
-        if let Some(receiver_type) = receiver_type
-            && let Some(derived) = self.try_auto_derived_method_match(method_name, receiver_type)
+        if let Some((receiver_type, at)) = derived_receiver
+            && let Some(derived) =
+                self.try_auto_derived_method_match(method_name, receiver_type, at)
         {
             return StaticLookup::Found(Box::new(self.derived_instance_callee(
                 derived,
@@ -402,21 +406,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The receiver a derived method on `def` is called on by type path: the
-    /// type `def` declares, or, where `def` is generic, the receiver argument's
-    /// type, since the type path names no arguments and only the call settles
-    /// them.
-    pub(super) fn derived_receiver_type(
+    /// type `def` declares, a generic one at the arguments the path wrote or
+    /// the call inferred, else at its own parameters. The arguments are checked
+    /// against it, never chosen by.
+    fn derived_receiver_type(
         &mut self,
         def: DefId,
         receiver_type: Option<TypeId>,
-        arg_types: &[TypeId],
-    ) -> Option<TypeId> {
-        if self.type_lookup().declared_type_param_ids(def).is_some() {
-            let tt = self.tysys.type_table.borrow();
-            let receiver = tt.peel_refs(*arg_types.first()?);
-            return (tt.nominal_def(receiver) == Some(def)).then_some(receiver);
+        receiver_args: &[TypeId],
+    ) -> Option<(TypeId, DerivedAt)> {
+        if self.type_lookup().declared_type_param_ids(def).is_none() {
+            let receiver = receiver_type.or_else(|| self.declared_self_type(def))?;
+            return Some((receiver, DerivedAt::Instance));
         }
-        receiver_type.or_else(|| self.declared_self_type(def))
+        if !receiver_args.is_empty() {
+            let receiver = self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .make_generic_instance(def, receiver_args.to_vec());
+            return Some((receiver, DerivedAt::Instance));
+        }
+        // A bare name reaches here as the declaration with no arguments.
+        let written = receiver_type.filter(|&ty| {
+            self.tysys
+                .type_table
+                .borrow()
+                .nominal_type_args(ty)
+                .is_some_and(|args| !args.is_empty())
+        });
+        match written {
+            Some(receiver) => Some((receiver, DerivedAt::Instance)),
+            None => Some((self.declared_self_type(def)?, DerivedAt::Declaration)),
+        }
     }
 
     /// The type a struct, resource, variant or enum declaration `def` declares,

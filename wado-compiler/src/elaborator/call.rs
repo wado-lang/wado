@@ -1373,7 +1373,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // Static method call (Type::method). Static methods are
             // registered with mangled names "Type::method".
-            else if self.is_static_method_at(receiver_site, prefix, suffix, &args) {
+            else if self.is_static_method_at(receiver_site, prefix, suffix) {
                 self.record_receiver_reference(ident, prefix);
                 // Record the method segment (suffix) as a reference to the
                 // declaration this call resolves to. The impl selection knows
@@ -3797,10 +3797,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.tysys.inherited_default_method_sig(&key, method_name)
             })
         else {
-            return (
-                self.derived_impl_args(struct_name, receiver_key, method_name, args),
-                vec![],
-            );
+            return (self.derived_impl_args(struct_name, method_name, args), vec![]);
         };
         if sig.decl.type_params.is_empty() {
             return (vec![], vec![]);
@@ -3842,25 +3839,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// The impl level of a derived method called by type path, which declares
-    /// no signature to solve: the receiver argument's type arguments.
-    fn derived_impl_args(
-        &mut self,
-        struct_name: &str,
-        receiver_key: Option<&ImplTargetKey>,
-        method_name: &str,
-        args: &[TypeId],
-    ) -> Vec<TypeId> {
-        if self.tysys.auto_derive_by_method(method_name).is_none() {
+    /// The impl level of a derived method called by type path, solved from the
+    /// arguments against [`Self::derived_method_signature`]; empty where they
+    /// leave a slot open.
+    fn derived_impl_args(&mut self, struct_name: &str, method_name: &str, args: &[TypeId]) -> Vec<TypeId> {
+        let Some(sig) = self.derived_method_signature(struct_name, method_name) else {
             return Vec::new();
+        };
+        let mut infer = InferCtx::new(&self.tysys.type_table, sig.slots.clone());
+        for (&param_type, &arg) in sig.param_types.iter().zip(args) {
+            infer.add(param_type, arg);
         }
-        let key = receiver_key
-            .cloned()
-            .unwrap_or_else(|| self.impl_target(struct_name));
-        key.decl()
-            .and_then(|def| self.derived_receiver_type(def, None, args))
-            .and_then(|receiver| self.tysys.type_table.borrow().nominal_type_args(receiver))
-            .unwrap_or_default()
+        let (inferred, bindings) = infer.solve_with_bindings();
+        if sig.slots.iter().all(|slot| bindings.contains_key(slot)) {
+            inferred
+        } else {
+            Vec::new()
+        }
     }
 
     /// The slot a declared type parameter's `TypeId` holds.
