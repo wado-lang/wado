@@ -38,9 +38,10 @@ the behavior belongs to.
   compiler chooses one. The choice may change with the optimization level or the
   compiler version, but a compiled program keeps it on every host. A correct
   program is correct under every listed outcome.
-- _Host-defined_: unspecified, except that the host chooses. The same compiled
-  program may behave differently on two hosts. Each case says whether the choice
-  stays fixed on one host. What a world import returns is host-defined within
+- _Host-defined_: unspecified, except that the compiled program need not fix
+  the choice, so the host may make it. The same compiled program may behave
+  differently on two hosts. Each case says whether the choice stays fixed on
+  one host. What a world import returns is host-defined within
   what its interface promises: `InsecureSeed` may return the same value every
   time, for one.
 - _Unconstrained_: the specification lists no outcomes, and the compiler may

@@ -57,10 +57,19 @@ golden test of a compiled program can pin it.
 
 ### Host-defined: the host chooses
 
-Host-defined behavior is unspecified behavior chosen by the host. It is a class
-of its own because the same compiled program can behave differently on
-wasmtime and on V8, so no golden test can pin it. The cases differ in how
-consistent the host is, so each one says:
+Host-defined behavior is unspecified behavior whose choice the compiled program
+need not fix, so the host may make it. It is a class of its own because the
+same compiled program can behave differently on wasmtime and on V8, so no golden
+test can pin it.
+
+The compiler may still fix the choice, and that is what lets it evaluate such
+an operation at compile time. Before the class existed, a NaN's bits had no
+stated latitude, so a constant fold never produced a NaN: the bits the
+compiler would pick might not be the ones the engine would. With the bits
+host-defined, any NaN is a permitted outcome, and a NaN-producing operation
+folds like any other.
+
+The cases differ in how consistent the host is, so each one says:
 
 - A NaN's bit pattern may differ between two runs of one operation, as Wasm
   allows. The order on floats treats every NaN as one value, so only reading
@@ -155,6 +164,9 @@ breaks a type's invariant.
    the surrogate gap is exhaustive, so a `_` after them is unreachable. Gale's
    first-char dispatch emits no `_` when its arms already take every char.
    Done.
+4. A float operation whose result is a NaN folds at compile time. Done:
+   `const_eval` folds it, and only reading a stored NaN, whose bits are not
+   host-defined, still declines.
 
 ## Known gaps
 

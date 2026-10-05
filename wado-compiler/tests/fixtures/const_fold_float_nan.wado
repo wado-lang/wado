@@ -1,0 +1,20 @@
+// A float operation whose result is a NaN folds. A NaN's bit pattern is
+// host-defined, so the compiler may fix it; the program observes only what
+// every NaN shares.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let zero = 0.0;
+    let q = zero / zero;
+    println(`${q.is_nan()} ${q == f64::NAN} ${q}`);
+    let zero32: f32 = 0.0;
+    let q32 = zero32 * f32::INFINITY;
+    println(`${q32.is_nan()} ${q32}`);
+}
+
+__DATA__
+{
+    "stdout": "true true NaN\ntrue NaN\n",
+    "wir_not_expect:O2": ["0 / 0", "0_f32 * inf_f32"]
+}

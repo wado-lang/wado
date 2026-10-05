@@ -770,10 +770,10 @@ pub(crate) fn eval_float_binary(
 
 pub(crate) fn eval_f64_binary(lval: f64, op: NirBinaryOp, rval: f64) -> Option<Value> {
     match op {
-        NirBinaryOp::Add => non_nan_float(lval + rval, PrimitiveType::F64),
-        NirBinaryOp::Sub => non_nan_float(lval - rval, PrimitiveType::F64),
-        NirBinaryOp::Mul => non_nan_float(lval * rval, PrimitiveType::F64),
-        NirBinaryOp::Div => non_nan_float(lval / rval, PrimitiveType::F64),
+        NirBinaryOp::Add => Some(float_result(lval + rval, PrimitiveType::F64)),
+        NirBinaryOp::Sub => Some(float_result(lval - rval, PrimitiveType::F64)),
+        NirBinaryOp::Mul => Some(float_result(lval * rval, PrimitiveType::F64)),
+        NirBinaryOp::Div => Some(float_result(lval / rval, PrimitiveType::F64)),
         _ => eval_float_comparison(lval, op, rval),
     }
 }
@@ -782,10 +782,10 @@ pub(crate) fn eval_f32_binary(lval: f64, op: NirBinaryOp, rval: f64) -> Option<V
     let l = lval as f32;
     let r = rval as f32;
     match op {
-        NirBinaryOp::Add => non_nan_float(f64::from(l + r), PrimitiveType::F32),
-        NirBinaryOp::Sub => non_nan_float(f64::from(l - r), PrimitiveType::F32),
-        NirBinaryOp::Mul => non_nan_float(f64::from(l * r), PrimitiveType::F32),
-        NirBinaryOp::Div => non_nan_float(f64::from(l / r), PrimitiveType::F32),
+        NirBinaryOp::Add => Some(float_result(f64::from(l + r), PrimitiveType::F32)),
+        NirBinaryOp::Sub => Some(float_result(f64::from(l - r), PrimitiveType::F32)),
+        NirBinaryOp::Mul => Some(float_result(f64::from(l * r), PrimitiveType::F32)),
+        NirBinaryOp::Div => Some(float_result(f64::from(l / r), PrimitiveType::F32)),
         // Widening is exact, so f64's order is f32's.
         _ => eval_float_comparison(f64::from(l), op, f64::from(r)),
     }
@@ -803,6 +803,15 @@ pub(crate) fn eval_float_comparison(lval: f64, op: NirBinaryOp, rval: f64) -> Op
     op.holds_for(ordering).map(Value::Bool)
 }
 
+/// The value a float operation produced. A NaN result folds too: the bit
+/// pattern of a NaN an operation produces is host-defined, so the compiler may
+/// fix it (spec-standard-traits.md, Float Comparison).
+fn float_result(value: f64, prim: PrimitiveType) -> Value {
+    Value::Float { value, prim }
+}
+
+/// A float stored as `bits`, or `None` for a NaN: reading a stored NaN keeps
+/// its bits, which a fold through `f64` may not.
 pub(crate) fn non_nan_float(value: f64, prim: PrimitiveType) -> Option<Value> {
     if value.is_nan() {
         return None;
