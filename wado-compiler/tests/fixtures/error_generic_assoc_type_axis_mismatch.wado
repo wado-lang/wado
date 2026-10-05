@@ -1,0 +1,30 @@
+// Two members of one family are one type only at one argument list, so a
+// generic body contracting the wrong axes does not compile, whichever backend
+// it is later given.
+
+struct Host<Axes> {
+    data: List<f32>,
+}
+
+trait Backend with () {
+    type Tensor<Axes>;
+
+    fn matmul<M, K, N>(&mut self, a: &Self::Tensor<[M, K]>, b: &Self::Tensor<[K, N]>) -> Self::Tensor<[M, N]>;
+}
+
+struct Batch {}
+struct In {}
+struct Out {}
+
+fn forward<B: Backend>(
+    backend: &mut B,
+    x: &B::Tensor<[Batch, In]>,
+    w: &B::Tensor<[In, Out]>,
+) -> B::Tensor<[Batch, Out]> {
+    return backend.matmul(w, x);
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": ":24:30: analysis error: type mismatch: expected '&B::Tensor<[Out, In]>', found '&B::Tensor<[Batch, In]>'"}

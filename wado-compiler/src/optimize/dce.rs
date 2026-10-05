@@ -31,7 +31,7 @@ use crate::nir_visitor::{NirRefVisitor, reachable_exprs};
 use crate::optimize::arena_query::{
     expr_node_may_trap, operand_values_may_trap, promoted_local_reads,
 };
-use crate::tir::{ResolvedType, StructDef, TypeId, TypeTable};
+use crate::tir::{ResolvedType, StructDef, TypeId, TypeTable, projection_arguments};
 use crate::{hashmap, nir, tir};
 
 /// Call graph: function ID -> set of called function IDs
@@ -1748,8 +1748,16 @@ fn collect_type_dependencies(
         // surviving projection (e.g. a field type of a retained generic
         // template) would dangle when the parameter type is pruned,
         // crashing later name-mangling.
-        ResolvedType::AssocTypeProjection { param_id, .. } => {
+        ResolvedType::AssocTypeProjection {
+            param_id,
+            args,
+            trait_args,
+            ..
+        } => {
             collect_type_transitive(*param_id, type_table, reachable);
+            for arg in projection_arguments(args, trait_args) {
+                collect_type_transitive(arg, type_table, reachable);
+            }
         }
 
         // Leaf types - no dependencies
@@ -1763,6 +1771,7 @@ fn collect_type_dependencies(
         | ResolvedType::Variant { .. }
         | ResolvedType::Resource { .. }
         | ResolvedType::TypeParam { .. }
+        | ResolvedType::AssocParam { .. }
         | ResolvedType::TypePack { .. } => {}
         ResolvedType::InferVar(var) => panic!("{var} reached DCE"),
 

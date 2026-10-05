@@ -1,0 +1,15 @@
+// A projection writes one type per parameter, so a generic associated type
+// takes plain type parameters only: no pack, no effect, no default.
+
+trait Store with () {
+    type Packed<..T>;
+    type Defaulted<T = i32>;
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":5:17: analysis error: associated type `Packed` takes only plain type parameters, which `T` is not",
+  "compile_errors_contains": ["associated type `Defaulted` takes only plain type parameters, which `T` is not"]
+}

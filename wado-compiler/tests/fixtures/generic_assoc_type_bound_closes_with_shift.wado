@@ -1,0 +1,26 @@
+// A parameter list whose last bound ends at a `>>` closes there, so the `=`
+// after it is the binding's, not a default for the parameter.
+
+trait Conv<T> with () {}
+
+impl Conv<i32> for i32 {}
+
+trait Store with () {
+    type Buf<B: Conv<i32>>;
+
+    fn hold<B: Conv<i32>>(&self, b: B) -> Self::Buf<B>;
+}
+
+struct Lists {}
+
+impl Store for Lists {
+    type Buf<B: Conv<i32>> = List<B>;
+
+    fn hold<B: Conv<i32>>(&self, b: B) -> List<B> {
+        return [b];
+    }
+}
+
+test {
+    assert Lists {}.hold(3) == [3] as List<i32>;
+}

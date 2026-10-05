@@ -1,0 +1,24 @@
+// An impl's `<F: fn(...)>` parameter is that signature wherever it stands: in
+// the method body it is callable, and the impl's trait argument names the
+// function type, so a bound naming it is answered and the method found.
+
+trait Run<F> with () {
+    fn run(&self, f: F) -> i32;
+}
+
+struct R {}
+
+impl<F: fn(i32) -> i32> Run<F> for R {
+    fn run(&self, f: F) -> i32 {
+        return f(3);
+    }
+}
+
+fn go<F: fn(i32) -> i32, X: Run<F>>(r: &X, f: F) -> i32 {
+    return r.run(f);
+}
+
+test "an impl's fn-bound parameter is its signature" {
+    assert R {}.run(|x: i32| x * 2) == 6;
+    assert go(&R {}, |x: i32| x + 1) == 4;
+}

@@ -809,6 +809,31 @@ fn test_format_supertrait_clause_roundtrips() {
     );
 }
 
+/// An associated type's own parameters survive formatting, in the trait and
+/// in the impl, bounds included.
+#[test]
+fn test_format_generic_associated_type_roundtrips() {
+    let source = concat!(
+        "trait Store {\n",
+        "    type Buf<E: Elem, Axes>: Len;\n",
+        "}\n",
+        "\n",
+        "impl Store for Lists {\n",
+        "    type Buf<E: Elem, Axes> = List<E>;\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+    assert_format_preserves_ast(source);
+
+    let dirty = "trait Store {\n    type Buf < E:Elem >;\n}\n";
+    let expected = "trait Store {\n    type Buf<E: Elem>;\n}\n";
+    assert_eq!(
+        wado_compiler::format(dirty).expect("format failed"),
+        expected
+    );
+}
+
 /// A trait head's `with` clause round-trips in each of its three written forms,
 /// and the parameter `with _` mints stays out of the printed type-param list.
 #[test]

@@ -1,0 +1,21 @@
+// Two bindings naming each other have no answer: the inner naming is
+// reported as naming nothing.
+
+trait Store with () {
+    type A;
+    type B;
+}
+
+struct Lists {}
+
+impl Store for Lists {
+    type A = Self::B;
+    type B = Self::A;
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":13:14: analysis error: unknown type 'Self::A'"
+}

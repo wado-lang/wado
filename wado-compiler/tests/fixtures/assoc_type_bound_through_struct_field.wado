@@ -1,0 +1,39 @@
+// A struct field's type projecting an associated type carries the bounds the
+// trait declares on it, as any other projection does: `w.out` answers
+// `T: Weight` though struct fields resolve before any function signature.
+
+struct Wrap<H: Holder> {
+    out: H::Out,
+}
+
+trait Weight with () {
+    fn weight(&self) -> i32;
+}
+
+trait Holder with () {
+    type Out: Weight;
+}
+
+impl Weight for i32 {
+    fn weight(&self) -> i32 {
+        return *self * 2;
+    }
+}
+
+struct Ints {}
+
+impl Holder for Ints {
+    type Out = i32;
+}
+
+fn weigh<T: Weight>(t: T) -> i32 {
+    return t.weight();
+}
+
+fn through<H: Holder>(w: Wrap<H>) -> i32 {
+    return weigh(w.out);
+}
+
+test "a struct field's projection carries its trait's bounds" {
+    assert through(Wrap::<Ints> { out: 21 }) == 42;
+}

@@ -1,0 +1,47 @@
+// A generic associated type's parameter carries its bound inside its own
+// declaration, so passing it to a sibling family's bounded parameter is
+// checked against what it declares: `E: Elem` meets `Inner`'s `X: Elem`.
+
+trait Elem with () {}
+
+impl Elem for i32 {}
+
+trait Holder<T> with () {
+    fn size(&self) -> i32;
+}
+
+trait Store with () {
+    type Inner<X: Elem>;
+    type Buf<E: Elem>: Holder<Self::Inner<E>>;
+
+    fn buf<E: Elem>(&self, e: E) -> Self::Buf<E>;
+}
+
+struct Wrap<E> {
+    items: List<E>,
+}
+
+impl<E: Elem> Holder<List<E>> for Wrap<E> {
+    fn size(&self) -> i32 {
+        return self.items.len();
+    }
+}
+
+struct Lists {}
+
+impl Store for Lists {
+    type Inner<X: Elem> = List<X>;
+    type Buf<E: Elem> = Wrap<E>;
+
+    fn buf<E: Elem>(&self, e: E) -> Wrap<E> {
+        return Wrap { items: [e, e] };
+    }
+}
+
+fn sized<S: Store>(s: &S) -> i32 {
+    return s.buf(1).size();
+}
+
+test "a family parameter meets a sibling's bound by its own" {
+    assert sized(&Lists {}) == 2;
+}

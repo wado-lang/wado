@@ -2,6 +2,7 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::ast::{self, Function, GlobalDecl, SelfKind, Type};
 use crate::attribute::{self, WIRE};
@@ -14,11 +15,14 @@ use crate::hashmap::IndexSet;
 use crate::logger::Logger;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, MethodName, global_name};
-use crate::tir::{ImplProjection, TirEffectOp, TirParam, TypeId, TypeTable, method_param_offset};
+use crate::tir::{
+    AssocTypeSig, ImplProjection, TirEffectOp, TirParam, TraitFrame, TraitRef, TypeId, TypeTable,
+    method_param_offset,
+};
 use crate::token::Span;
 
 use super::infer_hole::InferHoleTable;
-use super::scope::{BinderInScope, Scope, ScopedBound, TypeParamScope, param_decl};
+use super::scope::{BinderInScope, Scope, ScopedBound, TraitContext, TypeParamScope, param_decl};
 use super::sig::{DeclSig, MethodSig};
 use super::trait_query::SelfBinding;
 use super::types::{FunctionContext, TypeError};
@@ -713,6 +717,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                 Some(param.id),
             ));
         }
+        self.bind_fn_bound_params(impl_declared_params);
 
         // After the impl's own parameters, which `Maker<Container<U>>` names,
         // and before the trait's, whose bounds pin the `Self` they mean.
@@ -759,20 +764,6 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         }
         scope.check_impl_params_constrained(impl_block);
 
-        let mut associated_types = hashmap::IndexMap::default();
-        for binding in &impl_block.associated_types {
-            let type_id = scope.resolve_type(&binding.ty);
-            scope
-                .annotate_ctx
-                .trait_ctx
-                .assoc_type_bindings
-                .insert(binding.name.clone(), type_id);
-            associated_types.insert(binding.name.clone(), type_id);
-        }
-
-        // The block's name-level facts. Answered here because this is the only
-        // phase standing in the block's own frame.
-        let target_fq = scope.impl_receiver_name(impl_block);
         // The header's own site answers: `check_impl_trait_resolves` rejects a
         // header whose trait reaches no declaration, so a well-formed block has
         // an identity here and an erroneous one contributes none.
@@ -780,6 +771,18 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             .trait_type
             .as_ref()
             .and_then(|t| scope.tysys.resolutions.head_decl(t));
+
+        for binding in &impl_block.associated_types {
+            scope.reject_unsupported_assoc_params(&binding.name, &binding.type_params);
+        }
+        let associated_types: hashmap::IndexMap<String, TypeId> = scope
+            .bind_impl_assoc_types(impl_block)
+            .into_iter()
+            .collect();
+
+        // The block's name-level facts. Answered here because this is the only
+        // phase standing in the block's own frame.
+        let target_fq = scope.impl_receiver_name(impl_block);
         let impl_def = scope.tysys.def_at(impl_block.id);
         let projections = scope.impl_projections(impl_block);
         scope.tysys.type_table.borrow_mut().record_impl_target(
@@ -843,8 +846,15 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         if let Some(trait_type) = &impl_block.trait_type {
             trait_type.mentioned_names(&mut named);
         }
+        // A binding's own parameters shadow the impl's in its right-hand side.
         for binding in &impl_block.associated_types {
-            binding.ty.mentioned_names(&mut named);
+            let mut in_binding = Vec::new();
+            binding.ty.mentioned_names(&mut in_binding);
+            named.extend(
+                in_binding
+                    .into_iter()
+                    .filter(|n| !binding.type_params.iter().any(|p| &p.name == n)),
+            );
         }
         for param in &impl_block.type_params {
             for bound in &param.bounds {
@@ -968,6 +978,206 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     }
 }
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
+    /// Build the signature of every associated type `module`'s traits declare,
+    /// so a reader past the declaration pass finds each one. See
+    /// [`AssocTypeSig`].
+    pub(super) fn register_assoc_type_sigs(&mut self, module: &ast::Module) {
+        for item in &module.items {
+            let ast::Item::Trait(trait_decl) = item else {
+                continue;
+            };
+            let owner = self.tysys.def_at(trait_decl.id);
+            for assoc in &trait_decl.associated_types {
+                self.assoc_type_sig(owner, &assoc.name);
+            }
+        }
+    }
+
+    /// What `owning_trait` declares of its associated type `assoc`, resolved
+    /// once in the trait's own frame and kept. Built on first asking, since a
+    /// declaration's bound may project another associated type of any trait,
+    /// in any module. `None` while it is being built: two associated types may
+    /// each bound the other, and the inner asking reads no bounds.
+    pub(super) fn assoc_type_sig(
+        &mut self,
+        owning_trait: DefId,
+        assoc: &str,
+    ) -> Option<Rc<AssocTypeSig>> {
+        if let Some(sig) = self
+            .tysys
+            .type_table
+            .borrow()
+            .assoc_type_sig(owning_trait, assoc)
+        {
+            return Some(Rc::clone(sig));
+        }
+        let sig = self.unless_on_walk(
+            |scope| &mut scope.assoc_sig_stack,
+            (owning_trait, assoc.to_string()),
+            |e| {
+                Some(e.in_trait_frame(owning_trait, |e, frame| {
+                    e.build_assoc_type_sig(owning_trait, assoc, frame)
+                }))
+            },
+        )?;
+        let sig = Rc::new(sig);
+        self.tysys.type_table.borrow_mut().register_assoc_type_sig(
+            owning_trait,
+            assoc.to_string(),
+            Rc::clone(&sig),
+        );
+        Some(sig)
+    }
+
+    /// [`Self::assoc_type_sig`] resolved in the trait's `frame`.
+    fn build_assoc_type_sig(
+        &mut self,
+        owning_trait: DefId,
+        assoc: &str,
+        frame: Rc<TraitFrame>,
+    ) -> AssocTypeSig {
+        let decl = self
+            .tysys
+            .trait_env
+            .assoc_type_decl(&owning_trait, assoc)
+            .cloned()
+            .expect("the trait declares the associated type asked of it");
+        self.with_assoc_params(owning_trait, assoc, &decl.type_params, None, |e| {
+            AssocTypeSig {
+                owning_trait,
+                assoc_name: assoc.to_string(),
+                frame,
+                params: e.family_params(owning_trait, assoc),
+                param_bounds: e.family_param_bounds(owning_trait, assoc, &decl.type_params),
+                bounds: e.trait_refs_of(&decl.bounds),
+            }
+        })
+    }
+
+    /// `owning_trait`'s own frame, resolved once and kept. `None` for an
+    /// interface or a resource, which an impl also names and which has none.
+    pub(super) fn trait_frame(&mut self, owning_trait: DefId) -> Option<Rc<TraitFrame>> {
+        if let Some(frame) = self.tysys.type_table.borrow().trait_frame(owning_trait) {
+            return Some(Rc::clone(frame));
+        }
+        self.tysys.trait_env.decl_header_of(&owning_trait)?;
+        Some(self.in_trait_frame(owning_trait, |_, frame| frame))
+    }
+
+    /// Run `body` in `owning_trait`'s own frame, handing it the frame: read
+    /// where the trait is written, whoever asks, so neither the asking frame's
+    /// bounds nor its module's imports reach it.
+    fn in_trait_frame<R>(
+        &mut self,
+        owning_trait: DefId,
+        body: impl FnOnce(&mut Self, Rc<TraitFrame>) -> R,
+    ) -> R {
+        let header = self
+            .tysys
+            .trait_env
+            .decl_header_of(&owning_trait)
+            .cloned()
+            .expect("a trait has a header");
+        let home = self.tysys.resolutions.defs().module(owning_trait).clone();
+        let trait_id = self.tysys.resolutions.defs().ast_id(owning_trait);
+        self.with_module_perspective_for(&home, |e| {
+            let mut clean = e.enter_inherited_type_param_scope();
+            clean.annotate_ctx.trait_ctx = TraitContext::default();
+            let (mut scope, self_param, _) =
+                clean.enter_trait_frame(trait_id, &header.name, header.span, &header.type_params);
+            let known = scope
+                .tysys
+                .type_table
+                .borrow()
+                .trait_frame(owning_trait)
+                .cloned();
+            let frame = known.unwrap_or_else(|| {
+                let trait_env = Arc::clone(&scope.tysys.trait_env);
+                let type_params = trait_env.trait_type_params(owning_trait);
+                let params = type_params
+                    .iter()
+                    .map(|param| {
+                        let binder = scope.annotate_ctx.trait_ctx.type_params.get(&param.name)?;
+                        Some(binder.type_id)
+                    })
+                    .collect();
+                let defaults = type_params
+                    .iter()
+                    .map(|param| param.default.as_ref().map(|ty| scope.resolve_type(ty)))
+                    .collect();
+                let frame = Rc::new(TraitFrame {
+                    self_param,
+                    params,
+                    defaults,
+                });
+                scope
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .register_trait_frame(owning_trait, Rc::clone(&frame));
+                frame
+            });
+            body(&mut scope, frame)
+        })
+    }
+
+    /// The bounds each of `written`, the parameters of `owning_trait`'s
+    /// associated type `assoc` in scope here, declares. Each parameter carries
+    /// its bounds once they are read, so a later one's may project a sibling
+    /// family whose parameter it owes them.
+    pub(super) fn family_param_bounds(
+        &mut self,
+        owning_trait: DefId,
+        assoc: &str,
+        written: &[ast::GenericParam],
+    ) -> Vec<Vec<TraitRef>> {
+        let params = self.family_params(owning_trait, assoc);
+        let mut out = Vec::with_capacity(written.len());
+        for (param, &id) in written.iter().zip(&params) {
+            let refs = self.trait_refs_of(&param.bounds);
+            self.give_assoc_param_bounds(id, &refs);
+            out.push(refs);
+        }
+        out
+    }
+
+    /// Each of `bounds` naming a trait, at the arguments it writes, resolved in
+    /// this frame.
+    pub(super) fn trait_refs_of(&mut self, bounds: &[ast::TraitBound]) -> Vec<TraitRef> {
+        bounds
+            .iter()
+            .filter(|bound| bound.names_a_trait())
+            .filter_map(|bound| {
+                let decl = self.tysys.resolutions.bound_decl(bound)?;
+                let args = bound
+                    .type_args
+                    .iter()
+                    .map(|arg| self.resolve_type(arg))
+                    .collect();
+                Some(TraitRef::new(decl, args))
+            })
+            .collect()
+    }
+
+    /// Report each of a generic associated type's `params` that is not a plain
+    /// type parameter. A projection supplies one type per parameter, so a pack,
+    /// an effect or a default has nothing to take.
+    pub(super) fn reject_unsupported_assoc_params(
+        &mut self,
+        assoc_name: &str,
+        params: &[ast::GenericParam],
+    ) {
+        for param in params {
+            if param.is_pack || !param.is_real_type_param() || param.default.is_some() {
+                let _ = self.emit(TypeError::UnsupportedAssocTypeParam {
+                    assoc_name: assoc_name.to_string(),
+                    param_name: param.name.clone(),
+                    span: param.span,
+                });
+            }
+        }
+    }
+
     /// Substitute a signature's own defaulted type parameters into `ty`.
     ///
     /// A parameter without a default is left alone: it is opaque, and the
@@ -1156,19 +1366,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             );
             // In this frame, not one scope out: a signature naming
             // `Self::Item` is numbered by these slots.
-            frame_scope
-                .annotate_ctx
-                .trait_ctx
-                .assoc_type_bindings
-                .clear();
-            for binding in &impl_block.associated_types {
-                let type_id = frame_scope.resolve_type(&binding.ty);
-                frame_scope
-                    .annotate_ctx
-                    .trait_ctx
-                    .assoc_type_bindings
-                    .insert(binding.name.clone(), type_id);
-            }
+            frame_scope.bind_impl_assoc_types(impl_block);
 
             let param_types: Vec<TypeId> = method
                 .params
@@ -1640,6 +1838,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// — the same instantiation every other declaration uses, instead of
     /// re-resolving the trait's method AST in the impl's perspective.
     pub(super) fn resolve_trait_decl(&mut self, trait_decl: &ast::TraitDecl) {
+        for assoc in &trait_decl.associated_types {
+            self.reject_unsupported_assoc_params(&assoc.name, &assoc.type_params);
+        }
         let (mut scope, self_slot, next_slot) = self.enter_trait_scope(trait_decl);
 
         let decl_slots: Vec<(String, TypeId)> = std::iter::once(("Self".to_string(), self_slot))

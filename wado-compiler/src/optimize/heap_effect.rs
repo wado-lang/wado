@@ -540,6 +540,7 @@ impl HeapEffects<'_> {
             | ResolvedType::GenericResource { .. }
             | ResolvedType::Flags { .. }
             | ResolvedType::TypeParam { .. }
+            | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::Unknown
@@ -720,6 +721,7 @@ impl HeapEffects<'_> {
             ResolvedType::Function { .. }
             | ResolvedType::Reactive(_)
             | ResolvedType::TypeParam { .. }
+            | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::Unknown

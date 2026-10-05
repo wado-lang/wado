@@ -1,0 +1,30 @@
+// A binding projecting off the family's own parameter (`E::Inner`) is as
+// settled as the parameter, so the impl's binding owes the type's own bound.
+
+trait Marker with () {}
+
+trait Elem with () {
+    type Inner;
+}
+
+struct Wrap<T> {
+    t: T,
+}
+
+trait Store with () {
+    type Buf<E: Elem>: Marker;
+}
+
+struct Lists {}
+
+impl Store for Lists {
+    type Buf<E: Elem> = Wrap<E::Inner>;
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":21:5: analysis error: type 'Wrap<E::Inner>' does not implement trait 'Marker' required by bound on 'Buf'",
+  "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
+}

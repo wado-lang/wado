@@ -1,0 +1,39 @@
+// A type implementing one trait at two argument lists binds an associated
+// type twice; a projection reached at `Holder<i32>` names that impl's.
+
+trait Holder<T> with () {
+    type Out;
+
+    fn out(&self) -> Self::Out;
+}
+
+struct X {}
+
+impl Holder<i32> for X {
+    type Out = i32;
+
+    fn out(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl Holder<String> for X {
+    type Out = String;
+
+    fn out(&self) -> String {
+        return "s";
+    }
+}
+
+fn a<H: Holder<i32>>(h: &H) -> H::Out {
+    return h.out();
+}
+
+fn b<H: Holder<String>>(h: &H) -> H::Out {
+    return h.out();
+}
+
+test "the trait's arguments pick the impl a projection names" {
+    assert a(&X {}) == 1;
+    assert b(&X {}) == "s";
+}

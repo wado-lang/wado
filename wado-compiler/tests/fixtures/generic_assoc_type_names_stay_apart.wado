@@ -1,0 +1,63 @@
+// A family's parameter names mean its parameters only inside its own
+// declaration: a caller's type parameter spelled the same stays the caller's,
+// and a generic inherent impl reaches the family through its own receiver.
+
+trait Holds<T> with () {
+    fn first(&self) -> T;
+    fn apply(&self, f: fn(T) -> T) -> T;
+}
+
+struct Bag<T> {
+    items: List<T>,
+}
+
+impl<T> Holds<T> for Bag<T> {
+    fn first(&self) -> T {
+        return self.items[0];
+    }
+
+    fn apply(&self, f: fn(T) -> T) -> T {
+        return f(self.items[0]);
+    }
+}
+
+trait Store with () {
+    type Buf<E>: Holds<E>;
+
+    fn make<E>(&self, value: E) -> Self::Buf<E>;
+}
+
+struct Tagged<T> {
+    tag: T,
+}
+
+impl<T> Store for Tagged<T> {
+    type Buf<E> = Bag<E>;
+
+    fn make<E>(&self, value: E) -> Bag<E> {
+        return Bag { items: [value] };
+    }
+}
+
+impl<T> Tagged<T> {
+    fn ints(&self) -> Self::Buf<i32> {
+        return self.make(7);
+    }
+}
+
+// The caller's `E` is a `String`, the projection's argument an `i32`.
+fn apply_doubled<S: Store, E>(s: &S, label: E) -> [i32, E] {
+    let held = s.make(20);
+    let doubled = held.apply(|v: i32| v * 2);
+    return [doubled, label];
+}
+
+test "a caller's parameter keeps its meaning beside the family's" {
+    let [doubled, label] = apply_doubled(&Tagged { tag: 0 }, "x");
+    assert doubled == 40;
+    assert label == "x";
+}
+
+test "a generic inherent impl reaches the family through its receiver" {
+    assert Tagged { tag: "t" }.ints().first() == 7;
+}

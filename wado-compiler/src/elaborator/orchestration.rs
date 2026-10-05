@@ -70,6 +70,46 @@ use crate::token::Span;
 use crate::unparse::unparse_type_into;
 use crate::wit_consume::module_host_leaf_imports;
 
+/// What every trait bound a module writes, wherever it stands, gets wrong in
+/// the associated types it binds: one its trait does not declare, or one
+/// taking parameters, which a family is until a projection gives it some.
+struct BoundBindingsChecked<'a> {
+    resolutions: &'a Resolutions,
+    trait_env: &'a TraitEnv,
+    errors: Vec<TypeError>,
+}
+
+impl AstVisitor for BoundBindingsChecked<'_> {
+    fn visit_trait_bounds(&mut self, bounds: &[ast::TraitBound]) {
+        for bound in bounds {
+            let Some(trait_) = self.resolutions.bound_decl(bound) else {
+                continue;
+            };
+            for binding in &bound.assoc_types {
+                let declared = self
+                    .trait_env
+                    .trait_declaring_assoc_type(&trait_, &binding.name)
+                    .and_then(|owner| self.trait_env.assoc_type_decl(&owner, &binding.name));
+                match declared {
+                    None => self.errors.push(TypeError::AssocTypeNotInTrait {
+                        trait_name: bound.name.clone(),
+                        assoc_name: binding.name.clone(),
+                        span: binding.span,
+                    }),
+                    Some(decl) if !decl.type_params.is_empty() => {
+                        self.errors.push(TypeError::BoundBindsAssocFamily {
+                            assoc_name: binding.name.clone(),
+                            span: binding.span,
+                        });
+                    }
+                    Some(_) => {}
+                }
+            }
+        }
+        ast::walk_trait_bounds(self, bounds);
+    }
+}
+
 /// One `resource Child extends Parent` clause, held until every resource has
 /// been collected: a parent may be declared after its child, or elsewhere.
 struct PendingExtends {
@@ -899,6 +939,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
 
+        // A bound binding an associated type (`I: Iterator<Item = u8>`) names
+        // one its trait declares, and one taking no parameters: a family is no
+        // type until a projection gives it arguments, so nothing could hold it.
+        for (module_source, module) in modules {
+            if !is_user_local(module_source) {
+                continue;
+            }
+            let mut checked = BoundBindingsChecked {
+                resolutions: &resolutions,
+                trait_env: &trait_env,
+                errors: Vec::new(),
+            };
+            for item in &module.items {
+                checked.visit_item(item);
+            }
+            for error in checked.errors {
+                let _ = logger.error_in(module_source, error);
+            }
+        }
+
         // Nothing downstream rejects an impl that disagrees with its trait: an
         // unbound associated type reaches codegen unsubstituted, a wrong arity
         // only fails Wasm validation.
@@ -944,7 +1004,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 if !trait_env.declares_assoc_type(&decl_key, &binding.name) {
                     let _ = logger.error_in(
                         &header.module,
-                        TypeError::ImplAssocTypeNotInTrait {
+                        TypeError::AssocTypeNotInTrait {
                             trait_name: decl.name.clone(),
                             assoc_name: binding.name.clone(),
                             span: binding.span,
@@ -1324,6 +1384,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     elaborator.sem.imports.namespace_imports = namespace_imports;
                     elaborator.sem.decls.imported_functions = imported_functions;
                     elaborator.annotate_module_decls(module, module_source.clone());
+                    // What each trait declares of its associated types. The
+                    // elaborator builds one on asking, but a projection the
+                    // static resolver builds is read by the trait solver,
+                    // which cannot. Built once the module's declarations, and
+                    // so its namespace members, resolve.
+                    elaborator.register_assoc_type_sigs(module);
                 },
             );
             if !clean {
@@ -2044,11 +2110,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     };
                     let param_id =
                         type_table.make_type_param(namespaced.namespace.clone(), index as u32);
+                    let args = namespaced
+                        .args
+                        .iter()
+                        .map(|arg| {
+                            Self::resolve_type_static_with_params(
+                                arg,
+                                type_table,
+                                lookup,
+                                type_params,
+                            )
+                        })
+                        .collect();
                     return type_table.make_assoc_type_projection(
                         param_id,
                         owning_trait,
+                        None,
                         namespaced.name.clone(),
-                        vec![],
+                        args,
                         vec![],
                     );
                 }
@@ -2175,7 +2254,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Some((slots.of_name(name)?, param))
                 };
 
-                for binding in &impl_block.associated_types {
+                // A generic associated type's binding names parameters of its
+                // own, which only the frame resolver brings into scope.
+                for binding in impl_block
+                    .associated_types
+                    .iter()
+                    .filter(|binding| binding.type_params.is_empty())
+                {
                     let type_param_id = match &binding.ty {
                         // Simple case: `type Item = T` — T is a type param
                         Type::Named(named) => {
@@ -2204,6 +2289,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             type_table.borrow_mut().make_assoc_type_projection(
                                 inner_param_id,
                                 owning_trait,
+                                None,
                                 ns.name.clone(),
                                 vec![],
                                 vec![],

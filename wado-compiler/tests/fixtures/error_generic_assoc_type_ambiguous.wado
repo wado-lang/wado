@@ -1,0 +1,24 @@
+// A name two bounds both declare is reported as ambiguous, and a name no
+// bound declares as unknown, before any count of its arguments.
+
+trait A with () {
+    type Buf<E>;
+}
+
+trait B with () {
+    type Buf<E>;
+}
+
+fn both<S: A + B>(b: S::Buf<i32>) {}
+
+fn typo<S: A>(b: S::Bfu<i32>) {}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":12:22: analysis error: ambiguous associated type 'S::Buf': declared by 'A' and 'B'",
+  "compile_errors_contains": ["unknown type 'S::Bfu'"],
+  "compile_errors_not_contains": ["type argument", "name the trait's own binding"],
+  "compile_error_codes": ["AMBIGUOUS_CANDIDATE"]
+}

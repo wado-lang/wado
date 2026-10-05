@@ -1,0 +1,22 @@
+// A parameter's bound may name a sibling parameter, which stands for the
+// sibling's argument where the projection is written.
+
+trait Into<T> with () {}
+
+impl Into<i64> for i32 {}
+
+trait Store with () {
+    type Buf<E: Into<F>, F>;
+}
+
+fn fine<S: Store>(b: S::Buf<i32, i64>) {}
+
+fn wrong<S: Store>(b: S::Buf<i32, String>) {}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":14:30: analysis error: type 'i32' does not implement trait 'Into<String>' required by bound on 'E'",
+  "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
+}

@@ -1,0 +1,53 @@
+// One parameter bounded by one trait at two argument lists has two
+// associated types, each answered by the bound written at its arguments:
+// `Holder<i32>`'s `Out` is `A` and `Holder<String>`'s is `B`.
+
+trait Holder<T> with () {
+    type Out;
+
+    fn out(&self) -> Self::Out;
+}
+
+struct A {
+    n: i32,
+}
+
+struct B {
+    s: String,
+}
+
+struct X {}
+
+impl Holder<i32> for X {
+    type Out = A;
+
+    fn out(&self) -> A {
+        return A { n: 1 };
+    }
+}
+
+impl Holder<String> for X {
+    type Out = B;
+
+    fn out(&self) -> B {
+        return B { s: "b" };
+    }
+}
+
+fn of_strings<H: Holder<String>>(h: &H) -> H::Out {
+    return h.out();
+}
+
+fn of_ints<H: Holder<i32>>(h: &H) -> H::Out {
+    return h.out();
+}
+
+fn both<H: Holder<i32, Out = A> + Holder<String, Out = B>>(h: &H) -> String {
+    let b: B = of_strings(h);
+    let a: A = of_ints(h);
+    return `${a.n}${b.s}`;
+}
+
+test "each bound answers its own trait arguments" {
+    assert both(&X {}) == "1b";
+}
