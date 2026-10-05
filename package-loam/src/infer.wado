@@ -26,6 +26,7 @@ use {
     Known,
     Node,
     Rank,
+    UNARY_OPS,
     ValueInfo,
     absent,
     data_type,
@@ -1637,17 +1638,7 @@ fn required_operands(op: &String) -> Option<i32> {
 
 /// The operators whose output shape is their input's.
 fn is_unary_elementwise(op: &String) -> bool {
-    return *op == "Identity"
-        || *op == "Cast"
-        || *op == "Relu"
-        || *op == "Sigmoid"
-        || *op == "Tanh"
-        || *op == "Erf"
-        || *op == "Exp"
-        || *op == "Log"
-        || *op == "Sqrt"
-        || *op == "Neg"
-        || *op == "Abs";
+    return *op == "Identity" || *op == "Cast" || UNARY_OPS.contains_str(op);
 }
 
 /// Operand `index`'s shape. `operands_given` proved it defined, and a folded one

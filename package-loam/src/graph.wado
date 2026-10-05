@@ -528,8 +528,16 @@ fn upgraded_subgraphs(attrs: List<Attr>, opset: Option<i64>) -> Result<List<Attr
 
 /// The operators that broadcast two operands against each other.
 pub fn is_binary_elementwise(op: &String) -> bool {
-    return *op == "Add" || *op == "Sub" || *op == "Mul" || *op == "Div" || *op == "Pow";
+    return BINARY_OPS.contains_str(op);
 }
+
+/// The two-operand elementwise operators the kernels compute, each spelled as
+/// the runtime's `BinaryOp` case of the same name.
+pub global BINARY_OPS: List<String> = ["Add", "Sub", "Mul", "Div", "Pow"];
+
+/// The one-operand operators the kernels compute through an `Expr`, each
+/// spelled as the runtime's `UnaryOp` case of the same name.
+pub global UNARY_OPS: List<String> = ["Relu", "Sigmoid", "Tanh", "Erf", "Exp", "Log", "Sqrt", "Neg", "Abs"];
 
 /// How many of A's axes follow B's where arithmetic aligns B at A's `axis`, or
 /// 0 where it aligns B at A's end, as numpy does.

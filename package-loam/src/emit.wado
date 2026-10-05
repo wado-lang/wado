@@ -11,6 +11,7 @@ use {
     Graph,
     KERNEL_ELEMENT,
     Node,
+    UNARY_OPS,
     data_type,
     element_of,
     is_binary_elementwise,
@@ -1641,15 +1642,10 @@ fn batch_axes_agree(left: &Shape, right: &Shape) -> bool {
 global FIRST: String = "operand(0)";
 global SECOND: String = "operand(1)";
 
-/// The ONNX operators an `Expr` spells by the `BinaryOp` and `UnaryOp` case of
-/// the same name.
-global BINARY_OPS: List<String> = ["Add", "Sub", "Mul", "Div", "Pow"];
-global UNARY_OPS: List<String> = ["Relu", "Sigmoid", "Tanh", "Erf", "Exp", "Log", "Sqrt", "Neg", "Abs"];
-
 /// The `Expr` a binary operator combines `lhs` and `rhs`, each an `Expr`, through.
 fn binary_expr(op: &String, lhs: &String, rhs: &String) -> String {
     // Stage 0 refuses every operator the kernels lack.
-    assert BINARY_OPS.contains_str(op);
+    assert is_binary_elementwise(op);
     return `${lhs}.binary(BinaryOp::${op}, &${rhs})`;
 }
 
