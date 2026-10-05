@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791207765932,
+  "lastUpdate": 1791213816159,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -64033,6 +64033,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/74a1ed0ecdc2ae489d6127784fd169da710b9234"
         },
         "date": 1791207765420,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338523,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f3643ae6d4d278ebf411c67b6d2e4a928a654598",
+          "message": "Merge pull request #2280 from wado-lang/claude/hashmap-insecure-seed-ozmryi\n\nfeat(collections)!: HashMap::new() seeds itself from the host, with no effect on the caller",
+          "timestamp": "2026-10-06T00:02:19+09:00",
+          "tree_id": "d57c6418e4182c283cb08f6517d6ec625b8b206a",
+          "url": "https://github.com/wado-lang/wado/commit/f3643ae6d4d278ebf411c67b6d2e4a928a654598"
+        },
+        "date": 1791213815057,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
