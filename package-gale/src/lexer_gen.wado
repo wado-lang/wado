@@ -31,7 +31,7 @@ use {
 } from "./superclass.wado";
 use { MemberDecls, members_present } from "./java2wado/jmembers.wado";
 use { action_language_is_emittable } from "./java2wado.wado";
-use { clip_to_scalars } from "./g4/unicode.wado";
+use { clip_to_scalars, SCALAR_COUNT } from "./g4/unicode.wado";
 use { is_ident_char } from "./text.wado";
 use {
     ModeAttrUse,
@@ -5327,11 +5327,6 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
 
     return groups;
 }
-
-/// How many Unicode scalar values there are: every code point but the
-/// surrogates.
-global SCALAR_COUNT: i32 = 0x110000 - 0x800;
-
 /// The `try_` candidates one lexer mode dispatches over: parser literals
 /// (default mode only), then that mode's rules. Shared by the moded and the
 /// modeless tokenizer so both dispatch on the first character.
