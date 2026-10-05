@@ -443,7 +443,7 @@ test "deserialize a float past the format's range errors rather than reading inf
     assert max matches { Ok(v) && v == f64::MAX };
     let half_max: Result<f16, DeserializeError> = from_string("65519");
     assert half_max matches { Ok(v) && v == f16::MAX };
-    // Underflow rounds to a signed zero, as it does in every other reader.
+    // Underflow is no error: it reads as a zero of its sign.
     let tiny: Result<f64, DeserializeError> = from_string("-1e-400");
     assert tiny matches { Ok(v) && v.to_bits() == 0x8000000000000000 };
 }
