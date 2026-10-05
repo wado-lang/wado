@@ -3254,9 +3254,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let defaults: Vec<Option<TypeId>> =
             self.with_resolving_home(Some(callee.module().clone()), |s| {
-                let mut scope = s.enter_inherited_type_param_scope();
-                scope.annotate_ctx.trait_ctx.type_params.clear();
-                scope.register_generic_params(&params, 0);
+                let mut scope = s.enter_decl_params_scope(&params);
                 space
                     .iter()
                     .map(|p| p.default.as_ref().map(|ty| scope.resolve_type(ty)))

@@ -1399,12 +1399,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut subst = SubstitutionContext::new();
         if !type_args.is_empty() {
             subst = subst.bind(slots, &type_args);
-            self.enforce_type_arg_bounds(
-                own_params,
-                &type_args,
-                Some(self_binding),
-                span,
-            );
+            self.enforce_type_arg_bounds(own_params, &type_args, Some(self_binding), span);
         }
         (type_args, subst)
     }

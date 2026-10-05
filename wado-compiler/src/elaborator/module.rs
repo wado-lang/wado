@@ -22,10 +22,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for item in &module.items {
             match item {
                 Item::Struct(struct_decl) => {
-                    let mut scope = self.enter_inherited_type_param_scope();
-                    scope.annotate_ctx.trait_ctx.type_params.clear();
-                    scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
-                    scope.register_generic_params(&struct_decl.type_params, 0);
+                    let mut scope = self.enter_decl_params_scope(&struct_decl.type_params);
 
                     let mut fields = Vec::new();
                     for field in &struct_decl.fields {
@@ -62,12 +59,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } else {
                         // Each use instantiates the base from its AST; resolved
                         // here once, in its own frame, for what it owes there.
-                        let mut scope = self.enter_inherited_type_param_scope();
-                        scope.annotate_ctx.trait_ctx.type_params.clear();
-                        scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
-                        scope.register_generic_params(&newtype_decl.type_params, 0);
-                        scope.resolve_type(&newtype_decl.ty);
-                        drop(scope);
+                        self.enter_decl_params_scope(&newtype_decl.type_params)
+                            .resolve_type(&newtype_decl.ty);
                         self.sem
                             .decls
                             .local
@@ -76,9 +69,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
                 Item::Variant(variant_decl) => {
-                    let mut scope = self.enter_inherited_type_param_scope();
-                    scope.annotate_ctx.trait_ctx.type_params.clear();
-                    scope.register_generic_params(&variant_decl.type_params, 0);
+                    let mut scope = self.enter_decl_params_scope(&variant_decl.type_params);
                     let type_param_type_ids = Elaborator::<H>::slot_type_ids(
                         &ParamSlot::list(&variant_decl.type_params),
                         &scope.tysys.type_table,

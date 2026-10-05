@@ -1630,9 +1630,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     pub(super) fn resolve_struct(&mut self, struct_decl: &ast::StructDecl) {
-        let mut scope = self.enter_inherited_type_param_scope();
-        scope.annotate_ctx.trait_ctx.type_params.clear();
-        scope.register_generic_params(&struct_decl.type_params, 0);
+        let mut scope = self.enter_decl_params_scope(&struct_decl.type_params);
 
         // A field default is standalone — no self, no sibling fields in
         // scope — and must be pure; `effect_check` enforces that.
@@ -1968,9 +1966,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         type_params: &[ast::GenericParam],
         resource_self: Option<DefId>,
     ) -> (TypeParamScope<'_, 'a, H>, Option<TypeId>) {
-        let mut scope = self.enter_inherited_type_param_scope();
-        scope.annotate_ctx.trait_ctx.type_params.clear();
-        scope.register_generic_params(type_params, 0);
+        let mut scope = self.enter_decl_params_scope(type_params);
         let self_type: Option<TypeId> = resource_self.map(|def| {
             if type_params.iter().any(|p| !p.is_effect) {
                 let type_arg_ids: Vec<TypeId> = type_params
@@ -2345,12 +2341,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Resolve a variant declaration
     pub(super) fn resolve_variant_decl(&mut self, variant_decl: &ast::VariantDecl) {
-        let mut scope = self.enter_inherited_type_param_scope();
-        scope.annotate_ctx.trait_ctx.type_params.clear();
-        scope.register_generic_params(&variant_decl.type_params, 0);
-
-        let type_params = scope.data_type_params(&variant_decl.type_params);
-        drop(scope);
+        let type_params = self
+            .enter_decl_params_scope(&variant_decl.type_params)
+            .data_type_params(&variant_decl.type_params);
 
         self.sem
             .types
@@ -2383,10 +2376,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// function in the decl pass — the body walk re-resolves only to
     /// record per-node facts.
     pub(super) fn record_function_sig(&mut self, func: &Function) -> FunctionSig {
-        let mut scope = self.enter_inherited_type_param_scope();
-        scope.annotate_ctx.trait_ctx.type_params.clear();
-        scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
-        scope.register_generic_params(&func.type_params, 0);
+        let mut scope = self.enter_decl_params_scope(&func.type_params);
         let type_param_ids: Vec<(String, TypeId)> = scope
             .annotate_ctx
             .trait_ctx

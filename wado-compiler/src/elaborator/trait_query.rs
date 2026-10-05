@@ -247,7 +247,6 @@ impl Drop for OpenQuestion<'_> {
     }
 }
 
-
 /// What a bound's `Self::Assoc` projects off at a call: the receiver, and the
 /// trait whose declaration wrote the constraint.
 #[derive(Clone, Copy, Debug)]
@@ -2146,7 +2145,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Check the bounds on a generic type declaration's type arguments, for
     /// every `struct`, `variant` and generic newtype instantiation.
-    pub(super) fn check_type_decl_arg_bounds(&mut self, def: DefId, type_args: &[TypeId], span: Span) {
+    pub(super) fn check_type_decl_arg_bounds(
+        &mut self,
+        def: DefId,
+        type_args: &[TypeId],
+        span: Span,
+    ) {
         self.owe_bounds(OwedBounds {
             span,
             owed: Owed::DeclArgs {
@@ -2370,8 +2374,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         body: impl FnOnce(&mut Self) -> R,
     ) -> (R, Vec<OwedBounds>) {
-        let (result, held) =
-            util::replaced(self, |e| &mut e.annotate_ctx.held_bounds, Some(Vec::new()), body);
+        let (result, held) = util::replaced(
+            self,
+            |e| &mut e.annotate_ctx.held_bounds,
+            Some(Vec::new()),
+            body,
+        );
         (result, held.expect("the hold is the one `body` ran under"))
     }
 

@@ -439,6 +439,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
+    /// A scope binding a declaration's `params` and no type parameter the
+    /// caller brought: a declaration names its parameters itself.
+    pub(super) fn enter_decl_params_scope(
+        &mut self,
+        params: &[ast::GenericParam],
+    ) -> TypeParamScope<'_, 'a, H> {
+        let mut scope = self.enter_inherited_type_param_scope();
+        let ctx = &mut scope.annotate_ctx.trait_ctx;
+        ctx.type_params.clear();
+        ctx.type_param_bounds.clear();
+        scope.register_generic_params(params, 0);
+        scope
+    }
+
     /// A scope binding `impl_block`'s parameters and `Self` and nothing the
     /// caller brought: an impl block names its parameters in `impl<...>`.
     pub(super) fn enter_impl_params_scope(

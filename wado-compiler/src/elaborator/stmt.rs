@@ -307,9 +307,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn resolve_local_struct(&mut self, struct_decl: &ast::StructDecl) {
-        let mut scope = self.enter_inherited_type_param_scope();
-        scope.annotate_ctx.trait_ctx.type_params.clear();
-        scope.register_generic_params(&struct_decl.type_params, 0);
+        let mut scope = self.enter_decl_params_scope(&struct_decl.type_params);
 
         let mut field_ctx =
             FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
