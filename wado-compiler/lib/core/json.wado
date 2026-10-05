@@ -1166,22 +1166,18 @@ fn parse_integral<T: FromStr<Err = ParseIntError>>(
     };
 }
 
-/// Reads `text`, the contents of a string at `offset`, as the number `read`
-/// takes from a bare token: `None` where it holds anything but one number
-/// token. A number the token spells but `read` refuses (out of range, a
-/// fraction for an integer) is that error, at `offset`.
-fn read_number_text<T>(
-    text: ByteSlice,
-    offset: i64,
-    read: fn(&mut JsonDeserializer) -> Result<T, DeserializeError>,
-) -> Result<Option<T>, DeserializeError> {
+/// Reads `text`, the contents of a string at `offset`, as the number `T` reads
+/// from a bare token: `None` where it holds anything but one number token. A
+/// number the token spells but `T` refuses (out of range, a fraction for an
+/// integer) is that error, at `offset`.
+fn read_number_text<T: Deserialize>(text: ByteSlice, offset: i64) -> Result<Option<T>, DeserializeError> {
     let mut de = JsonDeserializer { input: text, pos: 0 };
     // The lead is checked here, since a reader skips whitespace first.
     let lead = de.peek();
     if lead != b'-' && !(b'0' <= lead <= b'9') {
         return Result::Ok(null);
     }
-    return match read(&mut de) {
+    return match T::deserialize(&mut de) {
         Ok(v) => Result::Ok(if de.pos == de.input.len() { Option::Some(v) } else { null }),
         Err(e) => match e.kind {
             MalformedInput | Eof => Result::Ok(null),
@@ -1855,14 +1851,11 @@ impl JsonDeserializer {
         return parse_integral::<T>(n, &self.input, type_name, start);
     }
 
-    /// Reads the string at `pos` as the number `read` takes from a bare token.
-    /// A string holding anything but one number token is the wrong type.
-    fn quoted_number<T>(
-        &mut self,
-        read: fn(&mut JsonDeserializer) -> Result<T, DeserializeError>,
-    ) -> Result<T, DeserializeError> {
+    /// Reads the string at `pos` as the number `T` reads from a bare token. A
+    /// string holding anything but one number token is the wrong type.
+    fn quoted_number<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
         let start = self.pos as i64;
-        let Some(v) = read_number_text(self.read_json_string()?.as_byte_slice(), start, read)? else {
+        let Some(v) = read_number_text::<T>(self.read_json_string()?.as_byte_slice(), start)? else {
             builtin::cold_path();
             return Result::Err(DeserializeError::unexpected_type("expected number", start));
         };
@@ -2147,14 +2140,10 @@ impl JsonKeyDeserializer {
         return Result::Ok(TextKeyDeserializer { key: self.de.read_json_string()?, offset });
     }
 
-    fn number<T>(
-        &mut self,
-        type_name: String,
-        read: fn(&mut JsonDeserializer) -> Result<T, DeserializeError>,
-    ) -> Result<T, DeserializeError> {
+    fn number<T: Deserialize>(&mut self, type_name: String) -> Result<T, DeserializeError> {
         let offset = self.de.pos as i64;
         let key = self.de.read_json_string()?;
-        let Some(v) = read_number_text(key.as_byte_slice(), offset, read)? else {
+        let Some(v) = read_number_text::<T>(key.as_byte_slice(), offset)? else {
             builtin::cold_path();
             return Result::Err(DeserializeError::invalid_value(
                 `map key "${key}" is not a valid ${type_name}`,
@@ -2172,43 +2161,43 @@ impl Deserializer for JsonKeyDeserializer {
     type VariantAccess = NoCompound;
 
     fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {
-        return self.number("i32", |t| t.deserialize_i32());
+        return self.number::<i32>("i32");
     }
 
     fn deserialize_i64(&mut self) -> Result<i64, DeserializeError> {
-        return self.number("i64", |t| t.deserialize_i64());
+        return self.number::<i64>("i64");
     }
 
     fn deserialize_u32(&mut self) -> Result<u32, DeserializeError> {
-        return self.number("u32", |t| t.deserialize_u32());
+        return self.number::<u32>("u32");
     }
 
     fn deserialize_u64(&mut self) -> Result<u64, DeserializeError> {
-        return self.number("u64", |t| t.deserialize_u64());
+        return self.number::<u64>("u64");
     }
 
     fn deserialize_i128(&mut self) -> Result<i128, DeserializeError> {
-        return self.number("i128", |t| t.deserialize_i128());
+        return self.number::<i128>("i128");
     }
 
     fn deserialize_u128(&mut self) -> Result<u128, DeserializeError> {
-        return self.number("u128", |t| t.deserialize_u128());
+        return self.number::<u128>("u128");
     }
 
     fn deserialize_f32(&mut self) -> Result<f32, DeserializeError> {
-        return self.number("f32", |t| t.deserialize_f32());
+        return self.number::<f32>("f32");
     }
 
     fn deserialize_f64(&mut self) -> Result<f64, DeserializeError> {
-        return self.number("f64", |t| t.deserialize_f64());
+        return self.number::<f64>("f64");
     }
 
     fn deserialize_f16(&mut self) -> Result<f16, DeserializeError> {
-        return self.number("f16", |t| t.deserialize_f16());
+        return self.number::<f16>("f16");
     }
 
     fn deserialize_bf16(&mut self) -> Result<bf16, DeserializeError> {
-        return self.number("bf16", |t| t.deserialize_bf16());
+        return self.number::<bf16>("bf16");
     }
 
     fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
@@ -2418,7 +2407,7 @@ impl Deserializer for JsonDeserializer {
     fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {
         let lead = self.peek_after_whitespace();
         if lead == b'"' {
-            return self.quoted_number(|t| t.deserialize_i32());
+            return self.quoted_number::<i32>();
         }
         return self.parse_i32_with_lead(lead);
     }
@@ -2426,7 +2415,7 @@ impl Deserializer for JsonDeserializer {
     fn deserialize_i64(&mut self) -> Result<i64, DeserializeError> {
         let lead = self.peek_after_whitespace();
         if lead == b'"' {
-            return self.quoted_number(|t| t.deserialize_i64());
+            return self.quoted_number::<i64>();
         }
         return self.parse_i64_with_lead(lead);
     }
@@ -2434,7 +2423,7 @@ impl Deserializer for JsonDeserializer {
     fn deserialize_u32(&mut self) -> Result<u32, DeserializeError> {
         let lead = self.peek_after_whitespace();
         if lead == b'"' {
-            return self.quoted_number(|t| t.deserialize_u32());
+            return self.quoted_number::<u32>();
         }
         let start = self.pos as i64;
         let v = self.parse_i64_with_lead(lead)?;
@@ -2451,7 +2440,7 @@ impl Deserializer for JsonDeserializer {
     fn deserialize_u64(&mut self) -> Result<u64, DeserializeError> {
         let lead = self.peek_after_whitespace();
         if lead == b'"' {
-            return self.quoted_number(|t| t.deserialize_u64());
+            return self.quoted_number::<u64>();
         }
         return self.parse_u64_with_lead(lead);
     }
@@ -2459,7 +2448,7 @@ impl Deserializer for JsonDeserializer {
     fn deserialize_i128(&mut self) -> Result<i128, DeserializeError> {
         let lead = self.peek_after_whitespace();
         if lead == b'"' {
-            return self.quoted_number(|t| t.deserialize_i128());
+            return self.quoted_number::<i128>();
         }
         return self.scan_integral::<i128>(lead, "i128");
     }
@@ -2467,7 +2456,7 @@ impl Deserializer for JsonDeserializer {
     fn deserialize_u128(&mut self) -> Result<u128, DeserializeError> {
         let lead = self.peek_after_whitespace();
         if lead == b'"' {
-            return self.quoted_number(|t| t.deserialize_u128());
+            return self.quoted_number::<u128>();
         }
         return self.scan_integral::<u128>(lead, "u128");
     }
