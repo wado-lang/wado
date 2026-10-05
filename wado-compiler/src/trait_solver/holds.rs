@@ -97,12 +97,9 @@ fn bound_answers(
         .args_reaching(bound, trait_, subject)
         .iter()
         .any(|args| {
-            wanted
-                .iter()
-                .enumerate()
-                .all(|(i, want)| {
-                    program.arg_at(trait_, args.get(i), i, subject).as_ref() == Some(want)
-                })
+            wanted.iter().enumerate().all(|(i, want)| {
+                program.arg_at(trait_, args.get(i), i, subject).as_ref() == Some(want)
+            })
         })
 }
 
