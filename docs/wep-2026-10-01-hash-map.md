@@ -36,12 +36,16 @@ default seed that the host supplies once per component instance, and
 pub struct HashSeed { k0: u64, k1: u64 }
 
 impl HashSeed {
-    pub fn random() -> HashSeed with InsecureSeed;
     pub fn fixed(k0: u64, k1: u64) -> HashSeed;
 }
 
+fn host_seed() -> HashSeed with InsecureSeed {
+    let [k0, k1] = InsecureSeed::get_insecure_seed();
+    return HashSeed { k0, k1 };
+}
+
 #[benign(InsecureSeed)]
-global DEFAULT_HASH_SEED: HashSeed = HashSeed::random();
+global DEFAULT_HASH_SEED: HashSeed = host_seed();
 
 impl<K: Hash + Eq, V> HashMap<K, V> {
     pub fn new() -> HashMap<K, V>;                    // under DEFAULT_HASH_SEED
@@ -53,9 +57,10 @@ impl<K: Hash + Eq, V> HashMap<K, V> {
 `core:collections`. Three things read it: `new()`, and the `Default` and
 `Deserialize` impls (below).
 
-`HashSeed::random()` calls `get-insecure-seed`, which the host is not obliged to
-fill with randomness. Its doc comment says so. The interface asks to be called
-only once, and an initializer runs at most once (below). The seed never shows
+The seed comes from `get-insecure-seed`, which the host is not obliged to fill
+with randomness. The interface asks to be called only once. `DEFAULT_HASH_SEED`
+is the only caller, since `HashSeed` has no public way to ask the host, and an
+initializer runs at most once (below). The seed never shows
 through a map: iteration keeps insertion order (below), so the effect is
 unobservable, which is what `#[benign]` asserts.
 
@@ -208,8 +213,9 @@ an all-zero seed.
   optimization level; the fixture that pins an unread global's trapping
   initializer as run is replaced; and the not-yet-implemented note is gone.
 - [ ] `DEFAULT_HASH_SEED`, `new()` under it and `with_seed(seed)` on `HashMap`
-  and `HashSet`. Done when every caller of the old `new(seed)` has moved to
-  `with_seed`.
+  and `HashSet`, and `HashSeed::random()` removed. Done when every caller of the
+  old `new(seed)` has moved to `with_seed`, and every caller of `random()` to
+  `new()`.
 - [ ] `Default`, `Serialize` and `Deserialize` on `HashMap` and `HashSet`. Done
   when a `HashMap<String, V>` round-trips through a JSON object in insertion
   order, and the output holds no seed.
