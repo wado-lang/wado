@@ -769,6 +769,14 @@ ANY : [\\u0000-\\uD7FF\\uE000-\\u{10FFFF}] ;";
     assert got == "ab => A:a ANY:b\n", got;
 }
 
+test "a first-char arm spanning the surrogate block claims every char" {
+    let input = "lexer grammar Test;
+A : 'a' ;
+ANY : [\\u0000-\\u{10FFFF}] ;";
+    let got = lexes(input, ["ab"]);
+    assert got == "ab => A:a ANY:b\n", got;
+}
+
 test "lexer rule caseInsensitive=true enables CI when grammar-level absent" {
     let input = "lexer grammar Test;
 KW options { caseInsensitive = true; } : 'go' ;

@@ -31,7 +31,7 @@ use {
 } from "./superclass.wado";
 use { MemberDecls, members_present } from "./java2wado/jmembers.wado";
 use { action_language_is_emittable } from "./java2wado.wado";
-use { clip_to_scalars, SCALAR_COUNT } from "./g4/unicode.wado";
+use { clip_to_scalars, scalar_count, SCALAR_COUNT } from "./g4/unicode.wado";
 use { is_ident_char } from "./text.wado";
 use {
     ModeAttrUse,
@@ -5289,9 +5289,7 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
         if members.is_empty() {
             continue;
         }
-        for let s of &spans {
-            claimed_scalars += s.end as i32 - s.start as i32 + 1;
-        }
+        claimed_scalars += scalar_count(&spans);
         for let ci of &branch_catch_all_calls(calls, &members) {
             members.push(*ci);
         }
@@ -5327,6 +5325,7 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
 
     return groups;
 }
+
 /// The `try_` candidates one lexer mode dispatches over: parser literals
 /// (default mode only), then that mode's rules. Shared by the moded and the
 /// modeless tokenizer so both dispatch on the first character.
@@ -5491,12 +5490,14 @@ fn second_char_arms(calls: &List<TryCall>, members: &List<i32>) -> List<Dispatch
     points.sort();
     let mut arms: List<DispatchGroup> = [];
     let mut arm_by_calls = GaleMap::<List<i32>, i32>::new();
+    let mut claimed_scalars = 0;
     for let mut i = 0; i + 1 < points.len(); i += 1 {
         let mut spans: List<CharRange> = [];
         clip_to_scalars(&mut spans, points[i], points[i + 1] - 1);
         if spans.is_empty() {
             continue;
         }
+        claimed_scalars += scalar_count(&spans);
         let at = points[i];
         let arm_calls: List<i32> = members.iter_value().filter(|m| second_char_admits(&calls[m], at)).collect();
         let pattern = spans.iter_ref().map(|s| char_pat(s.start, s.end)).collect().join(" | ");
@@ -5508,8 +5509,7 @@ fn second_char_arms(calls: &List<TryCall>, members: &List<i32>) -> List<Dispatch
         }
     }
     let rest: List<i32> = members.iter_value().filter(|m| second_char_admits(&calls[m], -1)).collect();
-    let covers_every_char = !points.is_empty() && points[0] == 0 && points[points.len() - 1] == 0x110000;
-    if covers_every_char && !arms.iter_ref().any(|a| a.calls == rest) {
+    if claimed_scalars == SCALAR_COUNT && !arms.iter_ref().any(|a| a.calls == rest) {
         return arms;
     }
     let mut out: List<DispatchGroup> = arms.into_iter().filter(|a| a.calls != rest).collect();
