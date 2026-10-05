@@ -2393,7 +2393,7 @@ fn check_impl_coherence(
 ) -> Vec<(ModuleSource, TypeError)> {
     use super::solver_bridge::{Lowering, lower_impls};
     use crate::trait_solver::{CoherenceError, ImplId, Program, coherence_errors};
-    let mut lowering = Lowering::default();
+    let mut lowering = Lowering::new();
     let mut program = Program::default();
     let sources = lower_impls(&mut lowering, &mut program, impl_headers, resolutions);
     let header_of = |id: ImplId| -> &ImplHeader { sources[id.0 as usize] };

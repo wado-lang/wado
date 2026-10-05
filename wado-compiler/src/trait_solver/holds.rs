@@ -100,7 +100,9 @@ fn bound_answers(
             wanted
                 .iter()
                 .enumerate()
-                .all(|(i, want)| program.arg_at(trait_, args, i, subject).as_ref() == Some(want))
+                .all(|(i, want)| {
+                    program.arg_at(trait_, args.get(i), i, subject).as_ref() == Some(want)
+                })
         })
 }
 
@@ -856,6 +858,30 @@ mod tests {
         let pair = SolverType::Tuple(vec![decl(I32), decl(POINT)]);
         assert_eq!(ask(&[pair]), Some(Holds::default()));
         assert_eq!(ask(&[SolverType::Tuple(vec![decl(I32)])]), None);
+    }
+
+    /// A pack the bound stops short of absorbs nothing and moves no default:
+    /// `trait Alpha<A = i32, ..P>: Sub<A>` and `T: Alpha` answer `Sub<i32>`.
+    #[test]
+    fn a_pack_past_the_written_arguments_leaves_the_defaults_in_place() {
+        let mut p = Builder::default()
+            .supertrait_args(
+                ALPHA,
+                ParamBound {
+                    trait_: SUB,
+                    args: vec![SolverType::Param(0)],
+                },
+            )
+            .build();
+        let alpha = p.traits.entry(ALPHA).or_default();
+        alpha.arg_defaults = vec![Some(ArgDefault::Type(decl(I32))), None];
+        alpha.pack = Some(1);
+        let bound = env(vec![vec![ALPHA]]);
+        let ask = |args: &[SolverType]| {
+            holds_with_args(&p, &bound, &SolverType::Param(0), SUB, HERE, args)
+        };
+        assert_eq!(ask(&[decl(I32)]), Some(Holds::default()));
+        assert_eq!(ask(&[SolverType::Tuple(Vec::new())]), None);
     }
 
     /// A clause writing no argument says the supertrait's declared defaults, so

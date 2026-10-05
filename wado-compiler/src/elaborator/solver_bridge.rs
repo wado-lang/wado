@@ -120,6 +120,21 @@ fn intern<K: std::hash::Hash + Eq>(map: &mut IndexMap<K, u32>, key: K) -> u32 {
 }
 
 impl Lowering {
+    /// A lowering with the heads every function type lowers under interned:
+    /// an impl header and a resolved type alike name them, and coherence
+    /// lowers headers alone.
+    pub(super) fn new() -> Self {
+        let mut lowering = Self::default();
+        for key in [
+            DeclKey::FnShape { is_mut: false },
+            DeclKey::FnShape { is_mut: true },
+            DeclKey::UndeclaredEffect,
+        ] {
+            intern(&mut lowering.decls, key);
+        }
+        lowering
+    }
+
     fn type_decl(&mut self, def: DefId) -> TypeDeclId {
         TypeDeclId(intern(&mut self.decls, DeclKey::Def(def)))
     }
@@ -170,7 +185,7 @@ impl Lowering {
     ) -> SolverType {
         let head = self
             .known_type(&DeclKey::FnShape { is_mut })
-            .expect("both function heads are interned before a function type lowers");
+            .expect("`Lowering::new` interns both function heads");
         let effects = effects
             .into_iter()
             .map(|e| SolverType::Decl(e, Vec::new()))
@@ -181,10 +196,15 @@ impl Lowering {
 
     /// The head of an effect spelled as [`mangle_effect_ref`] spells it.
     fn effect_spelled(&self, spelling: &str) -> TypeDeclId {
-        self.effects.get(spelling).copied().unwrap_or_else(|| {
-            self.known_type(&DeclKey::UndeclaredEffect)
-                .expect("the undeclared effect head is interned before a function type lowers")
-        })
+        self.effects
+            .get(spelling)
+            .copied()
+            .unwrap_or_else(|| self.undeclared_effect())
+    }
+
+    fn undeclared_effect(&self) -> TypeDeclId {
+        self.known_type(&DeclKey::UndeclaredEffect)
+            .expect("`Lowering::new` interns the undeclared effect head")
     }
 
     fn trait_decl(&mut self, def: DefId) -> TraitDeclId {
@@ -341,9 +361,6 @@ impl Lowering {
                     .chain(std::iter::once(&f.return_type))
                     .map(|ty| self.ast_type(ty, param, resolutions, self_type))
                     .collect::<Option<Vec<_>>>()?;
-                // An impl header lowers before any query, and coherence lowers
-                // headers alone, so the heads are interned here.
-                intern(&mut self.decls, DeclKey::FnShape { is_mut: f.is_mut });
                 let effects: Vec<TypeDeclId> = f
                     .effects
                     .iter()
@@ -351,7 +368,7 @@ impl Lowering {
                         Resolution::Def(def) if resolutions.defs().kind(def).is_effect() => {
                             self.type_decl(def)
                         }
-                        _ => TypeDeclId(intern(&mut self.decls, DeclKey::UndeclaredEffect)),
+                        _ => self.undeclared_effect(),
                     })
                     .collect();
                 Some(self.fn_type(f.is_mut, signature, effects))
@@ -746,7 +763,7 @@ impl SolverBridge {
     ];
 
     pub(crate) fn build(tysys: &TypeSystem, modules: &[ModuleSource]) -> Self {
-        let mut lowering = Lowering::default();
+        let mut lowering = Lowering::new();
         let mut program = Program::default();
         let table = tysys.type_table.borrow();
         lowering.tuple = table.compiler_item_def(CompilerItem::Tuple);
@@ -976,21 +993,12 @@ impl SolverBridge {
         lowering.template_shape();
         // `type_id` spells a resolved type under these heads whether or not an
         // impl header named one.
-        for key in [
-            DeclKey::FnShape { is_mut: false },
-            DeclKey::FnShape { is_mut: true },
-            DeclKey::UndeclaredEffect,
-        ] {
-            intern(&mut lowering.decls, key);
-        }
         for name in [TypeTable::ARRAY_TYPE_NAME, UNIT_TYPE_NAME, NEVER_TYPE_NAME]
             .into_iter()
             .chain(PrimitiveType::all_primitive_names())
         {
             lowering.builtin(name);
         }
-        // A struct or newtype declared in a body has its identity here and its
-        // members only once annotate reaches the body.
         let defs = tysys.resolutions.defs();
         // An interface is a trait to a bound, and one no impl names is still
         // one no type implements.
@@ -1004,6 +1012,8 @@ impl SolverBridge {
                 lowering.effects.insert(mangle_effect_ref(&effect), head);
             }
         }
+        // A struct or newtype declared in a body has its identity here and its
+        // members only once annotate reaches the body.
         for def in defs.iter().filter(|&def| {
             matches!(defs.kind(def), DefKind::Struct | DefKind::Newtype)
                 && defs.is_function_local(def)

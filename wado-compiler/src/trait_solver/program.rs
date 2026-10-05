@@ -453,20 +453,20 @@ impl Program {
     /// The default `def`'s trait declares for its argument at `index`, at
     /// `def`'s target; `None` where it declares none or cannot spell it.
     pub(super) fn default_arg(&self, def: &ImplDef, index: usize) -> Option<SolverType> {
-        self.arg_at(def.trait_?, &[], index, &def.target)
+        self.arg_at(def.trait_?, None, index, &def.target)
     }
 
-    /// `trait_`'s argument at `index` in a bound on `subject` writing `args`:
-    /// the written one, else the declared default there. `None` where neither
+    /// `trait_`'s argument at `index` in a bound on `subject` writing `written`
+    /// there: the written one, else the declared default. `None` where neither
     /// spells one.
     pub(super) fn arg_at(
         &self,
         trait_: TraitDeclId,
-        args: &[SolverType],
+        written: Option<&SolverType>,
         index: usize,
         subject: &SolverType,
     ) -> Option<SolverType> {
-        if let Some(arg) = args.get(index) {
+        if let Some(arg) = written {
             return Some(arg.clone());
         }
         self.traits
@@ -514,10 +514,16 @@ impl Program {
                 reaching.push(next.args.clone());
             }
             if let Some(def) = self.traits.get(&next.trait_) {
+                let args = args_per_param(
+                    &next.args,
+                    def.arg_defaults.len(),
+                    def.pack,
+                    SolverType::Tuple,
+                );
                 stack.extend(
                     def.supertraits
                         .iter()
-                        .filter_map(|clause| self.clause_at(clause, &next, subject)),
+                        .filter_map(|clause| self.clause_at(clause, next.trait_, &args, subject)),
                 );
             }
             seen.push(next);
@@ -525,35 +531,21 @@ impl Program {
         reaching
     }
 
-    /// `bound`'s arguments one per parameter of its trait: the run its pack
-    /// absorbs, every argument past the parameters around it, as one tuple.
-    fn grouped(&self, bound: &ParamBound) -> Vec<SolverType> {
-        let Some(def) = self.traits.get(&bound.trait_) else {
-            return bound.args.clone();
-        };
-        let Some(pack) = def.pack else {
-            return bound.args.clone();
-        };
-        let absorbed = (bound.args.len() + 1).saturating_sub(def.arg_defaults.len());
-        let mut args = bound.args.clone();
-        let at = pack.min(args.len());
-        let run = args.drain(at..(at + absorbed).min(args.len())).collect();
-        args.insert(at, SolverType::Tuple(run));
-        args
-    }
-
-    /// `clause`, written in `sub`'s trait's space, at the arguments a bound on
-    /// `subject` writing `sub` supplies. `None` where the clause names a
+    /// `clause`, written in `sub`'s space, at `args`, what a bound on `subject`
+    /// writes for each of `sub`'s parameters. `None` where the clause names a
     /// parameter that bound neither writes nor defaults: the edge then answers
     /// nothing rather than a guess.
     fn clause_at(
         &self,
         clause: &ParamBound,
-        sub: &ParamBound,
+        sub: TraitDeclId,
+        args: &[Option<SolverType>],
         subject: &SolverType,
     ) -> Option<ParamBound> {
-        let args = self.grouped(sub);
-        let arg = |i: u32| self.arg_at(sub.trait_, &args, i as usize, subject);
+        let arg = |i: u32| {
+            let i = i as usize;
+            self.arg_at(sub, args.get(i).and_then(Option::as_ref), i, subject)
+        };
         Some(ParamBound {
             trait_: clause.trait_,
             args: clause
@@ -563,4 +555,30 @@ impl Program {
                 .collect::<Option<_>>()?,
         })
     }
+}
+
+/// What the `written` arguments of a use say for each of a declaration's
+/// `params` parameters. A pack at `pack` takes the run of every argument past
+/// the parameters around it, made one by `tuple`, and an empty run where the
+/// use stops short of it. `None` at a position nothing is written for, which
+/// its default answers.
+pub fn args_per_param<T: Clone>(
+    written: &[T],
+    params: usize,
+    pack: Option<usize>,
+    tuple: impl FnOnce(Vec<T>) -> T,
+) -> Vec<Option<T>> {
+    let Some(pack) = pack else {
+        return written.iter().cloned().map(Some).collect();
+    };
+    let absorbed = (written.len() + 1).saturating_sub(params);
+    let run = written
+        .get(pack..pack + absorbed)
+        .unwrap_or_default()
+        .to_vec();
+    (0..pack)
+        .map(|i| written.get(i).cloned())
+        .chain(std::iter::once(Some(tuple(run))))
+        .chain((pack + 1..params).map(|i| written.get(i + absorbed - 1).cloned()))
+        .collect()
 }

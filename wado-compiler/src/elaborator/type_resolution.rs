@@ -19,6 +19,7 @@ use crate::elaborator::trait_env::{
 use crate::name::{FqTraitName, FqTypeName, namespace_member_alias};
 use crate::symbol::SymbolKind;
 use crate::tir::TraitRef;
+use crate::trait_solver::args_per_param;
 
 /// What a trait's declared parameters stand for at a frame, by name.
 pub(super) type ParamSpace = Vec<(String, TypeId)>;
@@ -981,22 +982,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Every parameter enters the space, an unanswered one as [`TypeTable::UNKNOWN`]:
     /// it stands for no type here, and leaving it out would let a same-named
     /// declaration at the reading site answer in its place. A pack answers the
-    /// tuple of the arguments it absorbs, every one past the parameters around
-    /// it.
+    /// tuple of the arguments it absorbs.
     fn param_space_of(&mut self, decl: DefId, args: &[TypeId]) -> ParamSpace {
         let params = self.tysys.trait_env.trait_decl_params(decl).to_vec();
-        let mut args = args.to_vec();
-        if let Some(pack) = params.iter().position(|p| p.is_pack) {
-            let absorbed = (args.len() + 1).saturating_sub(params.len());
-            let at = pack.min(args.len());
-            let run = args.drain(at..(at + absorbed).min(args.len())).collect();
-            let tuple = self.tysys.type_table.borrow_mut().make_tuple(run);
-            args.insert(at, tuple);
-        }
+        let args = args_per_param(
+            args,
+            params.len(),
+            params.iter().position(|p| p.is_pack),
+            |run| self.tysys.type_table.borrow_mut().make_tuple(run),
+        );
         let mut space = ParamSpace::new();
         for (index, param) in params.iter().enumerate() {
-            let arg = match (args.get(index), param.default.clone()) {
-                (Some(&arg), _) => arg,
+            let arg = match (args.get(index).copied().flatten(), param.default.clone()) {
+                (Some(arg), _) => arg,
                 (None, Some(default)) => {
                     self.resolve_in_space(&space, std::slice::from_ref(&default))[0]
                 }

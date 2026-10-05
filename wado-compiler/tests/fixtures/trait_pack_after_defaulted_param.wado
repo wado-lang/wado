@@ -1,0 +1,44 @@
+// A pack after a defaulted parameter leaves that parameter at its default
+// when the bound writes nothing.
+//
+// `Top<A = i32, ..P>` written `Top` is `Top<i32>` with an empty pack, so its
+// clause `Sub<A>` is `Sub<i32>`. The impl's supertrait check, the call
+// `need(t)`, and the method `t.sub()` through the bound each ask that. The
+// empty pack once took the first position, and `A` read it as `()`.
+
+trait Sub<X> with () {
+    fn sub(&self) -> i32;
+}
+
+trait Top<A = i32, ..P>: Sub<A> with () {
+    fn top(&self) -> i32;
+}
+
+struct S {}
+
+impl Sub<i32> for S {
+    fn sub(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl Top for S {
+    fn top(&self) -> i32 {
+        return 2;
+    }
+}
+
+fn need<U: Sub<i32>>(u: &U) -> i32 {
+    return u.sub();
+}
+
+fn via<T: Top>(t: &T) -> i32 {
+    return need(t) + t.sub() + t.top();
+}
+
+test "a bound writing no arguments leaves the defaulted parameter at its default" {
+    assert via(&S {}) == 4;
+}
+
+__DATA__
+{"test": {}}
