@@ -21,22 +21,22 @@ one document as different values. This module settles each one as follows.
 ### Numbers
 
 - The target type decides between integer and float, not the token's
-  spelling. An integer type takes `1.0`, `1e2` and `10e-1` when the value is
-  integral and in range; `1.5` is an `UnexpectedType` error, and a value
-  out of the type's range an `Overflow`.
+  spelling.
+- Every integer type reads a number, or a string holding one, by one rule,
+  exactly at any width. `1.0`, `1e2` and `10e-1` read when the value is
+  integral and in range. `1.5` is an `UnexpectedType` error and a value out
+  of the type's range an `Overflow`. `-0` reads as `0`, unsigned or not.
 - A float reads as the decimal rounded once to the nearest value of its
   type, however many digits it spells. `0.000…0001e400` with 400 zeros
   reads as exactly `0.1`.
 - A number that rounds to infinity in its type is an `Overflow` (`1e400` as
   `f64`, `3.5e38` as `f32`). One too small for the type reads as a zero of
-  its sign.
-- `-0` and `-0.0` read as `-0.0` into a float and as `0` into an integer.
+  its sign. `-0` reads as `-0.0`.
 - A `Value` holds every number as `Float`, as JavaScript does, so an
   integer past 2^53 loses precision there. Read into an integer type to
   keep it.
-- The writer refuses `NaN` and infinity. It writes `i64` and `u64` past
-  2^53 - 1, and `i128` and `u128` always, as strings of digits, and every
-  integer reader accepts either form.
+- The writer refuses `NaN` and infinity. The serialization chapter of the
+  specification says which integers it writes as strings.
 
 ### Strings
 
@@ -47,10 +47,14 @@ one document as different values. This module settles each one as follows.
 ### Objects
 
 - A repeated key is a `DuplicateField` error, into a struct, a map and a
-  `Value` alike. Keys compare after unescaping, so `"a"` repeats `"a"`.
+  `Value` alike. Keys compare after unescaping, so `"a\/b"` repeats `"a/b"`.
 - A map and a `Value` keep keys in document order. `to_bytes_canonical`
   writes them sorted.
-- A struct ignores a key it has no field for.
+- A struct ignores a key it has no field for. The value under it is held
+  to the grammar alone, so `1e400` there is no error.
+- A map key is a string, and a numeric key type reads it with its own
+  `from_str`, not by the number rules above: `"inf"`, `"NaN"` and `"1e400"`
+  all read as an `f64` key.
 
 ### Documents
 
@@ -361,8 +365,8 @@ String allocation.
 
 #### `pub fn parse_u64_direct(&mut self) -> Result<u64, DeserializeError>`
 
-Parses a u64 directly from `self.input`; only the rare token with one
-digit more than `FPFMT_DIGITS_MAX` allocates (for an exact re-parse).
+Parses a u64 directly from `self.input`, without an intermediate String
+allocation for a plain integer.
 
 #### `pub fn parse_f64_direct(&mut self) -> Result<f64, DeserializeError>`
 

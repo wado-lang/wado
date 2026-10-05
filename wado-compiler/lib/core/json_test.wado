@@ -600,6 +600,32 @@ test "deserialize unpaired surrogate errors" {
     assert no_pair matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
 }
 
+test "every integer type reads a number by one rule" {
+    // The string form, at every width.
+    assert from_string::<i32>(`"5"`) matches { Ok(5) };
+    assert from_string::<u32>(`"5"`) matches { Ok(5) };
+    // A fraction or an exponent, at every width.
+    assert from_string::<i128>("1e2") matches { Ok(100) };
+    assert from_string::<u128>("2.5e1") matches { Ok(25) };
+    let half: Result<i128, DeserializeError> = from_string("1.5");
+    assert half matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+    // A negative zero is zero, unsigned or not; any other negative is not.
+    assert from_string::<u64>("-0") matches { Ok(0) };
+    assert from_string::<u128>(`"-0.0e5"`) matches { Ok(0) };
+    let neg: Result<u64, DeserializeError> = from_string("-1e0");
+    assert neg matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+    // Exact past 2^53, where a detour through f64 would round.
+    assert from_string::<i64>("1234567890123456789e0") matches { Ok(1234567890123456789) };
+    assert from_string::<i64>(`"1.234567890123456789e18"`) matches { Ok(1234567890123456789) };
+    assert from_string::<u128>("3.40282366920938463463374607431768211455e38") matches { Ok(v) && v == u128::MAX };
+    // An exponent far out of range costs nothing to reject.
+    let huge: Result<i64, DeserializeError> = from_string("1e999999999");
+    assert huge matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+    let tiny: Result<i64, DeserializeError> = from_string("1e-999999999");
+    assert tiny matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+    assert from_string::<i64>("0e999999999") matches { Ok(0) };
+}
+
 test "serialize i128 and u128 as a string whatever the value" {
     assert to_string(&5_i128) matches { Ok(s) && s == `"5"` };
     assert to_string(&5_u128) matches { Ok(s) && s == `"5"` };
