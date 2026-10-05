@@ -19,6 +19,7 @@ use {
     element_count,
     ends_with,
 } from "./tensor.wado";
+use { TreeMap } from "core:collections";
 use {
     Webgpu,
     Gpu,
@@ -69,12 +70,14 @@ pub struct WebGpuBackend {
     device: GpuDevice,
     queue: GpuQueue,
     pipelines: List<Pipeline>,
+    /// Each compiled shader's place in `pipelines`, by its source.
+    compiled: TreeMap<String, i32>,
     cpu: Cpu,
 }
 
-/// A compiled shader, by its source.
+/// A compiled shader. A struct, so `pipelines` lends one by reference, which
+/// it cannot do for a resource held bare.
 struct Pipeline {
-    shader: String,
     compiled: GpuComputePipeline,
 }
 
@@ -101,7 +104,7 @@ impl WebGpuBackend {
             return null;
         };
         let queue = device.queue();
-        return Option::Some(WebGpuBackend { device, queue, pipelines: [], cpu: Cpu {} });
+        return Option::Some(WebGpuBackend { device, queue, pipelines: [], compiled: TreeMap::new(), cpu: Cpu {} });
     }
 
     fn host<E: Element, Axes>(
@@ -160,7 +163,9 @@ impl WebGpuBackend {
     ) -> GpuBuffer with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         assert bytes.len() % 4 == 0;
         let buffer = self.storage(bytes.len() / 4);
-        let _ = self.queue.write_buffer_with_copy(&buffer, 0, bytes, null, null);
+        let Ok(_) = self.queue.write_buffer_with_copy(&buffer, 0, bytes, null, null) else {
+            panic("loam: a host tensor did not write to the device");
+        };
         return buffer;
     }
 
@@ -188,6 +193,31 @@ impl WebGpuBackend {
         };
     }
 
+    /// `shader` compiled, at the place in `pipelines` it is kept.
+    fn compile(
+        &mut self,
+        shader: &String,
+    ) -> i32 with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        let module = self.device.create_shader_module(GpuShaderModuleDescriptor {
+            code: *shader,
+            compilation_hints: null,
+            label: null,
+        });
+        let pipeline = self.device.create_compute_pipeline(GpuComputePipelineDescriptor {
+            compute: GpuProgrammableStage {
+                module: &module,
+                entry_point: Option::Some("main"),
+                constants: null,
+            },
+            layout: GpuLayoutMode::Auto,
+            label: null,
+        });
+        let at = self.pipelines.len();
+        self.pipelines.push(Pipeline { compiled: pipeline });
+        self.compiled[*shader] = at;
+        return at;
+    }
+
     /// Run `shader` over `operands` into a new buffer of `count` elements, with
     /// `params` bound last, in `groups` workgroups along each dimension.
     fn dispatch(
@@ -203,31 +233,10 @@ impl WebGpuBackend {
             return out;
         }
         let params_buffer = self.written(word_bytes(&params));
-        let mut found = -1;
-        for let [i, p] of (&self.pipelines).into_iter().enumerate() {
-            if p.shader == *shader {
-                found = i;
-                break;
-            }
-        }
-        if found < 0 {
-            let module = self.device.create_shader_module(GpuShaderModuleDescriptor {
-                code: *shader,
-                compilation_hints: null,
-                label: null,
-            });
-            let pipeline = self.device.create_compute_pipeline(GpuComputePipelineDescriptor {
-                compute: GpuProgrammableStage {
-                    module: &module,
-                    entry_point: Option::Some("main"),
-                    constants: null,
-                },
-                layout: GpuLayoutMode::Auto,
-                label: null,
-            });
-            found = self.pipelines.len();
-            self.pipelines.push(Pipeline { shader: *shader, compiled: pipeline });
-        }
+        let found = match self.compiled.get(*shader) {
+            Some(at) => at,
+            None => self.compile(shader),
+        };
         let pipeline = &self.pipelines[found].compiled;
         let mut buffers = operands;
         buffers.push(&out);
@@ -247,7 +256,9 @@ impl WebGpuBackend {
             label: null,
         }));
         pass.set_pipeline(pipeline);
-        let _ = pass.set_bind_group(0, Option::Some(&group), null, null, null);
+        let Ok(_) = pass.set_bind_group(0, Option::Some(&group), null, null, null) else {
+            panic("loam: a kernel's buffers did not bind");
+        };
         let [x, y, z] = groups;
         pass.dispatch_workgroups(
             x as u32 as GpuSize32,
@@ -285,7 +296,8 @@ impl WebGpuBackend {
             },
             None => [a_buffer, a_len],
         };
-        let groups = covering(count, LANES);
+        // `dispatch` runs nothing over no elements, but `y` divides by `x`.
+        let groups = covering(i32::max(count, 1), LANES);
         let x = i32::min(groups, MAX_GROUPS);
         let y = covering(groups, x);
         let params: List<u32> = [count as u32, a_len as u32, b_len as u32, (x * LANES) as u32];
@@ -458,9 +470,19 @@ fn erf_(v: f32) -> f32 {
     return sign(v) * (1.0 - poly * exp(-x * x));
 }
 
-// WGSL's pow is undefined below zero, where ONNX's takes an integral exponent.
+// WGSL's pow is undefined below zero, where ONNX's takes an integral exponent,
+// and at zero to a power not above zero, where ONNX's is 1 or infinite.
 fn pow_(x: f32, y: f32) -> f32 {
-    if x >= 0.0 || y != floor(y) {
+    if y == 0.0 {
+        return 1.0;
+    }
+    if x == 0.0 {
+        if y < 0.0 {
+            return bitcast<f32>(0x7f800000u);
+        }
+        return 0.0;
+    }
+    if x > 0.0 || y != floor(y) {
         return pow(x, y);
     }
     let magnitude = pow(-x, y);

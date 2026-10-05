@@ -1,9 +1,10 @@
 # Every path the WebGPU backend takes: both products, each broadcast its
 # elementwise shader reads, every unary operator, a folded constant, a negative
-# base to an odd and an even power, a kernel left to the CPU whose result a
-# shader then uploads, and a count past one dispatch row.
+# base to an odd and an even power, zero to the powers 0 and -1, a kernel left
+# to the CPU whose result a shader then uploads, a count past one dispatch row,
+# and no elements at all.
 <ir_version: 8, opset_import: [ "" : 13 ]>
-kernels (float[B, M, 50] X, float[B, 50, 29] Y, float[L] V) => (float[B, M, 29] Z, float[B, 29, M] S, float[L] R)
+kernels (float[B, M, 50] X, float[B, 50, 29] Y, float[L] V, float[E] N) => (float[B, M, 29] Z, float[B, 29, M] S, float[L] R, float[B, M, 29] O, float[E] G)
 <float[50, 29] W, float[29] C>
 {
     P = MatMul(X, Y)
@@ -40,4 +41,11 @@ kernels (float[B, M, 50] X, float[B, 50, 29] Y, float[L] V) => (float[B, M, 29] 
     M2 = Transpose<perm = [0, 2, 1]>(M1)
     S = Add(M2, M2)
     R = Relu(V)
+    Zero = Constant<value = float {0.0}>()
+    A0 = Mul(A, Zero)
+    O0 = Pow(A0, Zero)
+    MinusOne = Constant<value = float {-1.0}>()
+    O1 = Pow(A0, MinusOne)
+    O = Add(O0, O1)
+    G = Add(N, One)
 }

@@ -361,12 +361,7 @@ global VISIBILITY_PREFIXES: List<String> = ["pub ", "internal "];
 fn declared_in(source: &String) -> List<String> {
     let mut names: List<String> = [];
     for let line of joined_uses(source) {
-        let mut declaration = line.as_str_slice();
-        for let prefix of VISIBILITY_PREFIXES {
-            if let Some(rest) = declaration.strip_prefix(prefix) {
-                declaration = rest;
-            }
-        }
+        let declaration = unqualified(line.as_str_slice());
         if let Some(clause) = declaration.strip_prefix("use ") {
             names.extend(&imported_names(&clause.to_string()));
             continue;
@@ -393,9 +388,20 @@ test "a use line binds its names, whatever its visibility" {
     assert declared_in(&source) == ["ns", "A", "C", "D"] as List<String>;
 }
 
+/// `line` without the visibility it opens with.
+fn unqualified(line: StrSlice) -> StrSlice {
+    let mut rest = line;
+    for let prefix of VISIBILITY_PREFIXES {
+        if let Some(after) = rest.strip_prefix(prefix) {
+            rest = after;
+        }
+    }
+    return rest;
+}
+
 test "a use the formatter wrapped binds its names as one line does" {
-    let source = "use {\n    A,\n    B as C,\n} from \"b\";\nfn f() {}\n";
-    assert declared_in(&source) == ["A", "C", "f"] as List<String>;
+    let source = "use {\n    A,\n    B as C,\n} from \"b\";\npub use {\n    D,\n} from \"c\";\nfn f() {}\n";
+    assert declared_in(&source) == ["A", "C", "D", "f"] as List<String>;
 }
 
 /// The lines of `source`, each `use` the formatter wrapped joined into one.
@@ -410,7 +416,7 @@ fn joined_uses(source: &String) -> List<String> {
                 lines.push(open);
                 open = "";
             }
-        } else if line.starts_with("use ") && !line.ends_with(";") {
+        } else if unqualified(line.as_str_slice()).starts_with("use ") && !line.ends_with(";") {
             open = line.to_string();
         } else {
             lines.push(line.to_string());

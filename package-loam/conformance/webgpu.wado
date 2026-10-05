@@ -20,7 +20,8 @@ use {
     GpuComputePipeline,
     GpuComputePassEncoder,
 } from "wasi:webgpu";
-use { Cpu, Tensor, WebGpuBackend, Weights, forward } from "./webgpu.onnxtext"
+use { deviation, noise } from "../example/webgpu/compare.wado";
+use { Cpu, Tensor, WebGpuBackend, Weights, element_count, forward } from "./webgpu.onnxtext"
     with {
         generator: {
             module: "../src/generator.wado",
@@ -58,6 +59,18 @@ use { Cpu, Tensor, WebGpuBackend, Weights, forward } from "./webgpu.onnxtext"
                         pattern: "R",
                         axes: ["Long"],
                     },
+                    {
+                        pattern: "O",
+                        axes: ["Batch", "Row", "Col"],
+                    },
+                    {
+                        pattern: "N",
+                        axes: ["Vacant"],
+                    },
+                    {
+                        pattern: "G",
+                        axes: ["Vacant"],
+                    },
                 ],
                 webgpu: true,
             },
@@ -67,34 +80,8 @@ use { Cpu, Tensor, WebGpuBackend, Weights, forward } from "./webgpu.onnxtext"
 /// More elements than one row of workgroups holds, 65535 of 64 each.
 global LONG: i32 = 4_200_000;
 
-/// `count` values in [-scale, scale), the same on every run.
-fn noise(count: i32, seed: u32, scale: f32) -> List<f32> {
-    let mut state = seed;
-    let mut values = List::<f32>::with_capacity(count);
-    for let _ of 0..<count {
-        state = state * 1664525 + 1013904223;
-        values.push(((state >> 8) as f32 / 16777216.0 * 2.0 - 1.0) * scale);
-    }
-    return values;
-}
-
 fn tensor<Axes>(extents: List<i32>, seed: u32) -> Tensor<f32, Axes> {
-    let mut count = 1;
-    for let e of extents {
-        count *= e;
-    }
-    return Tensor { data: noise(count, seed, 1.0), extents };
-}
-
-/// The largest difference between `a` and `b` relative to `b`'s magnitude,
-/// taken as at least 1.
-fn deviation(a: &List<f32>, b: &List<f32>) -> f32 {
-    assert a.len() == b.len();
-    let mut worst: f32 = 0.0;
-    for let i of 0..<a.len() {
-        worst = f32::max(worst, f32::abs(a[i] - b[i]) / f32::max(1.0, f32::abs(b[i])));
-    }
-    return worst;
+    return Tensor { data: noise(element_count(&extents), seed, 1.0), extents };
 }
 
 export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
@@ -106,13 +93,16 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     let x = tensor([3, 37, 50], 1);
     let y = tensor([3, 50, 29], 2);
     let v = tensor([LONG], 3);
+    let n = tensor([0], 6);
     let w = Weights {
         W: tensor([50, 29], 4),
         C: tensor([29], 5),
     };
-    let on_cpu = forward(&mut Cpu {}, &x, &y, &v, &w);
-    let on_gpu = forward(&mut gpu, &x, &y, &v, &w);
+    let on_cpu = forward(&mut Cpu {}, &x, &y, &v, &n, &w);
+    let on_gpu = forward(&mut gpu, &x, &y, &v, &n, &w);
     println(`Z ${on_gpu.Z.extents:?} ${deviation(&on_gpu.Z.data, &on_cpu.Z.data)}`);
     println(`S ${on_gpu.S.extents:?} ${deviation(&on_gpu.S.data, &on_cpu.S.data)}`);
     println(`R ${on_gpu.R.extents:?} ${deviation(&on_gpu.R.data, &on_cpu.R.data)}`);
+    println(`O ${on_gpu.O.extents:?} ${deviation(&on_gpu.O.data, &on_cpu.O.data)}`);
+    println(`G ${on_gpu.G.extents:?} ${deviation(&on_gpu.G.data, &on_cpu.G.data)}`);
 }

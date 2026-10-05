@@ -66,11 +66,20 @@ test "an expression reads its operands and folds its constants in order" {
     // relu(x - 2) * y, and a constant on the left of a non-commuting operator.
     let shifted = operand(0).binary(BinaryOp::Sub, &constant(2.0)).unary(UnaryOp::Relu);
     let e = shifted.binary(BinaryOp::Mul, &operand(1));
-    assert e.over(&[5.0, 1.0], &[4.0, 4.0]) == [12.0, 0.0] as List<f32>;
-    assert constant(1.0).binary(BinaryOp::Div, &operand(0)).over(&[4.0, 2.0], &[0.0]) == [0.25, 0.5] as List<f32>;
+    assert e.over(2, &[5.0, 1.0], &[4.0, 4.0]) == [12.0, 0.0] as List<f32>;
+    assert constant(1.0).binary(BinaryOp::Div, &operand(0)).over(2, &[4.0, 2.0], &[0.0]) == [0.25, 0.5] as List<f32>;
     // One element stands for every element, and a constant alone fills them.
-    assert e.over(&[5.0, 3.0], &[2.0]) == [6.0, 2.0] as List<f32>;
-    assert constant(7.0).over(&[1.0, 2.0, 3.0], &[0.0]) == [7.0, 7.0, 7.0] as List<f32>;
+    assert e.over(2, &[5.0, 3.0], &[2.0]) == [6.0, 2.0] as List<f32>;
+    assert constant(7.0).over(3, &[1.0, 2.0, 3.0], &[0.0]) == [7.0, 7.0, 7.0] as List<f32>;
+}
+
+test "an expression over no elements gives none, whatever its constants" {
+    let mut cpu = Cpu {};
+    let empty = cpu.upload(&tensor::<[Row]>([0], []));
+    let shifted = operand(0).binary(BinaryOp::Add, &constant(1.0));
+    assert cpu.download(&cpu.map(&empty, &shifted)).data.is_empty();
+    let filled = constant(2.0).binary(BinaryOp::Mul, &constant(3.0));
+    assert cpu.download(&cpu.zip(&empty, &empty, &filled)).data.is_empty();
 }
 
 test "the CPU backend runs a kernel over an expression" {

@@ -21,7 +21,8 @@ use {
     GpuComputePipeline,
     GpuComputePassEncoder,
 } from "wasi:webgpu";
-use { Batch, Cpu, In, Tensor, WebGpuBackend, Weights, forward } from "./mlp.onnxtext"
+use { deviation, noise } from "./compare.wado";
+use { Batch, Cpu, In, Tensor, WebGpuBackend, Weights, element_count, forward } from "./mlp.onnxtext"
     with {
         generator: {
             module: "../../src/generator.wado",
@@ -63,23 +64,8 @@ use { Batch, Cpu, In, Tensor, WebGpuBackend, Weights, forward } from "./mlp.onnx
 
 global BATCH: i32 = 256;
 
-/// `count` values in [-scale, scale), the same on every run.
-fn noise(count: i32, seed: u32, scale: f32) -> List<f32> {
-    let mut state = seed;
-    let mut values = List::<f32>::with_capacity(count);
-    for let _ of 0..<count {
-        state = state * 1664525 + 1013904223;
-        values.push(((state >> 8) as f32 / 16777216.0 * 2.0 - 1.0) * scale);
-    }
-    return values;
-}
-
 fn tensor<Axes>(extents: List<i32>, seed: u32, scale: f32) -> Tensor<f32, Axes> {
-    let mut count = 1;
-    for let e of extents {
-        count *= e;
-    }
-    return Tensor { data: noise(count, seed, scale), extents };
+    return Tensor { data: noise(element_count(&extents), seed, scale), extents };
 }
 
 fn weights() -> Weights {
@@ -91,17 +77,6 @@ fn weights() -> Weights {
         W3: tensor([2048, 512], 5, 0.05),
         B3: tensor([512], 6, 0.1),
     };
-}
-
-/// The largest difference between `a` and `b` relative to `b`'s magnitude,
-/// taken as at least 1.
-fn deviation(a: &List<f32>, b: &List<f32>) -> f32 {
-    assert a.len() == b.len();
-    let mut worst: f32 = 0.0;
-    for let i of 0..<a.len() {
-        worst = f32::max(worst, f32::abs(a[i] - b[i]) / f32::max(1.0, f32::abs(b[i])));
-    }
-    return worst;
 }
 
 fn millis(elapsed: u64) -> u64 {

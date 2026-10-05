@@ -1,0 +1,33 @@
+//! What a program comparing two backends' outputs shares: inputs the same on
+//! every run, and how far one output sits from the other.
+
+/// `count` values in [-scale, scale), the same on every run.
+pub fn noise(count: i32, seed: u32, scale: f32) -> List<f32> {
+    let mut state = seed;
+    let mut values = List::<f32>::with_capacity(count);
+    for let _ of 0..<count {
+        state = state * 1664525 + 1013904223;
+        values.push(((state >> 8) as f32 / 16777216.0 * 2.0 - 1.0) * scale);
+    }
+    return values;
+}
+
+/// The largest difference between `a` and `b` relative to `b`'s magnitude,
+/// taken as at least 1. Two equal elements differ by nothing, an infinity
+/// included.
+pub fn deviation(a: &List<f32>, b: &List<f32>) -> f32 {
+    assert a.len() == b.len();
+    let mut worst: f32 = 0.0;
+    for let i of 0..<a.len() {
+        if a[i] != b[i] {
+            worst = f32::max(worst, f32::abs(a[i] - b[i]) / f32::max(1.0, f32::abs(b[i])));
+        }
+    }
+    return worst;
+}
+
+test "equal outputs deviate by nothing, an infinity among them" {
+    let inf = f32::INFINITY;
+    assert deviation(&[1.0, inf], &[1.0, inf]) == 0.0;
+    assert deviation(&[3.0, 0.5], &[2.0, 0.25]) == 0.5;
+}

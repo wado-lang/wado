@@ -994,11 +994,14 @@ impl Expr {
         return Expr { steps };
     }
 
-    /// The output over whole operands: `x` the first's elements, `y` the
-    /// second's. Each holds as many elements as the output or one, which every
-    /// output element reads.
-    pub fn over(&self, x: &List<f32>, y: &List<f32>) -> List<f32> {
-        let count = i32::max(x.len(), y.len());
+    /// The output's `count` elements over whole operands: `x` the first's
+    /// elements, `y` the second's. Each holds `count` elements or one, which
+    /// every output element reads.
+    pub fn over(&self, count: i32, x: &List<f32>, y: &List<f32>) -> List<f32> {
+        assert (x.len() == count || x.len() == 1) && (y.len() == count || y.len() == 1);
+        if count == 0 {
+            return [];
+        }
         let mut values: List<List<f32>> = [];
         for let step of self.steps {
             values.push(match step {
@@ -1081,7 +1084,7 @@ fn pairwise(a: &List<f32>, b: &List<f32>, f: fn(f32, f32) -> f32) -> List<f32> {
 
 /// `op` over `a` and `b`, both already of the output's extents.
 fn elementwise<Axes>(a: &Tensor<f32, Axes>, b: &Tensor<f32, Axes>, op: &Expr) -> Tensor<f32, Axes> {
-    return Tensor { data: op.over(&a.data, &b.data), extents: a.extents };
+    return Tensor { data: op.over(a.data.len(), &a.data, &b.data), extents: a.extents };
 }
 
 /// Where the kernels run. `forward` is instantiated at each backend, and the
@@ -1244,7 +1247,7 @@ impl Backend for Cpu {
     }
 
     fn map<Axes>(&mut self, t: &Tensor<f32, Axes>, op: &Expr) -> Tensor<f32, Axes> {
-        return Tensor { data: op.over(&t.data, &[0.0]), extents: t.extents };
+        return Tensor { data: op.over(t.data.len(), &t.data, &[0.0]), extents: t.extents };
     }
 
     fn cast<A: Element, B: Element, Axes>(&mut self, t: &Tensor<A, Axes>) -> Tensor<B, Axes> {
