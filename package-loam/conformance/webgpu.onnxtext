@@ -2,10 +2,11 @@
 # elementwise shader reads, every unary operator, a folded constant, a negative
 # base to an odd and an even power, zero to the powers 0 and -1, a kernel left
 # to the CPU whose result a shader then uploads, a count past one dispatch row,
-# and no elements at all.
+# no elements at all, and products over more batch elements than one dispatch
+# dimension holds.
 <ir_version: 8, opset_import: [ "" : 13 ]>
-kernels (float[B, M, 50] X, float[B, 50, 29] Y, float[L] V, float[E] N) => (float[B, M, 29] Z, float[B, 29, M] S, float[L] R, float[B, M, 29] O, float[E] G)
-<float[50, 29] W, float[29] C>
+kernels (float[B, M, 50] X, float[B, 50, 29] Y, float[L] V, float[E] N, float[H, 1, 2] BX, float[H, 2, 1] BY) => (float[B, M, 29] Z, float[B, 29, M] S, float[L] R, float[B, M, 29] O, float[E] G, float[H, 1, 1] BZ, float[H, 1, 1] BS)
+<float[50, 29] W, float[29] C, float[2, 1] BW>
 {
     P = MatMul(X, Y)
     Q = MatMul(X, W)
@@ -48,4 +49,6 @@ kernels (float[B, M, 50] X, float[B, 50, 29] Y, float[L] V, float[E] N) => (floa
     O1 = Pow(A0, MinusOne)
     O = Add(O0, O1)
     G = Add(N, One)
+    BZ = MatMul(BX, BY)
+    BS = MatMul(BX, BW)
 }

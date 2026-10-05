@@ -355,6 +355,12 @@ fn placed_count<E, Axes>(t: &Placed<E, Axes>) -> i32 {
     return element_count(&placed_extents(t));
 }
 
+/// Whether one dispatch holds a product's tiles: a workgroup per tile of each
+/// batch element, the batch along the third dimension.
+fn tiles_fit(batch: i32, rows: i32, cols: i32) -> bool {
+    return batch <= MAX_GROUPS && covering(rows, TILE) <= MAX_GROUPS && covering(cols, TILE) <= MAX_GROUPS;
+}
+
 /// How many runs of `size` cover `count`.
 fn covering(count: i32, size: i32) -> i32 {
     return (count + size - 1) / size;
@@ -645,10 +651,10 @@ impl Backend for WebGpuBackend {
         let be = placed_extents(b);
         let rank = ae.len();
         let batch = ae[0..<rank - 2].to_list();
-        if batch != be[0..<rank - 2].to_list() {
+        let [rows, inner, cols] = [ae[rank - 2], ae[rank - 1], be[rank - 1]];
+        if batch != be[0..<rank - 2].to_list() || !tiles_fit(element_count(&batch), rows, cols) {
             return Placed::Host(self.cpu.matmul(&self.host(a), &self.host(b)));
         }
-        let [rows, inner, cols] = [ae[rank - 2], ae[rank - 1], be[rank - 1]];
         let mut extents = batch;
         extents.push(rows);
         extents.push(cols);
@@ -665,6 +671,9 @@ impl Backend for WebGpuBackend {
         let rank = ae.len();
         let batch = ae[0..<rank - 2].to_list();
         let [rows, inner, cols] = [ae[rank - 2], ae[rank - 1], be[1]];
+        if !tiles_fit(element_count(&batch), rows, cols) {
+            return Placed::Host(self.cpu.matmul_shared(&self.host(a), &self.host(b)));
+        }
         let mut extents = batch;
         extents.push(rows);
         extents.push(cols);

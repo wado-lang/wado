@@ -14,7 +14,8 @@ pub fn noise(count: i32, seed: u32, scale: f32) -> List<f32> {
 
 /// The largest difference between `a` and `b` relative to `b`'s magnitude,
 /// taken as at least 1. Two equal elements differ by nothing, an infinity
-/// included.
+/// included, and two NaNs are equal as `==` reads them. A NaN on one side
+/// only makes the deviation NaN, above every tolerance.
 pub fn deviation(a: &List<f32>, b: &List<f32>) -> f32 {
     assert a.len() == b.len();
     let mut worst: f32 = 0.0;
@@ -26,8 +27,13 @@ pub fn deviation(a: &List<f32>, b: &List<f32>) -> f32 {
     return worst;
 }
 
-test "equal outputs deviate by nothing, an infinity among them" {
-    let inf = f32::INFINITY;
-    assert deviation(&[1.0, inf], &[1.0, inf]) == 0.0;
+test "equal outputs deviate by nothing, an infinity or a NaN among them" {
+    let [inf, nan] = [f32::INFINITY, f32::NAN];
+    assert deviation(&[1.0, inf, nan], &[1.0, inf, nan]) == 0.0;
     assert deviation(&[3.0, 0.5], &[2.0, 0.25]) == 0.5;
+}
+
+test "a NaN on one side only deviates past every tolerance" {
+    assert deviation(&[f32::NAN, 1.0], &[1.0, 1.0]).is_nan();
+    assert deviation(&[1.0, 1.0], &[1.0, f32::NAN]).is_nan();
 }
