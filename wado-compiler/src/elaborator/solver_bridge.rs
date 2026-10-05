@@ -12,7 +12,7 @@ use crate::tir::{AnonStructId, ResolvedType, TypeId, TypeTable};
 use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
     ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, Selection, SolverType,
-    TraitDeclId, TypeDeclId, TypeDef, bound_candidates, candidates, comparison_row, derive,
+    TraitDeclId, TypeDeclId, TypeDef, applies, bound_candidates, candidates, comparison_row, derive,
     holds_with_args, owed, pair_comparisons, rank,
 };
 
@@ -71,6 +71,9 @@ pub(super) struct Lowering {
     /// the blanket its body comes from; a primitive's impl, or a body the
     /// compiler supplies with no blanket, is written by no block and is absent.
     impl_defs: IndexMap<ImplId, DefId>,
+    /// The impl each written block lowered to: [`Self::impl_defs`] the other
+    /// way, for a written block alone.
+    written_impls: IndexMap<DefId, ImplId>,
     /// The `Reflect*`-bounded blanket a derived body comes from, by the trait
     /// and the reflection kind it bounds on. Lookup collects that block for a
     /// derived body, so a `Derived` impl is named to it.
@@ -539,6 +542,7 @@ pub(super) fn lower_impls<'a>(
             },
         });
         lowering.impl_defs.insert(id, def);
+        lowering.written_impls.insert(def, id);
         if let Some(implemented) = implemented {
             let own = header
                 .methods
@@ -1793,6 +1797,23 @@ impl SolverBridge {
             self.impl_def_of(impl_)
                 .expect("a written impl names its block"),
         ))
+    }
+
+    /// Whether `block` applies at `instance`, its bounds included: what a
+    /// generic body's instance selects by, every parameter settled. `None`
+    /// where the lowering states nothing about either.
+    pub(crate) fn block_applies(
+        &self,
+        table: &TypeTable,
+        block: DefId,
+        instance: TypeId,
+    ) -> Option<bool> {
+        let impl_ = *self.lowering.written_impls.get(&block)?;
+        let ty = self
+            .lowering
+            .type_id(table, instance, &|_, index| Some(index))?;
+        let scope = self.lowering.known_module(table.def_module(block))?;
+        Some(applies(&self.program, &Env::default(), scope, impl_, &ty))
     }
 
     /// The impl block a candidate names: the one it was lowered from, or for a
