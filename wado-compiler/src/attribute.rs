@@ -327,7 +327,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
     },
     AttributeSchema {
         name: BENIGN,
-        targets: FUNCTION_TARGET,
+        targets: &[AttrTarget::Function, AttrTarget::Global],
         args: AttrArgs::Words,
         summary: "effects a caller need not declare onward",
         stdlib_only: false,

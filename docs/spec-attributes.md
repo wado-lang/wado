@@ -56,7 +56,25 @@ fn fresh() -> HashIndex {   // declares no effect, and needs none
 }
 ```
 
-> Not yet implemented: `#[benign]` on a global.
+On a global, the listed effects are admitted in its initializer:
+
+<!-- {"fixture":"global_benign_initializer.wado"} -->
+
+```wado
+use { println, Stdout } from "core:cli";
+
+fn announce() -> i32 with Stdout {
+    println("initialized");
+    return 7;
+}
+
+#[benign(Stdout)]
+global SEVEN: i32 = announce();
+
+test {
+    assert SEVEN == 7;
+}
+```
 
 Rationale: [WEP: Effect System and Randomness in Collections](./wep-2026-01-20-effect-system-randomness.md) and [WEP: HashMap](./wep-2026-10-01-hash-map.md).
 
