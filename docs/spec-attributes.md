@@ -634,7 +634,8 @@ pub fn i32_load(addr: i32) -> i32;
 The signature states facts of its own, so no identifier lists them:
 
 - A `&mut` parameter is written through, and the write may reach everything the
-  referent reaches, as far as the `Array<T>` rule below allows.
+  referent reaches, as far as the `Array<T>` rule below and an `outside` range
+  (see [Trap Conditions](#trap-conditions)) allow.
 - A declaration returning `!` never returns: every call ends in a trap. That is
   not `trap`, which says a call that returns may instead trap.
 - An `Array<T>` parameter, by value or by reference, is reached as the array:

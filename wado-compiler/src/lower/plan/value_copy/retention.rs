@@ -47,8 +47,9 @@ struct RetentionFacts {
     into_param: IndexMap<u32, IndexSet<u32>>,
     /// Positions whose claim is on what the referent's elements hold rather
     /// than on the reference itself: a reference parameter of `holds_args`,
-    /// `copies_args` or `stores_args`. An array of plain data hands on nothing, so the claim is gated on the argument's type at each
-    /// call. Only a declaration states one; a body walk never does.
+    /// `copies_args` or `stores_args`. An array of plain data hands on nothing,
+    /// so the claim is gated on the argument's type at each call. Only a
+    /// declaration states one; a body walk never does.
     elements: IndexSet<u32>,
 }
 
@@ -139,8 +140,8 @@ impl RetentionFacts {
 /// reference to the same parameter — so the two are not disjoint, and what the
 /// value carries altogether is their union.
 ///
-/// The split is what an element claim reads: one through a reference asks what the
-/// referent's elements hold, which is `holds` and never `is`.
+/// The split is what an element claim reads: one through a reference asks what
+/// the referent's elements hold, which is `holds` and never `is`.
 #[derive(Clone, Default)]
 struct Carried {
     is: IndexSet<u32>,
@@ -1400,9 +1401,10 @@ impl StoresWalker<'_> {
     }
 
     /// What the argument at `position` hands the callee. A position claimed
-    /// through a reference asks after the referent's elements, so it reads what the
-    /// argument holds and never what it is: a reference to a container is a
-    /// carrier by pointing at the container, not by anything the container keeps.
+    /// through a reference asks after the referent's elements, so it reads what
+    /// the argument holds and never what it is: a reference to a container is
+    /// a carrier by pointing at the container, not by anything the container
+    /// keeps.
     fn claimed(&self, position: u32, arg: &TirExpr, facts: &RetentionFacts) -> IndexSet<u32> {
         let carried = self.carried(arg);
         if facts.elements.contains(&position) {
