@@ -107,8 +107,8 @@ program that reaches none of its readers imports nothing for it.
 Gale's `GaleMap` and `GaleSet` are newtypes over `HashMap` and `HashSet` under a
 fixed seed. They exist because `HashMap::new` used to require a seed: the
 newtypes gave Gale a seedless `new()`, and `Default`, `Serialize` and
-`Deserialize`. All four now come with `HashMap` itself, so Gale uses `HashMap` and `HashSet` and the newtypes are
-deleted.
+`Deserialize`. All four now come with `HashMap` itself, so Gale uses `HashMap`
+and `HashSet` and the newtypes are deleted.
 
 ### Iteration keeps insertion order
 
@@ -174,7 +174,8 @@ insertion order. `Default` and `Deserialize` build the map under
 None of them may be derived. Bound-driven derivation reaches private fields
 across modules, so a derived `Serialize` would write the seed out, and a leaked
 seed disables the defence. A derived `Deserialize` would read the seed from the
-input, which is the attacker's to choose.
+input, which is the attacker's to choose. A derived `Default` would hash under
+an all-zero seed.
 
 ## Roadmap
 
