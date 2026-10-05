@@ -623,13 +623,6 @@ accepted, and so is `impl<T> Tr for Wrap<T>`. A value of `Wrap<X>` is still
 checked where `X` is concrete, so nothing is miscompiled; the generic
 declaration that names `Wrap<O>` is not.
 
-A projection a trait method's signature writes is skipped the same way:
-`fn hold<T>(&self) -> Self::Buf<T>` under `type Buf<E: Elem>` is accepted. A
-caller may then reach a member the family does not admit, and the error surfaces
-where an impl's body is instantiated at it, far from the declaration
-(`error_generic_assoc_type_trait_method_rigid_arg_todo.wado`). A function's
-signature and a struct's field are checked.
-
 ### Every effect binder is one effect
 
 A function type carries its effects to the solver as their declarations. An

@@ -9,6 +9,7 @@ use crate::module_source::ModuleSource;
 use crate::tir::{TraitRef, TypeId};
 use crate::token::Span;
 
+use super::super::scope::TraitContext;
 use super::super::sig::{DeclSig, MethodSig};
 use super::super::types::{DataDecls, StructFieldInfo};
 use crate::defs::DefId;
@@ -38,6 +39,19 @@ pub(crate) struct FunctionSig {
     /// Declared `with` effects, resolved in the declaring perspective
     /// (effect parameters stay symbolic as `EffectRef::Param`).
     pub(crate) effects: Vec<EffectRef>,
+}
+
+/// An argument owing `refs` on behalf of `param_name`, held until the solver
+/// can answer them.
+#[derive(Clone)]
+pub(in crate::elaborator) struct PendingTraitRefs {
+    pub(in crate::elaborator) type_arg: TypeId,
+    pub(in crate::elaborator) refs: Vec<TraitRef>,
+    pub(in crate::elaborator) param_name: String,
+    pub(in crate::elaborator) span: Span,
+    /// What places the type parameters `type_arg` and `refs` name: the
+    /// declaration's frame, gone once the decl pass leaves it.
+    pub(in crate::elaborator) frame: TraitContext,
 }
 
 /// Per-module declaration tables produced by elaboration.
@@ -126,9 +140,9 @@ pub(crate) struct ModuleDecls {
     /// answers their bounds was built: `(declaration, type arguments, span)`.
     pub(crate) pending_decl_arg_bounds: Vec<(DefId, Vec<TypeId>, Span)>,
 
-    /// Settled arguments the decl pass met owing bounds already instantiated
-    /// before the solver was built: `(argument, bounds, parameter, span)`.
-    pub(crate) pending_trait_ref_bounds: Vec<(TypeId, Vec<TraitRef>, String, Span)>,
+    /// Arguments the decl pass met owing bounds already instantiated before
+    /// the solver was built, each with the frame it was written in.
+    pub(in crate::elaborator) pending_trait_ref_bounds: Vec<PendingTraitRefs>,
 
     /// Additions to the data tables made during this module's walk, read by
     /// `TypeLookup` ahead of the program's. Keyed by declaration, never spelling.

@@ -1,11 +1,7 @@
-#![TODO]
 // A projection a trait method's signature writes owes the family's parameter
 // bounds, as one a function's signature writes does: `Self::Buf<T>` needs
-// `T: Elem`, which `hold` never asks for.
-//
-// Today the decl pass skips an argument naming a type parameter, so the trait
-// is accepted. `measure` then reaches `Weighed<String>`, and the error surfaces
-// in the `Len` impl's body when it is instantiated, far from its cause.
+// `T: Elem`, which `hold` never asks for. Reported at the declaration, not where
+// `measure` reaches `Weighed<String>`.
 
 trait Elem with () {
     fn weight(&self) -> i32;
@@ -61,6 +57,6 @@ export fn run() {
 
 __DATA__
 {
-  "compile_error": ":41:52: analysis error: type 'T' does not implement trait 'Elem' required by bound on 'E'",
+  "compile_error": ":37:52: analysis error: type 'T' does not implement trait 'Elem' required by bound on 'E'",
   "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
 }

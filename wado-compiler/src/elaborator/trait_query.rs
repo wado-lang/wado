@@ -21,6 +21,7 @@ use super::scope::{
     BinderInScope, BoundSelf, ElaboratedBound, FamilySite, Scope, ScopedBound, TraitCheckFrame,
     trait_params_from_impl,
 };
+use super::sem::decls::PendingTraitRefs;
 use super::trait_env::{ImplMethodHeader, InheritedBound, ViaClause};
 use super::type_resolution::ParamSpace;
 use super::types::{
@@ -28,6 +29,7 @@ use super::types::{
     TypeLookup,
 };
 use super::tysys::TypeSystem;
+use super::util;
 use super::{AbstractSelection, Elaborator};
 use crate::ast::{AstId, SelfKind};
 use crate::elaborator::sig;
@@ -2191,9 +2193,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (def, type_args, span) in std::mem::take(&mut self.sem.decls.pending_decl_arg_bounds) {
             self.check_type_decl_arg_bounds(def, &type_args, span, RigidArgs::Skipped);
         }
-        let pending = std::mem::take(&mut self.sem.decls.pending_trait_ref_bounds);
-        for (type_arg, refs, param_name, span) in pending {
-            self.enforce_trait_refs(type_arg, &refs, &param_name, span);
+        for pending in std::mem::take(&mut self.sem.decls.pending_trait_ref_bounds) {
+            util::replaced(
+                self,
+                |e| &mut e.annotate_ctx.trait_ctx,
+                pending.frame,
+                |this| {
+                    this.enforce_trait_refs(
+                        pending.type_arg,
+                        &pending.refs,
+                        &pending.param_name,
+                        pending.span,
+                    );
+                },
+            );
         }
     }
 
@@ -2343,23 +2356,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
     ) {
         // Any module's impl may answer a bound, so a decl pass leaves its
-        // checks to `check_deferred_decl_arg_bounds`: a settled one alone, as
-        // for a type the source writes, since the frame placing a rigid one is
-        // gone by then.
+        // checks to `check_deferred_decl_arg_bounds`, with the frame placing
+        // the parameters they name.
         if self.tysys.solver.is_none() {
-            let settled = {
-                let table = self.tysys.type_table.borrow();
-                let open = |id: TypeId| table.contains_type_param(id);
-                !open(type_arg) && !refs.iter().flat_map(|r| &r.args).any(|&a| open(a))
-            };
-            if settled {
-                self.sem.decls.pending_trait_ref_bounds.push((
+            self.sem
+                .decls
+                .pending_trait_ref_bounds
+                .push(PendingTraitRefs {
                     type_arg,
-                    refs.to_vec(),
-                    param_name.to_string(),
+                    refs: refs.to_vec(),
+                    param_name: param_name.to_string(),
                     span,
-                ));
-            }
+                    frame: self.annotate_ctx.trait_ctx.clone(),
+                });
             return;
         }
         for trait_ref in refs {
