@@ -1372,7 +1372,7 @@ global mut LATN_VISITED: LatnVisited = LatnVisited {
     step: 0,
     step_of: [],
     stack_of: [],
-    more: HashSet::<i64>::new(LATN_SEED),
+    more: HashSet::<i64>::with_seed(LATN_SEED),
 };
 
 impl LatnVisited {
@@ -1461,7 +1461,7 @@ fn latn_closure(
 
 internal fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32, longest: bool) -> i32 {
     let mut best = -1;
-    let mut stacks = LatnStacks { parent: [], ret: [], ids: HashMap::<i64, i32>::new(LATN_SEED) };
+    let mut stacks = LatnStacks { parent: [], ret: [], ids: HashMap::<i64, i32>::with_seed(LATN_SEED) };
     let mut open: List<i32> = [];
     let visited = &mut LATN_VISITED;
     visited.cover(sim.state_kind.len());

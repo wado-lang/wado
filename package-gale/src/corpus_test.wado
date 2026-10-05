@@ -6,7 +6,7 @@ use { Console } from "../tests/support/console.wado";
 use { scratch } from "../tests/support/scratch.wado";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
-use { HashMap } from "core:collections";
+use { HashMap, TreeMap } from "core:collections";
 use { Log } from "core:log";
 
 global SUITE: String = "gale-corpus-test";
@@ -63,11 +63,16 @@ fn baseline_with<S: AsStrSlice>(case: S, text: String) -> String with Preopens {
     return path;
 }
 
-/// `ratchet`'s exit status on `counts`, and what it printed.
-fn ratchet_run(baseline: &String, counts: HashMap<String, i32>, update: bool) -> [i32, Console] with (Preopens, Log) {
+/// `ratchet`'s exit status on `counts`, and what it printed. `counts` is a
+/// `TreeMap` because a map literal coerces to one, and to no `HashMap`.
+fn ratchet_run(baseline: &String, counts: TreeMap<String, i32>, update: bool) -> [i32, Console] with (Preopens, Log) {
+    let mut by_file = HashMap::<String, i32>::new();
+    for let [file, count] of counts.entries() {
+        by_file[*file] = *count;
+    }
     let mut console = Console {};
     let status = with &mut console do {
-        ratchet(*baseline, &counts, update, NOUN, REMEDY);
+        ratchet(*baseline, &by_file, update, NOUN, REMEDY);
     };
     return [status, console];
 }
