@@ -1749,9 +1749,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut seen: IndexSet<Option<DefId>> = IndexSet::default();
         for def in named.iter().filter(|def| seen.insert(**def)) {
             // A marker writes no method: the derived impl it asks for answers.
-            let written = def.filter(|def| {
-                !self.tysys.trait_env.impl_headers[def].is_synthesize_request
-            });
+            let written =
+                def.filter(|def| !self.tysys.trait_env.impl_headers[def].is_synthesize_request);
             match written {
                 Some(def) => found.extend(self.collect_trait_method_matches_from_impl(
                     &ImplBlockRef(def),

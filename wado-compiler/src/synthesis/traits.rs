@@ -1,5 +1,5 @@
-//! Trait synthesis: auto-derives `Eq` / `Ord` for structs and enums and `Eq` for
-//! variants (discriminant, then payload), `Default` for structs, `Inspect` for
+//! Trait synthesis: auto-derives `Eq` / `Ord` for structs, enums and variants
+//! (a variant by case, then payload), `Default` for structs, `Inspect` for
 //! debug formatting, and `Display` for an enum’s bare case name.
 //! Runs before monomorphize, but for the `fn(..)` dispatch stubs, whose types
 //! are concrete only once instantiated.
@@ -870,13 +870,7 @@ fn generate_reflect_member_tuple_fn(
         span,
     );
 
-    let body = TirBlock::new(
-        vec![TirStmt::new(
-            TirStmtKind::Return { value: Some(tuple) },
-            span,
-        )],
-        span,
-    );
+    let body = TirBlock::new(vec![return_stmt(tuple, span)], span);
 
     make_synthetic_method(
         qualified_name,
@@ -1031,13 +1025,7 @@ fn generate_struct_members_fn(
         span,
     );
 
-    let body = TirBlock::new(
-        vec![TirStmt::new(
-            TirStmtKind::Return { value: Some(tuple) },
-            span,
-        )],
-        span,
-    );
+    let body = TirBlock::new(vec![return_stmt(tuple, span)], span);
 
     make_synthetic_method(
         qualified_name,
@@ -1112,14 +1100,12 @@ fn generate_struct_default_slot_fn(
         .collect();
 
     let body = TirBlock::new(
-        vec![TirStmt::new(
-            TirStmtKind::Return {
-                value: Some(TirExpr::new(
-                    TirExprKind::TupleLiteral { elements },
-                    slots_tuple_type,
-                    span,
-                )),
-            },
+        vec![return_stmt(
+            TirExpr::new(
+                TirExprKind::TupleLiteral { elements },
+                slots_tuple_type,
+                span,
+            ),
             span,
         )],
         span,
@@ -1163,14 +1149,12 @@ fn generate_struct_empty_slots_fn(
         .collect();
 
     let body = TirBlock::new(
-        vec![TirStmt::new(
-            TirStmtKind::Return {
-                value: Some(TirExpr::new(
-                    TirExprKind::TupleLiteral { elements },
-                    slots_tuple_type,
-                    span,
-                )),
-            },
+        vec![return_stmt(
+            TirExpr::new(
+                TirExprKind::TupleLiteral { elements },
+                slots_tuple_type,
+                span,
+            ),
             span,
         )],
         span,
@@ -1228,15 +1212,7 @@ fn generate_struct_from_fields_fn(
         span,
     );
 
-    let body = TirBlock::new(
-        vec![TirStmt::new(
-            TirStmtKind::Return {
-                value: Some(literal),
-            },
-            span,
-        )],
-        span,
-    );
+    let body = TirBlock::new(vec![return_stmt(literal, span)], span);
 
     make_synthetic_method(
         qualified_name,
@@ -1269,15 +1245,7 @@ fn generate_wire_name_policy_fn(
     let method_info = trait_method_info(receiver, reflect_trait_name, wire_name_policy_method);
     let qualified_name = method_info.to_mangled_name();
     let construct = compiler_enum_case(case_style_item(name_policy), case_style_type, items, span);
-    let body = TirBlock::new(
-        vec![TirStmt::new(
-            TirStmtKind::Return {
-                value: Some(construct),
-            },
-            span,
-        )],
-        span,
-    );
+    let body = TirBlock::new(vec![return_stmt(construct, span)], span);
 
     make_synthetic_method(
         qualified_name,
@@ -1431,15 +1399,7 @@ fn generate_read_helper(
         helper_name,
         params,
         answer_type,
-        TirBlock::new(
-            vec![TirStmt::new(
-                TirStmtKind::Return {
-                    value: Some(dispatch),
-                },
-                span,
-            )],
-            span,
-        ),
+        TirBlock::new(vec![return_stmt(dispatch, span)], span),
         locals,
     )
 }
@@ -1466,15 +1426,7 @@ fn generate_type_name_fn(
         string_type,
         span,
     );
-    let body = TirBlock::new(
-        vec![TirStmt::new(
-            TirStmtKind::Return {
-                value: Some(literal),
-            },
-            span,
-        )],
-        span,
-    );
+    let body = TirBlock::new(vec![return_stmt(literal, span)], span);
 
     make_synthetic_method(
         qualified_name,
@@ -1740,13 +1692,7 @@ fn generate_template_members_fn(
         members_tuple_type,
         span,
     );
-    let body = TirBlock::new(
-        vec![TirStmt::new(
-            TirStmtKind::Return { value: Some(tuple) },
-            span,
-        )],
-        span,
-    );
+    let body = TirBlock::new(vec![return_stmt(tuple, span)], span);
     make_synthetic_method(
         qualified_name,
         method_info,
@@ -2084,13 +2030,7 @@ fn generate_variant_cases_fn(
         span,
     );
 
-    let body = TirBlock::new(
-        vec![TirStmt::new(
-            TirStmtKind::Return { value: Some(tuple) },
-            span,
-        )],
-        span,
-    );
+    let body = TirBlock::new(vec![return_stmt(tuple, span)], span);
 
     make_synthetic_method(
         qualified_name,
@@ -2284,18 +2224,7 @@ fn generate_case_extract_helper(
         span,
     );
 
-    let body = TirBlock::new(
-        vec![
-            guard,
-            TirStmt::new(
-                TirStmtKind::Return {
-                    value: Some(dispatch),
-                },
-                span,
-            ),
-        ],
-        span,
-    );
+    let body = TirBlock::new(vec![guard, return_stmt(dispatch, span)], span);
 
     make_synthetic_free_function(
         helper_name,
@@ -2359,15 +2288,7 @@ fn generate_case_construct_helper(
         span,
     );
 
-    let body = TirBlock::new(
-        vec![TirStmt::new(
-            TirStmtKind::Return {
-                value: Some(dispatch),
-            },
-            span,
-        )],
-        span,
-    );
+    let body = TirBlock::new(vec![return_stmt(dispatch, span)], span);
 
     make_synthetic_free_function(
         helper_name,
@@ -2431,10 +2352,7 @@ fn variant_tag_body(ref_variant_type: TypeId, variant_type: TypeId, span: Span) 
         TypeTable::I32,
         span,
     );
-    TirBlock::new(
-        vec![TirStmt::new(TirStmtKind::Return { value: Some(tag) }, span)],
-        span,
-    )
+    TirBlock::new(vec![return_stmt(tag, span)], span)
 }
 
 /// The `discriminant` of one instantiated generic variant, as a free function
@@ -2807,15 +2725,7 @@ fn generate_enum_discriminant_fn(
         deref_local(0, "self", ref_enum_type, enum_type, span),
         TypeTable::I32,
     );
-    let body = TirBlock::new(
-        vec![TirStmt::new(
-            TirStmtKind::Return {
-                value: Some(as_i32),
-            },
-            span,
-        )],
-        span,
-    );
+    let body = TirBlock::new(vec![return_stmt(as_i32, span)], span);
 
     make_synthetic_method(
         qualified_name,
@@ -2881,23 +2791,14 @@ fn generate_enum_from_discriminant_fn(
         stmts.push(TirStmt::new(
             TirStmtKind::If {
                 condition: comparison,
-                then_block: TirBlock::new(
-                    vec![TirStmt::new(
-                        TirStmtKind::Return { value: Some(some) },
-                        span,
-                    )],
-                    span,
-                ),
+                then_block: TirBlock::new(vec![return_stmt(some, span)], span),
                 else_block: None,
             },
             span,
         ));
     }
     let none = common::option_none(option_enum_type, type_table.borrow().compiler_items());
-    stmts.push(TirStmt::new(
-        TirStmtKind::Return { value: Some(none) },
-        span,
-    ));
+    stmts.push(return_stmt(none, span));
 
     let disc_param = TirParam {
         name: "disc".to_string(),
@@ -3259,15 +3160,7 @@ fn generate_flags_bits_fn(
         TypeTable::U32,
     );
     let as_u64 = common::cast(as_u32, TypeTable::U64);
-    let body = TirBlock::new(
-        vec![TirStmt::new(
-            TirStmtKind::Return {
-                value: Some(as_u64),
-            },
-            span,
-        )],
-        span,
-    );
+    let body = TirBlock::new(vec![return_stmt(as_u64, span)], span);
 
     make_synthetic_method(
         qualified_name,
@@ -3330,13 +3223,7 @@ fn generate_flags_from_bits_fn(
     let reject = TirStmt::new(
         TirStmtKind::If {
             condition: has_unknown_bits,
-            then_block: TirBlock::new(
-                vec![TirStmt::new(
-                    TirStmtKind::Return { value: Some(none) },
-                    span,
-                )],
-                span,
-            ),
+            then_block: TirBlock::new(vec![return_stmt(none, span)], span),
             else_block: None,
         },
         span,
@@ -3349,7 +3236,7 @@ fn generate_flags_from_bits_fn(
         option_flags_type,
         type_table.borrow().compiler_items(),
     );
-    let accept = TirStmt::new(TirStmtKind::Return { value: Some(some) }, span);
+    let accept = return_stmt(some, span);
 
     let raw_param = TirParam {
         name: "raw".to_string(),
@@ -3866,13 +3753,7 @@ fn generate_eq_from_cmp_fn(
         TypeTable::BOOL,
         span,
     );
-    let body = TirBlock::new(
-        vec![TirStmt::new(
-            TirStmtKind::Return { value: Some(equal) },
-            span,
-        )],
-        span,
-    );
+    let body = TirBlock::new(vec![return_stmt(equal, span)], span);
     make_trait_method(
         qualified_name,
         method_info,
@@ -4184,15 +4065,7 @@ fn generate_struct_default_fn(
         span,
     );
 
-    let body = TirBlock::new(
-        vec![TirStmt::new(
-            TirStmtKind::Return {
-                value: Some(literal),
-            },
-            span,
-        )],
-        span,
-    );
+    let body = TirBlock::new(vec![return_stmt(literal, span)], span);
 
     make_synthetic_method(
         qualified_name,
@@ -4869,15 +4742,7 @@ fn generate_scalar_eq_fn(
         TypeTable::BOOL,
         span,
     );
-    let body = TirBlock::new(
-        vec![TirStmt::new(
-            TirStmtKind::Return {
-                value: Some(comparison),
-            },
-            span,
-        )],
-        span,
-    );
+    let body = TirBlock::new(vec![return_stmt(comparison, span)], span);
 
     make_synthetic_method(
         qualified_name,
@@ -5177,15 +5042,7 @@ fn generate_struct_eq_fn(
     let qualified_name = method_info.to_mangled_name();
 
     let result = build_struct_eq_chain(fields, ref_struct_type, trait_env, module_source, tt, span);
-    let body = TirBlock::new(
-        vec![TirStmt::new(
-            TirStmtKind::Return {
-                value: Some(result),
-            },
-            span,
-        )],
-        span,
-    );
+    let body = TirBlock::new(vec![return_stmt(result, span)], span);
 
     make_trait_method(
         qualified_name,
@@ -5413,44 +5270,28 @@ fn build_struct_ord_body(
         stmts.push(TirStmt::new(
             TirStmtKind::If {
                 condition: cond,
-                then_block: TirBlock::new(
-                    vec![TirStmt::new(
-                        TirStmtKind::Return {
-                            value: Some(local_c),
-                        },
-                        span,
-                    )],
-                    span,
-                ),
+                then_block: TirBlock::new(vec![return_stmt(local_c, span)], span),
                 else_block: None,
             },
             span,
         ));
     }
 
-    stmts.push(TirStmt::new(
-        TirStmtKind::Return {
-            value: Some(ordering_construct(
-                ordering_type,
-                names.equal_index,
-                &names.equal_name,
-                span,
-            )),
-        },
+    stmts.push(return_stmt(
+        ordering_construct(ordering_type, names.equal_index, &names.equal_name, span),
         span,
     ));
 
     (stmts, locals)
 }
 
-/// Generate `VariantName^Eq::eq(&self, &Self) -> bool`.
-///
-/// Body: if-else chain testing each case with `VariantTest`, comparing payloads via `eq_call_expr`.
-/// Pass an empty `impl_type_params` slice for non-generic variants.
+/// Generate `VariantName^Eq::eq(&self, &Self) -> bool`: the same case on both
+/// sides compares payloads, any two cases are unequal. Pass an empty
+/// `impl_type_params` slice for a non-generic variant.
 fn generate_variant_eq_fn(
     receiver: &FqTypeName,
     impl_type_params: &[TirTypeParam],
-    cases: &[(String, u32, TypeId)],
+    cases: &[VariantCaseInfo],
     variant_type: TypeId,
     ref_variant_type: TypeId,
     trait_env: &TraitEnv,
@@ -5461,44 +5302,30 @@ fn generate_variant_eq_fn(
     let eq_trait_name = tt.compiler_trait_fq(CompilerItem::Eq);
     let method_info = trait_method_info(receiver, &eq_trait_name, "eq");
     let qualified_name = method_info.to_mangled_name();
+    let bool_literal = |b| TirExpr::new(TirExprKind::BoolLiteral(b), TypeTable::BOOL, span);
 
-    // Allocate two payload-binding locals (self-side, other-side) for
-    // every non-unit case. They follow the two parameter locals (self,
-    // other) and feed the nested `TirPattern::Variant { bindings }`
-    // arms produced by `variant_eq_body`.
     let mut locals = binary_method_locals(ref_variant_type);
-    let mut payload_bindings: Vec<Option<(u32, u32)>> = Vec::with_capacity(cases.len());
-    for (case_name, _, payload_type) in cases {
-        if *payload_type == TypeTable::UNIT {
-            payload_bindings.push(None);
-        } else {
-            let self_idx = locals.len() as u32;
-            locals.push(param_local(
-                &eq_payload_local("self", case_name, self_idx),
-                *payload_type,
-                false,
-            ));
-            let other_idx = locals.len() as u32;
-            locals.push(param_local(
-                &eq_payload_local("other", case_name, other_idx),
-                *payload_type,
-                false,
-            ));
-            payload_bindings.push(Some((self_idx, other_idx)));
-        }
-    }
-
-    let body_stmts = variant_eq_body(
+    let body_stmt = variant_case_pairs(
         cases,
-        &payload_bindings,
         variant_type,
         ref_variant_type,
-        trait_env,
-        module_source,
-        tt,
+        &mut locals,
+        bool_literal(true),
+        Some(bool_literal(false)),
+        |left, right, payload_type| {
+            eq_call_expr(
+                left,
+                right,
+                payload_type,
+                trait_env,
+                module_source,
+                tt,
+                span,
+            )
+        },
         span,
     );
-    let body = TirBlock::new(body_stmts, span);
+    let body = TirBlock::new(vec![body_stmt], span);
 
     make_trait_method(
         qualified_name,
@@ -5512,177 +5339,122 @@ fn generate_variant_eq_fn(
     )
 }
 
-/// Build the body statements for variant Eq: a nested TIR `Match` —
-/// the outer Match dispatches on `*self`, and each arm runs an inner
-/// Match on `*other` to either compare payloads (matching case) or
-/// return `false` (mismatched case). Variant Match is exhaustive at
-/// TIR level, so no final fallback is needed.
-fn variant_eq_body(
-    cases: &[(String, u32, TypeId)],
-    payload_bindings: &[Option<(u32, u32)>],
+/// The statement pairing two variant operands case by case: `match *self { C(x)
+/// => match *other { C(y) => return payload(x, y), _ => return mismatch }, U =>
+/// match *other { U => return unit, _ => return mismatch } }`, binding `x` and
+/// `y` in fresh `locals`. A `mismatch` of `None` says the caller has compared the
+/// case tags already: a unit case returns `unit` outright, and a payload case's
+/// other arm is unreachable. A variant without cases returns `unit`.
+fn variant_case_pairs(
+    cases: &[VariantCaseInfo],
     variant_type: TypeId,
     ref_variant_type: TypeId,
-    trait_env: &TraitEnv,
-    module_source: &ModuleSource,
-    tt: &mut TypeTable,
+    locals: &mut Vec<TirLocal>,
+    unit: TirExpr,
+    mismatch: Option<TirExpr>,
+    mut payload: impl FnMut(TirExpr, TirExpr, TypeId) -> TirExpr,
     span: Span,
-) -> Vec<TirStmt> {
+) -> TirStmt {
     if cases.is_empty() {
-        return vec![TirStmt::new(
-            TirStmtKind::Return {
-                value: Some(TirExpr::new(
-                    TirExprKind::BoolLiteral(true),
-                    TypeTable::BOOL,
-                    span,
-                )),
-            },
-            span,
-        )];
+        return return_stmt(unit, span);
     }
-
-    let deref_self = deref_local(0, "self", ref_variant_type, variant_type, span);
-    let deref_other = || deref_local(1, "other", ref_variant_type, variant_type, span);
-
-    let return_bool = |b: bool| -> TirExpr {
+    let returning = |value| {
         TirExpr::new(
-            TirExprKind::Block(TirBlock::new(
-                vec![TirStmt::new(
-                    TirStmtKind::Return {
-                        value: Some(TirExpr::new(
-                            TirExprKind::BoolLiteral(b),
-                            TypeTable::BOOL,
-                            span,
-                        )),
+            TirExprKind::Block(TirBlock::new(vec![return_stmt(value, span)], span)),
+            TypeTable::UNIT,
+            span,
+        )
+    };
+    let operand = |index, name| deref_local(index, name, ref_variant_type, variant_type, span);
+    let case_pattern = |case_name: &str, case_index, payload_type, bindings| TirPattern::Variant {
+        enum_type: variant_type,
+        variant_name: case_name.to_string(),
+        case_index,
+        bindings,
+        payload_type,
+    };
+    let pair = |pattern, body| {
+        let otherwise = match &mismatch {
+            Some(value) => returning(value.clone()),
+            None => unreachable_call(TypeTable::UNIT, span),
+        };
+        TirExpr::new(
+            TirExprKind::Match {
+                expr: Box::new(operand(1, "other")),
+                arms: vec![
+                    TirMatchArm {
+                        pattern,
+                        guard: None,
+                        body,
+                        span,
                     },
-                    span,
-                )],
-                span,
-            )),
+                    TirMatchArm {
+                        pattern: TirPattern::Wildcard,
+                        guard: None,
+                        body: otherwise,
+                        span,
+                    },
+                ],
+            },
             TypeTable::UNIT,
             span,
         )
     };
 
-    let outer_arms: Vec<TirMatchArm> = cases
-        .iter()
-        .zip(payload_bindings.iter())
-        .map(|((case_name, case_index, payload_type), binding)| {
-            let case_index = *case_index;
-            let is_unit = *payload_type == TypeTable::UNIT;
-            let (self_bindings, inner_arms): (Vec<TirPattern>, Vec<TirMatchArm>) = if is_unit {
-                let inner_arms = vec![
-                    TirMatchArm {
-                        pattern: TirPattern::Variant {
-                            enum_type: variant_type,
-                            variant_name: case_name.clone(),
-                            case_index,
-                            bindings: Vec::new(),
-                            payload_type: *payload_type,
-                        },
-                        guard: None,
-                        body: return_bool(true),
-                        span,
-                    },
-                    TirMatchArm {
-                        pattern: TirPattern::Wildcard,
-                        guard: None,
-                        body: return_bool(false),
-                        span,
-                    },
-                ];
-                (Vec::new(), inner_arms)
-            } else {
-                let (self_idx, other_idx) =
-                    binding.expect("non-unit case must have payload bindings");
-                let self_name = eq_payload_local("self", case_name, self_idx);
-                let other_name = eq_payload_local("other", case_name, other_idx);
-                let self_payload = local_expr(self_idx, &self_name, *payload_type, span);
-                let other_payload = local_expr(other_idx, &other_name, *payload_type, span);
-                let eq_result = eq_call_expr(
-                    self_payload,
-                    other_payload,
-                    *payload_type,
-                    trait_env,
-                    module_source,
-                    tt,
-                    span,
-                );
-                let matched_body = TirExpr::new(
-                    TirExprKind::Block(TirBlock::new(
-                        vec![TirStmt::new(
-                            TirStmtKind::Return {
-                                value: Some(eq_result),
-                            },
-                            span,
-                        )],
-                        span,
-                    )),
-                    TypeTable::UNIT,
-                    span,
-                );
-                let inner_arms = vec![
-                    TirMatchArm {
-                        pattern: TirPattern::Variant {
-                            enum_type: variant_type,
-                            variant_name: case_name.clone(),
-                            case_index,
-                            bindings: vec![TirPattern::Binding {
-                                name: other_name,
-                                local_index: other_idx,
-                                type_id: *payload_type,
-                            }],
-                            payload_type: *payload_type,
-                        },
-                        guard: None,
-                        body: matched_body,
-                        span,
-                    },
-                    TirMatchArm {
-                        pattern: TirPattern::Wildcard,
-                        guard: None,
-                        body: return_bool(false),
-                        span,
-                    },
-                ];
-                let self_bindings = vec![TirPattern::Binding {
-                    name: self_name,
-                    local_index: self_idx,
-                    type_id: *payload_type,
-                }];
-                (self_bindings, inner_arms)
+    let mut arms = Vec::with_capacity(cases.len());
+    for (case_name, case_index, payload_type) in cases {
+        let (case_index, payload_type) = (*case_index, *payload_type);
+        if payload_type == TypeTable::UNIT {
+            let unit_body = returning(unit.clone());
+            let body = match mismatch {
+                Some(_) => pair(
+                    case_pattern(case_name, case_index, payload_type, Vec::new()),
+                    unit_body,
+                ),
+                None => unit_body,
             };
-            let inner_match = TirExpr::new(
-                TirExprKind::Match {
-                    expr: Box::new(deref_other()),
-                    arms: inner_arms,
-                },
-                TypeTable::UNIT,
-                span,
-            );
-            TirMatchArm {
-                pattern: TirPattern::Variant {
-                    enum_type: variant_type,
-                    variant_name: case_name.clone(),
-                    case_index,
-                    bindings: self_bindings,
-                    payload_type: *payload_type,
-                },
+            arms.push(TirMatchArm {
+                pattern: case_pattern(case_name, case_index, payload_type, Vec::new()),
                 guard: None,
-                body: inner_match,
+                body,
                 span,
-            }
-        })
-        .collect();
-
+            });
+            continue;
+        }
+        let mut bind = |side| {
+            let local_index = locals.len() as u32;
+            let name = eq_payload_local(side, case_name, local_index);
+            locals.push(param_local(&name, payload_type, false));
+            let value = local_expr(local_index, &name, payload_type, span);
+            let binding = TirPattern::Binding {
+                name,
+                local_index,
+                type_id: payload_type,
+            };
+            (binding, value)
+        };
+        let (self_binding, self_payload) = bind("self");
+        let (other_binding, other_payload) = bind("other");
+        let body = returning(payload(self_payload, other_payload, payload_type));
+        arms.push(TirMatchArm {
+            pattern: case_pattern(case_name, case_index, payload_type, vec![self_binding]),
+            guard: None,
+            body: pair(
+                case_pattern(case_name, case_index, payload_type, vec![other_binding]),
+                body,
+            ),
+            span,
+        });
+    }
     let outer_match = TirExpr::new(
         TirExprKind::Match {
-            expr: Box::new(deref_self),
-            arms: outer_arms,
+            expr: Box::new(operand(0, "self")),
+            arms,
         },
         TypeTable::UNIT,
         span,
     );
-    vec![TirStmt::new(TirStmtKind::Expr(outer_match), span)]
+    TirStmt::new(TirStmtKind::Expr(outer_match), span)
 }
 
 /// Generate `V^Ord::cmp(&self, &Self) -> Ordering`: the case tags decide
@@ -5709,7 +5481,13 @@ fn generate_variant_ord_fn(
     let tag = |index, name| {
         TirExpr::new(
             TirExprKind::VariantTag {
-                expr: Box::new(deref_local(index, name, ref_variant_type, variant_type, span)),
+                expr: Box::new(deref_local(
+                    index,
+                    name,
+                    ref_variant_type,
+                    variant_type,
+                    span,
+                )),
             },
             TypeTable::I32,
             span,
@@ -5727,108 +5505,27 @@ fn generate_variant_ord_fn(
     locals.push(TirLocal::synth(2, TypeTable::I32, false));
     locals.push(TirLocal::synth(3, TypeTable::I32, false));
 
-    let equal = || ordering_construct(ordering_type, names.equal_index, &names.equal_name, span);
-    let returning = |value| {
-        TirExpr::new(
-            TirExprKind::Block(TirBlock::new(vec![return_stmt(value, span)], span)),
-            TypeTable::UNIT,
-            span,
-        )
-    };
-    let case_pattern = |case_name: &str, case_index, payload_type, bindings| TirPattern::Variant {
-        enum_type: variant_type,
-        variant_name: case_name.to_string(),
-        case_index,
-        bindings,
-        payload_type,
-    };
-    let binding = |name: String, local_index, type_id| TirPattern::Binding {
-        name,
-        local_index,
-        type_id,
-    };
-
-    let mut arms = Vec::with_capacity(cases.len());
-    for (case_name, case_index, payload_type) in cases {
-        let (case_index, payload_type) = (*case_index, *payload_type);
-        if payload_type == TypeTable::UNIT {
-            arms.push(TirMatchArm {
-                pattern: case_pattern(case_name, case_index, payload_type, Vec::new()),
-                guard: None,
-                body: returning(equal()),
-                span,
-            });
-            continue;
-        }
-        let self_idx = locals.len() as u32;
-        let self_name = eq_payload_local("self", case_name, self_idx);
-        locals.push(param_local(&self_name, payload_type, false));
-        let other_idx = locals.len() as u32;
-        let other_name = eq_payload_local("other", case_name, other_idx);
-        locals.push(param_local(&other_name, payload_type, false));
-
-        let order = cmp_call_expr(
-            local_expr(self_idx, &self_name, payload_type, span),
-            local_expr(other_idx, &other_name, payload_type, span),
-            payload_type,
-            ordering_type,
-            trait_env,
-            module_source,
-            tt,
-            span,
-        );
-        let inner_arms = vec![
-            TirMatchArm {
-                pattern: case_pattern(
-                    case_name,
-                    case_index,
-                    payload_type,
-                    vec![binding(other_name, other_idx, payload_type)],
-                ),
-                guard: None,
-                body: returning(order),
-                span,
-            },
-            TirMatchArm {
-                pattern: TirPattern::Wildcard,
-                guard: None,
-                body: unreachable_call(TypeTable::UNIT, span),
-                span,
-            },
-        ];
-        let inner_match = TirExpr::new(
-            TirExprKind::Match {
-                expr: Box::new(deref_local(1, "other", ref_variant_type, variant_type, span)),
-                arms: inner_arms,
-            },
-            TypeTable::UNIT,
-            span,
-        );
-        arms.push(TirMatchArm {
-            pattern: case_pattern(
-                case_name,
-                case_index,
+    stmts.push(variant_case_pairs(
+        cases,
+        variant_type,
+        ref_variant_type,
+        &mut locals,
+        ordering_construct(ordering_type, names.equal_index, &names.equal_name, span),
+        None,
+        |left, right, payload_type| {
+            cmp_call_expr(
+                left,
+                right,
                 payload_type,
-                vec![binding(self_name, self_idx, payload_type)],
-            ),
-            guard: None,
-            body: inner_match,
-            span,
-        });
-    }
-    if arms.is_empty() {
-        stmts.push(return_stmt(equal(), span));
-    } else {
-        let outer_match = TirExpr::new(
-            TirExprKind::Match {
-                expr: Box::new(deref_local(0, "self", ref_variant_type, variant_type, span)),
-                arms,
-            },
-            TypeTable::UNIT,
-            span,
-        );
-        stmts.push(TirStmt::new(TirStmtKind::Expr(outer_match), span));
-    }
+                ordering_type,
+                trait_env,
+                module_source,
+                tt,
+                span,
+            )
+        },
+        span,
+    ));
 
     make_trait_method(
         qualified_name,
