@@ -1,5 +1,6 @@
 //! The runner, end to end: compile a Wado program that dispatches a WGSL
-//! compute shader, run it, and read what the GPU wrote back.
+//! compute shader, run it, and read what the GPU wrote back. Loam's WebGPU
+//! backend is run here too, the one place a device is.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -61,6 +62,30 @@ fn a_compute_shader_writes_what_the_guest_reads_back() {
     assert!(output.status.success(), "stderr: {stderr}");
     // Below `--log-level info` the adapter goes unnamed.
     assert!(!stderr.contains("request-adapter"), "stderr: {stderr}");
+}
+
+/// How far Loam's WebGPU backend may sit from its CPU one: a product summed
+/// in another order, and `erf` as WGSL approximates it.
+const LOAM_TOLERANCE: f32 = 1e-4;
+
+#[test]
+fn loams_webgpu_backend_computes_what_its_cpu_backend_does() {
+    let program =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../package-loam/conformance/webgpu.wado");
+    let output = run(&[program.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "stderr: {stderr}");
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(lines.len(), 3, "stdout: {stdout}");
+    for line in lines {
+        let deviation: f32 = line
+            .rsplit(' ')
+            .next()
+            .and_then(|d| d.parse().ok())
+            .unwrap_or_else(|| panic!("no deviation in {line:?}"));
+        assert!(deviation <= LOAM_TOLERANCE, "{line}");
+    }
 }
 
 #[test]

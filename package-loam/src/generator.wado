@@ -34,6 +34,8 @@ pub struct Options {
     pub dims: TreeMap<String, i32>,
     /// The graph outputs `forward` returns. Empty keeps every output.
     pub outputs: List<String>,
+    /// Inline `WebGpuBackend`, the kernels over `wasi:webgpu`, beside `Cpu`.
+    pub webgpu: bool = false,
 }
 
 impl Deserialize for Options;
@@ -124,7 +126,7 @@ export fn generate(req: Request<Options>) -> Result<Response, KilnError> with Ki
     let checked = infer(&graph, &Schema { layout: req.options.layout }).map_err(|e| at(&path, &e))?;
     // Emitting first refuses an element type no kernel holds, which the check
     // below takes as given.
-    let generated = emit(&graph, &checked).map_err(|e| at(&path, &e))?;
+    let generated = emit(&graph, &checked, req.options.webgpu).map_err(|e| at(&path, &e))?;
     for let [input_path, header] of headers {
         let checkpoint = read_checkpoint(&header).map_err(|e| at(&input_path, &e))?;
         check_checkpoint(&graph, &checked.shapes, &checkpoint).map_err(|e| at(&input_path, &e))?;

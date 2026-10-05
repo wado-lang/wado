@@ -104,8 +104,9 @@ impl Error for EmitError {
 }
 
 /// The generated module's source. Every axis the graph mentions becomes a
-/// marker type, so two tensors sharing an axis share one type.
-pub fn emit(graph: &Graph, checked: &Checked) -> Result<String, EmitError> {
+/// marker type, so two tensors sharing an axis share one type. `webgpu` inlines
+/// the WebGPU backend beside `Cpu`.
+pub fn emit(graph: &Graph, checked: &Checked, webgpu: bool = false) -> Result<String, EmitError> {
     let shapes = &checked.shapes;
     if graph.outputs.is_empty() {
         builtin::cold_path();
@@ -137,6 +138,9 @@ pub fn emit(graph: &Graph, checked: &Checked) -> Result<String, EmitError> {
     w.raw(&RUNTIME);
     if loads_weights(graph) {
         w.raw(&CHECKPOINT_RUNTIME);
+    }
+    if webgpu {
+        w.raw(&WEBGPU_RUNTIME);
     }
     w.raw(&GRAPH_BANNER);
 
@@ -305,6 +309,9 @@ global RUNTIME: String = #include_str("./runtime/tensor.wado");
 /// leaves a weight to a checkpoint.
 global CHECKPOINT_RUNTIME: String = #include_str("./runtime/checkpoint.wado");
 
+/// The WebGPU backend, inlined where the `webgpu` option asks.
+global WEBGPU_RUNTIME: String = inlined_webgpu(&#include_str("./runtime/webgpu.wado"));
+
 /// Where the inlined runtime ends and this graph's own code begins. A reader
 /// needs the line, and a test asserting a kernel is absent needs the boundary.
 internal global GRAPH_BANNER: String = `
@@ -318,10 +325,11 @@ fn is_bound(module: &TreeSet<String>, name: &String) -> bool {
 
 /// The names the generated module binds beyond the language's own. The
 /// runtime's are read out of the runtime, so a new kernel cannot be missed, and
-/// the checkpoint reader's are bound whether or not a graph inlines it.
+/// the checkpoint reader's and the WebGPU backend's are bound whether or not a
+/// module inlines them.
 fn module_idents() -> TreeSet<String> {
     let mut reserved = TreeSet::<String>::new();
-    for let source of [&RUNTIME, &CHECKPOINT_RUNTIME] {
+    for let source of [&RUNTIME, &CHECKPOINT_RUNTIME, &WEBGPU_RUNTIME] {
         for let name of declared_in(source) {
             reserved.insert(name);
         }
@@ -352,7 +360,7 @@ global VISIBILITY_PREFIXES: List<String> = ["pub ", "internal "];
 /// the runtime is written in: a declaration or a `use` at column zero.
 fn declared_in(source: &String) -> List<String> {
     let mut names: List<String> = [];
-    for let line of source.lines() {
+    for let line of joined_uses(source) {
         let mut declaration = line.as_str_slice();
         for let prefix of VISIBILITY_PREFIXES {
             if let Some(rest) = declaration.strip_prefix(prefix) {
@@ -385,10 +393,46 @@ test "a use line binds its names, whatever its visibility" {
     assert declared_in(&source) == ["ns", "A", "C", "D"] as List<String>;
 }
 
+test "a use the formatter wrapped binds its names as one line does" {
+    let source = "use {\n    A,\n    B as C,\n} from \"b\";\nfn f() {}\n";
+    assert declared_in(&source) == ["A", "C", "f"] as List<String>;
+}
+
+/// The lines of `source`, each `use` the formatter wrapped joined into one.
+fn joined_uses(source: &String) -> List<String> {
+    let mut lines: List<String> = [];
+    let mut open = "";
+    for let line of source.lines() {
+        if !open.is_empty() {
+            open.push_str(" ");
+            open.push_str(&line.trim().to_string());
+            if line.ends_with(";") {
+                lines.push(open);
+                open = "";
+            }
+        } else if line.starts_with("use ") && !line.ends_with(";") {
+            open = line.to_string();
+        } else {
+            lines.push(line.to_string());
+        }
+    }
+    assert open.is_empty();
+    return lines;
+}
+
+/// The WebGPU backend as a module inlines it: the tensor runtime it reads is
+/// inlined beside it, so its import of that goes.
+fn inlined_webgpu(source: &String) -> String {
+    let lines: List<String> = joined_uses(source).into_iter().filter(|line| !line.ends_with(
+        "from \"./tensor.wado\";",
+    )).collect();
+    return lines.join("\n");
+}
+
 /// The names a `use` clause binds: its namespace, or each item under its alias.
 fn imported_names(clause: &String) -> List<String> {
     let Some([bound, _]) = clause.split_once(" from ") else {
-        panic(`an inlined runtime's import is one line: use ${clause}`);
+        unreachable();
     };
     let mut names: List<String> = [];
     let mut aliased = false;
