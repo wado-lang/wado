@@ -788,9 +788,18 @@ it must bind that type as the pin says.
 
 ## Coherence and Orphan Rules
 
-Wado enforces coherence: a `(Trait, Type)` pair is implemented once. A second impl of one pair is rejected where it is written, and the orphan rules below keep two packages from each writing one.
+Wado enforces coherence: an impl is written once. Two impls are one when they
+name the same trait at the same argument list, write the same target, and bound
+their parameters the same way. A parameter's name and the order its bounds are
+listed in do not tell them apart. The second is rejected where it is written,
+since nothing could rank the two. The orphan rules below keep two packages from
+each writing one.
 
-That is a rule about where impls may be written, not about how many apply to a call: a trait carries several blanket impls, and more than one of them can apply to a receiver. [Method Resolution](#method-resolution) orders those.
+That is a rule about where impls may be written, not about how many apply to a
+call. Impls that differ in target or bounds may reach one receiver: a specific
+impl beside a general one, or two blankets whose bounds the receiver both
+satisfies. [Method Resolution](#method-resolution) orders those, and reports at
+the call the ones it cannot.
 
 ### Package Boundary
 
