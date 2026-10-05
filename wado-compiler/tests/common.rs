@@ -26,135 +26,16 @@ use wasmtime_wasi_tls::{
     WasiTlsCtxView, WasiTlsView,
 };
 
-/// Install the rustls process-level `CryptoProvider` exactly once. See the
-/// matching helper in `wado-cli/src/runtime.rs` for the rationale; the test
-/// harness needs the same setup so `WasiTlsCtxBuilder::new()` does not panic
-/// on the rustls auto-detect path.
-pub fn install_rustls_provider_for_tests() {
-    static INSTALLED: std::sync::Once = std::sync::Once::new();
-    INSTALLED.call_once(|| {
-        let _ = rustls::crypto::ring::default_provider().install_default();
-    });
-}
-
 use wado_compiler::ast::TodoMark;
 use wado_compiler::world_registry::WorldSurface;
 use wado_compiler::{
     CompileError, CompileFailure, CompilerHost, CompilerOptions, Diagnostic, OptLevel, SourceError,
-    TraceSink, set_trace_sink,
 };
-
-/// Send developer traces to stderr, so `WADO_TRACE` and `WADO_DUMP_PASS_*` work
-/// under `cargo test` as under `wado`. The binaries install `wado-lsp`'s copy.
-fn install_trace_sink() {
-    struct StderrTraceSink;
-
-    impl TraceSink for StderrTraceSink {
-        fn trace(&self, line: &str) {
-            eprintln!("{line}");
-        }
-    }
-
-    static SINK: StderrTraceSink = StderrTraceSink;
-    set_trace_sink(&SINK);
-}
-
-/// Hand a dev build the stdlib, as the binaries do: an integration test links
-/// the library without `cfg(test)`, so it is the host here.
-#[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
-pub fn install_dev_stdlib() {
-    use wado_compiler::stdlib::{DEV_STDLIB_ROOT, dev_stdlib_files};
-
-    let root = Path::new(DEV_STDLIB_ROOT);
-    wado_compiler::stdlib::install_dev_stdlib(dev_stdlib_files().into_iter().map(|file| {
-        let path = root.join(file);
-        let source = std::fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("reading the stdlib at {}: {e}", path.display()));
-        (file.to_string(), source)
-    }));
-}
-
-#[cfg(not(all(debug_assertions, not(target_arch = "wasm32"))))]
-pub fn install_dev_stdlib() {}
-
-/// A located diagnostic names the file it is in — what a per-document consumer
-/// selects on, and without which the LSP drops it. Checked at the host, so the
-/// whole fixture corpus enforces it. A span-less diagnostic is about the
-/// compilation rather than a place in it, and is exempt.
-fn assert_diagnostic_is_attributed(diagnostic: &Diagnostic) {
-    if let Some(span) = diagnostic.span.as_ref() {
-        assert!(
-            !span.file.is_empty(),
-            "diagnostic carries a span but no file: {} ({:?}) at {}:{}\n\
-             emit it through `Elaborator::emit` / `Logger::error_in`, not `Logger::error`",
-            diagnostic.message,
-            diagnostic.code,
-            span.line,
-            span.column,
-        );
-    }
-}
-
-/// A filesystem-based `CompilerHost` for tests that need to load files
-pub struct FilesystemHost {
-    base_path: PathBuf,
-    diagnostics: Mutex<Vec<Diagnostic>>,
-    stubs: HostStubs,
-}
-
-impl FilesystemHost {
-    pub fn new(base_path: PathBuf) -> Self {
-        install_trace_sink();
-        install_dev_stdlib();
-        Self {
-            base_path,
-            diagnostics: Mutex::new(Vec::new()),
-            stubs: HostStubs::default(),
-        }
-    }
-
-    /// Answer from `stubs` what a real host would ask its environment.
-    pub fn with_stubs(mut self, stubs: HostStubs) -> Self {
-        self.stubs = stubs;
-        self
-    }
-
-    pub fn diagnostics(&self) -> Vec<Diagnostic> {
-        self.diagnostics.lock().unwrap().clone()
-    }
-}
-
-impl CompilerHost for FilesystemHost {
-    fn load_source(
-        &self,
-        path: &str,
-    ) -> impl std::future::Future<Output = Result<Vec<u8>, SourceError>> + Send {
-        let full_path = self.base_path.join(path);
-        async move {
-            std::fs::read(&full_path).map_err(|e| SourceError::IoError {
-                path: full_path.to_string_lossy().to_string(),
-                message: e.to_string(),
-            })
-        }
-    }
-
-    fn emit_diagnostic(&self, diagnostic: Diagnostic) {
-        assert_diagnostic_is_attributed(&diagnostic);
-        self.diagnostics.lock().unwrap().push(diagnostic);
-    }
-
-    fn env_var(&self, name: &str) -> Option<String> {
-        self.stubs.env.get(name).cloned()
-    }
-
-    fn dependency_index(&self) -> wado_compiler::DependencyIndex {
-        let mut index = wado_compiler::DependencyIndex::default();
-        for (name, lib) in &self.stubs.dependencies {
-            index.resolved.insert(name.clone(), lib.clone());
-        }
-        index
-    }
-}
+use wado_host::timezone;
+pub use wado_host::tls_trust::install_default_crypto_provider;
+pub use wado_host::{HostStubs, StubHost};
+use wado_lsp::host::install_dev_stdlib;
+use wado_lsp::install_stderr_trace_sink;
 
 /// A `CompilerHost` serving the given sources, keyed by the path the loader asks for.
 pub struct MapHost {
@@ -164,7 +45,7 @@ pub struct MapHost {
 
 impl MapHost {
     pub fn new(sources: &[(&str, &str)]) -> Self {
-        install_trace_sink();
+        install_stderr_trace_sink();
         install_dev_stdlib();
         Self {
             sources: sources
@@ -207,7 +88,7 @@ pub struct InMemoryHost {
 
 impl InMemoryHost {
     pub fn new() -> Self {
-        install_trace_sink();
+        install_stderr_trace_sink();
         install_dev_stdlib();
         Self {
             diagnostics: Mutex::new(Vec::new()),
@@ -904,7 +785,7 @@ impl TlsProvider for MockTlsProvider {
 /// Build a `WasiTlsCtx` whose provider is the mock provider seeded with `mocks`.
 /// Always installs the rustls crypto provider first (idempotent).
 pub fn build_tls_ctx(mocks: indexmap::IndexMap<String, TlsMockResponse>) -> WasiTlsCtx {
-    install_rustls_provider_for_tests();
+    install_default_crypto_provider();
     WasiTlsCtxBuilder::new()
         .provider(Box::new(MockTlsProvider::new(mocks)))
         .build()
@@ -995,7 +876,7 @@ pub fn linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_tls::p3::add_to_linker(&mut linker)?;
-    timezone_host::add_to_linker(&mut linker)?;
+    timezone::add_to_linker(&mut linker)?;
     linker
         .root()
         .instance("core:coverage/coverage-host@0.1.0")?
@@ -1062,10 +943,6 @@ pub fn lib_func(
     lookup_func(store, instance, iface.as_ref(), name)
         .unwrap_or_else(|| panic!("`{name}` export not found"))
 }
-
-// The host modules of `wado` itself, which the compiler tests cannot depend on.
-#[path = "../../wado-cli/src/timezone_host.rs"]
-mod timezone_host;
 
 /// Backward-compat alias
 pub fn cli_linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
@@ -1137,7 +1014,7 @@ pub fn compile_source_with_opts(
     opt_level: OptLevel,
 ) -> Result<wado_compiler::CompileResult, CompileError> {
     let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
-    let host = FilesystemHost::new(base_path);
+    let host = StubHost::new(base_path);
     let filename = path.to_string_lossy();
 
     runtime()
@@ -1270,16 +1147,6 @@ pub struct CapturedDiagnostic {
     pub message: String,
 }
 
-/// What a test stubs of the host that compiles it.
-#[derive(Default)]
-pub struct HostStubs {
-    /// The compile-time environment `#[param(from_env = ...)]` reads.
-    pub env: indexmap::IndexMap<String, String>,
-    /// The `[dependencies]` a bare `use ... from "name"` binds to: name → the
-    /// dependency's `[package].lib` path, relative to the host's base.
-    pub dependencies: indexmap::IndexMap<String, String>,
-}
-
 /// Compile and return the result alongside every diagnostic message the host
 /// received, on both success and failure — what `warnings_contains` /
 /// `warnings_not_contains` / `compile_errors_contains` assert against.
@@ -1292,7 +1159,7 @@ pub fn compile_capturing_diagnostics(
 ) -> CapturedCompile {
     use wado_compiler::Severity;
     let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
-    let host = FilesystemHost::new(base_path).with_stubs(stubs);
+    let host = StubHost::new(base_path).with_stubs(stubs);
     let filename = display_filename
         .map(std::borrow::Cow::Borrowed)
         .unwrap_or_else(|| path.to_string_lossy());
@@ -1346,8 +1213,8 @@ fn repository_root() -> PathBuf {
 }
 
 /// A host at the repository root with `package-web` as [`WEB_PACKAGE`].
-pub fn web_host() -> FilesystemHost {
-    FilesystemHost::new(repository_root()).with_stubs(web_stubs())
+pub fn web_host() -> StubHost {
+    StubHost::new(repository_root()).with_stubs(web_stubs())
 }
 
 /// Compile `source` with `package-web` as its [`WEB_PACKAGE`] dependency.
@@ -1372,7 +1239,7 @@ pub async fn compile_file_async(
     })?;
 
     let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
-    let host = FilesystemHost::new(base_path);
+    let host = StubHost::new(base_path);
     let filename = path.to_string_lossy();
 
     wado_compiler::compile_with_host(&source, &host, Some(&filename), opt_level)

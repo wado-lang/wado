@@ -5,8 +5,8 @@ use std::time::{Duration, Instant};
 use wado_compiler::hashmap::{IndexMap, IndexSet};
 
 use wado_compiler::OptLevel;
+use wado_host::{HostStubs, StubHost};
 
-use crate::compiler_host::FilesystemCompilerHost;
 use crate::data_section::{
     extract_dependencies_from_data_section, extract_world_from_data_section, should_skip_file,
 };
@@ -514,11 +514,15 @@ async fn render_phases(
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
     let target_world = extract_world_from_data_section(source, default_world);
-    let dependencies = extract_dependencies_from_data_section(source);
+    let stubs = HostStubs {
+        dependencies: extract_dependencies_from_data_section(source)
+            .into_iter()
+            .collect(),
+        ..HostStubs::default()
+    };
 
     if needs_dump {
-        let host = FilesystemCompilerHost::silent(base_path.clone())
-            .with_dependencies(dependencies.clone());
+        let host = StubHost::new(base_path.clone()).with_stubs(stubs.clone());
         let dumped = wado_compiler::dump_with_host_and_world(
             source,
             &host,
@@ -600,7 +604,7 @@ async fn render_phases(
     }
 
     if needs_wat {
-        let host = FilesystemCompilerHost::silent(base_path).with_dependencies(dependencies);
+        let host = StubHost::new(base_path).with_stubs(stubs);
         let options = wado_compiler::CompilerOptions {
             opt_level,
             target_world: target_world.clone(),
@@ -629,10 +633,10 @@ async fn render_phases(
 }
 
 /// Build an error string that attaches buffered diagnostics from a
-/// `silent()` host. `dump_with_host_and_world` converts a resolve `Bail`
+/// [`StubHost`], which prints none. `dump_with_host_and_world` converts a resolve `Bail`
 /// into a `DumpResult` with all post-resolve fields `None`, so the
 /// pipeline otherwise sees only an empty output with no context.
-fn diagnostics_summary(host: &FilesystemCompilerHost, prefix: &str) -> String {
+fn diagnostics_summary(host: &StubHost, prefix: &str) -> String {
     let diags = host.diagnostics();
     let errors: Vec<String> = diags
         .iter()
