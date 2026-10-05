@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791152028882,
+  "lastUpdate": 1791158829416,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -63769,6 +63769,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c296641f98446195ac7921aae95f8091b1e581bd"
         },
         "date": 1791152027932,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338523,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f5f079af8260666ba2e46a86fc698e2c6a8c9613",
+          "message": "Merge pull request #2273 from wado-lang/ccr-7ba038a8-bpc9gt\n\nfix(core:temporal)!: follow TC39 Temporal as the specification",
+          "timestamp": "2026-10-05T08:46:36+09:00",
+          "tree_id": "e96830221fdd50eed2cf0c1743d28bae033cda28",
+          "url": "https://github.com/wado-lang/wado/commit/f5f079af8260666ba2e46a86fc698e2c6a8c9613"
+        },
+        "date": 1791158828623,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
