@@ -3949,10 +3949,12 @@ impl Type {
                 args: each(&g.args),
                 ..g.clone()
             }),
-            Type::NamespacedGeneric(g) => Type::NamespacedGeneric(Box::new(NamespacedGenericType {
-                args: each(&g.args),
-                ..(**g).clone()
-            })),
+            Type::NamespacedGeneric(g) => {
+                Type::NamespacedGeneric(Box::new(NamespacedGenericType {
+                    args: each(&g.args),
+                    ..(**g).clone()
+                }))
+            }
             Type::Function(f) => Type::Function(Box::new(f.substituted(at))),
             Type::Tuple(elems) => Type::Tuple(each(elems)),
             Type::Reference(inner) => Type::Reference(Box::new(inner.substituted(at))),

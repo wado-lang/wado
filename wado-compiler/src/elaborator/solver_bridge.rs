@@ -433,6 +433,21 @@ impl Lowering {
             }))
     }
 
+    /// A trait reference as the solver spells a bound, `param` placing the
+    /// binders its arguments are written in.
+    fn bound_named(
+        &self,
+        named: &FqTraitName,
+        param: &dyn Fn(&str) -> Option<ParamKind>,
+    ) -> Result<ParamBound, Unsaid> {
+        let trait_ = named
+            .canonical()
+            .and_then(|def| self.known_trait(def))
+            .ok_or(Unsaid::Unsayable)?;
+        let args = said(named.args().iter().map(|arg| self.named_arg(arg, param)))?;
+        Ok(ParamBound { trait_, args })
+    }
+
     /// The declaration a trait id was given for. Every trait id is minted from
     /// one, so a builtin key here is a lowering bug.
     fn trait_def_of(&self, id: TraitDeclId) -> DefId {
@@ -1741,77 +1756,58 @@ impl SolverBridge {
                 .trait_env
                 .bound_declaring_assoc_type(bounds, assoc, &tysys.resolutions)
         };
+        let placed = place_binder(ctx, &table);
         let mut env = Env::default();
         let mut unstated = Vec::new();
         for (position, (name, binder)) in ctx.trait_ctx.type_params.iter().enumerate() {
-            let mut ids = Vec::new();
             // A family parameter also carries what its declaration bounds it
             // by, which an impl writing it need not restate.
-            let family = table.type_key(binder.type_id);
-            for declared in ctx
+            let declared = ctx
                 .trait_ctx
                 .assoc_param_bounds
-                .get(&family)
+                .get(&table.type_key(binder.type_id))
                 .into_iter()
                 .flatten()
-            {
-                let stated = declared
-                    .canonical()
-                    .and_then(|def| self.lowering.known_trait(def))
-                    .ok_or(Unsaid::Unsayable)
-                    .and_then(|trait_| {
-                        let args = said(
-                            declared
-                                .args()
-                                .iter()
-                                .map(|arg| self.lowering.named_arg(arg, &param)),
-                        )?;
-                        Ok(ParamBound { trait_, args })
-                    });
-                match stated {
-                    Ok(bound) => ids.push(bound),
-                    Err(unsaid) => unstated.push((position as u32, unsaid)),
-                }
-            }
-            for scoped in ctx
+                .map(|declared| self.lowering.bound_named(declared, &param));
+            let scoped = ctx
                 .trait_ctx
                 .type_param_bounds
                 .get(name)
                 .into_iter()
                 .flatten()
-            {
-                let self_type = scoped
-                    .self_binding
-                    .map(|binding| {
-                        self.lowering
-                            .type_id(&table, binding.type_id, &place_binder(ctx, &table))
-                    })
-                    .transpose();
-                // A bound naming no trait was reported where it is written.
-                let stated = tysys
-                    .resolutions
-                    .bound_decl(&scoped.bound)
-                    .ok_or(Unsaid::Failed)
-                    .and_then(|def| {
-                        let self_type = self_type?;
-                        let space = Written {
-                            resolutions: &tysys.resolutions,
-                            param: &param,
-                            declaring: &declaring,
-                            self_type: self_type.as_ref(),
-                        };
-                        let args = said(
-                            scoped
-                                .bound
-                                .type_args
-                                .iter()
-                                .map(|arg| self.lowering.ast_type(arg, &space)),
-                        )?;
-                        Ok(ParamBound {
-                            trait_: self.lowering.known_trait(def).ok_or(Unsaid::Unsayable)?,
-                            args,
+                .map(|scoped| {
+                    let self_type = scoped
+                        .self_binding
+                        .map(|binding| self.lowering.type_id(&table, binding.type_id, &placed))
+                        .transpose();
+                    // A bound naming no trait was reported where it is written.
+                    tysys
+                        .resolutions
+                        .bound_decl(&scoped.bound)
+                        .ok_or(Unsaid::Failed)
+                        .and_then(|def| {
+                            let self_type = self_type?;
+                            let space = Written {
+                                resolutions: &tysys.resolutions,
+                                param: &param,
+                                declaring: &declaring,
+                                self_type: self_type.as_ref(),
+                            };
+                            let args = said(
+                                scoped
+                                    .bound
+                                    .type_args
+                                    .iter()
+                                    .map(|arg| self.lowering.ast_type(arg, &space)),
+                            )?;
+                            Ok(ParamBound {
+                                trait_: self.lowering.known_trait(def).ok_or(Unsaid::Unsayable)?,
+                                args,
+                            })
                         })
-                    });
+                });
+            let mut ids = Vec::new();
+            for stated in declared.chain(scoped) {
                 match stated {
                     Ok(bound) => ids.push(bound),
                     Err(unsaid) => unstated.push((position as u32, unsaid)),
@@ -1819,9 +1815,7 @@ impl SolverBridge {
             }
             env.param_bounds.push(ids);
         }
-        let ty = self
-            .lowering
-            .type_id(&table, type_id, &place_binder(ctx, &table))?;
+        let ty = self.lowering.type_id(&table, type_id, &placed)?;
         said(
             unstated
                 .into_iter()
@@ -1864,10 +1858,6 @@ impl SolverBridge {
         asked: &FqTraitName,
     ) -> Result<Question, Unsaid> {
         let (env, ty) = self.env_for(tysys, ctx, type_id)?;
-        let trait_ = asked
-            .canonical()
-            .and_then(|decl| self.lowering.known_trait(decl))
-            .ok_or(Unsaid::Unsayable)?;
         if ty.mentions_decl(&|h| self.lowering.unstated.contains(&h)) {
             return Err(Unsaid::Unsayable);
         }
@@ -1876,10 +1866,9 @@ impl SolverBridge {
             .known_module(scope.current_module_source)
             .ok_or(Unsaid::Unsayable)?;
         let place = place_in(ctx);
-        let args = said(asked.args().iter().map(|name| {
-            self.lowering
-                .named_arg(name, &|name| place(name).map(ParamKind::Type))
-        }))?;
+        let ParamBound { trait_, args } = self
+            .lowering
+            .bound_named(asked, &|name| place(name).map(ParamKind::Type))?;
         Ok(Question {
             env,
             ty,
@@ -2161,10 +2150,7 @@ impl SolverBridge {
         let (eq, _) = self.program.comparisons?;
         // A shape the lowering cannot say is one no source names, so no written
         // impl reaches it.
-        let ty = self
-            .lowering
-            .type_id(table, instance, &by_position)
-            .ok()?;
+        let ty = self.lowering.type_id(table, instance, &by_position).ok()?;
         let (written, impl_) = comparison_row(&self.program, &ty)?;
         let item = if written == eq {
             CompilerItem::Eq
@@ -2228,8 +2214,8 @@ fn place_in(ctx: &scope::Scope) -> impl Fn(&str) -> Option<u32> + '_ {
 }
 
 /// A type parameter at its declared position, where no scope places binders:
-/// a declaration's members, written in its own parameters. A family parameter
-/// is no declaration's.
+/// a declaration's members, or a type read with its parameters rigid. A family
+/// parameter has no declared position.
 fn by_position(binder: Binder) -> Option<u32> {
     match binder {
         Binder::Param { index, .. } => Some(index),

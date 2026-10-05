@@ -330,9 +330,9 @@ impl Query<'_> {
         // A family's own parameters stay open, at their positions in the
         // family, for each projection's arguments to fill.
         let own = u32::try_from(def.params.len()).expect("fewer than 2^32 params");
-        let at_impl = |i: u32| match bindings.get(i as usize) {
-            Some(binding) => binding.as_ref().map(Binding::as_type),
-            None => Some(SolverType::Param(i - own)),
+        let at_impl = |i: u32| match i.checked_sub(own) {
+            None => bindings[i as usize].as_ref().map(Binding::as_type),
+            Some(j) => Some(SolverType::Param(j)),
         };
         let assoc = program
             .assoc_bindings
@@ -381,7 +381,8 @@ impl Query<'_> {
                 let bound = self
                     .holds(&base, *trait_, &[])
                     .and_then(|held| held.assoc.into_iter().find(|(a, _)| a == assoc));
-                let member = bound.and_then(|(_, ty)| ty.map_params(&|j| args.get(j as usize).cloned()));
+                let member =
+                    bound.and_then(|(_, ty)| ty.map_params(&|j| args.get(j as usize).cloned()));
                 match member {
                     Some(ty) => self.normalized(&ty),
                     None => SolverType::Projection {
