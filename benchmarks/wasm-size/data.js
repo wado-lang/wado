@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791163363282,
+  "lastUpdate": 1791173808581,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -63857,6 +63857,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a34d90c55ac3ef8f365a7471226b8b845c384b8a"
         },
         "date": 1791163362145,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338523,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "99c24c4d9816827665908a5e1b4732a4b522d0cb",
+          "message": "Merge pull request #2275 from wado-lang/ccr-5117b114-vbqsqr\n\nfeat(compiler): body-less declarations state every fact the optimizer reads",
+          "timestamp": "2026-10-05T12:58:24+09:00",
+          "tree_id": "3522801eb88d5534a162cdcd623697fcc06c6cf3",
+          "url": "https://github.com/wado-lang/wado/commit/99c24c4d9816827665908a5e1b4732a4b522d0cb"
+        },
+        "date": 1791173808193,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
