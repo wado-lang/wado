@@ -204,22 +204,22 @@ an all-zero seed.
   offer `TreeMap`'s and `TreeSet`'s lookup and iteration API.
 - [x] `gale_gen` builds its maps as `GaleMap` and `GaleSet`. Done when its
   benchmark row is re-measured.
-- [ ] `#[benign(E, …)]` on a global. Done when a fixture shows the listed
+- [x] `#[benign(E, …)]` on a global. Done when a fixture shows the listed
   effects admitted in its initializer, an unlisted one still rejected, and the
   world import still required, and the not-yet-implemented note in
   `spec-attributes.md` is gone.
-- [ ] The initializer rule in `spec-expressions.md`. Done when an unread global
+- [x] The initializer rule in `spec-expressions.md`. Done when an unread global
   is dropped with its initializer, and the imports only it reached, at every
   optimization level; the fixture that pins an unread global's trapping
   initializer as run is replaced; and the not-yet-implemented note is gone.
-- [ ] `DEFAULT_HASH_SEED`, `new()` under it and `with_seed(seed)` on `HashMap`
+- [x] `DEFAULT_HASH_SEED`, `new()` under it and `with_seed(seed)` on `HashMap`
   and `HashSet`, and `HashSeed::random()` removed. Done when every caller of the
   old `new(seed)` has moved to `with_seed`, and every caller of `random()` to
   `new()`.
-- [ ] `Default`, `Serialize` and `Deserialize` on `HashMap` and `HashSet`. Done
+- [x] `Default`, `Serialize` and `Deserialize` on `HashMap` and `HashSet`. Done
   when a `HashMap<String, V>` round-trips through a JSON object in insertion
   order, and the output holds no seed.
-- [ ] Gale uses `HashMap` and `HashSet`, under a fixed seed wherever the
+- [x] Gale uses `HashMap` and `HashSet`, under a fixed seed wherever the
   generator reaches. Done when `GaleMap` and `GaleSet` are deleted and the
   generator still compiles.
 
@@ -231,8 +231,5 @@ an all-zero seed.
 - Floating-point keys have no `Hash`. Their `==` treats every NaN as one value
   and `-0.0` as equal to `0.0`, so a `Hash` has to agree on each of those
   groups, which bit patterns do not.
-- Until its own `Serialize` lands, a `HashMap` is refused one only because the
-  `Array` behind its entries has none. The error walks the private fields to
-  `Array`.
 - Derivation serializes private fields of any type without a hand-written impl.
   `core:prng`'s `Seed` serializes its state words this way.
