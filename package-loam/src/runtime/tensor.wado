@@ -1077,7 +1077,7 @@ fn pairwise(a: &List<f32>, b: &List<f32>, f: fn(f32, f32) -> f32) -> List<f32> {
 }
 
 /// `op` over `a` and `b`, both already of the output's extents.
-fn over<Axes>(a: &Tensor<f32, Axes>, b: &Tensor<f32, Axes>, op: &Expr) -> Tensor<f32, Axes> {
+fn elementwise<Axes>(a: &Tensor<f32, Axes>, b: &Tensor<f32, Axes>, op: &Expr) -> Tensor<f32, Axes> {
     return Tensor { data: op.over(&a.data, &b.data), extents: a.extents };
 }
 
@@ -1250,9 +1250,9 @@ impl Backend for Cpu {
 
     fn zip<Axes>(&mut self, a: &Tensor<f32, Axes>, b: &Tensor<f32, Axes>, op: &Expr) -> Tensor<f32, Axes> {
         if a.extents == b.extents {
-            return over(a, b, op);
+            return elementwise(a, b, op);
         }
-        return over(&zip(a, b, |x, y| x), &zip(a, b, |x, y| y), op);
+        return elementwise(&zip(a, b, |x, y| x), &zip(a, b, |x, y| y), op);
     }
 
     fn zip_suffix<..Pre, ..Suf>(
@@ -1261,7 +1261,7 @@ impl Backend for Cpu {
         b: &Tensor<f32, [..Suf]>,
         op: &Expr,
     ) -> Tensor<f32, [..Pre, ..Suf]> {
-        return over(a, &zip_suffix(a, b, |x, y| y), op);
+        return elementwise(a, &zip_suffix(a, b, |x, y| y), op);
     }
 
     fn zip_suffix_lhs<..Pre, ..Suf>(
@@ -1270,7 +1270,7 @@ impl Backend for Cpu {
         b: &Tensor<f32, [..Pre, ..Suf]>,
         op: &Expr,
     ) -> Tensor<f32, [..Pre, ..Suf]> {
-        return over(&zip_suffix_lhs(a, b, |x, y| x), b, op);
+        return elementwise(&zip_suffix_lhs(a, b, |x, y| x), b, op);
     }
 
     fn zip_at<..Pre, ..Mid, ..Post>(
@@ -1280,7 +1280,7 @@ impl Backend for Cpu {
         trailing: i32,
         op: &Expr,
     ) -> Tensor<f32, [..Pre, ..Mid, ..Post]> {
-        return over(a, &zip_at(a, b, trailing, |x, y| y), op);
+        return elementwise(a, &zip_at(a, b, trailing, |x, y| y), op);
     }
 
     fn select<E: Element, Axes>(
