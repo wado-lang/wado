@@ -2,7 +2,7 @@
 //! with no field a `Tensor` has, as every operator and semantics case does, and
 //! computes what it computes on `Cpu`.
 
-use { OPAQUE_BACKEND, generated, ran } from "./oracle.wado";
+use { generated, program_over, ran } from "./oracle.wado";
 use { read } from "../src/onnx_text.wado";
 use { LayoutRule, Schema } from "../src/schema.wado";
 
@@ -23,10 +23,7 @@ test "the MLP runs through an opaque backend as it does on the CPU" {
             rule("B2", ["Out"]),
         ],
     }).unwrap();
-    let program = `${source}
-${OPAQUE_BACKEND}
-use { println, Stdout } from "core:cli";
-
+    let program = `${program_over(&source)}
 fn weight<A>(extents: List<i32>, value: f32) -> Tensor<f32, A> {
     let mut count = 1;
     for let e of extents {
@@ -77,10 +74,7 @@ test "an If reads its condition back through the opaque backend" {
             rule("Y", ["Total", "Embed"]),
         ],
     }).unwrap();
-    let program = `${source}
-${OPAQUE_BACKEND}
-use { println, Stdout } from "core:cli";
-
+    let program = `${program_over(&source)}
 export fn run() with Stdout {
     for let taken of [true, false] {
         let c = Tensor::<bool, [One]> { data: [taken], extents: [1] };
