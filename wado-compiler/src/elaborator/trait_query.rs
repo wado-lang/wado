@@ -1217,11 +1217,13 @@ impl TypeSystem {
     /// Why `type_id` derives no `Default`, which only a non-generic struct
     /// whose every field declares a default does.
     pub(super) fn default_withheld_note(&self, scope: &TypeLookup, type_id: TypeId) -> String {
-        let def = match self.type_table.borrow().get(type_id) {
+        let table = self.type_table.borrow();
+        let def = match table.get(table.representation_head(type_id)) {
             ResolvedType::Struct { def, .. } => def.decl(),
             ResolvedType::GenericInstance { def, .. } => Some(*def),
             _ => None,
         };
+        drop(table);
         let Some(info) = def.and_then(|def| scope.struct_fields_of(def)) else {
             return "only a struct derives `Default`; write the impl".to_string();
         };
@@ -1237,11 +1239,15 @@ impl TypeSystem {
         format!("field `{name}` has no default expression")
     }
 
+    /// Whether `type_id` derives `Default`: a newtype has no derivation of its
+    /// own, and the one its representation carries answers.
     fn is_defaultable_struct(&self, scope: &TypeLookup, type_id: TypeId) -> bool {
-        let def = match self.type_table.borrow().get(type_id) {
+        let table = self.type_table.borrow();
+        let def = match table.get(table.representation_head(type_id)) {
             ResolvedType::Struct { def, .. } => def.decl(),
             _ => None,
         };
+        drop(table);
         def.and_then(|def| self.auto_derive_default_struct_type(scope, def))
             .is_some()
     }
