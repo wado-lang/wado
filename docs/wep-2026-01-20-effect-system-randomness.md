@@ -63,10 +63,9 @@ This is distinct from:
 
 ## Decision
 
-[WEP: HashMap](./wep-2026-10-01-hash-map.md) replaces the `HashMap` API sketched
-here. `HashMap::new()` does not ask the host for a seed on each call. It reads
-one global, `DEFAULT_HASH_SEED`, whose initializer carries
-`#[benign(InsecureSeed)]`. The observational-purity argument below is unchanged.
+[WEP: HashMap](./wep-2026-10-01-hash-map.md) holds the `HashMap` design. Its
+`new()` does not ask the host for a seed on each call. It reads one global,
+`DEFAULT_HASH_SEED`, whose initializer carries `#[benign(InsecureSeed)]`.
 
 ### Both Maps Preserve Insertion Order
 
@@ -258,7 +257,7 @@ Because `DEFAULT_HASH_SEED` is `#[benign(InsecureSeed)]`, the coercion does not 
 - [x] `InsecureSeed` declared in `lib/wasi/random/insecure_seed.wado`.
 - [x] `TreeMap` implemented in `core:collections` (insertion-order, tree-indexed).
 - [x] `#[benign(E)]` attribute: parsing, effect-check integration (suppress propagation while still requiring the world import), and diagnostics.
-- [x] `HashMap`, insertion-order and hash-indexed. [WEP: HashMap](./wep-2026-10-01-hash-map.md) replaced `SipHash 1-3` and `#[benign(InsecureSeed)]` on `new` with its own design, and carries the work left.
+- [x] `HashMap`, insertion-order and hash-indexed. [WEP: HashMap](./wep-2026-10-01-hash-map.md) carries its design and the work left.
 
 ## Relationship with wasi-keyvalue
 
