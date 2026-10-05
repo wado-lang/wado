@@ -1,0 +1,15 @@
+// A missing range that spans the surrogate gap is reported as one range: no
+// `char` lies inside the gap to split it.
+
+fn is_a(c: char) -> i32 {
+    return match c {
+        'a' => 1,
+    };
+}
+
+export fn run() {
+    let _ = is_a('a');
+}
+
+__DATA__
+{"compile_error": "missing cases `'\\0'..='`'` and `'b'..='\\u{10ffff}'`"}

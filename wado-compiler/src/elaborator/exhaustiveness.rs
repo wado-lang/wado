@@ -161,9 +161,9 @@ pub(super) fn uncovered(patterns: &[&Pat]) -> Vec<Witness> {
                     Witness::Int {
                         lo: next_lo,
                         hi: next_hi,
-                        ..
+                        is_char,
                     },
-                ) if *hi + 1 == *next_lo => *hi = *next_hi,
+                ) if adjacent(*hi, *next_lo, *is_char) => *hi = *next_hi,
                 _ => missing.push(witness),
             }
         }
@@ -314,10 +314,9 @@ fn signature<'p, R: MatrixRow<'p>>(rows: &[R]) -> Option<Vec<Ctor>> {
 /// The domain cut at every range boundary in the column, so each piece lies
 /// wholly inside or outside every range.
 fn split_domain<'p, R: MatrixRow<'p>>(rows: &[R], domain: IntDomain) -> Vec<Ctor> {
+    let hole = hole(domain.is_char);
     let mut cuts = vec![domain.min, domain.max + 1];
-    if domain.is_char {
-        cuts.extend([SURROGATES.start, SURROGATES.end]);
-    }
+    cuts.extend(hole.iter().flat_map(|h| [h.start, h.end]));
     for row in rows {
         if let Pat::Int { lo, hi, .. } = row.pats()[0] {
             cuts.extend([
@@ -329,13 +328,21 @@ fn split_domain<'p, R: MatrixRow<'p>>(rows: &[R], domain: IntDomain) -> Vec<Ctor
     cuts.sort_unstable();
     cuts.dedup();
     cuts.windows(2)
-        .filter(|w| !(domain.is_char && SURROGATES.contains(&w[0])))
+        .filter(|w| !hole.as_ref().is_some_and(|h| h.contains(&w[0])))
         .map(|w| Ctor::Int(w[0], w[1] - 1, domain.is_char))
         .collect()
 }
 
-/// The code points a `char` never holds: it is a Unicode scalar value.
-const SURROGATES: Range<i128> = 0xD800..0xE000;
+/// The values between a domain's bounds that its type never holds: a `char` is
+/// a Unicode scalar value, so it holds no surrogate.
+fn hole(is_char: bool) -> Option<Range<i128>> {
+    is_char.then_some(0xD800..0xE000)
+}
+
+/// Whether no value of the domain lies between `hi` and `lo`.
+fn adjacent(hi: i128, lo: i128, is_char: bool) -> bool {
+    hi + 1 == lo || hole(is_char).is_some_and(|h| h.start == hi + 1 && h.end == lo)
+}
 
 /// `rows` specialized to each of `ctors`, which [`signature`] and [`split_domain`]
 /// list in order. A row reaches only the constructors its head can take.
