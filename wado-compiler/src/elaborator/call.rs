@@ -1596,17 +1596,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ),
                     None => (Vec::new(), None),
                 };
-                let substituted: Vec<TypeId> =
-                    if method_type_args.is_empty() && impl_type_args_inferred.is_empty() {
-                        raw_param_types
-                    } else {
-                        let mut combined_type_args = impl_type_args_inferred.clone();
-                        combined_type_args.extend_from_slice(&method_type_args);
-                        raw_param_types
-                            .iter()
-                            .map(|&t| self.substitute_in_frame(t, &combined_type_args))
-                            .collect()
-                    };
+                let generic = !impl_type_args_inferred.is_empty() || !method_type_args.is_empty();
+                if generic
+                    && self.report_value_for_reference(
+                        &raw_param_types,
+                        &call.args,
+                        &args,
+                        call.span,
+                    )
+                {
+                    return TypeTable::ERROR;
+                }
+                let substituted: Vec<TypeId> = if generic {
+                    let mut combined_type_args = impl_type_args_inferred.clone();
+                    combined_type_args.extend_from_slice(&method_type_args);
+                    raw_param_types
+                        .iter()
+                        .map(|&t| self.substitute_in_frame(t, &combined_type_args))
+                        .collect()
+                } else {
+                    raw_param_types
+                };
                 self.recoerce_literal_args(&call.args, &mut args, &substituted);
                 // Per-argument checking alone passes a call of the wrong length:
                 // the loop below reaches neither a missing argument nor a
@@ -1933,6 +1943,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .collect()
                     };
                     self.recoerce_literal_args(&call.args, &mut args, &checked);
+                    if !combined_type_args.is_empty()
+                        && self.report_value_for_reference(
+                            &param_types,
+                            &call.args,
+                            &args,
+                            call.span,
+                        )
+                    {
+                        return TypeTable::ERROR;
+                    }
                     // The same check the bare `Type::method` spelling gets: a
                     // count is only skipped where no signature answered.
                     let arg_sites = arg_sites_of(&call.args, args.len(), call.span);
@@ -2124,13 +2144,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.check_function_type_arg_bounds(&callee, &type_args, call.span);
         }
 
-        if !self.report_value_for_reference(
-            &callee,
-            &declared_param_types,
-            &call.args,
-            &args,
-            call.span,
-        ) {
+        let generic = !self.lookup_function_type_params(&callee).is_empty();
+        if !(generic
+            && self.report_value_for_reference(&declared_param_types, &call.args, &args, call.span))
+        {
             self.defer_or_report_uninferred_fn_type_args(
                 &callee,
                 &mut type_args,
@@ -3284,19 +3301,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Reports each value a generic callee receives for a reference parameter, whose
-    /// unbound slot the argument check accepts it against. Whether it reported any.
+    /// Reports each value a generic callee receives for a reference parameter,
+    /// read off `param_types` as declared: the argument check accepts it
+    /// against the slot, unbound or the error type. Whether it reported any.
     fn report_value_for_reference(
         &mut self,
-        callee: &CalleeRef,
         param_types: &[TypeId],
         arg_exprs: &[ast::Expr],
         args: &[TypeId],
         call_span: Span,
     ) -> bool {
-        if self.lookup_function_type_params(callee).is_empty() {
-            return false;
-        }
         let is_borrow = |this: &Self, t| {
             RefKind::from_resolved(this.tysys.type_table.borrow().get(t)).is_some()
         };

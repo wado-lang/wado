@@ -707,20 +707,32 @@ pub(super) fn lower_impls<'a>(
     resolutions: &Resolutions,
     declaring: &dyn Fn(&[DefId], &str) -> Option<DefId>,
 ) -> Vec<&'a ImplHeader> {
+    let impl_headers: Vec<(&DefId, &ImplHeader)> = impl_headers.into_iter().collect();
+    // `Self::Item` where the implemented trait declares no `Item` reads the
+    // one impl on the same target that binds it, as the elaborator does.
+    let bound_on_target = |header: &ImplHeader, assoc: &str| {
+        let mut binding = impl_headers.iter().filter_map(|(_, other)| {
+            (other.target == header.target
+                && other.associated_types.iter().any(|b| b.name == assoc))
+            .then(|| other.trait_def())
+            .flatten()
+        });
+        binding.next().filter(|_| binding.next().is_none())
+    };
     let mut sources: Vec<&ImplHeader> = Vec::new();
-    for (&def, header) in impl_headers {
+    for &(&def, header) in &impl_headers {
         let param = |name: &str| ParamKind::of(&header.type_params, name);
         let declaring_here = |base: &str, assoc: &str| {
-            let traits: Vec<DefId> = if base == "Self" {
-                header.trait_def().into_iter().collect()
-            } else {
-                header
-                    .type_params
-                    .iter()
-                    .filter(|p| p.name == base)
-                    .flat_map(|p| p.bounds.iter().filter_map(|b| resolutions.bound_decl(b)))
-                    .collect()
-            };
+            if base == "Self" {
+                let implemented: Vec<DefId> = header.trait_def().into_iter().collect();
+                return declaring(&implemented, assoc).or_else(|| bound_on_target(header, assoc));
+            }
+            let traits: Vec<DefId> = header
+                .type_params
+                .iter()
+                .filter(|p| p.name == base)
+                .flat_map(|p| p.bounds.iter().filter_map(|b| resolutions.bound_decl(b)))
+                .collect();
             declaring(&traits, assoc)
         };
         let mut space = Written {

@@ -309,7 +309,7 @@ impl Query<'_> {
                     let args: Vec<SolverType> = bound
                         .args
                         .iter()
-                        .map(|arg| bound_to(arg).unwrap_or_else(|| arg.clone()))
+                        .map(|arg| self.normalized(&bound_to(arg).unwrap_or_else(|| arg.clone())))
                         .collect();
                     let answer = self.holds(element, bound.trait_, &args)?;
                     // An impl binding the pinned assoc otherwise is refuted;
@@ -339,9 +339,46 @@ impl Query<'_> {
             trait_args: def
                 .trait_args
                 .iter()
-                .map(|arg| bound_to(arg).unwrap_or_else(|| arg.clone()))
+                .map(|arg| self.normalized(&bound_to(arg).unwrap_or_else(|| arg.clone())))
                 .collect(),
         })
+    }
+
+    /// `ty` with each projection an impl answers replaced by what that impl
+    /// binds: `<Ints as Src>::Item` is `i32` under `impl Src for Ints`. A
+    /// projection off a parameter binds nothing here and stays as written.
+    fn normalized(&mut self, ty: &SolverType) -> SolverType {
+        match ty {
+            SolverType::Projection {
+                base,
+                trait_,
+                assoc,
+            } => {
+                let base = self.normalized(base);
+                let bound = self
+                    .holds(&base, *trait_, &[])
+                    .and_then(|held| held.assoc.into_iter().find(|(a, _)| a == assoc));
+                match bound {
+                    Some((_, ty)) => self.normalized(&ty),
+                    None => SolverType::Projection {
+                        base: Box::new(base),
+                        trait_: *trait_,
+                        assoc: *assoc,
+                    },
+                }
+            }
+            SolverType::Decl(head, args) => {
+                SolverType::Decl(*head, args.iter().map(|a| self.normalized(a)).collect())
+            }
+            SolverType::Tuple(elems) => {
+                SolverType::Tuple(elems.iter().map(|e| self.normalized(e)).collect())
+            }
+            SolverType::Ref { is_mut, inner } => SolverType::Ref {
+                is_mut: *is_mut,
+                inner: Box::new(self.normalized(inner)),
+            },
+            SolverType::Param(_) | SolverType::Pack(_) => ty.clone(),
+        }
     }
 }
 
