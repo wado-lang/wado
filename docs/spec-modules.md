@@ -622,7 +622,8 @@ Rationale: [WEP: Re-export Syntax (`pub use`)](./wep-2026-01-25-pub-use-reexport
 ## The Prelude
 
 The prelude (`core:prelude`) is imported into every module automatically, so
-its names need no `use`. It is the one exception to explicit imports.
+its names need no `use`. It and the [`builtin` namespace](#the-builtin-namespace)
+are the two exceptions to explicit imports.
 [Prelude Types](./spec-types.md#prelude-types) lists the types it provides, and
 [`#![no_prelude]`](./spec-attributes.md#no_prelude) turns the import off for one
 module.
@@ -635,3 +636,13 @@ prelude name and needs an import.
 A module may not declare a type with a prelude type's name (`struct Option` is
 an error). The builtin type names (`i32`, `bool`, ...) stay reserved under
 `#![no_prelude]` too.
+
+## The `builtin` Namespace
+
+`builtin::name` names the declaration `name` in `core:builtin`, the module of
+the compiler's intrinsics, in every module and with no `use`:
+`builtin::black_box` ([Optimization Barrier](./spec-control-flow.md#optimization-barrier))
+and `builtin::cold_path` ([Branch Hints](./spec-control-flow.md#branch-hints))
+among them. The
+prefix reaches no more than an import would: a declaration of `core:builtin`
+that is not visible to the calling module is an error to name.
