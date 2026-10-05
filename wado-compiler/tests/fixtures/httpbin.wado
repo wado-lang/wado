@@ -1,0 +1,254 @@
+// An httpbin-style service. `handle` only adapts the CM request to a plain
+// `MockRequest`, so each test drives `route` with one directly: a Wado call of
+// `handle` would block on writing a body nothing reads.
+
+use { Request, Response, ErrorCode, Headers, FieldName, FieldValue, Trailers, StatusCode, Method } from "wasi:http";
+use { TreeMap } from "core:collections";
+use { decode } from "core:base64";
+use { Value } from "core:value";
+use { to_string } from "core:json";
+
+struct MockRequest {
+    method: String = "GET",
+    path_with_query: String,
+    headers: List<[String, String]> = [],
+    body: String = "",
+}
+
+struct MockResponse {
+    status: i32,
+    content_type: String,
+    body: String,
+}
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let mut headers: List<[String, String]> = [];
+    for let [name, value] of request.get_headers().copy_all() {
+        headers.push([name as String, String::from_utf8_lossy(value)]);
+    }
+    let mock = MockRequest {
+        method: method_name(request.get_method()),
+        path_with_query: request.get_path_with_query().unwrap_or("/"),
+        headers,
+        body: read_body(request),
+    };
+    let answer = route(&mock);
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [body_rx, body_tx] = Stream::<u8>::new();
+    let response_headers = Headers::new();
+    let _ = response_headers.append("content-type" as FieldName, answer.content_type.bytes().collect() as FieldValue);
+    let [response, _tx_future] = Response::new(response_headers, Option::<Stream<u8>>::Some(body_rx), trailers_future);
+    response.set_status_code(answer.status as u16 as StatusCode);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    body_tx.write_all(answer.body.bytes().collect());
+    body_tx.drop();
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+fn method_name(m: Method) -> String {
+    return match m {
+        Get => "GET",
+        Head => "HEAD",
+        Post => "POST",
+        Put => "PUT",
+        Delete => "DELETE",
+        Connect => "CONNECT",
+        Options => "OPTIONS",
+        Trace => "TRACE",
+        Patch => "PATCH",
+        Other(s) => s,
+    };
+}
+
+fn read_body(request: Request) -> String {
+    let [res_future, _res_tx] = Future::<Result<(), ErrorCode>>::new();
+    let [body_stream, _trailers] = Request::consume_body(request, res_future);
+    let body = String::from_utf8_lossy(body_stream.read_to_end());
+    body_stream.drop();
+    return body;
+}
+
+fn split_path_query(full: String) -> [String, String] {
+    if let Some(i) = full.find("?") {
+        return [full.substr_bytes(0, i), full.substr_bytes(i + 1, full.len())];
+    }
+    return [full, ""];
+}
+
+fn parse_query_params(query: String) -> TreeMap<String, Value> {
+    let mut params = TreeMap::<String, Value>::new();
+    for let pair of query.split("&") {
+        if pair.is_empty() {
+            continue;
+        }
+        if let Some(eq) = pair.find("=") {
+            params[pair.substr_bytes(0, eq)] = Value::String(pair.substr_bytes(eq + 1, pair.len()));
+        } else {
+            params[pair] = Value::String("");
+        }
+    }
+    return params;
+}
+
+fn headers_to_json(headers: List<[String, String]>) -> Value {
+    let mut map = TreeMap::<String, Value>::new();
+    for let [name, value] of headers {
+        map[name] = Value::String(value);
+    }
+    return Value::Object(map);
+}
+
+fn get_header(headers: List<[String, String]>, name: String) -> String {
+    for let [n, v] of headers {
+        if n == name {
+            return v;
+        }
+    }
+    return "";
+}
+
+fn parse_status_code(s: String) -> Option<u16> {
+    if let Ok(code) = i32::from_str(&s) {
+        if code >= 100 && code <= 599 {
+            return Some(code as u16);
+        }
+    }
+    return null;
+}
+
+fn json(obj: TreeMap<String, Value>) -> MockResponse {
+    return MockResponse { status: 200, content_type: "application/json", body: to_string(&Value::Object(obj)).unwrap() };
+}
+
+fn json_error(status: i32, msg: String) -> MockResponse {
+    let mut obj = TreeMap::<String, Value>::new();
+    obj["error"] = Value::String(msg);
+    return MockResponse { ..json(obj), status };
+}
+
+fn echo(request: &MockRequest, path: String, query: String, with_body: bool) -> MockResponse {
+    let mut obj = TreeMap::<String, Value>::new();
+    obj["method"] = Value::String(request.method);
+    obj["path"] = Value::String(path);
+    obj["args"] = Value::Object(parse_query_params(query));
+    obj["headers"] = headers_to_json(request.headers);
+    obj["origin"] = Value::String(get_header(request.headers, "x-forwarded-for"));
+    obj["url"] = Value::String(request.path_with_query);
+    if with_body {
+        obj["data"] = Value::String(request.body);
+    }
+    return json(obj);
+}
+
+fn route(request: &MockRequest) -> MockResponse {
+    let [path, query] = split_path_query(request.path_with_query);
+    let method = request.method;
+    let sends_body = method == "POST" || method == "PUT" || method == "PATCH";
+
+    if path == "/" {
+        return { status: 200, content_type: "text/html; charset=utf-8", body: "<h1>httpbin</h1>\n" };
+    }
+    for let only of ["GET", "POST", "PUT", "PATCH", "DELETE"] as List<String> {
+        if path == "/" + only.to_ascii_lowercase() {
+            if method != only {
+                return json_error(405, `Method Not Allowed. Use ${only}.`);
+            }
+            return echo(request, path, query, sends_body);
+        }
+    }
+    if path == "/anything" || path.starts_with("/anything/") {
+        return echo(request, path, query, sends_body);
+    }
+    if path == "/headers" {
+        let mut obj = TreeMap::<String, Value>::new();
+        obj["headers"] = headers_to_json(request.headers);
+        return json(obj);
+    }
+    if path == "/ip" {
+        let origin = get_header(request.headers, "x-forwarded-for");
+        let mut obj = TreeMap::<String, Value>::new();
+        obj["origin"] = Value::String(if origin.is_empty() { "unknown" } else { origin });
+        return json(obj);
+    }
+    if path == "/user-agent" {
+        let mut obj = TreeMap::<String, Value>::new();
+        obj["user-agent"] = Value::String(get_header(request.headers, "user-agent"));
+        return json(obj);
+    }
+    if path.starts_with("/status/") {
+        if let Some(code) = parse_status_code(path.substr_bytes(8, path.len())) {
+            return { status: code as i32, content_type: "text/plain", body: "" };
+        }
+        return json_error(400, "Invalid status code");
+    }
+    if path.starts_with("/base64/") {
+        if let Some(decoded) = decode(&path.substr_bytes(8, path.len())) {
+            return { status: 200, content_type: "text/plain", body: String::from_utf8_lossy(decoded) };
+        }
+        return json_error(400, "Invalid base64");
+    }
+    return json_error(404, "Not Found");
+}
+
+test "the root serves HTML" {
+    let r = route(&{ path_with_query: "/" });
+    assert r.status == 200;
+    assert r.content_type == "text/html; charset=utf-8";
+}
+
+test "an unknown path is 404" {
+    let r = route(&{ path_with_query: "/nonexistent" });
+    assert r.status == 404;
+    assert r.body == "{\"error\":\"Not Found\"}";
+}
+
+test "/get echoes the query as args" {
+    let r = route(&{ path_with_query: "/get?foo=bar&baz=1" });
+    assert r.content_type == "application/json";
+    assert r.body == "{\"method\":\"GET\",\"path\":\"/get\",\"args\":{\"foo\":\"bar\",\"baz\":\"1\"},\"headers\":{},\"origin\":\"\",\"url\":\"/get?foo=bar&baz=1\"}";
+}
+
+test "/get refuses another method" {
+    let r = route(&{ method: "POST", path_with_query: "/get" });
+    assert r.status == 405;
+    assert r.body == "{\"error\":\"Method Not Allowed. Use GET.\"}";
+}
+
+test "/post echoes the body as data" {
+    let r = route(&{ method: "POST", path_with_query: "/post", body: "hello world" });
+    assert r.status == 200;
+    assert r.body.contains("\"data\":\"hello world\"");
+}
+
+test "/anything accepts any method" {
+    let r = route(&{ method: "DELETE", path_with_query: "/anything/foo" });
+    assert r.status == 200;
+    assert r.body.contains("\"method\":\"DELETE\",\"path\":\"/anything/foo\"");
+}
+
+test "/headers echoes the request headers" {
+    let r = route(&{ path_with_query: "/headers", headers: [["x-custom", "test-value"]] });
+    assert r.body == "{\"headers\":{\"x-custom\":\"test-value\"}}";
+}
+
+test "/ip falls back to unknown" {
+    assert route(&{ path_with_query: "/ip" }).body == "{\"origin\":\"unknown\"}";
+}
+
+test "/user-agent echoes the header" {
+    let r = route(&{ path_with_query: "/user-agent", headers: [["user-agent", "wado"]] });
+    assert r.body == "{\"user-agent\":\"wado\"}";
+}
+
+test "/status/:code answers with that code" {
+    assert route(&{ path_with_query: "/status/201" }).status == 201;
+}
+
+test "/status/:code rejects a code out of range" {
+    assert route(&{ path_with_query: "/status/600" }).status == 400;
+}
+
+test "/base64/:text decodes" {
+    assert route(&{ path_with_query: "/base64/aGVsbG8=" }).body == "hello";
+}
