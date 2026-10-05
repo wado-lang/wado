@@ -2,7 +2,7 @@
 
 use super::scope::{BinderInScope, ScopedBound, trait_params_from_impl};
 use super::trait_env::ImplTargetKey;
-use super::trait_query::{RigidArgs, SelfBinding};
+use super::trait_query::SelfBinding;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -1404,7 +1404,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &type_args,
                 Some(self_binding),
                 span,
-                RigidArgs::Asked,
             );
         }
         (type_args, subst)

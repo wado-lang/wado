@@ -60,6 +60,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             base_type_id,
                         );
                     } else {
+                        // Each use instantiates the base from its AST; resolved
+                        // here once, in its own frame, for what it owes there.
+                        let mut scope = self.enter_inherited_type_param_scope();
+                        scope.annotate_ctx.trait_ctx.type_params.clear();
+                        scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
+                        scope.register_generic_params(&newtype_decl.type_params, 0);
+                        scope.resolve_type(&newtype_decl.ty);
+                        drop(scope);
                         self.sem
                             .decls
                             .local

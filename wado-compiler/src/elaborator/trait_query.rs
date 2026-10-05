@@ -21,7 +21,7 @@ use super::scope::{
     BinderInScope, BoundSelf, ElaboratedBound, FamilySite, Scope, ScopedBound, TraitCheckFrame,
     trait_params_from_impl,
 };
-use super::sem::decls::PendingTraitRefs;
+use super::sem::decls::{Owed, OwedBounds, PendingBounds};
 use super::trait_env::{ImplMethodHeader, InheritedBound, ViaClause};
 use super::type_resolution::ParamSpace;
 use super::types::{
@@ -247,18 +247,6 @@ impl Drop for OpenQuestion<'_> {
     }
 }
 
-/// Whether a bound check asks a type argument built over the parameters in
-/// scope. A body's parameters carry every bound in force on them, and a rigid
-/// one meets a bound only from those (spec-traits.md §Eligibility). Type
-/// resolution may bind a parameter before its bounds, as an impl's target is
-/// resolved between its names and its bounds (`register_impl_block_params`).
-#[derive(Clone, Copy, Debug)]
-pub(super) enum RigidArgs {
-    /// A call or a literal in a body.
-    Asked,
-    /// A type the source writes.
-    Skipped,
-}
 
 /// What a bound's `Self::Assoc` projects off at a call: the receiver, and the
 /// trait whose declaration wrote the constraint.
@@ -2153,74 +2141,50 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .into_iter()
             .filter(ast::GenericParam::is_real_type_param)
             .collect();
-        self.enforce_type_arg_bounds(&type_params, type_args, None, span, RigidArgs::Asked);
+        self.enforce_type_arg_bounds(&type_params, type_args, None, span);
     }
 
     /// Check the bounds on a generic type declaration's type arguments, for
     /// every `struct`, `variant` and generic newtype instantiation.
-    pub(super) fn check_type_decl_arg_bounds(
-        &mut self,
-        def: DefId,
-        type_args: &[TypeId],
-        span: Span,
-        rigid: RigidArgs,
-    ) {
-        // Any module's impl may answer a bound, so a decl pass leaves its
-        // checks to `check_deferred_decl_arg_bounds`.
-        if self.tysys.solver.is_none() {
-            assert!(
-                matches!(rigid, RigidArgs::Skipped),
-                "a decl pass walks no body"
-            );
-            self.sem
-                .decls
-                .pending_decl_arg_bounds
-                .push((def, type_args.to_vec(), span));
-            return;
-        }
-        let Some(params) = self
-            .type_lookup()
-            .declared_generic_params(def)
-            .map(<[ast::GenericParam]>::to_vec)
-        else {
-            return;
-        };
-        self.enforce_type_arg_bounds(&params, type_args, None, span, rigid);
+    pub(super) fn check_type_decl_arg_bounds(&mut self, def: DefId, type_args: &[TypeId], span: Span) {
+        self.owe_bounds(OwedBounds {
+            span,
+            owed: Owed::DeclArgs {
+                def,
+                type_args: type_args.to_vec(),
+            },
+        });
     }
 
-    /// Check the bounds the decl pass met before the solver was built.
+    /// Check the bounds the decl pass met before the solver was built, each
+    /// in the frame it was met in.
     pub(super) fn check_deferred_decl_arg_bounds(&mut self) {
-        for (def, type_args, span) in std::mem::take(&mut self.sem.decls.pending_decl_arg_bounds) {
-            self.check_type_decl_arg_bounds(def, &type_args, span, RigidArgs::Skipped);
-        }
-        for pending in std::mem::take(&mut self.sem.decls.pending_trait_ref_bounds) {
+        assert!(
+            self.tysys.solver.is_some(),
+            "deferred bounds wait for the solver"
+        );
+        for pending in std::mem::take(&mut self.sem.decls.pending_bounds) {
             util::replaced(
                 self,
                 |e| &mut e.annotate_ctx.trait_ctx,
                 pending.frame,
-                |this| {
-                    this.enforce_trait_refs(
-                        pending.type_arg,
-                        &pending.refs,
-                        &pending.param_name,
-                        pending.span,
-                    );
-                },
+                |this| this.owe_bounds(pending.bounds),
             );
         }
     }
 
     /// The single enforcement of trait bounds on a generic decl's type args,
-    /// shared by every generic-call kind so the rule cannot drift. Only a
-    /// settled arg is enforced, as `rigid` says, and `self_binding` is what a
-    /// bound's `Self::Assoc` projects off where the call binds one.
+    /// shared by every generic-call kind so the rule cannot drift. Only an arg
+    /// that is one type in the frame is enforced: a rigid parameter meets a
+    /// bound from the bounds in force on it (spec-traits.md §Eligibility).
+    /// `self_binding` is what a bound's `Self::Assoc` projects off where the
+    /// call binds one.
     pub(super) fn enforce_type_arg_bounds(
         &mut self,
         params: &[ast::GenericParam],
         type_args: &[TypeId],
         self_binding: Option<SelfBinding>,
         span: Span,
-        rigid: RigidArgs,
     ) {
         let at_call = self.tysys.call_site_types(params, type_args);
         let site: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
@@ -2228,15 +2192,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(&type_arg) = type_args.get(i) else {
                 continue;
             };
-            let asked = match rigid {
-                RigidArgs::Asked => {
-                    self.tysys
-                        .solver()
-                        .is_rigid(&self.tysys, &self.annotate_ctx, type_arg)
-                }
-                RigidArgs::Skipped => !self.tysys.type_table.borrow().contains_type_param(type_arg),
-            };
-            if !asked {
+            if !self
+                .tysys
+                .solver()
+                .is_rigid(&self.tysys, &self.annotate_ctx, type_arg)
+            {
                 // A hole carries its own slot's bounds to finalize; this slot's
                 // go with an answer an enclosing call is still to give.
                 if self.awaits_pending_call(type_arg) {
@@ -2355,22 +2315,80 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param_name: &str,
         span: Span,
     ) {
+        self.owe_bounds(OwedBounds {
+            span,
+            owed: Owed::TraitRefs {
+                type_arg,
+                refs: refs.to_vec(),
+                param_name: param_name.to_string(),
+            },
+        });
+    }
+
+    /// Ask `bounds` where the frame can answer them: now, once the frame
+    /// holding them is complete, or once the solver is built.
+    fn owe_bounds(&mut self, bounds: OwedBounds) {
+        if let Some(held) = &mut self.annotate_ctx.held_bounds {
+            held.push(bounds);
+            return;
+        }
         // Any module's impl may answer a bound, so a decl pass leaves its
         // checks to `check_deferred_decl_arg_bounds`, with the frame placing
         // the parameters they name.
         if self.tysys.solver.is_none() {
+            let frame = self.annotate_ctx.trait_ctx.clone();
             self.sem
                 .decls
-                .pending_trait_ref_bounds
-                .push(PendingTraitRefs {
-                    type_arg,
-                    refs: refs.to_vec(),
-                    param_name: param_name.to_string(),
-                    span,
-                    frame: self.annotate_ctx.trait_ctx.clone(),
-                });
+                .pending_bounds
+                .push(PendingBounds { bounds, frame });
             return;
         }
+        let OwedBounds { span, owed } = bounds;
+        match owed {
+            Owed::DeclArgs { def, type_args } => {
+                let Some(params) = self
+                    .type_lookup()
+                    .declared_generic_params(def)
+                    .map(<[ast::GenericParam]>::to_vec)
+                else {
+                    return;
+                };
+                self.enforce_type_arg_bounds(&params, &type_args, None, span);
+            }
+            Owed::TraitRefs {
+                type_arg,
+                refs,
+                param_name,
+            } => self.answer_trait_refs(type_arg, &refs, &param_name, span),
+        }
+    }
+
+    /// Run `body` holding the bounds it owes, for a frame whose parameters'
+    /// bounds are added after the types naming them are resolved. Hand them
+    /// to [`Self::release_bounds`] once the frame is complete.
+    pub(super) fn holding_bounds<R>(
+        &mut self,
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> (R, Vec<OwedBounds>) {
+        let (result, held) =
+            util::replaced(self, |e| &mut e.annotate_ctx.held_bounds, Some(Vec::new()), body);
+        (result, held.expect("the hold is the one `body` ran under"))
+    }
+
+    /// Ask what [`Self::holding_bounds`] held, in the frame now in force.
+    pub(super) fn release_bounds(&mut self, held: Vec<OwedBounds>) {
+        for bounds in held {
+            self.owe_bounds(bounds);
+        }
+    }
+
+    fn answer_trait_refs(
+        &mut self,
+        type_arg: TypeId,
+        refs: &[TraitRef],
+        param_name: &str,
+        span: Span,
+    ) {
         for trait_ref in refs {
             let (trait_name, trait_) = {
                 let table = self.tysys.type_table.borrow();

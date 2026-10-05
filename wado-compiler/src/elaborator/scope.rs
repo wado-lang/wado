@@ -17,6 +17,7 @@ use crate::module_source::ModuleSource;
 use crate::tir::{TraitRef, TypeId, TypeKey};
 
 use super::coercion::PendingLiterals;
+use super::sem::decls::OwedBounds;
 use super::trait_env::{InheritedBound, ViaClause};
 use super::trait_query::SelfBinding;
 use super::type_resolution::ParamSpace;
@@ -361,6 +362,10 @@ pub(super) struct Scope {
     /// call's open variables, one entry per call nested in another's argument,
     /// innermost last. See [`PendingLiterals`].
     pub(super) pending_literals: Vec<PendingLiterals>,
+    /// Set while the frame's parameters are named before their bounds are in
+    /// force: the bounds the types resolved meanwhile owe. See
+    /// [`Elaborator::holding_bounds`].
+    pub(super) held_bounds: Option<Vec<OwedBounds>>,
 }
 
 impl Scope {

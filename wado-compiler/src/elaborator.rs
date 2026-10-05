@@ -242,13 +242,17 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
         }
         self.bind_fn_bound_params(&impl_block.type_params);
         // Between the names and their bounds: the target is resolved from the
-        // names, and a bound's `Self::Assoc` projects off the target.
-        let implementing = self.impl_self_binding(&impl_block.ty, impl_block.trait_type.as_ref());
+        // names, and a bound's `Self::Assoc` projects off the target. What the
+        // target owes is asked once the bounds are in force.
+        let (implementing, held) = self.holding_bounds(|this| {
+            this.impl_self_binding(&impl_block.ty, impl_block.trait_type.as_ref())
+        });
         self.set_self_binding(implementing);
         for param in &impl_block.type_params {
             let bounds = self.scoped_bounds(param);
             self.add_param_bounds(&param.name, bounds);
         }
+        self.release_bounds(held);
     }
 }
 impl<'a, H: CompilerHost> Elaborator<'a, H> {

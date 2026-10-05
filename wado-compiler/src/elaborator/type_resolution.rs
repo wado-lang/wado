@@ -10,7 +10,7 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::scope::{BinderInScope, FamilySite, ScopedBound};
-use super::trait_query::{RigidArgs, SelfBinding};
+use super::trait_query::SelfBinding;
 use super::types::{TypeError, forward_type_param_defaults};
 use crate::ast;
 use crate::ast::{NamespacedGenericType, TraitBound};
@@ -969,7 +969,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 TypeTable::UNKNOWN
             } else {
                 let type_args = self.type_args_of_application(def, args);
-                self.check_type_decl_arg_bounds(def, &type_args, span, RigidArgs::Skipped);
+                self.check_type_decl_arg_bounds(def, &type_args, span);
                 // Named by the declaration its head resolved to, the arguments beside
                 // it rather than fused into a rendered `Box<i32>` no `impl` header writes.
                 self.tysys
@@ -979,7 +979,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         } else if self.lookup_generic_newtype_of_decl(def).is_some() {
             let type_args = self.type_args_of_application(def, args);
-            self.check_type_decl_arg_bounds(def, &type_args, span, RigidArgs::Skipped);
+            self.check_type_decl_arg_bounds(def, &type_args, span);
             self.generic_newtype_instance(def, type_args)
         } else {
             self.resolve_generic_type_out_of_scope(site, name, args, span)

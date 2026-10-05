@@ -41,16 +41,32 @@ pub(crate) struct FunctionSig {
     pub(crate) effects: Vec<EffectRef>,
 }
 
-/// An argument owing `refs` on behalf of `param_name`, held until the solver
-/// can answer them.
+/// Bounds a written type owes, at the span that wrote it.
 #[derive(Clone)]
-pub(in crate::elaborator) struct PendingTraitRefs {
-    pub(in crate::elaborator) type_arg: TypeId,
-    pub(in crate::elaborator) refs: Vec<TraitRef>,
-    pub(in crate::elaborator) param_name: String,
+pub(in crate::elaborator) struct OwedBounds {
     pub(in crate::elaborator) span: Span,
-    /// What places the type parameters `type_arg` and `refs` name: the
-    /// declaration's frame, gone once the decl pass leaves it.
+    pub(in crate::elaborator) owed: Owed,
+}
+
+/// What [`OwedBounds`] asks.
+#[derive(Clone)]
+pub(in crate::elaborator) enum Owed {
+    /// A generic type application's arguments, owing its declaration's bounds.
+    DeclArgs { def: DefId, type_args: Vec<TypeId> },
+    /// An argument owing bounds already instantiated, on behalf of
+    /// `param_name`.
+    TraitRefs {
+        type_arg: TypeId,
+        refs: Vec<TraitRef>,
+        param_name: String,
+    },
+}
+
+/// [`OwedBounds`] held until the solver can answer them, with the frame that
+/// places the type parameters they name: gone once the decl pass leaves it.
+#[derive(Clone)]
+pub(in crate::elaborator) struct PendingBounds {
+    pub(in crate::elaborator) bounds: OwedBounds,
     pub(in crate::elaborator) frame: TraitContext,
 }
 
@@ -136,13 +152,8 @@ pub(crate) struct ModuleDecls {
     /// (which records) from reify (which emits).
     pub(crate) pending_synthesis_requests: Vec<tir::SynthesisRequest>,
 
-    /// Generic type applications the decl pass met before the solver that
-    /// answers their bounds was built: `(declaration, type arguments, span)`.
-    pub(crate) pending_decl_arg_bounds: Vec<(DefId, Vec<TypeId>, Span)>,
-
-    /// Arguments the decl pass met owing bounds already instantiated before
-    /// the solver was built, each with the frame it was written in.
-    pub(in crate::elaborator) pending_trait_ref_bounds: Vec<PendingTraitRefs>,
+    /// Bounds the decl pass met before the solver that answers them was built.
+    pub(in crate::elaborator) pending_bounds: Vec<PendingBounds>,
 
     /// Additions to the data tables made during this module's walk, read by
     /// `TypeLookup` ahead of the program's. Keyed by declaration, never spelling.
