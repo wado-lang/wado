@@ -263,9 +263,6 @@ impl Query<'_> {
         if reached_by(program, implemented, ty, def.origin.yields_to()) {
             return None;
         }
-        let bound_to = |ty: &SolverType| {
-            ty.map_params(&|i| bindings.get(i as usize)?.as_ref().map(Binding::as_type))
-        };
         let mut requests = match def.origin {
             ImplOrigin::Written => Vec::new(),
             ImplOrigin::Derived | ImplOrigin::Marker | ImplOrigin::Paired => {
@@ -309,13 +306,16 @@ impl Query<'_> {
                     let args: Vec<SolverType> = bound
                         .args
                         .iter()
-                        .map(|arg| self.normalized(&bound_to(arg).unwrap_or_else(|| arg.clone())))
+                        .map(|arg| {
+                            self.at_bindings(arg, &bindings)
+                                .unwrap_or_else(|| arg.clone())
+                        })
                         .collect();
                     let answer = self.holds(element, bound.trait_, &args)?;
                     // An impl binding the pinned assoc otherwise is refuted;
                     // one binding nothing is not.
                     for pin in param.pins.iter().filter(|pin| pin.trait_ == bound.trait_) {
-                        let Some(expected) = bound_to(&pin.ty) else {
+                        let Some(expected) = self.at_bindings(&pin.ty, &bindings) else {
                             continue;
                         };
                         let actual = answer.assoc.iter().find(|(assoc, _)| *assoc == pin.assoc);
@@ -332,16 +332,27 @@ impl Query<'_> {
             .get(&id)
             .into_iter()
             .flatten()
-            .filter_map(|(assoc, binding)| Some((*assoc, bound_to(binding)?)))
+            .filter_map(|(assoc, binding)| Some((*assoc, self.at_bindings(binding, &bindings)?)))
             .collect();
         Some(Answer {
             holds: Holds { requests, assoc },
             trait_args: def
                 .trait_args
                 .iter()
-                .map(|arg| self.normalized(&bound_to(arg).unwrap_or_else(|| arg.clone())))
+                .map(|arg| {
+                    self.at_bindings(arg, &bindings)
+                        .unwrap_or_else(|| arg.clone())
+                })
                 .collect(),
         })
+    }
+
+    /// `ty`, written in an impl's parameter space, at what the match bound
+    /// each parameter to, normalized there. `None` where it names a parameter
+    /// the match left unbound.
+    fn at_bindings(&mut self, ty: &SolverType, bindings: &[Option<Binding>]) -> Option<SolverType> {
+        let bound = ty.map_params(&|i| bindings.get(i as usize)?.as_ref().map(Binding::as_type))?;
+        Some(self.normalized(&bound))
     }
 
     /// `ty` with each projection an impl answers replaced by what that impl
