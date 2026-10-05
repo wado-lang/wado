@@ -167,9 +167,8 @@ slow for the role.
 
 ### `TreeMap` stays
 
-`TreeMap` needs no seed, and its worst case is logarithmic. It stays the map for
-a world without `insecure-seed`, and the Component Model `map<K, V>` stays
-`TreeMap` ([WEP: CM map type](./wep-2026-08-25-cm-map-type.md)). `core:value`
+`TreeMap` needs no seed, and its worst case is logarithmic. The Component Model
+`map<K, V>` stays `TreeMap` ([WEP: CM map type](./wep-2026-08-25-cm-map-type.md)). `core:value`
 objects, which hold parsed external input, stay `TreeMap` as well.
 
 ### `Default`, `Serialize` and `Deserialize`, by hand
