@@ -519,7 +519,7 @@ variant Maybe<T> {
 }
 
 // Option and Result are defined as variants in core:prelude
-// pub variant Option<T> { Some(T), None }
+// pub variant Option<T> { None, Some(T) }
 // pub variant Result<T, E> { Ok(T), Err(E) }
 
 // Construction

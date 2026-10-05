@@ -45,3 +45,15 @@ test "a generic variant derives where its argument is Ord" {
     assert Tree::Leaf(1) < Tree::Leaf(2);
     assert Tree::Leaf(9) < Tree::<i32>::Empty;
 }
+
+test "Option and Result order as Rust's do" {
+    let none: Option<i32> = null;
+    assert none < Some(0);
+    assert Option::Some(1) < Option::Some(2);
+    let ok: Result<i32, i32> = Ok(5);
+    assert ok < Err(0);
+    assert ok < Ok(6);
+    let mut opts: List<Option<i32>> = [Some(2), null, Some(1)];
+    opts.sort();
+    assert opts == [null, Some(1), Some(2)];
+}

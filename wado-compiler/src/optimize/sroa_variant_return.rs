@@ -34,9 +34,65 @@ const MAX_TUPLE_ARITY: usize = 8;
 /// address-taken local into.
 const BOX_FIELD: &str = "value";
 
-/// `Option`'s case indices, as declared in `lib/core/prelude/types.wado`.
-const OPTION_SOME: u32 = 0;
-const OPTION_NONE: u32 = 1;
+/// One case of `Option`, as the compiler-item registry declares it.
+#[derive(Clone)]
+struct OptionCase {
+    name: String,
+    index: u32,
+}
+
+/// `Option`'s two cases, read from the registry once the type table is in hand
+/// so the rewrite never has to consult it again.
+#[derive(Clone)]
+pub(super) struct OptionCases {
+    some: OptionCase,
+    none: OptionCase,
+}
+
+impl OptionCases {
+    pub(super) fn of(type_table: &TypeTable) -> Self {
+        let case = |item| {
+            let (_, _, name, index) = type_table.compiler_variant_case(item);
+            OptionCase {
+                name: name.to_string(),
+                index,
+            }
+        };
+        OptionCases {
+            some: case(CompilerItem::OptionSome),
+            none: case(CompilerItem::OptionNone),
+        }
+    }
+
+    /// `Some(payload)` of `option_type`.
+    fn some_of(&self, option_type: TypeId, payload: Operand) -> ExprKind {
+        ExprKind::VariantConstruct {
+            variant_type: option_type,
+            case_index: self.some.index,
+            case_name: self.some.name.clone(),
+            payload: Some(payload),
+        }
+    }
+
+    /// The payload of `option`, known to be a `Some`.
+    fn some_payload(&self, option: Operand, payload_type: TypeId) -> ExprKind {
+        ExprKind::VariantPayload {
+            expr: option,
+            case_index: self.some.index,
+            payload_type,
+        }
+    }
+
+    /// `None` of `option_type`.
+    pub(super) fn none_of(&self, option_type: TypeId) -> ExprKind {
+        ExprKind::VariantConstruct {
+            variant_type: option_type,
+            case_index: self.none.index,
+            case_name: self.none.name.clone(),
+            payload: None,
+        }
+    }
+}
 
 /// The value that fills a slot the live case does not use. Resolved once, when
 /// the type table is in hand, so the rewrite never has to consult it again.
@@ -100,6 +156,8 @@ struct Layout {
     /// way (`translate.rs`, `ValueKind::Null`), so this is the same decision,
     /// made earlier.
     null_case: Option<u32>,
+    /// For the `Some` a wrapped slot carries and the `None` a pad mints.
+    option: OptionCases,
 }
 
 impl Layout {
@@ -610,11 +668,7 @@ fn rebuild_variant(
             if slot.wrap_in_some {
                 let payload_type = layout.case_payloads[case_index as usize];
                 Operand::Expr(body.exprs.push(ExprNode {
-                    kind: ExprKind::VariantPayload {
-                        expr: read,
-                        case_index: OPTION_SOME,
-                        payload_type,
-                    },
+                    kind: layout.option.some_payload(read, payload_type),
                     type_id: payload_type,
                     span,
                 }))
@@ -1010,11 +1064,11 @@ fn compute_layout(project: &NirPackage, variant_type: TypeId) -> Option<Layout> 
         project.type_table.borrow_mut().make_tuple(elements)
     };
 
-    let null_case = project
-        .type_table
-        .borrow()
+    let type_table = project.type_table.borrow();
+    let option = OptionCases::of(&type_table);
+    let null_case = type_table
         .as_option(variant_type)
-        .map(|_| OPTION_NONE);
+        .map(|_| option.none.index);
 
     Some(Layout {
         tuple_type,
@@ -1024,6 +1078,7 @@ fn compute_layout(project: &NirPackage, variant_type: TypeId) -> Option<Layout> 
         case_names,
         case_payloads,
         null_case,
+        option,
     })
 }
 
@@ -1952,26 +2007,29 @@ fn build_result_tuple(
         let live = slot.filter(|s| s.index == i).and_then(|s| {
             payload.map(|p| {
                 if s.wrap_in_some {
-                    wrap_in_some(body, p, layout.slot_types[i], span)
+                    wrap_in_some(body, p, layout.slot_types[i], &layout.option, span)
                 } else {
                     p
                 }
             })
         });
-        elements.push(live.unwrap_or_else(|| pad_value(body, layout.slot_pads[i], span)));
+        elements.push(
+            live.unwrap_or_else(|| pad_value(body, layout.slot_pads[i], &layout.option, span)),
+        );
     }
     ExprKind::TupleLiteral { elements }
 }
 
 /// `Some(v)` for a slot whose type is `Option<payload>`.
-fn wrap_in_some(body: &mut Body, payload: Operand, slot_type: TypeId, span: Span) -> Operand {
+fn wrap_in_some(
+    body: &mut Body,
+    payload: Operand,
+    slot_type: TypeId,
+    option: &OptionCases,
+    span: Span,
+) -> Operand {
     Operand::Expr(body.exprs.push(ExprNode {
-        kind: ExprKind::VariantConstruct {
-            variant_type: slot_type,
-            case_index: OPTION_SOME,
-            case_name: "Some".to_string(),
-            payload: Some(payload),
-        },
+        kind: option.some_of(slot_type, payload),
         type_id: slot_type,
         span,
     }))
@@ -1998,19 +2056,14 @@ pub(super) fn zero_pad(type_id: TypeId, type_table: &TypeTable) -> Option<Pad> {
 
 /// The value that fills a slot the live case does not use. Never read — every
 /// reader tests the tag first.
-fn pad_value(body: &mut Body, pad: Pad, span: Span) -> Operand {
+fn pad_value(body: &mut Body, pad: Pad, option: &OptionCases, span: Span) -> Operand {
     match pad {
         Pad::Int(ty) => constant(body, ValueKind::Int(0, ty), ty),
         Pad::Float(ty) => constant(body, ValueKind::Float(0.0f64.to_bits(), ty), ty),
         Pad::Bool => constant(body, ValueKind::Bool(false), TypeTable::BOOL),
         Pad::Char => constant(body, ValueKind::Char('\0'), TypeTable::CHAR),
         Pad::NoneOf(option_type) => Operand::Expr(body.exprs.push(ExprNode {
-            kind: ExprKind::VariantConstruct {
-                variant_type: option_type,
-                case_index: OPTION_NONE,
-                case_name: "None".to_string(),
-                payload: None,
-            },
+            kind: option.none_of(option_type),
             type_id: option_type,
             span,
         })),
@@ -2760,11 +2813,9 @@ fn slot_read(body: &mut Body, local: u32, layout: &Layout, case_index: u32, cx: 
     }
     let payload_type = layout.case_payloads[case_index as usize];
     body.exprs.push(ExprNode {
-        kind: ExprKind::VariantPayload {
-            expr: Operand::Expr(read),
-            case_index: OPTION_SOME,
-            payload_type,
-        },
+        kind: layout
+            .option
+            .some_payload(Operand::Expr(read), payload_type),
         type_id: payload_type,
         span: cx.span,
     })

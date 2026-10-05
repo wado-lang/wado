@@ -133,8 +133,8 @@ Codegen handles each node kind independently. It never inspects the variant name
 
 ```wado
 pub variant Option<T> {
-    Some(T),
     None,
+    Some(T),
 }
 
 pub variant Result<T, E> {
