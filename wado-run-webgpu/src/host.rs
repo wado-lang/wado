@@ -192,8 +192,14 @@ fn webgpu_import(engine: &Engine, component: &Component) -> Option<String> {
         .map(str::to_owned)
 }
 
+/// The GC heap `wado run` starts a guest with, `DEFAULT_GC_HEAP_INITIAL_SIZE`
+/// in `wado-cli/src/runtime.rs`. wasmtime collects before it grows, so a heap
+/// starting at zero pays a full trace at every doubling up to the working set.
+const GC_HEAP_INITIAL_SIZE: u64 = 256 << 20;
+
 /// What `wado run` configures, so a program behaves the same under either
-/// runner: the same features, the same collector, the same Cranelift level.
+/// runner: the same features, the same collector and initial GC heap, the same
+/// Cranelift level.
 fn engine_config(opt_level: OptLevel) -> Config {
     let mut config = Config::new();
     config.wasm_component_model_gc(true);
@@ -203,6 +209,7 @@ fn engine_config(opt_level: OptLevel) -> Config {
     config.wasm_wide_arithmetic(true);
     config.wasm_branch_hinting(true);
     config.collector(Collector::Copying);
+    config.gc_heap_initial_size(GC_HEAP_INITIAL_SIZE);
     config.cranelift_opt_level(cranelift_opt_level(opt_level));
     config
 }
