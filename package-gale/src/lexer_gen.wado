@@ -4741,12 +4741,51 @@ fn char_pat(start: char, end: char) -> String {
     return `${quoted_char(start)}..=${quoted_char(end)}`;
 }
 
-/// The `General_Category` groups whose chars print as nothing on their own.
-global UNPRINTED_CHAR_GROUPS: List<String> = ["Z", "M", "C"];
+/// The code points whose chars print as nothing on their own (the
+/// `General_Category` groups `Z`, `M` and `C`), as ascending, disjoint ranges:
+/// `starts[i]..=ends[i]`. Asked of ICU once, since a generation quotes
+/// thousands of chars.
+struct UnprintedChars {
+    starts: List<u32>,
+    ends: List<u32>,
+}
+
+global UNPRINTED_CHARS: UnprintedChars = unprinted_chars();
+
+fn unprinted_chars() -> UnprintedChars {
+    let mut ranges: List<[u32, u32]> = [];
+    for let group of ["Z", "M", "C"] {
+        for let r of icu::value_ranges("gc", group).unwrap() {
+            ranges.push(r);
+        }
+    }
+    ranges.sort_by(|a: &[u32, u32], b: &[u32, u32]| a.0.cmp(&b.0));
+    let mut out = UnprintedChars { starts: [], ends: [] };
+    for let [start, end] of ranges {
+        out.starts.push(start);
+        out.ends.push(end);
+    }
+    return out;
+}
+
+fn is_unprinted(code: u32) -> bool {
+    let set = &UNPRINTED_CHARS;
+    let mut lo = 0;
+    let mut hi = set.starts.len();
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        if set.starts[mid] <= code {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    return lo > 0 && code <= set.ends[lo - 1];
+}
 
 fn quoted_char(c: char) -> String {
     let code = c as u32;
-    if code > 0x7F && UNPRINTED_CHAR_GROUPS.iter_ref().any(|g| icu::value_contains("gc", *g, c).unwrap()) {
+    if code > 0x7F && is_unprinted(code) {
         return `'\\u{${code:x}}'`;
     }
     return `${char_range_pat(c..=c)}`;
