@@ -12,7 +12,7 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::callee::StaticMethodRef;
-use super::method_call::StaticReceiver;
+use super::method_call::{MethodSignatureFacts, StaticReceiver};
 use super::sem::types::CalleeParams;
 use super::sig::MethodSig;
 use super::synth::ArgClass;
@@ -411,16 +411,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_type: Option<TypeId>,
         arg_types: &[TypeId],
     ) -> Option<TypeId> {
-        let lookup = self.type_lookup();
-        if lookup.declared_type_param_ids(def).is_some() {
+        if self.type_lookup().declared_type_param_ids(def).is_some() {
             let tt = self.tysys.type_table.borrow();
             let receiver = tt.peel_refs(*arg_types.first()?);
             return (tt.nominal_def(receiver) == Some(def)).then_some(receiver);
         }
-        receiver_type.or_else(|| {
-            let ty = Self::nominal_type_of(def, &mut self.tysys.type_table.borrow_mut(), &lookup);
-            (ty != TypeTable::UNKNOWN).then_some(ty)
-        })
+        receiver_type.or_else(|| self.declared_self_type(def))
+    }
+
+    /// The type a struct, resource, variant or enum declaration `def` declares,
+    /// a generic one applied to its own parameters.
+    pub(super) fn declared_self_type(&self, def: DefId) -> Option<TypeId> {
+        let lookup = self.type_lookup();
+        let mut table = self.tysys.type_table.borrow_mut();
+        let ty = match lookup.declared_type_param_ids(def) {
+            Some(params) => table.make_generic_instance(def, params.to_vec()),
+            None => Self::nominal_type_of(def, &mut table, &lookup),
+        };
+        (ty != TypeTable::UNKNOWN).then_some(ty)
     }
 
     /// `derived` as the qualified spelling calls it: the receiver by reference,
@@ -437,17 +445,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow_mut()
             .intern(ResolvedType::Ref(receiver_type));
-        let params = CalleeParams {
-            param_is_mut: std::iter::once(false).chain(info.param_is_mut).collect(),
-            param_defaults: std::iter::once(("self".to_string(), None))
-                .chain(info.param_names.into_iter().map(|name| (name, None)))
-                .collect(),
-            param_types: std::iter::once(receiver_ref)
-                .chain(info.param_types)
-                .collect(),
-            self_in_args: true,
+        let (_, params) = MethodSignatureFacts {
+            param_is_mut: info.param_is_mut,
+            param_names: info.param_names,
+            param_defaults: info.param_defaults,
+            param_types: info.param_types,
+            type_args: Vec::new(),
+            self_kind: ast::SelfKind::Ref,
             defaults_module: None,
-        };
+        }
+        .into_dispatch_parts(receiver_ref);
         StaticCallee {
             params,
             own_params: Vec::new(),

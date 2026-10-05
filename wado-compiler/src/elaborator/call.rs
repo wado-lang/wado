@@ -2459,22 +2459,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
         let def = key.decl()?;
-        let lookup = self.type_lookup();
-        let mut table = self.tysys.type_table.borrow_mut();
-        let (receiver, slots) = match lookup.declared_type_param_ids(def) {
-            Some(params) => (
-                table.make_generic_instance(def, params.to_vec()),
-                params.to_vec(),
-            ),
-            None => (Self::nominal_type_of(def, &mut table, &lookup), Vec::new()),
-        };
-        if receiver == TypeTable::UNKNOWN {
-            return None;
-        }
-        let receiver_ref = table.intern(ResolvedType::Ref(receiver));
+        let receiver = self.declared_self_type(def)?;
+        let receiver_ref = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .intern(ResolvedType::Ref(receiver));
         Some(CalleeSignature {
             param_types: vec![receiver_ref, receiver_ref],
-            slots,
+            slots: self
+                .type_lookup()
+                .declared_type_param_ids(def)
+                .unwrap_or_default()
+                .to_vec(),
             return_type: Some(return_type),
         })
     }

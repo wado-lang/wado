@@ -172,7 +172,7 @@ impl MethodSignatureFacts {
     /// What the qualified spelling files: this call's type arguments, and the
     /// callee's parameters with the receiver leading each list. The counterpart
     /// of [`CalleeParams::of_signature`], which the ordinary spelling reaches.
-    fn into_dispatch_parts(self, receiver_type: TypeId) -> (Vec<TypeId>, CalleeParams) {
+    pub(super) fn into_dispatch_parts(self, receiver_type: TypeId) -> (Vec<TypeId>, CalleeParams) {
         let mut param_is_mut = vec![self.self_kind == ast::SelfKind::MutRef];
         param_is_mut.extend(self.param_is_mut);
         let mut param_defaults: Vec<(String, Option<ast::Expr>)> = vec![("self".to_string(), None)];
