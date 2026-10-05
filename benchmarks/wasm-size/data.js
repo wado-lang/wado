@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791158829416,
+  "lastUpdate": 1791163363282,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -63813,6 +63813,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f5f079af8260666ba2e46a86fc698e2c6a8c9613"
         },
         "date": 1791158828623,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338523,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a34d90c55ac3ef8f365a7471226b8b845c384b8a",
+          "message": "Merge pull request #2274 from wado-lang/generic-associated-types\n\nfeat: generic associated types, with bounds",
+          "timestamp": "2026-10-05T10:00:38+09:00",
+          "tree_id": "849e545aa13a792718dc38a182dd90992ff7a48c",
+          "url": "https://github.com/wado-lang/wado/commit/a34d90c55ac3ef8f365a7471226b8b845c384b8a"
+        },
+        "date": 1791163362145,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
