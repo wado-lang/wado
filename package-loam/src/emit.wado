@@ -11,10 +11,10 @@ use {
     Graph,
     KERNEL_ELEMENT,
     Node,
-    UNARY_OPS,
     data_type,
     element_of,
     is_binary_elementwise,
+    is_unary_operator,
     trailing_axes,
 } from "./graph.wado";
 use { fill_of } from "./fold.wado";
@@ -499,12 +499,10 @@ fn checkpoint_payload(e: &Expected) -> String {
     )}], extents: ${e.extents}, elements: ${e.elements}, width: ${e.width} })?`;
 }
 
-/// What each tensor is called inside `forward`. A graph input arrives as a
-/// reference and everything else as a value.
+/// What each tensor is called inside `forward`, each a value the backend holds.
 struct Operands {
     values: TreeMap<String, String>,
-    already_reference: TreeSet<String>,
-    /// A folded float of one element, as the literal a closure folds in.
+    /// A folded float of one element, as the constant an `Expr` folds in.
     scalars: TreeMap<String, String>,
 }
 
@@ -637,19 +635,11 @@ fn symbol_carriers(graph: &Graph, shapes: &TreeMap<String, Shape>) -> List<Carri
 
 impl Operands {
     fn reference(&self, tensor: &String) -> String {
-        let value = self.values.get(*tensor).unwrap();
-        if self.already_reference.contains(*tensor) {
-            return value;
-        }
-        return `&${value}`;
+        return `&${self.value(tensor)}`;
     }
 
     fn value(&self, tensor: &String) -> String {
-        let value = self.values.get(*tensor).unwrap();
-        if self.already_reference.contains(*tensor) {
-            return `*${value}`;
-        }
-        return value;
+        return self.values.get(*tensor).unwrap();
     }
 }
 
@@ -667,7 +657,6 @@ fn emit_forward(
     let shapes = &checked.shapes;
     let mut exprs = Operands {
         values: TreeMap::<String, String>::new(),
-        already_reference: TreeSet::<String>::new(),
         scalars,
     };
     let mut forward = FnSpec::new("forward", Vis::Pub);
@@ -785,9 +774,6 @@ fn scope_body(
         if is_alias(node, checked) {
             let source = node.inputs[0];
             exprs.values[produced] = exprs.values.get(source).unwrap();
-            if exprs.already_reference.contains(source) {
-                exprs.already_reference.insert(produced);
-            }
             continue;
         }
         if node.op == "If" {
@@ -848,7 +834,6 @@ fn branch_lines(
     let graph = subgraph(node, attr);
     let mut inner = Operands {
         values: exprs.values,
-        already_reference: exprs.already_reference,
         scalars: scalar_literals(branch),
     };
     for let [tensor, _] of exprs.values.entries() {
@@ -860,7 +845,6 @@ fn branch_lines(
         };
         if axis_list(&from) != axis_list(&to) {
             inner.values[*tensor] = relabeled(&around.primitives[*tensor], &from, &to, &exprs.reference(tensor));
-            inner.already_reference.remove(*tensor);
         }
     }
     let literals = literal_tensors(&graph, branch, &inner.scalars);
@@ -900,7 +884,7 @@ fn emit_outputs(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Na
     outputs.emit(w);
 }
 
-/// Every folded float of one element, as the literal a closure folds in.
+/// Every folded float of one element, as the literal an `Expr` folds in.
 fn scalar_literals(checked: &Checked) -> TreeMap<String, String> {
     let mut scalars = TreeMap::<String, String>::new();
     for let [name, k] of checked.known.entries() {
@@ -921,7 +905,7 @@ struct Literals {
 }
 
 /// The folded tensors something reads as a tensor: all a kernel reads or the
-/// graph returns, save a scalar a closure folds.
+/// graph returns, save a scalar an `Expr` folds.
 fn literal_tensors(graph: &Graph, checked: &Checked, scalars: &TreeMap<String, String>) -> Literals {
     let mut sources = TreeMap::<String, String>::new();
     for let node of &graph.nodes {
@@ -951,7 +935,7 @@ fn literal_tensors(graph: &Graph, checked: &Checked, scalars: &TreeMap<String, S
     return literals;
 }
 
-/// Whether a folded scalar is returned, or read where no closure folds it.
+/// Whether a folded scalar is returned, or read where no `Expr` folds it.
 fn read_as_tensor(graph: &Graph, checked: &Checked, scalars: &TreeMap<String, String>, scalar: &String) -> bool {
     if graph.outputs.position(|vi| vi.name == *scalar) matches { Some(_) } {
         return true;
@@ -1343,8 +1327,8 @@ fn reduction_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mu
     return reshaped(node, checked, &`&${kept}`, symbols);
 }
 
-/// The literal operand `index` folds into a closure as: a `Gemm` bias, or an
-/// arithmetic operand whose partner is a tensor. The closure maps over the
+/// The literal operand `index` folds into an `Expr` as: a `Gemm` bias, or an
+/// arithmetic operand whose partner is a tensor. The `Expr` maps over the
 /// partner, so the output must carry the partner's axes: a scalar of higher
 /// rank widens it, and an axis of 1 the scalar names apart renames it. `None`
 /// reads it as a tensor.
@@ -1651,7 +1635,7 @@ fn binary_expr(op: &String, lhs: &String, rhs: &String) -> String {
 
 /// The `Expr` a unary operator maps each element of the first operand through.
 fn unary_expr(op: &String) -> Option<String> {
-    if !UNARY_OPS.contains_str(op) {
+    if !is_unary_operator(op) {
         return null;
     }
     return Option::Some(`${FIRST}.unary(UnaryOp::${op})`);

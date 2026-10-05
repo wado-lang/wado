@@ -9,7 +9,7 @@
 
 use { read } from "../src/onnx_proto.wado";
 use { LayoutRule, Schema } from "../src/schema.wado";
-use { assert_close, generated, ran } from "./oracle.wado";
+use { OPAQUE_BACKEND, assert_close, generated, ran } from "./oracle.wado";
 
 /// One tensor a case's text spells, each part as written: `f32` or `i64`, the
 /// extents as a list literal, and the elements, a float by its bits.
@@ -95,10 +95,11 @@ fn computed(model: ByteList, case: &Case) -> String {
     let weights = if source.contains("fn embedded") { "Weights::embedded()" } else { "Weights {}" };
     let shown = if case.output.element == "f32" { "v.to_bits()" } else { "v" };
     let program = `${source}
+${OPAQUE_BACKEND}
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
-    let got = forward(&mut Cpu {}, ${args}&${weights});
+    let got = forward(&mut Opaque::new(), ${args}&${weights});
     let extents: List<String> = got.extents.into_iter().map(|e| \`\${e}\`).collect();
     let data: List<String> = got.data.into_iter().map(|v| \`\${${shown}}\`).collect();
     println(\`output ${case.output.element} [\${extents.join(",")}] [\${data.join(",")}]\`);

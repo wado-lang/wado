@@ -9,6 +9,10 @@ use { infer } from "../src/infer.wado";
 use { known_tensor, read_tensor } from "../src/onnx_proto.wado";
 use { Schema } from "../src/schema.wado";
 
+/// The backend a generated module's `forward` runs through in these tests,
+/// spliced after the module; see `opaque_backend.wado`.
+pub global OPAQUE_BACKEND: String = #include_str("./opaque_backend.wado");
+
 /// The module the generator writes for `graph` under `schema`, or why the
 /// build refuses it.
 pub fn generated(graph: &Graph, schema: &Schema) -> Result<String, String> {

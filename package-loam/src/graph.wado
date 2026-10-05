@@ -8,7 +8,7 @@ use onnx from "./onnx.proto"
         generator: { module: "lib:grog" },
     };
 use { Poly } from "./poly.wado";
-use { checked_element_count } from "./runtime/tensor.wado";
+use { BinaryOp, UnaryOp, checked_element_count } from "./runtime/tensor.wado";
 
 /// One dimension as the model states it. `Unknown` is ONNX's `?`, a dimension
 /// the exporter left open and no symbol stands for.
@@ -526,18 +526,29 @@ fn upgraded_subgraphs(attrs: List<Attr>, opset: Option<i64>) -> Result<List<Attr
     return Result::Ok(out);
 }
 
-/// The operators that broadcast two operands against each other.
+/// The operators that broadcast two operands against each other: each a case of
+/// the runtime's `BinaryOp`, by name.
 pub fn is_binary_elementwise(op: &String) -> bool {
-    return BINARY_OPS.contains_str(op);
+    return names_case::<BinaryOp>(op);
 }
 
-/// The two-operand elementwise operators the kernels compute, each spelled as
-/// the runtime's `BinaryOp` case of the same name.
-pub global BINARY_OPS: List<String> = ["Add", "Sub", "Mul", "Div", "Pow"];
+/// The one-operand operators an `Expr` applies: each a case of the runtime's
+/// `UnaryOp`, by name.
+pub fn is_unary_operator(op: &String) -> bool {
+    return names_case::<UnaryOp>(op);
+}
 
-/// The one-operand operators the kernels compute through an `Expr`, each
-/// spelled as the runtime's `UnaryOp` case of the same name.
-pub global UNARY_OPS: List<String> = ["Relu", "Sigmoid", "Tanh", "Erf", "Exp", "Log", "Sqrt", "Neg", "Abs"];
+/// Whether `name` is one of `E`'s cases, as the generated module spells it.
+fn names_case<E: ReflectEnum + Display>(name: &String) -> bool {
+    let mut i = 0;
+    while let Some(case) = ReflectEnum::<E>::from_discriminant(i) {
+        if `${case}` == *name {
+            return true;
+        }
+        i += 1;
+    }
+    return false;
+}
 
 /// How many of A's axes follow B's where arithmetic aligns B at A's `axis`, or
 /// 0 where it aligns B at A's end, as numpy does.
