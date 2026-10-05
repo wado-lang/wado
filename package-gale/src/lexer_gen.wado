@@ -2979,13 +2979,26 @@ pub fn lexer_alts_can_collide(alts: &List<LexerAlternative>, all_rules: &List<Le
             },
         }
     }
+    // Read only for an arm that shares a first char with another, which most
+    // alternations have none of.
     let mut seconds: List<Option<SecondChars>> = [];
-    for let alt of alts {
-        seconds.push(lexer_second_chars(&[*alt], all_rules, casing));
+    let mut seconds_read: List<bool> = [];
+    for let _ of alts {
+        seconds.push(null);
+        seconds_read.push(false);
     }
     for let mut i = 0; i < sets.len(); i += 1 {
         for let mut j = i + 1; j < sets.len(); j += 1 {
-            if leading_chars_overlap(&sets[i], &sets[j]) && !second_chars_apart(&seconds[i], &seconds[j]) {
+            if !leading_chars_overlap(&sets[i], &sets[j]) {
+                continue;
+            }
+            for let k of [i, j] {
+                if !seconds_read[k] {
+                    seconds[k] = lexer_second_chars(&[alts[k]], all_rules, casing);
+                    seconds_read[k] = true;
+                }
+            }
+            if !second_chars_apart(&seconds[i], &seconds[j]) {
                 return true;
             }
         }
