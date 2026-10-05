@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791215125344,
+  "lastUpdate": 1791237292546,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -64121,6 +64121,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/462c65c631ab626923a5f258401e9c73a73730fe"
         },
         "date": 1791215124629,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338523,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "52c54b6c9ac1af8b5eb11cd2f7dc2afa96c6865d",
+          "message": "Merge pull request #2281 from wado-lang/ccr-9254734c-ofisd8\n\nchore(tests): one httpbin fixture, one route per test block",
+          "timestamp": "2026-10-06T06:33:40+09:00",
+          "tree_id": "95b5656053d759f0cdee89393cd415c15dfac0c8",
+          "url": "https://github.com/wado-lang/wado/commit/52c54b6c9ac1af8b5eb11cd2f7dc2afa96c6865d"
+        },
+        "date": 1791237291714,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
