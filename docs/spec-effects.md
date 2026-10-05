@@ -390,7 +390,7 @@ Apart from a narrowing, nothing a body does adds to what its function holds.
 
 ### Ambient Functions
 
-`#[ambient]` on a function exempts its body from effect checking. The body may perform any effect without declaring it, and a call demands only what the function's own `with` clause declares. It is for best-effort output that must work from any function: `log_stdout` and `log_stderr` are ambient, and so is the `core:log` facade. A call whose result goes unused may be removed, so its output may never appear.
+`#[ambient]` on a function exempts its body from effect checking. The body may perform any effect without declaring it, and a call demands only what the function's own `with` clause declares. It is for best-effort output that must work from any function: `log_stdout` and `log_stderr` are ambient, and so is the `core:log` facade. Whether a call whose result goes unused runs is [unspecified](./spec-overview.md#behavior-classes), so its output may never appear.
 
 <!-- {"fixture":"spec_effects_ambient.wado"} -->
 

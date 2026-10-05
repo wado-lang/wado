@@ -205,7 +205,7 @@ Beyond basic arithmetic and comparison, types provide specialized operations: sa
 
 ### Relaxed SIMD
 
-Relaxed SIMD operations trade strict determinism for performance. Edge-case behavior (NaN, out-of-range values) is implementation-defined but consistent within a single runtime. Methods use the `relaxed_` prefix on existing newtypes:
+Relaxed SIMD operations trade strict determinism for performance. Edge-case behavior (NaN, out-of-range values) is [host-defined](./spec-overview.md#behavior-classes), and fixed on one host. Methods use the `relaxed_` prefix on existing newtypes:
 
 - Fused multiply-add: `f32x4/f64x2.relaxed_madd(b, c)`, `relaxed_nmadd(b, c)`
 - Min/Max: `f32x4/f64x2.relaxed_min/max` (faster than strict `min`/`max`)
@@ -355,7 +355,11 @@ assert part.to_string() == "ana";    // copies out, here and only here
 
 `slice(start, end)` takes byte offsets from the view's start. It traps when the
 range is out of bounds or either end is not a character boundary.
-`slice_unchecked` leaves both checks to the caller. A view refers to its
+`slice_unchecked` leaves both checks to the caller. Calling it with a range
+that fails either check is a
+[contract violation](./spec-overview.md#behavior-classes), and the behavior is
+unconstrained: the view breaks its own invariant, and it may read bytes outside
+the view it was taken from. A view refers to its
 string's bytes as a [slice](#slice-semantics) does, with the same snapshot and
 aliasing behavior.
 
@@ -539,14 +543,15 @@ buffer it refers to.
 `get(i)` returns `Option<T>` on all three types. `xs[i]` traps when `i` is
 outside `0..<len()`. On a slice that includes a negative index, even where the
 backing array holds an element, since a view never reads outside itself. The
-trap is the whole contract, and its message is implementation-defined.
+trap is the whole contract, and its message is
+[unspecified](./spec-overview.md#behavior-classes).
 
 `get_unchecked(i)` leaves the check to the caller, who must guarantee
-`0 <= i < len()`. Violating that yields an unspecified value of the element type
-or traps. It is never undefined behavior and never compromises memory safety,
-because every element read is bounds-checked by the Wasm engine. Wado's
-`_unchecked` elides a semantic check, not a memory check, which is why Wado
-needs no `unsafe`.
+`0 <= i < len()`. Calling it with any other `i` is a
+[contract violation](./spec-overview.md#behavior-classes), and the result is
+unspecified: an element of the backing array, or a trap. Either way the result
+is a valid value of the element type, because every element read is
+bounds-checked by the Wasm engine.
 
 Rationale: [WEP: The Sequence Family](./wep-2026-06-02-sequence-family.md).
 
