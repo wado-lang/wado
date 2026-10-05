@@ -77,6 +77,11 @@ test "f32::from_str basic" {
     assert f32::from_str(".5") matches { Err(e) && e.kind() == FloatErrorKind::Invalid };
 }
 
+test "f32 displays a non-finite value by name" {
+    assert `${f32::NEG_INFINITY}` == "-inf";
+    assert `${f32::NAN}` == "NaN";
+}
+
 test "i32::from_str basic" {
     assert i32::from_str("0") matches { Ok(0) };
     assert i32::from_str("42") matches { Ok(42) };
