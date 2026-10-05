@@ -1,8 +1,8 @@
 // A callee that hands its argument straight back keeps nothing, so it raises no
 // obligation of its own. The object lands in the caller, and every read of it
 // there is what `Slot::Ret` already asks of the whole program.
-// `#[result(part_of = p)]` declares this, and `builtin::black_box` is the one
-// builtin saying it of a by-value parameter.
+// `#[storage(part_of_args)]` declares this, and `builtin::black_box` says it
+// of a by-value parameter.
 //
 // `#[inline(never)]` keeps each call out of the caller's template block. A
 // tainted node anywhere under a block taints the block's value

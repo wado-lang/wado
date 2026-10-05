@@ -31,7 +31,7 @@ use crate::nir_visitor::{NirRefVisitor, reachable_exprs};
 use crate::optimize::arena_query::{
     expr_node_may_trap, operand_values_may_trap, promoted_local_reads,
 };
-use crate::tir::{ResolvedType, StructDef, TypeId, TypeTable};
+use crate::tir::{ResolvedType, StructDef, TypeId, TypeTable, projection_arguments};
 use crate::{hashmap, nir, tir};
 
 /// Call graph: function ID -> set of called function IDs
@@ -1748,8 +1748,16 @@ fn collect_type_dependencies(
         // surviving projection (e.g. a field type of a retained generic
         // template) would dangle when the parameter type is pruned,
         // crashing later name-mangling.
-        ResolvedType::AssocTypeProjection { param_id, .. } => {
+        ResolvedType::AssocTypeProjection {
+            param_id,
+            args,
+            trait_args,
+            ..
+        } => {
             collect_type_transitive(*param_id, type_table, reachable);
+            for arg in projection_arguments(args, trait_args) {
+                collect_type_transitive(arg, type_table, reachable);
+            }
         }
 
         // Leaf types - no dependencies
@@ -1763,6 +1771,7 @@ fn collect_type_dependencies(
         | ResolvedType::Variant { .. }
         | ResolvedType::Resource { .. }
         | ResolvedType::TypeParam { .. }
+        | ResolvedType::AssocParam { .. }
         | ResolvedType::TypePack { .. } => {}
         ResolvedType::InferVar(var) => panic!("{var} reached DCE"),
 
@@ -1905,8 +1914,16 @@ pub(super) fn deletable_value(
     body.find_in_live_node_under(NodeRef::Expr(root), |node| match node {
         _ if operand_values_may_trap(body, node) => Some(()),
         NodeRef::Expr(id) => match &body.exprs[id].kind {
+            // A hint goes with the code containing it, but `cold_path();` on
+            // its own is what it marks.
             ExprKind::Call { func_id, .. } => {
-                (!calls.call(id, *func_id).is_deletable()).then_some(())
+                let effect = calls.call(id, *func_id);
+                let deletable = if id == root {
+                    effect.is_deletable()
+                } else {
+                    effect.is_unobservable()
+                };
+                (!deletable).then_some(())
             }
             ExprKind::GlobalVarSet { .. }
             | ExprKind::Assign { .. }
@@ -2005,8 +2022,7 @@ impl GlobalGuards<'_> {
         let ExprKind::Call { func_id, args, .. } = &body.exprs[expr].kind else {
             return false;
         };
-        (self.inert_functions.contains(func_id)
-            || callee_descriptor(self.descriptors, *func_id).is_builtin_named("cold_path"))
+        (self.inert_functions.contains(func_id) || calls.call(expr, *func_id).is_unobservable())
             && args
                 .iter()
                 .all(|arg| deletable_value(body, arg.expr, self.types, calls))

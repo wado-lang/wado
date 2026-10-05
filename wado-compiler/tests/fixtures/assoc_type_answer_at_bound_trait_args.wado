@@ -1,0 +1,49 @@
+// Through a bound reached at its own trait arguments, only that bound's
+// binding answers: `Holder<String>` binds no `Out`, so `h.out("x")` is its
+// projection, not `Holder<i32>`'s `A`.
+
+trait Holder<T> with () {
+    type Out;
+
+    fn out(&self, t: T) -> Self::Out;
+}
+
+struct A {
+    n: i32,
+}
+
+struct B {
+    s: String,
+}
+
+struct X {}
+
+impl Holder<i32> for X {
+    type Out = A;
+
+    fn out(&self, t: i32) -> A {
+        return A { n: t };
+    }
+}
+
+impl Holder<String> for X {
+    type Out = B;
+
+    fn out(&self, t: String) -> B {
+        return B { s: t };
+    }
+}
+
+fn half<H: Holder<i32, Out = A> + Holder<String>>(h: &H) -> i32 {
+    let o = h.out("xyz");
+    let a: A = h.out(4);
+    return a.n + takes_string_out(h, o);
+}
+
+fn takes_string_out<H: Holder<String>>(h: &H, o: H::Out) -> i32 {
+    return 1;
+}
+
+test "a bound at its own arguments answers alone" {
+    assert half(&X {}) == 5;
+}

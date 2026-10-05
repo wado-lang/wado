@@ -1812,6 +1812,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::Never => return (0, TypeTable::UNKNOWN),
             // Read on each instance the body is monomorphized at.
             ResolvedType::TypeParam { .. }
+            | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
             | ResolvedType::AssocTypeProjection { .. } => return (0, TypeTable::UNKNOWN),
             ResolvedType::Primitive(_)

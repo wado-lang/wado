@@ -1,0 +1,34 @@
+// The associated type's own bound may name its parameter, and the binding
+// owes it at every argument: `Bag<i32>` holds an `i32` whatever `E` is.
+
+trait Holds<T> with () {
+    fn first(&self) -> T;
+}
+
+struct Bag<T> {
+    items: List<T>,
+}
+
+impl<T> Holds<T> for Bag<T> {
+    fn first(&self) -> T {
+        return self.items[0];
+    }
+}
+
+trait Store with () {
+    type Buf<E>: Holds<E>;
+}
+
+struct Bags {}
+
+impl Store for Bags {
+    type Buf<E> = Bag<i32>;
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":25:5: analysis error: type 'Bag<i32>' does not implement trait 'Holds<E>' required by bound on 'Buf'",
+  "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
+}

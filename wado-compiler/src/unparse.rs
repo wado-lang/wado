@@ -3,11 +3,11 @@
 // Converts AST back to canonical source code with comments.
 
 use crate::ast::{
-    AssertStmt, AssignExpr, AssociatedConst, AstId, AstVisitor, AttrArg, AttrItem, AttrObject,
-    AttrValue, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr,
-    CastExpr, ChainedComparison, ClosureExpr, ComparisonChainExpr, CompoundAssignExpr,
-    CompoundAssignOp, Condition, ConditionElement, EnumCase, EnumDecl, Expr, ExprStmt,
-    FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function, FunctionType, GenericParam,
+    AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeDecl, AstId, AstVisitor, AttrArg,
+    AttrItem, AttrObject, AttrValue, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt,
+    BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison, ClosureExpr, ComparisonChainExpr,
+    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, EnumCase, EnumDecl, Expr,
+    ExprStmt, FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function, FunctionType, GenericParam,
     GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute,
     InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt, Literal, LiteralMember,
     LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, Newtype, Param, Pattern,
@@ -18,6 +18,7 @@ use crate::ast::{
     VariantDecl, Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport, spell_number,
     written_params,
 };
+use crate::builtin_facts::BuiltinFacts;
 use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::escape::{quoted, quoted_char};
 use crate::flat_package::FlatPackage;
@@ -1110,6 +1111,7 @@ impl<'a> Unparser<'a> {
                 this.emit_member(assoc.id, assoc.span, &assoc.attrs, |this| {
                     this.output.push_str("type ");
                     this.output.push_str(&assoc.name);
+                    this.unparse_generic_params(&assoc.type_params);
                     this.output.push_str(" = ");
                     this.unparse_type(&assoc.ty);
                     this.output.push(';');
@@ -1184,6 +1186,7 @@ impl<'a> Unparser<'a> {
                 this.emit_member(assoc.id, assoc.span, &[], |this| {
                     this.output.push_str("type ");
                     this.output.push_str(&assoc.name);
+                    this.unparse_generic_params(&assoc.type_params);
                     if !assoc.bounds.is_empty() {
                         this.output.push_str(": ");
                         this.unparse_trait_bounds(&assoc.bounds);
@@ -4088,6 +4091,13 @@ fn unparse_attr_arg_into(arg: &AttrArg, output: &mut String) {
                 out.push_str(&quoted(v));
             });
         }
+        AttrArg::KeyIdentArray(k, vs) => {
+            output.push_str(k);
+            output.push_str(" = ");
+            delimited_into("[", "]", vs, output, |v: &String, out: &mut String| {
+                out.push_str(v);
+            });
+        }
         AttrArg::KeyNumber(k, v) => {
             output.push_str(k);
             output.push_str(" = ");
@@ -4178,6 +4188,18 @@ pub fn unparse_trait_header(t: &TraitDecl) -> String {
         unparse_trait_bounds_into(&t.supertraits, &mut out);
     }
     unparse_trait_head_into(&t.head, &mut out);
+    out
+}
+
+/// A trait's associated type as declared, without `type` or the `;`:
+/// `Buf<E: Elem>: Len`.
+pub fn unparse_assoc_type_decl(decl: &AssociatedTypeDecl) -> String {
+    let mut out = decl.name.clone();
+    unparse_generic_params_into(&decl.type_params, &mut out);
+    if !decl.bounds.is_empty() {
+        out.push_str(": ");
+        unparse_trait_bounds_into(&decl.bounds, &mut out);
+    }
     out
 }
 
@@ -4714,9 +4736,9 @@ impl<'a> TirUnparser<'a> {
             self.output.push_str(attr);
             self.output.push('\n');
         }
-        for retain in &f.retains {
+        for attr in f.declared.iter().flat_map(BuiltinFacts::written) {
             self.write_indent();
-            self.output.push_str(&unparse_retain_attr(retain));
+            self.output.push_str(&attr);
             self.output.push('\n');
         }
         self.write_indent();
@@ -5494,19 +5516,6 @@ fn inline_hint_attr(hint: tir::InlineHint) -> Option<&'static str> {
         tir::InlineHint::Hint => Some("#[inline]"),
         tir::InlineHint::Always => Some("#[inline(always)]"),
         tir::InlineHint::Never => Some("#[inline(never)]"),
-    }
-}
-
-/// Render a `#[retain(...)]` clause back as it is written.
-fn unparse_retain_attr(retain: &tir::RetainSpec<String>) -> String {
-    let source = if retain.elements {
-        format!("elements_of = {}", retain.source)
-    } else {
-        retain.source.clone()
-    };
-    match &retain.into {
-        Some(dest) => format!("#[retain({source}, into = {dest})]"),
-        None => format!("#[retain({source})]"),
     }
 }
 

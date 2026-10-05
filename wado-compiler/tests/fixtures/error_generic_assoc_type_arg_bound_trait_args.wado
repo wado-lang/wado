@@ -1,0 +1,20 @@
+// A parameter's bound reading the trait's parameter is owed at the argument
+// the trait is reached at: `bool` converts to `String`, not to `i32`.
+
+trait Conv<X> with () {}
+
+impl Conv<String> for bool {}
+
+trait Store<X> with () {
+    type Buf<E: Conv<X>>;
+}
+
+fn take<S: Store<i32>>(b: S::Buf<bool>) {}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":12:34: analysis error: type 'bool' does not implement trait 'Conv<i32>' required by bound on 'E'",
+  "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
+}

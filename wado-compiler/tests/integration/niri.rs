@@ -4693,7 +4693,7 @@ fn a_run_that_bails_part_way_writes_nothing() {
 
 #[test]
 fn a_retain_declaration_does_not_stop_a_run() {
-    // `#[retain]` names a *reference* the callee keeps, and the engine has
+    // A retained parameter is a *reference* the callee keeps, and the engine has
     // no references: an argument reduces to its referent's value, and a
     // referent it can bind is one nothing in the frame can go on to change.
     let table = TypeTable::new();
@@ -8177,7 +8177,7 @@ fn a_ref_returning_callee_does_not_fold_through_the_lost_alias() {
 
 #[test]
 fn a_stored_reference_parameter_does_not_fold_into_a_snapshot() {
-    // #[retain(p)] fn keep(p: &Inner) -> Holder;
+    // fn keep(p: &Inner) -> Holder;  // retains: p
     // fn scenario() -> i32 {
     //     let mut p = Inner { x: 7 };
     //     let h = keep(&p);

@@ -1,0 +1,30 @@
+// A binding named by a sibling is read in the impl's frame, not in the
+// sibling's: `Buf<E>`'s own `E` is not the impl's `E` that `Plain` reads.
+
+trait Store with () {
+    type Buf<E>;
+    type Plain;
+
+    fn plain(&self) -> Self::Plain;
+}
+
+struct W<E> {
+    e: E,
+}
+
+impl<E> Store for W<E> {
+    type Buf<E> = [E, Self::Plain];
+    type Plain = List<E>;
+
+    fn plain(&self) -> List<E> {
+        return [self.e];
+    }
+}
+
+fn plain_of<S: Store>(s: &S) -> S::Plain {
+    return s.plain();
+}
+
+test "a sibling binding reads the impl's parameters" {
+    assert plain_of(&W { e: 3 }).len() == 1;
+}

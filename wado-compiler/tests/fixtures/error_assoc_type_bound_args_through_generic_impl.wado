@@ -1,0 +1,36 @@
+// An associated type's bound is checked at the arguments it writes, also
+// where a generic impl answers it: `impl<T> Holds<T> for Bag<T>` gives
+// `Bag<i32>` `Holds<i32>`, never `Holds<String>`. The impl-header check runs
+// before the trait solver exists, so the compiler's own path answers it.
+
+trait Holds<T> with () {
+    fn first(&self) -> T;
+}
+
+struct Bag<T> {
+    items: List<T>,
+}
+
+impl<T> Holds<T> for Bag<T> {
+    fn first(&self) -> T {
+        return self.items[0];
+    }
+}
+
+trait Store with () {
+    type Buf: Holds<String>;
+}
+
+struct Bags {}
+
+impl Store for Bags {
+    type Buf = Bag<i32>;
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":27:5: analysis error: type 'Bag<i32>' does not implement trait 'Holds<String>' required by bound on 'Buf'",
+  "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
+}

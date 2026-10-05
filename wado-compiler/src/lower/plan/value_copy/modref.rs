@@ -469,10 +469,9 @@ impl TirRefVisitor for Walker<'_> {
                 }
             }
             // A callee this scan reads answers for its own parameter through the
-            // call graph; one it does not writes what it was handed. An
-            // alias-returning builtin (`array_get_ref_mut`) only hands back a
-            // reference into its argument — it writes nothing itself, so the
-            // write, if any, is charged at whoever uses that reference.
+            // call graph; one it does not writes what it was handed, unless it
+            // only hands back part of it (`array_get_ref_mut`): the write, if
+            // any, is charged at whoever uses that reference.
             TirExprKind::Call { func, args, .. } => {
                 let known = self.defined.contains(&func.module_source, &func.name);
                 if known {
@@ -489,9 +488,7 @@ impl TirRefVisitor for Walker<'_> {
                         handed,
                     });
                 }
-                let aliases_only = func.module_source.is_core_builtin()
-                    && self.builtins.part_of(&**func).is_some();
-                if !aliases_only {
+                if !self.builtins.only_aliases(&**func) {
                     for (position, arg) in args
                         .iter()
                         .enumerate()

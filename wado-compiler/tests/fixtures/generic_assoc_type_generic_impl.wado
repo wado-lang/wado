@@ -1,0 +1,46 @@
+// A generic impl's binding reads the impl's parameters beside its own, and
+// each instantiation of the receiver answers with its own family. A default
+// method writes the projection against `Self`, and an impl's own body writes
+// it against itself.
+
+trait Store with () {
+    type Buf<E>;
+
+    fn wrap<E>(&self, value: E) -> Self::Buf<E>;
+
+    fn wrap_twice<E>(&self, value: E) -> [Self::Buf<E>, Self::Buf<E>] {
+        return [self.wrap(value), self.wrap(value)];
+    }
+}
+
+struct Tagged<T, E> {
+    tag: T,
+    value: E,
+}
+
+struct Tagger<T> {
+    tag: T,
+}
+
+impl<T> Store for Tagger<T> {
+    type Buf<E> = Tagged<T, E>;
+
+    fn wrap<E>(&self, value: E) -> Self::Buf<E> {
+        return Tagged { tag: self.tag, value };
+    }
+}
+
+fn first_tag<S: Store>(s: &S) -> S::Buf<bool> {
+    let [a, _] = s.wrap_twice(true);
+    return a;
+}
+
+test "an instantiation of a generic impl answers with its own family" {
+    let t = Tagger { tag: "x" };
+    let b: Tagged<String, i32> = t.wrap(7);
+    assert b.tag == "x" && b.value == 7;
+
+    let n = Tagger { tag: 3 };
+    let c: Tagged<i32, bool> = first_tag(&n);
+    assert c.tag == 3 && c.value;
+}
