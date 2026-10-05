@@ -190,7 +190,8 @@ Wado targets the following Wasm features:
   - Fully supported by wasmtime.
   - See wasmtime's P3 support: `find vendor/wasmtime/crates/wasi/src/p3/wit -name '*.wit'`
 
-Wado supports WASI at one exact version. A WASI import whose version differs
+Wado supports WASI at one exact version: the one wasmtime implements, which
+`mise run update-stdlib-wasi` generates the stdlib from. A WASI import whose version differs
 from the host's gets no workaround on Wado's side. Matching semver-compatible
 versions is wasmtime's job, and Wado waits for wasmtime to implement it.
 
