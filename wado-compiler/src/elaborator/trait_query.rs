@@ -437,12 +437,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|arg| self.resolve_type(arg))
             .collect();
-        let (params, closure) = self
+        let clauses: Vec<(DefId, ast::TraitBound, Vec<ViaClause>)> = self
             .tysys
             .trait_env
-            .supertrait_closure_declared(&trait_decl);
-        let params = params.to_vec();
-        let clauses: Vec<(DefId, ast::TraitBound, Vec<ViaClause>)> = closure
+            .supertrait_closure_declared(&trait_decl)
+            .1
             .iter()
             .map(|inherited| {
                 (
@@ -452,14 +451,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             })
             .collect();
-        let (_, args) = self.trait_params_at_impl(
-            &params,
-            &arg_ids,
-            SelfBinding {
-                type_id: self_type,
-                declaring_trait: Some(trait_decl),
-            },
-        );
+        // A default the impl leaves to its trait reads `Self` as the target:
+        // `Add<Rhs = Self>` at `impl Add for P` is `Add<P>`.
+        let target = SelfBinding {
+            type_id: self_type,
+            declaring_trait: Some(trait_decl),
+        };
         for (decl, bound, via) in clauses {
             let named = self
                 .tysys
@@ -469,7 +466,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // from this impl's own arguments reaches: `X::Item` under `X = Feed`
             // is what `impl Src for Feed` binds it to. A spelling carries none
             // of that.
-            let space = self.inherited_space(trait_decl, &args, &via);
+            let space =
+                self.with_self_binding(target, |e| e.inherited_space(trait_decl, &arg_ids, &via));
             let pick = vec![true; bound.type_args.len()];
             let supertrait_trait = self.in_space(&space, |e| {
                 e.trait_named_with_resolved_args(named, &bound, &pick)
@@ -499,40 +497,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: impl_block.span,
             });
         }
-    }
-
-    /// `params` paired with what the impl answers for each: its own written
-    /// arguments, then a declared default for every position it leaves out.
-    ///
-    /// A default resolves against the positions settled before it and the impl's
-    /// target, so `P<V, W = V>` at `impl P<String>` binds `W` to `String` and
-    /// `Add<Rhs = Self>` binds `Rhs` to the target.
-    fn trait_params_at_impl(
-        &mut self,
-        params: &[ast::GenericParam],
-        written: &[TypeId],
-        target: SelfBinding,
-    ) -> (Vec<String>, Vec<TypeId>) {
-        let mut names: Vec<String> = Vec::new();
-        let mut args: Vec<TypeId> = Vec::new();
-        for (index, param) in params.iter().enumerate() {
-            let arg = if let Some(&arg) = written.get(index) {
-                arg
-            } else {
-                let Some(default) = param.default.clone() else {
-                    break;
-                };
-                let (settled_names, settled_args) = (names.clone(), args.clone());
-                self.with_self_binding(target, |e| {
-                    e.with_type_param_args(&settled_names, &settled_args, |e| {
-                        e.resolve_type(&default)
-                    })
-                })
-            };
-            names.push(param.name.clone());
-            args.push(arg);
-        }
-        (names, args)
     }
 
     /// `trait_` with every argument that reads an associated type resolved at
@@ -2205,8 +2169,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // the subject: `Make<Self::Base>` asks the subject's own
                     // `Base`, as its impl answers it.
                     let binding = self.tysys.base_self_binding(subject, Some(root));
-                    let space =
-                        self.with_self_binding(binding, |e| e.inherited_space(root, &root_args, &via));
+                    let space = self
+                        .with_self_binding(binding, |e| e.inherited_space(root, &root_args, &via));
                     self.in_space(&space, |e| {
                         let inherited = e.tysys.bound_written(&bound).map(|trait_| {
                             e.with_self_binding(binding, |e| {

@@ -623,6 +623,13 @@ accepted, and so is `impl<T> Tr for Wrap<T>`. A value of `Wrap<X>` is still
 checked where `X` is concrete, so nothing is miscompiled; the generic
 declaration that names `Wrap<O>` is not.
 
+### Every effect binder is one effect
+
+A function type carries its effects to the solver as their declarations. An
+effect binder declares nothing, so `fn() with E` and `fn() with F` are one type
+there, and so is an effect name that reached nothing. What it admits is a bound
+naming one binder's function type answered by an impl naming another's.
+
 ### A ref blanket never dispatches
 
 The order ranks `impl<T: Bound> Tr for &T` as the third candidate list, and

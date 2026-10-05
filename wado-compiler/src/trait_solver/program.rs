@@ -95,7 +95,8 @@ impl SolverType {
     }
 
     /// `self` with each parameter and pack replaced by `arg` at its position;
-    /// `None` where `arg` has none for one.
+    /// `None` where `arg` has none for one. A pack spread in a tuple whose
+    /// argument is a tuple splices its elements there.
     #[must_use]
     pub fn map_params(&self, arg: &dyn Fn(u32) -> Option<Self>) -> Option<Self> {
         let each = |inner: &[Self]| -> Option<Vec<Self>> {
@@ -104,7 +105,16 @@ impl SolverType {
         Some(match self {
             Self::Param(index) | Self::Pack(index) => arg(*index)?,
             Self::Decl(head, inner) => Self::Decl(*head, each(inner)?),
-            Self::Tuple(inner) => Self::Tuple(each(inner)?),
+            Self::Tuple(inner) => {
+                let mut spliced = Vec::with_capacity(inner.len());
+                for elem in inner {
+                    match (elem, elem.map_params(arg)?) {
+                        (Self::Pack(_), Self::Tuple(elems)) => spliced.extend(elems),
+                        (_, mapped) => spliced.push(mapped),
+                    }
+                }
+                Self::Tuple(spliced)
+            }
             Self::Ref { is_mut, inner } => Self::Ref {
                 is_mut: *is_mut,
                 inner: Box::new(inner.map_params(arg)?),
@@ -268,6 +278,9 @@ pub struct TraitDef {
     /// Per type parameter, its declared default, if any. A bound spells no
     /// arguments (WEP 2026-07-31), so it asks for the trait at its defaults.
     pub arg_defaults: Vec<Option<ArgDefault>>,
+    /// The position of its parameter pack, which a bound writes as the flat
+    /// run of arguments past the parameters around it.
+    pub pack: Option<usize>,
     /// The methods it declares, which is what a call site matches on. A
     /// supertrait's methods are not among them: an implementor writes a
     /// separate impl for each trait.
@@ -512,22 +525,35 @@ impl Program {
         reaching
     }
 
+    /// `bound`'s arguments one per parameter of its trait: the run its pack
+    /// absorbs, every argument past the parameters around it, as one tuple.
+    fn grouped(&self, bound: &ParamBound) -> Vec<SolverType> {
+        let Some(def) = self.traits.get(&bound.trait_) else {
+            return bound.args.clone();
+        };
+        let Some(pack) = def.pack else {
+            return bound.args.clone();
+        };
+        let absorbed = (bound.args.len() + 1).saturating_sub(def.arg_defaults.len());
+        let mut args = bound.args.clone();
+        let at = pack.min(args.len());
+        let run = args.drain(at..(at + absorbed).min(args.len())).collect();
+        args.insert(at, SolverType::Tuple(run));
+        args
+    }
+
     /// `clause`, written in `sub`'s trait's space, at the arguments a bound on
     /// `subject` writing `sub` supplies. `None` where the clause names a
-    /// parameter that bound neither writes nor defaults, or spreads the
-    /// trait's pack, which a flat argument list cannot place: the edge then
-    /// answers nothing rather than a guess.
+    /// parameter that bound neither writes nor defaults: the edge then answers
+    /// nothing rather than a guess.
     fn clause_at(
         &self,
         clause: &ParamBound,
         sub: &ParamBound,
         subject: &SolverType,
     ) -> Option<ParamBound> {
-        let spreads = |ty: &SolverType| ty.mentions(&|p| matches!(p, SolverType::Pack(_)));
-        if clause.args.iter().any(spreads) {
-            return None;
-        }
-        let arg = |i: u32| self.arg_at(sub.trait_, &sub.args, i as usize, subject);
+        let args = self.grouped(sub);
+        let arg = |i: u32| self.arg_at(sub.trait_, &args, i as usize, subject);
         Some(ParamBound {
             trait_: clause.trait_,
             args: clause

@@ -1,0 +1,42 @@
+// Two function types differing only in their `with` clause are two types, so
+// an impl for each is two impls and a bound reaches the one it names.
+//
+// The solver once keyed a function type by its signature alone, so coherence
+// rejected the second impl as a duplicate of the first.
+
+use { Stdout } from "core:cli";
+
+trait Tag<T> with () {
+    fn tag(&self) -> i32;
+}
+
+struct S {}
+
+impl Tag<fn() -> i32> for S {
+    fn tag(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl Tag<fn() -> i32 with Stdout> for S {
+    fn tag(&self) -> i32 {
+        return 2;
+    }
+}
+
+fn pure<T: Tag<fn() -> i32>>(t: &T) -> i32 {
+    return t.tag();
+}
+
+fn loud<T: Tag<fn() -> i32 with Stdout>>(t: &T) -> i32 {
+    return t.tag();
+}
+
+test "a bound reaches the impl its function type names" {
+    let s = S {};
+    assert pure(&s) == 1;
+    assert loud(&s) == 2;
+}
+
+__DATA__
+{"test": {}}

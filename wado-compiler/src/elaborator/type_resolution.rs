@@ -55,8 +55,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             }
             Type::Tuple(elements) => {
-                let elem_types: Vec<TypeId> =
-                    elements.iter().map(|e| self.resolve_type(e)).collect();
+                let mut elem_types = Vec::with_capacity(elements.len());
+                for element in elements {
+                    let resolved = self.resolve_type(element);
+                    // A pack a space has bound to its arguments' tuple splices
+                    // them here, as `[..X]` at `X = [i32, bool]` is `[i32, bool]`.
+                    let spliced = match element {
+                        Type::TypePackSpread(..) => {
+                            self.tysys.type_table.borrow().generic_type_args(resolved)
+                        }
+                        _ => None,
+                    };
+                    match spliced {
+                        Some(elems) => elem_types.extend(elems),
+                        None => elem_types.push(resolved),
+                    }
+                }
                 self.tysys.type_table.borrow_mut().make_tuple(elem_types)
             }
             Type::Reference(inner) => {
@@ -70,13 +84,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Type::NamespacedGeneric(namespaced) => self.resolve_namespaced_generic_type(namespaced),
             Type::TypePackSpread(name, span) => {
                 // Look up the type pack parameter
-                if let Some(BinderInScope { index, .. }) =
+                if let Some(&BinderInScope { index, type_id, .. }) =
                     self.annotate_ctx.trait_ctx.type_params.get(name)
                 {
+                    if self.tysys.type_table.borrow().is_tuple(type_id) {
+                        return type_id;
+                    }
                     self.tysys
                         .type_table
                         .borrow_mut()
-                        .make_type_pack(name.clone(), *index)
+                        .make_type_pack(name.clone(), index)
                 } else {
                     let _ = self.emit(TypeError::UnknownType {
                         name: format!("..{name}"),
@@ -963,9 +980,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///
     /// Every parameter enters the space, an unanswered one as [`TypeTable::UNKNOWN`]:
     /// it stands for no type here, and leaving it out would let a same-named
-    /// declaration at the reading site answer in its place.
+    /// declaration at the reading site answer in its place. A pack answers the
+    /// tuple of the arguments it absorbs, every one past the parameters around
+    /// it.
     fn param_space_of(&mut self, decl: DefId, args: &[TypeId]) -> ParamSpace {
         let params = self.tysys.trait_env.trait_decl_params(decl).to_vec();
+        let mut args = args.to_vec();
+        if let Some(pack) = params.iter().position(|p| p.is_pack) {
+            let absorbed = (args.len() + 1).saturating_sub(params.len());
+            let at = pack.min(args.len());
+            let run = args.drain(at..(at + absorbed).min(args.len())).collect();
+            let tuple = self.tysys.type_table.borrow_mut().make_tuple(run);
+            args.insert(at, tuple);
+        }
         let mut space = ParamSpace::new();
         for (index, param) in params.iter().enumerate() {
             let arg = match (args.get(index), param.default.clone()) {

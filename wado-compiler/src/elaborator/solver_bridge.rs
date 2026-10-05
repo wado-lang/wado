@@ -6,7 +6,9 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTraitName, FqTypeName, NEVER_TYPE_NAME, RefKind, TypeHead, UNIT_TYPE_NAME};
+use crate::name::{
+    FqTraitName, FqTypeName, NEVER_TYPE_NAME, RefKind, TypeHead, UNIT_TYPE_NAME, mangle_effect_ref,
+};
 use crate::primitive::PrimitiveType;
 use crate::tir::{AnonStructId, ResolvedType, TypeId, TypeTable};
 use crate::trait_solver::{
@@ -21,7 +23,7 @@ use super::trait_query::{OnBoundTrait, primitive_has_operator};
 use super::tysys::TypeSystem;
 use crate::elaborator::scope;
 use crate::elaborator::types::{DataDecls, TypeLookup};
-use crate::resolve::Resolutions;
+use crate::resolve::{Resolution, Resolutions};
 use crate::tir::StructDef;
 
 /// What a [`TypeDeclId`] stands for: a declaration, or a shape no module
@@ -41,6 +43,14 @@ enum DeclKey {
     /// its holes as the argument, on the same terms as
     /// [`Self::AnonymousStruct`].
     TemplateShape,
+    /// A function type's head; `fn mut` is a shape of its own, since a closure
+    /// that may write its captures is not the other.
+    FnShape {
+        is_mut: bool,
+    },
+    /// One head for every effect a function type names that the program does
+    /// not declare: an effect binder, or a name that reached nothing.
+    UndeclaredEffect,
 }
 
 /// How a declaration's parameter is spelled where a type mentions it.
@@ -75,6 +85,10 @@ impl ParamKind {
 #[derive(Default)]
 pub(super) struct Lowering {
     decls: IndexMap<DeclKey, u32>,
+    /// Each declared effect's head, by the spelling
+    /// [`crate::name::mangle_effect_ref`] gives it, which is how a function
+    /// type carries its effects.
+    effects: IndexMap<String, TypeDeclId>,
     modules: IndexMap<ModuleSource, u32>,
     /// The declaration a tuple type is an instance of. An impl writes a tuple
     /// as `[..T]`, so an instance lowers to [`SolverType::Tuple`] as well.
@@ -97,12 +111,6 @@ pub(super) struct Lowering {
     /// newtype declared in a body, until annotate resolves its block
     /// ([`SolverBridge::state_local`]). Only the compiler answers for one.
     unstated: IndexSet<TypeDeclId>,
-}
-
-/// The spelling a function type's head is keyed by. `fn mut` is a shape of its
-/// own, since a closure that may write its captures is not the other.
-fn fn_shape_name(is_mut: bool) -> &'static str {
-    if is_mut { "fn mut" } else { "fn" }
 }
 
 /// The id `key` has in `map`, minted at the next index when it has none.
@@ -150,9 +158,33 @@ impl Lowering {
             .expect("the template head is interned before the program is read")
     }
 
-    /// The head a function type lowers under.
-    fn fn_shape(&mut self, is_mut: bool) -> TypeDeclId {
-        self.builtin(fn_shape_name(is_mut))
+    /// A function type as the solver reads it: the shape, whose arguments are
+    /// its parameters, its return, then its effects as one tuple, so two
+    /// signatures differing only in a `with` clause are two types, and no two
+    /// arities collide.
+    fn fn_type(
+        &self,
+        is_mut: bool,
+        mut signature: Vec<SolverType>,
+        effects: impl IntoIterator<Item = TypeDeclId>,
+    ) -> SolverType {
+        let head = self
+            .known_type(&DeclKey::FnShape { is_mut })
+            .expect("both function heads are interned before a function type lowers");
+        let effects = effects
+            .into_iter()
+            .map(|e| SolverType::Decl(e, Vec::new()))
+            .collect();
+        signature.push(SolverType::Tuple(effects));
+        SolverType::Decl(head, signature)
+    }
+
+    /// The head of an effect spelled as [`mangle_effect_ref`] spells it.
+    fn effect_spelled(&self, spelling: &str) -> TypeDeclId {
+        self.effects.get(spelling).copied().unwrap_or_else(|| {
+            self.known_type(&DeclKey::UndeclaredEffect)
+                .expect("the undeclared effect head is interned before a function type lowers")
+        })
     }
 
     fn trait_decl(&mut self, def: DefId) -> TraitDeclId {
@@ -200,13 +232,16 @@ impl Lowering {
                 SolverType::Decl(self.known_type(&DeclKey::Builtin(builtin.clone()))?, args)
             }
             TypeHead::Function {
-                is_mut, signature, ..
-            } => SolverType::Decl(
-                self.known_type(&DeclKey::Builtin(fn_shape_name(*is_mut).to_string()))?,
+                is_mut,
+                signature,
+                effects,
+            } => self.fn_type(
+                *is_mut,
                 signature
                     .iter()
                     .map(|ty| self.named_arg(ty, param))
                     .collect::<Option<Vec<_>>>()?,
+                effects.iter().map(|e| self.effect_spelled(e)),
             ),
             head => SolverType::Decl(self.known_type(&DeclKey::Def(head.def()?))?, args),
         };
@@ -299,19 +334,27 @@ impl Lowering {
                     .collect::<Option<Vec<_>>>()?;
                 Some(SolverType::Decl(head, args))
             }
-            // A function type is a shape keyed by its spelling, as a builtin
-            // is, and its arguments are its parameters then its return — n + 1
-            // of them, so no two arities collide. Selection reads it for
-            // equality and for matching, and neither needs more.
             Type::Function(f) => {
-                let mut args = f
+                let signature = f
                     .params
                     .iter()
                     .chain(std::iter::once(&f.return_type))
                     .map(|ty| self.ast_type(ty, param, resolutions, self_type))
                     .collect::<Option<Vec<_>>>()?;
-                args.shrink_to_fit();
-                Some(SolverType::Decl(self.fn_shape(f.is_mut), args))
+                // An impl header lowers before any query, and coherence lowers
+                // headers alone, so the heads are interned here.
+                intern(&mut self.decls, DeclKey::FnShape { is_mut: f.is_mut });
+                let effects: Vec<TypeDeclId> = f
+                    .effects
+                    .iter()
+                    .map(|effect| match resolutions.get(effect.id) {
+                        Resolution::Def(def) if resolutions.defs().kind(def).is_effect() => {
+                            self.type_decl(def)
+                        }
+                        _ => TypeDeclId(intern(&mut self.decls, DeclKey::UndeclaredEffect)),
+                    })
+                    .collect();
+                Some(self.fn_type(f.is_mut, signature, effects))
             }
             Type::Infer(_) | Type::Error(_) => None,
         }
@@ -435,14 +478,22 @@ impl Lowering {
                 is_mut,
                 params,
                 return_type,
-                ..
+                effects,
             } => {
-                let args = params
+                let signature = params
                     .iter()
                     .chain(std::iter::once(return_type))
                     .map(|&a| self.type_id(table, a, param))
                     .collect::<Option<Vec<_>>>()?;
-                decl(DeclKey::Builtin(fn_shape_name(*is_mut).to_string()), args)
+                Some(
+                    self.fn_type(
+                        *is_mut,
+                        signature,
+                        effects
+                            .iter()
+                            .map(|e| self.effect_spelled(&mangle_effect_ref(e))),
+                    ),
+                )
             }
             // `impl Inspect for !` is written in the prelude, so the receiver
             // side names the same shape.
@@ -618,20 +669,16 @@ fn representative(
             if let Some(id) = TypeTable::primitive_by_name(name) {
                 return Some(table.get(id).clone());
             }
-            if name == TypeTable::ARRAY_TYPE_NAME {
-                Some(ResolvedType::BuiltinArray(TypeTable::UNIT))
-            } else if name == fn_shape_name(false) || name == fn_shape_name(true) {
-                Some(ResolvedType::Function {
-                    is_mut: name == fn_shape_name(true),
-                    params: Vec::new(),
-                    return_type: TypeTable::UNIT,
-                    effects: Vec::new(),
-                })
-            } else {
-                None
-            }
+            (name == TypeTable::ARRAY_TYPE_NAME)
+                .then(|| ResolvedType::BuiltinArray(TypeTable::UNIT))
         }
-        DeclKey::AnonymousStruct | DeclKey::TemplateShape => None,
+        DeclKey::FnShape { is_mut } => Some(ResolvedType::Function {
+            is_mut: *is_mut,
+            params: Vec::new(),
+            return_type: TypeTable::UNIT,
+            effects: Vec::new(),
+        }),
+        DeclKey::AnonymousStruct | DeclKey::TemplateShape | DeclKey::UndeclaredEffect => None,
     }
 }
 
@@ -898,7 +945,7 @@ impl SolverBridge {
             DeclKey::Def(_) => Some(CompilerItem::ReflectNewtype),
             DeclKey::AnonymousStruct => Some(CompilerItem::ReflectStruct),
             DeclKey::TemplateShape => Some(CompilerItem::ReflectTemplate),
-            DeclKey::Builtin(_) => None,
+            DeclKey::Builtin(_) | DeclKey::FnShape { .. } | DeclKey::UndeclaredEffect => None,
         };
         for (&id, def) in program.impls.iter().filter(|(id, _)| **id >= first) {
             if !matches!(def.origin, ImplOrigin::Derived | ImplOrigin::Marker) {
@@ -929,15 +976,16 @@ impl SolverBridge {
         lowering.template_shape();
         // `type_id` spells a resolved type under these heads whether or not an
         // impl header named one.
-        for name in [
-            fn_shape_name(false),
-            fn_shape_name(true),
-            TypeTable::ARRAY_TYPE_NAME,
-            UNIT_TYPE_NAME,
-            NEVER_TYPE_NAME,
-        ]
-        .into_iter()
-        .chain(PrimitiveType::all_primitive_names())
+        for key in [
+            DeclKey::FnShape { is_mut: false },
+            DeclKey::FnShape { is_mut: true },
+            DeclKey::UndeclaredEffect,
+        ] {
+            intern(&mut lowering.decls, key);
+        }
+        for name in [TypeTable::ARRAY_TYPE_NAME, UNIT_TYPE_NAME, NEVER_TYPE_NAME]
+            .into_iter()
+            .chain(PrimitiveType::all_primitive_names())
         {
             lowering.builtin(name);
         }
@@ -951,6 +999,10 @@ impl SolverBridge {
             .filter(|&def| matches!(defs.kind(def), DefKind::Trait | DefKind::Effect))
         {
             lowering.trait_decl(def);
+            if let Some(effect) = tysys.resolutions.effect_decl(def) {
+                let head = lowering.type_decl(def);
+                lowering.effects.insert(mangle_effect_ref(&effect), head);
+            }
         }
         for def in defs.iter().filter(|&def| {
             matches!(defs.kind(def), DefKind::Struct | DefKind::Newtype)
@@ -1010,23 +1062,22 @@ impl SolverBridge {
             let id = lowering.trait_decl(*trait_);
             let own = &tysys.trait_env.trait_decl_headers[trait_].type_params;
             let place = |name: &str| ParamKind::of(own, name);
-            // An edge whose arguments the lowering cannot say states none,
-            // which answers at the supertrait's declared defaults.
+            // An edge whose arguments the lowering cannot say states nothing:
+            // answering it at the supertrait's defaults would be a guess.
             program.traits.entry(id).or_default().supertraits = closure
                 .iter()
                 .filter(|b| b.via.is_empty())
-                .map(|b| ParamBound {
-                    trait_: lowering.trait_decl(b.decl),
-                    args: tysys
-                        .bound_written(&b.bound)
-                        .and_then(|written| {
-                            written
-                                .args()
-                                .iter()
-                                .map(|arg| lowering.named_arg(arg, &place))
-                                .collect::<Option<Vec<_>>>()
-                        })
-                        .unwrap_or_default(),
+                .filter_map(|b| {
+                    let args = b
+                        .bound
+                        .type_args
+                        .iter()
+                        .map(|arg| lowering.ast_type(arg, &place, &tysys.resolutions, None))
+                        .collect::<Option<Vec<_>>>()?;
+                    Some(ParamBound {
+                        trait_: lowering.trait_decl(b.decl),
+                        args,
+                    })
                 })
                 .collect();
         }
@@ -1079,6 +1130,7 @@ impl SolverBridge {
                 .collect();
             let def = program.traits.entry(id).or_default();
             def.arg_defaults = defaults;
+            def.pack = header.type_params.iter().position(|p| p.is_pack);
             def.on_ref = on_ref;
             def.methods = methods;
             def.reserved = reserved;
@@ -1325,7 +1377,10 @@ impl SolverBridge {
                 .get_index(head.0 as usize)
                 .expect("a stated head is interned");
             let (is_ref, is_ref_mut) = match key {
-                DeclKey::Def(_) | DeclKey::Builtin(_) => {
+                DeclKey::Def(_)
+                | DeclKey::Builtin(_)
+                | DeclKey::FnShape { .. }
+                | DeclKey::UndeclaredEffect => {
                     let Some(shape) = representative(tysys, table, lowering.tuple, key) else {
                         continue;
                     };
@@ -1527,9 +1582,15 @@ impl SolverBridge {
         type_id: TypeId,
         asked: &FqTraitName,
     ) -> Option<Vec<OwedBody>> {
-        // A type that failed to resolve was reported where it failed: it holds
-        // what every type holds, and no impl answers for it.
-        if matches!(tysys.type_table.borrow().get(type_id), ResolvedType::Error) {
+        // A type that failed to resolve or to infer, or that names a binder this
+        // scope does not declare, was reported where it failed: it holds what
+        // every type holds, and no impl answers for it.
+        let place = place_in(ctx);
+        if !tysys
+            .type_table
+            .borrow()
+            .is_settled_under(type_id, &|name| place(name).is_some())
+        {
             let holds = asked
                 .canonical()
                 .and_then(|decl| self.lowering.known_trait(decl))
@@ -1557,7 +1618,6 @@ impl SolverBridge {
             .iter()
             .any(|r| matches!(&r.ty, SolverType::Decl(head, _) if shape_heads.contains(head)))
         {
-            let place = place_in(ctx);
             self.shapes_in(&table, type_id, &|name, _| place(name), &mut shapes);
         }
         let defs = tysys.resolutions.defs();
@@ -1590,7 +1650,9 @@ impl SolverBridge {
                             trait_,
                         })
                         .collect(),
-                    DeclKey::Builtin(_) => Vec::new(),
+                    DeclKey::Builtin(_) | DeclKey::FnShape { .. } | DeclKey::UndeclaredEffect => {
+                        Vec::new()
+                    }
                 }
             })
             .collect();

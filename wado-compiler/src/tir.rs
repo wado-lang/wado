@@ -4365,13 +4365,22 @@ impl TypeTable {
     /// Whether `id` is settled up to the type parameters `in_scope` names: it
     /// mentions no other, and no pack, inference variable or unresolved type.
     pub fn is_rigid_under(&self, id: TypeId, in_scope: &dyn Fn(&str) -> bool) -> bool {
+        self.settled_under(id, in_scope, false)
+    }
+
+    /// [`Self::is_rigid_under`] admitting a pack `in_scope` names as well.
+    pub fn is_settled_under(&self, id: TypeId, in_scope: &dyn Fn(&str) -> bool) -> bool {
+        self.settled_under(id, in_scope, true)
+    }
+
+    /// The walk both of the above are, differing only in whether a pack in
+    /// scope is settled.
+    fn settled_under(&self, id: TypeId, in_scope: &dyn Fn(&str) -> bool, packs: bool) -> bool {
         match self.get(id) {
             ResolvedType::TypeParam { name, .. } => in_scope(name),
-            ResolvedType::TypePack { .. }
-            | ResolvedType::InferVar(_)
-            | ResolvedType::Unknown
-            | ResolvedType::Error => false,
-            _ => !self.any_constituent(id, &mut |t| !self.is_rigid_under(t, in_scope)),
+            ResolvedType::TypePack { name, .. } => packs && in_scope(name),
+            ResolvedType::InferVar(_) | ResolvedType::Unknown | ResolvedType::Error => false,
+            _ => !self.any_constituent(id, &mut |t| !self.settled_under(t, in_scope, packs)),
         }
     }
 
@@ -4979,8 +4988,8 @@ impl TypeTable {
             ResolvedType::BuiltinArray(_) => FqTypeName::builtin(Self::ARRAY_TYPE_NAME),
             ResolvedType::Unit => FqTypeName::builtin(UNIT_TYPE_NAME),
             ResolvedType::Function { .. } => self.fn_receiver_name(self.get(id)),
-            // Tuples, primitives and function types are builtin shapes: no
-            // module declares them and every mangler spells them bare.
+            // Tuples and primitives are builtin shapes: no module declares
+            // them and every mangler spells them bare.
             _ => FqTypeName::builtin(&self.base_type_name(id)),
         }
     }

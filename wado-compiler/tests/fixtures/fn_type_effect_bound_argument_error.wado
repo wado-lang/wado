@@ -1,0 +1,31 @@
+// A function type's `with` clause is part of the type a bound argument names.
+//
+// `User` implements `Uses<fn() -> i32>`, which is not the
+// `Uses<fn() -> i32 with Stdout>` that `drive` requires. The solver once keyed
+// a function type by its signature alone, so it accepted the call and the
+// rejection surfaced inside `drive`'s body instead of at the call.
+
+use { Stdout } from "core:cli";
+
+trait Uses<F> with _ {
+    fn go(&self) -> i32;
+}
+
+struct User {}
+
+impl Uses<fn() -> i32> for User {
+    fn go(&self) -> i32 {
+        return 1;
+    }
+}
+
+fn drive<U: Uses<fn() -> i32 with Stdout>>(u: &U) -> i32 with _ {
+    return u.go();
+}
+
+test {
+    assert drive(&User {}) == 1;
+}
+
+__DATA__
+{"compile_error": ":27:12: analysis error: type 'User' does not implement trait 'Uses<fn()->i32with(wasi:cli/stdout.wado/Stdout)>' required by bound on 'U'"}

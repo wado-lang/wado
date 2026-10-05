@@ -1,0 +1,16 @@
+// A receiver whose type arguments no inference settled reports once and stops.
+//
+// `TreeMap::new()` has nothing to fix `K` or `V`, so its type still names the
+// callee's own binders. `.len()` lives in `impl<K: Ord, V>`, and checking that
+// bound asked the solver about a `K` the test's scope does not declare: no
+// lowering states it, and the question panicked on top of the diagnostic.
+
+use { TreeMap } from "core:collections";
+
+test {
+    let m = TreeMap::new();
+    assert m.len() == 0;
+}
+
+__DATA__
+{"compile_error": "cannot infer type parameter `K`, `V` of `TreeMap::new`"}
