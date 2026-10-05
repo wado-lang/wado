@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791213816159,
+  "lastUpdate": 1791215125344,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -64077,6 +64077,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f3643ae6d4d278ebf411c67b6d2e4a928a654598"
         },
         "date": 1791213815057,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338523,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "462c65c631ab626923a5f258401e9c73a73730fe",
+          "message": "Merge pull request #2278 from wado-lang/loam-backend-seam\n\nfeat(loam): a Backend trait, and a WebGPU backend that runs a generated model 19x faster than the CPU",
+          "timestamp": "2026-10-06T00:02:44+09:00",
+          "tree_id": "ce0f3ff8ca5180c7e79125717c37a480e5d11ed1",
+          "url": "https://github.com/wado-lang/wado/commit/462c65c631ab626923a5f258401e9c73a73730fe"
+        },
+        "date": 1791215124629,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
