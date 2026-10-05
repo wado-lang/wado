@@ -222,7 +222,8 @@ function does ([WEP: Declared absence](./wep-2026-09-13-declared-absence.md)).
 - [ ] `#[benign(E, …)]` on a global, stated in `spec-attributes.md`. Done when a
   fixture shows the listed effects admitted in its initializer, an unlisted one
   still rejected, and the world import still required.
-- [ ] The unspecified-initializer rule in `spec-expressions.md`, replacing the
+- [ ] The unspecified-initializer rule and its handler scope in
+  `spec-expressions.md`, replacing the
   fixture that pins an unread global's trapping initializer as run. Done when
   the optimizer removes an unread global whose initializer performs a benign
   effect, along with the import that only it reached.
@@ -234,7 +235,7 @@ function does ([WEP: Declared absence](./wep-2026-09-13-declared-absence.md)).
 
 ## Known gaps
 
-- Every map built by `new()` in one instance shares `DEFAULT_HASH_SEED`. A
+- Every map built under `DEFAULT_HASH_SEED` in one instance shares it. A
   long-lived instance, such as an HTTP service, gives an attacker many requests
   against one seed to learn its collisions from timing.
 - A trusted-key newtype that leaves out `Default` or `Deserialize` hashes under
