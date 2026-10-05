@@ -86,14 +86,14 @@ Common methods: `abs`, `all_true`, `bitmask`, `bitselect`.
 ## Relaxed SIMD
 
 Relaxed SIMD operations trade strict determinism for performance.
-Edge-case behavior (NaN, out-of-range) is implementation-defined but consistent within a runtime.
+Edge-case behavior (NaN, out-of-range) is host-defined, and fixed on one host.
 Methods use the `relaxed_` prefix.
 
 - **FMA:** `f32x4/f64x2.relaxed_madd(b, c)` (a_b+c), `relaxed_nmadd(b, c)` (-(a_b)+c)
 - **Min/Max:** `f32x4/f64x2.relaxed_min/max` (faster, NaN behavior varies)
 - **Truncation:** `i32x4::relaxed_trunc_f32x4_s/u`, `relaxed_trunc_f64x2_s/u_zero`
 - **Lane select:** `i8x16/i16x8/i32x4/i64x2.relaxed_laneselect`
-- **Swizzle:** `i8x16.relaxed_swizzle` (out-of-range indices implementation-defined)
+- **Swizzle:** `i8x16.relaxed_swizzle` (out-of-range indices host-defined)
 - **Q15 multiply:** `i16x8.relaxed_q15mulr_s`
 - **Dot product:** `i16x8.relaxed_dot_i8x16_i7x16_s`, `i32x4.relaxed_dot_i8x16_i7x16_add_s`
 

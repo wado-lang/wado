@@ -762,8 +762,9 @@ associated type carries no bound — and stay bounded inherent impls.
 
 #### `fn get_unchecked(&self, index: i32) -> Self::Elem`
 
-The caller must guarantee `0 <= index < len()`. Violating it yields an
-unspecified `Elem` or traps; it is never undefined behaviour.
+The caller must guarantee `0 <= index < len()`. Any other `index` is a
+contract violation, and the result is unspecified: some valid `Elem`,
+or a trap.
 
 #### `fn is_empty(&self) -> bool`
 
@@ -4442,7 +4443,7 @@ cannot silently break code generation.
 
 The caller must guarantee `0 <= index < len()`. Any other `index` is a
 contract violation, and the result is unspecified: an element of the
-backing array past the view, or a trap. Also the byte-read
+backing array outside the view, or a trap. Also the byte-read
 anchor for `FieldSchema::lookup`, as `len` is for byte length.
 
 #### `pub fn slice(&self, start: i32, end: i32) -> Slice<T>`

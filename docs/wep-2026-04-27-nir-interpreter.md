@@ -71,10 +71,10 @@ trust already placed in effect checking elsewhere.
 
 ### Determinism
 
-- Float NaN bits are nondeterministic in Wasm, so NaN-producing arithmetic is
-  never folded.
-- `v128` and relaxed-SIMD have implementation-defined corner cases; SIMD CTFE is
-  deferred to a later WEP.
+- A NaN's bit pattern is host-defined, so NaN-producing arithmetic folds to
+  the canonical NaN ([WEP: Behavior Classes](./wep-2026-10-05-behavior-classes.md)).
+- `v128` and relaxed-SIMD have host-defined corner cases; SIMD CTFE is deferred
+  to a later WEP.
 - Integer wrapping matches Wasm. Division by zero and a signed `MIN / -1` trap
   at every width, so they are left unfolded and the runtime trap survives. A
   signed `MIN % -1` folds to 0.

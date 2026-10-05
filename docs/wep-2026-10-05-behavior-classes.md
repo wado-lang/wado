@@ -55,7 +55,7 @@ The log reads `A B` or `B A`. Either way `A == 1` and `B == 2` afterwards.
 The compiler makes the choice, so a compiled program keeps it on every host. A
 golden test of a compiled program can pin it.
 
-### Host-defined: the host chooses
+### Host-defined: the host may choose
 
 Host-defined behavior is unspecified behavior whose choice the compiled program
 need not fix, so the host may make it. It is a class of its own because the
@@ -73,7 +73,7 @@ The cases differ in how consistent the host is, so each one says:
 
 - A NaN's bit pattern may differ between two runs of one operation, as Wasm
   allows. The order on floats treats every NaN as one value, so only reading
-  the bits observes it.
+  the bits observes it, as `to_bits` and `copysign` do.
 - Relaxed SIMD results stay fixed on one host, as Wasm requires.
 - `InsecureSeed` may return the same value every time. Its WIT says so.
 
@@ -165,8 +165,10 @@ breaks a type's invariant.
    first-char dispatch emits no `_` when its arms already take every char.
    Done.
 4. A float operation whose result is a NaN folds at compile time. Done:
-   `const_eval` folds it, and only reading a stored NaN, whose bits are not
-   host-defined, still declines.
+   `const_eval` folds it to the canonical NaN, so the Wasm does not depend on
+   the machine that ran the compiler. Only reading a stored f32 NaN declines:
+   its bits are not host-defined, and widening it to the `f64` a `Value` holds
+   may quiet it.
 
 ## Known gaps
 

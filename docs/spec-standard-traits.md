@@ -428,8 +428,9 @@ false. `x != x` is always false, so a NaN is tested with `is_nan()`.
 
 The bit pattern of a NaN that an operation produces is
 [host-defined](./spec-overview.md#behavior-classes), and may differ between
-two runs of one operation. Only reading the bits, as `to_bits` does, observes
-it.
+two runs of one operation. The order and `is_nan()` never observe it. Reading
+the bits does: `to_bits` returns them, and `copysign` copies the sign bit from
+its second operand.
 
 Each of the four float types carries IEEE 754's six comparisons as methods.
 They answer as IEEE does, so a NaN operand makes every one false except
