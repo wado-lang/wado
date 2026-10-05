@@ -16,9 +16,9 @@ use crate::defs::DefId;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FqTraitName, FqTypeName, FreeFunctionName, FunctionId, MethodName, UNIT_TYPE_NAME,
-    closure_call_method_name, closure_call_name, closure_functor_type, is_fn_type_name,
-    mangle_generic_name, mangle_local_trait_method, mangle_method_generic,
+    FqTraitName, FqTypeName, FreeFunctionName, FunctionId, MODULE_INIT_FUNCTION, MethodName,
+    UNIT_TYPE_NAME, closure_call_method_name, closure_call_name, closure_functor_type,
+    is_fn_type_name, mangle_generic_name, mangle_local_trait_method, mangle_method_generic,
 };
 use crate::nir::{FuncId, FunctionRef, NirFunction, NirImport, NirStruct};
 use crate::nir_arena::{
@@ -2314,36 +2314,89 @@ fn compute_global_reachability(
 /// `GlobalVarSet` for a dead global from surviving function bodies
 /// (covers both the original `$initialize_module` and any inlined
 /// copies).
+///
+/// Whether a global's initializer runs is unspecified, so a dead global's
+/// initializer goes whole, effects and traps included, and takes with it the
+/// functions and imports only it reached. An assignment the program wrote keeps
+/// its effect.
 pub(super) fn remove_unreachable_globals(
     project: &mut NirPackage,
     used_globals: &IndexSet<(String, String)>,
     summaries: &FnSummaries,
 ) {
+    let mut initialized_only: IndexSet<(String, String)> = IndexSet::default();
     project.globals.retain(|global| {
-        let global_module_key = global.module_source.to_path().join("::");
-        used_globals.contains(&(global_module_key, global.name.clone()))
+        let key = (
+            global.module_source.to_path().join("::"),
+            global.name.clone(),
+        );
+        let used = used_globals.contains(&key);
+        // No assignment reaches an immutable global, so its one store is the
+        // initializer, wherever inlining has carried it.
+        if !used && !global.wado_mutable {
+            initialized_only.insert(key);
+        }
+        used
     });
 
     let type_table = project.type_table.borrow();
+    let dead = DeadGlobals {
+        used: used_globals,
+        initialized_only,
+        type_table: &type_table,
+    };
     for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
         let calls = summaries.of_body(i);
+        let is_module_init = func.name == MODULE_INIT_FUNCTION;
         if let Some(body) = func.body.as_mut() {
+            if is_module_init {
+                drop_dead_initializers(body, used_globals);
+            }
             let root = body.root;
-            remove_dead_global_sets(body, NodeRef::Block(root), used_globals, &type_table, calls);
+            remove_dead_global_sets(body, NodeRef::Block(root), &dead, calls);
         }
     }
 }
 
-/// Strip every store to a dead global under `node`, keeping a value that is not
-/// [`deletable_value`] evaluated where the store was.
-fn remove_dead_global_sets(
-    body: &mut Body,
-    node: NodeRef,
-    used: &IndexSet<(String, String)>,
-    type_table: &TypeTable,
-    calls: CallFacts,
-) {
+/// What [`remove_dead_global_sets`] strips, and what of each store it keeps.
+struct DeadGlobals<'a> {
+    used: &'a IndexSet<(String, String)>,
+    /// The dead globals whose every store is the initializer.
+    initialized_only: IndexSet<(String, String)>,
+    type_table: &'a TypeTable,
+}
+
+impl DeadGlobals<'_> {
+    /// The part of a dead store's value that must still run: none of an
+    /// initializer, else [`kept_effect`].
+    fn kept_effect(&self, body: &Body, store: ExprId, calls: CallFacts) -> Option<ExprId> {
+        let (key, value) = dead_store(body, store, self.used)?;
+        if self.initialized_only.contains(&key) {
+            return None;
+        }
+        kept_effect(body, value, self.type_table, calls)
+    }
+}
+
+/// Drop each top-level store of `$initialize_module` to a dead global: until
+/// inlining copies it elsewhere, such a store is an initializer, and the
+/// program's assignments are elsewhere.
+fn drop_dead_initializers(body: &mut Body, used: &IndexSet<(String, String)>) {
+    let root = body.root;
+    let stmts = std::mem::take(&mut body.blocks[root].stmts);
+    body.blocks[root].stmts = stmts
+        .into_iter()
+        .filter(|&s| match body.stmts[s].kind {
+            StmtKind::Expr(Operand::Expr(store)) => dead_store(body, store, used).is_none(),
+            _ => true,
+        })
+        .collect();
+}
+
+/// Strip every store to a dead global under `node`, keeping what
+/// [`DeadGlobals::kept_effect`] answers evaluated where the store was.
+fn remove_dead_global_sets(body: &mut Body, node: NodeRef, dead: &DeadGlobals, calls: CallFacts) {
     if let NodeRef::Block(block) = node {
         let old = std::mem::take(&mut body.blocks[block].stmts);
         let mut kept: Vec<StmtId> = Vec::with_capacity(old.len());
@@ -2352,11 +2405,11 @@ fn remove_dead_global_sets(
                 kept.push(s);
                 continue;
             };
-            let Some(value) = dead_store_value(body, store, used) else {
+            if dead_store(body, store, dead.used).is_none() {
                 kept.push(s);
                 continue;
-            };
-            if let Some(effect) = kept_effect(body, value, type_table, calls) {
+            }
+            if let Some(effect) = dead.kept_effect(body, store, calls) {
                 body.stmts[s].kind = StmtKind::Expr(effect.into());
                 kept.push(s);
             }
@@ -2367,15 +2420,14 @@ fn remove_dead_global_sets(
     let mut stores: Vec<ExprId> = Vec::new();
     body.for_each_operand(node, |op| {
         if let Some(e) = op.as_expr()
-            && dead_store_value(body, e, used).is_some()
+            && dead_store(body, e, dead.used).is_some()
         {
             stores.push(e);
         }
     });
     for store in stores {
-        let value = dead_store_value(body, store, used).expect("collected as a dead store");
         let unit = body.exprs[store].type_id;
-        if let Some(effect) = kept_effect(body, value, type_table, calls) {
+        if let Some(effect) = dead.kept_effect(body, store, calls) {
             let span = body.exprs[store].span;
             let stmt = body.stmts.push(StmtNode {
                 kind: StmtKind::Expr(effect.into()),
@@ -2395,12 +2447,17 @@ fn remove_dead_global_sets(
     let mut children: Vec<NodeRef> = Vec::new();
     body.for_each_child(node, |c| children.push(c));
     for child in children {
-        remove_dead_global_sets(body, child, used, type_table, calls);
+        remove_dead_global_sets(body, child, dead, calls);
     }
 }
 
-/// The value `e` stores, when `e` is a store to a global `used` does not hold.
-fn dead_store_value(body: &Body, e: ExprId, used: &IndexSet<(String, String)>) -> Option<Operand> {
+/// The global `e` stores to and the value it stores, when `e` is a store to a
+/// global `used` does not hold.
+fn dead_store(
+    body: &Body,
+    e: ExprId,
+    used: &IndexSet<(String, String)>,
+) -> Option<((String, String), Operand)> {
     let ExprKind::GlobalVarSet {
         module_source,
         name,
@@ -2410,7 +2467,7 @@ fn dead_store_value(body: &Body, e: ExprId, used: &IndexSet<(String, String)>) -
         return None;
     };
     let key = (module_source.to_path().join("::"), name.clone());
-    (!used.contains(&key)).then_some(*value)
+    (!used.contains(&key)).then_some((key, *value))
 }
 
 /// The part of a dead store's value that must still run: all of it, unless it

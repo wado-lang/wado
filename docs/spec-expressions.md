@@ -302,9 +302,6 @@ most once and has run before the global is read. An initializer that traps may
 trap the program at start, at the first read, or never, if nothing reads the
 global. A `#[benign]` global is no exception.
 
-> Not yet implemented: every initializer runs at module initialization, whether
-> or not anything reads the global.
-
 ### Mutability
 
 Globals follow [Variable Mutability](#variable-mutability): without `mut` a

@@ -1,6 +1,6 @@
-// A dead global's initializer whose loop no counter bounds may never return,
-// and running forever is observable: the call stays although nothing reads the
-// global. Only a loop counting a local up to a constant is known to end. The
+// A store to a dead global whose value's loop no counter bounds may never
+// return, and running forever is observable: the call stays although nothing
+// reads the global. Only a loop counting a local up to a constant is known to end. The
 // bodies do nothing that could trap, so divergence is what keeps each call.
 use { println, Stdout } from "core:cli";
 
@@ -28,14 +28,16 @@ fn counts_to_a_parameter(limit: i32) -> i32 {
     return odd;
 }
 
-global STEPS: i32 = collatz_steps(builtin::black_box(27));
-global ODD: i32 = counts_to_a_parameter(builtin::black_box(10));
+global mut STEPS: i32 = 0;
+global mut ODD: i32 = 0;
 
 fn read() -> i32 {
     return STEPS + ODD;
 }
 
 export fn run() with Stdout {
+    STEPS = collatz_steps(builtin::black_box(27));
+    ODD = counts_to_a_parameter(builtin::black_box(10));
     println("ok");
 }
 

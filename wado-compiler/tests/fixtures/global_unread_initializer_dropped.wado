@@ -1,0 +1,29 @@
+// Whether a global's initializer runs is unspecified, and one that nothing
+// reads is dropped at every optimization level, with the functions and imports
+// only it reaches. Each initializer below would be observed if it ran:
+// `DIVIDED`, `CALLED` and `ASSIGNABLE` trap, and `SEED` calls an import
+// nothing else does.
+use { println, Stdout } from "core:cli";
+use { InsecureSeed } from "wasi:random";
+
+fn divide_by_zero() -> i32 {
+    return 1 / 0;
+}
+
+global DIVIDED: i32 = 1 / 0;
+global CALLED: i32 = divide_by_zero();
+global mut ASSIGNABLE: i32 = divide_by_zero();
+
+#[benign(InsecureSeed)]
+global SEED: [u64, u64] = InsecureSeed::get_insecure_seed();
+
+export fn run() with Stdout {
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_not_expect:O0": ["divide_by_zero", "insecure-seed"],
+    "wir_not_expect:O2": ["divide_by_zero", "insecure-seed"]
+}

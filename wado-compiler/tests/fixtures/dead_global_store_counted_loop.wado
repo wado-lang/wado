@@ -1,5 +1,5 @@
-// A dead global's initializer that only fills a fresh array in counted loops,
-// every access in range, goes with the global: it can neither trap nor loop
+// A store to a dead global whose value only fills a fresh array in counted
+// loops, every access in range, goes whole: it can neither trap nor loop
 // forever, so nothing it does is observable.
 use { println, Stdout } from "core:cli";
 
@@ -19,13 +19,14 @@ fn build_table(lenient: bool) -> ByteList {
     return table;
 }
 
-global TABLE: ByteList = build_table(true);
+global mut TABLE: ByteList = [];
 
 fn decode(b: u8) -> u8 {
     return TABLE[b as i32];
 }
 
 export fn run() with Stdout {
+    TABLE = build_table(true);
     println("ok");
 }
 
