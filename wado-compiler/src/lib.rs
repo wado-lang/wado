@@ -2179,8 +2179,6 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // into `TypeId`s the cached `TirModule`s do not carry, and left an
     // `Iterator::Item` projection to reach WIR build and panic on programs
     // `compile` handled fine.
-    let test_world = target_world == Some(TEST_WORLD);
-    let flags = parse_codegen_flags(codegen_flags, opt_level, test_world, &logger)?;
     let sem = semantics::semantics_with_logger(load_result, &logger, true, None);
     let symbols = sem.symbols.clone();
     let interner = sem.interner.clone();
@@ -2237,7 +2235,12 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 package.target_world = world.to_string();
             }
             package.wasm_assets.clone_from(&wasm_assets);
-            package.codegen_flags = flags;
+            package.codegen_flags = parse_codegen_flags(
+                codegen_flags,
+                opt_level,
+                package.is_test_world(),
+                &logger,
+            )?;
 
             // Validate target world (test world is synthetic, not in registry)
             if !package.is_test_world()

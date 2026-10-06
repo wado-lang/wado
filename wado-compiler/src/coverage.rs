@@ -1274,13 +1274,18 @@ mod tests {
         assert!(none.is_empty());
     }
 
+    fn parse(source: &str) -> ast::Module {
+        let lexed = lex(source);
+        assert!(lexed.errors.is_empty(), "lex error: {:?}", lexed.errors);
+        Parser::new(lexed.tokens).parse_strict().expect("parse")
+    }
+
     /// `fn f` whose second statement is a contract check, planned with or
     /// without `contract_checks`.
     fn plan_check(contract_checks: bool) -> (ModulePlan, Sites) {
-        let source = "fn f(i: i32) {\n    let j = i;\n    if builtin::contract_checks() {\n        assert j > 0;\n    }\n}\n";
-        let lexed = lex(source);
-        assert!(lexed.errors.is_empty(), "lex error: {:?}", lexed.errors);
-        let module = Parser::new(lexed.tokens).parse_strict().expect("parse");
+        let module = parse(
+            "fn f(i: i32) {\n    let j = i;\n    if builtin::contract_checks() {\n        assert j > 0;\n    }\n}\n",
+        );
         let (plan, sites, _) = plan_module(&ModuleSource::builtin(), &module, contract_checks);
         (plan, sites)
     }
@@ -1308,8 +1313,7 @@ mod tests {
             ("if builtin::contract_checks::<i32>() { }", false),
         ];
         for (shape, is_check) in shapes {
-            let lexed = lex(&format!("fn f() {{\n    {shape}\n}}\n"));
-            let module = Parser::new(lexed.tokens).parse_strict().expect("parse");
+            let module = parse(&format!("fn f() {{\n    {shape}\n}}\n"));
             let Item::Function(f) = &module.items[0] else {
                 unreachable!("the source declares one function");
             };

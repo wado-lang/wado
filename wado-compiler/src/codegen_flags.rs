@@ -37,8 +37,8 @@ pub struct CodegenFlags {
     pub wide_arithmetic: bool,
 
     /// Check the contracts of `_unchecked` functions: `lower::contract_checks`
-    /// keeps each `if builtin::contract_checks()` or deletes it. On in the test world and at
-    /// `-O0`, off otherwise (see [`CodegenFlags::for_build`]).
+    /// keeps each `if builtin::contract_checks()` or deletes it. On in the
+    /// test world and at `-O0`, off otherwise (see [`CodegenFlags::for_build`]).
     pub contract_checks: bool,
 }
 
