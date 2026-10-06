@@ -4278,6 +4278,18 @@ impl GenericParam {
         param
     }
 
+    /// Whether [`Type::any`] holds of a type its bounds or its default write.
+    #[must_use]
+    pub fn any_type<'a>(&'a self, pred: &mut impl FnMut(&'a Type) -> bool) -> bool {
+        self.bounds.iter().any(|bound| {
+            bound.type_args.iter().any(|arg| arg.any(pred))
+                || bound.assoc_types.iter().any(|assoc| assoc.ty.any(pred))
+                || bound.fn_signature.as_ref().is_some_and(|signature| {
+                    signature.params.iter().any(|p| p.any(pred)) || signature.return_type.any(pred)
+                })
+        }) || self.default.as_ref().is_some_and(|ty| ty.any(pred))
+    }
+
     /// The trait bounds this param declares. An `fn`-signature bound is
     /// excluded: it is already realised in the parameter's own type, so there
     /// is no trait to check a type argument against.

@@ -636,6 +636,15 @@ matches, and monomorphization names no instance for it either
 (`impl_param_bound_by_trait_arg.wado`). A program relying on it is rejected,
 never miscompiled.
 
+### A projection off a trait parameter keeps the impl's method parameter
+
+An impl's method takes its type parameters from the trait, read in the impl's
+frame. A bound or default projecting off one of the trait's own parameters
+(`fn hold<E: Conv<X::Item>>` in `trait Store<X: Iter>`) has no written form
+there, so that parameter stays as the impl restates it
+(`trait_method_bound_projects_trait_param.wado`). A default the trait gave it
+does not reach a call through the impl.
+
 ### A ref blanket never dispatches
 
 The order ranks `impl<T: Bound> Tr for &T` as the third candidate list, and

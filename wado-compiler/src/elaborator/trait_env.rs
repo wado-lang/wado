@@ -1375,32 +1375,42 @@ impl TraitEnv {
     /// impl's header writes for it. Matched by the binder a name reaches, so a
     /// method parameter shadowing one is left alone. A parameter the header
     /// leaves to its default, or a pack, which takes a run of arguments no
-    /// one name stands for, stays as written.
+    /// one name stands for, stays as written. `None` where `param` projects
+    /// off one of the trait's parameters (`X::Item`): a written type cannot
+    /// say that in the impl's frame.
     pub(super) fn in_impl_frame(
         &self,
         impl_def: DefId,
         param: &ast::GenericParam,
         resolutions: &Resolutions,
-    ) -> ast::GenericParam {
+    ) -> Option<ast::GenericParam> {
         let Some(header) = self.impl_headers.get(&impl_def) else {
-            return param.clone();
+            return Some(param.clone());
         };
         let Some(trait_) = header.trait_def() else {
-            return param.clone();
+            return Some(param.clone());
         };
         let declared = self.trait_type_params(trait_);
         if declared.iter().any(|p| p.is_pack) {
-            return param.clone();
+            return Some(param.clone());
+        }
+        let projects_off_declared = param.any_type(&mut |ty| {
+            matches!(ty, ast::Type::NamespacedGeneric(ns)
+                if matches!(resolutions.walked(ns.id),
+                    Some(Resolution::Projection(base)) if declared.iter().any(|p| p.id == base)))
+        });
+        if projects_off_declared {
+            return None;
         }
         let written = header.trait_ty().map_or(&[][..], written_arg_nodes);
-        param.substituted(&|named| match resolutions.walked(named.id)? {
+        Some(param.substituted(&|named| match resolutions.walked(named.id)? {
             Resolution::Binder(binder) => declared
                 .iter()
                 .position(|p| p.id == binder)
                 .and_then(|i| written.get(i))
                 .cloned(),
             Resolution::Def(_) | Resolution::Projection(_) | Resolution::Unresolved => None,
-        })
+        }))
     }
 
     /// The parameters of `trait_` a reference to it gives a type argument, in

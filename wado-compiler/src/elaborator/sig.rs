@@ -139,13 +139,15 @@ impl Signatures {
     /// declare a default (WEP 2026-04-11), and a default names its neighbours
     /// as the trait called them. Not the decl pass: the trait may be elsewhere.
     /// `in_impl` reads a type parameter the trait wrote in the impl's frame,
-    /// where the trait's own parameters are the arguments the impl writes.
+    /// where the trait's own parameters are the arguments the impl writes, and
+    /// answers `None` where that frame cannot say it: the impl's restatement
+    /// stands there, so a default the trait gave that parameter is lost.
     pub(crate) fn inherit_trait_param_defaults(
         &mut self,
         defs: &DefTable,
-        in_impl: &dyn Fn(DefId, &GenericParam) -> GenericParam,
+        in_impl: &dyn Fn(DefId, &GenericParam) -> Option<GenericParam>,
     ) {
-        let inherited: Vec<(DefId, ModuleSource, Vec<Param>, Vec<GenericParam>)> = self
+        let inherited: Vec<(DefId, ModuleSource, Vec<Param>, Vec<Option<GenericParam>>)> = self
             .method_sigs
             .values()
             .filter(|sig| !sig.params.is_empty() || !sig.own_params.is_empty())
@@ -179,7 +181,9 @@ impl Signatures {
             // Whole entries: bounds and default are both the trait's. The slots
             // stay the impl's own, numbered in `decl.type_params`, untouched.
             for (param, from_trait) in sig.own_params.iter_mut().zip(own_params) {
-                *param = from_trait;
+                if let Some(from_trait) = from_trait {
+                    *param = from_trait;
+                }
             }
         }
     }
