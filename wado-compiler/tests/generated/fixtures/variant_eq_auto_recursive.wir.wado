@@ -131,9 +131,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_s
 
 type "functype//core:prelude/traits.wado/variant_eq_auto_recursive.wado/BranchData^core:prelude/traits.wado/Inspect::inspect" = fn(ref "variant_eq_auto_recursive.wado//BranchData", ref "core:prelude/format.wado//Formatter");  // TypeId(47)
 
-type "functype//variant_eq_auto_recursive.wado/variant_eq_auto_recursive.wado/Node^core:prelude/traits.wado/Eq::eq$scalar" = fn(ref "variant_eq_auto_recursive.wado//Node", ref "variant_eq_auto_recursive.wado//Node") -> bool;  // TypeId(48)
+type "functype//core:prelude/traits.wado/variant_eq_auto_recursive.wado/Node^core:prelude/traits.wado/Inspect::inspect$scalar" = fn(ref "variant_eq_auto_recursive.wado//Node", ref "core:prelude/format.wado//Formatter");  // TypeId(48)
 
-type "functype//core:prelude/traits.wado/variant_eq_auto_recursive.wado/Node^core:prelude/traits.wado/Inspect::inspect$scalar" = fn(ref "variant_eq_auto_recursive.wado//Node", ref "core:prelude/format.wado//Formatter");  // TypeId(49)
+type "functype//variant_eq_auto_recursive.wado/variant_eq_auto_recursive.wado/Node^core:prelude/traits.wado/Eq::eq$scalar" = fn(ref "variant_eq_auto_recursive.wado//Node", ref "variant_eq_auto_recursive.wado//Node") -> bool;  // TypeId(49)
 
 type "functype//core:prelude/primitive.wado/bool::fmt_into$scalar" = fn(bool, ref "core:prelude/format.wado//Formatter");  // TypeId(50)
 
@@ -2231,30 +2231,6 @@ fn "core:prelude/traits.wado/variant_eq_auto_recursive.wado/BranchData^core:prel
     builtin::array_copy<u8>(self_10.repr, new_used_22, global:core:prelude/traits.wado::$const_obj_41, 0, 2);
 }
 
-fn "variant_eq_auto_recursive.wado/variant_eq_auto_recursive.wado/Node^core:prelude/traits.wado/Eq::eq$scalar"(self, other) {
-    let $eq_self_Leaf_2: i32;
-    let $eq_other_Leaf_3: i32;
-    let $eq_self_Branch_4: ref "variant_eq_auto_recursive.wado//BranchData";
-    let $eq_other_Branch_5: ref "variant_eq_auto_recursive.wado//BranchData";
-    if ref.test "variant_eq_auto_recursive.wado//Node::Leaf"(self) {
-        $eq_self_Leaf_2 = ref.cast "variant_eq_auto_recursive.wado//Node::Leaf"(self).payload_0;
-        if ref.test "variant_eq_auto_recursive.wado//Node::Leaf"(other) {
-            $eq_other_Leaf_3 = ref.cast "variant_eq_auto_recursive.wado//Node::Leaf"(other).payload_0;
-            return $eq_self_Leaf_2 == $eq_other_Leaf_3;
-        } else {
-            return 0;
-        }
-    } else {
-        $eq_self_Branch_4 = ref.cast "variant_eq_auto_recursive.wado//Node::Branch"(self).payload_0;
-        if ref.test "variant_eq_auto_recursive.wado//Node::Branch"(other) {
-            $eq_other_Branch_5 = ref.cast "variant_eq_auto_recursive.wado//Node::Branch"(other).payload_0;
-            return "variant_eq_auto_recursive.wado/variant_eq_auto_recursive.wado/BranchData^core:prelude/traits.wado/Eq::eq"($eq_self_Branch_4, $eq_other_Branch_5);
-        } else {
-            return 0;
-        }
-    }
-}
-
 fn "core:prelude/traits.wado/variant_eq_auto_recursive.wado/Node^core:prelude/traits.wado/Inspect::inspect$scalar"(self, f) {
     let self_10: ref "core:prelude/string.wado//String";
     let new_used_22: i32;
@@ -2312,6 +2288,30 @@ fn "core:prelude/traits.wado/variant_eq_auto_recursive.wado/Node^core:prelude/tr
             unreachable;
         }
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<variant_eq_auto_recursive.wado/BranchData>"(ref.cast "variant_eq_auto_recursive.wado//Node::Branch"(self).payload_0, f);
+    }
+}
+
+fn "variant_eq_auto_recursive.wado/variant_eq_auto_recursive.wado/Node^core:prelude/traits.wado/Eq::eq$scalar"(self, other) {
+    let $eq_self_Leaf_2: i32;
+    let $eq_other_Leaf_3: i32;
+    let $eq_self_Branch_4: ref "variant_eq_auto_recursive.wado//BranchData";
+    let $eq_other_Branch_5: ref "variant_eq_auto_recursive.wado//BranchData";
+    if ref.test "variant_eq_auto_recursive.wado//Node::Leaf"(self) {
+        $eq_self_Leaf_2 = ref.cast "variant_eq_auto_recursive.wado//Node::Leaf"(self).payload_0;
+        if ref.test "variant_eq_auto_recursive.wado//Node::Leaf"(other) {
+            $eq_other_Leaf_3 = ref.cast "variant_eq_auto_recursive.wado//Node::Leaf"(other).payload_0;
+            return $eq_self_Leaf_2 == $eq_other_Leaf_3;
+        } else {
+            return 0;
+        }
+    } else {
+        $eq_self_Branch_4 = ref.cast "variant_eq_auto_recursive.wado//Node::Branch"(self).payload_0;
+        if ref.test "variant_eq_auto_recursive.wado//Node::Branch"(other) {
+            $eq_other_Branch_5 = ref.cast "variant_eq_auto_recursive.wado//Node::Branch"(other).payload_0;
+            return "variant_eq_auto_recursive.wado/variant_eq_auto_recursive.wado/BranchData^core:prelude/traits.wado/Eq::eq"($eq_self_Branch_4, $eq_other_Branch_5);
+        } else {
+            return 0;
+        }
     }
 }
 

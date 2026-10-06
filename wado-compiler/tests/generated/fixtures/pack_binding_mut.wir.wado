@@ -109,9 +109,9 @@ type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(42)
 
-type "functype//core:prelude/primitive.wado/bool^core:prelude/traits.wado/Inspect::inspect$scalar" = fn(bool, ref "core:prelude/format.wado//Formatter");  // TypeId(43)
+type "functype//core:prelude/primitive.wado/i32::fmt_into$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(43)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_into$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(44)
+type "functype//core:prelude/primitive.wado/bool^core:prelude/traits.wado/Inspect::inspect$scalar" = fn(bool, ref "core:prelude/format.wado//Formatter");  // TypeId(44)
 
 type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(45)
 
@@ -1946,12 +1946,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $mv_arg_3(f.buf).repr, is_negative, x, self);
 }
 
-fn "core:prelude/primitive.wado/bool^core:prelude/traits.wado/Inspect::inspect$scalar"(self, f) {
-    "core:prelude/primitive.wado/bool::fmt_into$scalar"(self, f);
-}
-
 fn "core:prelude/primitive.wado/i32::fmt_into$scalar"(self, f) {
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f);
+}
+
+fn "core:prelude/primitive.wado/bool^core:prelude/traits.wado/Inspect::inspect$scalar"(self, f) {
+    "core:prelude/primitive.wado/bool::fmt_into$scalar"(self, f);
 }
 
 fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar"(self, f) {

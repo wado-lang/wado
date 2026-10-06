@@ -176,21 +176,21 @@ type "functype//core:prelude/tuple.wado/[core:prelude/string.wado/String,bool,i3
 
 type "functype//core:prelude/tuple.wado/[i32,core:prelude/string.wado/String]^core:prelude/traits.wado/Inspect::inspect" = fn(ref "tuple//[i32, core:prelude/string.wado/String]", ref "core:prelude/format.wado//Formatter");  // TypeId(67)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(68)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(68)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(69)
+type "functype//core:prelude/primitive.wado/i32::fmt_into$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(69)
 
 type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(70)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_into$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(71)
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(71)
 
-type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(72)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(72)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(73)
+type "functype//core:prelude/format.wado/&core:prelude/string.wado/StrSlice^core:prelude/traits.wado/Inspect::inspect$spec0$scalar" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(73)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(74)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(74)
 
-type "functype//core:prelude/format.wado/&core:prelude/string.wado/StrSlice^core:prelude/traits.wado/Inspect::inspect$spec0$scalar" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(75)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(75)
 
 type "functype//core:prelude/primitive.wado/u8^core:prelude/traits.wado/Inspect::inspect$scalar$spec0$scalar" = fn(u8, ref "core:prelude/string.wado//String");  // TypeId(76)
 
@@ -3460,10 +3460,6 @@ fn "core:prelude/tuple.wado/[i32,core:prelude/string.wado/String]^core:prelude/t
     builtin::array_copy<u8>(self_7.repr, start_20, global:core:prelude/tuple.wado::$const_obj_48, 0, 1);
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {
-    builtin::array_copy<u8>(self, offset, s.repr, 0, n);
-}
-
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let is_negative: bool;
     let x: i64;
@@ -3477,16 +3473,33 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $mv_arg_3(f.buf).repr, is_negative, x, self);
 }
 
-fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar"(self, f) {
-    "core:prelude/primitive.wado/i32::fmt_into$scalar"(self, f);
-}
-
 fn "core:prelude/primitive.wado/i32::fmt_into$scalar"(self, f) {
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f);
 }
 
+fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar"(self, f) {
+    "core:prelude/primitive.wado/i32::fmt_into$scalar"(self, f);
+}
+
 fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect$scalar"(self, f) {
     "core:prelude/primitive.wado/i32::fmt_into$scalar"(self, f);
+}
+
+fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {
+    builtin::array_copy<u8>(self, offset, s.repr, 0, n);
+}
+
+fn "core:prelude/format.wado/&core:prelude/string.wado/StrSlice^core:prelude/traits.wado/Inspect::inspect$spec0$scalar"(self, f) {
+    let new_used: i32;
+    let start_16: i32;
+    if @unlikely(local.tee new_used(f.used + 1) > builtin::array_len(f.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used);
+    }
+    start_16 = f.used;
+    f.used = new_used;
+    builtin::array_copy<u8>(f.repr, start_16, global:core:prelude/format.wado::$const_obj_29, 0, 1);
+    "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/StrSlice>$spec0$scalar"(f, self.repr, self.start, self.end);
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(self, $mv$content$repr, $mv$content$used) {
@@ -3512,19 +3525,6 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
     is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(f, is_negative, self);
     "core:prelude/primitive.wado/write_decimal_digits"(f.repr, is_negative, x, self);
-}
-
-fn "core:prelude/format.wado/&core:prelude/string.wado/StrSlice^core:prelude/traits.wado/Inspect::inspect$spec0$scalar"(self, f) {
-    let new_used: i32;
-    let start_16: i32;
-    if @unlikely(local.tee new_used(f.used + 1) > builtin::array_len(f.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used);
-    }
-    start_16 = f.used;
-    f.used = new_used;
-    builtin::array_copy<u8>(f.repr, start_16, global:core:prelude/format.wado::$const_obj_29, 0, 1);
-    "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/StrSlice>$spec0$scalar"(f, self.repr, self.start, self.end);
 }
 
 fn "core:prelude/primitive.wado/u8^core:prelude/traits.wado/Inspect::inspect$scalar$spec0$scalar"(self, f) {

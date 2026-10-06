@@ -103,9 +103,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/primitive.wado/bool::fmt_into$scalar" = fn(bool, ref "core:prelude/format.wado//Formatter");  // TypeId(39)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(40)
+type "functype//core:prelude/primitive.wado/bool^core:prelude/traits.wado/Inspect::inspect$scalar" = fn(bool, ref "core:prelude/format.wado//Formatter");  // TypeId(40)
 
-type "functype//core:prelude/primitive.wado/bool^core:prelude/traits.wado/Inspect::inspect$scalar" = fn(bool, ref "core:prelude/format.wado//Formatter");  // TypeId(41)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(41)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_into$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(42)
 
@@ -1938,6 +1938,10 @@ fn "core:prelude/primitive.wado/bool::fmt_into$scalar"(self, f) {
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(f, text.repr, text.used);
 }
 
+fn "core:prelude/primitive.wado/bool^core:prelude/traits.wado/Inspect::inspect$scalar"(self, f) {
+    "core:prelude/primitive.wado/bool::fmt_into$scalar"(self, f);
+}
+
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let is_negative: bool;
     let x: i64;
@@ -1949,10 +1953,6 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_arg_3.repr, $mv_arg_3.used, self);
     };
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $mv_arg_3(f.buf).repr, is_negative, x, self);
-}
-
-fn "core:prelude/primitive.wado/bool^core:prelude/traits.wado/Inspect::inspect$scalar"(self, f) {
-    "core:prelude/primitive.wado/bool::fmt_into$scalar"(self, f);
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_into$scalar"(self, f) {

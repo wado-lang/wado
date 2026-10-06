@@ -140,9 +140,9 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, r
 
 type "functype//core:prelude/primitive.wado/i32::fmt_into$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(58)
 
-type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(59)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(59)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(60)
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(60)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(61)
 
@@ -1815,7 +1815,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     start_15 = start_15 + 64;
     builtin::array_copy<u8>($load_2, start_15, global:array_bounds.wado::$const_obj_47, 0, 1);
     $sroa_$f_buf_119 = $local_7;
-    "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar$spec0$scalar"(349, $sroa_$f_buf_119);
+    "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar$spec0$scalar"(368, $sroa_$f_buf_119);
     if @unlikely(local.tee start_15($local_7.used + 63) > builtin::array_len($local_7.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7, start_15);
@@ -1876,7 +1876,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     start_13 = start_13 + 63;
     builtin::array_copy<u8>($load_2, start_13, global:array_bounds.wado::$const_obj_47, 0, 1);
     $sroa_$f_buf_117 = $local_4;
-    "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar$spec0$scalar"(340, $sroa_$f_buf_117);
+    "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar$spec0$scalar"(359, $sroa_$f_buf_117);
     if @unlikely(local.tee start_13($local_4.used + 58) > builtin::array_len($local_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, start_13);
@@ -2321,12 +2321,12 @@ fn "core:prelude/primitive.wado/i32::fmt_into$scalar"(self, f) {
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f);
 }
 
-fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect$scalar"(self, f) {
-    "core:prelude/primitive.wado/i32::fmt_into$scalar"(self, f);
-}
-
 fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {
     builtin::array_copy<u8>(self, offset, s.repr, 0, n);
+}
+
+fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect$scalar"(self, f) {
+    "core:prelude/primitive.wado/i32::fmt_into$scalar"(self, f);
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(self, $mv$content$repr, $mv$content$used) {

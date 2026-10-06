@@ -115,11 +115,11 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, r
 
 type "functype//core:prelude/primitive.wado/i32::fmt_into$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(44)
 
-type "functype//core:prelude/traits.wado/ref_equality_struct_with_ref.wado/Inner^core:prelude/traits.wado/Inspect::inspect$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(45)
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(45)
 
-type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(46)
+type "functype//core:prelude/primitive.wado/bool^core:prelude/traits.wado/Inspect::inspect$scalar" = fn(bool, ref "core:prelude/format.wado//Formatter");  // TypeId(46)
 
-type "functype//core:prelude/primitive.wado/bool^core:prelude/traits.wado/Inspect::inspect$scalar" = fn(bool, ref "core:prelude/format.wado//Formatter");  // TypeId(47)
+type "functype//core:prelude/traits.wado/ref_equality_struct_with_ref.wado/Inner^core:prelude/traits.wado/Inspect::inspect$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(47)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(48)
 
@@ -1888,6 +1888,14 @@ fn "core:prelude/primitive.wado/i32::fmt_into$scalar"(self, f) {
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f);
 }
 
+fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar"(self, f) {
+    "core:prelude/primitive.wado/i32::fmt_into$scalar"(self, f);
+}
+
+fn "core:prelude/primitive.wado/bool^core:prelude/traits.wado/Inspect::inspect$scalar"(self, f) {
+    "core:prelude/primitive.wado/bool::fmt_into$scalar"(self, f);
+}
+
 fn "core:prelude/traits.wado/ref_equality_struct_with_ref.wado/Inner^core:prelude/traits.wado/Inspect::inspect$scalar"(self, f) {
     let self_9: ref "core:prelude/string.wado//String";
     let new_used_21: i32;
@@ -1939,14 +1947,6 @@ fn "core:prelude/traits.wado/ref_equality_struct_with_ref.wado/Inner^core:prelud
     new_used_21 = self_9.used;
     self_9.used = self;
     builtin::array_copy<u8>(self_9.repr, new_used_21, global:core:prelude/traits.wado::$const_obj_17, 0, 2);
-}
-
-fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar"(self, f) {
-    "core:prelude/primitive.wado/i32::fmt_into$scalar"(self, f);
-}
-
-fn "core:prelude/primitive.wado/bool^core:prelude/traits.wado/Inspect::inspect$scalar"(self, f) {
-    "core:prelude/primitive.wado/bool::fmt_into$scalar"(self, f);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {

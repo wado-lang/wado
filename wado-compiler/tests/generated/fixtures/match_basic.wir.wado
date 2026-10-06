@@ -191,9 +191,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(74)
 
-type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(75)
+type "functype//core:prelude/primitive.wado/i32::fmt_into$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(75)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_into$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(76)
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(76)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(77)
 
@@ -207,11 +207,11 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(82)
 
-type "functype//core:prelude/primitive.wado/u8^core:prelude/traits.wado/Inspect::inspect$scalar$spec0$scalar" = fn(u8, ref "core:prelude/string.wado//String");  // TypeId(83)
+type "functype//core:prelude/primitive.wado/u8::fmt_into$scalar$spec0$scalar" = fn(u8, ref "core:prelude/string.wado//String");  // TypeId(83)
 
-type "functype//core:prelude/primitive.wado/u8::fmt_into$scalar$spec0$scalar" = fn(u8, ref "core:prelude/string.wado//String");  // TypeId(84)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_sign$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool);  // TypeId(84)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_sign$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool);  // TypeId(85)
+type "functype//core:prelude/primitive.wado/u8^core:prelude/traits.wado/Inspect::inspect$scalar$spec0$scalar" = fn(u8, ref "core:prelude/string.wado//String");  // TypeId(85)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(86)
 
@@ -295,7 +295,7 @@ global global:match_basic.wado::$const_obj_246: ref Array<u8> = array.new_fixed<
 global global:match_basic.wado::$const_obj_281: ref Array<u8> = array.new_fixed<u8>(105, 58, 32);
 global global:match_basic.wado::$const_obj_282: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 105, 32, 61, 61, 32, 50, 10);
 global global:match_basic.wado::$const_obj_286: ref Array<u8> = array.new_fixed<u8>(36, 116, 101, 115, 116, 95, 49, 53, 95, 97, 110, 95, 97, 114, 109, 95, 100, 105, 115, 99, 97, 114, 100, 105, 110, 103, 95, 97, 95, 115, 116, 114, 117, 99, 116, 95, 102, 105, 101, 108, 100, 95, 105, 110, 115, 105, 100, 101, 95, 97, 95, 119, 104, 105, 108, 101);
-global global:core:prelude/primitive.wado::$const_obj_289: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:core:prelude/primitive.wado::$const_obj_288: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "match_basic.wado/$test_4_an_arm_that_returns_from_the_enclosing_function"() {
     let $v0_8: ref "core:prelude/string.wado//String";
@@ -2404,18 +2404,18 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
     is_negative = block -> i32 {
         let $mv_arg_3: ref "core:prelude/string.wado//String";
-        $mv_arg_3 = global:core:prelude/primitive.wado::$const_obj_289;
+        $mv_arg_3 = global:core:prelude/primitive.wado::$const_obj_288;
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_arg_3.repr, $mv_arg_3.used, self);
     };
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $mv_arg_3(f.buf).repr, is_negative, x, self);
 }
 
-fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar"(self, f) {
-    "core:prelude/primitive.wado/i32::fmt_into$scalar"(self, f);
-}
-
 fn "core:prelude/primitive.wado/i32::fmt_into$scalar"(self, f) {
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f);
+}
+
+fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar"(self, f) {
+    "core:prelude/primitive.wado/i32::fmt_into$scalar"(self, f);
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(self, $mv$content$repr, $mv$content$used) {
@@ -2466,10 +2466,6 @@ fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect$sc
     "core:prelude/primitive.wado/i32::fmt_into$scalar$spec0$scalar"(self, f);
 }
 
-fn "core:prelude/primitive.wado/u8^core:prelude/traits.wado/Inspect::inspect$scalar$spec0$scalar"(self, f) {
-    "core:prelude/primitive.wado/u8::fmt_into$scalar$spec0$scalar"(self, f);
-}
-
 fn "core:prelude/primitive.wado/u8::fmt_into$scalar$spec0$scalar"(self, f) {
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f);
 }
@@ -2479,6 +2475,10 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_sign$spec
         "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(self, 45);
     } else {
     }
+}
+
+fn "core:prelude/primitive.wado/u8^core:prelude/traits.wado/Inspect::inspect$scalar$spec0$scalar"(self, f) {
+    "core:prelude/primitive.wado/u8::fmt_into$scalar$spec0$scalar"(self, f);
 }
 
 export fn "match_basic.wado/$cm_export__$test_0_match_on_an_option" as "$test_0_match_on_an_option"

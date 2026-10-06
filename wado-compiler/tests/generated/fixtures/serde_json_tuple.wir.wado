@@ -335,13 +335,13 @@ type "functype//core:serde/i32^core:serde/Deserialize::deserialize_next_element_
 
 type "functype//core:json/core:json/JsonSeqAccess^core:serde/DeserializeSeq::next_element<core:prelude/string.wado/String>" = fn(ref "core:json//JsonSeqAccess") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//DeserializeError"];  // TypeId(122)
 
-type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(123)
+type "functype//core:json/core:json/JsonSerializer^core:serde/Serializer::serialize_bool$scalar" = fn(ref "core:prelude/string.wado//String", bool) -> ref null "core:serde//SerializeError";  // TypeId(123)
 
-type "functype//core:json/core:json/JsonSerializer^core:serde/Serializer::serialize_bool$scalar" = fn(ref "core:prelude/string.wado//String", bool) -> ref null "core:serde//SerializeError";  // TypeId(124)
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(124)
 
-type "functype//core:json/core:json/JsonDeserializer::entry_separator_error$scalar" = fn(i32, i32) -> ref "core:serde//DeserializeError";  // TypeId(125)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(125)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(126)
+type "functype//core:json/core:json/JsonDeserializer::entry_separator_error$scalar" = fn(i32, i32) -> ref "core:serde//DeserializeError";  // TypeId(126)
 
 type "functype//core:prelude/primitive.wado/char^core:prelude/traits.wado/Display::fmt$scalar" = fn(char, ref "core:prelude/format.wado//Formatter");  // TypeId(127)
 
@@ -2648,7 +2648,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u64>^core:prelude/traits.
     offset_20 = 0 + 63;
     builtin::array_copy<u8>($load_0, offset_20, global:core:json::$const_obj_101, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar$spec0"(340, $local_5);
+    "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar$spec0"(359, $local_5);
     if @unlikely(local.tee offset_20($local_4.used + 58) > builtin::array_len($local_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, offset_20);
@@ -2703,7 +2703,7 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::get_unchecked$col
     offset_28 = 0 + 67;
     builtin::array_copy<u8>($load_0, offset_28, global:core:json::$const_obj_101, 0, 1);
     $local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_8 };
-    "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar$spec0"(103, $local_9);
+    "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar$spec0"(106, $local_9);
     if @unlikely(local.tee offset_28($local_8.used + 75) > builtin::array_len($local_8.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8, offset_28);
@@ -5086,17 +5086,21 @@ fn "core:json/core:json/JsonDeserializer::quoted_number<i32>"(self) {
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push_bytes_unchecked<core:prelude/bytes.wado/ByteSlice>"(self, bytes) {
     let n_3: i32;
     let new_used: i32;
-    let start_10: i32;
-    if local.tee n_3(bytes.end - bytes.start) == 0 {
+    let start_11: i32;
+    let $sroa_slice_repr_15: ref Array<u8>;
+    let $sroa_slice_start_16: i32;
+    $sroa_slice_repr_15 = bytes.repr;
+    $sroa_slice_start_16 = bytes.start;
+    if local.tee n_3(bytes.end - $sroa_slice_start_16) == 0 {
         return;
     }
     if @unlikely(local.tee new_used(self.used + n_3) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used);
     }
-    start_10 = self.used;
+    start_11 = self.used;
     self.used = new_used;
-    builtin::array_copy<u8>(self.repr, start_10, bytes.repr, bytes.start, n_3);
+    builtin::array_copy<u8>(self.repr, start_11, $sroa_slice_repr_15, $sroa_slice_start_16, n_3);
 }
 
 fn "core:serde/core:serde/DeserializeError::malformed<core:prelude/string.wado/String>"($mv$msg$repr, $mv$msg$used, offset) {
@@ -5294,10 +5298,6 @@ fn "core:json/core:json/JsonSeqAccess^core:serde/DeserializeSeq::next_element<co
     return 0, $qm_v_3, ref.null none;
 }
 
-fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar"(self, f) {
-    "core:prelude/primitive.wado/i32::fmt_into$scalar"(self, f);
-}
-
 fn "core:json/core:json/JsonSerializer^core:serde/Serializer::serialize_bool$scalar"(self, v) {
     let start_15: i32;
     if v {
@@ -5318,6 +5318,14 @@ fn "core:json/core:json/JsonSerializer^core:serde/Serializer::serialize_bool$sca
         builtin::array_copy<u8>(self.repr, v, global:core:json::$const_obj_250, 0, 5);
     }
     return ref.null none;
+}
+
+fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar"(self, f) {
+    "core:prelude/primitive.wado/i32::fmt_into$scalar"(self, f);
+}
+
+fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {
+    builtin::array_copy<u8>(self, offset, s.repr, 0, n);
 }
 
 fn "core:json/core:json/JsonDeserializer::entry_separator_error$scalar"(self, close) {
@@ -5342,10 +5350,6 @@ fn "core:json/core:json/JsonDeserializer::entry_separator_error$scalar"(self, cl
     builtin::array_copy<u8>($local_2.repr, start_18, global:core:json::$const_obj_11, 0, 1);
     start_18 = $local_2.used;
     return struct.new "core:serde//DeserializeError" { kind: 6, message: struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = $local_2.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(start_18)), 0, $array_clone_src_1, 0, start_18); $array_clone_dst_2, used: start_18 }, offset: builtin::i64_extend_i32_s(self) };
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {
-    builtin::array_copy<u8>(self, offset, s.repr, 0, n);
 }
 
 fn "core:prelude/primitive.wado/char^core:prelude/traits.wado/Display::fmt$scalar"(self, f) {

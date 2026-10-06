@@ -172,11 +172,11 @@ type "functype//float_min_max.wado/core:prelude/slice.wado/SliceValueIter<f64>^c
 
 type "functype//float_min_max.wado/core:prelude/slice.wado/SliceValueIter<f64>^core:prelude/traits.wado/Iterator::max_by$$Closure_1" = fn(ref "core:prelude/slice.wado//SliceValueIter<f64>") -> [i32, f64];  // TypeId(79)
 
-type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(80)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(80)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(81)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(81)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(82)
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(82)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(83)
 
@@ -4932,7 +4932,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u64>^core:prelude/traits.
     start_13 = start_13 + 63;
     builtin::array_copy<u8>($load_2, start_13, global:core:prelude/primitive.wado::$const_obj_51, 0, 1);
     $sroa_$f_buf_117 = $local_4;
-    "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar$spec0$scalar"(340, $sroa_$f_buf_117);
+    "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar$spec0$scalar"(359, $sroa_$f_buf_117);
     if @unlikely(local.tee start_13($local_4.used + 58) > builtin::array_len($local_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, start_13);
@@ -5184,10 +5184,6 @@ fn "float_min_max.wado/core:prelude/slice.wado/SliceValueIter<f64>^core:prelude/
     return 0, 0;
 }
 
-fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar$spec0$scalar"(self, f) {
-    "core:prelude/primitive.wado/i32::fmt_into$scalar$spec0$scalar"(self, f);
-}
-
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     let is_negative: bool;
     let x: i64;
@@ -5211,6 +5207,10 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         builtin::array_copy<u8>(self.repr, start_20, $mv$content$repr, 0, $mv$content$used);
     };
     return;
+}
+
+fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar$spec0$scalar"(self, f) {
+    "core:prelude/primitive.wado/i32::fmt_into$scalar$spec0$scalar"(self, f);
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {

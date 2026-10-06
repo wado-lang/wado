@@ -104,11 +104,11 @@ type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display
 
 type "functype//core:prelude/traits.wado/./sub/reflect_visibility_dep.wado/Opaque^core:prelude/traits.wado/Inspect::inspect$spec0" = fn(ref "./sub/reflect_visibility_dep.wado//Opaque", ref "core:prelude/format.wado//Formatter");  // TypeId(40)
 
-type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(41)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(41)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(42)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(42)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(43)
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(43)
 
 type "functype//core:prelude/primitive.wado/u8::fmt_into$scalar$spec0$scalar" = fn(u8, ref "core:prelude/string.wado//String");  // TypeId(44)
 
@@ -1430,10 +1430,6 @@ fn "core:prelude/traits.wado/./sub/reflect_visibility_dep.wado/Opaque^core:prelu
     builtin::array_copy<u8>(self_10.repr, new_used_22, global:core:prelude/traits.wado::$const_obj_125, 0, 2);
 }
 
-fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar$spec0$scalar"(self, f) {
-    "core:prelude/primitive.wado/i32::fmt_into$scalar$spec0$scalar"(self, f);
-}
-
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     let is_negative: bool;
     let x: i64;
@@ -1457,6 +1453,10 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         builtin::array_copy<u8>(self.repr, start_20, $mv$content$repr, 0, $mv$content$used);
     };
     return;
+}
+
+fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar$spec0$scalar"(self, f) {
+    "core:prelude/primitive.wado/i32::fmt_into$scalar$spec0$scalar"(self, f);
 }
 
 fn "core:prelude/primitive.wado/u8::fmt_into$scalar$spec0$scalar"(self, f) {

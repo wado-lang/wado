@@ -217,9 +217,9 @@ type "functype//core:collections/treemap.wado/core:collections/treemap.wado/Tree
 
 type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::grow_nodes" = fn(ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,i32>");  // TypeId(76)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect$scalar" = fn(ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(77)
+type "functype//core:prelude/primitive.wado/bool::fmt_into$scalar" = fn(bool, ref "core:prelude/format.wado//Formatter");  // TypeId(77)
 
-type "functype//core:prelude/primitive.wado/bool::fmt_into$scalar" = fn(bool, ref "core:prelude/format.wado//Formatter");  // TypeId(78)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect$scalar" = fn(ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(78)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(79)
 
@@ -3710,6 +3710,16 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
     }
 }
 
+fn "core:prelude/primitive.wado/bool::fmt_into$scalar"(self, f) {
+    let text: ref "core:prelude/string.wado//String";
+    text = (if self -> ref "core:prelude/string.wado//String" {
+        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
+    } else {
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
+    });
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(f, text.repr, text.used);
+}
+
 fn "core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect$scalar"(self, f) {
     let self_10: ref "core:prelude/string.wado//String";
     let new_used_22: i32;
@@ -3764,16 +3774,6 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/tr
         }
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$scalar"(ref.cast "core:prelude/types.wado//Option<i32>::Some"(self).payload_0, f);
     }
-}
-
-fn "core:prelude/primitive.wado/bool::fmt_into$scalar"(self, f) {
-    let text: ref "core:prelude/string.wado//String";
-    text = (if self -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
-    } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
-    });
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(f, text.repr, text.used);
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {

@@ -115,9 +115,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(41)
 
-type "functype//core:prelude/traits.wado/./sub/derived_static_call_namespace_dep.wado/Tr<i32>^core:prelude/traits.wado/Inspect::inspect$scalar" = fn(ref "./sub/derived_static_call_namespace_dep.wado//Tr<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(42)
+type "functype//core:prelude/primitive.wado/bool::fmt_into$scalar" = fn(bool, ref "core:prelude/format.wado//Formatter");  // TypeId(42)
 
-type "functype//core:prelude/primitive.wado/bool::fmt_into$scalar" = fn(bool, ref "core:prelude/format.wado//Formatter");  // TypeId(43)
+type "functype//core:prelude/traits.wado/./sub/derived_static_call_namespace_dep.wado/Tr<i32>^core:prelude/traits.wado/Inspect::inspect$scalar" = fn(ref "./sub/derived_static_call_namespace_dep.wado//Tr<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(43)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(44)
 
@@ -1886,6 +1886,16 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prel
     };
 }
 
+fn "core:prelude/primitive.wado/bool::fmt_into$scalar"(self, f) {
+    let text: ref "core:prelude/string.wado//String";
+    text = (if self -> ref "core:prelude/string.wado//String" {
+        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
+    } else {
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
+    });
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(f, text.repr, text.used);
+}
+
 fn "core:prelude/traits.wado/./sub/derived_static_call_namespace_dep.wado/Tr<i32>^core:prelude/traits.wado/Inspect::inspect$scalar"(self, f) {
     let self_10: ref "core:prelude/string.wado//String";
     let new_used_22: i32;
@@ -1940,16 +1950,6 @@ fn "core:prelude/traits.wado/./sub/derived_static_call_namespace_dep.wado/Tr<i32
         self_10.used = start_23;
         builtin::array_copy<u8>(self_10.repr, new_used_22, global:core:prelude/traits.wado::$const_obj_120, 0, 5);
     }
-}
-
-fn "core:prelude/primitive.wado/bool::fmt_into$scalar"(self, f) {
-    let text: ref "core:prelude/string.wado//String";
-    text = (if self -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
-    } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
-    });
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(f, text.repr, text.used);
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
