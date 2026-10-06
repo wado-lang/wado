@@ -17,6 +17,7 @@ use crate::module_source::ModuleSource;
 use crate::tir::{TraitRef, TypeId, TypeKey};
 
 use super::coercion::PendingLiterals;
+use super::sem::decls::PendingBounds;
 use super::trait_env::{InheritedBound, ViaClause};
 use super::trait_query::SelfBinding;
 use super::type_resolution::ParamSpace;
@@ -361,6 +362,9 @@ pub(super) struct Scope {
     /// call's open variables, one entry per call nested in another's argument,
     /// innermost last. See [`PendingLiterals`].
     pub(super) pending_literals: Vec<PendingLiterals>,
+    /// Set while what answers the bounds the types resolved meanwhile owe is
+    /// not yet in place. See [`Elaborator::holding_bounds`].
+    pub(super) held_bounds: Option<Vec<PendingBounds>>,
 }
 
 impl Scope {
@@ -432,6 +436,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             elaborator: self,
             saved,
         }
+    }
+
+    /// A scope binding a declaration's `params` and no type parameter the
+    /// caller brought: a declaration names its parameters itself.
+    pub(super) fn enter_decl_params_scope(
+        &mut self,
+        params: &[ast::GenericParam],
+    ) -> TypeParamScope<'_, 'a, H> {
+        let mut scope = self.enter_inherited_type_param_scope();
+        let ctx = &mut scope.annotate_ctx.trait_ctx;
+        ctx.type_params.clear();
+        ctx.type_param_bounds.clear();
+        scope.register_generic_params(params, 0);
+        scope
     }
 
     /// A scope binding `impl_block`'s parameters and `Self` and nothing the
@@ -743,7 +761,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// The transitive supertraits of trait `decl`.
     fn supertraits_of(&self, decl: DefId) -> &[InheritedBound] {
-        self.tysys.trait_env.supertrait_closure_declared(&decl).1
+        self.tysys.trait_env.supertrait_closure(&decl)
     }
 
     /// The type-parameter ids the enclosing generic scope owns: a slot bound to

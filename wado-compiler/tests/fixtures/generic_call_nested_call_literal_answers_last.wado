@@ -71,7 +71,7 @@ fn unbox<T: Eq>(b: Box<T>, fallback: T) -> T {
     return if b.v == fallback { fallback } else { b.v };
 }
 
-fn unbox_twice<T>(b: Box<Box<T>>, fallback: T) -> T {
+fn unbox_twice<T: Eq>(b: Box<Box<T>>, fallback: T) -> T {
     return unbox(b.v, fallback);
 }
 
