@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791237292546,
+  "lastUpdate": 1791261335807,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -64165,6 +64165,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/52c54b6c9ac1af8b5eb11cd2f7dc2afa96c6865d"
         },
         "date": 1791237291714,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338523,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9973f8f190e8943f555b12031c481418ab74eaf1",
+          "message": "Merge pull request #2283 from wado-lang/ccr-17e0bf50-ne2q08\n\nrefactor(tests): one host per job, and compiler tests that no longer reach into wado-cli",
+          "timestamp": "2026-10-06T13:17:57+09:00",
+          "tree_id": "9452fa67d430b98f91e52fede82db2a4e83bfe0b",
+          "url": "https://github.com/wado-lang/wado/commit/9973f8f190e8943f555b12031c481418ab74eaf1"
+        },
+        "date": 1791261335299,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
