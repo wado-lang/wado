@@ -34,8 +34,8 @@ array Array<core:prelude/list.wado/List<i32>> (mut ref "core:prelude//List<i32>"
 array Array<core:prelude/types.wado/Option<i32>> (mut ref "core:prelude/types.wado//Option<i32>");  // TypeId(8)
 
 variant core:prelude/types.wado//Option<i32> {  // TypeId(9)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(10)
@@ -139,7 +139,7 @@ global global:nested_array.wado::$const_obj_20: ref Array<u8> = array.new_fixed<
 global global:nested_array.wado::$const_obj_21: ref Array<u8> = array.new_fixed<u8>(83, 111, 109, 101, 40);
 global global:nested_array.wado::$const_obj_22: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(115, 101, 99, 111, 110, 100, 58, 32, 110, 117, 108, 108), used: 12 };
 global global:nested_array.wado::$const_obj_23: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 105, 114, 115, 116, 58, 32, 52, 50), used: 9 };
-global global:nested_array.wado::$const_obj_24: ref "Array<core:prelude/types.wado/Option<i32>>" = array.new_fixed<ref "core:prelude/types.wado//Option<i32>">(struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 42 }, struct.new "core:prelude/types.wado//Option<i32>" { 1 }, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 99 });
+global global:nested_array.wado::$const_obj_24: ref "Array<core:prelude/types.wado/Option<i32>>" = array.new_fixed<ref "core:prelude/types.wado//Option<i32>">(struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 42 }, struct.new "core:prelude/types.wado//Option<i32>" { 0 }, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 99 });
 global global:core:prelude/array.wado::$const_obj_111: ref Array<u8> = array.new_fixed<u8>(46, 46, 46);
 global global:core:prelude/array.wado::$const_obj_112: ref Array<u8> = array.new_fixed<u8>(44, 32, 46, 46, 46);
 global global:core:prelude/array.wado::$const_obj_113: ref Array<u8> = array.new_fixed<u8>(44, 32);
@@ -537,7 +537,7 @@ fn "nested_array.wado/nested_array_option_access_test"() with Stdout {
     $mv_arg_2 = global:nested_array.wado::$const_obj_23;
     "core:rt/write_string_to_stream$spec0"(tx_160, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_159);
-    if local.tee $match_14(builtin::array_get_value<ref "core:prelude/types.wado//Option<i32>">($sroa_arr_repr_172, 1)).discriminant == 1 {
+    if local.tee $match_14(builtin::array_get_value<ref "core:prelude/types.wado//Option<i32>">($sroa_arr_repr_172, 1)).discriminant == 0 {
         rx_159 = builtin::i32_wrap_i64(local.tee packed_158("wasi/stream-new"()));
         tx_160 = builtin::i32_wrap_i64(packed_158 >> 32_i64);
         rx_159 = "nested_array.wado/$cm_binding__Stdout_write_via_stream"(rx_159);
@@ -553,17 +553,17 @@ fn "nested_array.wado/nested_array_option_access_test"() with Stdout {
             $sroa_slot_151 = ref.null none;
             $inline_core_prelude_slice_wado_SliceValueIter_core_prelude_types_wado_Option_i32___core_prelude_traits_wado_Iterator__next_21: block {
                 if rx_159 >= 3 {
-                    $sroa_slot_150 = 1;
+                    $sroa_slot_150 = 0;
                     $sroa_slot_151 = ref.null none;
                     break $inline_core_prelude_slice_wado_SliceValueIter_core_prelude_types_wado_Option_i32___core_prelude_traits_wado_Iterator__next_21;
                 }
                 $match_14 = builtin::array_get_value<ref "core:prelude/types.wado//Option<i32>">($sroa_arr_repr_172, rx_159);
                 rx_159 = rx_159 + 1;
-                $sroa_slot_150 = 0;
+                $sroa_slot_150 = 1;
                 $sroa_slot_151 = $match_14;
                 break $inline_core_prelude_slice_wado_SliceValueIter_core_prelude_types_wado_Option_i32___core_prelude_traits_wado_Iterator__next_21;
             };
-            if local.tee tx_160($sroa_slot_150) == 0 {
+            if local.tee tx_160($sroa_slot_150) == 1 {
                 s = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee item_6(ref.as_non_null($sroa_slot_151))) -> ref "core:prelude/string.wado//String" {
                     n_7 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(item_6).payload_0;
                     $mv_arg_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };

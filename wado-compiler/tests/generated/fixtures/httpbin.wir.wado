@@ -270,8 +270,8 @@ struct core:prelude/slice.wado//Slice<u8> {  // TypeId(53)
 }
 
 variant core:prelude/types.wado//Option<i32> {  // TypeId(54)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(55)
@@ -280,8 +280,8 @@ struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(55)
 }
 
 variant core:prelude/types.wado//Option<char> {  // TypeId(56)
-    Some(char),
     None,
+    Some(char),
 }
 
 struct core:prelude/types.wado//Option<char>::Some {  // TypeId(57)
@@ -787,7 +787,7 @@ fn "httpbin.wado/parse_query_params"($mv$query$repr, $mv$query$used) {
                     let $mv$$local_4$0: i32;
                     let $mv$$local_4$1: i32;
                     multivalue_bind [$mv$$local_4$0, $mv$$local_4$1] = (let $mv_arg_2: ref "core:prelude/string.wado//String"; $mv_arg_2 = global:httpbin.wado::$const_obj_42; "core:prelude/string.wado/core:prelude/string.wado/StrSlice::find<core:prelude/string.wado/String>"(self_20, $mv_arg_2.repr, $mv_arg_2.used));
-                    if $mv$$local_4$0 == 0 {
+                    if $mv$$local_4$0 == 1 {
                         let $mv_0_3: ref "core:prelude/string.wado//StrSlice";
                         let $mv_1_4: ref "core:prelude/string.wado//StrSlice";
                         multivalue_bind [$mv_0_3, $mv_1_4] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::cut_at"(self_20, $mv$$local_4$1);
@@ -1060,7 +1060,7 @@ fn "httpbin.wado/echo"(request, path, query, with_body) {
             "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:value/Value>::push"(obj_4.log, query, value_11);
         };
     }
-    return struct.new "httpbin.wado//MockResponse" { status: 200, content_type: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, body: let $mv$self_85$1: ref null "core:prelude/string.wado//String"; let $mv$self_85$2: ref null "core:serde//SerializeError"; multivalue_bind [with_body, $mv$self_85$1, $mv$self_85$2] = "core:json/core/json/to_string<core:value/Value>$scalar"(struct.new "core:value//Value::Object" { discriminant: 10, payload_0: obj_4 }, struct.new "core:prelude/types.wado//Option<char>" { 1 }); (if @likely(with_body == 0) -> ref "core:prelude/string.wado//String" {
+    return struct.new "httpbin.wado//MockResponse" { status: 200, content_type: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, body: let $mv$self_85$1: ref null "core:prelude/string.wado//String"; let $mv$self_85$2: ref null "core:serde//SerializeError"; multivalue_bind [with_body, $mv$self_85$1, $mv$self_85$2] = "core:json/core/json/to_string<core:value/Value>$scalar"(struct.new "core:value//Value::Object" { discriminant: 10, payload_0: obj_4 }, struct.new "core:prelude/types.wado//Option<char>" { 0 }); (if @likely(with_body == 0) -> ref "core:prelude/string.wado//String" {
         local.tee query(ref.as_non_null($mv$self_85$1));
     } else if with_body == 1 -> ref "core:prelude/string.wado//String" {
         e = ref.as_non_null($mv$self_85$2);
@@ -1119,7 +1119,7 @@ fn "httpbin.wado/route"(request) {
         let $mv$$local_4$0: i32;
         let $mv$$local_4$1: i32;
         multivalue_bind [$mv$$local_4$0, $mv$$local_4$1] = ($load_0 = global:httpbin.wado::$const_obj_60; "core:prelude/string.wado/core:prelude/string.wado/StrSlice::find<core:prelude/string.wado/String>"(self_286, $load_0.repr, $load_0.used));
-        if $mv$$local_4$0 == 0 {
+        if $mv$$local_4$0 == 1 {
             let $mv_1_4: ref "core:prelude/string.wado//StrSlice";
             multivalue_bind [self_286, $mv_1_4] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::cut_at"(self_286, $mv$$local_4$1);
             struct.new "tuple//[core:prelude/string.wado/StrSlice, core:prelude/string.wado/StrSlice]" { 0: self_286, 1: $mv_1_4 };
@@ -1317,7 +1317,7 @@ fn "httpbin.wado/route"(request) {
                     let $mv$self_102$0: i32;
                     let $mv$self_102$1: ref null "core:prelude/string.wado//String";
                     let $mv$self_102$2: ref null "core:serde//SerializeError";
-                    multivalue_bind [$mv$self_102$0, $mv$self_102$1, $mv$self_102$2] = "core:json/core/json/to_string<core:value/Value>$scalar"(struct.new "core:value//Value::Object" { discriminant: 10, payload_0: obj_57 }, struct.new "core:prelude/types.wado//Option<char>" { 1 });
+                    multivalue_bind [$mv$self_102$0, $mv$self_102$1, $mv$self_102$2] = "core:json/core/json/to_string<core:value/Value>$scalar"(struct.new "core:value//Value::Object" { discriminant: 10, payload_0: obj_57 }, struct.new "core:prelude/types.wado//Option<char>" { 0 });
                     $sroa_$base_0_body_480 = (if @likely($mv$self_102$0 == 0) -> ref "core:prelude/string.wado//String" {
                         ref.as_non_null($mv$self_102$1);
                     } else if $mv$self_102$0 == 1 -> ref "core:prelude/string.wado//String" {
@@ -1410,7 +1410,7 @@ fn "httpbin.wado/route"(request) {
             }
             "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:value/Value>::push"(obj_57.log, query, value_93);
         };
-        return struct.new "httpbin.wado//MockResponse" { status: 200, content_type: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, body: multivalue_bind [$mv$self_102$0, $mv$self_102$1, $mv$self_102$2] = "core:json/core/json/to_string<core:value/Value>$scalar"(struct.new "core:value//Value::Object" { discriminant: 10, payload_0: obj_57 }, struct.new "core:prelude/types.wado//Option<char>" { 1 }); (if @likely($mv$self_102$0 == 0) -> ref "core:prelude/string.wado//String" {
+        return struct.new "httpbin.wado//MockResponse" { status: 200, content_type: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, body: multivalue_bind [$mv$self_102$0, $mv$self_102$1, $mv$self_102$2] = "core:json/core/json/to_string<core:value/Value>$scalar"(struct.new "core:value//Value::Object" { discriminant: 10, payload_0: obj_57 }, struct.new "core:prelude/types.wado//Option<char>" { 0 }); (if @likely($mv$self_102$0 == 0) -> ref "core:prelude/string.wado//String" {
             local.tee query(ref.as_non_null($mv$self_102$1));
         } else if $mv$self_102$0 == 1 -> ref "core:prelude/string.wado//String" {
             e_104 = ref.as_non_null($mv$self_102$2);
@@ -1472,7 +1472,7 @@ fn "httpbin.wado/route"(request) {
             }
             "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:value/Value>::push"(obj_57.log, query, value_93);
         };
-        return struct.new "httpbin.wado//MockResponse" { status: 200, content_type: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, body: multivalue_bind [$mv$self_102$0, $mv$self_102$1, $mv$self_102$2] = "core:json/core/json/to_string<core:value/Value>$scalar"(struct.new "core:value//Value::Object" { discriminant: 10, payload_0: obj_57 }, struct.new "core:prelude/types.wado//Option<char>" { 1 }); (if @likely($mv$self_102$0 == 0) -> ref "core:prelude/string.wado//String" {
+        return struct.new "httpbin.wado//MockResponse" { status: 200, content_type: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, body: multivalue_bind [$mv$self_102$0, $mv$self_102$1, $mv$self_102$2] = "core:json/core/json/to_string<core:value/Value>$scalar"(struct.new "core:value//Value::Object" { discriminant: 10, payload_0: obj_57 }, struct.new "core:prelude/types.wado//Option<char>" { 0 }); (if @likely($mv$self_102$0 == 0) -> ref "core:prelude/string.wado//String" {
             local.tee query(ref.as_non_null($mv$self_102$1));
         } else if $mv$self_102$0 == 1 -> ref "core:prelude/string.wado//String" {
             e_104 = ref.as_non_null($mv$self_102$2);
@@ -1528,7 +1528,7 @@ fn "httpbin.wado/route"(request) {
             }
             "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:value/Value>::push"(obj_57.log, query, value_93);
         };
-        return struct.new "httpbin.wado//MockResponse" { status: 200, content_type: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, body: multivalue_bind [$mv$self_102$0, $mv$self_102$1, $mv$self_102$2] = "core:json/core/json/to_string<core:value/Value>$scalar"(struct.new "core:value//Value::Object" { discriminant: 10, payload_0: obj_57 }, struct.new "core:prelude/types.wado//Option<char>" { 1 }); (if @likely($mv$self_102$0 == 0) -> ref "core:prelude/string.wado//String" {
+        return struct.new "httpbin.wado//MockResponse" { status: 200, content_type: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, body: multivalue_bind [$mv$self_102$0, $mv$self_102$1, $mv$self_102$2] = "core:json/core/json/to_string<core:value/Value>$scalar"(struct.new "core:value//Value::Object" { discriminant: 10, payload_0: obj_57 }, struct.new "core:prelude/types.wado//Option<char>" { 0 }); (if @likely($mv$self_102$0 == 0) -> ref "core:prelude/string.wado//String" {
             local.tee query(ref.as_non_null($mv$self_102$1));
         } else if $mv$self_102$0 == 1 -> ref "core:prelude/string.wado//String" {
             e_104 = ref.as_non_null($mv$self_102$2);
@@ -1562,17 +1562,17 @@ fn "httpbin.wado/route"(request) {
                 })), 2: ref.null none };
             }).0) == 0 {
                 if (local.tee $mv$self_102$0($match_2.1) >= 100) & ($mv$self_102$0 <= 599) {
-                    $mv$$local_4$1 = 0;
+                    $mv$$local_4$1 = 1;
                     e_367 = $mv$self_102$0 & 65535;
                     break $inline_parse_status_code_86;
                 }
             } else {
             }
-            $mv$$local_4$1 = 1;
+            $mv$$local_4$1 = 0;
             e_367 = 0;
             break $inline_parse_status_code_86;
         };
-        if $mv$$local_4$1 == 0 {
+        if $mv$$local_4$1 == 1 {
             return struct.new "httpbin.wado//MockResponse" { status: e_367, content_type: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("text/plain"), used: 10 }, body: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
         } else {
         }
@@ -1587,7 +1587,7 @@ fn "httpbin.wado/route"(request) {
             }
             "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:value/Value>::push"(obj_57.log, query, value_93);
         };
-        multivalue_bind [e_367, $mv$self_102$1, $mv$self_102$2] = "core:json/core/json/to_string<core:value/Value>$scalar"(struct.new "core:value//Value::Object" { discriminant: 10, payload_0: obj_57 }, struct.new "core:prelude/types.wado//Option<char>" { 1 });
+        multivalue_bind [e_367, $mv$self_102$1, $mv$self_102$2] = "core:json/core/json/to_string<core:value/Value>$scalar"(struct.new "core:value//Value::Object" { discriminant: 10, payload_0: obj_57 }, struct.new "core:prelude/types.wado//Option<char>" { 0 });
         query = (if @likely(e_367 == 0) -> ref "core:prelude/string.wado//String" {
             local.tee query(ref.as_non_null($mv$self_102$1));
         } else if e_367 == 1 -> ref "core:prelude/string.wado//String" {
@@ -1651,7 +1651,7 @@ fn "httpbin.wado/route"(request) {
             }
             "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:value/Value>::push"(obj_57.log, $load_0, value_93);
         };
-        multivalue_bind [$mv$self_102$0, $mv$self_102$1, $mv$self_102$2] = "core:json/core/json/to_string<core:value/Value>$scalar"(struct.new "core:value//Value::Object" { discriminant: 10, payload_0: obj_57 }, struct.new "core:prelude/types.wado//Option<char>" { 1 });
+        multivalue_bind [$mv$self_102$0, $mv$self_102$1, $mv$self_102$2] = "core:json/core/json/to_string<core:value/Value>$scalar"(struct.new "core:value//Value::Object" { discriminant: 10, payload_0: obj_57 }, struct.new "core:prelude/types.wado//Option<char>" { 0 });
         $load_0 = (if @likely($mv$self_102$0 == 0) -> ref "core:prelude/string.wado//String" {
             local.tee $load_0(ref.as_non_null($mv$self_102$1));
         } else if $mv$self_102$0 == 1 -> ref "core:prelude/string.wado//String" {
@@ -1674,7 +1674,7 @@ fn "httpbin.wado/route"(request) {
         }
         "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:value/Value>::push"(obj_57.log, $load_0, value_93);
     };
-    multivalue_bind [$mv$self_102$0, $mv$self_102$1, $mv$self_102$2] = "core:json/core/json/to_string<core:value/Value>$scalar"(struct.new "core:value//Value::Object" { discriminant: 10, payload_0: obj_57 }, struct.new "core:prelude/types.wado//Option<char>" { 1 });
+    multivalue_bind [$mv$self_102$0, $mv$self_102$1, $mv$self_102$2] = "core:json/core/json/to_string<core:value/Value>$scalar"(struct.new "core:value//Value::Object" { discriminant: 10, payload_0: obj_57 }, struct.new "core:prelude/types.wado//Option<char>" { 0 });
     $load_0 = (if @likely($mv$self_102$0 == 0) -> ref "core:prelude/string.wado//String" {
         local.tee $load_0(ref.as_non_null($mv$self_102$1));
     } else if $mv$self_102$0 == 1 -> ref "core:prelude/string.wado//String" {
@@ -1972,7 +1972,7 @@ fn "httpbin.wado/$test_4__post_echoes_the_body_as_data"() {
     self_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee $load_1(r.body).repr, start: 0, end: $load_1.used };
     let $mv$$vr_2$1: i32;
     multivalue_bind [$v0_1, $mv$$vr_2$1] = ($load_1 = global:httpbin.wado::$const_obj_71; "core:prelude/string.wado/core:prelude/string.wado/StrSlice::find<core:prelude/string.wado/String>"(self_13, $load_1.repr, $load_1.used));
-    if @unlikely(local.tee $v0_1($v0_1 == 0) == 0) {
+    if @unlikely(local.tee $v0_1($v0_1 == 1) == 0) {
         cold_path;
         "httpbin.wado/$test_4__post_echoes_the_body_as_data$cold0"($v0_1);
         unreachable;
@@ -1992,7 +1992,7 @@ fn "httpbin.wado/$test_5__anything_accepts_any_method"() {
     self_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee $load_1(r.body).repr, start: 0, end: $load_1.used };
     let $mv$$vr_2$1: i32;
     multivalue_bind [$v0_1, $mv$$vr_2$1] = ($load_1 = global:httpbin.wado::$const_obj_72; "core:prelude/string.wado/core:prelude/string.wado/StrSlice::find<core:prelude/string.wado/String>"(self_13, $load_1.repr, $load_1.used));
-    if @unlikely(local.tee $v0_1($v0_1 == 0) == 0) {
+    if @unlikely(local.tee $v0_1($v0_1 == 1) == 0) {
         cold_path;
         "httpbin.wado/$test_5__anything_accepts_any_method$cold0"($v0_1);
         unreachable;
@@ -6061,7 +6061,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at"(byt
         unreachable;
     }
     if prefix >= 0 {
-        return struct.new "core:prelude/string.wado//Utf8Error" { valid_up_to: prefix, error_len: struct.new "core:prelude/types.wado//Option<i32>" { 1 } };
+        return struct.new "core:prelude/string.wado//Utf8Error" { valid_up_to: prefix, error_len: struct.new "core:prelude/types.wado//Option<i32>" { 0 } };
     }
     prefix = -1 - prefix;
     $v1 = local.tee $v2_2("core:prelude/string.wado/core:prelude/string.wado/String::utf8_invalid_len"(bytes, prefix)) >= 1;
@@ -6078,7 +6078,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at"(byt
         "core:prelude/string.wado/core:prelude/string.wado/Utf8Error::invalid$cold0"($v2_2, $v1, $v2_12, $v2_seen, $v3, $v3_seen);
         unreachable;
     }
-    return struct.new "core:prelude/string.wado//Utf8Error" { valid_up_to: prefix, error_len: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $v2_2 } };
+    return struct.new "core:prelude/string.wado//Utf8Error" { valid_up_to: prefix, error_len: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: $v2_2 } };
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_invalid_len"(bytes, start) {
@@ -6787,7 +6787,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::find<core:prelud
     let j: i32;
     let $licm_repr_21: ref Array<u8>;
     if $mv$pat$used == 0 {
-        return 0, 0;
+        return 1, 0;
     }
     limit = (self.end - local.tee $load_1(self.start)) - $mv$pat$used;
     i = 0;
@@ -6810,13 +6810,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::find<core:prelud
                 };
                 break $inline_bytes_match_at_4: 1;
             } {
-                return 0, i;
+                return 1, i;
             }
             i = i + 1;
             continue l771;
         };
     };
-    return 1, 0;
+    return 0, 0;
 }
 
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:value/Value>::search_node"(self, n, key) {

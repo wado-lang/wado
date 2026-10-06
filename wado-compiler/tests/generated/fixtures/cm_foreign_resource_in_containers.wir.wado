@@ -7,8 +7,8 @@ struct cm_foreign_resource_in_containers.wado//Slot {  // TypeId(0)
 }
 
 variant core:prelude/types.wado//Option<cm_foreign_resource_in_containers.wado/Device> {  // TypeId(1)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<cm_foreign_resource_in_containers.wado/Device>::Some {  // TypeId(2)
@@ -17,8 +17,8 @@ struct core:prelude/types.wado//Option<cm_foreign_resource_in_containers.wado/De
 }
 
 variant core:prelude/types.wado//Option<&cm_foreign_resource_in_containers.wado/Device> {  // TypeId(3)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<&cm_foreign_resource_in_containers.wado/Device>::Some {  // TypeId(4)
@@ -81,8 +81,8 @@ import fn wasi/task-return from "wasi/task-return";
 fn "cm_foreign_resource_in_containers.wado/run"() with Maker, User, Device {
     let d: i32;
     d = "cm_foreign_resource_in_containers.wado/$cm_binding__Maker_get_device"();
-    drop("cm_foreign_resource_in_containers.wado/$cm_binding__User_peek"(struct.new "core:prelude/types.wado//Option<&cm_foreign_resource_in_containers.wado/Device>::Some" { discriminant: 0, payload_0: d }));
-    drop("cm_foreign_resource_in_containers.wado/$cm_binding__User_take"(struct.new "core:prelude/types.wado//Option<cm_foreign_resource_in_containers.wado/Device>::Some" { discriminant: 0, payload_0: d }));
+    drop("cm_foreign_resource_in_containers.wado/$cm_binding__User_peek"(struct.new "core:prelude/types.wado//Option<&cm_foreign_resource_in_containers.wado/Device>::Some" { discriminant: 1, payload_0: d }));
+    drop("cm_foreign_resource_in_containers.wado/$cm_binding__User_take"(struct.new "core:prelude/types.wado//Option<cm_foreign_resource_in_containers.wado/Device>::Some" { discriminant: 1, payload_0: d }));
     drop("cm_foreign_resource_in_containers.wado/$cm_binding__User_settle"(struct.new "core:prelude/types.wado//Result<cm_foreign_resource_in_containers.wado/Device,u32>::Ok" { discriminant: 0, payload_0: "cm_foreign_resource_in_containers.wado/$cm_binding__Maker_get_device"() }));
     drop("cm_foreign_resource_in_containers.wado/$cm_binding__User_fill"(struct.new "cm_foreign_resource_in_containers.wado//Slot" { device: "cm_foreign_resource_in_containers.wado/$cm_binding__Maker_get_device"() }));
 }

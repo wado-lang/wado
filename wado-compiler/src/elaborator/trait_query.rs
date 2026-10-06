@@ -59,6 +59,15 @@ pub(super) enum NewtypePeel {
     Here,
 }
 
+/// What a derived method is asked of: an instance, whose bound must hold, or a
+/// generic declaration at its own parameters, which the call's arguments have
+/// yet to settle and which answers the name alone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum DerivedAt {
+    Instance,
+    Declaration,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum OnBoundTrait {
     Eq,
@@ -476,8 +485,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Enforce a trait's supertraits against `impl Trait for T`. The whole
     /// closure, not just the direct ones: a supertrait satisfied structurally
-    /// has no impl block of its own to carry the rest of the chain.
+    /// has no impl block of its own to carry the rest of the chain. A marker is
+    /// held to the derivation's own check, which a member lacking a supertrait
+    /// already fails.
     pub(super) fn enforce_impl_supertraits(&mut self, impl_block: &ast::ImplBlock) {
+        if impl_block.is_synthesize_request {
+            return;
+        }
         let Some((trait_type, trait_name, trait_decl)) = self.impl_trait_head(impl_block) else {
             return;
         };
@@ -951,21 +965,15 @@ impl TypeSystem {
                 Some(walk_struct(info, &[], visit))
             }
             ResolvedType::Variant { def } => {
-                if tr == OnBoundTrait::Ord {
-                    return None;
-                }
                 let info = scope.variant_cases_of(*def)?;
                 Some(walk_variant(info, &[], visit))
             }
             ResolvedType::GenericInstance { def, type_args } => {
                 if let Some(info) = scope.struct_fields_of(*def) {
                     Some(walk_struct(info, type_args, visit))
-                } else if tr != OnBoundTrait::Ord
-                    && let Some(info) = scope.variant_cases_of(*def)
-                {
-                    Some(walk_variant(info, type_args, visit))
                 } else {
-                    None
+                    let info = scope.variant_cases_of(*def)?;
+                    Some(walk_variant(info, type_args, visit))
                 }
             }
             _ => None,
@@ -1023,13 +1031,38 @@ impl TypeSystem {
         }
     }
 
-    fn is_defaultable_struct(&self, scope: &TypeLookup, type_id: TypeId) -> bool {
-        let def = match self.type_table.borrow().get(type_id) {
-            ResolvedType::Struct { def, .. } => def.decl(),
-            _ => None,
+    /// Why `type_id` derives no `Default`, which only a non-generic struct
+    /// whose every field declares a default does.
+    pub(super) fn default_withheld_note(&self, scope: &TypeLookup, type_id: TypeId) -> String {
+        let Some(info) = self
+            .represented_decl(type_id)
+            .and_then(|def| scope.struct_fields_of(def))
+        else {
+            return "only a struct derives `Default`; write the impl".to_string();
         };
-        def.and_then(|def| self.auto_derive_default_struct_type(scope, def))
+        if !info.type_param_type_ids.is_empty() {
+            return "a generic struct derives no `Default`; write the impl".to_string();
+        }
+        let (name, _, _) = info
+            .fields
+            .iter()
+            .zip(&info.field_defaults)
+            .find_map(|(field, default)| default.is_none().then_some(field))
+            .expect("a non-generic struct deriving no `Default` has a field without one");
+        format!("field `{name}` has no default expression")
+    }
+
+    fn is_defaultable_struct(&self, scope: &TypeLookup, type_id: TypeId) -> bool {
+        self.represented_decl(type_id)
+            .and_then(|def| self.auto_derive_default_struct_type(scope, def))
             .is_some()
+    }
+
+    /// The declaration `type_id`'s representation instantiates: a newtype has
+    /// no derivation of its own, and the one its representation carries answers.
+    fn represented_decl(&self, type_id: TypeId) -> Option<DefId> {
+        let table = self.type_table.borrow();
+        table.nominal_def(table.representation_head(type_id))
     }
 
     /// The `Ref` marker's eligibility: whether a value of this type is a Wasm GC
@@ -1203,18 +1236,13 @@ impl TypeSystem {
         }
     }
 
-    /// Why `type_id` has no `Ord`, where a written `eq` is the cause. A variant
-    /// derives no `Ord` whatever it writes, so its `eq` is no cause.
+    /// Why `type_id` has no `Ord`, where a written `eq` is the cause.
     pub(super) fn ord_withheld_note(&self, type_id: TypeId) -> Option<String> {
         let link = self.ord_withheld_by(type_id)?;
-        let derives_ord =
-            self.type_table.borrow().reflect_kind(link) != Some(CompilerItem::ReflectVariant);
-        derives_ord.then(|| {
-            format!(
-                "`{}` writes `eq`, so no `Ord` is derived for it; write `cmp` beside it",
-                self.type_id_to_string(link)
-            )
-        })
+        Some(format!(
+            "`{}` writes `eq`, so no `Ord` is derived for it; write `cmp` beside it",
+            self.type_id_to_string(link)
+        ))
     }
 
     /// Whether a bound writing `wanted` selects the header — see
@@ -3033,6 +3061,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         method_name: &str,
         receiver_type_id: TypeId,
+        at: DerivedAt,
     ) -> Option<TraitMethodMatch> {
         let (item, _, return_type) = self.tysys.auto_derive_by_method(method_name)?;
         let base_type_id = self.tysys.get_base_type(receiver_type_id);
@@ -3079,23 +3108,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.impl_receiver(header, link),
             )
         } else {
-            // A newtype has no derivation of its own: the one its
-            // representation carries answers.
+            // A newtype has no derivation of its own: the one the declaration
+            // it inherits from carries answers, a `flags` type's included.
             let derive_id = self
                 .tysys
                 .type_table
                 .borrow()
-                .representation_head(base_type_id);
+                .reflect_structure_head(base_type_id);
             if !self.tysys.auto_derive_eligible_kind(derive_id) {
                 return None;
             }
             let trait_ = self.tysys.compiler_trait(item)?;
-            if !self.tysys.type_implements_trait(
-                &self.annotate_ctx,
-                &self.type_lookup(),
-                derive_id,
-                &trait_,
-            ) {
+            if at == DerivedAt::Instance
+                && !self.tysys.type_implements_trait(
+                    &self.annotate_ctx,
+                    &self.type_lookup(),
+                    derive_id,
+                    &trait_,
+                )
+            {
                 return None;
             }
             let home = self

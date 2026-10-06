@@ -15,14 +15,14 @@ impl<T: Ord> Wrapper<T> {
 }
 
 variant Foo {
-    A(i32),
+    A(fn() -> i32),
     B,
 }
 
 export fn run() {
-    let w1 = Wrapper { value: Foo::A(1) };
-    let w2 = Wrapper { value: Foo::A(2) };
-    // Foo (variant) does not implement Ord, so max_with() should not be available
+    let w1 = Wrapper { value: Foo::A(|| 1) };
+    let w2 = Wrapper { value: Foo::A(|| 2) };
+    // Foo's `fn` payload has no Ord, so max_with() should not be available
     let m = w1.max_with(&w2);
 }
 

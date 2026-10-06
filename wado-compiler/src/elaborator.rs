@@ -1252,10 +1252,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ) {
             return;
         }
-        if on_bound == OnBoundTrait::Ord
-            && let Some(why) = self.tysys.ord_withheld_note(target_type_id)
-        {
-            let _ = self.emit(types::TypeError::OrdMarkerBesideWrittenEq {
+        let withheld = if on_bound == OnBoundTrait::Ord {
+            self.tysys.ord_withheld_note(target_type_id)
+        } else if on_bound == OnBoundTrait::Default {
+            Some(
+                self.tysys
+                    .default_withheld_note(&self.type_lookup(), target_type_id),
+            )
+        } else {
+            None
+        };
+        if let Some(why) = withheld {
+            let _ = self.emit(types::TypeError::MarkerWithheld {
+                trait_name: self.get_type_name_full(trait_type),
                 type_name: target_type_name.to_string(),
                 why,
                 span,
