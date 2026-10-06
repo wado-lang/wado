@@ -30,7 +30,7 @@ use crate::nir_arena::{
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::primitive::PrimitiveType;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{BuiltinDeclaration, ResolvedType, TypeId, TypeTable};
 
 use cranelift_entity::EntityRef;
 
@@ -977,7 +977,7 @@ fn safepoint_calls(project: &NirPackage, descriptors: &[FunctionRef]) -> Vec<boo
             declarations.leaves_for_host(callee)
                 || declarations
                     .get(callee)
-                    .is_some_and(super::super::tir::BuiltinDeclaration::allocates)
+                    .is_some_and(BuiltinDeclaration::allocates)
         })
         .collect()
 }
