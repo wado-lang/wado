@@ -203,8 +203,8 @@ impl Query<'_> {
             && let Some(bounds) = env.param_bounds.get(*index as usize)
             && bounds.iter().any(|bound| {
                 let bound = ParamBound {
+                    trait_: bound.trait_,
                     args: bound.args.iter().map(|arg| self.normalized(arg)).collect(),
-                    ..bound.clone()
                 };
                 bound_answers(program, ty, &bound, trait_, args)
             })
