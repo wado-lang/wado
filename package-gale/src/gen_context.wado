@@ -140,10 +140,10 @@ pub struct GenContext {
     /// Maps single-alt group type name → the rule name that first defines it.
     /// Used to resolve general group type names inside shared single-alt groups.
     single_alt_owner: HashMap<String, String>,
-    /// Registry of token-kind sets keyed by canonical (sorted, joined
-    /// with `|`) representation. IDs are assigned in insertion order so
+    /// Registry of token-kind sets keyed by canonical (`canonical_ids`)
+    /// representation. IDs are assigned in insertion order so
     /// the same input grammar always produces the same helper names.
-    kind_set_registry: HashMap<String, KindSetEntry>,
+    kind_set_registry: HashMap<List<i32>, KindSetEntry>,
     /// Only a `LeftRecursive` rule carries a `min_prec` parameter.
     /// A map for `contains_key_str`, which `HashSet` lacks, as is the next.
     lr_rule_snakes: HashMap<String, ()>,
@@ -172,14 +172,14 @@ pub struct GenContext {
     /// per-depth representation. IDs are assigned in insertion order so
     /// `FOLLOW_MASK_<id>` global names are stable across runs. See
     /// `FollowMaskEntry`.
-    follow_mask_registry: HashMap<String, FollowMaskEntry>,
+    follow_mask_registry: HashMap<List<List<i32>>, FollowMaskEntry>,
     /// Positions each interned mask constrains, indexed by its id.
     follow_mask_depths: List<i32>,
     /// Registry of recovery sync sets (a leaf's FIRST-of-rest) keyed by
     /// canonical representation. Each distinct non-empty set becomes one
     /// `SYNC_<id>: List<i32>` global passed to `expect` by reference, so a
     /// terminal on the valid hot path never rebuilds or copies the set.
-    sync_set_registry: HashMap<String, KindSetEntry>,
+    sync_set_registry: HashMap<List<i32>, KindSetEntry>,
     /// Per function being emitted, innermost last, the top-level names its text
     /// references, which it `note`s at its end for `CodeWriter::prune`.
     ref_frames: List<HashSet<String>>,
@@ -2656,12 +2656,11 @@ impl GenContext {
     /// first-seen order across the codegen pass.
     pub fn intern_kind_set(&mut self, tokens: &List<String>) -> i32 {
         let ids = self.canonical_kind_ids(tokens);
-        let key = join_ids(&ids);
-        if let Some(entry) = self.kind_set_registry.get(key) {
+        if let Some(entry) = self.kind_set_registry.get(ids) {
             return entry.id;
         }
         let id = self.kind_set_registry.len();
-        self.kind_set_registry[key] = KindSetEntry { id, tokens: ids };
+        self.kind_set_registry[ids] = KindSetEntry { id, tokens: ids };
         return id;
     }
 
@@ -2766,12 +2765,11 @@ impl GenContext {
         if ids.is_empty() {
             return null;
         }
-        let key = join_ids(&ids);
-        if let Some(entry) = self.sync_set_registry.get(key) {
+        if let Some(entry) = self.sync_set_registry.get(ids) {
             return Option::<i32>::Some(entry.id);
         }
         let id = self.sync_set_registry.len();
-        self.sync_set_registry[key] = KindSetEntry { id, tokens: ids };
+        self.sync_set_registry[ids] = KindSetEntry { id, tokens: ids };
         return Option::<i32>::Some(id);
     }
 
@@ -2840,13 +2838,12 @@ impl GenContext {
         for let mut d = 0; d <= last_constrained; d += 1 {
             canonical.push(sorted[d]);
         }
-        let key = ids_prefix_key(&canonical);
-        if let Some(entry) = self.follow_mask_registry.get(key) {
+        if let Some(entry) = self.follow_mask_registry.get(canonical) {
             return Option::<i32>::Some(entry.id);
         }
         let id = self.follow_mask_registry.len();
         self.follow_mask_depths.push(canonical.len());
-        self.follow_mask_registry[key] = FollowMaskEntry { id, mask: canonical };
+        self.follow_mask_registry[canonical] = FollowMaskEntry { id, mask: canonical };
         return Option::<i32>::Some(id);
     }
 
@@ -3064,19 +3061,6 @@ impl GenContext {
     }
 }
 
-/// Join a canonical id list with `|` into a registry key. Ids are stable for
-/// the lifetime of the table (append-only), so the key is unambiguous.
-fn join_ids(ids: &List<i32>) -> String {
-    let mut s = String::with_capacity(32);
-    for let mut i = 0; i < ids.len(); i += 1 {
-        if i > 0 {
-            s.push('|');
-        }
-        s.push_display(&ids[i]);
-    }
-    return s;
-}
-
 /// `scan_<snake>`, the name of the rule `snake`'s scan function where it is
 /// defined. A call takes the name from `GenContext::scan_fn_of`.
 pub fn scan_fn_name<S: AsStrSlice>(snake: S) -> String {
@@ -3109,21 +3093,6 @@ fn expect_ids(sets: &List<Option<List<i32>>>, i: i32) -> Option<List<i32>> {
         return null;
     }
     return sets[i];
-}
-
-/// Registry key of a canonical K-prefix mask: depths joined with `;`,
-/// ids within a depth joined with `|`.
-fn ids_prefix_key(prefix: &List<List<i32>>) -> String {
-    let mut s = String::with_capacity(64);
-    let mut first_depth = true;
-    for let depth of prefix {
-        if !first_depth {
-            s.push(';');
-        }
-        first_depth = false;
-        s.push_str(&join_ids(depth));
-    }
-    return s;
 }
 
 /// Build a map from single-alt group type name to the first rule that contains it.
