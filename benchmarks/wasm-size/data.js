@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791292220055,
+  "lastUpdate": 1791297969965,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -64493,6 +64493,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 338502,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c5f7e3b13c62a827210116d82141fb7096712ace",
+          "message": "Merge pull request #2291 from wado-lang/ccr-88c0ef90-ndsh12\n\nfeat: check the contracts of `_unchecked` functions in test and debug builds",
+          "timestamp": "2026-10-06T23:23:23+09:00",
+          "tree_id": "7fb7e9b73fb31f3a46d466a8c2bfb3b40ad26e9b",
+          "url": "https://github.com/wado-lang/wado/commit/c5f7e3b13c62a827210116d82141fb7096712ace"
+        },
+        "date": 1791297968968,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338446,
             "unit": "bytes"
           }
         ]
