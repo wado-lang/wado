@@ -22,8 +22,9 @@ one document as different values. This module settles each one as follows.
 
 - The target type decides between integer and float, not the token's
   spelling.
-- Every integer type reads a number, or a string holding one, by one rule,
-  exactly at any width. `1.0`, `1e2` and `10e-1` read when the value is
+- Every number type reads a number, or a string holding exactly one number
+  token, by one rule. `"1.5"` reads as a float, `"NaN"` and `" 1"` as none.
+- Every integer type reads exactly at any width. `1.0`, `1e2` and `10e-1` read when the value is
   integral and in range. `1.5` is an `UnexpectedType` error and a value out
   of the type's range an `Overflow`. `-0` reads as `0`, unsigned or not.
 - A float reads as the decimal rounded once to the nearest value of its

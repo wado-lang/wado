@@ -1611,6 +1611,19 @@ test "i64 and u64 read their string form" {
     assert de_err::<u64>(`"12`) == DeserializeError::eof(3);
 }
 
+test "a float reads its string form as an integer does" {
+    assert from_string::<f64>(`"1.5"`) == Result::Ok(1.5);
+    assert from_string::<f64>(`"-2e-3"`) == Result::Ok(-0.002);
+    assert from_string::<f32>(`"0.1"`) == Result::Ok(0.1_f32);
+    assert from_string::<f16>(`"1.5"`) == Result::Ok(1.5_f16);
+    assert from_string::<bf16>(`"1.5"`) == Result::Ok(1.5_bf16);
+    assert de_err::<f64>(`"1e400"`) == DeserializeError::overflow("value out of range for f64", 0);
+    assert de_err::<f64>(`"NaN"`) == DeserializeError::unexpected_type("expected number", 0);
+    assert de_err::<f64>(`" 1.5"`) == DeserializeError::unexpected_type("expected number", 0);
+    assert de_err::<f64>(`"1.5 "`) == DeserializeError::unexpected_type("expected number", 0);
+    assert de_err::<f32>(`"12`) == DeserializeError::eof(3);
+}
+
 test "i128 and u128 report a truncated token" {
     assert de_err::<i128>("-") == DeserializeError::eof(1);
     assert de_err::<u128>("-") == DeserializeError::eof(1);
