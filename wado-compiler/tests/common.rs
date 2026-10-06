@@ -1,7 +1,8 @@
 //! Common test utilities shared across test files
 //!
 //! This module provides shared utilities for:
-//! - Compiler host setup (`in_memory_host`; the filesystem one is `wado_host::StubHost`)
+//! - Compiler hosts, re-exported: `in_memory_host` from `wado-lsp`, `StubHost`
+//!   from `wado-host`
 //! - Wasmtime engine configuration
 //! - WASI context setup
 //! - Test fixture parsing (__DATA__ sections)

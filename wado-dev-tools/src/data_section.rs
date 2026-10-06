@@ -2,8 +2,7 @@ use wado_host::fixture::{CompileInputs, data_section};
 
 pub fn should_skip_file(source: &str) -> bool {
     // Skip if __DATA__ contains "compile_error"
-    let data = source.find("\n__DATA__\n").map_or("", |p| &source[p..]);
-    if data.contains("\"compile_error\"") {
+    if data_section(source).is_some_and(|data| data.contains("\"compile_error\"")) {
         return true;
     }
     // Skip if module has #![TODO] attribute (may fail to compile)

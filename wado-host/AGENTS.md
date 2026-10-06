@@ -22,3 +22,6 @@ tests share.
 - `stub_host.rs` — `StubHost`, a filesystem `CompilerHost` that answers the
   dependency index and environment from `HostStubs`. It compiles the e2e
   fixtures for both the tests and the golden dumps.
+- `fixture.rs` — `CompileInputs`, the `__DATA__` keys that say how to compile a
+  fixture. The e2e harness and the golden dumps both read them, so a golden
+  records the program its test runs.

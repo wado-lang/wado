@@ -117,7 +117,7 @@ form means the same, commit that instead (`.wat` for `.wasm`, `.onnxtext` for
 
 - `wado-compiler/` — the compiler: frontend, IR pipeline, optimizer, codegen. The Wado standard library (`core:*`, `wasi:*`) lives in `wado-compiler/lib/`. Internals: `docs/compiler.md`, `docs/optimizer.md`.
 - `wado-cli/` — the `wado` binary.
-- `wado-host/` — the native host pieces `wado-cli`, `wado-dev-tools` and the compiler's tests share: the `wasi:clocks/timezone` host, the TLS trust store, and `StubHost`, the `CompilerHost` that compiles e2e fixtures.
+- `wado-host/` — the native host pieces `wado-cli`, `wado-dev-tools` and the compiler's tests share: the `wasi:clocks/timezone` host, the TLS trust store, and `StubHost`, the `CompilerHost` that compiles e2e fixtures from the `__DATA__` inputs it reads.
 - `wado-run-webgpu/` — the `wado run-webgpu` subcommand, a separate binary and a workspace of its own: it links a GPU stack on a wasmtime other than the pin. The `test-webgpu` CI job is the only one that builds it.
 - `wado-lsp/` — the language service engine, also compiled to Wasm for the browser.
 - `wado-vscode/` — the VS Code extension.
