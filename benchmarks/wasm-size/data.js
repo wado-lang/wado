@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791273998057,
+  "lastUpdate": 1791278153925,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -64297,6 +64297,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d5473bf6474deab7338f302fcbacd971d6b926ee"
         },
         "date": 1791273997089,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338502,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "64ee6131f01e1490cff5357d14ae42c627690578",
+          "message": "Merge pull request #2288 from wado-lang/claude/funny-euler-uulvfh\n\nfix(tls): one trust store for every outbound client, and no certificate data in logs",
+          "timestamp": "2026-10-06T17:58:02+09:00",
+          "tree_id": "0eb633428055e3e3912ac1a3b763da660cbe7275",
+          "url": "https://github.com/wado-lang/wado/commit/64ee6131f01e1490cff5357d14ae42c627690578"
+        },
+        "date": 1791278153051,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
