@@ -909,8 +909,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // but when called on Location, it should expect &Location)
                 // Only set if not already set (for chained newtypes like C -> B -> A -> Point,
                 // we want to keep the innermost base type where the method is defined)
+                // The owner is where the lookup found the method, so a base
+                // that is a reference names the type behind it.
                 if method_info.owner == MethodOwner::Receiver {
-                    method_info.owner = MethodOwner::InheritedFrom(base_type_id);
+                    method_info.owner =
+                        MethodOwner::InheritedFrom(self.tysys.get_base_type(base_type_id));
                 }
                 return Some(method_info);
             }
@@ -1518,7 +1521,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(place) = receiver_ast {
             self.record_mut_borrow(place, ctx);
         }
-        let immutable = match self.tysys.type_table.borrow().get(receiver) {
+        let immutable = match self.reference_head(receiver) {
             ResolvedType::Ref(_) => true,
             ResolvedType::MutRef(_) => false,
             _ => receiver_ast.is_some_and(|e| self.place_roots_at_immutable_ref(e)),
@@ -1561,10 +1564,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The name whose storage the place `expr` writes: `x`, `x.f`, `x[i]`,
     /// `*x`, and any nesting of those. `None` past a reference step.
+    /// What `ty` is represented by, so a newtype over a reference reads as the
+    /// reference it is.
+    fn reference_head(&self, ty: TypeId) -> ResolvedType {
+        let table = self.tysys.type_table.borrow();
+        table.get(table.representation_head(ty)).clone()
+    }
+
     fn place_root<'e>(&self, expr: &'e ast::Expr) -> Option<&'e str> {
         if let Some(ty) = self.sem.types.expression_types.get(&expr.id()).copied()
             && matches!(
-                self.tysys.type_table.borrow().get(ty),
+                self.reference_head(ty),
                 ResolvedType::Ref(_) | ResolvedType::MutRef(_)
             )
         {
@@ -1621,7 +1631,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(inner_type) = self.sem.types.expression_types.get(&inner.id()).copied() else {
             return false;
         };
-        match self.tysys.type_table.borrow().get(inner_type) {
+        match self.reference_head(inner_type) {
             ResolvedType::Ref(_) => true,
             ResolvedType::MutRef(_) => false,
             _ => self.place_roots_at_immutable_ref(inner),

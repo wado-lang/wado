@@ -1,0 +1,40 @@
+// Test: a newtype over `&mut T` calls `T`'s methods, as the reference does.
+//
+// The inherited method was recorded as owned by the newtype's base `&mut T`
+// rather than by `T`, so the call named `&mut T::bump`, a function that does
+// not exist, and the compiler panicked. And the binding holding the newtype
+// was taken for the place the method writes, so an immutable one was refused
+// although the write lands behind the reference, as it does for `&mut T`.
+
+use { println, Stdout } from "core:cli";
+
+struct Counter {
+    n: i32,
+}
+
+impl Counter {
+    fn bump(&mut self) -> i32 {
+        self.n += 1;
+        return self.n;
+    }
+}
+
+type Handle = &mut Counter;
+
+fn twice(h: &mut Handle) -> i32 {
+    return h.bump() + h.bump();
+}
+
+export fn run() with Stdout {
+    let mut c = Counter { n: 0 };
+    let h = &mut c as Handle;
+    let first = h.bump();
+    let mut held = &mut c as Handle;
+    let both = twice(&mut held);
+    println(`${first} ${both} ${c.n}`);
+}
+
+__DATA__
+{
+    "stdout": "1 5 3\n"
+}
