@@ -329,17 +329,7 @@ The implementation lives in `wado-compiler/lib/core/router.wado` and is ported f
 - Method dispatch supports multiple methods per terminal via an `List<MethodEntry>` per terminal, scanned linearly on lookup (per-terminal method count is in the single digits, so a sorted array + binary search is overkill). (The example assumes one method per terminal.)
 - Each terminal and wildcard node carries an extra `any_handler_idx: i32` (`-1` when absent) for `Router::any` dispatch.
 - A `match_request` adapter handles path/query split.
-- Patterns with no `:param`/`*wildcard` segments are routed through a side-table (`static_routes: HashMap<String, List<StaticEntry<H>>>`) with pre-built `RouteMatch` shells, one entry per method. The DFA only stores dynamic patterns. Static-route hits return a reference into the side-table — zero allocations per match.
-- A DFA state's literal edges are a `HashMap<String, i32>` from segment text to the next state, probed with the path's segment view, so a lookup copies no substring.
-
-  Both maps replaced sorted lists searched by binary search (2026-10). On a router micro-benchmark, 40,000 matches per iteration:
-
-  | route set                         | sorted lists | `HashMap` |
-  | --------------------------------- | -----------: | --------: |
-  | `http_routing`'s 12 routes        |     7.213 ms |  6.301 ms |
-  | 200 static + 200 one-param routes |    14.838 ms |  5.302 ms |
-
-  `benchmark/http_routing` reads the same within noise: routing is about 1% of a request there.
+- Patterns with no `:param`/`*wildcard` segments are routed through a side-table keyed by pattern, with pre-built `RouteMatch` shells. The DFA only stores dynamic patterns. Static-route hits return a reference into the side-table — zero allocations per match.
 - Each DFA terminal caches the captured parameter-name list (`terminal_names: List<String>`) so a match can construct `PathParams` without re-walking the path. Wildcard transitions similarly cache `wildcard_names = terminal_names + [wildcard_name]`.
 
 ```
