@@ -761,7 +761,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// The transitive supertraits of trait `decl`.
     fn supertraits_of(&self, decl: DefId) -> &[InheritedBound] {
-        self.tysys.trait_env.supertrait_closure_declared(&decl).1
+        self.tysys.trait_env.supertrait_closure(&decl)
     }
 
     /// The type-parameter ids the enclosing generic scope owns: a slot bound to

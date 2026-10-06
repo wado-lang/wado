@@ -777,14 +777,24 @@ pub(super) fn lower_impls<'a>(
     let impl_headers: Vec<(&DefId, &ImplHeader)> = impl_headers.into_iter().collect();
     // `Self::Item` where the implemented trait declares no `Item` reads the
     // one impl on the same target that binds it, as the elaborator does.
-    let bound_on_target = |header: &ImplHeader, assoc: &str| {
-        let mut binding = impl_headers.iter().filter_map(|(_, other)| {
-            (other.target == header.target
-                && other.associated_types.iter().any(|b| b.name == assoc))
-            .then(|| other.trait_def())
-            .flatten()
-        });
-        binding.next().filter(|_| binding.next().is_none())
+    let mut binders: IndexMap<(&ImplTargetKey, &str), Vec<DefId>> = IndexMap::default();
+    for (_, header) in &impl_headers {
+        let Some(trait_) = header.trait_def() else {
+            continue;
+        };
+        for binding in &header.associated_types {
+            binders
+                .entry((&header.target, binding.name.as_str()))
+                .or_default()
+                .push(trait_);
+        }
+    }
+    let bound_on_target = |header: &ImplHeader, assoc: &str| match binders
+        .get(&(&header.target, assoc))
+        .map(Vec::as_slice)
+    {
+        Some(&[only]) => Some(only),
+        _ => None,
     };
     let mut sources: Vec<&ImplHeader> = Vec::new();
     for &(&def, header) in &impl_headers {
@@ -1801,6 +1811,7 @@ impl SolverBridge {
                 .map(|scoped| {
                     let self_type = scoped
                         .self_binding
+                        .filter(|_| scoped.bound.writes_self())
                         .map(|binding| self.lowering.type_id(&table, binding.type_id, &placed))
                         .transpose();
                     // A bound naming no trait was reported where it is written.

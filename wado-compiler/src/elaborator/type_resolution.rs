@@ -1089,8 +1089,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let closure = e
                         .tysys
                         .trait_env
-                        .supertrait_closure_declared(&decl)
-                        .1
+                        .supertrait_closure(&decl)
                         .to_vec();
                     out.push((bound, at_decl));
                     for inherited in closure {
@@ -1465,10 +1464,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && self
                     .tysys
                     .trait_env
-                    .supertrait_closure_declared(&decl)
-                    .1
-                    .iter()
-                    .any(|inherited| inherited.decl == trait_);
+                    .supertrait_decls(&decl)
+                    .any(|inherited| inherited == trait_);
             if decl != trait_ && !inherits {
                 continue;
             }

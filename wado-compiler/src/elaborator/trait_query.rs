@@ -492,8 +492,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let clauses: Vec<(DefId, ast::TraitBound, Vec<ViaClause>)> = self
             .tysys
             .trait_env
-            .supertrait_closure_declared(&trait_decl)
-            .1
+            .supertrait_closure(&trait_decl)
             .iter()
             .map(|inherited| {
                 (

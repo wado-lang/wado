@@ -1253,7 +1253,7 @@ impl TraitEnv {
     ///
     /// Written in `key`'s own parameter space, so a caller reading an argument
     /// resolves it through [`InheritedBound::via`] rather than here.
-    fn supertrait_closure(&self, key: &DefId) -> &[InheritedBound] {
+    pub(super) fn supertrait_closure(&self, key: &DefId) -> &[InheritedBound] {
         self.supertrait_closures.get(key).map_or(&[], Vec::as_slice)
     }
 
@@ -1819,16 +1819,6 @@ impl TraitEnv {
         self.supertrait_closure(key)
             .iter()
             .map(|inherited| inherited.decl)
-    }
-
-    /// `key`'s parameters and its closure as declared, both in `key`'s own
-    /// parameter space. A reader re-spells them at its own arguments with
-    /// `Elaborator::inherited_space`.
-    pub(super) fn supertrait_closure_declared(
-        &self,
-        key: &DefId,
-    ) -> (&[ast::GenericParam], &[InheritedBound]) {
-        (self.trait_decl_params(*key), self.supertrait_closure(key))
     }
 
     /// `key` or the supertrait of it declaring `assoc_name`, making
