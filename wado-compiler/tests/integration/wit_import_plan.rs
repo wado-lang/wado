@@ -9,14 +9,14 @@
 use std::collections::BTreeSet;
 
 use crate::common::block_on;
-use crate::common::{InMemoryHost, StubHost};
+use crate::common::{StubHost, in_memory_host};
 use wado_compiler::{
     CompilerOptions, OptLevel, compile_with_host, compile_with_options, dump_with_host_and_world,
 };
 
 /// The plan: `WirPackage::world_surface.imports`, obtained from a dump.
 fn plan_imports(source: &str) -> BTreeSet<String> {
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let dump = block_on(dump_with_host_and_world(
         source,
         &host,
@@ -37,7 +37,7 @@ fn plan_imports(source: &str) -> BTreeSet<String> {
 /// The ground truth: CM interface FQs the compiled component actually imports,
 /// scraped from the printed WAT.
 fn actual_imports(source: &str) -> BTreeSet<String> {
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let result = block_on(compile_with_host(
         source,
         &host,
@@ -133,7 +133,7 @@ fn plan_matches_component_for_http_service_with_resources() {
     let world = "wasi:http/service";
 
     let plan: BTreeSet<String> = {
-        let host = InMemoryHost::new();
+        let host = in_memory_host(&[]);
         let dump = block_on(dump_with_host_and_world(
             &source,
             &host,
@@ -157,7 +157,7 @@ fn plan_matches_component_for_http_service_with_resources() {
     };
 
     let actual: BTreeSet<String> = {
-        let host = InMemoryHost::new();
+        let host = in_memory_host(&[]);
         let options = CompilerOptions {
             target_world: Some(world.to_string()),
             ..Default::default()

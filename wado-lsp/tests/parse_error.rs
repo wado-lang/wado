@@ -17,7 +17,8 @@
 //! regions. The dedicated test `lexer_error_recovers_around_stray_character`
 //! pins this.
 
-use wado_lsp::test_support::MapHost;
+use wado_compiler::InMemoryCompilerHost;
+use wado_lsp::test_support::in_memory_host;
 use wado_lsp::{Diagnostic, Engine, Position, Severity};
 
 const PATH: &str = "/test.wado";
@@ -39,10 +40,10 @@ fn uri() -> String {
     format!("file://{PATH}")
 }
 
-fn engine_with_broken_source() -> (Engine, MapHost) {
+fn engine_with_broken_source() -> (Engine, InMemoryCompilerHost) {
     let mut engine = Engine::new();
     engine.open_document(&uri(), BROKEN_SOURCE.to_string());
-    let host = MapHost::single(PATH, BROKEN_SOURCE);
+    let host = in_memory_host(&[(PATH, BROKEN_SOURCE)]);
     (engine, host)
 }
 
@@ -137,7 +138,7 @@ fn lexer_error_recovers_around_stray_character() {
         let source = "fn f() -> i32 {\n    let x: i32 = 1;\n    return x;\n}\n@\nfn g() -> i32 { return 2; }\n";
         let mut engine = Engine::new();
         engine.open_document(&uri(), source.to_string());
-        let host = MapHost::single(PATH, source);
+        let host = in_memory_host(&[(PATH, source)]);
 
         let diags = engine.diagnostics(&uri(), &host).await;
         let lex_errs: Vec<&Diagnostic> = diags
@@ -170,7 +171,7 @@ fn lexer_error_recovers_around_stray_character() {
 #[test]
 fn fixing_the_parse_error_recovers_semantics() {
     futures::executor::block_on(async {
-        let host = MapHost::single(PATH, BROKEN_SOURCE);
+        let host = in_memory_host(&[(PATH, BROKEN_SOURCE)]);
         let mut engine = Engine::new();
         engine.open_document(&uri(), BROKEN_SOURCE.to_string());
         // First query on the broken source still resolves `x`.
@@ -199,7 +200,7 @@ fn g() -> i32 {
     return 2;
 }
 ";
-        let host = MapHost::single(PATH, fixed);
+        let host = in_memory_host(&[(PATH, fixed)]);
         engine.update_document(&uri(), fixed.to_string());
         let hover = engine
             .hover(
@@ -233,7 +234,7 @@ fn body_error_node_does_not_panic_semantics() {
         let src = "export fn f() -> i32 {\n    let a = 1;\n    let b = a + ;\n    return 0;\n}\n";
         let mut engine = Engine::new();
         engine.open_document(path, src.to_string());
-        let host = MapHost::single("/body_err.wado", src);
+        let host = in_memory_host(&[("/body_err.wado", src)]);
         let diags = engine.diagnostics(path, &host).await;
         assert!(
             errors(&diags)

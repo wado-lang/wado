@@ -2,7 +2,7 @@
 //! from `wado dump --assert-plan`. Every shape `SOURCE` covers captures an
 //! operand, so `EXPECTED_EMPTY` is empty; a shape that stops is a regression.
 
-use crate::common::{InMemoryHost, block_on};
+use crate::common::{block_on, in_memory_host};
 use wado_compiler::{OptLevel, dump_with_host_and_world};
 
 const SOURCE: &str = r#"
@@ -98,7 +98,7 @@ const EXPECTED_CONDITIONAL: &[(&str, &[&str])] = &[
 const EXPECTED_UNCONDITIONAL: &[(&str, &[&str])] = &[("0 <= a < b", &["a", "b"])];
 
 fn entry_plan() -> String {
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let dump = block_on(dump_with_host_and_world(
         SOURCE,
         &host,

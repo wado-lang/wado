@@ -6,11 +6,11 @@
 //! This pins the Engine contract that the native `wado query` path relies
 //! on, independent of the CLI's wasmtime pipeline: the loader resolves a
 //! `kiln:` redirect URI by stripping the scheme and calling
-//! `CompilerHost::load_source`, so an in-memory `MapHost` serving the
+//! `CompilerHost::load_source`, so an in-memory host serving the
 //! generated module at that path is enough to exercise it.
 
 use wado_compiler::kiln::InvocationIndex;
-use wado_lsp::test_support::MapHost;
+use wado_lsp::test_support::in_memory_host;
 use wado_lsp::{Engine, Severity};
 
 const ENTRY_URI: &str = "file:///entry.wado";
@@ -30,7 +30,7 @@ fn errors(diags: &[wado_lsp::Diagnostic]) -> Vec<&wado_lsp::Diagnostic> {
 fn injected_index_redirects_without_consume_only() {
     futures::executor::block_on(async {
         // The generated module is served at the kiln URI's stripped path.
-        let host = MapHost::single("/gen/out.wado", GENERATED);
+        let host = in_memory_host(&[("/gen/out.wado", GENERATED)]);
         let mut index = InvocationIndex::new();
         // `decl_file` is the entry filename the loader sees, i.e.
         // `Uri::to_filename(ENTRY_URI)`.
@@ -58,7 +58,7 @@ fn without_injection_the_bare_schema_import_fails() {
         // Same entry, no injected index and no inline `with` clause → no
         // redirect, and `./schema.g4` is not a real module. Proves the
         // injection above is what made the query resolve.
-        let host = MapHost::empty();
+        let host = in_memory_host(&[]);
         let mut engine = Engine::new();
         engine.open_document(ENTRY_URI, ENTRY_SRC.to_string());
 

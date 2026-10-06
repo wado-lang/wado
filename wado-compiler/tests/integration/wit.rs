@@ -4,7 +4,7 @@
 //! Each case asserts the rendered WIT text and re-parses it with `wit-parser`
 //! to confirm the output is syntactically valid WIT.
 
-use crate::common::{InMemoryHost, WEB_PACKAGE, block_on, web_host, world_surface};
+use crate::common::{WEB_PACKAGE, block_on, in_memory_host, web_host, world_surface};
 use wado_compiler::compiler_host::CompilerHost;
 use wado_compiler::semantics::{semantics, semantics_for_world};
 use wado_compiler::wit_emit::{self, WitEmitOptions, WitScope, emit_wit_text, emit_wit_text_from};
@@ -14,7 +14,7 @@ use wado_compiler::{CompilerOptions, OptLevel, compile_with_options};
 /// Emit WIT for `source` under `scope` targeting `world_fq`, feeding the
 /// emitter the world surface as the CLI does.
 fn emit_world(source: &str, scope: WitScope, world_fq: &str) -> String {
-    emit_world_on(&InMemoryHost::new(), source, scope, world_fq)
+    emit_world_on(&in_memory_host(&[]), source, scope, world_fq)
 }
 
 fn emit_world_on(
@@ -84,7 +84,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
     return Result::Ok(Response { files: [] });
 }
 "#;
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let mut sem = block_on(semantics_for_world(
         GENERATOR,
         &host,
@@ -179,7 +179,7 @@ fn stdlib_newtype_export_emits_its_alias() {
 
 /// Emit WIT as `wado wit` does: from the subset one compile retains.
 fn emit_compiled(source: &str, scope: WitScope) -> String {
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let options = CompilerOptions {
         opt_level: OptLevel::O2,
         retain_wir: true,
@@ -472,7 +472,7 @@ fn future_and_stream_map_to_wit() {
 fn cm_catalog_matches_committed_wit() {
     let source = include_str!("../../../package-cm-catalog/src/lib.wado");
     let expected = include_str!("../../../package-cm-catalog/cm-catalog.wit");
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let mut sem = block_on(semantics(source, &host, Some("lib.wado")));
     assert!(sem.is_complete(), "catalog source did not analyze");
     sem.set_wit_contract(wit_emit::wit_contract(

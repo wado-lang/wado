@@ -11,12 +11,12 @@
 //! / `warnings_contains` / `warnings_not_contains`), where the whole corpus
 //! enforces it.
 
-use wado_lsp::test_support::MapHost;
+use wado_lsp::test_support::in_memory_host;
 use wado_lsp::{Diagnostic, DiagnosticTag, Engine, Severity};
 
 async fn diagnostics_for(path: &str, source: &str) -> Vec<Diagnostic> {
     let uri = format!("file://{path}");
-    let host = MapHost::empty();
+    let host = in_memory_host(&[]);
     let mut engine = Engine::new();
     engine.open_document(&uri, source.to_string());
     engine.diagnostics(&uri, &host).await
@@ -55,7 +55,7 @@ fn imported_module_dead_code_stays_off_the_importer() {
         let bar = "pub fn helper() -> i32 {\n    return 1;\n}\n\ninternal fn dead_in_bar() -> i32 {\n    return 2;\n}\n";
         let foo =
             "use { helper } from \"./bar.wado\";\n\nexport fn run() {\n    let _ = helper();\n}\n";
-        let host = MapHost::with_files(&[("/work/bar.wado", bar)]);
+        let host = in_memory_host(&[("/work/bar.wado", bar)]);
         let mut engine = Engine::new();
         engine.open_document("file:///work/foo.wado", foo.to_string());
         engine.open_document("file:///work/bar.wado", bar.to_string());
@@ -86,7 +86,7 @@ fn imported_module_errors_stay_off_the_importer() {
         let bar = "pub fn boom() -> i32 {\n    return \"not an i32\";\n}\n";
         let foo =
             "use { boom } from \"./bar.wado\";\n\nexport fn run() {\n    let _ = boom();\n}\n";
-        let host = MapHost::with_files(&[("/work/bar.wado", bar)]);
+        let host = in_memory_host(&[("/work/bar.wado", bar)]);
         let mut engine = Engine::new();
         engine.open_document("file:///work/foo.wado", foo.to_string());
         engine.open_document("file:///work/bar.wado", bar.to_string());
@@ -136,7 +136,7 @@ fn missing_import_is_reported_on_the_importer() {
 fn toggling_unused_diagnostics_takes_effect_without_reopen() {
     futures::executor::block_on(async {
         let source = "fn unused_helper() -> i32 {\n    return 1;\n}\n\nexport fn run() {}\n";
-        let host = MapHost::empty();
+        let host = in_memory_host(&[]);
         let mut engine = Engine::new();
         engine.open_document("file:///work/toggle.wado", source.to_string());
 
@@ -163,7 +163,7 @@ fn disabling_unused_diagnostics_keeps_the_other_lints() {
         let source = "trait Tick {\n    fn tick(&self) -> i32;\n}\n\n\
                       export fn run() {\n    let x = 1;\n    if let Some(x) = Some(2) {}\n    \
                       let b = 255 as u8;\n}\n";
-        let host = MapHost::empty();
+        let host = in_memory_host(&[]);
         let mut engine = Engine::new();
         engine.set_unused_diagnostics(false);
         engine.open_document("file:///work/lints.wado", source.to_string());

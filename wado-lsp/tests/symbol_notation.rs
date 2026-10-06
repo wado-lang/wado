@@ -2,20 +2,20 @@
 //! Wado symbol notation (`MODULE#SYMBOL`) to a definition location.
 
 use std::assert_matches;
-use wado_compiler::symbol_notation;
-use wado_lsp::test_support::MapHost;
+use wado_compiler::{InMemoryCompilerHost, symbol_notation};
+use wado_lsp::test_support::in_memory_host;
 use wado_lsp::{DefinitionResult, DocumentHighlight, Engine, ReferenceLocation, SymbolQueryError};
 
 const ENTRY_URI: &str = "file:///__wado_query__.wado";
 
 /// Build an engine over a synthetic entry that imports `module_spec`, serving
 /// `files` (plus the entry) through the host.
-fn engine_for(files: &[(&str, &str)], module_spec: &str) -> (Engine, MapHost) {
+fn engine_for(files: &[(&str, &str)], module_spec: &str) -> (Engine, InMemoryCompilerHost) {
     let entry_src = format!("use __q from \"{module_spec}\";\n");
     let mut all: Vec<(&str, &str)> = files.to_vec();
     let leaked: &'static str = Box::leak(entry_src.into_boxed_str());
     all.push(("/__wado_query__.wado", leaked));
-    let host = MapHost::with_files(&all);
+    let host = in_memory_host(&all);
     let mut engine = Engine::new();
     engine.open_document(ENTRY_URI, leaked.to_string());
     (engine, host)

@@ -1,7 +1,7 @@
 //! Common test utilities shared across test files
 //!
 //! This module provides shared utilities for:
-//! - In-memory compiler hosts (the filesystem one is `wado_host::StubHost`)
+//! - Compiler host setup (`in_memory_host`; the filesystem one is `wado_host::StubHost`)
 //! - Wasmtime engine configuration
 //! - WASI context setup
 //! - Test fixture parsing (__DATA__ sections)
@@ -29,7 +29,8 @@ use wasmtime_wasi_tls::{
 use wado_compiler::ast::TodoMark;
 use wado_compiler::world_registry::WorldSurface;
 use wado_compiler::{
-    CompileError, CompileFailure, CompilerHost, CompilerOptions, Diagnostic, OptLevel, SourceError,
+    CompileError, CompileFailure, CompilerHost, CompilerOptions, Diagnostic, InMemoryCompilerHost,
+    OptLevel,
 };
 use wado_host::timezone;
 pub use wado_host::tls_trust::install_default_crypto_provider;
@@ -37,87 +38,13 @@ pub use wado_host::{HostStubs, StubHost};
 use wado_lsp::host::install_dev_stdlib;
 use wado_lsp::install_stderr_trace_sink;
 
-/// A `CompilerHost` serving the given sources, keyed by the path the loader asks for.
-pub struct MapHost {
-    pub sources: indexmap::IndexMap<String, String>,
-    diagnostics: Mutex<Vec<Diagnostic>>,
-}
-
-impl MapHost {
-    pub fn new(sources: &[(&str, &str)]) -> Self {
-        install_stderr_trace_sink();
-        install_dev_stdlib();
-        Self {
-            sources: sources
-                .iter()
-                .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
-                .collect(),
-            diagnostics: Mutex::new(Vec::new()),
-        }
-    }
-
-    pub fn diagnostics(&self) -> Vec<Diagnostic> {
-        self.diagnostics.lock().unwrap().clone()
-    }
-}
-
-impl CompilerHost for MapHost {
-    fn load_source(
-        &self,
-        path: &str,
-    ) -> impl std::future::Future<Output = Result<Vec<u8>, SourceError>> + Send {
-        let result = self.sources.get(path).cloned();
-        let path = path.to_string();
-        async move {
-            match result {
-                Some(s) => Ok(s.into_bytes()),
-                None => Err(SourceError::NotFound { path }),
-            }
-        }
-    }
-
-    fn emit_diagnostic(&self, diagnostic: Diagnostic) {
-        self.diagnostics.lock().unwrap().push(diagnostic);
-    }
-}
-
-/// An in-memory `CompilerHost` for tests that don't need file loading
-pub struct InMemoryHost {
-    diagnostics: Mutex<Vec<Diagnostic>>,
-}
-
-impl InMemoryHost {
-    pub fn new() -> Self {
-        install_stderr_trace_sink();
-        install_dev_stdlib();
-        Self {
-            diagnostics: Mutex::new(Vec::new()),
-        }
-    }
-
-    pub fn diagnostics(&self) -> Vec<Diagnostic> {
-        self.diagnostics.lock().unwrap().clone()
-    }
-}
-
-impl Default for InMemoryHost {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl CompilerHost for InMemoryHost {
-    fn load_source(
-        &self,
-        path: &str,
-    ) -> impl std::future::Future<Output = Result<Vec<u8>, SourceError>> + Send {
-        let path = path.to_string();
-        async move { Err(SourceError::NotFound { path }) }
-    }
-
-    fn emit_diagnostic(&self, diagnostic: Diagnostic) {
-        self.diagnostics.lock().unwrap().push(diagnostic);
-    }
+/// An [`InMemoryCompilerHost`] serving `files`, set up as a binary would set
+/// up its own: an integration test links the compiler without `cfg(test)`, so
+/// nothing else hands it the stdlib.
+pub fn in_memory_host(files: &[(&str, &str)]) -> InMemoryCompilerHost {
+    install_stderr_trace_sink();
+    install_dev_stdlib();
+    InMemoryCompilerHost::with_files(files)
 }
 
 /// Convert a `Bail` + host diagnostics into a `CompileError` for test backward compat
@@ -950,7 +877,7 @@ pub fn cli_linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
 }
 
 /// What `host` reported, one `Code: message` line each.
-pub fn diagnostic_messages(host: &InMemoryHost) -> Vec<String> {
+pub fn diagnostic_messages(host: &InMemoryCompilerHost) -> Vec<String> {
     host.diagnostics()
         .into_iter()
         .map(|d| format!("{:?}: {}", d.code, d.message))
@@ -961,7 +888,7 @@ pub fn diagnostic_messages(host: &InMemoryHost) -> Vec<String> {
 /// effect check that runs after it. Both, because a form the elaborator
 /// accepts can still be rejected downstream.
 pub fn check_diagnostics(source: &str) -> Vec<String> {
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = runtime().block_on(wado_compiler::semantics::semantics(
         source,
         &host,
@@ -978,7 +905,7 @@ pub fn check_diagnostics(source: &str) -> Vec<String> {
 
 /// Compile source string using in-memory host
 pub fn compile_source(source: &str) -> Result<wado_compiler::CompileResult, CompileError> {
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     runtime()
         .block_on(wado_compiler::compile_with_host(
             source,
