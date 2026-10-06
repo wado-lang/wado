@@ -401,27 +401,24 @@ fn rewrite_everywhere(
 /// `i >= len(a)` and evaluate their operands in the same order, but wasmtime
 /// compiles a fill to a bulk operation and a loop around the store.
 fn try_fill_one_as_set(instr: &mut WirInstr) -> bool {
-    let WirInstr::ArrayFill { len, .. } = instr else {
-        return false;
-    };
-    if !matches!(len.as_ref(), WirInstr::I32Const(1)) {
-        return false;
-    }
     let WirInstr::ArrayFill {
         type_id,
         array,
         offset,
         value,
-        ..
-    } = std::mem::replace(instr, WirInstr::Nop)
+        len,
+    } = instr
     else {
-        unreachable!("matched as an ArrayFill above");
+        return false;
     };
+    if !matches!(len.as_ref(), WirInstr::I32Const(1)) {
+        return false;
+    }
     *instr = WirInstr::ArraySet {
-        type_id,
-        array,
-        index: offset,
-        value,
+        type_id: type_id.clone(),
+        array: std::mem::replace(array, Box::new(WirInstr::Nop)),
+        index: std::mem::replace(offset, Box::new(WirInstr::Nop)),
+        value: std::mem::replace(value, Box::new(WirInstr::Nop)),
     };
     true
 }
