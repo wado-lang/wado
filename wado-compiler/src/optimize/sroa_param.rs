@@ -584,7 +584,8 @@ fn transitive_reachable_writes(
             );
         }
         if let Some(body) = func.body.as_ref() {
-            for node in body.exprs.values() {
+            for e in reachable_exprs(body) {
+                let node = &body.exprs[e];
                 match &node.kind {
                     ExprKind::GlobalVarSet {
                         module_source,
