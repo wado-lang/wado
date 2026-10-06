@@ -344,6 +344,7 @@ impl ImplHeader {
     pub(super) fn ref_receiver(&self) -> Option<name::Receiver> {
         name::Receiver::ref_to(&self.target_id)
     }
+
     /// What a `&X` / `&mut X` target refers to, keyed as a value target is;
     /// `None` for any other target.
     pub(super) fn referent_key(&self, resolutions: &Resolutions) -> Option<ImplTargetKey> {
@@ -3004,14 +3005,19 @@ pub(super) fn written_type_source(ty: &ast::Type) -> String {
         ast::Type::NamespacedGeneric(ns) => {
             format!("{}::{}<{}>", ns.namespace, ns.name, list(&ns.args))
         }
-        ast::Type::Function(ft) => {
-            let m = if ft.is_mut { " mut" } else { "" };
-            format!(
-                "fn{m}({}) -> {}",
-                list(&ft.params),
-                written_type_source(&ft.return_type)
-            )
-        }
+        ast::Type::Function(ft) => name::display_fn_type(
+            ft.is_mut,
+            &ft.params
+                .iter()
+                .map(written_type_source)
+                .collect::<Vec<_>>(),
+            &written_type_source(&ft.return_type),
+            matches!(ft.return_type, ast::Type::Function(_)),
+            &ft.effects
+                .iter()
+                .map(|e| e.name.clone())
+                .collect::<Vec<_>>(),
+        ),
         ast::Type::Tuple(elems) => format!("[{}]", list(elems)),
         ast::Type::Reference(inner) => format!("&{}", written_type_source(inner)),
         ast::Type::MutReference(inner) => format!("&mut {}", written_type_source(inner)),

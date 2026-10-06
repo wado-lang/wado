@@ -7,6 +7,7 @@ use crate::tir::TypeTable;
 
 use super::Elaborator;
 use super::scope::{BinderInScope, ScopedBound};
+use super::trait_env;
 use super::types::{
     EnumInfo, FlagsInfo, GenericNewtypeInfo, ParamSlot, StructFieldInfo, VariantCaseData,
     VariantInfo,
@@ -320,15 +321,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     TUPLE_TYPE_NAME.to_string()
                 }
             }
-            Type::Function(func_type) => {
-                // Build function type string: "fn(T1, T2) -> R"
-                let param_strs: Vec<String> = func_type
-                    .params
-                    .iter()
-                    .map(|p| self.get_type_name(p))
-                    .collect();
-                let return_str = self.get_type_name(&func_type.return_type);
-                format!("fn({}) -> {}", param_strs.join(", "), return_str)
+            Type::Function(_) => {
+                trait_env::written_type_arg(ty, &self.tysys.resolutions).to_display()
             }
             _ => "Unknown".to_string(),
         }

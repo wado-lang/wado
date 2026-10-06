@@ -1642,9 +1642,9 @@ impl SolverBridge {
         }
     }
 
-    /// Every declaration of `data` as [`derive`] reads it: structs, plain
-    /// enums, flags and variants, then the unrestricted resources. One with a
-    /// member the lowering cannot express is left out.
+    /// Every declaration of `data` as [`derive`] reads it: the structs, plain
+    /// enums, flags and variants, and apart from them the unrestricted
+    /// resources. One with a member the lowering cannot express is left out.
     fn declarations(
         tysys: &TypeSystem,
         data: &DataDecls,
