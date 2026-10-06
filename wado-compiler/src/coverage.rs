@@ -743,6 +743,7 @@ impl AstVisitor for Planner {
                     self.block_of(region, block);
                 }
             }
+            Stmt::If(s) if is_contract_check(stmt) => self.statements(&s.then_block, None),
             Stmt::If(s) => {
                 self.visit_condition(&s.condition);
                 self.if_branches(s.id, s.span, &s.then_block, s.else_block.as_ref());
@@ -839,6 +840,7 @@ fn may_leave(expr: &Expr) -> bool {
 /// whose condition, scrutinee and guards cannot leave first.
 fn enters_choice(stmt: &Stmt) -> bool {
     let choice = match stmt {
+        Stmt::If(_) if is_contract_check(stmt) => return false,
         Stmt::If(s) => return !Leaves::find(|l| l.visit_condition(&s.condition)),
         Stmt::Match(m) => return !match_head_may_leave(m),
         Stmt::Expr(s) => &s.expr,
@@ -857,6 +859,19 @@ fn enters_choice(stmt: &Stmt) -> bool {
         Expr::Match(m) => !match_head_may_leave(m),
         _ => false,
     }
+}
+
+/// Whether `stmt` is `if builtin::contract_checks() { … }`. Its condition is a
+/// build constant, not a choice a run makes, so its body counts as part of the
+/// enclosing region: a test-world build runs it wherever that region runs.
+fn is_contract_check(stmt: &Stmt) -> bool {
+    let Stmt::If(s) = stmt else { return false };
+    let ast::Condition::Expr(Expr::Call(call)) = &s.condition else {
+        return false;
+    };
+    s.else_block.is_none()
+        && call.args.is_empty()
+        && matches!(&call.callee, Expr::Ident(ident) if ident.name == "builtin::contract_checks")
 }
 
 fn match_head_may_leave(m: &MatchExpr) -> bool {
@@ -1158,6 +1173,8 @@ pub fn render_plan(plan: &ModulePlan) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lexer::lex;
+    use crate::parser::Parser;
 
     /// `fn f` whose body derives from an `if` and its omitted `else`.
     fn plan() -> ModulePlan {
@@ -1224,6 +1241,24 @@ mod tests {
         let mut none = BTreeSet::new();
         plan.derive(&mut none);
         assert!(none.is_empty());
+    }
+
+    fn plan_source(source: &str) -> (ModulePlan, Sites) {
+        let lexed = lex(source);
+        assert!(lexed.errors.is_empty(), "lex error: {:?}", lexed.errors);
+        let module = Parser::new(lexed.tokens).parse_strict().expect("parse");
+        let (plan, sites, _) = plan_module(&ModuleSource::builtin(), &module);
+        (plan, sites)
+    }
+
+    #[test]
+    fn a_contract_check_is_no_branch() {
+        let (plan, sites) = plan_source(
+            "fn f(i: i32) {\n    if builtin::contract_checks() {\n        assert i > 0;\n    }\n}\n",
+        );
+        assert_eq!(plan.regions.len(), 1);
+        assert_eq!(plan.lines, vec![(2, 0), (3, 0)]);
+        assert!(sites.iter().all(|&(site, _, _)| site == ProbeSite::BlockStart));
     }
 
     #[test]

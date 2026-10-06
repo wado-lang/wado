@@ -23,7 +23,7 @@ use { ReflectTemplate } from "core:prelude/traits.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { Option, Result } from "core:prelude/types.wado";
 use { Slice } from "core:prelude/slice.wado";
-use { Array, seq_eq, seq_cmp, check_index_contract } from "core:prelude/array.wado";
+use { Array, seq_eq, seq_cmp } from "core:prelude/array.wado";
 use { List } from "core:prelude/list.wado";
 use { ByteSlice, ByteList, ByteArray, AsByteSlice } from "core:prelude/bytes.wado";
 
@@ -531,7 +531,9 @@ impl String {
     /// unspecified: a byte of the backing array past `len()`, or a trap.
     #[compiler_item("string_get_byte_unchecked")]
     pub fn get_byte_unchecked(&self, index: i32) -> u8 {
-        check_index_contract(index, self.used);
+        if builtin::contract_checks() {
+            assert 0 <= index < self.used, "index out of bounds";
+        }
         return self.repr[index];
     }
 
@@ -544,7 +546,9 @@ impl String {
     /// Breaking it is a contract violation, and the behavior is unconstrained.
     #[compiler_item("string_set_byte_unchecked")]
     pub fn set_byte_unchecked(&mut self, index: i32, value: u8) {
-        check_index_contract(index, self.used);
+        if builtin::contract_checks() {
+            assert 0 <= index < self.used, "index out of bounds";
+        }
         self.repr[index] = value;
     }
 
@@ -691,9 +695,6 @@ impl String {
     ///
     /// Breaking it is a contract violation, and the behavior is unconstrained.
     pub fn push_str_range_unchecked<S: AsStrSlice>(&mut self, s: S, start: i32, end: i32) {
-        if end <= start {
-            return;
-        }
         self.push_str(s.as_str_slice().slice_unchecked(start, end));
     }
 
@@ -1377,7 +1378,9 @@ impl StrSlice {
     /// Any other `index` is a contract violation, and the result is
     /// unspecified: a byte of the backing array outside the view, or a trap.
     pub fn get_byte_unchecked(&self, index: i32) -> u8 {
-        check_index_contract(index, self.len());
+        if builtin::contract_checks() {
+            assert 0 <= index < self.len(), "index out of bounds";
+        }
         return self.repr[self.start + index];
     }
 
@@ -1797,6 +1800,7 @@ impl StrSlice {
             return self.to_string();
         }
         let mut result = String::with_capacity(len);
+        let mut run_start = 0;
         let mut pos = 0;
         let mut replacements = 0;
         let limit = len - from_len;
@@ -1804,19 +1808,19 @@ impl StrSlice {
             if count >= 0 && replacements >= count {
                 break;
             }
+            // A match starts with the pattern's lead byte, never inside a
+            // character, so each run between matches is whole characters.
             if bytes_match_at(self.repr, self.start + pos, pat.repr, pat.start, from_len) {
+                result.push_str(self.slice_unchecked(run_start, pos));
                 result.push_str(to);
                 pos += from_len;
+                run_start = pos;
                 replacements += 1;
             } else {
-                let char_len = utf8_seq_len(self.get_byte_unchecked(pos));
-                result.push_str(self.slice_unchecked(pos, pos + char_len));
-                pos += char_len;
+                pos += 1;
             }
         }
-        if pos < len {
-            result.push_str(self.slice_unchecked(pos, len));
-        }
+        result.push_str(self.slice_unchecked(run_start, len));
         return result;
     }
 }
@@ -2044,8 +2048,7 @@ impl AsStrSlice for String {
     }
 
     fn get_byte_unchecked(&self, index: i32) -> u8 {
-        check_index_contract(index, self.used);
-        return self.repr[index];
+        return String::get_byte_unchecked(self, index);
     }
 
     /// Already a `String`: the default would rebuild one byte by byte, which a

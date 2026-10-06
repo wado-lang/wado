@@ -220,13 +220,13 @@ pub struct CompileResult {
 
 /// Report a compilation error the pipeline has no span for — it names the
 /// offending declaration instead.
-pub(crate) fn report_without_span<H: compiler_host::CompilerHost>(
+pub(crate) fn report_without_span<H: CompilerHost>(
     logger: &Logger<'_, H>,
-    code: compiler_host::Code,
+    code: Code,
     message: String,
 ) {
-    let _ = logger.error(compiler_host::Diagnostic {
-        severity: compiler_host::Severity::Error,
+    let _ = logger.error(Diagnostic {
+        severity: Severity::Error,
         code,
         message,
         span: None,
@@ -247,9 +247,9 @@ fn panic_on_invalid_artifact<H: CompilerHost>(host: &H, invalid: &InvalidArtifac
 }
 
 /// [`report_without_span`], for a caller that stops at the first such error.
-pub(crate) fn bail_with<H: compiler_host::CompilerHost>(
+pub(crate) fn bail_with<H: CompilerHost>(
     logger: &Logger<'_, H>,
-    code: compiler_host::Code,
+    code: Code,
     message: String,
 ) -> Bail {
     report_without_span(logger, code, message);
@@ -258,7 +258,7 @@ pub(crate) fn bail_with<H: compiler_host::CompilerHost>(
 
 /// The `-f` flags for `package`, whose target world must already be set: the
 /// test world checks contracts by default.
-fn parse_codegen_flags<H: compiler_host::CompilerHost>(
+fn parse_codegen_flags<H: CompilerHost>(
     flags: &[String],
     opt_level: OptLevel,
     package: &Package,

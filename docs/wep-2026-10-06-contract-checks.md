@@ -40,21 +40,27 @@ is for. It already pays for that with the `debug` allocator.
 
 ### `builtin::contract_checks()`
 
-`builtin::contract_checks()` answers whether the build checks contracts. The
-compiler replaces each call with `true` or `false` before NIR. Where checks
-are off, it deletes an `if builtin::contract_checks() { … }` statement
-outright, so a disabled check costs nothing at any optimization level. Folding
-the condition alone was not enough: the inliner sized the `if false` body
-before any pass pruned it, and `Formatter::prepare_int_write` stopped being
-inlined at `-O2`.
-
-A function checks its contract with it:
+`builtin::contract_checks()` answers whether the build checks contracts. A
+function checks its contract with it, and this is the only shape it takes: the
+whole condition of an `if` with no `else`.
 
 ```text
 if builtin::contract_checks() {
     assert 0 <= index < self.len(), "index out of bounds";
 }
 ```
+
+Before NIR, the compiler keeps such an `if` where checks are on and deletes it
+outright where they are off, so a disabled check costs nothing at any
+optimization level. Folding the condition to `false` was not enough: the
+inliner sized the `if false` body before any pass pruned it, and
+`Formatter::prepare_int_write` stopped being inlined at `-O2`. For the same
+reason each site writes its check out rather than calling a shared helper: the
+call to a helper a disabled check left empty would remain.
+
+Coverage counts the body as part of the enclosing region, not as a branch: the
+condition is a build constant, so the path that skips the body never runs in a
+test-world build.
 
 It is the mechanism, not a stopgap. A contract syntax, once one is designed,
 lowers to it.

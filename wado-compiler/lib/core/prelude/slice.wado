@@ -20,7 +20,7 @@ use {
 use { IterMap, IterFilter, IterEnumerate, IterTake, IterSkip, IterChain, IterZip } from "core:prelude/traits.wado";
 use { Option } from "core:prelude/types.wado";
 use { List } from "core:prelude/list.wado";
-use { write_seq_inspect, seq_eq, seq_cmp, check_index_contract } from "core:prelude/array.wado";
+use { write_seq_inspect, seq_eq, seq_cmp } from "core:prelude/array.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
 use { panic } from "core:rt";
@@ -99,7 +99,9 @@ impl<T> Slice<T> {
     /// anchor for `FieldSchema::lookup`, as `len` is for byte length.
     #[compiler_item("byte_slice_get_unchecked")]
     pub fn get_unchecked(&self, index: i32) -> T {
-        check_index_contract(index, self.end - self.start);
+        if builtin::contract_checks() {
+            assert 0 <= index < self.end - self.start, "index out of bounds";
+        }
         return builtin::array_get_value(self.repr, self.start + index);
     }
 
@@ -169,8 +171,7 @@ impl<T> Sequence for Slice<T> {
     }
 
     fn get_unchecked(&self, index: i32) -> T {
-        check_index_contract(index, self.end - self.start);
-        return builtin::array_get_value(self.repr, self.start + index);
+        return Slice::get_unchecked(self, index);
     }
 }
 

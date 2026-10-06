@@ -24,7 +24,7 @@ use {
 use { Option } from "core:prelude/types.wado";
 use { String, AsStrSlice } from "core:prelude/string.wado";
 use { Formatter } from "core:prelude/format.wado";
-use { write_seq_inspect, seq_eq, seq_cmp, check_index_contract } from "core:prelude/array.wado";
+use { write_seq_inspect, seq_eq, seq_cmp } from "core:prelude/array.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
 use {
     AsSlice,
@@ -377,7 +377,9 @@ impl<T> Sequence for List<T> {
     }
 
     fn get_unchecked(&self, index: i32) -> T {
-        check_index_contract(index, self.used);
+        if builtin::contract_checks() {
+            assert 0 <= index < self.used, "index out of bounds";
+        }
         return self.repr[index];
     }
 }

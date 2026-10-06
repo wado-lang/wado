@@ -13,7 +13,7 @@ use crate::OptLevel;
 /// Unlike a plain `#[derive(Default)]`, the default here is *not* uniformly
 /// `false`: each field's default encodes the compiler's current preferred
 /// codegen strategy. `-f <flag>` forces it on and `-f no-<flag>` forces it
-/// off, so an empty flag set reproduces [`CodegenFlags::default`].
+/// off, so an empty flag set reproduces [`CodegenFlags::for_build`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CodegenFlags {
     /// Emit `metadata.code.branch_hint` entries (the default);
@@ -27,7 +27,7 @@ pub struct CodegenFlags {
     /// power-assert diagnostic. The check and trap always stay; only the
     /// *message* goes, taking with it the `Formatter` / `Inspect` / `String`
     /// stack that even a `list[i]` drags in. Off at `-O0`…`-O3`, **on at `-Os`**
-    /// (see [`CodegenFlags::for_opt_level`]).
+    /// (see [`CodegenFlags::for_build`]).
     pub bare_asserts: bool,
 
     /// Emit native Wasm wide-arithmetic (`i64.mul_wide_u/s`, `i64.add128`,
@@ -36,8 +36,8 @@ pub struct CodegenFlags {
     /// V8, which lacks the proposal.
     pub wide_arithmetic: bool,
 
-    /// Check the contracts of `_unchecked` functions: `builtin::contract_checks()`
-    /// folds to this (`lower::contract_checks`). On in the test world and at
+    /// Check the contracts of `_unchecked` functions: `lower::contract_checks`
+    /// keeps each `if builtin::contract_checks()` or deletes it. On in the test world and at
     /// `-O0`, off otherwise (see [`CodegenFlags::for_build`]).
     pub contract_checks: bool,
 }
