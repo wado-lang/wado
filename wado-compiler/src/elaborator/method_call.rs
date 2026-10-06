@@ -2444,7 +2444,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         let own_slots = method
             .and_then(|def| self.tysys.signatures.method_sig(def))
-            .map(super::sig::MethodSig::own_type_param_ids)
+            .map(MethodSig::own_type_param_ids)
             .unwrap_or_default();
         let subst_ctx = SubstitutionContext::new().bind(&own_slots, method_type_args);
         if subst_ctx.is_empty() {
