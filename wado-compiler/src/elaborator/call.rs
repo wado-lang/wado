@@ -1936,7 +1936,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .collect()
                     };
                     self.recoerce_literal_args(&call.args, &mut args, &checked);
-                    if !combined_type_args.is_empty()
+                    if func_ref.monomorph_info.is_some()
                         && self.report_value_for_reference(
                             &param_types,
                             &call.args,

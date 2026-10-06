@@ -1897,7 +1897,6 @@ impl SolverBridge {
         scope: &TypeLookup,
         type_id: TypeId,
         asked: &FqTraitName,
-<<<<<<< HEAD
     ) -> Option<Vec<OwedBody>> {
         let q = match self.question(tysys, ctx, scope, type_id, asked) {
             Ok(q) => q,
@@ -1918,19 +1917,6 @@ impl SolverBridge {
                 "the lowering states no `{}: {asked}`",
                 tysys.type_table.borrow().type_name(type_id)
             ),
-||||||| 462c65c63
-    ) -> Option<Option<Vec<OwedBody>>> {
-        let q = self.question(tysys, ctx, scope, type_id, asked)?;
-        let Some(held) = holds_with_args(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args)
-        else {
-            return Some(None);
-=======
-    ) -> Option<Verdict> {
-        let q = self.question(tysys, ctx, scope, type_id, asked)?;
-        let Some(held) = holds_with_args(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args)
-        else {
-            return Some(Verdict::Fails);
->>>>>>> origin/main
         };
         let held = holds_with_args(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args)?;
         let owed = owed(&self.program, &q.env, q.module, held.requests);
@@ -1982,13 +1968,7 @@ impl SolverBridge {
                 }
             })
             .collect();
-<<<<<<< HEAD
         Some(bodies)
-||||||| 462c65c63
-        Some(Some(bodies))
-=======
-        Some(Verdict::Holds(bodies))
->>>>>>> origin/main
     }
 
     /// Each anonymous shape `id` is built over, with its lowering: what a
@@ -2270,13 +2250,6 @@ fn place_binder<'a>(
                 .map(|i| u32::try_from(i).expect("fewer than 2^32 params"))
         }
     }
-}
-
-/// The solver's answer to a question the lowering states.
-pub(super) enum Verdict {
-    Fails,
-    /// Holds, owing these bodies.
-    Holds(Vec<OwedBody>),
 }
 
 /// A body an answer owes, keyed as synthesis keys the request for it.

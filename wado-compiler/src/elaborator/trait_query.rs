@@ -21,12 +21,7 @@ use super::scope::{
     BinderInScope, BoundSelf, ElaboratedBound, FamilySite, Scope, ScopedBound, TraitCheckFrame,
     trait_params_from_impl,
 };
-<<<<<<< HEAD
 use super::sem::decls::{Owed, OwedBounds, PendingBounds};
-||||||| 462c65c63
-=======
-use super::solver_bridge::Verdict;
->>>>>>> origin/main
 use super::trait_env::{ImplMethodHeader, InheritedBound, ViaClause};
 use super::type_resolution::ParamSpace;
 use super::types::{
@@ -695,42 +690,6 @@ impl TypeSystem {
         // A binder-headed name declares nothing, so no impl answers it.
         if trait_.canonical().is_none() {
             return false;
-<<<<<<< HEAD
-||||||| 462c65c63
-        };
-        let wanted = trait_.args();
-        // The answer is the solver's wherever the lowering states the
-        // question, and so are the bodies it owes (WEP 2026-09-01).
-        if let Some(bridge) = self.solver.as_ref()
-            && let Some(answer) = bridge
-                .borrow()
-                .answer_owing(self, ctx, scope, type_id, trait_)
-        {
-            let holds = answer.is_some();
-            let mut table = self.type_table.borrow_mut();
-            for body in answer.into_iter().flatten() {
-                table.record_bound_driven_synth_request(&body.head, &body.module, &body.trait_);
-            }
-            return holds;
-=======
-        };
-        let wanted = trait_.args();
-        // The answer is the solver's wherever the lowering states the
-        // question, and so are the bodies it owes (WEP 2026-09-01).
-        if let Some(bridge) = self.solver.as_ref()
-            && let Some(verdict) = bridge
-                .borrow()
-                .answer_owing(self, ctx, scope, type_id, trait_)
-        {
-            let Verdict::Holds(owed) = verdict else {
-                return false;
-            };
-            let mut table = self.type_table.borrow_mut();
-            for body in owed {
-                table.record_bound_driven_synth_request(&body.head, &body.module, &body.trait_);
-            }
-            return true;
->>>>>>> origin/main
         }
         // The answer is the solver's, and so are the bodies it owes
         // (WEP 2026-09-01).
