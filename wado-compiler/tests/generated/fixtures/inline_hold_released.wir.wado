@@ -186,13 +186,11 @@ fn "inline_hold_released.wado/lookup"(t, kind) {
     } else {
         0;
     }) {
-        $licm_arith_5 = local.tee self_7(t.defaults).used;
-        if @unlikely(kind >= $licm_arith_5) {
+        return $licm_arith_5 = local.tee self_7(t.defaults).used, if @unlikely(kind >= $licm_arith_5) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(kind, $licm_arith_5);
             unreachable;
-        }
-        return builtin::array_get_value<i32>(self_7.repr, kind);
+        }, builtin::array_get_value<i32>(self_7.repr, kind);
     }
     return -1;
 }

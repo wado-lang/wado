@@ -152,6 +152,8 @@ fn "effect_interface_default_body_calls.wado/run"() with Stdout, Calc {
     let is_negative_35: bool;
     let x_39: i64;
     let $local_1_89: ref null "effect_interface_default_body_calls.wado//$Dispatch_Calc";
+    let $licm_end_163: i32;
+    let $licm_repr_164: ref "Array<core:prelude/string.wado/String>";
     let self_166: ref "core:prelude//List<core:prelude/string.wado/String>";
     let rx_210: i32;
     let tx_211: i32;
@@ -289,16 +291,20 @@ fn "effect_interface_default_body_calls.wado/run"() with Stdout, Calc {
     $local_3_27 = local.tee self_166(global:effect_interface_default_body_calls.wado::TRACE).used;
     $sroa_$iter_0_repr_216 = self_166.repr;
     is_negative_35 = 0;
+    $licm_end_163 = $local_3_27;
+    $licm_repr_164 = $sroa_$iter_0_repr_216;
     b12: block {
         l13: loop {
-            break_if b12 is_negative_35 >= $local_3_27;
-            $av_257 = local.tee $local_3_3(builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$iter_0_repr_216, is_negative_35)).used;
+            break_if b12 is_negative_35 >= $licm_end_163;
+            $av_257 = local.tee $local_3_3(builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_164, is_negative_35)).used;
             $local_3_3 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_23: ref Array<u8>; $array_clone_src_23 = $local_3_3.repr; let $array_clone_dst_24: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_24(builtin::array_new<u8>($av_257)), 0, $array_clone_src_23, 0, $av_257); $array_clone_dst_24, used: $av_257 };
             is_negative_35 = is_negative_35 + 1;
             rx_210 = builtin::i32_wrap_i64(local.tee x_39("wasi/stream-new"()));
             tx_211 = builtin::i32_wrap_i64(x_39 >> 32_i64);
             rx_210 = "effect_interface_default_body_calls.wado/$cm_binding__Stdout_write_via_stream"(rx_210);
             "core:rt/write_string_to_stream$spec0"(tx_211, $local_3_3.repr, $av_257);
+            $licm_end_163 = $local_3_27;
+            $licm_repr_164 = $sroa_$iter_0_repr_216;
             "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_210);
             continue l13;
         };

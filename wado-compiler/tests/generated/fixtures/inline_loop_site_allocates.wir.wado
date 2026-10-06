@@ -135,11 +135,14 @@ fn "inline_loop_site_allocates.wado/store_cell"(out, i, b) {
 fn "inline_loop_site_allocates.wado/fill"(bytes) {
     let $load_0: i32;
     let out: ref "Array<inline_loop_site_allocates.wado/Cell>";
+    let $v1: i32;
+    let $licm_used_17: i32;
     let $licm_repr_18: ref Array<u8>;
     let current: i32;
     let $sroa_$iter_0_start_30: i32;
     out = builtin::array_new<ref "inline_loop_site_allocates.wado//Cell">(local.tee $load_0(bytes.used));
     $sroa_$iter_0_start_30 = 0;
+    $licm_used_17 = $load_0;
     $licm_repr_18 = bytes.repr;
     b4: block {
         l5: loop {
@@ -161,10 +164,12 @@ fn "inline_loop_site_allocates.wado/fill"(bytes) {
                 $sroa_$iter_0_start_30 = current + 1;
                 break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_scalar_1;
             };
-            "inline_loop_site_allocates.wado/store_cell"(out, current, if @unlikely(current >= $load_0) {
+            "inline_loop_site_allocates.wado/store_cell"(out, current, $v1 = $licm_used_17; if @unlikely(current >= $v1) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(current, $load_0);
+                "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(current, $v1);
                 unreachable;
+                $licm_used_17 = bytes.used;
+                $licm_repr_18 = bytes.repr;
             }; builtin::array_get_value<u8>($licm_repr_18, current));
             continue l5;
         };

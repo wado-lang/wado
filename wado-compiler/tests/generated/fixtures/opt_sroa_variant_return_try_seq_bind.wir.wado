@@ -845,19 +845,20 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
 fn "opt_sroa_variant_return_try_seq_bind.wado/opt_sroa_variant_return_try_seq_bind.wado/Cursor::step"(self) {
     let $load_0: i32;
     let $load_1: ref "core:prelude//List<core:prelude/string.wado/String>";
-    let $load_2: i32;
     let v_3: ref "core:prelude/string.wado//String";
-    if local.tee $load_0(self.pos) >= local.tee $load_2(local.tee $load_1(self.data).used) {
+    let $v1: i32;
+    if local.tee $load_0(self.pos) >= local.tee $load_1(self.data).used {
         return 0, ref.null none, ref.null none;
     }
-    if @unlikely($load_0 >= $load_2) {
+    $v1 = $load_1.used;
+    if @unlikely($load_0 >= $v1) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($load_0, $load_2);
+        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($load_0, $v1);
         unreachable;
     }
-    $load_2 = local.tee v_3(builtin::array_get_value<ref "core:prelude/string.wado//String">($load_1.repr, $load_0)).used;
-    v_3 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_3.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_2)), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 };
-    if $load_2 == 0 {
+    $v1 = local.tee v_3(builtin::array_get_value<ref "core:prelude/string.wado//String">($load_1.repr, $load_0)).used;
+    v_3 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_3.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($v1)), 0, $array_clone_src_1, 0, $v1); $array_clone_dst_2, used: $v1 };
+    if $v1 == 0 {
         return 1, ref.null none, struct.new "opt_sroa_variant_return_try_seq_bind.wado//StepErr" { 0 };
     }
     self.pos = $load_0 + 1;

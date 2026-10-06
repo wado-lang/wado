@@ -1823,21 +1823,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prel
 }
 
 fn "spec_effects_handler_impl.wado/spec_effects_handler_impl.wado/$Closure_0::$call"(self) {
-    let $load_1: i32;
-    let $load_2: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let $load_2: i32;
     let self_1: ref "spec_effects_handler_impl.wado//MockStdin";
     let v: ref "core:prelude/string.wado//String";
+    let self_4: ref "core:prelude//List<core:prelude/string.wado/String>";
     let $v1: i32;
-    $load_1 = local.tee self_1(self.$capture_0).index;
-    $v1 = local.tee $load_2(self_1.responses).used;
-    if @unlikely($load_1 >= $v1) {
+    self_4 = local.tee self_1(self.$capture_0).responses;
+    $load_2 = self_1.index;
+    $v1 = self_4.used;
+    if @unlikely($load_2 >= $v1) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($load_1, $v1);
+        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($load_2, $v1);
         unreachable;
     }
-    $v1 = local.tee v(builtin::array_get_value<ref "core:prelude/string.wado//String">($load_2.repr, $load_1)).used;
+    $v1 = local.tee v(builtin::array_get_value<ref "core:prelude/string.wado//String">(self_4.repr, $load_2)).used;
     v = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($v1)), 0, $array_clone_src_1, 0, $v1); $array_clone_dst_2, used: $v1 };
-    self_1.index = $load_1 + 1;
+    self_1.index = $load_2 + 1;
     return v;
 }
 

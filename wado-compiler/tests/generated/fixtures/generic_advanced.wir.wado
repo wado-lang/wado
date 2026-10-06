@@ -310,7 +310,13 @@ fn "generic_advanced.wado/partition"(arr, low, high, cmp) {
     let pivot: ref "core:prelude/types.wado//Box<i32>";
     let i: i32;
     let tmp_7: i32;
+    let $v1_17: i32;
+    let $v1_23: i32;
     let value_31: i32;
+    let $v1_34: i32;
+    let $v1_40: i32;
+    let $v1_54: i32;
+    let self_105: ref Array<i32>;
     pivot = struct.new "core:prelude/types.wado//Box<i32>" { value: $load_0 = arr.used; if @unlikely(high >= $load_0) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(high, $load_0);
@@ -322,34 +328,49 @@ fn "generic_advanced.wado/partition"(arr, low, high, cmp) {
             break_if b9 low >= high;
             if block -> bool {
                 let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(cmp)).env, struct.new "core:prelude/types.wado//Box<i32>" { value: if @unlikely(low >= $load_0) {
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(cmp)).env, struct.new "core:prelude/types.wado//Box<i32>" { value: $v1_17 = $load_0; if @unlikely(low >= $v1_17) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(low, $load_0);
+                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(low, $v1_17);
                     unreachable;
-                }; builtin::array_get_value<i32>($load_1, low) }, pivot);
+                    $load_0 = arr.used;
+                    $load_1 = arr.repr;
+                }; builtin::array_get_value<i32>(local.tee self_105($load_1), low) }, pivot);
             } {
-                if @unlikely(local.tee i(i + 1) >= $load_0) {
+                i = i + 1;
+                $v1_23 = $load_0;
+                if @unlikely(i >= $v1_23) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i, $load_0);
+                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i, $v1_23);
                     unreachable;
+                    $load_0 = arr.used;
+                    $load_1 = arr.repr;
                 }
                 tmp_7 = builtin::array_get_value<i32>($load_1, i);
-                if @unlikely(low >= $load_0) {
+                $v1_40 = $load_0;
+                if @unlikely(low >= $v1_40) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(low, $load_0);
+                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(low, $v1_40);
                     unreachable;
+                    $load_0 = arr.used;
+                    $load_1 = arr.repr;
                 }
                 value_31 = builtin::array_get_value<i32>($load_1, low);
-                if @unlikely(((0 <= i) & (i < $load_0)) == 0) {
+                $v1_34 = $load_0;
+                if @unlikely(((0 <= i) & (i < $v1_34)) == 0) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0"(i, $load_0);
+                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0"(i, $v1_34);
                     unreachable;
+                    $load_0 = arr.used;
+                    $load_1 = arr.repr;
                 }
                 builtin::array_set<i32>($load_1, i, value_31);
-                if @unlikely(((0 <= low) & (low < $load_0)) == 0) {
+                $v1_54 = $load_0;
+                if @unlikely(((0 <= low) & (low < $v1_54)) == 0) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0"(low, $load_0);
+                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0"(low, $v1_54);
                     unreachable;
+                    $load_0 = arr.used;
+                    $load_1 = arr.repr;
                 }
                 builtin::array_set<i32>($load_1, low, tmp_7);
             }
@@ -357,33 +378,33 @@ fn "generic_advanced.wado/partition"(arr, low, high, cmp) {
             continue l10;
         };
     };
+    $v1_54 = i + 1;
+    $v1_34 = arr.used;
+    if @unlikely($v1_54 >= $v1_34) {
+        cold_path;
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($v1_54, $v1_34);
+        unreachable;
+    }
+    $v1_54 = builtin::array_get_value<i32>(local.tee self_105(arr.repr), $v1_54);
     value_31 = i + 1;
-    tmp_7 = arr.used;
-    if @unlikely(value_31 >= tmp_7) {
+    if @unlikely(high >= $v1_34) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(value_31, tmp_7);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(high, $v1_34);
         unreachable;
     }
-    value_31 = builtin::array_get_value<i32>(local.tee $load_1(arr.repr), value_31);
-    $load_0 = i + 1;
-    if @unlikely(high >= tmp_7) {
+    $v1_40 = builtin::array_get_value<i32>(self_105, high);
+    if @unlikely(((0 <= value_31) & (value_31 < $v1_34)) == 0) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(high, tmp_7);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0"(value_31, $v1_34);
         unreachable;
     }
-    low = builtin::array_get_value<i32>($load_1, high);
-    if @unlikely(((0 <= $load_0) & ($load_0 < tmp_7)) == 0) {
+    builtin::array_set<i32>(self_105, value_31, $v1_40);
+    if @unlikely(((0 <= high) & (high < $v1_34)) == 0) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0"($load_0, tmp_7);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0"(high, $v1_34);
         unreachable;
     }
-    builtin::array_set<i32>($load_1, $load_0, low);
-    if @unlikely(((0 <= high) & (high < tmp_7)) == 0) {
-        cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0"(high, tmp_7);
-        unreachable;
-    }
-    builtin::array_set<i32>($load_1, high, value_31);
+    builtin::array_set<i32>(self_105, high, $v1_54);
     return i + 1;
 }
 

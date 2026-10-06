@@ -100,6 +100,7 @@ global global:core:prelude/list.wado::$const_obj_15: ref Array<u8> = array.new_f
 
 fn "slot_temp_sroa.wado/find"(m, k) {
     let i: i32;
+    let $v1: i32;
     let $licm_used_10: i32;
     let $licm_repr_11: ref Array<i32>;
     i = 0;
@@ -108,7 +109,13 @@ fn "slot_temp_sroa.wado/find"(m, k) {
     b0: block {
         l1: loop {
             break_if b0 i >= $licm_used_10;
-            if builtin::array_get_value<i32>($licm_repr_11, i) == k {
+            if $v1 = $licm_used_10; if @unlikely(i >= $v1) {
+                cold_path;
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i, $v1);
+                unreachable;
+                $licm_used_10 = m.used;
+                $licm_repr_11 = m.repr;
+            }; builtin::array_get_value<i32>($licm_repr_11, i) == k {
                 return i;
             }
             i = i + 1;
@@ -167,9 +174,9 @@ fn "slot_temp_sroa.wado/run"() with Stdout {
     m = struct.new "core:prelude//List<i32>" { repr: local.tee elements(array.new_fixed<i32>(black_box(10), 20, 30)), used: builtin::array_len(elements) };
     total = 0;
     j = 0;
-    b7: block {
-        l8: loop {
-            break_if b7 j >= 3;
+    b8: block {
+        l9: loop {
+            break_if b8 j >= 3;
             let $mv$$match_7$0: i32;
             let $mv$$match_7$1: i32;
             let $mv$$match_7$2: ref null "core:prelude/string.wado//String";
@@ -179,7 +186,7 @@ fn "slot_temp_sroa.wado/run"() with Stdout {
             } else {
             }
             j = j + 1;
-            continue l8;
+            continue l9;
         };
     };
     multivalue_bind [$mv$$match_7$1, $mv$$match_7$0, $mv$$match_7$2] = "slot_temp_sroa.wado/outer$spec0"(m);
@@ -251,19 +258,26 @@ fn "slot_temp_sroa.wado/outer$spec0"(m) {
 
 fn "slot_temp_sroa.wado/find$spec0"(m) {
     let i: i32;
+    let $v1: i32;
     let $licm_used_10: i32;
     let $licm_repr_11: ref Array<i32>;
     i = 0;
     $licm_used_10 = m.used;
     $licm_repr_11 = m.repr;
-    b15: block {
-        l16: loop {
-            break_if b15 i >= $licm_used_10;
-            if builtin::array_get_value<i32>($licm_repr_11, i) == 99 {
+    b16: block {
+        l17: loop {
+            break_if b16 i >= $licm_used_10;
+            if $v1 = $licm_used_10; if @unlikely(i >= $v1) {
+                cold_path;
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i, $v1);
+                unreachable;
+                $licm_used_10 = m.used;
+                $licm_repr_11 = m.repr;
+            }; builtin::array_get_value<i32>($licm_repr_11, i) == 99 {
                 return i;
             }
             i = i + 1;
-            continue l16;
+            continue l17;
         };
     };
     return -1;
@@ -274,16 +288,16 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     let pair: i32;
     let tens: i32;
     digit_count = offset + digit_count;
-    b18: block {
-        l19: loop {
-            break_if b18 (digit_count - offset) < 2;
+    b20: block {
+        l21: loop {
+            break_if b20 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
             builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
             digit_count = digit_count - 2;
             val = q;
-            continue l19;
+            continue l21;
         };
     };
     if digit_count > offset {
@@ -386,17 +400,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b42: block {
-        l43: loop {
-            break_if b42 i >= $mv$data$end;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b44: block {
+        l45: loop {
+            break_if b44 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l43;
+            continue l45;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l45: loop {
+        l47: loop {
             ptr_15 = ptr_13 + i;
             count_16 = $mv$data$end - i;
             if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
@@ -426,7 +440,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return count_16;
             }
-            continue l45;
+            continue l47;
         };
     };
 }

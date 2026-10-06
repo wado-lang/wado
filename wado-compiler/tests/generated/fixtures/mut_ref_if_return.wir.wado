@@ -121,19 +121,19 @@ global global:mut_ref_if_return.wado::$const_obj_33: ref Array<u8> = array.new_f
 global global:mut_ref_if_return.wado::$const_obj_35: ref Array<u8> = array.new_fixed<u8>(112, 97, 114, 115, 101, 95, 114, 111, 111, 116);
 
 fn "mut_ref_if_return.wado/parse_item"(p) {
-    let $load_1: ref "core:prelude//List<mut_ref_if_return.wado/Token>";
     let $qm_v_2: ref "mut_ref_if_return.wado//NodeA";
+    let self_7: ref "core:prelude//List<mut_ref_if_return.wado/Token>";
     let index_8: i32;
     let $v1: i32;
     let $qm_v_14: ref "mut_ref_if_return.wado//Token";
     let $qm_e_15: ref "core:prelude/string.wado//String";
     let $sroa_slot_19: ref null "mut_ref_if_return.wado//NodeA";
     let $sroa_slot_20: ref null "core:prelude/string.wado//String";
-    if local.tee index_8(index_8 = p.pos; $v1 = local.tee $load_1(p.tokens).used; if @unlikely(index_8 >= $v1) {
+    if local.tee index_8(self_7 = p.tokens; index_8 = p.pos; $v1 = self_7.used; if @unlikely(index_8 >= $v1) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<mut_ref_if_return.wado/Token>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_8, $v1);
         unreachable;
-    }; builtin::array_get_value<ref "mut_ref_if_return.wado//Token">($load_1.repr, index_8).kind) == 1 {
+    }; builtin::array_get_value<ref "mut_ref_if_return.wado//Token">(self_7.repr, index_8).kind) == 1 {
         index_8 = 0;
         $sroa_slot_19 = ref.null none;
         $sroa_slot_20 = ref.null none;
@@ -172,17 +172,17 @@ fn "mut_ref_if_return.wado/parse_item"(p) {
 }
 
 fn "mut_ref_if_return.wado/parse_root"(p) {
-    let $load_1: ref "core:prelude//List<mut_ref_if_return.wado/Token>";
     let $qm_e: ref "core:prelude/string.wado//String";
+    let self_12: ref "core:prelude//List<mut_ref_if_return.wado/Token>";
     let index_13: i32;
     let $v1: i32;
     b6: block {
         l7: loop {
-            break_if b6 index_13 = p.pos; $v1 = local.tee $load_1(p.tokens).used; if @unlikely(index_13 >= $v1) {
+            break_if b6 self_12 = p.tokens; index_13 = p.pos; $v1 = self_12.used; if @unlikely(index_13 >= $v1) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<mut_ref_if_return.wado/Token>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_13, $v1);
                 unreachable;
-            }; builtin::array_get_value<ref "mut_ref_if_return.wado//Token">($load_1.repr, index_13).kind != 1;
+            }; builtin::array_get_value<ref "mut_ref_if_return.wado//Token">(self_12.repr, index_13).kind != 1;
             let $mv$$vr_10$0: i32;
             let $mv$$vr_10$1: ref null "mut_ref_if_return.wado//NodeA";
             let $mv$$vr_10$2: ref null "core:prelude/string.wado//String";
@@ -558,23 +558,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "mut_ref_if_return.wado/mut_ref_if_return.wado/Parser::expect"(self) {
-    let $load_0: i32;
-    let $load_1: ref "core:prelude//List<mut_ref_if_return.wado/Token>";
-    let $load_2: i32;
-    let $load_3: ref "Array<mut_ref_if_return.wado/Token>";
-    let $load_7: i32;
+    let $load_0: ref "core:prelude//List<mut_ref_if_return.wado/Token>";
+    let $load_1: i32;
+    let $load_9: i32;
+    let $v1_5: i32;
     let v_41: ref "mut_ref_if_return.wado//Token";
     let v_42: ref "core:prelude/string.wado//String";
-    if $load_0 = self.pos; $load_2 = local.tee $load_1(self.tokens).used; if @unlikely($load_0 >= $load_2) {
+    if $load_0 = self.tokens; $load_1 = self.pos; $v1_5 = $load_0.used; if @unlikely($load_1 >= $v1_5) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<mut_ref_if_return.wado/Token>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($load_0, $load_2);
+        "core:prelude/list.wado/core:prelude/list.wado/List<mut_ref_if_return.wado/Token>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($load_1, $v1_5);
         unreachable;
-    }; builtin::array_get_value<ref "mut_ref_if_return.wado//Token">(local.tee $load_3($load_1.repr), $load_0).kind == 1 {
-        return 0, if @unlikely($load_0 >= $load_2) {
+    }; builtin::array_get_value<ref "mut_ref_if_return.wado//Token">($load_0.repr, $load_1).kind == 1 {
+        return 0, $v1_5 = $load_0.used; if @unlikely($load_1 >= $v1_5) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<mut_ref_if_return.wado/Token>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($load_0, $load_2);
+            "core:prelude/list.wado/core:prelude/list.wado/List<mut_ref_if_return.wado/Token>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($load_1, $v1_5);
             unreachable;
-        }; $load_2 = local.tee v_41(builtin::array_get_value<ref "mut_ref_if_return.wado//Token">($load_3, $load_0)).kind; v_42 = v_41.text; let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_42.repr; $load_7 = v_42.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_7)), 0, $array_clone_src_1, 0, $load_7); self.pos = $load_0 + 1; struct.new "mut_ref_if_return.wado//Token" { kind: $load_2, text: struct.new "core:prelude/string.wado//String" { repr: builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>($load_7)), 0, $array_clone_dst_2, 0, $load_7); $array_clone_src_1, used: $load_7 } }, ref.null none;
+        }; $v1_5 = local.tee v_41(builtin::array_get_value<ref "mut_ref_if_return.wado//Token">($load_0.repr, $load_1)).kind; v_42 = v_41.text; let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_42.repr; $load_9 = v_42.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_9)), 0, $array_clone_src_1, 0, $load_9); self.pos = $load_1 + 1; struct.new "mut_ref_if_return.wado//Token" { kind: $v1_5, text: struct.new "core:prelude/string.wado//String" { repr: builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>($load_9)), 0, $array_clone_dst_2, 0, $load_9); $array_clone_src_1, used: $load_9 } }, ref.null none;
     }
     return 1, ref.null none, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected 1"), used: 10 };
 }

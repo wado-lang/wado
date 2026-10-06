@@ -540,9 +540,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 fn "assoc_projection_method_compose.wado/assoc_projection_method_compose.wado/Peekable<assoc_projection_method_compose.wado/Gen<i32>>^core:prelude/traits.wado/Iterator::next"(self) {
     let $load_1: ref "assoc_projection_method_compose.wado//Gen<i32>";
     let $load_2: i32;
-    let $load_3: ref "core:prelude//List<i32>";
-    let $load_4: i32;
     let buffered: ref "core:prelude/types.wado//Option<i32>";
+    let self_5: ref "core:prelude//List<i32>";
+    let $v1: i32;
     let $match_scrut_0: ref null "core:prelude/types.wado//Option<i32>";
     if ref.is_null(local.tee $match_scrut_0(self.peeked)) == 0 {
         buffered = ref.as_non_null($match_scrut_0);
@@ -551,43 +551,45 @@ fn "assoc_projection_method_compose.wado/assoc_projection_method_compose.wado/Pe
     } else {
     }
     return $inline_assoc_projection_method_compose_wado_Gen_i32__core_prelude_traits_wado_Iterator__next_0: block -> ref "core:prelude/types.wado//Option<i32>" {
-        if local.tee $load_2(local.tee $load_1(self.inner).idx) >= local.tee $load_4(local.tee $load_3($load_1.items).used) {
+        if local.tee $load_2(local.tee $load_1(self.inner).idx) >= $load_1.items.used {
             break $inline_assoc_projection_method_compose_wado_Gen_i32__core_prelude_traits_wado_Iterator__next_0: struct.new "core:prelude/types.wado//Option<i32>" { 0 };
         }
-        if @unlikely($load_2 >= $load_4) {
+        $v1 = local.tee self_5($load_1.items).used;
+        if @unlikely($load_2 >= $v1) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($load_2, $load_4);
+            "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($load_2, $v1);
             unreachable;
         }
-        $load_4 = builtin::array_get_value<i32>($load_3.repr, $load_2);
+        $v1 = builtin::array_get_value<i32>(self_5.repr, $load_2);
         $load_1.idx = $load_2 + 1;
-        break $inline_assoc_projection_method_compose_wado_Gen_i32__core_prelude_traits_wado_Iterator__next_0: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: $load_4 };
+        break $inline_assoc_projection_method_compose_wado_Gen_i32__core_prelude_traits_wado_Iterator__next_0: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: $v1 };
     };
 }
 
 fn "assoc_projection_method_compose.wado/assoc_projection_method_compose.wado/Peekable<assoc_projection_method_compose.wado/Gen<i32>>::peek"(self) {
     let $load_1: ref "assoc_projection_method_compose.wado//Gen<i32>";
     let $load_2: i32;
-    let $load_3: ref "core:prelude//List<i32>";
-    let $load_4: i32;
     let buffered: ref "core:prelude/types.wado//Option<i32>";
+    let self_6: ref "core:prelude//List<i32>";
+    let $v1: i32;
     let $match_scrut_0: ref null "core:prelude/types.wado//Option<i32>";
     if ref.is_null(local.tee $match_scrut_0(self.peeked)) == 0 {
         return local.tee buffered(ref.as_non_null($match_scrut_0));
     } else {
     }
     buffered = $inline_assoc_projection_method_compose_wado_Gen_i32__core_prelude_traits_wado_Iterator__next_0: block -> ref "core:prelude/types.wado//Option<i32>" {
-        if local.tee $load_2(local.tee $load_1(self.inner).idx) >= local.tee $load_4(local.tee $load_3($load_1.items).used) {
+        if local.tee $load_2(local.tee $load_1(self.inner).idx) >= $load_1.items.used {
             break $inline_assoc_projection_method_compose_wado_Gen_i32__core_prelude_traits_wado_Iterator__next_0: struct.new "core:prelude/types.wado//Option<i32>" { 0 };
         }
-        if @unlikely($load_2 >= $load_4) {
+        $v1 = local.tee self_6($load_1.items).used;
+        if @unlikely($load_2 >= $v1) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($load_2, $load_4);
+            "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($load_2, $v1);
             unreachable;
         }
-        $load_4 = builtin::array_get_value<i32>($load_3.repr, $load_2);
+        $v1 = builtin::array_get_value<i32>(self_6.repr, $load_2);
         $load_1.idx = $load_2 + 1;
-        break $inline_assoc_projection_method_compose_wado_Gen_i32__core_prelude_traits_wado_Iterator__next_0: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: $load_4 };
+        break $inline_assoc_projection_method_compose_wado_Gen_i32__core_prelude_traits_wado_Iterator__next_0: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: $v1 };
     };
     self.peeked = buffered;
     return buffered;
@@ -596,18 +598,19 @@ fn "assoc_projection_method_compose.wado/assoc_projection_method_compose.wado/Pe
 fn "assoc_projection_method_compose.wado/assoc_projection_method_compose.wado/Gen<i32>^core:prelude/traits.wado/Iterator::next"(self) {
     let $load_0: i32;
     let $load_1: ref "core:prelude//List<i32>";
-    let $load_2: i32;
-    if local.tee $load_0(self.idx) >= local.tee $load_2(local.tee $load_1(self.items).used) {
+    let $v1: i32;
+    if local.tee $load_0(self.idx) >= local.tee $load_1(self.items).used {
         return struct.new "core:prelude/types.wado//Option<i32>" { 0 };
     }
-    if @unlikely($load_0 >= $load_2) {
+    $v1 = $load_1.used;
+    if @unlikely($load_0 >= $v1) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($load_0, $load_2);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($load_0, $v1);
         unreachable;
     }
-    $load_2 = builtin::array_get_value<i32>($load_1.repr, $load_0);
+    $v1 = builtin::array_get_value<i32>($load_1.repr, $load_0);
     self.idx = $load_0 + 1;
-    return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: $load_2 };
+    return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: $v1 };
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
