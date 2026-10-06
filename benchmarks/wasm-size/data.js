@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791305685313,
+  "lastUpdate": 1791310417703,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -64581,6 +64581,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 338446,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c48b674add397bc26c5bb82657a7191c4a2cd085",
+          "message": "Merge pull request #2289 from wado-lang/claude/happy-brown-pgls7b\n\nfix(opt): keep a field read through a reference sound across calls that may write it",
+          "timestamp": "2026-10-07T02:52:13+09:00",
+          "tree_id": "2285d7d24b6d378c32953c05e6f88480de14cca8",
+          "url": "https://github.com/wado-lang/wado/commit/c48b674add397bc26c5bb82657a7191c4a2cd085"
+        },
+        "date": 1791310417237,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20963,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338481,
             "unit": "bytes"
           }
         ]
