@@ -230,6 +230,7 @@
 
 ## Research
 
+- [Research: Assertions and Contracts in Other Languages](./research-assertions-and-contracts.md)
 - [Research: Callbacks across the Component Model Boundary](./research-cm-boundary-callbacks.md)
 - [Research: Component Model Pain Points](./research-cm-pain-points.md)
 - [Research: Code Generation Approaches](./research-code-generation.md)
