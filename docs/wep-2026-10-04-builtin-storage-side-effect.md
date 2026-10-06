@@ -105,7 +105,8 @@ A fact the attribute leaves out is a fact the call does not have. A call with no
 `trap` never traps. A wrong attribute miscompiles as wrong code does, so
 validation checks the form of an attribute and never second-guesses its facts.
 
-`none`, `opaque` and `black_box` each stand alone. `black_box` exists for
+`none`, `opaque` and `black_box` each stand alone, except that `opaque` takes
+`suspend`. `black_box` exists for
 `builtin::black_box`, which a test or a benchmark uses to keep the work it
 measures from being folded away. The optimizer never deletes, moves or merges
 such a call, and never computes its result from the operand. Its storage is
