@@ -1075,19 +1075,17 @@ fn write_through(engine: &Engine, place: ExprId, sink: &mut impl FnMut(Write)) {
     match write_root(engine.body, place, false) {
         WriteRoot::Local(root) => {
             sink(Write::Root(root));
-            if engine.aliased().contains(&root) || place_crosses_reference(engine, place) {
+            if engine.aliased().contains(&root)
+                || engine
+                    .body
+                    .place_crosses_reference(place, engine.value_graph_type_table())
+            {
                 sink(Write::Aliased);
             }
         }
         WriteRoot::Aliased => sink(Write::Aliased),
         WriteRoot::Temp => {}
     }
-}
-
-fn place_crosses_reference(engine: &Engine, e: ExprId) -> bool {
-    engine
-        .body
-        .place_crosses_reference(e, engine.value_graph_type_table())
 }
 
 /// Whether `w` may change what `root` holds. A call reaches a reference's
