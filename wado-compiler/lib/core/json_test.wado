@@ -858,6 +858,55 @@ test "to_bytes_canonical sorts nested struct fields recursively" {
     }
 }
 
+fn canonical_text<T: Serialize>(value: &T) -> String {
+    return String::from_utf8_slice(to_bytes_canonical(value).unwrap()).unwrap();
+}
+
+fn canonical_of_text(json: String) -> String {
+    return canonical_text(&from_string::<Value>(json).unwrap());
+}
+
+// RFC 8785 §3.2.4.
+test "to_bytes_canonical writes the RFC 8785 example" {
+    let input = `{"numbers":[333333333.33333329,1E30,4.50,2e-3,0.000000000000000000000000001],"string":"\\u20ac$\\u000F\\u000aA'\\u0042\\u0022\\u005c\\\\\\"\\/","literals":[null,true,false]}`;
+    assert canonical_of_text(input) == `{"literals":[null,true,false],"numbers":[333333333.3333333,1e+30,4.5,0.002,1e-27],"string":"€$\\u000f\\nA'B\\"\\\\\\\\\\"/"}`;
+}
+
+// RFC 8785 §3.2.3: keys sort by their UTF-16 code units, unescaped.
+test "to_bytes_canonical sorts keys by UTF-16 code units" {
+    let input = `{"\\u20ac":"Euro Sign","\\r":"Carriage Return","\\ufb33":"Hebrew Letter Dalet With Dagesh","1":"One","\\ud83d\\ude00":"Emoji: Grinning Face","\\u0080":"Control","\\u00f6":"Latin Small Letter O With Diaeresis"}`;
+    assert canonical_of_text(input) == `{"\\r":"Carriage Return","1":"One","\u{80}":"Control","ö":"Latin Small Letter O With Diaeresis","€":"Euro Sign","😀":"Emoji: Grinning Face","\u{fb33}":"Hebrew Letter Dalet With Dagesh"}`;
+    assert canonical_of_text(`{"a\\u0001":1,"a\\"":2,"a#":3,"a":4}`) == `{"a":4,"a\\u0001":1,"a\\"":2,"a#":3}`;
+}
+
+// RFC 8785 §3.2.2.3: a number is written as ECMAScript's `Number.prototype.toString`.
+test "to_bytes_canonical writes numbers in the ECMAScript form" {
+    let cases: List<[f64, String]> = [
+        [0.0, "0"],
+        [-0.0, "0"],
+        [1.0e21, "1e+21"],
+        [1.0e20, "100000000000000000000"],
+        [1.0e23, "1e+23"],
+        [1.0e-7, "1e-7"],
+        [0.000001, "0.000001"],
+        [1.23e-18, "1.23e-18"],
+        [-1.5e-9, "-1.5e-9"],
+        [5e-324, "5e-324"],
+        [f64::MAX, "1.7976931348623157e+308"],
+        [4.5, "4.5"],
+        [-12.0, "-12"],
+    ];
+    for let [v, text] of cases {
+        assert canonical_text(&v) == text;
+    }
+    assert canonical_text(&f32::MAX) == "3.4028235e+38";
+    assert canonical_text(&1.0e-7_f32) == "1e-7";
+}
+
+test "to_bytes_canonical escapes as ECMAScript's JSON.stringify" {
+    assert canonical_text(&"\u{8}\u{c}\u{1f}\u{7f}") == `"\\b\\f\\u001f\u{7f}"`;
+}
+
 test "to_bytes_pretty matches to_string_pretty" {
     let u = PrettyUser { first_name: "Bo", age: 5 };
     let pretty = to_bytes_pretty(&u);
