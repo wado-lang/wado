@@ -105,7 +105,9 @@ impl HeapState {
             v = v.max(fg);
         }
         let Some(r) = root else {
-            v = v.max(self.escaped_version).max(self.reference_version(None));
+            v = v
+                .max(self.escaped_version)
+                .max(self.reference_version(None));
             v = self.per_local.values().fold(v, |acc, &pl| acc.max(pl));
             return self
                 .per_slot
@@ -922,7 +924,9 @@ impl<'a> Builder<'a> {
     /// Whose storage holds the fields of the object `recv_expr` (valued `recv`)
     /// evaluates to: a reference's pointee unless the frame built it.
     fn holder_of(&self, recv_expr: ExprId, recv: Option<ValueId>) -> Holder {
-        if self.body.place_crosses_reference(recv_expr, self.type_table)
+        if self
+            .body
+            .place_crosses_reference(recv_expr, self.type_table)
             && recv.is_none_or(|v| !self.owned_pointees.contains(&v))
         {
             let ty = self.body.exprs[recv_expr].type_id;
@@ -1256,8 +1260,7 @@ impl<'a> Builder<'a> {
                         }
                     }
                     ExprKind::FieldAccess { field_index, .. } => {
-                        let (root, recv_v, bare_local, holder) =
-                            field_place.expect("field target");
+                        let (root, recv_v, bare_local, holder) = field_place.expect("field target");
                         // A non-aliased bare-`Local` root takes the precise
                         // per-slot bump — a write to `a.f` leaves every other
                         // object's `f` untouched. An aliased root, or a deeper
@@ -1399,17 +1402,17 @@ impl<'a> Builder<'a> {
                 // A promoted `Operand::Value` receiver has no skeleton place: no
                 // reference target and no receiver root local.
                 let inner_e = inner.as_expr();
-                let (recv, root, holder) =
-                    match inner_e.and_then(|ie| self.reference_lookthrough(ie)) {
-                        Some((pointee_vn, pointee)) => (pointee_vn, Some(pointee), Holder::Frame),
-                        None => (
-                            walked,
-                            inner_e.and_then(|ie| self.receiver_root(ie)),
-                            inner_e.map_or(Holder::Foreign(None), |ie| {
-                                self.holder_of(ie, Some(walked))
-                            }),
-                        ),
-                    };
+                let (recv, root, holder) = match inner_e
+                    .and_then(|ie| self.reference_lookthrough(ie))
+                {
+                    Some((pointee_vn, pointee)) => (pointee_vn, Some(pointee), Holder::Frame),
+                    None => (
+                        walked,
+                        inner_e.and_then(|ie| self.receiver_root(ie)),
+                        inner_e
+                            .map_or(Holder::Foreign(None), |ie| self.holder_of(ie, Some(walked))),
+                    ),
+                };
                 let heap_ver = self.heap_version_of(root, field_index, holder);
                 // Store→load forwarding: a value stored to this exact
                 // `(receiver, field, version)` is the value this read sees.
@@ -2182,8 +2185,7 @@ impl<'a> Builder<'a> {
         } else if eff.has_pure_calls {
             self.bump_pure_call_reach();
         }
-        self.heap_state
-            .bump_references(Some(&eff.reference_writes));
+        self.heap_state.bump_references(Some(&eff.reference_writes));
     }
 
     /// After a flow-opaque construct (`LabeledBlock` with potential breaks),
@@ -2250,13 +2252,6 @@ pub struct CallFacts<'a> {
     pub writes: &'a IndexMap<ExprId, ObjectTypes>,
 }
 
-impl CallFacts<'_> {
-    /// What `call` may write behind a reference; `None` is every type.
-    fn writes_of(&self, call: ExprId) -> Option<&ObjectTypes> {
-        self.writes.get(&call)
-    }
-}
-
 /// A loop body's heap-write effects, used to invalidate exactly the fields a
 /// loop may mutate (mirrors `const_folding`'s `LoopWriteEffects`). Reassigned
 /// locals are handled separately by `walk_loop`'s `Opaque` reassignment.
@@ -2284,6 +2279,7 @@ impl LoopHeapEffects {
         self.reference_writes.set_any();
     }
 
+    /// A call writing `written` behind a reference; `None` is every type.
     fn call_writes(&mut self, written: Option<&ObjectTypes>) {
         match written {
             Some(types) => self.reference_writes.union(types),
@@ -2411,7 +2407,7 @@ fn record_loop_heap_write(
                 } else {
                     eff.has_external_writes = true;
                 }
-                eff.call_writes(facts.writes_of(e));
+                eff.call_writes(facts.writes.get(&e));
             }
         }
         ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => eff.write_anywhere(),

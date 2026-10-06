@@ -337,6 +337,7 @@ pub struct ObjectTypes {
 }
 
 impl ObjectTypes {
+    /// The set of every type.
     pub fn everything() -> Self {
         Self {
             any: true,
@@ -344,6 +345,7 @@ impl ObjectTypes {
         }
     }
 
+    /// The set of `key` alone.
     pub fn one(key: TypeKey) -> Self {
         Self {
             any: false,
@@ -351,6 +353,7 @@ impl ObjectTypes {
         }
     }
 
+    /// Whether the set is every type.
     pub fn is_any(&self) -> bool {
         self.any
     }
@@ -361,25 +364,30 @@ impl ObjectTypes {
         self.keys.iter().copied()
     }
 
+    /// Whether `key` is in the set.
     pub fn contains(&self, key: TypeKey) -> bool {
         self.any || self.keys.contains(&key)
     }
 
+    /// Whether the set has no type.
     pub fn is_empty(&self) -> bool {
         !self.any && self.keys.is_empty()
     }
 
+    /// Add `key`.
     pub fn insert(&mut self, key: TypeKey) {
         if !self.any {
             self.keys.insert(key);
         }
     }
 
+    /// Make the set every type.
     pub fn set_any(&mut self) {
         self.any = true;
         self.keys.clear();
     }
 
+    /// `self ∪= other`.
     pub fn union(&mut self, other: &ObjectTypes) {
         if other.any {
             self.set_any();
