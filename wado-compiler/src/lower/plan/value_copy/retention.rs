@@ -1414,11 +1414,13 @@ impl StoresWalker<'_> {
     }
 
     /// What a *place* (the operand of `&`) carries, read off its root —
-    /// `&p.field` roots at `p`, whatever the field's own type.
+    /// `&p.field` roots at `p`, whatever the field's own type. A borrow of a
+    /// temporary (`&self.as_slice()`) reaches whatever the temporary holds.
     fn place_roots(&self, place: &TirExpr) -> Carried {
-        Self::place_root(place)
-            .and_then(|(local, _)| self.carries.get(&local).cloned())
-            .unwrap_or_default()
+        match Self::place_root(place) {
+            Some((local, _)) => self.carries.get(&local).cloned().unwrap_or_default(),
+            None => Carried::held(self.carried(place).all()),
+        }
     }
 
     /// The local a place is rooted at, with its type, or `None` for a place
