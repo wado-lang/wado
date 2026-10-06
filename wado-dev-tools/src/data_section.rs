@@ -24,10 +24,11 @@ pub fn should_skip_file(source: &str) -> bool {
 
 /// How a fixture's `__DATA__` says to compile it. Golden generation compiles a
 /// fixture the way the e2e harness does, so it reads the same [`CompileInputs`].
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct FixtureCompile {
     /// The world to compile for; `None` keeps the CLI default.
     pub world: Option<String>,
+    /// What the host and the `#[param]` resolution are given.
     pub inputs: CompileInputs,
 }
 
