@@ -12,6 +12,8 @@ global CODE_POINT_MAX: i32 = 0x10FFFF;
 /// The surrogate block — code points that are not Unicode scalars.
 global SURROGATE_FIRST: i32 = 0xD800;
 global SURROGATE_LAST: i32 = 0xDFFF;
+/// How many Unicode scalar values there are.
+internal global SCALAR_COUNT: i32 = CODE_POINT_MAX + 1 - (SURROGATE_LAST + 1 - SURROGATE_FIRST);
 
 /// Push `[lo, hi]` as `CharRange`s, keeping only its Unicode-scalar part.
 ///
@@ -27,6 +29,19 @@ pub fn clip_to_scalars(ranges: &mut List<CharRange>, lo: i32, hi: i32) {
     }
     push_scalar_segment(ranges, lo, i32::min(hi, SURROGATE_FIRST - 1));
     push_scalar_segment(ranges, i32::max(lo, SURROGATE_LAST + 1), i32::min(hi, CODE_POINT_MAX));
+}
+
+/// How many Unicode scalar values `ranges` hold. A range from
+/// `clip_to_scalars` may span the surrogate block, which holds none.
+internal fn scalar_count(ranges: &List<CharRange>) -> i32 {
+    let mut count = 0;
+    for let r of ranges {
+        let lo = r.start as i32;
+        let hi = r.end as i32;
+        let surrogates = i32::max(0, i32::min(hi, SURROGATE_LAST) - i32::max(lo, SURROGATE_FIRST) + 1);
+        count += hi - lo + 1 - surrogates;
+    }
+    return count;
 }
 
 fn is_scalar(code: i32) -> bool {

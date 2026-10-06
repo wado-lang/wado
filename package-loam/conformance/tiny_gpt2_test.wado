@@ -141,6 +141,7 @@ fn reproduces(input_ids: ByteList, attention_mask: ByteList, logits: ByteList) {
 
     let weights = gpt2::Weights::load(&#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
     let got = gpt2::forward(
+        &mut gpt2::Cpu {},
         &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: ids, extents: ids_extents },
         &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: mask, extents: mask_extents },
         &weights,
@@ -174,6 +175,7 @@ test "a sequence longer than the mask stops forward" {
     let mask = List::<i64>::filled(513, 1);
     let weights = gpt2::Weights::load(&#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
     gpt2::forward(
+        &mut gpt2::Cpu {},
         &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
             data: ids,
             extents: [1, 513],

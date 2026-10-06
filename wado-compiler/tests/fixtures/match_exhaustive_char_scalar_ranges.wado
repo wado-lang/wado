@@ -1,0 +1,20 @@
+// A `char` is a Unicode scalar value, so two ranges around the surrogate gap
+// cover it with no `_` arm.
+
+use { println, Stdout } from "core:cli";
+
+fn plane(c: char) -> i32 {
+    return match c {
+        '\0'..='\u{D7FF}' => 0,
+        '\u{E000}'..='\u{10FFFF}' => 1,
+    };
+}
+
+export fn run() with Stdout {
+    println(`${plane('a')} ${plane('\u{FFFD}')}`);
+}
+
+__DATA__
+{
+    "stdout": "0 1\n"
+}

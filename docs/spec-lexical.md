@@ -7,10 +7,10 @@ in [Literals](./spec-literals.md), and operators in
 
 ## Whitespace
 
-Whitespace separates tokens and is otherwise ignored. Any character with the
-Unicode `White_Space` property is whitespace: space, tab, LF and CR, and also
-characters such as the no-break space (U+00A0) and the ideographic space
-(U+3000).
+Whitespace separates tokens and is otherwise ignored. It is ASCII only: space,
+tab, LF, form feed (U+000C) and CR. Any other character outside a string,
+character literal or comment is an error, the no-break space (U+00A0) and the
+ideographic space (U+3000) among them.
 
 ## Comments
 
@@ -108,9 +108,7 @@ SUBMODULE_DATA_MARKER
 
 ## Identifiers
 
-An identifier starts with an ASCII letter or `_`. Each later character is `_`
-or any Unicode letter or number (a character with the `Alphabetic` property or a
-numeric general category):
+An identifier is ASCII: `[a-zA-Z_][a-zA-Z0-9_]*`.
 
 <!-- {"fixture":"spec_lexical_identifiers.wado"} -->
 
@@ -122,16 +120,21 @@ let FooBar = fooBar + 1;
 let FOO_BAR = FooBar + 1;
 let _private = FOO_BAR + 1;
 let name123 = _private + 1;
-let café = name123 + 1;    // OK: `é` is not the first character
-assert café == 8;
+assert name123 == 7;
 ```
 
-A non-ASCII first character is an error:
+A non-ASCII character is an error, wherever it stands:
 
 <!-- {"fixture":"spec_lexical_identifier_non_ascii_start.wado"} -->
 
 ```wado
 let é = 1;    // Error: the first character must be ASCII
+```
+
+<!-- {"fixture":"spec_lexical_identifier_non_ascii_continue.wado"} -->
+
+```wado
+let café = 1;    // Error: `é` is not an ASCII letter, digit or `_`
 ```
 
 Identifiers are case-sensitive.

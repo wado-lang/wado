@@ -3,7 +3,7 @@
 //! and no second, since the weight travels in the model.
 
 use { assert_close, tensor_of } from "./oracle.wado";
-use { Col, Row, Tensor, Weights, forward } from "../tests/onnx/pytorch-operator/test_operator_params/model.onnx"
+use { Col, Cpu, Row, Tensor, Weights, forward } from "../tests/onnx/pytorch-operator/test_operator_params/model.onnx"
     with {
         generator: {
             module: "../src/generator.wado",
@@ -30,7 +30,7 @@ test "a graph with an initializer reproduces the output ONNX ships" {
         #include_bytes("../tests/onnx/pytorch-operator/test_operator_params/test_data_set_0/output_0.pb"),
     );
 
-    let got = forward(&Tensor::<f32, [Row, Col]> { data: x, extents: x_extents }, &Weights::embedded());
+    let got = forward(&mut Cpu {}, &Tensor::<f32, [Row, Col]> { data: x, extents: x_extents }, &Weights::embedded());
 
     assert got.extents == want_extents;
     assert_close(&got.data, &want);

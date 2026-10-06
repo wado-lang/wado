@@ -10,7 +10,7 @@ use { TreeMap } from "core:collections";
 use { Graph } from "../src/graph.wado";
 use { read } from "../src/onnx_proto.wado";
 use { LayoutRule, Schema } from "../src/schema.wado";
-use { generated, ran } from "./oracle.wado";
+use { generated, program_over, ran } from "./oracle.wado";
 
 /// The lengths of `X` the oracle ran each case at.
 global LENGTHS: List<i32> = [3, 10];
@@ -81,9 +81,7 @@ fn run(source: String, graph: &Graph) -> String {
     for let vi of graph.inputs {
         args.push_str(`&${INPUTS[vi.name]}, `);
     }
-    let program = `${source}
-use { println, Stdout } from "core:cli";
-
+    let program = `${program_over(&source)}
 fn iota(first: f32, count: i32) -> List<f32> {
     let mut values: List<f32> = [];
     for let i of 0..<count {
@@ -99,7 +97,7 @@ fn joined<T: Display>(values: List<T>) -> String {
 
 export fn run() with Stdout {
     for let n of ${LENGTHS:?} as List<i32> {
-        let got = forward(${args}&Weights {});
+        let got = forward(&mut Opaque::new(), ${args}&Weights {});
         println(\`N = \${n}: extents [\${joined(got.extents)}], data [\${joined(got.data)}]\`);
     }
 }

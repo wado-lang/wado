@@ -3,7 +3,15 @@
 //! ONNX ships one input and the weight travels in the model.
 
 use { assert_close, tensor_of } from "./oracle.wado";
-use { Batch, In, Out, Tensor, Weights, forward } from "../tests/onnx/pytorch-converted/test_Linear_no_bias/model.onnx"
+use {
+    Batch,
+    Cpu,
+    In,
+    Out,
+    Tensor,
+    Weights,
+    forward,
+} from "../tests/onnx/pytorch-converted/test_Linear_no_bias/model.onnx"
     with {
         generator: {
             module: "../src/generator.wado",
@@ -30,7 +38,7 @@ test "MatMul reproduces the output ONNX ships" {
         #include_bytes("../tests/onnx/pytorch-converted/test_Linear_no_bias/test_data_set_0/output_0.pb"),
     );
 
-    let got = forward(&Tensor::<f32, [Batch, In]> { data: x, extents: x_extents }, &Weights::embedded());
+    let got = forward(&mut Cpu {}, &Tensor::<f32, [Batch, In]> { data: x, extents: x_extents }, &Weights::embedded());
 
     assert got.extents == want_extents;
     assert_close(&got.data, &want);

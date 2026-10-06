@@ -12,6 +12,57 @@ Serde I/O is bytes-primary: prefer `to_bytes` / `from_bytes` when the data
 is consumed as bytes. `to_bytes_pretty` and `to_bytes_canonical` cover the
 indented and the deterministic (sorted-key) forms.
 
+## Where JSON readers disagree
+
+RFC 8259 leaves number range and precision, lone surrogates and repeated
+keys to the implementation, and readers that settle them differently read
+one document as different values. This module settles each one as follows.
+
+### Numbers
+
+- The target type decides between integer and float, not the token's
+  spelling.
+- Every integer type reads a number, or a string holding one, by one rule,
+  exactly at any width. `1.0`, `1e2` and `10e-1` read when the value is
+  integral and in range. `1.5` is an `UnexpectedType` error and a value out
+  of the type's range an `Overflow`. `-0` reads as `0`, unsigned or not.
+- A float reads as the decimal rounded once to the nearest value of its
+  type, however many digits it spells. `0.000…0001e400` with 400 zeros
+  reads as exactly `0.1`.
+- A number that rounds to infinity in its type is an `Overflow` (`1e400` as
+  `f64`, `3.5e38` as `f32`). One too small for the type reads as a zero of
+  its sign. `-0` reads as `-0.0`.
+- A `Value` holds every number as `Float`, as JavaScript does, so an
+  integer past 2^53 loses precision there. Read into an integer type to
+  keep it.
+- The writer refuses `NaN` and infinity. The serialization chapter of the
+  specification says which integers it writes as strings.
+
+### Strings
+
+- A `\uXXXX` high surrogate followed by a low one decodes to one character.
+  A lone surrogate is a `MalformedInput` error.
+- Raw bytes must be valid UTF-8. `\u0000` is allowed.
+
+### Objects
+
+- A repeated key is a `DuplicateField` error, into a struct, a map and a
+  `Value` alike. Keys compare after unescaping, so `"a\/b"` repeats `"a/b"`.
+- A map and a `Value` keep keys in document order. `to_bytes_canonical`
+  writes them sorted.
+- A struct ignores a key it has no field for. The value under it is held
+  to the grammar alone, so `1e400` there is no error.
+- A map key is a string, and a numeric key type holds what it spells to the
+  number rules above, as serde_json does: `"1e2"` is the `i32` key `100`,
+  `"1e400"` an `Overflow` as an `f64` key, and `"NaN"`, `"inf"` and `"+5"`
+  no number. Writing a NaN or infinite key is an error, as writing such a
+  value is.
+
+### Documents
+
+- A byte-order mark or anything but whitespace after the value is an error.
+- Nesting deeper than `max_depth` is an error.
+
 ## Synopsis
 
 ```wado
@@ -294,11 +345,6 @@ the input costs another bounds check and load.
 
 #### `pub fn read_json_string(&mut self) -> Result<String, DeserializeError>`
 
-#### `pub fn read_number_raw(&mut self) -> Result<String, DeserializeError>`
-
-Reads a JSON number token as a String, held to the grammar every
-number read is.
-
 #### `pub fn skip_number(&mut self) -> Result<(), DeserializeError>`
 
 Advances past the JSON number at `pos` without allocating a String,
@@ -316,8 +362,8 @@ String allocation.
 
 #### `pub fn parse_u64_direct(&mut self) -> Result<u64, DeserializeError>`
 
-Parses a u64 directly from `self.input`; only the rare token with one
-digit more than `FPFMT_DIGITS_MAX` allocates (for an exact re-parse).
+Parses a u64 directly from `self.input`, without an intermediate String
+allocation for a plain integer.
 
 #### `pub fn parse_f64_direct(&mut self) -> Result<f64, DeserializeError>`
 

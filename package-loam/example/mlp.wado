@@ -8,7 +8,7 @@
 //!     wado run package-loam/example/mlp.wado
 
 use { println, Stdout } from "core:cli";
-use { Batch, Hidden, In, Out, Tensor, Weights, forward } from "./mlp.onnxtext"
+use { Batch, Cpu, Hidden, In, Out, Tensor, Weights, forward } from "./mlp.onnxtext"
     with {
         generator: {
             module: "../src/generator.wado",
@@ -77,12 +77,12 @@ fn ones_input() -> Tensor<f32, [Batch, In]> {
 
 export fn run() with Stdout {
     let x = ones_input();
-    let y = forward(&x, &weights());
+    let y = forward(&mut Cpu {}, &x, &weights());
     println(`batch ${batch_size(&x)}, logits ${y.extents[1]}, first ${y.data[0]}`);
 }
 
 test "the generated forward pass runs the graph's operators" {
-    let y = forward(&ones_input(), &weights());
+    let y = forward(&mut Cpu {}, &ones_input(), &weights());
 
     assert y.extents == [1, 10] as List<i32>;
     // Each hidden unit sums 128 ones, `Relu` keeps them, each logit sums 64
