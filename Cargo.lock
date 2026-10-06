@@ -2490,15 +2490,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustls-pemfile"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dce314e5fee3f39953d46bb63bb8a46d40c2f8fb7cc5a3b6cab2bde9721d6e50"
-dependencies = [
- "rustls-pki-types",
-]
-
-[[package]]
 name = "rustls-pki-types"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3284,7 +3275,6 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
- "iana-time-zone",
  "indexmap",
  "jsonschema",
  "lexopt",
@@ -3293,7 +3283,6 @@ dependencies = [
  "oci-client",
  "predicates",
  "rustls",
- "rustls-pemfile",
  "semver",
  "serde",
  "serde_json",
@@ -3303,6 +3292,7 @@ dependencies = [
  "tokio-rustls",
  "toml",
  "wado-compiler",
+ "wado-host",
  "wado-lsp",
  "wado-manifest",
  "wasm-encoder",
@@ -3312,7 +3302,6 @@ dependencies = [
  "wasmtime-wasi",
  "wasmtime-wasi-http",
  "wasmtime-wasi-tls",
- "webpki-roots",
  "wit-component",
  "wit-parser",
 ]
@@ -3322,28 +3311,49 @@ name = "wado-compiler"
 version = "0.0.34"
 dependencies = [
  "anyhow",
- "bytes",
  "cranelift-entity",
- "datatest-mini",
  "fluent-uri",
  "futures",
  "heck",
+ "indexmap",
+ "rustc-hash",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tokio",
+ "wado-wasm-embed",
+ "wasm-compose",
+ "wasm-encoder",
+ "wasmparser",
+ "wat",
+ "wit-component",
+ "wit-encoder",
+ "wit-parser",
+]
+
+[[package]]
+name = "wado-compiler-tests"
+version = "0.0.34"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "cranelift-entity",
+ "datatest-mini",
+ "futures",
  "http",
  "http-body-util",
- "iana-time-zone",
  "indexmap",
- "libc",
- "rustc-hash",
- "rustls",
- "semver",
  "serde",
  "serde_json",
  "sha2 0.11.0",
  "tempfile",
  "tokio",
+ "wado-compiler",
+ "wado-host",
+ "wado-lsp",
  "wado-wasm-embed",
  "wasm-compose",
- "wasm-encoder",
  "wasmparser",
  "wasmprinter",
  "wasmtime",
@@ -3352,7 +3362,6 @@ dependencies = [
  "wasmtime-wasi-tls",
  "wat",
  "wit-component",
- "wit-encoder",
  "wit-parser",
  "zlib-rs",
 ]
@@ -3367,6 +3376,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "wado-compiler",
+ "wado-host",
  "wado-lsp",
  "wado-wasm-embed",
  "wasm-encoder",
@@ -3386,6 +3396,25 @@ dependencies = [
  "serde_json",
  "wado-compiler",
  "wit-parser",
+]
+
+[[package]]
+name = "wado-host"
+version = "0.0.34"
+dependencies = [
+ "anyhow",
+ "iana-time-zone",
+ "indexmap",
+ "libc",
+ "rustls",
+ "rustls-webpki",
+ "serde",
+ "tempfile",
+ "wado-compiler",
+ "wado-lsp",
+ "wasmtime",
+ "wasmtime-wasi",
+ "webpki-roots",
 ]
 
 [[package]]

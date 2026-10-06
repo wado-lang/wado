@@ -14,7 +14,7 @@ run the tests once and read every report from that run:
 
 ```sh
 cargo llvm-cov clean --workspace   # a stale profile would merge into this run
-cargo llvm-cov --no-report -p wado-compiler
+cargo llvm-cov --no-report -p wado-compiler -p wado-compiler-tests
 cargo llvm-cov report --html                                   # target/llvm-cov/html/
 cargo llvm-cov report --json --output-path scratchpad/cov.json
 jq '.data[0].totals.lines' scratchpad/cov.json                  # overall

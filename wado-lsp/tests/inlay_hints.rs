@@ -5,7 +5,7 @@
 //! validate the public `Engine` surface (`Engine::open_document` →
 //! `Engine::inlay_hints`) and the LSP-shaped wire types.
 
-use wado_lsp::test_support::{self, MapHost};
+use wado_lsp::test_support::{self, in_memory_host};
 use wado_lsp::{Engine, InlayHint, InlayHintKind, Position, Range};
 
 async fn hints(source: &str) -> Vec<InlayHint> {
@@ -83,7 +83,7 @@ fn engine_filters_hints_outside_range() {
         let source = "fn f() -> i32 {\n    let x = 1;\n    let y = 2;\n    return x + y;\n}\n";
         let path = "/test.wado";
         let uri = format!("file://{path}");
-        let host = MapHost::single(path, source);
+        let host = in_memory_host(&[(path, source)]);
         let mut engine = Engine::new();
         engine.open_document(&uri, source.to_string());
         // Restrict to line 1 only (the `let x = 1` line). The `let y =
@@ -111,7 +111,7 @@ fn engine_returns_empty_for_unknown_document() {
     futures::executor::block_on(async {
         let path = "/nonexistent.wado";
         let uri = format!("file://{path}");
-        let host = MapHost::empty();
+        let host = in_memory_host(&[]);
         let engine = Engine::new();
         let hints = engine.inlay_hints(&uri, Range::WHOLE_DOCUMENT, &host).await;
         assert!(

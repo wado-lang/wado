@@ -2538,7 +2538,7 @@ impl<T: Eq> Eq for Pair<T> {
 
 #[test]
 fn test_format_idempotent_all_fixtures() {
-    let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures");
 
     let mut failures = Vec::new();
 
@@ -2635,8 +2635,8 @@ fn test_no_dropped_comments_in_corpus() {
 
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let mut failures = Vec::new();
-    visit(&root.join("tests/fixtures"), &mut failures);
-    visit(&root.join("lib"), &mut failures);
+    visit(&root.join("fixtures"), &mut failures);
+    visit(&root.join("../lib"), &mut failures);
 
     assert!(
         failures.is_empty(),
@@ -2732,19 +2732,30 @@ fn test_format_nested_labeled_blocks() {
 ///   2. format(clean) == clean   (idempotency)
 #[test]
 fn test_format_golden() {
-    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
-    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/generated/format.fixtures");
-    let dirty = fs::read_to_string(fixtures.join("all_dirty.wado")).expect("read dirty");
-    let clean = fs::read_to_string(golden.join("all.clean.wado")).expect("read clean");
+    assert_format_golden("all");
+}
+
+/// format(`format.fixtures/{name}_dirty.wado`) equals
+/// `generated/format.fixtures/{name}.clean.wado`, and formatting that again
+/// changes nothing.
+fn assert_format_golden(name: &str) {
+    let package = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let dirty_path = package.join(format!("format.fixtures/{name}_dirty.wado"));
+    let clean_path = package.join(format!("generated/format.fixtures/{name}.clean.wado"));
+    let dirty = fs::read_to_string(&dirty_path).expect("read dirty");
+    let clean = fs::read_to_string(&clean_path).expect("read clean");
 
     let formatted = wado_compiler::format(&dirty).expect("format dirty failed");
     assert_eq!(
         formatted, clean,
-        "format(dirty) should equal clean\n\nActual:\n{formatted}\n\nExpected:\n{clean}"
+        "format({name} dirty) should equal {name} clean\n\nActual:\n{formatted}\n\nExpected:\n{clean}"
     );
 
     let formatted2 = wado_compiler::format(&formatted).expect("format clean failed");
-    assert_eq!(formatted, formatted2, "format(clean) should be idempotent");
+    assert_eq!(
+        formatted, formatted2,
+        "format({name} clean) should be idempotent"
+    );
 }
 
 /// Golden test for "messy" inputs: excessive blank lines, block comments in
@@ -2754,22 +2765,7 @@ fn test_format_golden() {
 /// `generated/format.fixtures/mess.clean.wado` is the expected canonical output.
 #[test]
 fn test_format_golden_mess() {
-    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
-    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/generated/format.fixtures");
-    let dirty = fs::read_to_string(fixtures.join("mess_dirty.wado")).expect("read mess dirty");
-    let clean = fs::read_to_string(golden.join("mess.clean.wado")).expect("read mess clean");
-
-    let formatted = wado_compiler::format(&dirty).expect("format mess dirty failed");
-    assert_eq!(
-        formatted, clean,
-        "format(mess dirty) should equal mess clean\n\nActual:\n{formatted}\n\nExpected:\n{clean}"
-    );
-
-    let formatted2 = wado_compiler::format(&formatted).expect("format mess clean failed");
-    assert_eq!(
-        formatted, formatted2,
-        "format(mess clean) should be idempotent"
-    );
+    assert_format_golden("mess");
 }
 
 /// Golden test for `no_prelude` constructs: effects, resources, WASI attributes,
@@ -2779,24 +2775,7 @@ fn test_format_golden_mess() {
 /// `generated/format.fixtures/no_prelude.clean.wado` is the expected canonical output.
 #[test]
 fn test_format_golden_no_prelude() {
-    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
-    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/generated/format.fixtures");
-    let dirty =
-        fs::read_to_string(fixtures.join("no_prelude_dirty.wado")).expect("read no_prelude dirty");
-    let clean =
-        fs::read_to_string(golden.join("no_prelude.clean.wado")).expect("read no_prelude clean");
-
-    let formatted = wado_compiler::format(&dirty).expect("format no_prelude dirty failed");
-    assert_eq!(
-        formatted, clean,
-        "format(no_prelude dirty) should equal no_prelude clean\n\nActual:\n{formatted}\n\nExpected:\n{clean}"
-    );
-
-    let formatted2 = wado_compiler::format(&formatted).expect("format no_prelude clean failed");
-    assert_eq!(
-        formatted, formatted2,
-        "format(no_prelude clean) should be idempotent"
-    );
+    assert_format_golden("no_prelude");
 }
 
 /// Golden test for comment placement: where a comment lands in each
@@ -2807,22 +2786,7 @@ fn test_format_golden_no_prelude() {
 /// `generated/format.fixtures/comments.clean.wado` is the expected canonical output.
 #[test]
 fn test_format_golden_comments() {
-    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
-    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/generated/format.fixtures");
-    let dirty = fs::read_to_string(fixtures.join("comments_dirty.wado")).expect("read dirty");
-    let clean = fs::read_to_string(golden.join("comments.clean.wado")).expect("read clean");
-
-    let formatted = wado_compiler::format(&dirty).expect("format comments dirty failed");
-    assert_eq!(
-        formatted, clean,
-        "format(comments dirty) should equal comments clean\n\nActual:\n{formatted}\n\nExpected:\n{clean}"
-    );
-
-    let formatted2 = wado_compiler::format(&formatted).expect("format comments clean failed");
-    assert_eq!(
-        formatted, formatted2,
-        "format(comments clean) should be idempotent"
-    );
+    assert_format_golden("comments");
 }
 
 /// Golden test for operator precedence: redundant parens are removed, necessary
@@ -2832,23 +2796,7 @@ fn test_format_golden_comments() {
 /// spacing. `generated/format.fixtures/ops.all.clean.wado` is the expected canonical output.
 #[test]
 fn test_format_golden_ops_all() {
-    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
-    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/generated/format.fixtures");
-    let dirty =
-        fs::read_to_string(fixtures.join("ops.all_dirty.wado")).expect("read ops.all dirty");
-    let clean = fs::read_to_string(golden.join("ops.all.clean.wado")).expect("read ops.all clean");
-
-    let formatted = wado_compiler::format(&dirty).expect("format ops.all dirty failed");
-    assert_eq!(
-        formatted, clean,
-        "format(ops.all dirty) should equal ops.all clean\n\nActual:\n{formatted}\n\nExpected:\n{clean}"
-    );
-
-    let formatted2 = wado_compiler::format(&formatted).expect("format ops.all clean failed");
-    assert_eq!(
-        formatted, formatted2,
-        "format(ops.all clean) should be idempotent"
-    );
+    assert_format_golden("ops.all");
 }
 
 /// Golden test for operator precedence with messy inputs: block comments,
@@ -2858,24 +2806,7 @@ fn test_format_golden_ops_all() {
 /// `generated/format.fixtures/ops.mess.clean.wado` is the expected canonical output.
 #[test]
 fn test_format_golden_ops_mess() {
-    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
-    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/generated/format.fixtures");
-    let dirty =
-        fs::read_to_string(fixtures.join("ops.mess_dirty.wado")).expect("read ops.mess dirty");
-    let clean =
-        fs::read_to_string(golden.join("ops.mess.clean.wado")).expect("read ops.mess clean");
-
-    let formatted = wado_compiler::format(&dirty).expect("format ops.mess dirty failed");
-    assert_eq!(
-        formatted, clean,
-        "format(ops.mess dirty) should equal ops.mess clean\n\nActual:\n{formatted}\n\nExpected:\n{clean}"
-    );
-
-    let formatted2 = wado_compiler::format(&formatted).expect("format ops.mess clean failed");
-    assert_eq!(
-        formatted, formatted2,
-        "format(ops.mess clean) should be idempotent"
-    );
+    assert_format_golden("ops.mess");
 }
 
 #[test]
@@ -3325,7 +3256,7 @@ fn run(a: i32, b: i32, c: i32) -> String {
 
 #[test]
 fn test_roundtrip_ast_all_fixtures() {
-    let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures");
     let mut failures = Vec::new();
 
     for entry in fs::read_dir(&fixtures_dir).expect("cannot read fixtures dir") {
@@ -3444,7 +3375,7 @@ fn test() {
 
 #[test]
 fn test_roundtrip_ast_all_stdlib() {
-    let lib_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("lib");
+    let lib_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../lib");
     let mut failures = Vec::new();
 
     fn visit_dir(dir: &Path, failures: &mut Vec<String>) {
@@ -3750,7 +3681,7 @@ fn token_starts(source: &str) -> Vec<(usize, usize, usize)> {
 /// formatting.
 #[test]
 fn test_format_keeps_a_comment_wedged_in_any_token_gap() {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("format.fixtures");
     let mut probed = 0usize;
     let mut failures: Vec<String> = Vec::new();
     let mut fixtures: Vec<_> = fs::read_dir(&dir)

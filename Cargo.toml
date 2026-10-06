@@ -1,11 +1,13 @@
 [workspace]
 members = [
     "wado-compiler",
+    "wado-compiler/tests",
     "wado-cli",
     "wado-from-idl",
     "wado-bundled-libm",
     "wado-manifest",
     "wado-dev-tools",
+    "wado-host",
     "wado-lsp",
     "wado-playground",
     "wado-wasm-embed",
@@ -89,7 +91,7 @@ hyper-util = { version = "0.1", features = ["tokio", "http1", "http2", "server",
 rustls = { version = "0.23", default-features = false, features = ["ring", "tls12", "logging"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12", "logging"] }
 webpki-roots = { version = "1" }
-rustls-pemfile = { version = "2" }
+rustls-webpki = { version = "0.103", default-features = false }
 http-body = { version = "1" }
 assert_cmd = { version = "2" }
 heck = { version = "0.5" }
@@ -136,6 +138,11 @@ overflow-checks = false
 # `1` and `2`. The price is a from-scratch workspace build, about a third
 # slower. That is paid on `cargo clean` and a CI cache miss, never on an edit.
 [profile.dev.package.wado-compiler]
+opt-level = 2
+
+# The harness that drives the compiler's tests, at the level it had while it
+# was the compiler's own test targets.
+[profile.dev.package.wado-compiler-tests]
 opt-level = 2
 
 [profile.dev.package.wado-dev-tools]

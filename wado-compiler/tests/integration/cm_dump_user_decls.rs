@@ -2,7 +2,7 @@
 //! module's `#[cm]` declarations too. Either entry point missing them reaches
 //! WIR with the binding's call unresolved.
 
-use crate::common::{InMemoryHost, block_on};
+use crate::common::{block_on, in_memory_host};
 use wado_compiler::{OptLevel, dump_with_host_and_world};
 
 const USER_CM_BINDING: &str = r#"
@@ -18,7 +18,7 @@ export fn run() with Entropy {
 
 #[test]
 fn dump_registers_a_user_modules_cm_declarations() {
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let dump = block_on(dump_with_host_and_world(
         USER_CM_BINDING,
         &host,

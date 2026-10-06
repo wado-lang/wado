@@ -341,7 +341,7 @@ impl AstVisitor for HintCollector<'_> {
 mod tests {
     use super::*;
     use crate::query::test_ctx::with_ctx;
-    use crate::test_support::MapHost;
+    use crate::test_support::in_memory_host;
     use crate::text::PositionEncoding;
     use futures::executor::block_on;
 
@@ -489,7 +489,7 @@ mod tests {
             let src = "fn f() -> i32 {\n    let x = 1;\n    let y = 2;\n    return x + y;\n}\n";
             let path = "/test.wado";
             let uri = format!("file://{path}");
-            let host = MapHost::single(path, src);
+            let host = in_memory_host(&[(path, src)]);
             let sem = wado_compiler::semantics(src, &host, Some(path)).await;
             let ctx = QueryContext::new(&sem, src, &uri, PositionEncoding::Utf16);
             // Restrict to line 1 only — `let x = 1` is on line 1 (0-based),
@@ -744,7 +744,7 @@ mod tests {
         let src = "// 🦀🦀🦀\nfn f() -> i32 { let x = 1; return x; }\n";
         let path = "/test.wado";
         let uri = format!("file://{path}");
-        let host = MapHost::single(path, src);
+        let host = in_memory_host(&[(path, src)]);
         let sem = futures::executor::block_on(wado_compiler::semantics(src, &host, Some(path)));
         let ctx = QueryContext::new(&sem, src, &uri, PositionEncoding::Utf16);
         let hints = inlay_hints(&ctx, Range::WHOLE_DOCUMENT);
@@ -808,7 +808,7 @@ mod tests {
             // host's lookup key. Mirror the pattern in `def_at_in`
             // (`tests/definition.rs`) which keys the sibling module on
             // `./lib.wado`, not its eventual absolute path.
-            let host = MapHost::with_files(&[("./other.wado", other), (path, entry)]);
+            let host = in_memory_host(&[("./other.wado", other), (path, entry)]);
             let sem = wado_compiler::semantics(entry, &host, Some(path)).await;
             let ctx = QueryContext::new(&sem, entry, &uri, PositionEncoding::Utf16);
             let hints = inlay_hints(&ctx, Range::WHOLE_DOCUMENT);

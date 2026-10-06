@@ -41,7 +41,7 @@ How to _use_ the CLI is the `wado-cli` skill, not this file.
 ## Module Map
 
 - `compile.rs`, `check.rs`, `run.rs`, `serve.rs`, `test.rs`, `format.rs`, `doc.rs`, `dump.rs`, `wit.rs`, `query.rs` — one subcommand each.
-- `runtime.rs`, `http_hooks.rs`, `timezone_host.rs`, `tls_trust.rs` — the wasmtime host: instantiation, WASI wiring, and the hooks `serve` needs.
+- `runtime.rs`, `http_hooks.rs` — the wasmtime host: instantiation, WASI wiring, and the hooks `serve` needs. The timezone host and the TLS trust store live in `wado-host`, which the compiler's tests share.
 - `kiln_driver.rs`, `kiln_provider.rs`, `kiln_runtime.rs`, `kiln_wit.rs`, `kiln_metadata.rs` — Kiln generators. `check` runs the same pipeline `compile` does, writes included.
 - `manifest.rs`, `build.rs`, `build_dep.rs`, `dep_component.rs`, `fetch.rs`, `git.rs`, `oci.rs`, `registry.rs`, `publish.rs` — `wado.toml` handling and the dependency backends behind `wado-manifest`'s `DependencyProvider` seam.
 - `query_adapter.rs`, `lsp.rs` — bridge to `wado-lsp`, for the `query` subcommand and the stdio server.

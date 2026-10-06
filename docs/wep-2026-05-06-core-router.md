@@ -329,7 +329,7 @@ The implementation lives in `wado-compiler/lib/core/router.wado` and is ported f
 - Method dispatch supports multiple methods per terminal via an `List<MethodEntry>` per terminal, scanned linearly on lookup (per-terminal method count is in the single digits, so a sorted array + binary search is overkill). (The example assumes one method per terminal.)
 - Each terminal and wildcard node carries an extra `any_handler_idx: i32` (`-1` when absent) for `Router::any` dispatch.
 - A `match_request` adapter handles path/query split.
-- Patterns with no `:param`/`*wildcard` segments are routed through a sorted side-table (`static_entries: List<StaticEntry<H>>`) with binary search and pre-built `RouteMatch` shells. The DFA only stores dynamic patterns. Static-route hits return a reference into the side-table — zero allocations per match.
+- Patterns with no `:param`/`*wildcard` segments are routed through a side-table keyed by pattern, with pre-built `RouteMatch` shells. The DFA only stores dynamic patterns. Static-route hits return a reference into the side-table — zero allocations per match.
 - Each DFA terminal caches the captured parameter-name list (`terminal_names: List<String>`) so a match can construct `PathParams` without re-walking the path. Wildcard transitions similarly cache `wildcard_names = terminal_names + [wildcard_name]`.
 
 ```

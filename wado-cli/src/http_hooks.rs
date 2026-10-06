@@ -1,4 +1,4 @@
-//! Custom `WasiHttpHooks` that uses [`crate::tls_trust`]'s augmented
+//! Custom `WasiHttpHooks` that uses [`wado_host::tls_trust`]'s augmented
 //! trust store for outbound HTTPS.
 //!
 //! wasmtime's stock `default_send_request` hardcodes `webpki-roots`, which is
@@ -17,7 +17,7 @@ use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
 use wasmtime_wasi_http::{Error as HttpError, RequestOptions, WasiBody, WasiHttpHooks};
 
-use crate::tls_trust::{build_root_cert_store, install_default_crypto_provider};
+use wado_host::tls_trust::{build_root_cert_store, install_default_crypto_provider};
 
 macro_rules! warn_log {
     ($($arg:tt)*) => { eprintln!("warning: {}", format_args!($($arg)*)) };
@@ -47,12 +47,9 @@ pub struct WadoHttpHooks {
 
 /// Process-wide `rustls::ClientConfig` shared by every `WadoHttpHooks`.
 ///
-/// `wado serve` builds a fresh `WasiState` per request and used to call
-/// `WadoHttpHooks::new()` from the per-request constructor, which in turn
-/// ran `build_root_cert_store()` — a function that reads CA bundles from
-/// disk via `SSL_CERT_FILE`/`SSL_CERT_DIR`. Doing that I/O on every request
-/// is wasted work; the configuration is immutable after process startup,
-/// so cache it in a `LazyLock` and clone the `Arc` per request.
+/// `wado serve` builds a fresh `WasiState` per request, and with it a
+/// `WadoHttpHooks`. The configuration is immutable after process startup, so
+/// it is built once rather than copying the whole root store per request.
 fn shared_client_config() -> Arc<rustls::ClientConfig> {
     static CONFIG: LazyLock<Arc<rustls::ClientConfig>> = LazyLock::new(|| {
         install_default_crypto_provider();
