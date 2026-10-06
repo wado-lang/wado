@@ -82,8 +82,8 @@ pub enum CtfeBuiltin {
     ArraySet,
     ArrayCopy,
     ArrayClonePrefix,
-    /// `array_release`: no slot it empties is read before a write refills it,
-    /// so the interpreter leaves the elements where they are.
+    /// `array_release`: reading a released slot is unspecified, the element it
+    /// held among the outcomes, so the interpreter leaves the elements in place.
     ArrayRelease,
     ColdPath,
     Select,
