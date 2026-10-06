@@ -58,8 +58,10 @@ not accept. It is always a bug, and each operation says which class of behavior
 its violation has. Unconstrained behavior arises from a contract violation and
 from nothing else.
 
-Any build may detect a contract violation and trap. No build may trap on
-unspecified or host-defined behavior that is not a contract violation.
+Any build may detect a contract violation and trap, and
+[Contract Checks](./spec-assertions.md#contract-checks) says which builds do.
+No build may trap on unspecified or host-defined behavior that is not a
+contract violation.
 
 ## Overview
 

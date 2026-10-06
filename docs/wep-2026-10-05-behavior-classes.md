@@ -169,8 +169,5 @@ breaks a type's invariant.
    the machine that ran the compiler. Only reading a stored f32 NaN declines:
    its bits are not host-defined, and widening it to the `f64` a `Value` holds
    may quiet it.
-
-## Known gaps
-
-- No build detects a contract violation yet. The specification permits it, and
-  nothing does it.
+5. A build detects a contract violation:
+   [WEP: Contract Checks](./wep-2026-10-06-contract-checks.md). Done.
