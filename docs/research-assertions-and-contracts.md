@@ -94,9 +94,9 @@ or a failed `assert` inside a called function does.
 
 ### The test world
 
-`wado test` compiles to the test world. It already differs from a shipping
-build in one way: it uses the `debug` allocator, which never reuses freed
-memory and poisons it with `0xFF`. The behavior-classes WEP names the test
+`wado test` compiles to the test world. It already trades speed for finding
+bugs: it uses the `debug` allocator, which never reuses freed memory and
+poisons it with `0xFF`. The behavior-classes WEP names the test
 world as a build that could keep the checks an `_unchecked` function elides.
 
 ## Assertions elsewhere
@@ -104,7 +104,7 @@ world as a build that could keep the checks an `_unchecked` function elides.
 | Language | Check that always runs           | Check a build removes                         | What a removed check means                          |
 | -------- | -------------------------------- | --------------------------------------------- | --------------------------------------------------- |
 | Rust     | `assert!`                        | `debug_assert!`, by `debug_assertions`        | nothing                                             |
-| Swift    | `precondition`, kept at `-O`     | `assert`, removed at `-O`                     | assumed true at `-Ounchecked`                       |
+| Swift    | `precondition`, kept at `-O`     | `assert` at `-O`; both at `-Ounchecked`       | nothing at `-O`; assumed true at `-Ounchecked`      |
 | Kotlin   | `require`, `check`               | `assert`, by the JVM's `-ea`                  | nothing                                             |
 | Java     | none                             | `assert`, off unless `-ea`                    | nothing                                             |
 | Python   | none                             | `assert`, removed by `-O`                     | nothing                                             |
@@ -183,8 +183,9 @@ checks nothing at run time.
 ### Eiffel
 
 Eiffel introduced Design by Contract. A failed precondition is the caller's
-fault, and a failed postcondition is the function's own. That split is what
-makes a precondition part of the signature rather than of the body.
+fault, and a failed postcondition is the function's own. The split is why a
+precondition sits on the signature, where the caller reads it, rather than in
+the body.
 
 ### Ada and SPARK
 
