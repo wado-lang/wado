@@ -23,7 +23,7 @@ use { ReflectTemplate } from "core:prelude/traits.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { Option, Result } from "core:prelude/types.wado";
 use { Slice } from "core:prelude/slice.wado";
-use { Array, seq_eq, seq_cmp } from "core:prelude/array.wado";
+use { Array, seq_eq, seq_cmp, check_index_contract } from "core:prelude/array.wado";
 use { List } from "core:prelude/list.wado";
 use { ByteSlice, ByteList, ByteArray, AsByteSlice } from "core:prelude/bytes.wado";
 
@@ -531,9 +531,7 @@ impl String {
     /// unspecified: a byte of the backing array past `len()`, or a trap.
     #[compiler_item("string_get_byte_unchecked")]
     pub fn get_byte_unchecked(&self, index: i32) -> u8 {
-        if builtin::contract_checks() {
-            assert 0 <= index < self.used, "index out of bounds";
-        }
+        check_index_contract(index, self.used);
         return self.repr[index];
     }
 
@@ -546,9 +544,7 @@ impl String {
     /// Breaking it is a contract violation, and the behavior is unconstrained.
     #[compiler_item("string_set_byte_unchecked")]
     pub fn set_byte_unchecked(&mut self, index: i32, value: u8) {
-        if builtin::contract_checks() {
-            assert 0 <= index < self.used, "index out of bounds";
-        }
+        check_index_contract(index, self.used);
         self.repr[index] = value;
     }
 
@@ -1381,9 +1377,7 @@ impl StrSlice {
     /// Any other `index` is a contract violation, and the result is
     /// unspecified: a byte of the backing array outside the view, or a trap.
     pub fn get_byte_unchecked(&self, index: i32) -> u8 {
-        if builtin::contract_checks() {
-            assert 0 <= index < self.len(), "index out of bounds";
-        }
+        check_index_contract(index, self.len());
         return self.repr[self.start + index];
     }
 
@@ -2050,9 +2044,7 @@ impl AsStrSlice for String {
     }
 
     fn get_byte_unchecked(&self, index: i32) -> u8 {
-        if builtin::contract_checks() {
-            assert 0 <= index < self.used, "index out of bounds";
-        }
+        check_index_contract(index, self.used);
         return self.repr[index];
     }
 

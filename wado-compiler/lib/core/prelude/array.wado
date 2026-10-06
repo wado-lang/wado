@@ -180,6 +180,14 @@ impl<T> IndexValue<RangeInclusive<i32>> for Array<T> {
     }
 }
 
+/// The contract of an `_unchecked` read at `index` of a sequence `len` long,
+/// checked where the build checks contracts.
+internal fn check_index_contract(index: i32, len: i32) {
+    if builtin::contract_checks() {
+        assert 0 <= index < len, "index out of bounds";
+    }
+}
+
 /// True when `a[a_start..a_end)` and `b[b_start..b_end)` hold equal elements.
 internal fn seq_eq<T: Eq>(a: &Array<T>, a_start: i32, a_end: i32, b: &Array<T>, b_start: i32, b_end: i32) -> bool {
     let len = a_end - a_start;
