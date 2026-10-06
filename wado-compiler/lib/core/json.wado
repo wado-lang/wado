@@ -985,10 +985,14 @@ impl Serializer for PrettyJsonSerializer {
 pub struct JsonDeserializer {
     pub input: ByteSlice,
     pub pos: i32,
-    /// Nesting level of the value being read. Each access re-asserts its own
-    /// level before descending, so it never needs unwinding.
+    /// Nesting level of the value being read. A container's `begin_*` raises
+    /// it and its `end` lowers it again.
     pub depth: i32 = 0,
     pub max_depth: i32 = DEFAULT_MAX_DEPTH,
+    /// Whether the innermost open container has yielded no entry yet, so the
+    /// next one takes no comma. One flag serves every level: a container is
+    /// resumed only after the one nested in it ended, which clears it.
+    first_entry: bool = false,
     /// Scratch for `scan_number_into`, reused so a number token costs no
     /// allocation. Every field is written before it is read.
     scratch: ScannedNumber = ScannedNumber::empty(),
@@ -1215,8 +1219,20 @@ struct StringRunScan {
 }
 
 impl JsonDeserializer {
-    fn inner_depth(&self) -> Result<i32, DeserializeError> {
-        return deeper(self.depth, self.max_depth, self.pos as i64);
+    /// Consumes a container's opening byte `open` and descends into it.
+    fn open_container(&mut self, open: i32) -> Result<(), DeserializeError> {
+        self.expect_char(open)?;
+        self.depth = deeper(self.depth, self.max_depth, self.pos as i64)?;
+        self.first_entry = true;
+        return Result::Ok(());
+    }
+
+    /// Consumes a container's closing byte `close` and ascends out of it.
+    fn close_container(&mut self, close: i32) -> Result<(), DeserializeError> {
+        self.expect_char(close)?;
+        self.depth -= 1;
+        self.first_entry = false;
+        return Result::Ok(());
     }
 
     pub fn peek(&self) -> i32 {
@@ -1319,7 +1335,7 @@ impl JsonDeserializer {
     /// not call it: that caller needs the byte, and returning it here means
     /// re-reading it after the comma for every seq element and map key, which
     /// costs json-catalog deserialize 2% against a flat reading for this shape.
-    fn entry_head(&mut self, close: i32, first: bool) -> Result<bool, DeserializeError> {
+    fn entry_head(&mut self, close: i32) -> Result<bool, DeserializeError> {
         let b = self.peek_after_whitespace();
         if b < 0 {
             builtin::cold_path();
@@ -1328,6 +1344,8 @@ impl JsonDeserializer {
         if b == close {
             return Result::Ok(false);
         }
+        let first = self.first_entry;
+        self.first_entry = false;
         if !first {
             // Whitespace is already skipped, so the separator is this byte.
             if b != b',' {
@@ -2130,21 +2148,16 @@ impl JsonDeserializer {
 
 // --- Sub-deserializer implementations ---
 
-// Sub-deserializers hold `&mut JsonDeserializer`, not a value field: a value
-// would deep-copy, so the caller's `pos` would never see what the sub-access
-// consumed. Each carries its container's level, re-asserted before descending.
+// Sub-deserializers hold `&mut JsonDeserializer`, not a value: a value would
+// deep-copy, so the caller's `pos` would never see what the sub-access
+// consumed. The container's state lives in the deserializer, so a container
+// access is the reference itself, and opening one allocates nothing.
 
-pub struct JsonSeqAccess {
-    de: &mut JsonDeserializer,
-    depth: i32,
-    first: bool,
-}
+/// Reads the elements of a JSON array.
+pub type JsonSeqAccess = &mut JsonDeserializer;
 
-pub struct JsonMapAccess {
-    de: &mut JsonDeserializer,
-    depth: i32,
-    first: bool,
-}
+/// Reads the members of a JSON object as a map.
+pub type JsonMapAccess = &mut JsonDeserializer;
 
 /// Reads an object key as the scalar `JsonKeySerializer` wrote: a string as
 /// itself, a number by the rules a bare one is read by (as serde_json reads
@@ -2259,100 +2272,95 @@ impl Deserializer for JsonKeyDeserializer {
     }
 }
 
-pub struct JsonStructAccess {
-    de: &mut JsonDeserializer,
-    depth: i32,
-    first: bool,
-}
+/// Reads the members of a JSON object as a struct's fields.
+pub type JsonStructAccess = &mut JsonDeserializer;
 
 pub struct JsonVariantAccess {
     de: &mut JsonDeserializer,
-    depth: i32,
     variant: String,
     is_object: bool,
 }
 
 impl DeserializeSeq for JsonSeqAccess {
     fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
-        if !self.de.entry_head(b']', self.first)? {
+        let de = *self as &mut JsonDeserializer;
+        if !de.entry_head(b']')? {
             return Result::Ok(null);
         }
-        self.first = false;
-        self.de.depth = self.depth;
-        let v = T::deserialize(&mut self.de)?;
+        let v = T::deserialize(de)?;
         return Result::Ok(Option::Some(v));
     }
 
     fn end(&mut self) -> Result<(), DeserializeError> {
-        return self.de.expect_char(b']');
+        return self.close_container(b']');
     }
 }
 
 impl DeserializeMap for JsonMapAccess {
     fn next_key<K: Deserialize>(&mut self) -> Result<Option<K>, DeserializeError> {
-        if !self.de.entry_head(b'}', self.first)? {
+        let de = *self as &mut JsonDeserializer;
+        if !de.entry_head(b'}')? {
             return Result::Ok(null);
         }
-        self.first = false;
-        let key = K::deserialize(&mut JsonKeyDeserializer { de: self.de })?;
-        self.de.expect_char(b':')?;
+        let key = K::deserialize(&mut JsonKeyDeserializer { de })?;
+        de.expect_char(b':')?;
         return Result::Ok(Option::Some(key));
     }
 
     fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError> {
-        self.de.depth = self.depth;
-        return V::deserialize(&mut self.de);
+        return V::deserialize(*self as &mut JsonDeserializer);
     }
 
     fn end(&mut self) -> Result<(), DeserializeError> {
-        return self.de.expect_char(b'}');
+        return self.close_container(b'}');
     }
 }
 
 impl DeserializeStruct for JsonStructAccess {
     fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError> {
+        let de = *self as &mut JsonDeserializer;
         // `entry_head`'s shape, kept here because the key check below reads the
         // byte the scan stopped on — see that function for what sharing costs.
-        let mut b = self.de.peek_after_whitespace();
+        let mut b = de.peek_after_whitespace();
         if b < 0 {
             builtin::cold_path();
-            return Result::Err(DeserializeError::eof(self.de.pos as i64));
+            return Result::Err(DeserializeError::eof(de.pos as i64));
         }
         if b == b'}' {
             return Result::Ok(null);
         }
-        if !self.first {
+        if !de.first_entry {
             if b != b',' {
                 builtin::cold_path();
-                return Result::Err(self.de.entry_separator_error(b'}'));
+                return Result::Err(de.entry_separator_error(b'}'));
             }
-            self.de.pos += 1;
-            b = self.de.peek_after_whitespace();
+            de.pos += 1;
+            b = de.peek_after_whitespace();
         }
-        self.first = false;
+        de.first_entry = false;
 
         // Fast path: scan JSON string key without allocating.
         // For unescaped keys (the common case), we pass the byte range
         // directly to S::lookup, avoiding String allocation entirely.
         if b != b'"' {
             builtin::cold_path();
-            return Result::Err(self.de.key_quote_error(b));
+            return Result::Err(de.key_quote_error(b));
         }
-        self.de.pos += 1;
-        let key_start = self.de.pos;
-        let scan = self.de.scan_string_run(key_start);
-        self.de.pos = scan.end;
+        de.pos += 1;
+        let key_start = de.pos;
+        let scan = de.scan_string_run(key_start);
+        de.pos = scan.end;
 
         if scan.stop == b'"' {
             // Fast path: key has no escapes, compare directly from input buffer
             if !scan.valid {
                 builtin::cold_path();
-                return Result::Err(self.de.invalid_utf8_string(key_start));
+                return Result::Err(de.invalid_utf8_string(key_start));
             }
-            let key_end = self.de.pos;
-            self.de.pos += 1;  // skip closing '"'
-            self.de.expect_char(b':')?;
-            let idx = match S::lookup(self.de.input.slice(key_start, key_end)) {
+            let key_end = de.pos;
+            de.pos += 1;  // skip closing '"'
+            de.expect_char(b':')?;
+            let idx = match S::lookup(de.input.slice(key_start, key_end)) {
                 Some(i) => i,
                 None => -1,
             };
@@ -2362,9 +2370,9 @@ impl DeserializeStruct for JsonStructAccess {
 
         // Slow path: key has escape sequences or is malformed, must parse fully.
         // Reset position to before the key and use read_json_string.
-        self.de.pos = key_start - 1;
-        let key = self.de.read_json_string()?;
-        self.de.expect_char(b':')?;
+        de.pos = key_start - 1;
+        let key = de.read_json_string()?;
+        de.expect_char(b':')?;
         let idx = match S::lookup(key.as_bytes()) {
             Some(i) => i,
             None => -1,
@@ -2373,16 +2381,15 @@ impl DeserializeStruct for JsonStructAccess {
     }
 
     fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
-        self.de.depth = self.depth;
-        return T::deserialize(&mut self.de);
+        return T::deserialize(*self as &mut JsonDeserializer);
     }
 
     fn skip(&mut self) -> Result<(), DeserializeError> {
-        return self.de.skip_value(self.depth);
+        return self.skip_value(self.depth);
     }
 
     fn end(&mut self) -> Result<(), DeserializeError> {
-        return self.de.expect_char(b'}');
+        return self.close_container(b'}');
     }
 }
 
@@ -2401,7 +2408,6 @@ impl DeserializeVariant for JsonVariantAccess {
     }
 
     fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
-        self.de.depth = self.depth;
         return T::deserialize(&mut self.de);
     }
 
@@ -2411,7 +2417,7 @@ impl DeserializeVariant for JsonVariantAccess {
 
     fn end(&mut self) -> Result<(), DeserializeError> {
         if self.is_object {
-            return self.de.expect_char(b'}');
+            return self.de.close_container(b'}');
         }
         return Result::Ok(());
     }
@@ -2587,33 +2593,18 @@ impl Deserializer for JsonDeserializer {
     }
 
     fn begin_seq(&mut self) -> Result<JsonSeqAccess, DeserializeError> {
-        self.expect_char(b'[')?;
-        let depth = self.inner_depth()?;
-        return Result::Ok(JsonSeqAccess {
-            de: self,
-            depth,
-            first: true,
-        });
+        self.open_container(b'[')?;
+        return Result::Ok(self as JsonSeqAccess);
     }
 
     fn begin_map(&mut self) -> Result<JsonMapAccess, DeserializeError> {
-        self.expect_char(b'{')?;
-        let depth = self.inner_depth()?;
-        return Result::Ok(JsonMapAccess {
-            de: self,
-            depth,
-            first: true,
-        });
+        self.open_container(b'{')?;
+        return Result::Ok(self as JsonMapAccess);
     }
 
     fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<JsonStructAccess, DeserializeError> {
-        self.expect_char(b'{')?;
-        let depth = self.inner_depth()?;
-        return Result::Ok(JsonStructAccess {
-            de: self,
-            depth,
-            first: true,
-        });
+        self.open_container(b'{')?;
+        return Result::Ok(self as JsonStructAccess);
     }
 
     fn begin_variant<S: AsStrSlice>(
@@ -2630,23 +2621,19 @@ impl Deserializer for JsonDeserializer {
         match b {
             '"' => {
                 // A bare tag opens no container.
-                let depth = self.depth;
                 let name = self.read_json_string()?;
                 return Result::Ok(JsonVariantAccess {
                     de: self,
-                    depth,
                     variant: name,
                     is_object: false,
                 });
             },
             '{' => {
-                self.pos += 1;
-                let depth = self.inner_depth()?;
+                self.open_container(b'{')?;
                 let name = self.read_json_string()?;
                 self.expect_char(b':')?;
                 return Result::Ok(JsonVariantAccess {
                     de: self,
-                    depth,
                     variant: name,
                     is_object: true,
                 });
