@@ -1,0 +1,16 @@
+// A function type is foreign to every package, so an inherent `impl` on one is
+// a coherence violation. The diagnostic names the type by its signature, effects
+// included.
+
+use { Stdout } from "core:cli";
+
+impl fn(i32) -> i32 with Stdout {
+    fn twice(&self, x: i32) -> i32 with Stdout {
+        return self(self(x));
+    }
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "coherence violation: cannot define an inherent `impl` on foreign type `fn(i32) -> i32 with Stdout` (defined in another package); use a trait to extend it"}

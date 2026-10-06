@@ -1,0 +1,43 @@
+// A bound's argument may project off the parameter it bounds, or off one whose
+// own bound projects back. Asking any bound of such a parameter normalizes the
+// others' arguments, which asks about the parameter again; the question once
+// recursed until the stack overflowed.
+
+trait Src with () {
+    type Item;
+}
+
+trait Has<X> with () {
+    fn has(&self) -> i32;
+}
+
+struct A {
+    v: i32,
+}
+
+impl Src for A {
+    type Item = i32;
+}
+
+impl Has<i32> for A {
+    fn has(&self) -> i32 {
+        return self.v;
+    }
+}
+
+fn needs_src<U: Src>(u: &U) -> i32 {
+    return 1;
+}
+
+fn own<T: Has<T::Item> + Src>(t: T) -> i32 {
+    return needs_src(&t) + t.has();
+}
+
+fn mutual<P: Has<Q::Item> + Src, Q: Has<P::Item> + Src>(p: P, q: Q) -> i32 {
+    return needs_src(&p) + needs_src(&q) + p.has() + q.has();
+}
+
+test {
+    assert own(A { v: 10 }) == 11;
+    assert mutual(A { v: 10 }, A { v: 20 }) == 32;
+}

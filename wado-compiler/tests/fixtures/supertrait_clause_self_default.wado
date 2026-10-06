@@ -1,0 +1,44 @@
+// A supertrait clause reading a parameter that defaults to `Self` reads the
+// bounded type.
+//
+// `T: Top` leaves `X` at its default, so its clause `Sub<X>` is `Sub<T>`. Both
+// the call `via(&P {})`, which checks `P: Sub<P>` through the chain, and the
+// body of `via`, which answers `T: Sub<T>` from its bound, once lost `X` and
+// panicked on a question nobody could state.
+
+trait Sub<X> with () {
+    fn s(&self) -> i32;
+}
+
+trait Top<X = Self>: Sub<X> with () {
+    fn t(&self) -> i32;
+}
+
+struct P {}
+
+impl Sub<P> for P {
+    fn s(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl Top for P {
+    fn t(&self) -> i32 {
+        return 2;
+    }
+}
+
+fn need<U: Sub<U>>(u: &U) -> i32 {
+    return u.s();
+}
+
+fn via<T: Top>(t: &T) -> i32 {
+    return need(t) + t.t();
+}
+
+test "a Self default reaches the clause as the bounded type" {
+    assert via(&P {}) == 3;
+}
+
+__DATA__
+{"test": {}}

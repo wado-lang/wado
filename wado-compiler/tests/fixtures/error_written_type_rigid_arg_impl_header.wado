@@ -1,0 +1,20 @@
+// An impl header's target owes its declaration's bounds at the impl's
+// parameters: `Wrap<T>` needs `T: Tag`, which the impl does not declare.
+
+trait Tag with () {}
+
+trait Shown with () {}
+
+struct Wrap<T: Tag> {
+    v: T,
+}
+
+impl<T> Shown for Wrap<T> {}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":12:19: analysis error: type 'T' does not implement trait 'Tag' required by bound on 'T'",
+  "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
+}

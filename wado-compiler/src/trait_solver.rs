@@ -17,6 +17,6 @@ pub use holds::{Holds, comparison_row, holds, holds_with_args, owed};
 pub use program::{
     ArgDefault, AssocId, Declaration, DerivationRequest, Env, Fact, ImplDef, ImplId, ImplOrigin,
     MethodId, ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, SolverType,
-    TraitDeclId, TraitDef, TypeDeclId, TypeDef,
+    TraitDeclId, TraitDef, TypeDeclId, TypeDef, args_per_param,
 };
 pub use rank::{Candidate, Generality, Selection, rank};

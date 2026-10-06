@@ -2695,6 +2695,8 @@ pub fn bf16_reinterpret_u16(i: u16) -> bf16;
 
 pub fn unreachable() -> !;
 
+fn contract_checks() -> bool;
+
 pub fn cold_path();
 
 pub fn stream_read(handle: i32, ptr: i32, max: i32) -> i32;
@@ -2728,6 +2730,13 @@ pub fn f64_is_nan(x: f64) -> bool;
 pub fn i8x16_eq(a: v128, b: v128) -> v128;
 
 pub fn i8x16_all_true(a: v128) -> bool;
+
+pub fn "core:prelude/format.wado/Formatter::resolved_seq_limit"(self: &Formatter) -> i32 {
+    if (self.precision == -2) {
+        return 256;
+    }
+    return self.precision;
+}
 
 // retains: buf
 pub fn "core:prelude/format.wado/Formatter::new"(buf: &mut String) -> Formatter {
@@ -2898,6 +2907,10 @@ pub fn "core:prelude/format.wado/Formatter::write_indent"(self: &mut Formatter) 
 pub fn "core:prelude/format.wado/Formatter::write_newline_indent"(self: &mut Formatter) {
     self."core:prelude/format.wado/Formatter::write_char"('\n');
     self."core:prelude/format.wado/Formatter::write_indent"();
+}
+
+pub fn "core:prelude/string.wado/StrSlice^core:prelude/traits.wado/Inspect::inspect"(self: &StrSlice, f: &mut Formatter) {
+    "core::prelude/format.wado::core/prelude/format.wado/inspect_text<core:prelude/string.wado/StrSlice>"(f, *self);
 }
 
 pub fn "$field_get$core:prelude/format.wado/Formatter$char"(v: &Formatter, index: i32) -> char {
@@ -4004,6 +4017,51 @@ fn count_digits_u64(val: u64) -> i32 {
     return 20;
 }
 
+fn count_digits_u64_base(val_i64: i64, bits_per_digit: i32) -> i32 {
+    if (val_i64 == 0) {
+        return 1;
+    }
+    return ((("core::prelude/fpfmt.wado::u64_bit_len"(val_i64 as u64) - 1) / bits_per_digit) + 1);
+}
+
+fn write_u64_base_digits(arr: &mut Array<u8>, offset: i32, val_i64: i64, digit_count: i32, bits_per_digit: i32, mask: i32, upper: bool) {
+    let mask64: i64 = mask as i64;
+    let mut pos: i32 = (offset + digit_count);
+    if (val_i64 == 0) {
+        core::builtin::array_set_u8(arr, offset, 48);
+    } else {
+        let mut temp: i64 = val_i64;
+        loop {
+            if !(temp != 0) {
+                break;
+            }
+            pos = (pos - 1);
+            let digit: i32 = (temp & mask64) as i32;
+            let ch: i32 = if (digit < 10) {
+                (48 + digit);
+            } else {
+                if upper {
+                    ((65 + digit) - 10);
+                } else {
+                    ((97 + digit) - 10);
+                };
+            };
+            core::builtin::array_set_u8(arr, pos, ch as u8);
+            let shift_u64: u64 = bits_per_digit as u64;
+            temp = (temp as u64 >> shift_u64) as i64;
+        }
+    }
+}
+
+fn bool::fmt_into(self: Box<bool>, f: &mut Formatter) {
+    let text: String = if self.value {
+        String { repr: packed"true", used: 4 };
+    } else {
+        String { repr: packed"false", used: 5 };
+    };
+    f."core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(text);
+}
+
 pub fn char::from_u32_unchecked(value: u32) -> char {
     return core::builtin::i32_as_char(value as i32);
 }
@@ -4020,6 +4078,10 @@ pub fn char::len_utf8(self: Box<char>) -> i32 {
         return 3;
     }
     return 4;
+}
+
+fn u8::fmt_into(self: Box<u8>, f: &mut Formatter) {
+    Box<i32> { value: self.value as i32 }.i32::fmt_decimal(f);
 }
 
 pub fn i32::max(a: i32, b: i32) -> i32 {
@@ -4050,6 +4112,17 @@ fn i32::fmt_into(self: Box<i32>, f: &mut Formatter) {
     self.i32::fmt_decimal(f);
 }
 
+fn u32::fmt_decimal(self: Box<u32>, f: &mut Formatter) {
+    let value: u64 = self.value as u64;
+    let digit_count: i32 = "core::prelude/primitive.wado::count_digits_u64"(value);
+    let offset: i32 = f."core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(false, String { repr: packed"", used: 0 }, digit_count);
+    "core::prelude/primitive.wado::write_decimal_digits"(f.buf."core:prelude/string.wado/String::internal_raw_bytes_mut"(), offset, value, digit_count);
+}
+
+fn u32::fmt_into(self: Box<u32>, f: &mut Formatter) {
+    self.u32::fmt_decimal(f);
+}
+
 pub fn i64::abs(x: i64) -> i64 {
     return if (x < 0) {
         -x;
@@ -4075,6 +4148,23 @@ fn u64::fmt_decimal(self: Box<u64>, f: &mut Formatter) {
     let digit_count: i32 = "core::prelude/primitive.wado::count_digits_u64"(self.value);
     let offset: i32 = f."core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(false, String { repr: packed"", used: 0 }, digit_count);
     "core::prelude/primitive.wado::write_decimal_digits"(f.buf."core:prelude/string.wado/String::internal_raw_bytes_mut"(), offset, self.value, digit_count);
+}
+
+fn u64::fmt_base(self: Box<u64>, f: &mut Formatter, base: i32, upper: bool, alt_prefix: String) {
+    let val_i64: i64 = self.value as i64;
+    let bits_per_digit: i32 = if (base == 2) {
+        1;
+    } else {
+        if (base == 8) {
+            3;
+        } else {
+            4;
+        };
+    };
+    let mask: i32 = (base - 1);
+    let digit_count: i32 = "core::prelude/primitive.wado::count_digits_u64_base"(val_i64, bits_per_digit);
+    let offset: i32 = f."core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(false, alt_prefix, digit_count);
+    "core::prelude/primitive.wado::write_u64_base_digits"(f.buf."core:prelude/string.wado/String::internal_raw_bytes_mut"(), offset, val_i64, digit_count, bits_per_digit, mask, upper);
 }
 
 fn u64::fmt_into(self: Box<u64>, f: &mut Formatter) {
@@ -4237,8 +4327,20 @@ pub fn "v128^core:prelude/traits.wado/Eq::eq"(self: Box<v128>, other: Box<v128>)
     return core::builtin::i8x16_all_true(core::builtin::i8x16_eq(self.value, other.value));
 }
 
+pub fn "bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<bool>, f: &mut Formatter) {
+    self.bool::fmt_into(f);
+}
+
+pub fn "u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<u8>, f: &mut Formatter) {
+    self.u8::fmt_into(f);
+}
+
 pub fn "i32^core:prelude/traits.wado/Inspect::inspect"(self: Box<i32>, f: &mut Formatter) {
     self.i32::fmt_into(f);
+}
+
+pub fn "u32^core:prelude/traits.wado/Inspect::inspect"(self: Box<u32>, f: &mut Formatter) {
+    self.u32::fmt_into(f);
 }
 
 pub fn "i64^core:prelude/traits.wado/Inspect::inspect"(self: Box<i64>, f: &mut Formatter) {
@@ -4251,6 +4353,10 @@ pub fn "u64^core:prelude/traits.wado/Inspect::inspect"(self: Box<u64>, f: &mut F
 
 pub fn "f64^core:prelude/traits.wado/Inspect::inspect"(self: Box<f64>, f: &mut Formatter) {
     self.f64::inspect_into(f);
+}
+
+pub fn "i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex"(self: Box<i32>, f: &mut Formatter) {
+    Box<u64> { value: self.value as u32 as u64 }.u64::fmt_base(f, 16, false, String { repr: packed"0x", used: 2 });
 }
 
 pub fn "i8^core:prelude/traits.wado/Eq::eq"(self: Box<i8>, other: Box<i8>) -> bool {
@@ -4430,6 +4536,26 @@ pub fn "$field_get$core:prelude/primitive.wado/ParseCharError$core:prelude/primi
     };
 }
 
+fn decode_char_at(repr: &Array<u8>, pos: i32) -> [u32, i32] {
+    let b0: u32 = repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"(pos) as u32;
+    if (b0 < 128) {
+        return [b0, 1];
+    }
+    if (b0 < 224) {
+        let b1: u32 = repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"((pos + 1)) as u32;
+        return [(((b0 & 31) << 6) | (b1 & 63)), 2];
+    }
+    if (b0 < 240) {
+        let b1: u32 = repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"((pos + 1)) as u32;
+        let b2: u32 = repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"((pos + 2)) as u32;
+        return [((((b0 & 15) << 12) | ((b1 & 63) << 6)) | (b2 & 63)), 3];
+    }
+    let b1: u32 = repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"((pos + 1)) as u32;
+    let b2: u32 = repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"((pos + 2)) as u32;
+    let b3: u32 = repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"((pos + 3)) as u32;
+    return [(((((b0 & 7) << 18) | ((b1 & 63) << 12)) | ((b2 & 63) << 6)) | (b3 & 63)), 4];
+}
+
 fn encode_char(repr: &mut Array<u8>, pos: i32, code: u32) -> i32 {
     if (code < 128) {
         repr."Array<u8>^core:prelude/traits.wado/IndexAssign<i32>::index_assign"(pos, code as u8);
@@ -4455,6 +4581,43 @@ fn encode_char(repr: &mut Array<u8>, pos: i32, code: u32) -> i32 {
 
 fn is_char_start(b: u8) -> bool {
     return ((b & 192) != 128);
+}
+
+fn boundary_at(repr: &Array<u8>, start: i32, len: i32, index: i32) -> bool {
+    if ((index == 0) || (index == len)) {
+        return true;
+    }
+    if ((index < 0) || (index > len)) {
+        return false;
+    }
+    return "core::prelude/string.wado::is_char_start"(repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"((start + index)));
+}
+
+pub fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"(self: &mut StrCharIter) -> Option<char> {
+    if (self.byte_index >= self.used) {
+        return null;
+    }
+    let $pattern_temp_0: [u32, i32] = "core::prelude/string.wado::decode_char_at"(self.repr, self.byte_index);
+    let code: u32 = $pattern_temp_0.0;
+    let len: i32 = $pattern_temp_0.1;
+    self.byte_index = (self.byte_index + len);
+    return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(code));
+}
+
+pub fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::count"(self: &mut StrCharIter) -> i32 {
+    let mut n: i32 = 0;
+    loop {
+        let $match_2: Option<char> = self."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"();
+        match $match_2 {
+            Some(_) => $block_0: {
+                n = (n + 1);
+            },
+            _ => $block_1: {
+                break;
+            },
+        };
+    }
+    return n;
 }
 
 pub fn "core:prelude/string.wado/String::with_capacity"(capacity: i32) -> String {
@@ -4588,6 +4751,20 @@ pub fn "core:prelude/string.wado/StrSlice::get_byte_unchecked"(self: &StrSlice, 
     return self.repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"((self.start + index));
 }
 
+pub fn "core:prelude/string.wado/StrSlice::is_char_boundary"(self: &StrSlice, index: i32) -> bool {
+    return "core::prelude/string.wado::boundary_at"(self.repr, self.start, self."core:prelude/string.wado/StrSlice::len"(), index);
+}
+
+// retains: self
+pub fn "core:prelude/string.wado/StrSlice::slice_unchecked"(self: &StrSlice, start: i32, end: i32) -> StrSlice {
+    return StrSlice { repr: self.repr, start: (self.start + start), end: (self.start + end) };
+}
+
+// retains: self
+pub fn "core:prelude/string.wado/StrSlice::chars"(self: &StrSlice) -> StrCharIter {
+    return StrCharIter { repr: self.repr, used: self.end, byte_index: self.start };
+}
+
 // retains: self
 fn "core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"(self: &String) -> StrSlice {
     return "core::prelude/string.wado::core:prelude/string.wado/StrSlice::internal_new"(&self.repr as &Array<u8>, 0, self.used);
@@ -4605,6 +4782,10 @@ fn "core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::as_st
 pub fn "core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to"(self: &StrSlice, out: &mut String) {
     let view: StrSlice = self."core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::as_str_slice"();
     out."core:prelude/string.wado/String::internal_push_view"(&view);
+}
+
+pub fn "core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::chars"(self: &StrSlice) -> StrCharIter {
+    return self."core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::as_str_slice"()."core:prelude/string.wado/StrSlice::chars"();
 }
 
 pub fn "core:prelude/string.wado/StrSlice^core:prelude/traits.wado/Eq::eq"(self: &StrSlice, other: &StrSlice) -> bool {
@@ -5469,6 +5650,12 @@ pub fn "core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/Stri
     return true;
 }
 
+pub fn "&core:prelude/string.wado/StrSlice^core:prelude/traits.wado/Inspect::inspect"(self: &&StrSlice, f: &mut Formatter) {
+    f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(String { repr: packed"&", used: 1 });
+    let inner: &StrSlice = *self;
+    *inner."core:prelude/string.wado/StrSlice^core:prelude/traits.wado/Inspect::inspect"(f);
+}
+
 fn "core/prelude/array.wado/seq_cmp<u8>"(a: &Array<u8>, a_start: i32, a_end: i32, b: &Array<u8>, b_start: i32, b_end: i32) -> Ordering {
     let a_len: i32 = (a_end - a_start);
     let b_len: i32 = (b_end - b_start);
@@ -5539,6 +5726,49 @@ fn "Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &Arra
 }
 
 pub fn "core/builtin/select<i32>"(cond: bool, if_true: i32, if_false: i32) -> i32;
+
+pub fn "core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(self: &mut Formatter, content: String) {
+    if (self.width <= 0) {
+        self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(content);
+        return;
+    }
+    let view: StrSlice = content."core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"();
+    let content_len: i32 = view."core:prelude/string.wado/StrSlice::chars"()."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::count"();
+    if (content_len >= self.width) {
+        self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(content);
+        return;
+    }
+    let padding: i32 = (self.width - content_len);
+    if self.zero_pad {
+        let sign_len: i32 = "core::prelude/format.wado::core/prelude/format.wado/leading_sign_byte_len<core:prelude/string.wado/StrSlice>"(view, 0, view."core:prelude/string.wado/StrSlice::len"());
+        self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/StrSlice>"(view."core:prelude/string.wado/StrSlice::slice_unchecked"(0, sign_len));
+        self."core:prelude/format.wado/Formatter::write_char_n"('0', padding);
+        self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/StrSlice>"(view."core:prelude/string.wado/StrSlice::slice_unchecked"(sign_len, view."core:prelude/string.wado/StrSlice::len"()));
+        return;
+    }
+    let align: Alignment = self.align;
+    if match align {
+        Left => true,
+        _ => false,
+    } {
+        self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(content);
+        self."core:prelude/format.wado/Formatter::write_char_n"(self.fill, padding);
+    } else {
+        if match align {
+            Center => true,
+            _ => false,
+        } {
+            let left_pad: i32 = (padding / 2);
+            let right_pad: i32 = (padding - left_pad);
+            self."core:prelude/format.wado/Formatter::write_char_n"(self.fill, left_pad);
+            self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(content);
+            self."core:prelude/format.wado/Formatter::write_char_n"(self.fill, right_pad);
+        } else {
+            self."core:prelude/format.wado/Formatter::write_char_n"(self.fill, padding);
+            self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(content);
+        }
+    }
+}
 
 pub fn "core:prelude/format.wado/Formatter::write_str<&core:prelude/string.wado/String>"(self: &mut Formatter, s: &String) {
     self.buf."core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(s);
@@ -5711,6 +5941,73 @@ pub fn "core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/S
     self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(s);
 }
 
+fn "core/prelude/format.wado/inspect_text<core:prelude/string.wado/StrSlice>"(f: &mut Formatter, text: StrSlice) {
+    let limit: i32 = f."core:prelude/format.wado/Formatter::resolved_seq_limit"();
+    f."core:prelude/format.wado/Formatter::write_char"('"');
+    let mut count: i32 = 0;
+    let mut truncated: bool = false;
+    $for_of_0: {
+        let mut $iter_0: StrCharIter = "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(text."core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::chars"()."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/IntoIterator::into_iter"());
+        loop {
+            let $match_10: Option<char> = $iter_0."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"();
+            match $match_10 {
+                Some(c) => $block_14: {
+                    if ((limit >= 0) && (count >= limit)) {
+                        truncated = true;
+                        break;
+                    }
+                    if (c == '"') {
+                        f."core:prelude/format.wado/Formatter::write_char"('\\');
+                        f."core:prelude/format.wado/Formatter::write_char"('"');
+                    } else {
+                        if (c == '\\') {
+                            f."core:prelude/format.wado/Formatter::write_char"('\\');
+                            f."core:prelude/format.wado/Formatter::write_char"('\\');
+                        } else {
+                            if (c == '\n') {
+                                f."core:prelude/format.wado/Formatter::write_char"('\\');
+                                f."core:prelude/format.wado/Formatter::write_char"('n');
+                            } else {
+                                if (c == '\r') {
+                                    f."core:prelude/format.wado/Formatter::write_char"('\\');
+                                    f."core:prelude/format.wado/Formatter::write_char"('r');
+                                } else {
+                                    if (c == '\t') {
+                                        f."core:prelude/format.wado/Formatter::write_char"('\\');
+                                        f."core:prelude/format.wado/Formatter::write_char"('t');
+                                    } else {
+                                        let code: i32 = c as i32;
+                                        if ((code < 32) || (code == 127)) {
+                                            f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(String { repr: packed"\\u{", used: 3 });
+                                            f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"($tmpl: {
+                                                let mut $r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(16);
+                                                let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
+                                                Box<i32> { value: code }."i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex"(&mut $f);
+                                                break $tmpl: $r;
+                                            });
+                                            f."core:prelude/format.wado/Formatter::write_char"('}');
+                                        } else {
+                                            f."core:prelude/format.wado/Formatter::write_char"(c);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    count = (count + 1);
+                },
+                _ => $block_15: {
+                    break;
+                },
+            };
+        }
+    }
+    f."core:prelude/format.wado/Formatter::write_char"('"');
+    if truncated {
+        f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(String { repr: packed"...", used: 3 });
+    }
+}
+
 fn "core/prelude/format.wado/leading_sign_byte_len<&mut core:prelude/string.wado/String>"(s: &mut String, at: i32, len: i32) -> i32 {
     if (len == 0) {
         return 0;
@@ -5740,6 +6037,11 @@ pub fn "core:prelude/string.wado/String::push_str<core:prelude/string.wado/Strin
 
 pub fn "core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/Utf8Error>^core:prelude/traits.wado/ReflectVariant::members"() -> [VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/Utf8Error>,core:prelude/string.wado/String>, VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/Utf8Error>,core:prelude/string.wado/Utf8Error>] {
     return [VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/Utf8Error>,core:prelude/string.wado/String> { index: 0, case_name: String { repr: packed"Ok", used: 2 }, wire_override: Option<String>::None, is_unit: false }, VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/Utf8Error>,core:prelude/string.wado/Utf8Error> { index: 1, case_name: String { repr: packed"Err", used: 3 }, wire_override: Option<String>::None, is_unit: false }];
+}
+
+// retains: self
+fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/IntoIterator::into_iter"(self: &StrCharIter) -> StrCharIter {
+    return *self;
 }
 
 fn "Array<u64>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &Array<u64>, index: i32) -> u64 {
@@ -5772,6 +6074,17 @@ pub fn "Array<u32>::len"(self: &Array<u32>) -> i32 {
 
 pub fn "core:prelude/string.wado/String::push_str<core:prelude/string.wado/StrSlice>"(self: &mut String, other: StrSlice) {
     other."core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to"(self);
+}
+
+fn "core/prelude/format.wado/leading_sign_byte_len<core:prelude/string.wado/StrSlice>"(s: StrSlice, at: i32, len: i32) -> i32 {
+    if (len == 0) {
+        return 0;
+    }
+    let first: u8 = s."core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::as_str_slice"()."core:prelude/string.wado/StrSlice::get_byte_unchecked"(at);
+    if ((first == 45) || (first == 43)) {
+        return 1;
+    }
+    return 0;
 }
 
 // retains: self
@@ -11807,11 +12120,6 @@ fn "$value_copy$core:prelude/string.wado/StrCharIndicesIter"(v: StrCharIndicesIt
 }
 
 // retains: v
-fn "$value_copy$core:prelude/string.wado/StrCharIter"(v: StrCharIter) -> StrCharIter {
-    return StrCharIter { repr: v.repr, used: v.used, byte_index: v.byte_index };
-}
-
-// retains: v
 fn "$value_copy$core:prelude/string.wado/StrUtf8ByteIter"(v: StrUtf8ByteIter) -> StrUtf8ByteIter {
     return StrUtf8ByteIter { repr: v.repr, used: v.used, index: v.index };
 }
@@ -11824,13 +12132,17 @@ fn "$value_copy$core:prelude/string.wado/Utf8Error"(v: Utf8Error) -> Utf8Error {
     return Utf8Error { valid_up_to: v.valid_up_to, error_len: v.error_len };
 }
 
-// retains: v
-fn "$value_copy$core:prelude/string.wado/StrSlice"(v: StrSlice) -> StrSlice {
-    return StrSlice { repr: v.repr, start: v.start, end: v.end };
-}
-
 fn "$value_copy$Array<u8>"(v: Array<u8>) -> Array<u8> {
     return core::builtin::array_clone::<u8>(&v);
+}
+
+// retains: v
+fn "$value_copy$core:prelude/string.wado/StrCharIter"(v: StrCharIter) -> StrCharIter {
+    return StrCharIter { repr: v.repr, used: v.used, byte_index: v.byte_index };
+}
+
+fn "$value_copy$[u32,i32]"(v: [u32, i32]) -> [u32, i32] {
+    return [u32,i32] { 0: v.0, 1: v.1 };
 }
 
 fn "$value_copy$core:prelude/primitive.wado/ParseCharError"(v: ParseCharError) -> ParseCharError {
@@ -11878,12 +12190,17 @@ fn "$value_copy$core:prelude/fpfmt.wado/UnpackResult"(v: UnpackResult) -> Unpack
 }
 
 // retains: v
-fn "$value_copy$core:prelude/format.wado/Formatter"(v: Formatter) -> Formatter {
-    return Formatter { fill: v.fill, align: v.align, sign_plus: v.sign_plus, alternate: v.alternate, zero_pad: v.zero_pad, width: v.width, precision: v.precision, indent: v.indent, buf: v.buf };
+fn "$value_copy$core:prelude/string.wado/StrSlice"(v: StrSlice) -> StrSlice {
+    return StrSlice { repr: v.repr, start: v.start, end: v.end };
 }
 
 fn "$value_copy$core:prelude/string.wado/String"(v: String) -> String {
     return String { repr: core::builtin::array_clone_prefix::<u8>(&v.repr, v.used), used: v.used };
+}
+
+// retains: v
+fn "$value_copy$core:prelude/format.wado/Formatter"(v: Formatter) -> Formatter {
+    return Formatter { fill: v.fill, align: v.align, sign_plus: v.sign_plus, alternate: v.alternate, zero_pad: v.zero_pad, width: v.width, precision: v.precision, indent: v.indent, buf: v.buf };
 }
 
 fn "$value_copy$[i64,i64]"(v: [i64, i64]) -> [i64, i64] {

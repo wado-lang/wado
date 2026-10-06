@@ -1,0 +1,29 @@
+// A trait method's bound reading the trait's parameter means, at an impl's
+// method, the argument the impl writes for it: through `Store<i32>`, the
+// `E: Conv<X>` `hold` declares is `E: Conv<i32>`.
+
+trait Conv<X> with () {
+    fn conv(&self) -> X;
+}
+
+impl Conv<i32> for i32 {
+    fn conv(&self) -> i32 {
+        return *self * 10;
+    }
+}
+
+trait Store<X> with () {
+    fn hold<E: Conv<X>>(&self, e: E) -> X;
+}
+
+struct Boxes {}
+
+impl Store<i32> for Boxes {
+    fn hold<E: Conv<i32>>(&self, e: E) -> i32 {
+        return e.conv();
+    }
+}
+
+test "the impl's argument stands for the trait's parameter" {
+    assert Boxes {}.hold(4) == 40;
+}

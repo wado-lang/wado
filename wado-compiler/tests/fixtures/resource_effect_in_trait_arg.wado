@@ -1,0 +1,27 @@
+// A resource named in a function type's `with` clause is the same effect in an
+// impl header as in a resolved type, as an interface is.
+
+resource Sock {
+    fn ping(&self) -> i32;
+}
+
+trait Tag<F> with () {
+    fn t(&self) -> i32 {
+        return 1;
+    }
+}
+
+struct S {}
+
+impl Tag<fn() with Sock> for S {}
+
+fn need<T: Tag<fn() with Sock>>(t: T) -> i32 {
+    return t.t();
+}
+
+test {
+    assert need(S {}) == 1;
+}
+
+__DATA__
+{"test": {}}

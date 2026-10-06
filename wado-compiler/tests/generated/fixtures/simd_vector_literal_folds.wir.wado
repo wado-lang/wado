@@ -68,7 +68,7 @@ fn "simd_vector_literal_folds.wado/run"() with Stdout {
     let self_20: i32;
     let is_negative_28: bool;
     let x: i64;
-    let start_79: i32;
+    let start_82: i32;
     v_4 = v128.const(316912650112397582603894390785);
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative_28 = local.tee self_20(i32x4.extract_lane(2, v_4)) < 0;
@@ -78,17 +78,17 @@ fn "simd_vector_literal_folds.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, is_negative_28);
         }
-        start_79 = $local_1.used;
+        start_82 = $local_1.used;
         $local_1.used = is_negative_28;
-        builtin::array_set_u8($local_1.repr, start_79, 45);
+        builtin::array_set_u8($local_1.repr, start_82, 45);
     } else {
     }
-    if @unlikely(local.tee start_79($local_1.used + self_20) > builtin::array_len($local_1.repr)) {
+    if @unlikely(local.tee start_82($local_1.used + self_20) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_79);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_82);
     }
     is_negative_28 = $local_1.used;
-    $local_1.used = start_79;
+    $local_1.used = start_82;
     "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, is_negative_28, x, self_20);
     self_20 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_28 = builtin::i32_wrap_i64(x >> 32_i64);

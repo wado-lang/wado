@@ -92,7 +92,7 @@ fn "inline_folded_cost_mut_param.wado/run"() with Stdout {
     let $local_2: ref "core:prelude/string.wado//String";
     let is_negative_17: bool;
     let x: i64;
-    let start_68: i32;
+    let start_71: i32;
     seed = black_box(0);
     seed = ("inline_folded_cost_mut_param.wado/pick"(0, seed) + "inline_folded_cost_mut_param.wado/pick"(0, seed + 1)) + "inline_folded_cost_mut_param.wado/pick"(0, seed + 2);
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
@@ -103,17 +103,17 @@ fn "inline_folded_cost_mut_param.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, is_negative_17);
         }
-        start_68 = $local_2.used;
+        start_71 = $local_2.used;
         $local_2.used = is_negative_17;
-        builtin::array_set_u8($local_2.repr, start_68, 45);
+        builtin::array_set_u8($local_2.repr, start_71, 45);
     } else {
     }
-    if @unlikely(local.tee start_68($local_2.used + seed) > builtin::array_len($local_2.repr)) {
+    if @unlikely(local.tee start_71($local_2.used + seed) > builtin::array_len($local_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_68);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_71);
     }
     is_negative_17 = $local_2.used;
-    $local_2.used = start_68;
+    $local_2.used = start_71;
     "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, is_negative_17, x, seed);
     seed = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_17 = builtin::i32_wrap_i64(x >> 32_i64);

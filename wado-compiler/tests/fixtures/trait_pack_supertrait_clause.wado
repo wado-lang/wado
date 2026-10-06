@@ -1,0 +1,44 @@
+// A supertrait clause spreading the trait's own pack reads the arguments the
+// pack absorbs.
+//
+// `A<i32, bool>` binds `..X` to `i32, bool`, so its clause `B<[..X]>` is
+// `B<[i32, bool]>`. The impl's supertrait check, the call `need(t)`, and the
+// method `t.b()` through the bound each ask that. The pack once bound its first
+// argument alone, `[..X]` stayed unspliced, and the question panicked.
+
+trait B<X> with () {
+    fn b(&self) -> i32;
+}
+
+trait A<..X>: B<[..X]> with () {
+    fn a(&self) -> i32;
+}
+
+struct P {}
+
+impl B<[i32, bool]> for P {
+    fn b(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl A<i32, bool> for P {
+    fn a(&self) -> i32 {
+        return 2;
+    }
+}
+
+fn need<U: B<[i32, bool]>>(u: &U) -> i32 {
+    return u.b();
+}
+
+fn via<T: A<i32, bool>>(t: &T) -> i32 {
+    return need(t) + t.b() + t.a();
+}
+
+test "a pack's clause reads the arguments it absorbs" {
+    assert via(&P {}) == 4;
+}
+
+__DATA__
+{"test": {}}

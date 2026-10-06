@@ -79,51 +79,51 @@ fn "hfs_match_guard_with_call.wado/run"() with Stdout {
     let i_1: i32;
     let $local_3: ref "core:prelude/string.wado//String";
     let x_22: i64;
-    let $hfs_v_352: i32;
-    let $hfs_call_353: bool;
+    let $hfs_v_452: i32;
+    let $hfs_call_453: bool;
     b = struct.new "hfs_match_guard_with_call.wado//Buf" { v: 0, pad: 0 };
     i_1 = 0;
-    $hfs_v_352 = 0;
+    $hfs_v_452 = 0;
     b0: block {
         l1: loop {
             break_if b0 i_1 >= 4;
-            b.v = $hfs_v_352;
-            $hfs_call_353 = "hfs_match_guard_with_call.wado/probe"(b) > 0;
-            $hfs_v_352 = b.v;
-            if $hfs_call_353 {
-                $hfs_v_352 = $hfs_v_352 + 1;
+            b.v = $hfs_v_452;
+            $hfs_call_453 = "hfs_match_guard_with_call.wado/probe"(b) > 0;
+            $hfs_v_452 = b.v;
+            if $hfs_call_453 {
+                $hfs_v_452 = $hfs_v_452 + 1;
             } else {
             }
             i_1 = i_1 + 1;
-            b.v = $hfs_v_352;
+            b.v = $hfs_v_452;
             continue l1;
         };
     };
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    $hfs_v_352 = local.tee $hfs_call_353(b.v) < 0;
-    $hfs_call_353 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_22(x_22 = builtin::i64_extend_i32_s($hfs_call_353); select i64(x_22 < 0_i64, 0_i64 - x_22, x_22)));
-    if $hfs_v_352 {
-        if @unlikely(local.tee $hfs_v_352(0 + 1) > builtin::array_len($local_3.repr)) {
+    $hfs_v_452 = local.tee $hfs_call_453(b.v) < 0;
+    $hfs_call_453 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_22(x_22 = builtin::i64_extend_i32_s($hfs_call_453); select i64(x_22 < 0_i64, 0_i64 - x_22, x_22)));
+    if $hfs_v_452 {
+        if @unlikely(local.tee $hfs_v_452(0 + 1) > builtin::array_len($local_3.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, $hfs_v_352);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, $hfs_v_452);
         }
         i_1 = $local_3.used;
-        $local_3.used = $hfs_v_352;
+        $local_3.used = $hfs_v_452;
         builtin::array_set_u8($local_3.repr, i_1, 45);
     } else {
     }
-    if @unlikely(local.tee i_1($local_3.used + $hfs_call_353) > builtin::array_len($local_3.repr)) {
+    if @unlikely(local.tee i_1($local_3.used + $hfs_call_453) > builtin::array_len($local_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, i_1);
     }
-    $hfs_v_352 = $local_3.used;
+    $hfs_v_452 = $local_3.used;
     $local_3.used = i_1;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, $hfs_v_352, x_22, $hfs_call_353);
-    $hfs_call_353 = builtin::i32_wrap_i64(local.tee x_22("wasi/stream-new"()));
-    $hfs_v_352 = builtin::i32_wrap_i64(x_22 >> 32_i64);
-    $hfs_call_353 = "hfs_match_guard_with_call.wado/$cm_binding__Stdout_write_via_stream"($hfs_call_353);
-    "core:rt/write_string_to_stream"($hfs_v_352, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($hfs_call_353);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, $hfs_v_452, x_22, $hfs_call_453);
+    $hfs_call_453 = builtin::i32_wrap_i64(local.tee x_22("wasi/stream-new"()));
+    $hfs_v_452 = builtin::i32_wrap_i64(x_22 >> 32_i64);
+    $hfs_call_453 = "hfs_match_guard_with_call.wado/$cm_binding__Stdout_write_via_stream"($hfs_call_453);
+    "core:rt/write_string_to_stream"($hfs_v_452, $local_3.repr, $local_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($hfs_call_453);
 }
 
 fn "hfs_match_guard_with_call.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

@@ -74,7 +74,7 @@ fn "mut_reborrow_primitive.wado/run"() with Stdout {
     let new_used_22: i32;
     let start_23: i32;
     let x_36: i64;
-    let start_85: i32;
+    let start_88: i32;
     local.tee c_0(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }).value = 1;
     c_0.value = 2;
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
@@ -92,17 +92,17 @@ fn "mut_reborrow_primitive.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_22);
         }
-        start_85 = $local_2.used;
+        start_88 = $local_2.used;
         $local_2.used = new_used_22;
-        builtin::array_set_u8($local_2.repr, start_85, 45);
+        builtin::array_set_u8($local_2.repr, start_88, 45);
     } else {
     }
-    if @unlikely(local.tee start_85($local_2.used + start_23) > builtin::array_len($local_2.repr)) {
+    if @unlikely(local.tee start_88($local_2.used + start_23) > builtin::array_len($local_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_85);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_88);
     }
     new_used_22 = $local_2.used;
-    $local_2.used = start_85;
+    $local_2.used = start_88;
     "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, new_used_22, x_36, start_23);
     start_23 = builtin::i32_wrap_i64(local.tee x_36("wasi/stream-new"()));
     new_used_22 = builtin::i32_wrap_i64(x_36 >> 32_i64);

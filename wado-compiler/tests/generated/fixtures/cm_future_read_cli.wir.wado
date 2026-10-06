@@ -93,7 +93,7 @@ fn "cm_future_read_cli.wado/run"() with Stdout {
     let packed_7: i64;
     let rx_8: i32;
     let is_negative_18: bool;
-    let start_90: i32;
+    let start_93: i32;
     rx_8 = builtin::i32_wrap_i64(local.tee packed_7("wasi/future-new:s32"()));
     "cm_future_read_cli.wado/$cm_future_write_i32"(builtin::i32_wrap_i64(packed_7 >> 32_i64), 42);
     if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee result("cm_future_read_cli.wado/$cm_future_read_i32"(rx_8))) {
@@ -106,17 +106,17 @@ fn "cm_future_read_cli.wado/run"() with Stdout {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, is_negative_18);
             }
-            start_90 = $local_4_4.used;
+            start_93 = $local_4_4.used;
             $local_4_4.used = is_negative_18;
-            builtin::array_set_u8($local_4_4.repr, start_90, 45);
+            builtin::array_set_u8($local_4_4.repr, start_93, 45);
         } else {
         }
-        if @unlikely(local.tee start_90($local_4_4.used + rx_8) > builtin::array_len($local_4_4.repr)) {
+        if @unlikely(local.tee start_93($local_4_4.used + rx_8) > builtin::array_len($local_4_4.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, start_90);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, start_93);
         }
         is_negative_18 = $local_4_4.used;
-        $local_4_4.used = start_90;
+        $local_4_4.used = start_93;
         "core:prelude/primitive.wado/write_decimal_digits"($local_4_4.repr, is_negative_18, packed_7, rx_8);
         rx_8 = builtin::i32_wrap_i64(local.tee packed_7("wasi/stream-new"()));
         is_negative_18 = builtin::i32_wrap_i64(packed_7 >> 32_i64);

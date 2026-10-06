@@ -67,7 +67,7 @@ fn "labeled_block_shadowed_label.wado/run"() with Stdout {
     let $local_1: ref "core:prelude/string.wado//String";
     let is_negative_16: bool;
     let x: i64;
-    let start_67: i32;
+    let start_70: i32;
     acc = 0;
     acc = 1;
     outer: block {
@@ -83,17 +83,17 @@ fn "labeled_block_shadowed_label.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, is_negative_16);
         }
-        start_67 = $local_1.used;
+        start_70 = $local_1.used;
         $local_1.used = is_negative_16;
-        builtin::array_set_u8($local_1.repr, start_67, 45);
+        builtin::array_set_u8($local_1.repr, start_70, 45);
     } else {
     }
-    if @unlikely(local.tee start_67($local_1.used + acc) > builtin::array_len($local_1.repr)) {
+    if @unlikely(local.tee start_70($local_1.used + acc) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_67);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_70);
     }
     is_negative_16 = $local_1.used;
-    $local_1.used = start_67;
+    $local_1.used = start_70;
     "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, is_negative_16, x, acc);
     acc = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_16 = builtin::i32_wrap_i64(x >> 32_i64);

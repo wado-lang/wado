@@ -23,6 +23,9 @@ pub fn data_section(source: &str) -> Option<&str> {
 /// expectations, which only the e2e harness reads.
 #[derive(Debug, Default, Deserialize)]
 pub struct CompileInputs {
+    /// The `-f` codegen flags to compile with, at every level.
+    #[serde(default)]
+    pub codegen_flags: Vec<String>,
     /// Compile-time parameter overrides (`-D NAME=value`) for `#[param]` globals.
     #[serde(default)]
     pub params: IndexMap<String, String>,

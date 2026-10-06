@@ -67,7 +67,7 @@ fn "match_const_global_switch.wado/run"() with Stdout {
     let i_1: i32;
     let $local_2: ref "core:prelude/string.wado//String";
     let x: i64;
-    let start_71: i32;
+    let start_74: i32;
     hits = 0;
     i_1 = 0;
     b0: block {
@@ -86,17 +86,17 @@ fn "match_const_global_switch.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, i_1);
         }
-        start_71 = $local_2.used;
+        start_74 = $local_2.used;
         $local_2.used = i_1;
-        builtin::array_set_u8($local_2.repr, start_71, 45);
+        builtin::array_set_u8($local_2.repr, start_74, 45);
     } else {
     }
-    if @unlikely(local.tee start_71($local_2.used + hits) > builtin::array_len($local_2.repr)) {
+    if @unlikely(local.tee start_74($local_2.used + hits) > builtin::array_len($local_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_71);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_74);
     }
     i_1 = $local_2.used;
-    $local_2.used = start_71;
+    $local_2.used = start_74;
     "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, i_1, x, hits);
     hits = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     i_1 = builtin::i32_wrap_i64(x >> 32_i64);

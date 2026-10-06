@@ -1,0 +1,62 @@
+// A family's argument does not stand in for the caller's parameter: under
+// `S = Wrap<U>`, `S::Buf<i32>` is `Duo<U, i32>`, which `Probe` does not answer.
+
+trait Is<X> with () {}
+
+trait Tr with () {
+    fn tr() -> i32;
+}
+
+trait Elem with () {}
+
+impl Elem for i32 {}
+
+struct Wrap<X> {
+    x: X,
+}
+
+struct Duo<A, B> {
+    a: A,
+    b: B,
+}
+
+trait Store with () {
+    type Buf<E: Elem>;
+}
+
+impl<X> Store for Wrap<X> {
+    type Buf<E: Elem> = Duo<X, E>;
+}
+
+struct Probe {}
+
+impl Is<Duo<i32, i32>> for Probe {}
+
+struct Held<S, Q> {
+    s: S,
+    q: Q,
+}
+
+impl<S: Store, Q: Is<S::Buf<i32>>> Tr for Held<S, Q> {
+    fn tr() -> i32 {
+        return 2;
+    }
+}
+
+fn need<T: Tr>() -> i32 {
+    return T::tr();
+}
+
+fn family<U>() -> i32 {
+    return need::<Held<Wrap<U>, Probe>>();
+}
+
+export fn run() {
+    family::<i32>();
+}
+
+__DATA__
+{
+  "compile_error": ":51:12: analysis error: type 'Held<Wrap<U>, Probe>' does not implement trait 'Tr' required by bound on 'T'",
+  "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
+}

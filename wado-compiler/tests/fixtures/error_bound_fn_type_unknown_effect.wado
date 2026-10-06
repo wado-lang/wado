@@ -1,0 +1,28 @@
+// A function type in a bound argument naming no effect is reported once, where
+// it is written: the bound stands as met rather than failing a second time at
+// the call.
+trait Conv<X> with () {
+    fn conv(&self) -> i32;
+}
+
+struct A {
+    v: i32,
+}
+
+
+impl Conv<fn() -> i32> for A {
+    fn conv(&self) -> i32 {
+        return self.v;
+    }
+}
+
+fn f<T: Conv<fn() -> i32 with Nope>>(t: T) -> i32 {
+    return t.conv();
+}
+
+test {
+    assert f(A { v: 1 }) == 1;
+}
+
+__DATA__
+{"compile_error": ":19:31: analysis error: no effect named 'Nope' is in scope"}

@@ -1,0 +1,16 @@
+// A supertrait argument naming no type is reported where it is written.
+trait Conv<X> with () {
+    fn conv(&self) -> i32;
+}
+
+struct A {
+    v: i32,
+}
+
+
+trait Sub: Conv<Nope> with () {}
+
+test {}
+
+__DATA__
+{"compile_error": ":11:17: analysis error: unknown type 'Nope'"}

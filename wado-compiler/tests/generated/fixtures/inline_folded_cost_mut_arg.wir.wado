@@ -104,39 +104,39 @@ fn "inline_folded_cost_mut_arg.wado/run"() with Stdout {
     let a: ref "inline_folded_cost_mut_arg.wado//S";
     let b: ref "inline_folded_cost_mut_arg.wado//S";
     let c_3: ref "inline_folded_cost_mut_arg.wado//S";
-    let $local_5: ref "core:prelude/string.wado//String";
+    let $local_5_5: ref "core:prelude/string.wado//String";
     let is_negative_20: bool;
     let x: i64;
-    let start_71: i32;
+    let start_74: i32;
     seed = black_box(0);
     a = struct.new "inline_folded_cost_mut_arg.wado//S" { n: 0 };
     b = struct.new "inline_folded_cost_mut_arg.wado//S" { n: 0 };
     c_3 = struct.new "inline_folded_cost_mut_arg.wado//S" { n: 0 };
     seed = ("inline_folded_cost_mut_arg.wado/pick"(a, seed) + "inline_folded_cost_mut_arg.wado/pick"(b, seed + 1)) + "inline_folded_cost_mut_arg.wado/pick"(c_3, seed + 2);
-    $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    $local_5_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative_20 = seed < 0;
     seed = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(seed); select i64(x < 0_i64, 0_i64 - x, x)));
     if is_negative_20 {
-        if @unlikely(local.tee is_negative_20(0 + 1) > builtin::array_len($local_5.repr)) {
+        if @unlikely(local.tee is_negative_20(0 + 1) > builtin::array_len($local_5_5.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, is_negative_20);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5_5, is_negative_20);
         }
-        start_71 = $local_5.used;
-        $local_5.used = is_negative_20;
-        builtin::array_set_u8($local_5.repr, start_71, 45);
+        start_74 = $local_5_5.used;
+        $local_5_5.used = is_negative_20;
+        builtin::array_set_u8($local_5_5.repr, start_74, 45);
     } else {
     }
-    if @unlikely(local.tee start_71($local_5.used + seed) > builtin::array_len($local_5.repr)) {
+    if @unlikely(local.tee start_74($local_5_5.used + seed) > builtin::array_len($local_5_5.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, start_71);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5_5, start_74);
     }
-    is_negative_20 = $local_5.used;
-    $local_5.used = start_71;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_5.repr, is_negative_20, x, seed);
+    is_negative_20 = $local_5_5.used;
+    $local_5_5.used = start_74;
+    "core:prelude/primitive.wado/write_decimal_digits"($local_5_5.repr, is_negative_20, x, seed);
     seed = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_20 = builtin::i32_wrap_i64(x >> 32_i64);
     seed = "inline_folded_cost_mut_arg.wado/$cm_binding__Stdout_write_via_stream"(seed);
-    "core:rt/write_string_to_stream"(is_negative_20, $local_5.repr, $local_5.used);
+    "core:rt/write_string_to_stream"(is_negative_20, $local_5_5.repr, $local_5_5.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(seed);
 }
 

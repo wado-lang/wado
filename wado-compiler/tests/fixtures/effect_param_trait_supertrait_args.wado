@@ -1,0 +1,41 @@
+// A trait's effect parameter takes no argument position: `T: Sub<i32>` under
+// `trait Sub<effect E, X>: Base<X>` reaches `Base<i32>`, and an omitted
+// argument stands at its default, not at the effect's slot.
+
+trait Base<X> with () {
+    fn base(&self) -> i32 {
+        return 1;
+    }
+}
+
+trait Sub<effect E, X>: Base<X> with () {}
+
+trait Conv<effect E, X = i32> with () {
+    fn c(&self) -> i32 {
+        return 2;
+    }
+}
+
+struct S {}
+
+impl Base<i32> for S {}
+
+impl Sub<i32> for S {}
+
+impl Conv for S {}
+
+fn use_base<T: Sub<i32>>(t: T) -> i32 {
+    return t.base();
+}
+
+fn use_conv<T: Conv>(t: T) -> i32 {
+    return t.c();
+}
+
+test {
+    assert use_base(S {}) == 1;
+    assert use_conv(S {}) == 2;
+}
+
+__DATA__
+{"test": {}}

@@ -11,7 +11,7 @@ use crate::ast::{AstId, AstIdSpace, ImplBlock, Item, Module, SelfKind, Visibilit
 use crate::ast_index::AstIndex;
 use crate::compiler_host::{Code, CompilerHost, LogLevel};
 use crate::component_model::{CmInterfaceRegistry, UserCmError, declares_cm_binding};
-use crate::coverage::{CoverageMap, CoverageScope};
+use crate::coverage::{CoverageMap, CoverageRequest};
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::render_plans;
 use crate::elaborator::liveness::Liveness;
@@ -1068,7 +1068,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     load_result: loader::LoadResult,
     logger: &Logger<'_, H>,
     build_tir: bool,
-    coverage: Option<CoverageScope>,
+    coverage: Option<CoverageRequest>,
 ) -> Semantics {
     // Before any phase reports: a diagnostic's span names the file it indexes
     // by looking its parse up here.
@@ -1109,7 +1109,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         let _span = logger.span("stdlib_snapshot");
         // A measured stdlib takes probes the plain snapshot lacks.
         get_or_init_snapshot()
-            .filter(|_| !coverage.is_some_and(|scope| scope.stdlib))
+            .filter(|_| !coverage.is_some_and(|request| request.scope.stdlib))
             .filter(|snap| reparsed_snapshot_module(snap, &load_result.modules).is_none())
     };
 
@@ -1172,12 +1172,13 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // recorded, with no second lexical scan to drift out of sync. On Bail the
     // partial facts are still routed so cursor queries work against whatever
     // bodies were reached. `build_tir == false` stops after `annotate_bodies`.
-    let coverage = coverage.map(|scope| {
+    let coverage = coverage.map(|request| {
         CoverageMap::build(
             load_result
                 .modules
                 .iter()
-                .filter(|(source, _)| scope.measures(source)),
+                .filter(|(source, _)| request.scope.measures(source)),
+            request.contract_checks,
         )
     });
     let (tir_modules, lower_ok) = {
