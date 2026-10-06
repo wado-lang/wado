@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791265031264,
+  "lastUpdate": 1791273998057,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -64273,6 +64273,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 338523,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d5473bf6474deab7338f302fcbacd971d6b926ee",
+          "message": "Merge pull request #2285 from wado-lang/gale-gen-perf\n\nperf(gale): generate parsers 17% faster",
+          "timestamp": "2026-10-06T16:47:49+09:00",
+          "tree_id": "a008d838698619f480e2ffb1d86a38244ccb2988",
+          "url": "https://github.com/wado-lang/wado/commit/d5473bf6474deab7338f302fcbacd971d6b926ee"
+        },
+        "date": 1791273997089,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338502,
             "unit": "bytes"
           }
         ]
