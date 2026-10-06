@@ -427,9 +427,9 @@ pub fn black_box<T>(value: T) -> T;
 pub fn is_uninitialized<T>(value: &T) -> bool;
 
 /// Whether this build checks contracts (`-f contract-checks`). The compiler
-/// replaces each call with a constant before NIR, so a disabled check is a dead
-/// branch. `internal`: a check a program could skip would be a removable
-/// `assert`.
+/// replaces each call with a constant before NIR, and deletes the
+/// `if builtin::contract_checks() { … }` it guards where checks are off.
+/// `internal`: a check a program could skip would be a removable `assert`.
 #[storage(none)]
 #[side_effect(none)]
 internal fn contract_checks() -> bool;

@@ -41,8 +41,12 @@ is for. It already pays for that with the `debug` allocator.
 ### `builtin::contract_checks()`
 
 `builtin::contract_checks()` answers whether the build checks contracts. The
-compiler replaces each call with `true` or `false` before NIR, so a disabled
-check costs nothing at any optimization level that removes a dead branch.
+compiler replaces each call with `true` or `false` before NIR. Where checks
+are off, it deletes an `if builtin::contract_checks() { … }` statement
+outright, so a disabled check costs nothing at any optimization level. Folding
+the condition alone was not enough: the inliner sized the `if false` body
+before any pass pruned it, and `Formatter::prepare_int_write` stopped being
+inlined at `-O2`.
 
 A function checks its contract with it:
 
@@ -88,7 +92,10 @@ already traps out of range.
 ## Roadmap
 
 1. `-f contract-checks`, `builtin::contract_checks()`, and the checks in
-   `core:prelude`'s `_unchecked` functions. Done.
+   `core:prelude`'s `_unchecked` functions. Done. The first run of the test
+   suites found one violation, in the standard library itself:
+   `StrSlice::replacen` copied a non-matching byte at a time, so the tail view
+   it appended could start inside a character.
 
 ## Known gaps
 

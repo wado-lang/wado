@@ -219,6 +219,10 @@ struct TestSpec {
     #[serde(default, deserialize_with = "one_or_many")]
     allocator: Vec<String>,
 
+    /// The `-f` codegen flags to compile with, at every level.
+    #[serde(default)]
+    codegen_flags: Vec<String>,
+
     /// Compile-time parameter overrides (`-D NAME=value`) for `#[param]` globals.
     #[serde(default)]
     params: indexmap::IndexMap<String, String>,
@@ -894,6 +898,7 @@ fn run_with_allocator(
         skip_validation: false,
         retain_wir: spec.has_wir_expectations(opt_level),
         allocator,
+        codegen_flags: spec.codegen_flags.clone(),
         params: wado_compiler::param_resolution::ParamInputs {
             overrides: spec
                 .params
