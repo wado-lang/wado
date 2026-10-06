@@ -15,6 +15,7 @@ use bytes::Bytes;
 use oci_client::client::{Certificate, CertificateEncoding, ClientConfig};
 use oci_client::secrets::RegistryAuth;
 use oci_client::{Client, Reference};
+use wado_host::tls_trust::extra_ca_certs;
 
 pub use oci_client::Reference as OciReference;
 
@@ -117,20 +118,12 @@ fn auth() -> RegistryAuth {
     }
 }
 
-/// Extra trust roots from `SSL_CERT_FILE`, added to the default webpki roots so
-/// a custom or corporate CA (e.g. an intercepting proxy) is trusted without
-/// weakening verification for public registries. Absent or unreadable file
-/// yields no extra roots.
+/// The CAs `wado run` trusts beyond the default webpki roots, so a registry
+/// behind a custom or corporate CA (e.g. an intercepting proxy) is reached the
+/// same way a guest's HTTPS is.
 fn extra_root_certificates() -> Vec<Certificate> {
-    let Some(path) = std::env::var_os("SSL_CERT_FILE") else {
-        return Vec::new();
-    };
-    let Ok(bytes) = std::fs::read(&path) else {
-        return Vec::new();
-    };
-    let mut reader = std::io::BufReader::new(bytes.as_slice());
-    rustls_pemfile::certs(&mut reader)
-        .filter_map(Result::ok)
+    extra_ca_certs()
+        .into_iter()
         .map(|der| Certificate {
             encoding: CertificateEncoding::Der,
             data: der.to_vec(),
