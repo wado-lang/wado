@@ -102,6 +102,7 @@ fn "opt_lbf_exit_in_if_condition.wado/run"() with Stdout {
     let self_10: ref "core:prelude/string.wado//String";
     let start_13: i32;
     let self_14: ref "core:prelude/string.wado//String";
+    let new_used: i32;
     let start_17: i32;
     let buf: ref "core:prelude/string.wado//String";
     let self_20: i32;
@@ -124,13 +125,12 @@ fn "opt_lbf_exit_in_if_condition.wado/run"() with Stdout {
         if n_0 > 0 {
             self_6 = local.tee $local_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 });
             other_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("some "), used: 5 };
-            self_14 = local.tee self_10(self_6);
-            if @unlikely(5 > builtin::array_len(self_14.repr)) {
+            if @unlikely(local.tee new_used(local.tee self_14(local.tee self_10(self_6)).used + 5) > builtin::array_len(self_14.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_14, 5);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_14, new_used);
             }
             start_17 = self_14.used;
-            self_14.used = 5;
+            self_14.used = new_used;
             start_13 = start_17;
             builtin::array_copy<u8>(self_10.repr, start_13, other_7.repr, 0, 5);
             buf = $local_3;
@@ -168,13 +168,12 @@ fn "opt_lbf_exit_in_if_condition.wado/run"() with Stdout {
         break_if $fused_check n_0 < -5;
         self_6 = local.tee $local_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 });
         other_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("some "), used: 5 };
-        self_14 = local.tee self_10(self_6);
-        if @unlikely(5 > builtin::array_len(self_14.repr)) {
+        if @unlikely(local.tee new_used(local.tee self_14(local.tee self_10(self_6)).used + 5) > builtin::array_len(self_14.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_14, 5);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_14, new_used);
         }
         start_17 = self_14.used;
-        self_14.used = 5;
+        self_14.used = new_used;
         start_13 = start_17;
         builtin::array_copy<u8>(self_10.repr, start_13, other_7.repr, 0, 5);
         buf = $local_3;
