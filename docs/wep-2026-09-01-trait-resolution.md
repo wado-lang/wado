@@ -358,7 +358,15 @@ in a pointee (`impl<T: B> Tr for &T`), or in a pack's elements
 from the bounds in force on it and from nothing else. So `[..T]: Ord` does not
 hold of `[A, B]` under `A: Inspect, B: Inspect`, and the body that wants it
 says `A: Ord, B: Ord` (`trait_bound_on_rigid_param_is_checked.wado`,
-`trait_error_bound_missing_on_rigid_param.wado`).
+`trait_error_bound_missing_on_rigid_param.wado`). A call or a struct literal
+passing a rigid parameter to a bounded one asks the same question, in the
+generic body rather than at an instantiation (`bound_unmet_by_rigid_param.wado`,
+`error_forwarded_type_param_violates_bound.wado`). So does a type the source
+writes: `Wrap<O>` under `struct Wrap<T: Tag>`, in a signature, an impl header, a
+field, a local or a newtype's base, is rejected unless `O: Tag` is in force
+(`error_written_type_rigid_arg_*.wado`, `written_type_rigid_arg_bounded.wado`).
+An impl's target is named before its parameters' bounds are in force, so what it
+owes is asked once they are.
 
 A marker on a generic declaration is the other question and keeps its own
 answer: `impl<T> Eq for Pair<T>;` asks whether the _declaration_ derives, and
@@ -557,7 +565,26 @@ Nothing flips at once. The fixture corpus is the drift detector, as
 a question the solver answers is asserted against the compiler's own path in
 debug builds over every fixture before the compiler's path is retired. `holds`
 ran that way beside `type_implements_trait` until it answered every question the
-lowering states.
+lowering states. The lowering then grew to state every question the corpus
+asks, and the compiler's own rules were deleted: `type_implements_trait` is the
+solver's answer, and a question it cannot state is a compiler bug.
+
+The growth that took:
+
+- A function type is a name with structure, its parameters and return
+  reachable by substitution, rather than one opaque spelling.
+- An interface no impl names is still a trait, one no type implements.
+- A type that failed to resolve holds what every type holds.
+- A bound on a type declaration's arguments is checked once the solver is built,
+  since any module's impl may answer it.
+- A supertrait clause writing `Self` is read with `Self` bound to the subject.
+
+The bodies the solver's answer owes are what synthesis emits: `owed` closes a
+structural body over its members, since the body calls the trait on each. A
+late declaration is stated when its members are known. An anonymous struct and
+a template shape lower as one variadic declaration each, their fields the pack's
+elements, and a struct or newtype declared in a body is stated when annotate
+hoists it (`trait_late_declaration_derives.wado`).
 
 Selection has one candidate set. The order names the impls that answer, each an
 impl block, or for a derived body the `Reflect*` blanket it comes from. Lookup
@@ -580,17 +607,6 @@ match from each impl the order names, and reports what the order tied.
 
 ## Known gaps
 
-### A projection inside a function type is never answered
-
-A trait argument spelled as a function type carries its projection unanswered.
-`U: Uses<fn(P::Item) -> i32>` passes `wado check` and then fails where the call
-is monomorphized, reported as `User` not implementing `Uses<fn(P::Item)->i32>`.
-A function type stands in a trait's name as one opaque spelling, holding no
-position a substitution can reach, so `P::Item` stays written there while every
-other shape answers it — `Uses<P::Item>` and `Uses<List<P::Item>>` both
-dispatch. This admits a valid program the compiler rejects, at that one shape,
-naming a parameter the call site never wrote.
-
 ### Scope does not gate a call through a bound
 
 A method call and a static call are gated: an impl that applies while its trait
@@ -603,6 +619,31 @@ the bounds path resolves without the order (above).
 
 - [ ] Gate the bounds path on the supertrait's declaration being in scope
   (`trait_error_unimported_supertrait_method.wado`).
+
+### Every effect binder is one effect
+
+A function type carries its effects to the solver as their declarations. An
+effect binder declares nothing, so `fn() with E` and `fn() with F` are one type
+there. What it admits is a bound
+naming one binder's function type answered by an impl naming another's.
+
+### A parameter only the trait's arguments name is never bound
+
+The specification determines an impl's parameters from the receiver and the
+trait's arguments, but only the target binds one. `impl<T> Tr<T> for X` answers
+no `X: Tr<i64>`: the solver leaves `T` unbound, so the written argument never
+matches, and monomorphization names no instance for it either
+(`impl_param_bound_by_trait_arg.wado`). A program relying on it is rejected,
+never miscompiled.
+
+### A projection off a trait parameter keeps the impl's method parameter
+
+An impl's method takes its type parameters from the trait, read in the impl's
+frame. A bound or default projecting off one of the trait's own parameters
+(`fn hold<E: Conv<X::Item>>` in `trait Store<X: Iter>`) has no written form
+there, so that parameter stays as the impl restates it
+(`trait_method_bound_projects_trait_param.wado`). A default the trait gave it
+does not reach a call through the impl.
 
 ### A ref blanket never dispatches
 
@@ -637,25 +678,6 @@ name. They share which impls reach the receiver, and nothing after that. Ranks
 0-3 exist on none of them; they agree with the order only by coincidence of scan
 order. Each path holds a different amount of the call: a receiver type, an
 operand class, a bound list.
-
-### The compiler answers what the lowering cannot state
-
-The solver answers every bound the lowering states, and the bodies its answer
-owes are what synthesis emits: `owed` closes a structural body over its
-members, since the body calls the trait on each. A late declaration is stated
-when its members are known. An anonymous struct and a template shape lower as
-one variadic declaration each, their fields the pack's elements, and a struct or
-newtype declared in a body is stated when annotate hoists it
-(`trait_late_declaration_derives.wado`).
-
-A question the lowering cannot state still falls to `type_implements_trait`'s
-own rules: a bound in scope the lowering cannot spell, or a type it has no way
-to say (an inference variable, a closure environment, a mapped pack). Those
-rules carry a second copy of what the solver states for reflection and
-`Default`. They read an instance's row of the comparison table from the solver,
-as every other phase does, and apply it themselves. They walk no members, so a
-structural trait asked there holds only through an impl. No fixture asks one
-about a structural trait.
 
 ### Specificity is refused, and now has a named cost
 

@@ -242,13 +242,17 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
         }
         self.bind_fn_bound_params(&impl_block.type_params);
         // Between the names and their bounds: the target is resolved from the
-        // names, and a bound's `Self::Assoc` projects off the target.
-        let implementing = self.impl_self_binding(&impl_block.ty, impl_block.trait_type.as_ref());
+        // names, and a bound's `Self::Assoc` projects off the target. What the
+        // target owes is asked once the bounds are in force.
+        let (implementing, held) = self.holding_bounds(|this| {
+            this.impl_self_binding(&impl_block.ty, impl_block.trait_type.as_ref())
+        });
         self.set_self_binding(implementing);
         for param in &impl_block.type_params {
             let bounds = self.scoped_bounds(param);
             self.add_param_bounds(&param.name, bounds);
         }
+        self.release_bounds_here(held);
     }
 }
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
@@ -1099,6 +1103,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         type_params: &[ast::GenericParam],
         owner: Option<DefId>,
     ) -> FqTypeName {
+        // A function type's name is its whole signature, `mut` and effects
+        // included, as `TypeTable::fn_receiver_name` spells a call's receiver.
+        if let ast::Type::Function(_) = impl_ty {
+            return trait_env::written_type_arg(impl_ty, &self.tysys.resolutions);
+        }
         if RefKind::from_ast(impl_ty).is_some() {
             let target = trait_env::written_type_arg(impl_ty, &self.tysys.resolutions);
             if Receiver::ref_to(&target).is_some() {
@@ -2008,9 +2017,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // block writes two templates. `receiver` keys `method_info` against
             // receivers built elsewhere, so it stays plain.
             let qualified_struct_name = scope.impl_receiver_name(impl_block);
-            let receiver = match RefKind::from_ast(&impl_block.ty) {
-                Some(kind) => Receiver::of_ref_impl(kind, &qualified_struct_name),
-                None => Receiver::Type(scope.qualified_receiver_name(&struct_name)),
+            let receiver = match (&impl_block.ty, RefKind::from_ast(&impl_block.ty)) {
+                (_, Some(kind)) => Receiver::of_ref_impl(kind, &qualified_struct_name),
+                (ast::Type::Function(_), None) => Receiver::Type(qualified_struct_name.clone()),
+                (_, None) => Receiver::Type(scope.qualified_receiver_name(&struct_name)),
             };
             let is_ref_impl = receiver.ref_kind().is_some();
             // Concrete type args of the impl's trait reference

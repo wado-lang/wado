@@ -1421,18 +1421,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // An omitted turbofish infers both levels; a partial one keeps
                 // what it named and infers only its `_` slots. The call's own
                 // `type_args` stay as written.
-                let (impl_type_args_inferred, mut method_type_args) = self.static_call_type_args(
-                    StaticCallee {
-                        type_name: prefix,
-                        method_name: suffix,
-                        receiver_key: None,
-                    },
-                    &call.args,
-                    &args,
-                    expected_type,
-                    call.span,
-                    written,
-                );
+                let (mut impl_type_args_inferred, mut method_type_args) = self
+                    .static_call_type_args(
+                        StaticCallee {
+                            type_name: prefix,
+                            method_name: suffix,
+                            receiver_key: None,
+                        },
+                        &call.args,
+                        &args,
+                        expected_type,
+                        call.span,
+                        written,
+                    );
                 // A method-level parameter bound only through another's
                 // associated type (`..V` off `Holes`) is projected once the
                 // owner is inferred, as the free-function path does; the
@@ -1453,8 +1454,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.report_uninferred_static_method_type_args(
                     prefix,
                     suffix,
-                    &impl_type_args_inferred,
-                    &method_type_args,
+                    &mut impl_type_args_inferred,
+                    &mut method_type_args,
                     call.span,
                     None,
                 );
@@ -1594,17 +1595,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ),
                     None => (Vec::new(), None),
                 };
-                let substituted: Vec<TypeId> =
-                    if method_type_args.is_empty() && impl_type_args_inferred.is_empty() {
-                        raw_param_types
-                    } else {
-                        let mut combined_type_args = impl_type_args_inferred.clone();
-                        combined_type_args.extend_from_slice(&method_type_args);
-                        raw_param_types
-                            .iter()
-                            .map(|&t| self.substitute_in_frame(t, &combined_type_args))
-                            .collect()
-                    };
+                let generic = !impl_type_args_inferred.is_empty() || !method_type_args.is_empty();
+                if generic
+                    && self.report_value_for_reference(
+                        &raw_param_types,
+                        &call.args,
+                        &args,
+                        call.span,
+                    )
+                {
+                    return TypeTable::ERROR;
+                }
+                let substituted: Vec<TypeId> = if generic {
+                    let mut combined_type_args = impl_type_args_inferred.clone();
+                    combined_type_args.extend_from_slice(&method_type_args);
+                    raw_param_types
+                        .iter()
+                        .map(|&t| self.substitute_in_frame(t, &combined_type_args))
+                        .collect()
+                } else {
+                    raw_param_types
+                };
                 self.recoerce_literal_args(&call.args, &mut args, &substituted);
                 // Per-argument checking alone passes a call of the wrong length:
                 // the loop below reaches neither a missing argument nor a
@@ -1766,23 +1777,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // written turbofish mangled `ns::Cell::wrap(7)` with no
                     // arguments at all, and reported nothing where none could
                     // be inferred.
-                    let (impl_type_args_inferred, method_type_args) = self.static_call_type_args(
-                        StaticCallee {
-                            type_name,
-                            method_name,
-                            receiver_key: ns_key.as_ref(),
-                        },
-                        &call.args,
-                        &args,
-                        expected_type,
-                        call.span,
-                        method_type_args,
-                    );
+                    let (mut impl_type_args_inferred, mut method_type_args) = self
+                        .static_call_type_args(
+                            StaticCallee {
+                                type_name,
+                                method_name,
+                                receiver_key: ns_key.as_ref(),
+                            },
+                            &call.args,
+                            &args,
+                            expected_type,
+                            call.span,
+                            method_type_args,
+                        );
                     self.report_uninferred_static_method_type_args(
                         type_name,
                         method_name,
-                        &impl_type_args_inferred,
-                        &method_type_args,
+                        &mut impl_type_args_inferred,
+                        &mut method_type_args,
                         call.span,
                         ns_key.as_ref(),
                     );
@@ -1924,6 +1936,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .collect()
                     };
                     self.recoerce_literal_args(&call.args, &mut args, &checked);
+                    if func_ref.monomorph_info.is_some()
+                        && self.report_value_for_reference(
+                            &param_types,
+                            &call.args,
+                            &args,
+                            call.span,
+                        )
+                    {
+                        return TypeTable::ERROR;
+                    }
                     // The same check the bare `Type::method` spelling gets: a
                     // count is only skipped where no signature answered.
                     let arg_sites = arg_sites_of(&call.args, args.len(), call.span);
@@ -2115,13 +2137,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.check_function_type_arg_bounds(&callee, &type_args, call.span);
         }
 
-        if !self.report_value_for_reference(
-            &callee,
-            &declared_param_types,
-            &call.args,
-            &args,
-            call.span,
-        ) {
+        let generic = !self.lookup_function_type_params(&callee).is_empty();
+        if !(generic
+            && self.report_value_for_reference(&declared_param_types, &call.args, &args, call.span))
+        {
             self.defer_or_report_uninferred_fn_type_args(
                 &callee,
                 &mut type_args,
@@ -3102,58 +3121,62 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         params: &[ast::GenericParam],
         type_args: &mut Vec<TypeId>,
     ) {
-        // A turbofish naming only the non-pack params (`parse::<Perms>()`,
+        // A turbofish naming only the leading params (`parse::<Perms>()`,
         // where the subject appears solely in the return type) leaves the
-        // trailing pack slot absent. Seed it with its declared, still-unbound
-        // form so the projection below can pin it from the owner's bound.
+        // trailing slots absent. Seed them open so the projection below can
+        // pin them from the owner's bound.
         for (i, param) in params.iter().enumerate().skip(type_args.len()) {
-            let declared = self.tysys.type_table.borrow_mut().make_declared_param(
-                param.name.clone(),
-                i as u32,
-                param.is_pack,
-            );
-            type_args.push(declared);
+            let open = self.open_slot(param, i);
+            type_args.push(open);
         }
         self.resolve_assoc_bound_args(params, type_args);
+    }
+
+    /// A call's slot for `param` at `index` that nothing has answered yet: a
+    /// fresh variable, as `instantiate` mints. The callee's own binder would
+    /// read as the caller's of one name and index, a slot the caller forwards.
+    /// A pack keeps its declared form, as `instantiate` keeps it.
+    fn open_slot(&mut self, param: &ast::GenericParam, index: usize) -> TypeId {
+        if param.is_pack {
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .make_type_pack(param.name.clone(), index as u32)
+        } else {
+            self.mint_infer_var_named(&param.name)
+        }
     }
 
     /// Report "cannot infer type parameter" at the call site rather than letting
     /// an unsubstituted `TypeParam` reach codegen and trap. Effect parameters,
     /// `fn`-bound ones (constrained structurally), defaulted ones (already
     /// filled), and ones bound to an outer-scope `TypeParam` (the caller
-    /// forwarding its own generics) are all excluded.
+    /// forwarding its own generics) are all excluded. A slot it reports is the
+    /// error type from then on, as
+    /// [`Self::report_uninferred_static_method_type_args`] leaves one.
     fn report_uninferred_fn_type_args(
         &mut self,
         callee: &CalleeRef,
-        type_args: &[TypeId],
+        type_args: &mut Vec<TypeId>,
         span: token::Span,
     ) {
         let params = self.lookup_function_type_params(callee);
-        let inferable: Vec<&ast::GenericParam> = params
-            .iter()
-            .filter(|p| !p.is_effect && p.default.is_none() && !p.has_fn_bound())
-            .collect();
-        if inferable.is_empty() {
-            return;
-        }
         let scope_params = self.scope_type_param_ids();
 
         // When inference produced no type args at all, every inferable
         // parameter is unresolved. Otherwise check each against its inferred
         // slot (parallel to the full declared parameter list).
-        let unresolved: Vec<&str> = if type_args.is_empty() {
-            inferable.iter().map(|p| p.name.as_str()).collect()
+        let is_inferable =
+            |p: &ast::GenericParam| !p.is_effect && p.default.is_none() && !p.has_fn_bound();
+        let unresolved: Vec<usize> = if type_args.is_empty() {
+            (0..params.len())
+                .filter(|&i| is_inferable(&params[i]))
+                .collect()
         } else if type_args.len() == params.len() {
-            params
-                .iter()
-                .zip(type_args.iter())
-                .filter(|&(p, &tid)| {
-                    !p.is_effect
-                        && p.default.is_none()
-                        && !p.has_fn_bound()
-                        && self.slot_unanswered(tid, &scope_params)
+            (0..params.len())
+                .filter(|&i| {
+                    is_inferable(&params[i]) && self.slot_unanswered(type_args[i], &scope_params)
                 })
-                .map(|(p, _)| p.name.as_str())
                 .collect()
         } else {
             // Length mismatch (packs/effects interleaved): be conservative
@@ -3164,7 +3187,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if unresolved.is_empty() {
             return;
         }
-        let names: Vec<String> = unresolved.iter().copied().map(str::to_string).collect();
+        let names: Vec<String> = unresolved.iter().map(|&i| params[i].name.clone()).collect();
+        // Nothing inferred leaves no slots to overwrite, unless every slot is
+        // one reported here.
+        if type_args.is_empty() && unresolved.len() == params.len() {
+            type_args.resize(params.len(), TypeTable::ERROR);
+        }
+        if type_args.len() == params.len() {
+            for &i in &unresolved {
+                type_args[i] = TypeTable::ERROR;
+            }
+        }
         let func_name = callee.name();
         let _ = self.emit(TypeError::cannot_infer(
             &names,
@@ -3174,12 +3207,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ));
     }
 
+    /// A slot it reports is the error type from then on: left as the callee's
+    /// own binder, it reads as whatever the caller declares under that name.
     fn report_uninferred_static_method_type_args(
         &mut self,
         prefix: &str,
         suffix: &str,
-        impl_type_args: &[TypeId],
-        method_type_args: &[TypeId],
+        impl_type_args: &mut Vec<TypeId>,
+        method_type_args: &mut Vec<TypeId>,
         span: token::Span,
         receiver_key: Option<&ImplTargetKey>,
     ) {
@@ -3209,23 +3244,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // `impl_type_args` is indexed by slot, which a parameter nested in the
         // target or pushed past a concrete argument holds out of declaration order.
-        let mut names: Vec<String> = declaring_slots
+        let impl_unresolved: Vec<(usize, String)> = declaring_slots
             .iter()
-            .filter(|&&(_, id)| {
-                unresolved(self, impl_type_args.get(self.declared_slot(id) as usize))
-            })
-            .map(|(name, _)| name.clone())
+            .map(|(name, id)| (self.declared_slot(*id) as usize, name.clone()))
+            .filter(|(slot, _)| unresolved(self, impl_type_args.get(*slot)))
             .collect();
-        let type_level_unresolved = !names.is_empty();
-        names.extend(
-            method_slots
-                .iter()
-                .enumerate()
-                .filter(|&(i, _)| unresolved(self, method_type_args.get(i)))
-                .map(|(_, (name, _))| name.clone()),
-        );
-        if names.is_empty() {
+        let method_unresolved: Vec<(usize, String)> = method_slots
+            .iter()
+            .enumerate()
+            .filter(|&(i, _)| unresolved(self, method_type_args.get(i)))
+            .map(|(i, (name, _))| (i, name.clone()))
+            .collect();
+        if impl_unresolved.is_empty() && method_unresolved.is_empty() {
             return;
+        }
+        let type_level_unresolved = !impl_unresolved.is_empty();
+        let names: Vec<String> = impl_unresolved
+            .iter()
+            .chain(&method_unresolved)
+            .map(|(_, name)| name.clone())
+            .collect();
+        for (args, unresolved) in [
+            (&mut *impl_type_args, &impl_unresolved),
+            (&mut *method_type_args, &method_unresolved),
+        ] {
+            for &(slot, _) in unresolved {
+                if args.len() <= slot {
+                    args.resize(slot + 1, TypeTable::ERROR);
+                }
+                args[slot] = TypeTable::ERROR;
+            }
         }
 
         let turbofish = if type_level_unresolved {
@@ -3296,9 +3344,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let defaults: Vec<Option<TypeId>> =
             self.with_resolving_home(Some(callee.module().clone()), |s| {
-                let mut scope = s.enter_inherited_type_param_scope();
-                scope.annotate_ctx.trait_ctx.type_params.clear();
-                scope.register_generic_params(&params, 0);
+                let mut scope = s.enter_decl_params_scope(&params);
                 space
                     .iter()
                     .map(|p| p.default.as_ref().map(|ty| scope.resolve_type(ty)))
@@ -3309,13 +3355,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             *type_args = space
                 .iter()
                 .enumerate()
-                .map(|(i, p)| {
-                    self.tysys.type_table.borrow_mut().make_declared_param(
-                        p.name.clone(),
-                        i as u32,
-                        p.is_pack,
-                    )
-                })
+                .map(|(i, p)| self.open_slot(p, i))
                 .collect();
         }
         if type_args.len() != n {
@@ -3342,19 +3382,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Reports each value a generic callee receives for a reference parameter, whose
-    /// unbound slot the argument check accepts it against. Whether it reported any.
+    /// Reports each value a generic callee receives for a reference parameter,
+    /// read off `param_types` as declared: the argument check accepts it
+    /// against the slot, unbound or the error type. Whether it reported any.
     fn report_value_for_reference(
         &mut self,
-        callee: &CalleeRef,
         param_types: &[TypeId],
         arg_exprs: &[ast::Expr],
         args: &[TypeId],
         call_span: Span,
     ) -> bool {
-        if self.lookup_function_type_params(callee).is_empty() {
-            return false;
-        }
         let is_borrow = |this: &Self, t| {
             RefKind::from_resolved(this.tysys.type_table.borrow().get(t)).is_some()
         };

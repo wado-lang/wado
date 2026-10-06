@@ -1,0 +1,38 @@
+// The restated bound an impl stands on when its trait's projects off a trait
+// parameter is still enforced at the call.
+trait Iter with () {
+    type Item;
+}
+
+trait Conv<X> with () {}
+
+trait Store<X: Iter> with () {
+    fn hold<E: Conv<X::Item>>(&self, e: E) -> i32;
+}
+
+struct Ints {}
+
+impl Iter for Ints {
+    type Item = i32;
+}
+
+struct E2 {}
+
+struct Bx {}
+
+impl Store<Ints> for Bx {
+    fn hold<E: Conv<i32>>(&self, e: E) -> i32 {
+        return 1;
+    }
+}
+
+export fn run() {
+    let b = Bx {};
+    assert b.hold(E2 {}) == 1;
+}
+
+__DATA__
+{
+  "compile_error": ":31:12: analysis error: type 'E2' does not implement trait 'Conv<i32>' required by bound on 'E'",
+  "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
+}

@@ -7,6 +7,7 @@ use crate::tir::TypeTable;
 
 use super::Elaborator;
 use super::scope::{BinderInScope, ScopedBound};
+use super::trait_env;
 use super::types::{
     EnumInfo, FlagsInfo, GenericNewtypeInfo, ParamSlot, StructFieldInfo, VariantCaseData,
     VariantInfo,
@@ -22,10 +23,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for item in &module.items {
             match item {
                 Item::Struct(struct_decl) => {
-                    let mut scope = self.enter_inherited_type_param_scope();
-                    scope.annotate_ctx.trait_ctx.type_params.clear();
-                    scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
-                    scope.register_generic_params(&struct_decl.type_params, 0);
+                    let mut scope = self.enter_decl_params_scope(&struct_decl.type_params);
 
                     let mut fields = Vec::new();
                     for field in &struct_decl.fields {
@@ -60,6 +58,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             base_type_id,
                         );
                     } else {
+                        // Each use instantiates the base from its AST; resolved
+                        // here once, in its own frame, for what it owes there.
+                        self.enter_decl_params_scope(&newtype_decl.type_params)
+                            .resolve_type(&newtype_decl.ty);
                         self.sem
                             .decls
                             .local
@@ -68,9 +70,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
                 Item::Variant(variant_decl) => {
-                    let mut scope = self.enter_inherited_type_param_scope();
-                    scope.annotate_ctx.trait_ctx.type_params.clear();
-                    scope.register_generic_params(&variant_decl.type_params, 0);
+                    let mut scope = self.enter_decl_params_scope(&variant_decl.type_params);
                     let type_param_type_ids = Elaborator::<H>::slot_type_ids(
                         &ParamSlot::list(&variant_decl.type_params),
                         &scope.tysys.type_table,
@@ -176,9 +176,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Check each trait impl's header against what its trait requires: the
-    /// bounds on its associated types, and its supertraits.
+    /// bounds on its associated types, and its supertraits. First, the bounds
+    /// on type declarations' arguments the decl pass met before the solver.
     pub(super) fn check_impl_headers(&mut self, module: &Module, module_source: ModuleSource) {
         self.current_module_source = module_source;
+        self.check_deferred_decl_arg_bounds();
         for item in &module.items {
             if let Item::Impl(impl_block) = item
                 && impl_block.trait_type.is_some()
@@ -319,15 +321,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     TUPLE_TYPE_NAME.to_string()
                 }
             }
-            Type::Function(func_type) => {
-                // Build function type string: "fn(T1, T2) -> R"
-                let param_strs: Vec<String> = func_type
-                    .params
-                    .iter()
-                    .map(|p| self.get_type_name(p))
-                    .collect();
-                let return_str = self.get_type_name(&func_type.return_type);
-                format!("fn({}) -> {}", param_strs.join(", "), return_str)
+            Type::Function(_) => {
+                trait_env::written_type_arg(ty, &self.tysys.resolutions).to_display()
             }
             _ => "Unknown".to_string(),
         }

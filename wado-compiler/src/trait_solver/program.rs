@@ -46,6 +46,9 @@ pub enum SolverType {
         base: Box<SolverType>,
         trait_: TraitDeclId,
         assoc: AssocId,
+        /// The associated type's own arguments (`i32` in `S::Buf<i32>`),
+        /// empty for one that declares no parameters.
+        args: Vec<SolverType>,
     },
 }
 
@@ -70,7 +73,10 @@ impl SolverType {
         match self {
             Self::Param(_) | Self::Pack(_) => pred(self),
             Self::Decl(_, inner) | Self::Tuple(inner) => inner.iter().any(|t| t.mentions(pred)),
-            Self::Ref { inner, .. } | Self::Projection { base: inner, .. } => inner.mentions(pred),
+            Self::Ref { inner, .. } => inner.mentions(pred),
+            Self::Projection { base, args, .. } => {
+                base.mentions(pred) || args.iter().any(|t| t.mentions(pred))
+            }
         }
     }
 
@@ -82,8 +88,9 @@ impl SolverType {
             Self::Param(_) | Self::Pack(_) => false,
             Self::Decl(id, inner) => pred(*id) || inner.iter().any(|t| t.mentions_decl(pred)),
             Self::Tuple(inner) => inner.iter().any(|t| t.mentions_decl(pred)),
-            Self::Ref { inner, .. } | Self::Projection { base: inner, .. } => {
-                inner.mentions_decl(pred)
+            Self::Ref { inner, .. } => inner.mentions_decl(pred),
+            Self::Projection { base, args, .. } => {
+                base.mentions_decl(pred) || args.iter().any(|t| t.mentions_decl(pred))
             }
         }
     }
@@ -124,10 +131,12 @@ impl SolverType {
                 base,
                 trait_,
                 assoc,
+                args,
             } => Self::Projection {
                 base: Box::new(base.map_params(arg)?),
                 trait_: *trait_,
                 assoc: *assoc,
+                args: each(args)?,
             },
         })
     }
@@ -263,9 +272,11 @@ pub enum RefRule {
 /// A trait declaration, reduced to what the rules read.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct TraitDef {
-    /// The traits an implementor must also implement, so a bound naming this
-    /// one answers for them too, each with what the clause writes for that
-    /// trait's own parameters (`trait AsStrSlice: Eq<String>`).
+    /// The traits its clause names, which an implementor must also implement,
+    /// so a bound naming this one answers for them too. Each carries what the
+    /// clause writes for that trait's own parameters (`trait AsStrSlice:
+    /// Eq<String>`), in this trait's space: [`SolverType::Param`] is this
+    /// trait's parameter at that position (`trait Gauge<X>: Measure<X>`).
     pub supertraits: Vec<ParamBound>,
     /// Holds of every type before any body exists — `Inspect`. The unbounded
     /// blanket that would say so is rejected, so the trait says it itself.
@@ -277,6 +288,9 @@ pub struct TraitDef {
     /// Per type parameter, its declared default, if any. A bound spells no
     /// arguments (WEP 2026-07-31), so it asks for the trait at its defaults.
     pub arg_defaults: Vec<Option<ArgDefault>>,
+    /// The position of its parameter pack, which a bound writes as the flat
+    /// run of arguments past the parameters around it.
+    pub pack: Option<usize>,
     /// The methods it declares, which is what a call site matches on. A
     /// supertrait's methods are not among them: an implementor writes a
     /// separate impl for each trait.
@@ -381,7 +395,9 @@ pub struct Program {
     /// trait they answer for.
     pub facts: IndexMap<(TypeDeclId, TraitDeclId), Fact>,
     /// Each impl's `type X = …;` bindings, spelled with the impl's own
-    /// parameters. What a [`Pin`] is checked against.
+    /// parameters. What a [`Pin`] is checked against. A family's binding
+    /// (`type Buf<E> = List<E>;`) spells its own parameters past the impl's:
+    /// `E` is [`SolverType::Param`] at the impl's parameter count.
     pub assoc_bindings: IndexMap<ImplId, Vec<(AssocId, SolverType)>>,
     /// The methods each impl block's body declares. One its trait does not
     /// declare — a helper the bodies call on `self` — is a candidate through
@@ -449,42 +465,73 @@ impl Program {
     /// The default `def`'s trait declares for its argument at `index`, at
     /// `def`'s target; `None` where it declares none or cannot spell it.
     pub(super) fn default_arg(&self, def: &ImplDef, index: usize) -> Option<SolverType> {
+        self.arg_at(def.trait_?, None, index, &def.target)
+    }
+
+    /// `trait_`'s argument at `index` in a bound on `subject` writing `written`
+    /// there: the written one, else the declared default. `None` where neither
+    /// spells one.
+    pub(super) fn arg_at(
+        &self,
+        trait_: TraitDeclId,
+        written: Option<&SolverType>,
+        index: usize,
+        subject: &SolverType,
+    ) -> Option<SolverType> {
+        if let Some(arg) = written {
+            return Some(arg.clone());
+        }
         self.traits
-            .get(&def.trait_?)?
+            .get(&trait_)?
             .arg_defaults
             .get(index)?
             .as_ref()?
-            .at(&def.target)
+            .at(subject)
     }
 
-    /// Whether a bound on `bound` answers for `wanted`: itself or a supertrait,
-    /// transitively.
-    pub(super) fn bound_reaches(&self, bound: TraitDeclId, wanted: TraitDeclId) -> bool {
+    /// What `args`, written for `trait_`, say for each of its parameters, as
+    /// [`args_per_param`] reads them. With no trait declaring a pack, each
+    /// argument is its own parameter's.
+    pub(super) fn per_param(
+        &self,
+        trait_: Option<TraitDeclId>,
+        args: &[SolverType],
+    ) -> Vec<Option<SolverType>> {
+        match trait_.and_then(|trait_| self.traits.get(&trait_)) {
+            Some(def) => args_per_param(args, def.arg_defaults.len(), def.pack, SolverType::Tuple),
+            None => args.iter().cloned().map(Some).collect(),
+        }
+    }
+
+    /// Whether a bound on `subject` naming `bound` answers for `wanted`: itself
+    /// or a supertrait, transitively.
+    pub(super) fn bound_reaches(
+        &self,
+        bound: TraitDeclId,
+        wanted: TraitDeclId,
+        subject: &SolverType,
+    ) -> bool {
         !self
-            .args_reaching(&ParamBound::bare(bound), wanted)
+            .args_reaching(&ParamBound::bare(bound), wanted, subject)
             .is_empty()
     }
 
-    /// Every argument list `bound` writes for `wanted`'s own parameters — its
-    /// own arguments where it names `wanted`, and each clause that reaches it.
-    /// Two edges to one trait writing different arguments are two answers, so
-    /// the walk carries on past the first rather than deciding on it.
+    /// Every argument list a bound on `subject` writing `bound` reaches
+    /// `wanted` with — its own arguments where it names `wanted`, and each
+    /// clause that reaches it. Two edges to one trait writing different
+    /// arguments are two answers, so the walk carries on past the first rather
+    /// than deciding on it.
     pub(super) fn args_reaching(
         &self,
         bound: &ParamBound,
         wanted: TraitDeclId,
+        subject: &SolverType,
     ) -> Vec<Vec<SolverType>> {
-        if bound.trait_ == wanted {
-            return vec![bound.args.clone()];
-        }
-        let Some(def) = self.traits.get(&bound.trait_) else {
-            return Vec::new();
-        };
         let mut reaching = Vec::new();
-        let mut stack = def.supertraits.clone();
+        let mut stack = vec![bound.clone()];
         // An edge is its trait and what it writes, so a second instantiation of
         // one trait is walked rather than taken for a revisit.
-        let mut seen: Vec<ParamBound> = vec![bound.clone()];
+        let mut seen: Vec<ParamBound> = Vec::new();
         while let Some(next) = stack.pop() {
             if seen.contains(&next) {
                 continue;
@@ -493,10 +540,66 @@ impl Program {
                 reaching.push(next.args.clone());
             }
             if let Some(def) = self.traits.get(&next.trait_) {
-                stack.extend(def.supertraits.iter().cloned());
+                let args = self.per_param(Some(next.trait_), &next.args);
+                stack.extend(
+                    def.supertraits
+                        .iter()
+                        .filter_map(|clause| self.clause_at(clause, next.trait_, &args, subject)),
+                );
             }
             seen.push(next);
         }
         reaching
     }
+
+    /// `clause`, written in `sub`'s space, at `args`, what a bound on `subject`
+    /// writes for each of `sub`'s parameters. `None` where the clause names a
+    /// parameter that bound neither writes nor defaults: the edge then answers
+    /// nothing rather than a guess.
+    fn clause_at(
+        &self,
+        clause: &ParamBound,
+        sub: TraitDeclId,
+        args: &[Option<SolverType>],
+        subject: &SolverType,
+    ) -> Option<ParamBound> {
+        let arg = |i: u32| {
+            let i = i as usize;
+            self.arg_at(sub, args.get(i).and_then(Option::as_ref), i, subject)
+        };
+        Some(ParamBound {
+            trait_: clause.trait_,
+            args: clause
+                .args
+                .iter()
+                .map(|ty| ty.map_params(&arg))
+                .collect::<Option<_>>()?,
+        })
+    }
+}
+
+/// What the `written` arguments of a use say for each of a declaration's
+/// `params` parameters. A pack at `pack` takes the run of every argument past
+/// the parameters around it, made one by `tuple`, and an empty run where the
+/// use stops short of it. `None` at a position nothing is written for, which
+/// its default answers.
+pub fn args_per_param<T: Clone>(
+    written: &[T],
+    params: usize,
+    pack: Option<usize>,
+    tuple: impl FnOnce(Vec<T>) -> T,
+) -> Vec<Option<T>> {
+    let Some(pack) = pack else {
+        return written.iter().cloned().map(Some).collect();
+    };
+    let absorbed = (written.len() + 1).saturating_sub(params);
+    let run = written
+        .get(pack..pack + absorbed)
+        .unwrap_or_default()
+        .to_vec();
+    (0..pack)
+        .map(|i| written.get(i).cloned())
+        .chain(std::iter::once(Some(tuple(run))))
+        .chain((pack + 1..params).map(|i| written.get(i + absorbed - 1).cloned()))
+        .collect()
 }

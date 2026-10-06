@@ -1,0 +1,20 @@
+// A callee parameter nothing infers is reported even where the caller declares
+// one of the same name at the same index, and a defaulted neighbour (`U`)
+// does not hide it.
+fn make<T, U = i32>() -> List<T> {
+    return [];
+}
+
+fn g<T>(t: T) -> i32 {
+    let l = make();
+    return l.len();
+}
+
+export fn run() {
+    assert g(1) == 0;
+}
+
+__DATA__
+{
+  "compile_error": ":9:13: analysis error: cannot infer type parameter `T` of function `make`; add a turbofish (`make::<...>()`) or a type annotation"
+}

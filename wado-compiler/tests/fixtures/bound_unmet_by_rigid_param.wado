@@ -1,0 +1,26 @@
+// A type parameter meets a bound only from the bounds in force on it. `O` has
+// none, so passing it where `T: Eq` is asked is rejected in the generic body,
+// whatever `O` is later instantiated with.
+
+struct Worker {}
+
+struct Wrap<O> {
+    o: O,
+}
+
+fn same<T: Eq>(a: &T, b: &T) -> bool {
+    return a == b;
+}
+
+impl<O> Wrap<O> {
+    fn run(&self) -> bool {
+        return same(&self.o, &self.o);
+    }
+}
+
+test {
+    assert Wrap { o: Worker {} }.run();
+}
+
+__DATA__
+{"compile_error": "type 'O' does not implement trait 'Eq' required by bound on 'T'"}

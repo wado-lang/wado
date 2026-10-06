@@ -1,0 +1,38 @@
+// A bound whose argument is a projection answers a bound asking the same
+// projection: `Q: Has<P::Item>` meets `U: Has<P::Item>` in `forward`.
+
+trait Src with () {
+    type Item;
+}
+
+trait Has<A> with () {
+    fn h(&self) -> i32;
+}
+
+struct Ints {}
+
+impl Src for Ints {
+    type Item = i32;
+}
+
+struct Holder {
+    n: i32,
+}
+
+impl Has<i32> for Holder {
+    fn h(&self) -> i32 {
+        return self.n;
+    }
+}
+
+fn read<P: Src, U: Has<P::Item>>(u: &U) -> i32 {
+    return u.h();
+}
+
+fn forward<P: Src, Q: Has<P::Item>>(q: &Q) -> i32 {
+    return read::<P, Q>(q);
+}
+
+test {
+    assert forward::<Ints, Holder>(&Holder { n: 7 }) == 7;
+}
