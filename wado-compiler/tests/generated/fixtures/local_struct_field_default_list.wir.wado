@@ -107,8 +107,8 @@ struct core:prelude/slice.wado//Slice<u8> {  // TypeId(20)
 }
 
 variant core:prelude/types.wado//Option<i32> {  // TypeId(21)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(22)
@@ -659,7 +659,7 @@ fn "core:json/integral_digits"(n, input, type_name, start) {
                         }
                         break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_scalar_0: 1;
                     } != 0 {
-                        $sroa_slot_65 = 1;
+                        $sroa_slot_65 = 0;
                         break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0;
                     }
                     $load_2 = $licm_neg_43;
@@ -671,10 +671,10 @@ fn "core:json/integral_digits"(n, input, type_name, start) {
                         $licm_neg_43 = $load_2 + 1;
                         break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_scalar_1;
                     };
-                    $sroa_slot_65 = 0;
+                    $sroa_slot_65 = 1;
                     break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0;
                 };
-                if local.tee $load_1($sroa_slot_65) == 0 {
+                if local.tee $load_1($sroa_slot_65) == 1 {
                     if @unlikely(local.tee $av_68(digits.used + 1) > builtin::array_len(digits.repr)) {
                         cold_path;
                         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(digits, $av_68);
@@ -1332,21 +1332,21 @@ fn "core:json/core/json/read_number_text<i32>"(text, offset) {
     } else {
         0;
     }) {
-        return 0, struct.new "core:prelude/types.wado//Option<i32>" { 1 }, ref.null none;
+        return 0, struct.new "core:prelude/types.wado//Option<i32>" { 0 }, ref.null none;
     }
     let $mv$$vr_9$1: i32;
     let $mv$$vr_9$2: ref null "core:serde//DeserializeError";
     multivalue_bind [$av_15, $mv$$vr_9$1, $mv$$vr_9$2] = "core:serde/i32^core:serde/Deserialize::deserialize<core:json/JsonDeserializer>"(de);
     if $av_15 == 0 {
         return 0, (if de.pos == local.tee text(de.input).end - text.start -> ref "core:prelude/types.wado//Option<i32>" {
-            struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $mv$$vr_9$1 };
+            struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: $mv$$vr_9$1 };
         } else {
-            struct.new "core:prelude/types.wado//Option<i32>" { 1 };
+            struct.new "core:prelude/types.wado//Option<i32>" { 0 };
         }), ref.null none;
     } else if @likely($av_15 == 1) {
         $av_15 = local.tee e(ref.as_non_null($mv$$vr_9$2)).kind;
         if (0 | ($av_15 == 6)) | ($av_15 == 8) {
-            return 0, struct.new "core:prelude/types.wado//Option<i32>" { 1 }, ref.null none;
+            return 0, struct.new "core:prelude/types.wado//Option<i32>" { 0 }, ref.null none;
         } else {
             return 1, ref.null none, struct.new "core:serde//DeserializeError" { kind: $av_15, message: e.message, offset: offset };
         }

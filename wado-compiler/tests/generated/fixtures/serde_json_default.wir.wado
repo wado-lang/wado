@@ -108,8 +108,8 @@ struct core:prelude/slice.wado//Slice<u8> {  // TypeId(19)
 }
 
 variant core:prelude/types.wado//Option<i32> {  // TypeId(20)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(21)
@@ -1034,7 +1034,7 @@ fn "core:json/integral_digits"(n, input, type_name, start) {
                         }
                         break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_scalar_0: 1;
                     } != 0 {
-                        $sroa_slot_65 = 1;
+                        $sroa_slot_65 = 0;
                         break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0;
                     }
                     $load_2 = $licm_neg_43;
@@ -1046,10 +1046,10 @@ fn "core:json/integral_digits"(n, input, type_name, start) {
                         $licm_neg_43 = $load_2 + 1;
                         break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_scalar_1;
                     };
-                    $sroa_slot_65 = 0;
+                    $sroa_slot_65 = 1;
                     break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0;
                 };
-                if local.tee $load_1($sroa_slot_65) == 0 {
+                if local.tee $load_1($sroa_slot_65) == 1 {
                     if @unlikely(local.tee $av_68(digits.used + 1) > builtin::array_len(digits.repr)) {
                         cold_path;
                         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(digits, $av_68);
@@ -1707,21 +1707,21 @@ fn "core:json/core/json/read_number_text<i32>"(text, offset) {
     } else {
         0;
     }) {
-        return 0, struct.new "core:prelude/types.wado//Option<i32>" { 1 }, ref.null none;
+        return 0, struct.new "core:prelude/types.wado//Option<i32>" { 0 }, ref.null none;
     }
     let $mv$$vr_9$1: i32;
     let $mv$$vr_9$2: ref null "core:serde//DeserializeError";
     multivalue_bind [$av_15, $mv$$vr_9$1, $mv$$vr_9$2] = "core:serde/i32^core:serde/Deserialize::deserialize<core:json/JsonDeserializer>"(de);
     if $av_15 == 0 {
         return 0, (if de.pos == local.tee text(de.input).end - text.start -> ref "core:prelude/types.wado//Option<i32>" {
-            struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $mv$$vr_9$1 };
+            struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: $mv$$vr_9$1 };
         } else {
-            struct.new "core:prelude/types.wado//Option<i32>" { 1 };
+            struct.new "core:prelude/types.wado//Option<i32>" { 0 };
         }), ref.null none;
     } else if @likely($av_15 == 1) {
         $av_15 = local.tee e(ref.as_non_null($mv$$vr_9$2)).kind;
         if (0 | ($av_15 == 6)) | ($av_15 == 8) {
-            return 0, struct.new "core:prelude/types.wado//Option<i32>" { 1 }, ref.null none;
+            return 0, struct.new "core:prelude/types.wado//Option<i32>" { 0 }, ref.null none;
         } else {
             return 1, ref.null none, struct.new "core:serde//DeserializeError" { kind: $av_15, message: e.message, offset: offset };
         }
@@ -3972,41 +3972,6 @@ fn "core:serde/serde_json_default.wado/Config^core:serde/Deserialize::deserializ
     let $local_56: ref "core:serde//DeserializeError";
     let $local_57: ref null "core:prelude/string.wado//String";
     let $local_88: ref null "core:serde//DeserializeError";
-<<<<<<< HEAD
-    let $sroa_slots_0_192: ref null "core:prelude/string.wado//String";
-    let $sroa_slots_3_195: ref null "core:prelude//List<core:prelude/string.wado/String>";
-    let $sroa_$sroa_slots_1_193_0_202: i32;
-    let $sroa_$sroa_slots_1_193_1_203: i32;
-    let $sroa_$sroa_slots_2_194_0_204: i32;
-    let $sroa_$sroa_slots_2_194_1_205: bool;
-    let $sroa_$sroa_slots_4_196_0_206: i32;
-    let $sroa_$sroa_slots_4_196_1_207: ref null "core:prelude/string.wado//String";
-    $sroa_slots_0_192 = ref.null none;
-    $sroa_$sroa_slots_1_193_0_202 = 0;
-    $sroa_$sroa_slots_1_193_1_203 = 0;
-    $sroa_$sroa_slots_2_194_0_204 = 0;
-    $sroa_$sroa_slots_2_194_1_205 = 0;
-    $sroa_slots_3_195 = ref.null none;
-    $sroa_$sroa_slots_4_196_0_206 = 0;
-    $sroa_$sroa_slots_4_196_1_207 = ref.null none;
-||||||| 99c24c4d98
-    let $sroa_slots_0_192: ref null "core:prelude/string.wado//String";
-    let $sroa_slots_3_195: ref null "core:prelude//List<core:prelude/string.wado/String>";
-    let $sroa_$sroa_slots_1_193_0_202: i32;
-    let $sroa_$sroa_slots_1_193_1_203: i32;
-    let $sroa_$sroa_slots_2_194_0_204: i32;
-    let $sroa_$sroa_slots_2_194_1_205: bool;
-    let $sroa_$sroa_slots_4_196_0_206: i32;
-    let $sroa_$sroa_slots_4_196_1_207: ref null "core:prelude/string.wado//String";
-    $sroa_slots_0_192 = ref.null none;
-    $sroa_$sroa_slots_1_193_0_202 = 1;
-    $sroa_$sroa_slots_1_193_1_203 = 0;
-    $sroa_$sroa_slots_2_194_0_204 = 1;
-    $sroa_$sroa_slots_2_194_1_205 = 0;
-    $sroa_slots_3_195 = ref.null none;
-    $sroa_$sroa_slots_4_196_0_206 = 1;
-    $sroa_$sroa_slots_4_196_1_207 = ref.null none;
-=======
     let $sroa_slots_0_190: ref null "core:prelude/string.wado//String";
     let $sroa_slots_3_193: ref null "core:prelude//List<core:prelude/string.wado/String>";
     let $sroa_$sroa_slots_1_191_0_200: i32;
@@ -4016,14 +3981,13 @@ fn "core:serde/serde_json_default.wado/Config^core:serde/Deserialize::deserializ
     let $sroa_$sroa_slots_4_194_0_204: i32;
     let $sroa_$sroa_slots_4_194_1_205: ref null "core:prelude/string.wado//String";
     $sroa_slots_0_190 = ref.null none;
-    $sroa_$sroa_slots_1_191_0_200 = 1;
+    $sroa_$sroa_slots_1_191_0_200 = 0;
     $sroa_$sroa_slots_1_191_1_201 = 0;
-    $sroa_$sroa_slots_2_192_0_202 = 1;
+    $sroa_$sroa_slots_2_192_0_202 = 0;
     $sroa_$sroa_slots_2_192_1_203 = 0;
     $sroa_slots_3_193 = ref.null none;
-    $sroa_$sroa_slots_4_194_0_204 = 1;
+    $sroa_$sroa_slots_4_194_0_204 = 0;
     $sroa_$sroa_slots_4_194_1_205 = ref.null none;
->>>>>>> origin/main
     let $mv$$vr_90$0: i32;
     let $mv$$vr_90$1: ref null "core:json//JsonStructAccess";
     let $mv$$vr_90$2: ref null "core:serde//DeserializeError";
@@ -4076,13 +4040,7 @@ fn "core:serde/serde_json_default.wado/Config^core:serde/Deserialize::deserializ
                     }));
                     taken = 1;
                 } else if index_10 == 1 {
-<<<<<<< HEAD
-                    if @unlikely($sroa_$sroa_slots_1_193_0_202 == 1) {
-||||||| 99c24c4d98
-                    if @unlikely($sroa_$sroa_slots_1_193_0_202 == 0) {
-=======
-                    if @unlikely($sroa_$sroa_slots_1_191_0_200 == 0) {
->>>>>>> origin/main
+                    if @unlikely($sroa_$sroa_slots_1_191_0_200 == 1) {
                         cold_path;
                         $local_33 = struct.new "core:serde//DeserializeError" { kind: 3, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("duplicate field: \"port\""), used: 23 }, offset: -1_i64 };
                         cold_path;
@@ -4102,25 +4060,11 @@ fn "core:serde/serde_json_default.wado/Config^core:serde/Deserialize::deserializ
                     } else {
                         unreachable;
                     });
-<<<<<<< HEAD
-                    $sroa_$sroa_slots_1_193_0_202 = 1;
-                    $sroa_$sroa_slots_1_193_1_203 = $local_36;
-||||||| 99c24c4d98
-                    $sroa_$sroa_slots_1_193_0_202 = 0;
-                    $sroa_$sroa_slots_1_193_1_203 = $local_36;
-=======
-                    $sroa_$sroa_slots_1_191_0_200 = 0;
+                    $sroa_$sroa_slots_1_191_0_200 = 1;
                     $sroa_$sroa_slots_1_191_1_201 = $local_36;
->>>>>>> origin/main
                     taken = 1;
                 } else if index_10 == 2 {
-<<<<<<< HEAD
-                    if @unlikely($sroa_$sroa_slots_2_194_0_204 == 1) {
-||||||| 99c24c4d98
-                    if @unlikely($sroa_$sroa_slots_2_194_0_204 == 0) {
-=======
-                    if @unlikely($sroa_$sroa_slots_2_192_0_202 == 0) {
->>>>>>> origin/main
+                    if @unlikely($sroa_$sroa_slots_2_192_0_202 == 1) {
                         cold_path;
                         $local_40 = struct.new "core:serde//DeserializeError" { kind: 3, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("duplicate field: \"verbose\""), used: 26 }, offset: -1_i64 };
                         cold_path;
@@ -4140,16 +4084,8 @@ fn "core:serde/serde_json_default.wado/Config^core:serde/Deserialize::deserializ
                     } else {
                         unreachable;
                     });
-<<<<<<< HEAD
-                    $sroa_$sroa_slots_2_194_0_204 = 1;
-                    $sroa_$sroa_slots_2_194_1_205 = $local_43;
-||||||| 99c24c4d98
-                    $sroa_$sroa_slots_2_194_0_204 = 0;
-                    $sroa_$sroa_slots_2_194_1_205 = $local_43;
-=======
-                    $sroa_$sroa_slots_2_192_0_202 = 0;
+                    $sroa_$sroa_slots_2_192_0_202 = 1;
                     $sroa_$sroa_slots_2_192_1_203 = $local_43;
->>>>>>> origin/main
                     taken = 1;
                 } else if index_10 == 3 {
                     if @unlikely(ref.is_null($sroa_slots_3_193) == 0) {
@@ -4174,13 +4110,7 @@ fn "core:serde/serde_json_default.wado/Config^core:serde/Deserialize::deserializ
                     }));
                     taken = 1;
                 } else if index_10 == 4 {
-<<<<<<< HEAD
-                    if @unlikely($sroa_$sroa_slots_4_196_0_206 == 1) {
-||||||| 99c24c4d98
-                    if @unlikely($sroa_$sroa_slots_4_196_0_206 == 0) {
-=======
-                    if @unlikely($sroa_$sroa_slots_4_194_0_204 == 0) {
->>>>>>> origin/main
+                    if @unlikely($sroa_$sroa_slots_4_194_0_204 == 1) {
                         cold_path;
                         $local_54 = struct.new "core:serde//DeserializeError" { kind: 3, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("duplicate field: \"description\""), used: 30 }, offset: -1_i64 };
                         cold_path;
@@ -4200,16 +4130,8 @@ fn "core:serde/serde_json_default.wado/Config^core:serde/Deserialize::deserializ
                     } else {
                         unreachable;
                     });
-<<<<<<< HEAD
-                    $sroa_$sroa_slots_4_196_0_206 = 1;
-                    $sroa_$sroa_slots_4_196_1_207 = $local_57;
-||||||| 99c24c4d98
-                    $sroa_$sroa_slots_4_196_0_206 = 0;
-                    $sroa_$sroa_slots_4_196_1_207 = $local_57;
-=======
-                    $sroa_$sroa_slots_4_194_0_204 = 0;
+                    $sroa_$sroa_slots_4_194_0_204 = 1;
                     $sroa_$sroa_slots_4_194_1_205 = $local_57;
->>>>>>> origin/main
                     taken = 1;
                 } else {
                 }
@@ -4248,35 +4170,15 @@ fn "core:serde/serde_json_default.wado/Config^core:serde/Deserialize::deserializ
         local.tee value_18(ref.as_non_null($sroa_slots_0_190));
     } else {
         return 1, ref.null none, struct.new "core:serde//DeserializeError" { kind: 1, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("missing field: host"), used: 19 }, offset: -1_i64 };
-<<<<<<< HEAD
-    }); $sroa_$sroa_slots_1_193_0_202 = (if $sroa_$sroa_slots_1_193_0_202 == 1 -> i32 {
-        $sroa_$sroa_slots_1_193_1_203;
-    } else if @likely($sroa_$sroa_slots_1_193_0_202 == 0) -> i32 {
-||||||| 99c24c4d98
-    }); $sroa_$sroa_slots_1_193_0_202 = (if $sroa_$sroa_slots_1_193_0_202 == 0 -> i32 {
-        $sroa_$sroa_slots_1_193_1_203;
-    } else if @likely($sroa_$sroa_slots_1_193_0_202 == 1) -> i32 {
-=======
-    }); $sroa_$sroa_slots_1_191_0_200 = (if $sroa_$sroa_slots_1_191_0_200 == 0 -> i32 {
+    }); $sroa_$sroa_slots_1_191_0_200 = (if $sroa_$sroa_slots_1_191_0_200 == 1 -> i32 {
         $sroa_$sroa_slots_1_191_1_201;
-    } else if @likely($sroa_$sroa_slots_1_191_0_200 == 1) -> i32 {
->>>>>>> origin/main
+    } else if @likely($sroa_$sroa_slots_1_191_0_200 == 0) -> i32 {
         0;
     } else {
         unreachable;
-<<<<<<< HEAD
-    }); $sroa_$sroa_slots_2_194_0_204 = (if $sroa_$sroa_slots_2_194_0_204 == 1 -> bool {
-        $sroa_$sroa_slots_2_194_1_205;
-    } else if @likely($sroa_$sroa_slots_2_194_0_204 == 0) -> bool {
-||||||| 99c24c4d98
-    }); $sroa_$sroa_slots_2_194_0_204 = (if $sroa_$sroa_slots_2_194_0_204 == 0 -> bool {
-        $sroa_$sroa_slots_2_194_1_205;
-    } else if @likely($sroa_$sroa_slots_2_194_0_204 == 1) -> bool {
-=======
-    }); $sroa_$sroa_slots_2_192_0_202 = (if $sroa_$sroa_slots_2_192_0_202 == 0 -> bool {
+    }); $sroa_$sroa_slots_2_192_0_202 = (if $sroa_$sroa_slots_2_192_0_202 == 1 -> bool {
         $sroa_$sroa_slots_2_192_1_203;
-    } else if @likely($sroa_$sroa_slots_2_192_0_202 == 1) -> bool {
->>>>>>> origin/main
+    } else if @likely($sroa_$sroa_slots_2_192_0_202 == 0) -> bool {
         0;
     } else {
         unreachable;
@@ -4284,22 +4186,10 @@ fn "core:serde/serde_json_default.wado/Config^core:serde/Deserialize::deserializ
         local.tee $local_50(ref.as_non_null($sroa_slots_3_193));
     } else {
         local.tee $local_50(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 });
-<<<<<<< HEAD
-    }); $sroa_$sroa_slots_4_196_1_207 = (if $sroa_$sroa_slots_4_196_0_206 == 1 -> ref null "core:prelude/string.wado//String" {
-        $sroa_$sroa_slots_4_196_1_207;
-    } else if @likely($sroa_$sroa_slots_4_196_0_206 == 0) -> ref null "core:prelude/string.wado//String" {
-        local.tee $sroa_$sroa_slots_4_196_1_207(struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Option<core:prelude/string.wado/String>>::Some" { discriminant: 1, payload_0: ref.null none }.payload_0);
-||||||| 99c24c4d98
-    }); $sroa_$sroa_slots_4_196_1_207 = (if $sroa_$sroa_slots_4_196_0_206 == 0 -> ref null "core:prelude/string.wado//String" {
-        $sroa_$sroa_slots_4_196_1_207;
-    } else if @likely($sroa_$sroa_slots_4_196_0_206 == 1) -> ref null "core:prelude/string.wado//String" {
-        local.tee $sroa_$sroa_slots_4_196_1_207(struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Option<core:prelude/string.wado/String>>::Some" { discriminant: 0, payload_0: ref.null none }.payload_0);
-=======
-    }); $sroa_$sroa_slots_4_194_1_205 = (if $sroa_$sroa_slots_4_194_0_204 == 0 -> ref null "core:prelude/string.wado//String" {
+    }); $sroa_$sroa_slots_4_194_1_205 = (if $sroa_$sroa_slots_4_194_0_204 == 1 -> ref null "core:prelude/string.wado//String" {
         $sroa_$sroa_slots_4_194_1_205;
-    } else if @likely($sroa_$sroa_slots_4_194_0_204 == 1) -> ref null "core:prelude/string.wado//String" {
-        local.tee $sroa_$sroa_slots_4_194_1_205(struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Option<core:prelude/string.wado/String>>::Some" { discriminant: 0, payload_0: ref.null none }.payload_0);
->>>>>>> origin/main
+    } else if @likely($sroa_$sroa_slots_4_194_0_204 == 0) -> ref null "core:prelude/string.wado//String" {
+        local.tee $sroa_$sroa_slots_4_194_1_205(struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Option<core:prelude/string.wado/String>>::Some" { discriminant: 1, payload_0: ref.null none }.payload_0);
     } else {
         unreachable;
     }); struct.new "serde_json_default.wado//Config" { host: value_18, port: $sroa_$sroa_slots_1_191_0_200, verbose: $sroa_$sroa_slots_2_192_0_202, tags: $local_50, description: $sroa_$sroa_slots_4_194_1_205 }, ref.null none;
