@@ -1140,7 +1140,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// declaration at the reading site answer in its place. A pack answers the
     /// tuple of the arguments it absorbs.
     fn param_space_of(&mut self, decl: DefId, args: &[TypeId]) -> ParamSpace {
-        let params = self.tysys.trait_env.trait_decl_params(decl).to_vec();
+        let params: Vec<ast::GenericParam> = self
+            .tysys
+            .trait_env
+            .trait_type_params(decl)
+            .into_iter()
+            .cloned()
+            .collect();
         let args = args_per_param(
             args,
             params.len(),

@@ -96,6 +96,17 @@ struct Written<'a> {
     self_type: Option<&'a SolverType>,
 }
 
+/// A trait's parameters that take an argument position: a bound's arguments
+/// leave its effect parameter out.
+fn arg_params(tysys: &TypeSystem, trait_: DefId) -> Vec<GenericParam> {
+    tysys
+        .trait_env
+        .trait_type_params(trait_)
+        .into_iter()
+        .cloned()
+        .collect()
+}
+
 /// The trait among the bounds `params` puts on `base` that declares `assoc`.
 fn declaring_among(
     tysys: &TypeSystem,
@@ -231,20 +242,23 @@ impl Lowering {
                 | DefKind::Flags
                 | DefKind::Variant
                 | DefKind::Newtype
-                | DefKind::BuiltinType
-                | DefKind::Resource => {
+                | DefKind::BuiltinType => {
                     lowering.head_of(defs, def);
                 }
                 DefKind::Trait => {
                     lowering.trait_decl(def);
                 }
+                // A resource is also an effect to a function type's `with`
+                // clause, under its own head.
+                DefKind::Resource => {
+                    let head = lowering.head_of(defs, def);
+                    lowering.effect_named(resolutions, def, head);
+                }
                 // An interface is a trait to a bound, and an effect to a
                 // function type's `with` clause.
                 DefKind::Effect => {
                     let head = lowering.type_decl(def);
-                    if let Some(effect) = resolutions.effect_decl(def) {
-                        lowering.effects.insert(mangle_effect_ref(&effect), head);
-                    }
+                    lowering.effect_named(resolutions, def, head);
                 }
                 DefKind::Function
                 | DefKind::World
@@ -267,6 +281,15 @@ impl Lowering {
             lowering.builtin(name);
         }
         lowering
+    }
+
+    /// `head` as the effect `def` declares, under the spelling a function
+    /// type carries it by.
+    fn effect_named(&mut self, resolutions: &Resolutions, def: DefId, head: TypeDeclId) {
+        let effect = resolutions
+            .effect_decl(def)
+            .expect("an interface or a resource is an effect");
+        self.effects.insert(mangle_effect_ref(&effect), head);
     }
 
     /// Every trait's associated types, which a projection reads by the
@@ -1296,12 +1319,12 @@ impl SolverBridge {
     fn state_traits(tysys: &TypeSystem, lowering: &mut Lowering, program: &mut Program) {
         for (trait_, closure) in tysys.trait_env.supertrait_closures_in_own_space() {
             let id = lowering.trait_decl(*trait_);
-            let own = &tysys.trait_env.trait_decl_headers[trait_].type_params;
-            let place = |name: &str| ParamKind::of(own, name);
+            let own = arg_params(tysys, *trait_);
+            let place = |name: &str| ParamKind::of(&own, name);
             let space = Written {
                 resolutions: &tysys.resolutions,
                 param: &place,
-                declaring: &|base, assoc| declaring_among(tysys, own, base, assoc),
+                declaring: &|base, assoc| declaring_among(tysys, &own, base, assoc),
                 self_type: None,
             };
             // An edge whose arguments the lowering cannot say states nothing:
@@ -1341,8 +1364,8 @@ impl SolverBridge {
             self_type: None,
         };
         for (&trait_, header) in &tysys.trait_env.trait_decl_headers {
-            let defaults: Vec<Option<ArgDefault>> = header
-                .type_params
+            let own = arg_params(tysys, trait_);
+            let defaults: Vec<Option<ArgDefault>> = own
                 .iter()
                 .map(|p| {
                     p.default.as_ref().map(|default| match default {
@@ -1380,7 +1403,7 @@ impl SolverBridge {
                 .collect();
             let def = program.traits.entry(id).or_default();
             def.arg_defaults = defaults;
-            def.pack = header.type_params.iter().position(|p| p.is_pack);
+            def.pack = own.iter().position(|p| p.is_pack);
             def.on_ref = on_ref;
             def.methods = methods;
             def.reserved = reserved;
