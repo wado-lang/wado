@@ -17,8 +17,9 @@
 //! `WADO_EMI_LEVELS`, `WADO_EMI_SHARD` (`k/n`), `WADO_EMI_LIMIT`,
 //! `WADO_EMI_OUT`.
 
-mod common;
+use wado_compiler_tests as common;
 
+use common::repository_root;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -154,7 +155,7 @@ impl Root {
     }
 
     fn dir(self) -> PathBuf {
-        repo_root().join(self.rel_dir())
+        repository_root().join(self.rel_dir())
     }
 
     /// The stdlib is a tree; the other two are flat.
@@ -224,7 +225,7 @@ impl Source {
     /// file name would not do — `json_test.wado` names two programs.
     fn name(&self) -> String {
         self.path
-            .strip_prefix(repo_root())
+            .strip_prefix(repository_root())
             .expect("a corpus path is under the repository root")
             .to_string_lossy()
             .to_string()
@@ -236,7 +237,7 @@ impl Source {
             .into_iter()
             .find(|root| name.starts_with(root.rel_dir()))
             .unwrap_or_else(|| panic!("`{name}` is under no corpus root"));
-        Self::new(root, repo_root().join(name))
+        Self::new(root, repository_root().join(name))
     }
 
     /// The shapes named in a `corpus.txt` column, `if,while`.
@@ -1493,10 +1494,6 @@ fn take_shard<T>(items: Vec<T>, spec: &str) -> Vec<T> {
         .collect()
 }
 
-fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
-}
-
 /// Every `.wado` file under `dir`, the tree below it included when `recursive`.
 fn wado_files(dir: &Path, recursive: bool) -> Vec<PathBuf> {
     let entries =
@@ -1727,7 +1724,7 @@ fn mutate_corpus() {
 
 fn out_dir() -> PathBuf {
     selection("WADO_EMI_OUT").map_or_else(
-        || Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/emi"),
+        || repository_root().join("target/emi"),
         PathBuf::from,
     )
 }

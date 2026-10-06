@@ -136,7 +136,7 @@ export fn go(code: String, lang: String) -> String {
 "#;
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures/provider_consumer.wado"
+        "/fixtures/provider_consumer.wado"
     );
     let options = CompilerOptions {
         opt_level: OptLevel::O2,

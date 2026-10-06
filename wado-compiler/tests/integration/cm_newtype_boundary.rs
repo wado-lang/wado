@@ -78,7 +78,7 @@ fn type_name(resolve: &wit_parser::Resolve, ty: &wit_parser::Type) -> Option<Str
 fn compile_lib_source(source: &str) -> Vec<u8> {
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures/nt_boundary.wado"
+        "/fixtures/nt_boundary.wado"
     );
     let options = CompilerOptions {
         opt_level: OptLevel::O2,

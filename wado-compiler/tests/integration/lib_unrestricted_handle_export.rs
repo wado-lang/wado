@@ -61,7 +61,7 @@ fn compile_imported(opt_level: OptLevel) -> Vec<u8> {
         lib_world: Some(LIB_WORLD_FQ.to_string()),
         ..Default::default()
     };
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/lib.wado");
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/lib.wado");
     compile_source_with_compiler_options(&path, IMPORTED_SOURCE, options)
         .expect("library failed to compile")
         .wasm

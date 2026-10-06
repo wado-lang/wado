@@ -1,6 +1,6 @@
-//! The native host pieces `wado-cli`, `wado-dev-tools`, and `wado-compiler`'s
-//! tests share. A crate of its own because the compiler's tests cannot depend
-//! on `wado-cli`, which depends on the compiler.
+//! The native host pieces `wado-cli`, `wado-dev-tools`, and
+//! `wado-compiler-tests` share. A crate of its own so that the compiler's tests
+//! need not depend on `wado-cli`.
 
 pub mod fixture;
 pub mod stub_host;

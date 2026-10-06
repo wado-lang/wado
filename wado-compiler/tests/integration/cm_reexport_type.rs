@@ -13,7 +13,7 @@ const LIB_WORLD_FQ: &str = "test:reexp/reexp@0.1.0";
 
 fn compile_reexport() -> Vec<u8> {
     // `./sub/cm-catalog.wasm` resolves relative to this fixtures path.
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/reexp.wado");
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/reexp.wado");
     let source = r#"
 use { CmCatalog, Point } from "./sub/cm-catalog.wasm" with { type: "wasm" };
 export fn mk(v: Point) -> Point {

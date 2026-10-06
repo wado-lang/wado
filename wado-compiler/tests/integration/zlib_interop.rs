@@ -27,7 +27,7 @@ static COMPRESS_COMPONENT: OnceLock<Component> = OnceLock::new();
 static INFLATE_COMPONENT: OnceLock<Component> = OnceLock::new();
 
 fn compile_driver(fixture_name: &str) -> Component {
-    let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sub");
+    let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/sub");
     let path = fixtures_dir.join(fixture_name);
     let result = compile_file(&path).unwrap_or_else(|e| {
         panic!("Failed to compile {fixture_name}: {e:?}");

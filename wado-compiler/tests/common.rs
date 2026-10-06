@@ -1,15 +1,11 @@
-//! Common test utilities shared across test files
-//!
-//! This module provides shared utilities for:
+//! The library of the `wado-compiler-tests` package: utilities its test
+//! targets share, for:
 //! - Compiler hosts, re-exported: `in_memory_host` from `wado-lsp`, `StubHost`
 //!   from `wado-host`
 //! - Wasmtime engine configuration
 //! - WASI context setup
 //! - Test fixture parsing (__DATA__ sections)
 //! - Tokio runtime management
-
-// Each test file includes this module but only uses a subset of functions.
-#![allow(dead_code)]
 
 use std::collections::BTreeSet;
 use std::future::Future;
@@ -1126,8 +1122,9 @@ fn web_stubs() -> HostStubs {
     }
 }
 
-fn repository_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
+/// The repository checkout, two levels above this package.
+pub fn repository_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
 /// A host at the repository root with `package-web` as [`WEB_PACKAGE`].

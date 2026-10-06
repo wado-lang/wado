@@ -118,10 +118,10 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       # The test binary's name carries a hash; cargo reports where it put it.
-      - name: cargo test --locked -p wado-compiler --test e2e --no-run
+      - name: cargo test --locked -p wado-compiler-tests --test e2e --no-run
         run: |
           set -euo pipefail
-          exe="$(cargo test --locked -p wado-compiler --test e2e --no-run \
+          exe="$(cargo test --locked -p wado-compiler-tests --test e2e --no-run \
             --message-format=json-render-diagnostics \
             | jq -r 'select(.reason == "compiler-artifact" and .target.name == "e2e") | .executable // empty')"
           cp "${exe}" target/debug/e2e
@@ -195,8 +195,8 @@ jobs:
       # From the package, as `cargo test` runs it: a fixture's preopen seed is a
       # path relative to it. The e2e test names are lower case.
       - name: e2e "fixture_test_${LEVEL,,}"
-        working-directory: wado-compiler
-        run: ../target/debug/e2e "fixture_test_${LEVEL,,}"
+        working-directory: wado-compiler/tests
+        run: ../../target/debug/e2e "fixture_test_${LEVEL,,}"
       - run: mise run test-stdlib "$LEVEL"
       # Coverage does not depend on -O, so one level gates it.
       - if: matrix.level == 'O2'

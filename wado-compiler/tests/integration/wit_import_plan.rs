@@ -68,7 +68,7 @@ fn actual_imports(source: &str) -> BTreeSet<String> {
 }
 
 fn read_corpus(rel: &str) -> String {
-    let path = format!("{}/../{rel}", env!("CARGO_MANIFEST_DIR"));
+    let path = format!("{}/../../{rel}", env!("CARGO_MANIFEST_DIR"));
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {path}: {e}"))
 }
 
@@ -211,7 +211,7 @@ fn plan_excludes_type_alias_only_clock_types() {
 /// against the filesystem and return `(plan, actual)`: the type-level import
 /// plan and the composed binary's real imports.
 fn component_plan_and_actual(source: &str) -> (BTreeSet<String>, BTreeSet<String>) {
-    let base = std::path::PathBuf::from(format!("{}/tests/fixtures", env!("CARGO_MANIFEST_DIR")));
+    let base = std::path::PathBuf::from(format!("{}/fixtures", env!("CARGO_MANIFEST_DIR")));
 
     let plan: BTreeSet<String> = {
         let host = StubHost::new(base.clone());

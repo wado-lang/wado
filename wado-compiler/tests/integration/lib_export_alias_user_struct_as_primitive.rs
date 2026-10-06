@@ -39,7 +39,7 @@ export fn make(v: i32) -> Foo {
 "#;
 
 fn compile(source: &str) -> Vec<u8> {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/lib.wado");
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/lib.wado");
     let options = CompilerOptions {
         opt_level: OptLevel::O2,
         lib_world: Some(LIB_WORLD_FQ.to_string()),

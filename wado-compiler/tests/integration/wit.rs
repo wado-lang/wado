@@ -255,7 +255,7 @@ fn full_scope_reconstructs_resource_methods_and_reparses() {
     // methods, statics, and constructors, plus the `handle` entry point.
     let source = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../example/http_server.wado"
+        "/../../example/http_server.wado"
     ))
     .expect("read http_server example");
     let text = emit_world(&source, WitScope::Full, "wasi:http/service");

@@ -2538,7 +2538,7 @@ impl<T: Eq> Eq for Pair<T> {
 
 #[test]
 fn test_format_idempotent_all_fixtures() {
-    let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures");
 
     let mut failures = Vec::new();
 
@@ -2635,8 +2635,8 @@ fn test_no_dropped_comments_in_corpus() {
 
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let mut failures = Vec::new();
-    visit(&root.join("tests/fixtures"), &mut failures);
-    visit(&root.join("lib"), &mut failures);
+    visit(&root.join("fixtures"), &mut failures);
+    visit(&root.join("../lib"), &mut failures);
 
     assert!(
         failures.is_empty(),
@@ -2732,8 +2732,8 @@ fn test_format_nested_labeled_blocks() {
 ///   2. format(clean) == clean   (idempotency)
 #[test]
 fn test_format_golden() {
-    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
-    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/generated/format.fixtures");
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("format.fixtures");
+    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("generated/format.fixtures");
     let dirty = fs::read_to_string(fixtures.join("all_dirty.wado")).expect("read dirty");
     let clean = fs::read_to_string(golden.join("all.clean.wado")).expect("read clean");
 
@@ -2754,8 +2754,8 @@ fn test_format_golden() {
 /// `generated/format.fixtures/mess.clean.wado` is the expected canonical output.
 #[test]
 fn test_format_golden_mess() {
-    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
-    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/generated/format.fixtures");
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("format.fixtures");
+    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("generated/format.fixtures");
     let dirty = fs::read_to_string(fixtures.join("mess_dirty.wado")).expect("read mess dirty");
     let clean = fs::read_to_string(golden.join("mess.clean.wado")).expect("read mess clean");
 
@@ -2779,8 +2779,8 @@ fn test_format_golden_mess() {
 /// `generated/format.fixtures/no_prelude.clean.wado` is the expected canonical output.
 #[test]
 fn test_format_golden_no_prelude() {
-    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
-    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/generated/format.fixtures");
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("format.fixtures");
+    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("generated/format.fixtures");
     let dirty =
         fs::read_to_string(fixtures.join("no_prelude_dirty.wado")).expect("read no_prelude dirty");
     let clean =
@@ -2807,8 +2807,8 @@ fn test_format_golden_no_prelude() {
 /// `generated/format.fixtures/comments.clean.wado` is the expected canonical output.
 #[test]
 fn test_format_golden_comments() {
-    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
-    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/generated/format.fixtures");
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("format.fixtures");
+    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("generated/format.fixtures");
     let dirty = fs::read_to_string(fixtures.join("comments_dirty.wado")).expect("read dirty");
     let clean = fs::read_to_string(golden.join("comments.clean.wado")).expect("read clean");
 
@@ -2832,8 +2832,8 @@ fn test_format_golden_comments() {
 /// spacing. `generated/format.fixtures/ops.all.clean.wado` is the expected canonical output.
 #[test]
 fn test_format_golden_ops_all() {
-    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
-    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/generated/format.fixtures");
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("format.fixtures");
+    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("generated/format.fixtures");
     let dirty =
         fs::read_to_string(fixtures.join("ops.all_dirty.wado")).expect("read ops.all dirty");
     let clean = fs::read_to_string(golden.join("ops.all.clean.wado")).expect("read ops.all clean");
@@ -2858,8 +2858,8 @@ fn test_format_golden_ops_all() {
 /// `generated/format.fixtures/ops.mess.clean.wado` is the expected canonical output.
 #[test]
 fn test_format_golden_ops_mess() {
-    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
-    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/generated/format.fixtures");
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("format.fixtures");
+    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("generated/format.fixtures");
     let dirty =
         fs::read_to_string(fixtures.join("ops.mess_dirty.wado")).expect("read ops.mess dirty");
     let clean =
@@ -3325,7 +3325,7 @@ fn run(a: i32, b: i32, c: i32) -> String {
 
 #[test]
 fn test_roundtrip_ast_all_fixtures() {
-    let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures");
     let mut failures = Vec::new();
 
     for entry in fs::read_dir(&fixtures_dir).expect("cannot read fixtures dir") {
@@ -3444,7 +3444,7 @@ fn test() {
 
 #[test]
 fn test_roundtrip_ast_all_stdlib() {
-    let lib_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("lib");
+    let lib_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../lib");
     let mut failures = Vec::new();
 
     fn visit_dir(dir: &Path, failures: &mut Vec<String>) {
@@ -3750,7 +3750,7 @@ fn token_starts(source: &str) -> Vec<(usize, usize, usize)> {
 /// formatting.
 #[test]
 fn test_format_keeps_a_comment_wedged_in_any_token_gap() {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("format.fixtures");
     let mut probed = 0usize;
     let mut failures: Vec<String> = Vec::new();
     let mut fixtures: Vec<_> = fs::read_dir(&dir)

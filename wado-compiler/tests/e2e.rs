@@ -11,7 +11,7 @@
 //! Helper modules that are imported by tests go in subdirectories
 //! (e.g., fixtures/sub/) and are not run as tests themselves.
 
-mod common;
+use wado_compiler_tests as common;
 
 use bytes::Bytes;
 use futures::future::{Either, select};
@@ -1315,13 +1315,13 @@ datatest_mini::harness! {
     // The env is read at macro expansion, so toggling requires re-expanding the
     // macro (touch this file or `cargo clean`); locally, run them on demand with
     // `cargo test -- --ignored`.
-    { test = fixture_test_o0, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
-    { test = fixture_test_o1, root = "tests/fixtures", pattern = r"^[^/]+\.wado$",
+    { test = fixture_test_o0, root = "fixtures", pattern = r"^[^/]+\.wado$" },
+    { test = fixture_test_o1, root = "fixtures", pattern = r"^[^/]+\.wado$",
       ignore_unless_env = ["CI", "WADO_FULL_TEST"] },
-    { test = fixture_test_o2, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
-    { test = fixture_test_o3, root = "tests/fixtures", pattern = r"^[^/]+\.wado$",
+    { test = fixture_test_o2, root = "fixtures", pattern = r"^[^/]+\.wado$" },
+    { test = fixture_test_o3, root = "fixtures", pattern = r"^[^/]+\.wado$",
       ignore_unless_env = ["CI", "WADO_FULL_TEST"] },
-    { test = fixture_test_os, root = "tests/fixtures", pattern = r"^[^/]+\.wado$",
+    { test = fixture_test_os, root = "fixtures", pattern = r"^[^/]+\.wado$",
       ignore_unless_env = ["CI", "WADO_FULL_TEST"] },
 }
 

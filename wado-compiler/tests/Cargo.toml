@@ -1,0 +1,63 @@
+[package]
+name = "wado-compiler-tests"
+version = { workspace = true }
+edition = "2024"
+description = "Integration tests for wado-compiler"
+license = { workspace = true }
+publish = false
+
+# A package of its own so that `wado-compiler`'s unit tests stop waiting for
+# `wado-host` and `wado-lsp`, which depend on the compiler: a test binary links
+# only after every dependency's full build.
+[lib]
+path = "common.rs"
+test = false
+doctest = false
+
+[[test]]
+name = "e2e"
+path = "e2e.rs"
+
+[[test]]
+name = "emi"
+path = "emi.rs"
+
+[[test]]
+name = "format"
+path = "format.rs"
+
+[[test]]
+name = "integration"
+path = "integration/main.rs"
+
+[dependencies]
+wado-compiler = { path = ".." }
+wado-host = { path = "../../wado-host" }
+wado-lsp = { path = "../../wado-lsp" }
+anyhow = { workspace = true }
+bytes = { workspace = true }
+futures = { workspace = true }
+http = { workspace = true }
+http-body-util = { workspace = true }
+indexmap = { workspace = true }
+serde = { workspace = true }
+tokio = { workspace = true }
+wasmtime = { workspace = true }
+wasmtime-wasi = { workspace = true }
+wasmtime-wasi-http = { workspace = true }
+wasmtime-wasi-tls = { workspace = true }
+
+[dev-dependencies]
+datatest-mini = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tempfile = { workspace = true }
+wasmparser = { workspace = true }
+wasmprinter = { workspace = true }
+wat = { workspace = true }
+wit-component = { workspace = true }
+wit-parser = { workspace = true }
+zlib-rs = { workspace = true }
+
+[lints]
+workspace = true

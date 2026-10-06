@@ -1,13 +1,13 @@
 # wado-host
 
-The native host pieces that `wado-cli`, `wado-dev-tools`, and `wado-compiler`'s
-tests share.
+The native host pieces that `wado-cli`, `wado-dev-tools`, and
+`wado-compiler-tests` share.
 
 ## Rules
 
-- This crate exists so that `wado-compiler` never depends on `wado-cli`. The
-  compiler takes it as a dev-dependency only, so nothing here may be needed by
-  the compiler library itself.
+- This crate exists so that the compiler's tests never depend on `wado-cli`.
+  It depends on the compiler, so nothing here may be needed by the compiler
+  library itself.
 - It is native-only. Code the browser also runs belongs in `wado-lsp`, which
   must build for `wasm32-unknown-unknown`.
 - Put a piece here once a second crate needs it, not before. What only `wado`
