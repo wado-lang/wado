@@ -435,8 +435,11 @@ struct Reader<'a, 'p> {
 /// The `#[side_effect]` keys, in the order a diagnostic lists them.
 const SIDE_EFFECT_KEYS: [&str; 5] = ["outside", "at", "count", "unset", "negative"];
 
-/// The `#[side_effect]` identifiers that stand alone.
+/// The `#[side_effect]` identifiers that stand alone, `suspend` aside.
 const ALONE: [&str; 3] = ["none", "opaque", "black_box"];
+
+/// The `#[side_effect]` identifiers of a call that returns without suspending.
+const NEVER_SUSPENDS: [&str; 3] = ["none", "black_box", "hint"];
 
 impl Reader<'_, '_> {
     fn report(&mut self, attr: &'static str, message: impl Into<String>) {
@@ -642,7 +645,7 @@ impl Reader<'_, '_> {
             );
             return None;
         }
-        if suspend && let Some(word) = ["none", "black_box", "hint"].iter().find(|w| words.contains(*w)) {
+        if suspend && let Some(word) = NEVER_SUSPENDS.iter().find(|w| words.contains(*w)) {
             self.report(
                 SIDE_EFFECT,
                 format!("`#[side_effect({word})]` returns without suspending, so it goes without `suspend`"),

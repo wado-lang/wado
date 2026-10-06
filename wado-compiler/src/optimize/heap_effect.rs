@@ -1,6 +1,7 @@
 //! Which GC-heap objects a call may read or write: [`HeapEffectsCache`]
 //! summarises each function over the call graph, [`HeapFrame`] one body's objects.
 
+use std::borrow::Cow;
 use std::cell::{OnceCell, RefCell};
 use std::rc::Rc;
 
@@ -135,7 +136,9 @@ enum Callee {
     /// No body, and nothing declared, `opaque` or `black_box`: it may read,
     /// write and keep anything it is handed. One that `suspends` also reads
     /// and writes anything held elsewhere, since other tasks run meanwhile.
-    Opaque { suspends: bool },
+    Opaque {
+        suspends: bool,
+    },
 }
 
 /// One function as the solver sees it, taken when its gate edit count was
@@ -506,13 +509,10 @@ impl HeapEffects<'_> {
             return ObjectTypes::default();
         }
         let (target, args) = call_parts(self, body, call);
-        if target.suspends() {
-            return ObjectTypes::everything();
+        let mut out = target.elsewhere(Effect::Write).into_owned();
+        if out.is_any() {
+            return out;
         }
-        let mut out = match target {
-            Target::Summary(t) => t.writes.elsewhere.clone(),
-            Target::Builtin(_) | Target::Opaque { .. } => ObjectTypes::default(),
-        };
         for (j, &a) in args.iter().enumerate() {
             let ty = body.operand_type(a);
             match target {
@@ -749,14 +749,14 @@ fn classify_callee(f: &NirFunction, project: &NirPackage) -> Callee {
     if f.body.is_some() {
         return Callee::Body;
     }
-    match project.builtin_declarations.get(f) {
-        Some(declaration) => match declaration.facts.side_effect {
-            SideEffect::BlackBox | SideEffect::Opaque => Callee::Opaque {
-                suspends: declaration.facts.suspend,
-            },
-            SideEffect::Listed { .. } => Callee::Builtin(Box::new(declaration.clone())),
+    let declarations = &project.builtin_declarations;
+    match declarations.get(f) {
+        Some(declaration) if matches!(declaration.facts.side_effect, SideEffect::Listed { .. }) => {
+            Callee::Builtin(Box::new(declaration.clone()))
+        }
+        Some(_) | None => Callee::Opaque {
+            suspends: declarations.may_suspend(f),
         },
-        None => Callee::Opaque { suspends: true },
     }
 }
 
@@ -1492,13 +1492,8 @@ impl HeapFrame {
         } else {
             &mut unobserved
         };
-        if target.suspends() {
-            reads.elsewhere.set_any();
-            writes.elsewhere.set_any();
-        } else if let Target::Summary(t) = target {
-            reads.elsewhere.union(&t.reads.elsewhere);
-            writes.elsewhere.union(&t.writes.elsewhere);
-        }
+        reads.elsewhere.union(&target.elsewhere(Effect::Read));
+        writes.elsewhere.union(&target.elsewhere(Effect::Write));
         for (j, &a) in args.iter().enumerate() {
             let OperandNode::Node(n) = self.lookup(effects, body, a) else {
                 continue;
@@ -1647,14 +1642,7 @@ impl HeapFrame {
         let h = self.local_root(local);
         let h_escapes = h.is_none_or(|r| !self.prov[r as usize].is_fresh());
         let (target, args) = call_parts(effects, body, call);
-        let elsewhere = if target.suspends() {
-            keys.meets(&ObjectTypes::everything())
-        } else if let Target::Summary(t) = target {
-            keys.meets(&t.access(effect).elsewhere)
-        } else {
-            false
-        };
-        if h_escapes && elsewhere {
+        if h_escapes && keys.meets(&target.elsewhere(effect)) {
             return true;
         }
         args.iter().enumerate().any(|(j, &a)| {
@@ -1848,15 +1836,19 @@ enum Target<'s> {
 }
 
 impl Target<'_> {
-    /// Whether other tasks may run before the call returns, reading and
-    /// writing anything held elsewhere. A summary states what its body's
-    /// calls reach elsewhere, so it answers `false`.
-    fn suspends(&self) -> bool {
-        match self {
-            Target::Summary(_) => false,
+    /// The object types held elsewhere that the call may `effect`: every type
+    /// where other tasks run before it returns, and what a body's calls reach.
+    fn elsewhere(&self, effect: Effect) -> Cow<'_, ObjectTypes> {
+        let suspends = match self {
+            Target::Summary(t) => return Cow::Borrowed(&t.access(effect).elsewhere),
             Target::Builtin(declaration) => declaration.facts.suspend,
             Target::Opaque { suspends } => *suspends,
-        }
+        };
+        Cow::Owned(if suspends {
+            ObjectTypes::everything()
+        } else {
+            ObjectTypes::default()
+        })
     }
 }
 
