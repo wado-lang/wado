@@ -858,6 +858,83 @@ test "to_bytes_canonical sorts nested struct fields recursively" {
     }
 }
 
+fn canonical_text<T: Serialize>(value: &T) -> String {
+    return String::from_utf8_slice(to_bytes_canonical(value).unwrap()).unwrap();
+}
+
+fn canonical_of_text(json: String) -> String {
+    return canonical_text(&from_string::<Value>(json).unwrap());
+}
+
+// RFC 8785 §3.2.4.
+test "to_bytes_canonical writes the RFC 8785 example" {
+    let input = `{"numbers":[333333333.33333329,1E30,4.50,2e-3,0.000000000000000000000000001],"string":"\\u20ac$\\u000F\\u000aA'\\u0042\\u0022\\u005c\\\\\\"\\/","literals":[null,true,false]}`;
+    assert canonical_of_text(input) == `{"literals":[null,true,false],"numbers":[333333333.3333333,1e+30,4.5,0.002,1e-27],"string":"€$\\u000f\\nA'B\\"\\\\\\\\\\"/"}`;
+}
+
+// RFC 8785 §3.2.3: keys sort by their UTF-16 code units, unescaped.
+test "to_bytes_canonical sorts keys by UTF-16 code units" {
+    let input = `{"\\u20ac":"Euro Sign","\\r":"Carriage Return","\\ufb33":"Hebrew Letter Dalet With Dagesh","1":"One","\\ud83d\\ude00":"Emoji: Grinning Face","\\u0080":"Control","\\u00f6":"Latin Small Letter O With Diaeresis"}`;
+    assert canonical_of_text(input) == `{"\\r":"Carriage Return","1":"One","\u{80}":"Control","ö":"Latin Small Letter O With Diaeresis","€":"Euro Sign","😀":"Emoji: Grinning Face","\u{fb33}":"Hebrew Letter Dalet With Dagesh"}`;
+    assert canonical_of_text(`{"a\\u0001":1,"a\\"":2,"a#":3,"a":4}`) == `{"a":4,"a\\u0001":1,"a\\"":2,"a#":3}`;
+}
+
+// RFC 8785 §3.2.2.3: a number is written as ECMAScript's `Number.prototype.toString`.
+test "to_bytes_canonical writes numbers in the ECMAScript form" {
+    let cases: List<[f64, String]> = [
+        [0.0, "0"],
+        [-0.0, "0"],
+        [1.0e21, "1e+21"],
+        [1.0e20, "100000000000000000000"],
+        [1.0e23, "1e+23"],
+        [1.0e-7, "1e-7"],
+        [0.000001, "0.000001"],
+        [1.23e-18, "1.23e-18"],
+        [-1.5e-9, "-1.5e-9"],
+        [5e-324, "5e-324"],
+        [f64::MAX, "1.7976931348623157e+308"],
+        [4.5, "4.5"],
+        [-12.0, "-12"],
+    ];
+    for let [v, text] of cases {
+        assert canonical_text(&v) == text;
+    }
+    assert canonical_text(&f32::MAX) == "3.4028235e+38";
+    assert canonical_text(&1.0e-7_f32) == "1e-7";
+    assert canonical_text(&-0.0_f32) == "0";
+    assert canonical_text(&-2.5_f32) == "-2.5";
+    assert to_bytes_canonical(&f32::INFINITY).unwrap_err() == SerializeError::unsupported_value(
+        "Infinity is not allowed in JSON",
+    );
+}
+
+test "every writer escapes as ECMAScript's JSON.stringify" {
+    let text = "\u{8}\u{c}\u{1f}\u{7f}";
+    let escaped = `"\\b\\f\\u001f\u{7f}"`;
+    assert to_string(&text) == Result::Ok(escaped);
+    assert to_string_pretty(&text) == Result::Ok(escaped);
+    assert canonical_text(&text) == escaped;
+}
+
+test "to_bytes_canonical sorts keys past U+FFFF by their surrogates" {
+    let mut m: TreeMap<String, i32> = TreeMap::new();
+    m["\u{ffff}"] = 1;
+    m["\u{1f601}"] = 2;
+    m["\u{e000}"] = 3;
+    m["\u{1f600}"] = 4;
+    m["\u{10000}"] = 5;
+    m["\u{1f600}a"] = 6;
+    assert canonical_text(&m) == `{"\u{10000}":5,"\u{1f600}":4,"\u{1f600}a":6,"\u{1f601}":2,"\u{e000}":3,"\u{ffff}":1}`;
+}
+
+test "to_bytes_canonical sorts a scalar key by its text" {
+    let mut m: TreeMap<char, i32> = TreeMap::new();
+    m['b'] = 1;
+    m['"'] = 2;
+    m['\u{1}'] = 3;
+    assert canonical_text(&m) == `{"\\u0001":3,"\\"":2,"b":1}`;
+}
+
 test "to_bytes_pretty matches to_string_pretty" {
     let u = PrettyUser { first_name: "Bo", age: 5 };
     let pretty = to_bytes_pretty(&u);
@@ -1286,7 +1363,7 @@ test "every scalar has the same form when pretty-printed" {
 }`;
 }
 
-test "every scalar has the same form in the canonical encoding" {
+test "every scalar but a float has the same form in the canonical encoding" {
     let b = to_bytes_canonical(&sample_scalars()).unwrap();
     assert_bytes_eq_string(
         &b,
@@ -1562,6 +1639,19 @@ test "i64 and u64 read their string form" {
     assert de_err::<u64>(`"12`) == DeserializeError::eof(3);
 }
 
+test "a float reads its string form as an integer does" {
+    assert from_string::<f64>(`"1.5"`) == Result::Ok(1.5);
+    assert from_string::<f64>(`"-2e-3"`) == Result::Ok(-0.002);
+    assert from_string::<f32>(`"0.1"`) == Result::Ok(0.1_f32);
+    assert from_string::<f16>(`"1.5"`) == Result::Ok(1.5_f16);
+    assert from_string::<bf16>(`"1.5"`) == Result::Ok(1.5_bf16);
+    assert de_err::<f64>(`"1e400"`) == DeserializeError::overflow("value out of range for f64", 0);
+    assert de_err::<f64>(`"NaN"`) == DeserializeError::unexpected_type("expected number", 0);
+    assert de_err::<f64>(`" 1.5"`) == DeserializeError::unexpected_type("expected number", 0);
+    assert de_err::<f64>(`"1.5 "`) == DeserializeError::unexpected_type("expected number", 0);
+    assert de_err::<f32>(`"12`) == DeserializeError::eof(3);
+}
+
 test "i128 and u128 report a truncated token" {
     assert de_err::<i128>("-") == DeserializeError::eof(1);
     assert de_err::<u128>("-") == DeserializeError::eof(1);
@@ -1654,7 +1744,7 @@ test "a Value read reports a missing or malformed token" {
 }
 
 test "JsonDeserializer reads a token stream by hand" {
-    let text = ` [-2147483648, 18446744073709551615, -9223372036854775808, -1.5e+3, {"k": [true]}]`;
+    let text = ` [-2147483648, 18446744073709551615, -9223372036854775808, -1.5e+3, 0.1, {"k": [true]}]`;
     let mut de = JsonDeserializer { input: text.as_bytes(), pos: 0 };
     assert de.peek() == b' ';
     assert de.peek_after_whitespace() == b'[';
@@ -1667,9 +1757,15 @@ test "JsonDeserializer reads a token stream by hand" {
     assert de.expect_char(b',') matches { Ok };
     assert de.parse_f64_direct() == Result::Ok(-1500.0);
     assert de.expect_char(b',') matches { Ok };
+    assert de.parse_f32_direct() == Result::Ok(0.1_f32);
+    assert de.expect_char(b',') matches { Ok };
     assert de.skip_value(0) matches { Ok };
     assert de.expect_char(b']') matches { Ok };
     assert de.peek() == -1;
+
+    let mut huge = JsonDeserializer { input: "1e400".as_bytes(), pos: 0 };
+    assert huge.parse_f64_direct() matches { Err(_) };
+    assert huge.parse_f32_direct() matches { Err(_) };
 }
 
 test "an integer part is a lone zero or starts with a nonzero digit" {

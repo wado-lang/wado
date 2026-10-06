@@ -12,8 +12,8 @@ use crate::tir::{AnonStructId, EffectRef, ResolvedType, TypeId, TypeTable};
 use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
     ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, Selection, SolverType,
-    TraitDeclId, TypeDeclId, TypeDef, bound_candidates, candidates, comparison_row, derive,
-    holds_with_args, owed, pair_comparisons, rank,
+    TraitDeclId, TypeDeclId, TypeDef, applies, bound_candidates, candidates, comparison_row,
+    derive, holds_with_args, mark_duplicates, owed, pair_comparisons, rank,
 };
 
 use super::trait_env::{
@@ -176,6 +176,9 @@ pub(super) struct Lowering {
     /// the blanket its body comes from; a primitive's impl, or a body the
     /// compiler supplies with no blanket, is written by no block and is absent.
     impl_defs: IndexMap<ImplId, DefId>,
+    /// The impl each written block lowered to: [`Self::impl_defs`] the other
+    /// way, for a written block alone.
+    written_impls: IndexMap<DefId, ImplId>,
     /// The `Reflect*`-bounded blanket a derived body comes from, by the trait
     /// and the reflection kind it bounds on. Lookup collects that block for a
     /// derived body, so a `Derived` impl is named to it.
@@ -205,6 +208,7 @@ impl Lowering {
             assocs: IndexMap::default(),
             methods: IndexMap::default(),
             impl_defs: IndexMap::default(),
+            written_impls: IndexMap::default(),
             derivation_source: IndexMap::default(),
             unstated: IndexSet::default(),
         };
@@ -841,6 +845,7 @@ pub(super) fn lower_impls<'a>(
             },
         });
         lowering.impl_defs.insert(id, def);
+        lowering.written_impls.insert(def, id);
         if let Some(implemented) = implemented {
             let own = header
                 .methods
@@ -1025,6 +1030,7 @@ impl SolverBridge {
             &tysys.resolutions,
         );
         Self::state_primitive_impls(tysys, &mut lowering, &mut program);
+        mark_duplicates(&mut program);
         Self::state_traits(tysys, &mut lowering, &mut program);
         Self::state_scopes(tysys, modules, &mut lowering, &mut program);
         if let (Some(eq), Some(ord)) = (
@@ -1258,8 +1264,8 @@ impl SolverBridge {
                 .map(|(_, def)| *def);
             for trait_ in eq_ord.iter().copied().chain(carried) {
                 let trait_ = lowering.trait_decl(trait_);
-                // The prelude writes many of these pairs; one impl per pair,
-                // or every call on a primitive would rank `Duplicated`.
+                // A prelude impl of the trait on the primitive, at any trait
+                // arguments, already states it.
                 let written = program
                     .impls
                     .values()
@@ -2156,6 +2162,36 @@ impl SolverBridge {
         ))
     }
 
+    /// Whether a written block applies at `instance`, its bounds included: what
+    /// a generic body's instance selects by, every parameter settled. Where the
+    /// lowering states nothing about the block or the instance (a closure
+    /// environment, or a template's own `Self` whose parameters no bound in
+    /// scope here answers), the target match alone decides.
+    pub(crate) fn blocks_applying_at<'a>(
+        &'a self,
+        table: &'a TypeTable,
+        instance: TypeId,
+    ) -> impl Fn(DefId) -> bool + 'a {
+        let ty = self.lowering.type_id(table, instance, &|_| None).ok();
+        move |block| {
+            table.impl_reaches_instance(block, instance)
+                && self
+                    .block_applies(table, block, ty.as_ref())
+                    .is_none_or(|applies| applies)
+        }
+    }
+
+    fn block_applies(
+        &self,
+        table: &TypeTable,
+        block: DefId,
+        ty: Option<&SolverType>,
+    ) -> Option<bool> {
+        let impl_ = *self.lowering.written_impls.get(&block)?;
+        let scope = self.lowering.known_module(table.def_module(block))?;
+        Some(applies(&self.program, &Env::default(), scope, impl_, ty?))
+    }
+
     /// The impl block a candidate names: the one it was lowered from, or for a
     /// derived body the `Reflect*` blanket lookup collects for it. `None` for a
     /// body the compiler supplies with no block at all, which is how a
@@ -2188,8 +2224,8 @@ pub(super) enum Ordered {
     AmbiguousBlankets(Vec<Option<DefId>>),
     /// One trait at several argument lists — the call's arguments choose.
     Overloaded(Vec<Option<DefId>>),
-    /// Several impls of one pair, which coherence rejects where they are
-    /// written.
+    /// Several impls written for the receiver at one argument list, kept apart
+    /// only by bounds that all hold here.
     Duplicated(Vec<Option<DefId>>),
 }
 

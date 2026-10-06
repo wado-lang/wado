@@ -22,10 +22,12 @@ one document as different values. This module settles each one as follows.
 
 - The target type decides between integer and float, not the token's
   spelling.
-- Every integer type reads a number, or a string holding one, by one rule,
-  exactly at any width. `1.0`, `1e2` and `10e-1` read when the value is
-  integral and in range. `1.5` is an `UnexpectedType` error and a value out
-  of the type's range an `Overflow`. `-0` reads as `0`, unsigned or not.
+- Every number type reads a number, or a string holding exactly one number
+  token, by one rule. `"1.5"` reads as a float, `"NaN"` and `" 1"` as none.
+- Every integer type reads exactly at any width. `1.0`, `1e2` and `10e-1`
+  read when the value is integral and in range. `1.5` is an
+  `UnexpectedType` error and a value out of the type's range an `Overflow`.
+  `-0` reads as `0`, unsigned or not.
 - A float reads as the decimal rounded once to the nearest value of its
   type, however many digits it spells. `0.000…0001e400` with 400 zeros
   reads as exactly `0.1`.
@@ -49,7 +51,7 @@ one document as different values. This module settles each one as follows.
 - A repeated key is a `DuplicateField` error, into a struct, a map and a
   `Value` alike. Keys compare after unescaping, so `"a\/b"` repeats `"a/b"`.
 - A map and a `Value` keep keys in document order. `to_bytes_canonical`
-  writes them sorted.
+  writes them sorted, as RFC 8785 (JCS) does.
 - A struct ignores a key it has no field for. The value under it is held
   to the grammar alone, so `1e400` there is no error.
 - A map key is a string, and a numeric key type holds what it spells to the
@@ -126,12 +128,15 @@ validated as UTF-8 (RFC 8259 §8.1). `max_depth` bounds nesting.
 
 ### `pub fn to_bytes_canonical<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<ByteSlice, SerializeError>`
 
-Serializes a value to canonical (deterministic) UTF-8 JSON bytes.
-
-Object / struct keys are emitted in ascending bytewise order of their
-encoded form (RFC 8785-style); equal values produce byte-identical output
-regardless of map insertion order. Use this for signing or content
-addressing; use `to_bytes` for the faster insertion-order form.
+Serializes a value to UTF-8 JSON bytes in the JSON Canonicalization Scheme
+(RFC 8785): keys sorted by their UTF-16 code units, numbers in ECMAScript's
+form, strings escaped as `JSON.stringify` escapes them. Equal values produce
+byte-identical output regardless of map insertion order, and any JCS
+implementation canonicalizing that output reproduces it byte for byte. An
+f32 keeps its own shortest digits and an integer past 2^53 its string form,
+so a JCS implementation starting from the same values as doubles writes
+those differently. Use this for signing or content addressing; use
+`to_bytes` for the faster insertion-order form.
 
 Returns a read-only `ByteSlice` over the serializer's UTF-8 buffer.
 `trailing_char`, when `Some`, is appended after the value; leave it `null`
@@ -480,6 +485,10 @@ _Fields are private._
 
 ### `pub struct CanonicalJsonSerializer`
 
+The JSON Canonicalization Scheme (RFC 8785) serializer behind
+`to_bytes_canonical`. Integers past the f64 safe range keep the string form
+the other serializers give them, as RFC 8785 §6 advises.
+
 _Fields are private._
 
 #### `impl Serializer for CanonicalJsonSerializer`
@@ -531,6 +540,8 @@ _Fields are private._
 ##### `fn end(&mut self) -> Result<(), SerializeError>`
 
 ### `pub struct CanonicalMapSerializer`
+
+Each entry is a key, unescaped, and its encoded value.
 
 _Fields are private._
 

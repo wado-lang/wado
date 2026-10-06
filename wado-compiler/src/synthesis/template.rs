@@ -1093,14 +1093,19 @@ pub(crate) fn answering_link(
 ) -> Option<(TypeId, TemplateId)> {
     let trait_ = trait_name.called_decl();
     let key = tt.impl_receiver_key(receiver);
-    if let Some(template) =
-        trait_env.answering_template(&key, Some(trait_), trait_name.args(), method, |block| {
-            tt.impl_reaches_instance(block, receiver)
-        })
-    {
+    let solver = trait_env.solver();
+    // Two blocks on one target are told apart by their bounds, as the call
+    // site told them apart.
+    if let Some(template) = trait_env.answering_template(
+        &key,
+        Some(trait_),
+        trait_name.args(),
+        method,
+        solver.blocks_applying_at(tt, receiver),
+    ) {
         return Some((receiver, template));
     }
-    if let Some(paired) = eq_from_written_cmp(trait_env, trait_env.solver(), trait_, receiver, tt) {
+    if let Some(paired) = eq_from_written_cmp(trait_env, solver, trait_, receiver, tt) {
         return Some((receiver, paired.template()));
     }
     let resolved = tt.get(receiver);

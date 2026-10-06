@@ -336,12 +336,13 @@ _different_ traits are the two-trait ambiguity above.
 
 Two impls generic over the receiver's head both reach it, and rank 2 puts them
 at one level. Like a blanket, neither can be named at the call, so the answer is
-again an impl written for the receiver:
+again an impl written for the receiver. Each is named by its header, bounds and
+all, since two of them may write one target:
 
 ```text
-ambiguous impls of 'Name' for 'Pair<String, i32>': the ones for 'Pair<T, i32>'
-and 'Pair<A, B>' both reach it, and nothing ranks them;
-write 'impl Name for Pair<String, i32>'
+ambiguous impls of 'Name' for 'Pair<String, i32>':
+'impl<T> Name for Pair<T, i32>' and 'impl<A, B> Name for Pair<A, B>' both reach
+it, and nothing ranks them; write 'impl Name for Pair<String, i32>'
 ```
 
 This too is reported at the use site. The two impls conflict only at a receiver
@@ -541,13 +542,13 @@ bound on that parameter (`..C: Arbitrary`) waits for monomorphization
 
 #### The five questions
 
-| Function                                            | Rules it owns                                                                          |
-| --------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `coherence_errors(program)`                         | duplicate `(Trait, Type)` pairs, an unbounded value blanket, variadic overlap, orphans |
-| `derive(program, trait_, declarations)`             | which declarations derive `trait_`, and the impls that says                            |
-| `holds(program, env, ty, trait_, scope)`            | bound satisfaction, supertraits, the cycle rule                                        |
-| `candidates(program, env, receiver, method, scope)` | the three candidate lists, the scope gate, each candidate's depth                      |
-| `rank(candidates)`                                  | ranks 0-3 and the ties the ambiguities report                                          |
+| Function                                            | Rules it owns                                                     |
+| --------------------------------------------------- | ----------------------------------------------------------------- |
+| `coherence_errors(program)`                         | a duplicate impl, an unbounded value blanket, orphans             |
+| `derive(program, trait_, declarations)`             | which declarations derive `trait_`, and the impls that says       |
+| `holds(program, env, ty, trait_, scope)`            | bound satisfaction, supertraits, the cycle rule                   |
+| `candidates(program, env, receiver, method, scope)` | the three candidate lists, the scope gate, each candidate's depth |
+| `rank(candidates)`                                  | ranks 0-3 and the ties the ambiguities report                     |
 
 Two disciplines keep them functions rather than passes:
 
@@ -657,16 +658,13 @@ prelude's `Inspect for &T` works because the compiler answers that bound itself.
 - [ ] Collect a reference blanket as a match, or materialize the match from the
   winning `ImplId` (above), which makes the collection moot.
 
-### Two coherence rules still read the AST
+### The orphan rule still reads the AST
 
-`coherence_errors` owns four rules and answers the duplicate pair and the
-unbounded value blanket. The other two still run over the AST:
+`coherence_errors` owns three rules and answers the duplicate impl and the
+unbounded value blanket. The orphan rule still runs over the AST:
 
-- [ ] Variadic overlap, `check_variadic_impl_overlap`. Moving it needs `Program`
-  to carry a pack's bounds, which the key it compares on deliberately
-  ignores (WEP 2026-03-14 §5 Rule 2).
-- [ ] The orphan rule. Moving it needs each declaration's module and the
-  package boundary, which `Program` does not carry yet.
+- [ ] Moving it needs each declaration's module and the package boundary, which
+  `Program` does not carry yet.
 
 ### The other dispatch paths do not share the order
 
