@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791320147852,
+  "lastUpdate": 1791324826960,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -64713,6 +64713,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 338481,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ebc2307b469ec90ef89a275f6be8c0a3494f9f8b",
+          "message": "Merge pull request #2292 from wado-lang/microgpt-train-perf\n\nperf(stdlib): release the slots a shrinking List gives up",
+          "timestamp": "2026-10-07T06:52:35+09:00",
+          "tree_id": "52c0398163e067e4ec2eccefe619cdc6fef6fd4e",
+          "url": "https://github.com/wado-lang/wado/commit/ebc2307b469ec90ef89a275f6be8c0a3494f9f8b"
+        },
+        "date": 1791324826332,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20963,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338620,
             "unit": "bytes"
           }
         ]
