@@ -328,7 +328,7 @@ pub(super) fn freeze_pure_arith(
         // Address-taken locals (`&x` / `&mut x`): excluded as `FieldAccess`
         // receivers by the receiver-stability gate. Cloned before `Engine::new`.
         let address_taken: hashmap::IndexSet<u32> = address_taken_locals.clone();
-        let (aliased, untrackable, mut_escaped) = builder_alias_sets(
+        let alias = builder_alias_sets(
             body,
             locals,
             address_taken_locals,
@@ -345,10 +345,10 @@ pub(super) fn freeze_pure_arith(
         // build-once graph cannot keep it across the structural passes; an
         // *immutable*-`&`-escaped local (licm's `&config`) is stable and its field
         // constant freezes soundly. Keep a copy before `set_alias_sets` moves it.
-        let mut_escaped_leaf = mut_escaped.clone();
+        let mut_escaped_leaf = alias.mut_escaped.clone();
         let verdicts = call_verdicts(body, &type_table, &first_param_types, &call_immutability);
         let mut engine = Engine::new(body, &mut buffers, locals);
-        engine.set_alias_sets(aliased, untrackable, mut_escaped);
+        engine.set_alias_sets(alias);
         engine.set_value_graph_type_table(&type_table);
         engine.set_param_locals(param_locals);
         engine.set_call_verdicts(verdicts.pure, verdicts.receiver_immutable);

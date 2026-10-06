@@ -18,6 +18,7 @@ use crate::nir_arena::{
     ArenaCallArg, Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, PatId, StmtKind,
 };
 use crate::nir_package::NirPackage;
+use crate::nir_value_graph::builder::AliasSets;
 use crate::niri::AliasClasses;
 use crate::tir::{ResolvedType, TypeId, TypeKey, TypeTable};
 
@@ -246,9 +247,9 @@ pub(super) fn first_param_types(project: &NirPackage) -> FirstParamTypes {
     map
 }
 
-/// The `aliased`, `untrackable`, and `mut_escaped` local sets the `ValueGraph`
-/// builder needs, as plain `IndexSet`s. Wraps [`build_alias_info`] (for
-/// `aliased` / `untrackable`) with the mutable-escape analysis (`mut_escaped`).
+/// The [`AliasSets`] the `ValueGraph` builder needs. Wraps [`build_alias_info`]
+/// (for `aliased` / `untrackable`) with the mutable-escape analysis
+/// (`mut_escaped`), and reads `references` off the local types.
 ///
 /// `mut_escaped` ⊆ `aliased` is the subset a call can actually mutate, derived
 /// subtractively: a local is dropped only when its type is transitively free of
@@ -263,7 +264,7 @@ pub(super) fn builder_alias_sets(
     type_table: &TypeTable,
     first_param_types: &FirstParamTypes,
     call_immutability: &CallImmutability,
-) -> (IndexSet<u32>, IndexSet<u32>, IndexSet<u32>) {
+) -> AliasSets {
     // A mutating method call `recv.m(…)` (`&mut self`) aliases `recv` implicitly:
     // the NIR receiver is a bare `Local` with no `&mut recv` node, so
     // `collect_aliased_node` misses it and the value graph would forward `recv`'s
@@ -308,7 +309,20 @@ pub(super) fn builder_alias_sets(
         call_immutability,
         &info.alias_groups,
     );
-    (aliased, info.untrackable.iter().collect(), mut_escaped)
+    let references = (0..locals.len() as u32)
+        .filter(|&i| {
+            matches!(
+                type_table.get(locals[i as usize].type_id),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            )
+        })
+        .collect();
+    AliasSets {
+        aliased,
+        untrackable: info.untrackable.iter().collect(),
+        mut_escaped,
+        references,
+    }
 }
 
 /// Compute `mut_escaped` subtractively from `aliased`: keep every local that is

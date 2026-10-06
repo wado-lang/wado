@@ -113,7 +113,7 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
             ..
         } = &mut *func;
         let body = body.as_mut().expect("checked above");
-        let (aliased, untrackable, mut_escaped) = builder_alias_sets(
+        let alias = builder_alias_sets(
             body,
             locals,
             address_taken_locals,
@@ -124,7 +124,7 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
         );
         let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
         let mut engine = Engine::new(body, &mut buffers, locals);
-        engine.set_alias_sets(aliased, untrackable, mut_escaped);
+        engine.set_alias_sets(alias);
         engine.set_value_graph_type_table(&type_table);
         engine.set_param_locals(param_locals);
         engine.set_panic_callee_ids(&panic_ids);

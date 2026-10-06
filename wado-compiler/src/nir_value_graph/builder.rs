@@ -209,17 +209,29 @@ pub struct ValueGraphBuild {
     pub loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
 }
 
+/// The per-function local sets that bound how far a heap write reaches.
+/// Empty sets claim no aliasing, sound only for a body without any.
+#[derive(Default, Clone)]
+pub struct AliasSets {
+    /// Locals another handle may reach; their field writes invalidate coarsely.
+    pub aliased: IndexSet<u32>,
+    /// `stores`-aliased locals, whose fields are never seeded.
+    pub untrackable: IndexSet<u32>,
+    /// The subset of `aliased` a call may mutate.
+    pub mut_escaped: IndexSet<u32>,
+    /// Reference-typed locals. Their pointee is storage the body does not own,
+    /// which any call may reach through a global, so a call taking no argument
+    /// still writes it.
+    pub references: IndexSet<u32>,
+}
+
 /// Build the `ValueGraph` for one function body. Each parameter in
 /// `param_locals` seeds a fresh `Opaque` up front, which is what makes them
-/// visible in the loop-entry snapshots taken before any in-loop read. An
-/// `aliased` local invalidates through the coarse generations, `untrackable`
-/// ones are never seeded, and `mut_escaped` narrows `aliased` to real mutation.
+/// visible in the loop-entry snapshots taken before any in-loop read.
 pub fn build(
     body: &mut Body,
     param_locals: &[u32],
-    aliased: &IndexSet<u32>,
-    untrackable: &IndexSet<u32>,
-    mut_escaped: &IndexSet<u32>,
+    alias: &AliasSets,
     calls: CallFacts<'_>,
     type_table: Option<&TypeTable>,
 ) -> ValueGraphBuild {
@@ -229,7 +241,7 @@ pub fn build(
     // stable across builds (it only grows), the prerequisite for build-once.
     let seed = std::mem::take(&mut body.values);
     let (pool, loop_entry_values) = {
-        let mut b = Builder::new(&*body, aliased, untrackable, mut_escaped, type_table, seed);
+        let mut b = Builder::new(&*body, alias, type_table, seed);
         b.pure_calls.clone_from(calls.pure);
         b.pure_builtin_callees.clone_from(calls.pure_builtin);
         b.receiver_immutable_calls
@@ -255,9 +267,7 @@ pub(crate) fn build_scoped(
     skip: usize,
     param_locals: &[u32],
     seed: &IndexMap<u32, ValueId>,
-    aliased: &IndexSet<u32>,
-    untrackable: &IndexSet<u32>,
-    mut_escaped: &IndexSet<u32>,
+    alias: &AliasSets,
     type_table: Option<&TypeTable>,
     calls: CallFacts<'_>,
     scratch: &mut ValuePool,
@@ -270,9 +280,7 @@ pub(crate) fn build_scoped(
         skip,
         param_locals,
         seed,
-        aliased,
-        untrackable,
-        mut_escaped,
+        alias,
         type_table,
         calls,
         scratch,
@@ -304,16 +312,14 @@ pub(crate) fn walk_scoped(
     skip: usize,
     param_locals: &[u32],
     seed: &IndexMap<u32, ValueId>,
-    aliased: &IndexSet<u32>,
-    untrackable: &IndexSet<u32>,
-    mut_escaped: &IndexSet<u32>,
+    alias: &AliasSets,
     type_table: Option<&TypeTable>,
     calls: CallFacts<'_>,
     scratch: &mut ValuePool,
     heap_seed: Option<&HeapSnapshot>,
 ) -> ScopedWalk {
     let pool = std::mem::take(scratch);
-    let mut b = Builder::new(body, aliased, untrackable, mut_escaped, type_table, pool);
+    let mut b = Builder::new(body, alias, type_table, pool);
     b.seed_params(param_locals);
     // The same per-call verdicts the whole-body build gets. Withholding them
     // does not merely forgo a forward: a call the walk cannot call pure bumps
@@ -471,6 +477,9 @@ struct Builder<'a> {
     /// Locals a call may mutate (mutable escape). Only these are bumped by
     /// [`Builder::bump_call_effects`]. See [`build`].
     mut_escaped: IndexSet<u32>,
+    /// Reference-typed locals, ascending. Every call that may write a struct
+    /// field invalidates their fields. See [`AliasSets::references`].
+    references: Vec<u32>,
     /// `local → pointee local` for `let r = &v` references, so `r.f` forwards
     /// from `v`'s field slot (reference look-through). Cleared when `r` or the
     /// pointee is reassigned ([`Builder::update_ref_target`]). This is
@@ -529,12 +538,15 @@ struct Builder<'a> {
 impl<'a> Builder<'a> {
     fn new(
         body: &'a Body,
-        aliased: &IndexSet<u32>,
-        untrackable: &IndexSet<u32>,
-        mut_escaped: &IndexSet<u32>,
+        alias: &AliasSets,
         type_table: Option<&'a TypeTable>,
         pool: ValuePool,
     ) -> Self {
+        let sorted = |set: &IndexSet<u32>| {
+            let mut v: Vec<u32> = set.iter().copied().collect();
+            v.sort_unstable();
+            v
+        };
         Self {
             body,
             pool,
@@ -549,14 +561,11 @@ impl<'a> Builder<'a> {
                 static NEXT: AtomicU32 = AtomicU32::new(0);
                 NEXT.fetch_add(1, Ordering::Relaxed)
             },
-            aliased: aliased.clone(),
-            untrackable: untrackable.clone(),
-            mut_escaped: mut_escaped.clone(),
-            mut_escaped_sorted: {
-                let mut v: Vec<u32> = mut_escaped.iter().copied().collect();
-                v.sort_unstable();
-                v
-            },
+            aliased: alias.aliased.clone(),
+            untrackable: alias.untrackable.clone(),
+            mut_escaped: alias.mut_escaped.clone(),
+            mut_escaped_sorted: sorted(&alias.mut_escaped),
+            references: sorted(&alias.references),
             ref_targets: IndexMap::default(),
             field_ref_targets: IndexMap::default(),
             assigned_fields: assigned_field_indices(body),
@@ -828,22 +837,40 @@ impl<'a> Builder<'a> {
     }
 
     fn heap_version_of(&self, root: Option<u32>, field: u32) -> HeapVersion {
-        let escaped = root.is_some_and(|r| self.mut_escaped.contains(&r));
+        let escaped = root.is_some_and(|r| {
+            self.mut_escaped.contains(&r) || self.references.binary_search(&r).is_ok()
+        });
         self.heap_state.version_of(root, field, escaped)
     }
 
+    /// What a call mutating no caller local still reaches: the `untrackable`
+    /// locals, and the pointee of every reference. One that is not pure bumps
+    /// `escaped_version`, which a read through a reference also observes.
+    fn bump_pure_call_reach(&mut self) {
+        for i in 0..self.mut_escaped_sorted.len() {
+            let l = self.mut_escaped_sorted[i];
+            if self.untrackable.contains(&l) {
+                self.heap_state.bump_local(l);
+            }
+        }
+        for i in 0..self.references.len() {
+            self.heap_state.bump_local(self.references[i]);
+        }
+    }
+
     /// Invalidate the locals a call may mutate. One proven to mutate nothing
-    /// ([`BuildConfig::pure_calls`]) bumps only the `untrackable` locals any call
-    /// can reach; otherwise every `mut_escaped` local is bumped — not just this
-    /// call's arguments, since a mutable reference that escaped earlier may have
-    /// been retained.
+    /// ([`BuildConfig::pure_calls`]) bumps only what
+    /// [`Builder::bump_pure_call_reach`] names; otherwise every `mut_escaped`
+    /// local is bumped — not just this call's arguments, since a mutable
+    /// reference that escaped earlier may have been retained.
     fn bump_call_effects(&mut self, call: ExprId) {
         // A sequence builtin reaches an array's elements, never a struct field:
         // `array_set` writes into the object `repr` names and leaves `repr` and
         // `used` alone. Since the versions here guard struct-field reads only,
-        // it invalidates none of them.
+        // it invalidates none of them. An effect-free callee writes no field.
         if let ExprKind::Call { func_id, .. } = &self.body.exprs[call].kind
-            && self.ctfe_builtins.contains_key(func_id)
+            && (self.ctfe_builtins.contains_key(func_id)
+                || is_builtin_pure_call(&self.pure_builtin_callees, *func_id))
         {
             return;
         }
@@ -852,18 +879,17 @@ impl<'a> Builder<'a> {
         // opaque `ValueId`s and heap versions are handed out in visit order, so
         // this keeps the value graph a deterministic function of the program
         // regardless of how the alias sets were built (#1440). A pure call
-        // reaches only the `untrackable` locals, too few for the set-wide
-        // version, so those keep their `per_local` bump.
-        if !pure {
+        // reaches too few locals for the set-wide version, so those keep their
+        // `per_local` bump.
+        if pure {
+            self.bump_pure_call_reach();
+        } else {
             self.heap_state.bump_escaped();
         }
         for i in 0..self.mut_escaped_sorted.len() {
             let l = self.mut_escaped_sorted[i];
-            if pure {
-                if !self.untrackable.contains(&l) {
-                    continue;
-                }
-                self.heap_state.bump_local(l);
+            if pure && !self.untrackable.contains(&l) {
+                continue;
             }
             // A local bound to an aggregate literal keeps its value across the
             // call: the local *is* the storage, so a callee writing through a
@@ -2037,14 +2063,7 @@ impl<'a> Builder<'a> {
         if eff.has_external_writes {
             self.heap_state.bump_escaped();
         } else if eff.has_pure_calls {
-            // A pure call still reaches the `untrackable` locals; bump those
-            // alone, as `bump_call_effects` does for one call.
-            for i in 0..self.mut_escaped_sorted.len() {
-                let l = self.mut_escaped_sorted[i];
-                if self.untrackable.contains(&l) {
-                    self.heap_state.bump_local(l);
-                }
-            }
+            self.bump_pure_call_reach();
         }
     }
 
@@ -2122,8 +2141,8 @@ struct LoopHeapEffects {
     /// An impure call, indirect or CM call, or opaque-target store that may
     /// mutate aliased state.
     has_external_writes: bool,
-    /// A pure call, which still reaches the `untrackable` locals. Kept apart so
-    /// a loop of pure calls skips the set-wide bump.
+    /// A pure call, which still reaches what [`Builder::bump_pure_call_reach`]
+    /// names. Kept apart so a loop of pure calls skips the set-wide bump.
     has_pure_calls: bool,
 }
 
@@ -2612,8 +2631,8 @@ mod tests {
         assert!(eff.has_external_writes);
     }
 
-    /// A pure call sets no external write, and still reaches the `untrackable`
-    /// locals.
+    /// A pure call sets no external write, and still reaches what
+    /// [`Builder::bump_pure_call_reach`] names.
     #[test]
     fn pure_call_in_a_loop_writes_no_escaped_state() {
         let mut body = Body::empty();
@@ -2627,27 +2646,27 @@ mod tests {
         );
         assert!(
             eff.has_pure_calls,
-            "it still reaches the untrackable locals no argument list names"
+            "it still reaches the locals no argument list names"
         );
     }
 
     #[test]
     fn cse_independent_of_mut_escaped_iteration_order() {
         use IndexSet;
-        let empty = IndexSet::default();
         let no_calls = IndexSet::default();
         let no_callees = IndexSet::default();
         let no_builtin_map = CtfeBuiltinMap::default();
-        let escaped = |order: [u32; 2]| order.into_iter().collect::<IndexSet<u32>>();
+        let escaped = |order: [u32; 2]| AliasSets {
+            mut_escaped: order.into_iter().collect(),
+            ..AliasSets::default()
+        };
 
-        let build_with = |mut_escaped: &IndexSet<u32>| {
+        let build_with = |alias: &AliasSets| {
             let mut body = call_then_add_body();
             build(
                 &mut body,
                 &[],
-                &empty,
-                &empty,
-                mut_escaped,
+                alias,
                 CallFacts {
                     pure_builtin: &no_callees,
                     pure: &no_calls,

@@ -1,0 +1,68 @@
+// A field read through a reference parameter is not shared across a call that
+// writes the pointee through a global: the reference may name the global, so
+// the call is a write to it whether or not it takes the reference.
+
+use { println, Stdout } from "core:cli";
+
+struct P {
+    x: i32,
+    y: i32,
+}
+
+global mut G: P = P { x: 1, y: 0 };
+
+#[inline(never)]
+fn bump_global() {
+    G.x += 1;
+}
+
+#[inline(never)]
+fn bump_global_and(n: &mut i32) {
+    G.x += 1;
+    *n += 1;
+}
+
+#[inline(never)]
+fn through_ref(r: &P, c: bool) -> i32 {
+    let mut s = 0;
+    if c {
+        s = r.x * 100;
+    }
+    bump_global();
+    return s + r.x;
+}
+
+#[inline(never)]
+fn through_mut_ref(r: &mut P, c: bool) -> i32 {
+    let mut s = 0;
+    if c {
+        s = r.x * 100;
+    }
+    bump_global();
+    return s + r.x;
+}
+
+#[inline(never)]
+fn across_call_with_mut_arg(r: &P, c: bool) -> i32 {
+    let mut s = 0;
+    let mut n = 0;
+    if c {
+        s = r.x * 100;
+    }
+    bump_global_and(&mut n);
+    return s + r.x + n * 1000;
+}
+
+export fn run() with Stdout {
+    let c = builtin::black_box(true);
+    println(`${through_ref(&G, c)}`);
+    G.x = 1;
+    println(`${through_mut_ref(&mut G, c)}`);
+    G.x = 1;
+    println(`${across_call_with_mut_arg(&G, c)}`);
+}
+
+__DATA__
+{
+    "stdout": "102\n102\n1102\n"
+}
