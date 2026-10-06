@@ -311,9 +311,8 @@ external WIT support; they are listed so the inventory stays honest.
   / world inheritance. Consuming external WIT realistically wants L2 and
   probably L3, since two unrelated worlds can carry same-named interfaces.
 - [ ] The `export(World::name)` mapping. Its syntax is specified by
-  [World Conformance](./wep-2026-01-16-world-conformance-and-export.md) but
-  the parser does not implement it, and its meaning depends on choosing L2 or
-  L3 above.
+  [World Conformance](./wep-2026-01-16-world-conformance-and-export.md), but
+  the parser does not implement it.
 - [ ] An opt-out of the default-interface fallback, so that every non-entry-point
   export must live in an explicit `export interface`.
 
