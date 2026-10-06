@@ -183,14 +183,14 @@ impl Query<'_> {
             return None;
         }
         self.asking.push((ty.clone(), trait_, args.to_vec()));
-        let answer = self.answer(ty, trait_, args, subject);
+        let answer = self.decide(ty, trait_, args, subject);
         self.asking.pop();
         answer
     }
 
     /// [`Self::holds_at`] once the question is open: every step that asks
     /// another, a bound's projection normalized included, finds it asked.
-    fn answer(
+    fn decide(
         &mut self,
         ty: &SolverType,
         trait_: TraitDeclId,

@@ -624,7 +624,7 @@ the bounds path resolves without the order (above).
 
 A function type carries its effects to the solver as their declarations. An
 effect binder declares nothing, so `fn() with E` and `fn() with F` are one type
-there, and so is an effect name that reached nothing. What it admits is a bound
+there. What it admits is a bound
 naming one binder's function type answered by an impl naming another's.
 
 ### A parameter only the trait's arguments name is never bound

@@ -2136,8 +2136,7 @@ fn fn_keyword(is_mut: bool) -> &'static str {
 
 /// An effect as a [`mangle_fn_type`] `with` member. A concrete one carries its
 /// declaring module, since two modules may declare one name.
-#[must_use]
-pub fn mangle_effect_ref(effect: &tir::EffectRef) -> String {
+fn mangle_effect_ref(effect: &tir::EffectRef) -> String {
     match effect {
         tir::EffectRef::Concrete {
             name,
