@@ -4427,9 +4427,8 @@ A contiguous view into a backing `Array<T>` over the half-open range
 `[start, end)`. Holds a reference to the whole array, so creating a slice
 never copies elements.
 
-Contract: a slice of a `List` must not be read past the list's length once
-the list shrinks. Shrinking releases those slots, and reading one is
-unspecified: the element it held, or a trap.
+A slice of a `List` is bound by the contract on `List`: once the list
+shrinks, the slice must not read past the list's new length.
 
 _Fields are private._
 
