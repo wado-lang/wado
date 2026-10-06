@@ -221,74 +221,10 @@ struct TestSpec {
     #[serde(default, deserialize_with = "one_or_many")]
     allocator: Vec<String>,
 
-<<<<<<< HEAD
-    /// The `-f` codegen flags to compile with, at every level.
-    #[serde(default)]
-    codegen_flags: Vec<String>,
-
-    /// Compile-time parameter overrides (`-D NAME=value`) for `#[param]` globals.
-    #[serde(default)]
-    params: indexmap::IndexMap<String, String>,
-
-    /// Stubbed compile-time environment for `#[param(from_env = ...)]`.
-    #[serde(default)]
-    param_env: indexmap::IndexMap<String, String>,
-
-    /// Host-supplied parameter fallbacks, as `wado test` supplies `log.level`.
-    #[serde(default)]
-    param_defaults: indexmap::IndexMap<String, String>,
-
-    /// Stubbed path `[dependencies]`: name → the dependency's `[package].lib`,
-    /// relative to the fixture directory. Each entry is its own package.
-    #[serde(default)]
-    dependencies: indexmap::IndexMap<String, String>,
-
-    /// Override the `--param-unknown` policy level (`error` / `warn` / `ignore`).
-    #[serde(default)]
-    param_unknown: Option<String>,
-
-    /// Override the `--param-invalid` policy level (`error` / `warn` / `ignore`).
-    #[serde(default)]
-    param_invalid: Option<String>,
-
-    /// Override the `--param-missing` policy level (`error` / `warn` / `ignore`).
-    #[serde(default)]
-    param_missing: Option<String>,
-||||||| a03e903f9
-    /// Compile-time parameter overrides (`-D NAME=value`) for `#[param]` globals.
-    #[serde(default)]
-    params: indexmap::IndexMap<String, String>,
-
-    /// Stubbed compile-time environment for `#[param(from_env = ...)]`.
-    #[serde(default)]
-    param_env: indexmap::IndexMap<String, String>,
-
-    /// Host-supplied parameter fallbacks, as `wado test` supplies `log.level`.
-    #[serde(default)]
-    param_defaults: indexmap::IndexMap<String, String>,
-
-    /// Stubbed path `[dependencies]`: name → the dependency's `[package].lib`,
-    /// relative to the fixture directory. Each entry is its own package.
-    #[serde(default)]
-    dependencies: indexmap::IndexMap<String, String>,
-
-    /// Override the `--param-unknown` policy level (`error` / `warn` / `ignore`).
-    #[serde(default)]
-    param_unknown: Option<String>,
-
-    /// Override the `--param-invalid` policy level (`error` / `warn` / `ignore`).
-    #[serde(default)]
-    param_invalid: Option<String>,
-
-    /// Override the `--param-missing` policy level (`error` / `warn` / `ignore`).
-    #[serde(default)]
-    param_missing: Option<String>,
-=======
     /// The keys that say how to compile the fixture, shared with the golden
     /// dumps.
     #[serde(flatten)]
     compile: CompileInputs,
->>>>>>> origin/main
 
     /// Mock responses for outgoing HTTP requests (keyed by URL or path).
     /// When present, any `wasi:http/client#send` from the guest will be
@@ -962,41 +898,9 @@ fn run_with_allocator(
         target_world,
         skip_validation: false,
         retain_wir: spec.has_wir_expectations(opt_level),
-<<<<<<< HEAD
-        allocator,
-        codegen_flags: spec.codegen_flags.clone(),
-        params: wado_compiler::param_resolution::ParamInputs {
-            overrides: spec
-                .params
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect(),
-            defaults: spec
-                .param_defaults
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect(),
-            policy: param_policy,
-        },
-||||||| a03e903f9
-        allocator,
-        params: wado_compiler::param_resolution::ParamInputs {
-            overrides: spec
-                .params
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect(),
-            defaults: spec
-                .param_defaults
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect(),
-            policy: param_policy,
-        },
-=======
         allocator: Some(allocator.to_string()),
+        codegen_flags: spec.compile.codegen_flags.clone(),
         params: spec.compile.param_inputs(),
->>>>>>> origin/main
         coverage: spec.coverage.as_ref().map(|_| CoverageScope::default()),
         ..Default::default()
     };
