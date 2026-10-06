@@ -28,6 +28,8 @@ use crate::optimize::alias::{
     CallImmutability, builder_alias_sets, call_verdicts, first_param_types,
 };
 use crate::optimize::arena_query::storage_root;
+use crate::optimize::gate::FunctionGate;
+use crate::optimize::heap_effect::HeapEffectsCache;
 use crate::primitive::PrimitiveType;
 use crate::tir;
 use crate::tir::{ResolvedType, TypeTable};
@@ -308,6 +310,12 @@ pub(super) fn freeze_pure_arith(
     let first_param_types = first_param_types(project);
     let call_immutability = CallImmutability::new(project, &type_table);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
+    // Only a field read is versioned by what a call writes.
+    let gate = include_fields.then(|| FunctionGate::new(project));
+    let mut heap = HeapEffectsCache::default();
+    let effects = gate
+        .as_ref()
+        .map(|gate| heap.effects(project, &type_table, gate));
     let mut buffers = EngineBuffers::default();
     let mut refusals = Refusals::new();
     let mut changed = false;
@@ -328,7 +336,7 @@ pub(super) fn freeze_pure_arith(
         // Address-taken locals (`&x` / `&mut x`): excluded as `FieldAccess`
         // receivers by the receiver-stability gate. Cloned before `Engine::new`.
         let address_taken: hashmap::IndexSet<u32> = address_taken_locals.clone();
-        let (aliased, untrackable, mut_escaped) = builder_alias_sets(
+        let alias = builder_alias_sets(
             body,
             locals,
             address_taken_locals,
@@ -345,13 +353,18 @@ pub(super) fn freeze_pure_arith(
         // build-once graph cannot keep it across the structural passes; an
         // *immutable*-`&`-escaped local (licm's `&config`) is stable and its field
         // constant freezes soundly. Keep a copy before `set_alias_sets` moves it.
-        let mut_escaped_leaf = mut_escaped.clone();
+        let mut_escaped_leaf = alias.mut_escaped.clone();
         let verdicts = call_verdicts(body, &type_table, &first_param_types, &call_immutability);
+        let call_writes = effects
+            .as_ref()
+            .map(|e| e.body_call_writes(body))
+            .unwrap_or_default();
         let mut engine = Engine::new(body, &mut buffers, locals);
-        engine.set_alias_sets(aliased, untrackable, mut_escaped);
+        engine.set_alias_sets(alias);
         engine.set_value_graph_type_table(&type_table);
         engine.set_param_locals(param_locals);
         engine.set_call_verdicts(verdicts.pure, verdicts.receiver_immutable);
+        engine.set_call_writes(call_writes);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
 
         // Locals a frozen value may not name, from the same predicate that
@@ -630,10 +643,9 @@ fn classify_candidate(
             let recv_stable = match recv_src {
                 Some(OpaqueSource::Local(i)) => {
                     let owned_enough = ctx.param_set.contains(&i)
-                        || !matches!(
-                            ctx.type_table.get(engine.locals()[i as usize].type_id),
-                            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-                        );
+                        || !ctx
+                            .type_table
+                            .is_reference_shaped(engine.locals()[i as usize].type_id);
                     owned_enough
                         && !ctx.multi_version_locals.contains(&i)
                         && !ctx.address_taken.contains(&i)

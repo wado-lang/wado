@@ -85,7 +85,7 @@ fn forward_one(
         ..
     } = &mut *func;
     let body = body.as_mut().expect("checked above");
-    let (aliased, untrackable, mut_escaped) = builder_alias_sets(
+    let alias = builder_alias_sets(
         body,
         locals,
         address_taken_locals,
@@ -95,7 +95,7 @@ fn forward_one(
         call_immutability,
     );
     let mut engine = Engine::new(body, buffers, locals);
-    engine.set_alias_sets(aliased, untrackable, mut_escaped);
+    engine.set_alias_sets(alias);
     engine.set_value_graph_type_table(type_table);
     engine.set_pure_builtin_callees(pure_builtin_callees);
     engine.set_ctfe_builtins(ctfe_builtins);

@@ -18,10 +18,10 @@ use crate::nir_arena::{
     ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId, PatKind, PatNode, StmtId, StmtKind,
     StmtNode,
 };
-use crate::nir_value_graph::builder::{CallFacts, build};
+use crate::nir_value_graph::builder::{AliasSets, CallFacts, build};
 use crate::nir_value_graph::{HeapVersion, ValueId, ValueKind};
 use crate::niri::CtfeBuiltinMap;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::{ObjectTypes, TypeId, TypeTable};
 use crate::token::Span;
 
 /// A live-pool representative per field read, plus the versions a placement
@@ -321,20 +321,11 @@ pub struct Engine<'a> {
     /// edits. Consumed by `Local`-read exclusions (`store_load_forward`, licm's
     /// arithmetic hoist).
     body_address_taken: Option<IndexSet<u32>>,
-    /// Reference-aliased locals (address-taken / retained by a callee /
-    /// reference-typed). The `ValueGraph` builder invalidates these
-    /// conservatively across field writes and calls; non-aliased locals get
-    /// precise per-`(root, field)` forwarding. Empty unless a pass supplies it
-    /// via [`Engine::set_alias_sets`] before the first `value` query.
-    aliased_locals: IndexSet<u32>,
-    /// The `stores`-aliased subset whose fields are never seeded.
-    untrackable_locals: IndexSet<u32>,
-    /// The subset of `aliased_locals` a call may actually mutate (locals with a
-    /// mutable escape: `&mut v`, mut-ref args, `&mut self` receivers, or a
-    /// `stores` stash). The `ValueGraph` builder bumps only these across calls,
-    /// so immutable-`&v`-only locals keep their forwarded fields. Empty unless a
-    /// pass supplies it via [`Engine::set_alias_sets`].
-    mut_escaped_locals: IndexSet<u32>,
+    /// What bounds the `ValueGraph` builder's heap-write invalidation; aliased
+    /// locals lose their fields across writes and calls, the rest get precise
+    /// per-`(root, field)` forwarding. Empty unless a pass supplies it via
+    /// [`Engine::set_alias_sets`] before the first `value` query.
+    alias: AliasSets,
     /// Parameter local indices, seeded as stable `Opaque`s. Only up-front
     /// seeding makes parameters visible in the loop-entry snapshots, so
     /// passes consuming [`Engine::loop_entry_value`] must call
@@ -346,6 +337,9 @@ pub struct Engine<'a> {
     /// Calls whose callee cannot write through the receiver. Empty is
     /// conservative.
     receiver_immutable_calls: IndexSet<ExprId>,
+    /// The object types each call may write that the caller can reach. A call
+    /// with no entry may write any. Set via [`Engine::set_call_writes`].
+    call_writes: IndexMap<ExprId, ObjectTypes>,
     /// Which sequence builtin each callee id is. `None` leaves every array
     /// length opaque, which costs a fold rather than correctness.
     ctfe_builtins: Option<&'a CtfeBuiltinMap>,
@@ -389,12 +383,11 @@ impl<'a> Engine<'a> {
             buf,
             locals,
             body_address_taken: None,
-            aliased_locals: IndexSet::default(),
-            untrackable_locals: IndexSet::default(),
-            mut_escaped_locals: IndexSet::default(),
+            alias: AliasSets::default(),
             param_locals: Vec::new(),
             pure_calls: IndexSet::default(),
             receiver_immutable_calls: IndexSet::default(),
+            call_writes: IndexMap::default(),
             ctfe_builtins: None,
             vg_type_table: None,
             panic_callee_ids: None,
@@ -544,15 +537,14 @@ impl<'a> Engine<'a> {
             0,
             &self.param_locals,
             &empty,
-            &self.aliased_locals,
-            &self.untrackable_locals,
-            &self.mut_escaped_locals,
+            &self.alias,
             self.vg_type_table,
             builder::CallFacts {
                 pure_builtin: self.pure_builtin_callees.unwrap_or(&NO_PURE_BUILTINS),
                 pure: &self.pure_calls,
                 receiver_immutable: &self.receiver_immutable_calls,
                 ctfe_builtins: self.ctfe_builtins.unwrap_or(&NO_CTFE_BUILTINS),
+                writes: &self.call_writes,
             },
             &mut scratch,
             None,
@@ -611,15 +603,14 @@ impl<'a> Engine<'a> {
             0,
             &self.param_locals,
             &empty,
-            &self.aliased_locals,
-            &self.untrackable_locals,
-            &self.mut_escaped_locals,
+            &self.alias,
             self.vg_type_table,
             builder::CallFacts {
                 pure_builtin: self.pure_builtin_callees.unwrap_or(&NO_PURE_BUILTINS),
                 pure: &self.pure_calls,
                 receiver_immutable: &self.receiver_immutable_calls,
                 ctfe_builtins: self.ctfe_builtins.unwrap_or(&NO_CTFE_BUILTINS),
+                writes: &self.call_writes,
             },
             &mut scratch,
             None,
@@ -709,13 +700,13 @@ impl<'a> Engine<'a> {
     /// Set by [`Engine::set_alias_sets`]; a pass treating a field read as
     /// loop-/function-invariant must exclude these receivers.
     pub fn mut_escaped(&self) -> &IndexSet<u32> {
-        &self.mut_escaped_locals
+        &self.alias.mut_escaped
     }
 
     /// Locals another handle may reach, so a store through any handle may land
     /// in theirs. Set by [`Engine::set_alias_sets`].
     pub fn aliased(&self) -> &IndexSet<u32> {
-        &self.aliased_locals
+        &self.alias.aliased
     }
 
     /// Record the owning function's parameter local indices so the value graph
@@ -736,21 +727,19 @@ impl<'a> Engine<'a> {
         self.receiver_immutable_calls = receiver_immutable_calls;
     }
 
-    /// Record the function's reference-aliased and `stores`-aliased locals so
-    /// the value graph invalidates field forwarding for them at the right
-    /// granularity. Used by the one build-once construction. Without it the
-    /// builder treats every receiver as non-aliased — sound only when the
-    /// function has no reference aliasing, so passes that may see aliasing must
-    /// supply it before the first value query.
-    pub fn set_alias_sets(
-        &mut self,
-        aliased: IndexSet<u32>,
-        untrackable: IndexSet<u32>,
-        mut_escaped: IndexSet<u32>,
-    ) {
-        self.aliased_locals = aliased;
-        self.untrackable_locals = untrackable;
-        self.mut_escaped_locals = mut_escaped;
+    /// Record what each call may write behind a reference. Supply before the
+    /// first value query; the build is lazy.
+    pub fn set_call_writes(&mut self, call_writes: IndexMap<ExprId, ObjectTypes>) {
+        self.call_writes = call_writes;
+    }
+
+    /// Record the function's alias sets so the value graph invalidates field
+    /// forwarding at the right granularity. Used by the one build-once
+    /// construction. Without it the builder treats every receiver as
+    /// non-aliased — sound only when the function has no reference aliasing, so
+    /// passes that may see aliasing must supply it before the first value query.
+    pub fn set_alias_sets(&mut self, alias: AliasSets) {
+        self.alias = alias;
     }
 
     /// Provide the type table so the value graph folds pure arithmetic on
@@ -817,14 +806,13 @@ impl<'a> Engine<'a> {
         let build = build(
             &mut *self.body,
             &self.param_locals,
-            &self.aliased_locals,
-            &self.untrackable_locals,
-            &self.mut_escaped_locals,
+            &self.alias,
             CallFacts {
                 pure_builtin: self.pure_builtin_callees.unwrap_or(&NO_PURE_BUILTINS),
                 pure: &self.pure_calls,
                 receiver_immutable: &self.receiver_immutable_calls,
                 ctfe_builtins: self.ctfe_builtins.unwrap_or(&NO_CTFE_BUILTINS),
+                writes: &self.call_writes,
             },
             self.vg_type_table,
         );
