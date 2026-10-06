@@ -28,6 +28,8 @@ use crate::optimize::alias::{
     CallImmutability, builder_alias_sets, call_verdicts, first_param_types,
 };
 use crate::optimize::arena_query::storage_root;
+use crate::optimize::gate::FunctionGate;
+use crate::optimize::heap_effect::HeapEffectsCache;
 use crate::primitive::PrimitiveType;
 use crate::tir;
 use crate::tir::{ResolvedType, TypeTable};
@@ -308,6 +310,10 @@ pub(super) fn freeze_pure_arith(
     let first_param_types = first_param_types(project);
     let call_immutability = CallImmutability::new(project, &type_table);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
+    // Only a field read is versioned by what a call writes.
+    let gate = FunctionGate::new(project);
+    let mut heap = HeapEffectsCache::default();
+    let effects = include_fields.then(|| heap.effects(project, &type_table, &gate));
     let mut buffers = EngineBuffers::default();
     let mut refusals = Refusals::new();
     let mut changed = false;
@@ -347,11 +353,16 @@ pub(super) fn freeze_pure_arith(
         // constant freezes soundly. Keep a copy before `set_alias_sets` moves it.
         let mut_escaped_leaf = alias.mut_escaped.clone();
         let verdicts = call_verdicts(body, &type_table, &first_param_types, &call_immutability);
+        let call_writes = effects
+            .as_ref()
+            .map(|e| e.body_call_writes(body))
+            .unwrap_or_default();
         let mut engine = Engine::new(body, &mut buffers, locals);
         engine.set_alias_sets(alias);
         engine.set_value_graph_type_table(&type_table);
         engine.set_param_locals(param_locals);
         engine.set_call_verdicts(verdicts.pure, verdicts.receiver_immutable);
+        engine.set_call_writes(call_writes);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
 
         // Locals a frozen value may not name, from the same predicate that

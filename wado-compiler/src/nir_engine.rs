@@ -21,7 +21,7 @@ use crate::nir_arena::{
 use crate::nir_value_graph::builder::{AliasSets, CallFacts, build};
 use crate::nir_value_graph::{HeapVersion, ValueId, ValueKind};
 use crate::niri::CtfeBuiltinMap;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::{ObjectTypes, TypeId, TypeTable};
 use crate::token::Span;
 
 /// A live-pool representative per field read, plus the versions a placement
@@ -337,6 +337,9 @@ pub struct Engine<'a> {
     /// Calls whose callee cannot write through the receiver. Empty is
     /// conservative.
     receiver_immutable_calls: IndexSet<ExprId>,
+    /// The object types each call may write that the caller can reach. A call
+    /// with no entry may write any. Set via [`Engine::set_call_writes`].
+    call_writes: IndexMap<ExprId, ObjectTypes>,
     /// Which sequence builtin each callee id is. `None` leaves every array
     /// length opaque, which costs a fold rather than correctness.
     ctfe_builtins: Option<&'a CtfeBuiltinMap>,
@@ -384,6 +387,7 @@ impl<'a> Engine<'a> {
             param_locals: Vec::new(),
             pure_calls: IndexSet::default(),
             receiver_immutable_calls: IndexSet::default(),
+            call_writes: IndexMap::default(),
             ctfe_builtins: None,
             vg_type_table: None,
             panic_callee_ids: None,
@@ -540,6 +544,7 @@ impl<'a> Engine<'a> {
                 pure: &self.pure_calls,
                 receiver_immutable: &self.receiver_immutable_calls,
                 ctfe_builtins: self.ctfe_builtins.unwrap_or(&NO_CTFE_BUILTINS),
+                writes: &self.call_writes,
             },
             &mut scratch,
             None,
@@ -605,6 +610,7 @@ impl<'a> Engine<'a> {
                 pure: &self.pure_calls,
                 receiver_immutable: &self.receiver_immutable_calls,
                 ctfe_builtins: self.ctfe_builtins.unwrap_or(&NO_CTFE_BUILTINS),
+                writes: &self.call_writes,
             },
             &mut scratch,
             None,
@@ -721,6 +727,12 @@ impl<'a> Engine<'a> {
         self.receiver_immutable_calls = receiver_immutable_calls;
     }
 
+    /// Record what each call may write behind a reference. Supply before the
+    /// first value query; the build is lazy.
+    pub fn set_call_writes(&mut self, call_writes: IndexMap<ExprId, ObjectTypes>) {
+        self.call_writes = call_writes;
+    }
+
     /// Record the function's alias sets so the value graph invalidates field
     /// forwarding at the right granularity. Used by the one build-once
     /// construction. Without it the builder treats every receiver as
@@ -800,6 +812,7 @@ impl<'a> Engine<'a> {
                 pure: &self.pure_calls,
                 receiver_immutable: &self.receiver_immutable_calls,
                 ctfe_builtins: self.ctfe_builtins.unwrap_or(&NO_CTFE_BUILTINS),
+                writes: &self.call_writes,
             },
             self.vg_type_table,
         );

@@ -328,6 +328,99 @@ impl PartialOrd for TypeKey {
     }
 }
 
+/// A set of heap object types, keyed by [`TypeTable::heap_object_key`]; `any`
+/// stands for every type.
+#[derive(Clone, Default, PartialEq, Eq, Debug)]
+pub struct ObjectTypes {
+    any: bool,
+    keys: IndexSet<TypeKey>,
+}
+
+impl ObjectTypes {
+    pub fn everything() -> Self {
+        Self {
+            any: true,
+            keys: IndexSet::default(),
+        }
+    }
+
+    pub fn one(key: TypeKey) -> Self {
+        Self {
+            any: false,
+            keys: std::iter::once(key).collect(),
+        }
+    }
+
+    pub fn is_any(&self) -> bool {
+        self.any
+    }
+
+    /// The keys of a set that is not [`Self::is_any`].
+    pub fn keys(&self) -> impl Iterator<Item = TypeKey> + '_ {
+        assert!(!self.any, "an `any` set has no key list");
+        self.keys.iter().copied()
+    }
+
+    pub fn contains(&self, key: TypeKey) -> bool {
+        self.any || self.keys.contains(&key)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        !self.any && self.keys.is_empty()
+    }
+
+    pub fn insert(&mut self, key: TypeKey) {
+        if !self.any {
+            self.keys.insert(key);
+        }
+    }
+
+    pub fn set_any(&mut self) {
+        self.any = true;
+        self.keys.clear();
+    }
+
+    pub fn union(&mut self, other: &ObjectTypes) {
+        if other.any {
+            self.set_any();
+        } else if !self.any {
+            self.keys.extend(other.keys.iter().copied());
+        }
+    }
+
+    /// Whether `self ∩ other` is non-empty.
+    pub fn meets(&self, other: &ObjectTypes) -> bool {
+        match (self.any, other.any) {
+            (true, true) => true,
+            (true, false) => !other.keys.is_empty(),
+            (false, true) => !self.keys.is_empty(),
+            (false, false) => self.keys.iter().any(|k| other.keys.contains(k)),
+        }
+    }
+
+    /// `self ∪= a ∩ b`.
+    pub fn union_meet(&mut self, a: &ObjectTypes, b: &ObjectTypes) {
+        match (a.any, b.any) {
+            (true, true) => {
+                self.set_any();
+            }
+            (true, false) => {
+                self.union(b);
+            }
+            (false, true) => {
+                self.union(a);
+            }
+            (false, false) => {
+                for &k in &a.keys {
+                    if b.keys.contains(&k) {
+                        self.insert(k);
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Identity of an inference variable — see [`ResolvedType::InferVar`].
 ///
 /// Minted per module by the elaborator, so two uses of the same polymorphic
@@ -1273,6 +1366,54 @@ impl TypeTable {
                 .and_then(|ty| self.intern_map.get(ty).copied())
                 .unwrap_or(resolved),
         )
+    }
+
+    /// `ty` without its references and newtypes: the object a handle names.
+    #[must_use]
+    pub fn strip_handles(&self, mut ty: TypeId) -> TypeId {
+        loop {
+            if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = self.get(ty) {
+                ty = *inner;
+            } else if let ResolvedType::Newtype { .. } = self.get(ty) {
+                ty = self.representation_head(ty);
+            } else {
+                return ty;
+            }
+        }
+    }
+
+    /// The heap object a value of `ty` is, or reaches first through its
+    /// references: the key an access to one of its fields is made under.
+    #[must_use]
+    pub fn heap_object_key(&self, ty: TypeId) -> Option<TypeKey> {
+        let ty = self.strip_handles(ty);
+        match self.get(ty) {
+            ResolvedType::Struct { .. }
+            | ResolvedType::BuiltinArray(_)
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Function { .. }
+            | ResolvedType::Reactive(_) => Some(self.type_key(ty)),
+            ResolvedType::GenericInstance { .. } => {
+                Some(self.type_key(self.monomorphized_or_self(ty)))
+            }
+            ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Never
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::GenericResource { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::TypeParam { .. }
+            | ResolvedType::AssocParam { .. }
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::AssocTypeProjection { .. }
+            | ResolvedType::Unknown
+            | ResolvedType::Error => None,
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_) | ResolvedType::Newtype { .. } => {
+                unreachable!("strip_handles removes every reference and newtype")
+            }
+            ResolvedType::InferVar(var) => panic!("{var} reached heap-effect analysis"),
+        }
     }
 
     /// Whether `a` and `b` name one list of types, position by position.

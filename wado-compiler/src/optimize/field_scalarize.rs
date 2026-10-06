@@ -326,7 +326,7 @@ impl HfsAnalysis<'_> {
         local_type: TypeId,
         field: u32,
     ) -> bool {
-        let Some(key) = self.effects.object_key(local_type) else {
+        let Some(key) = self.effects.type_table.heap_object_key(local_type) else {
             return false;
         };
         let sites = &self.loop_sites[&loop_body];
@@ -349,7 +349,7 @@ impl HfsAnalysis<'_> {
         c: &ScalarizeCandidate,
         type_table: &TypeTable,
     ) -> bool {
-        let Some(key) = self.effects.object_key(c.local_type_id) else {
+        let Some(key) = type_table.heap_object_key(c.local_type_id) else {
             return false;
         };
         self.frame.call_may_besides(
