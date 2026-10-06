@@ -72,7 +72,7 @@ fn "opt_drve_trait_method.wado/run"() with Stdout {
     let new_used_19: i32;
     let start_20: i32;
     let x: i64;
-    let start_82: i32;
+    let start_85: i32;
     "opt_drve_trait_method.wado/opt_drve_trait_method.wado/Factory^opt_drve_trait_method.wado/Maker::make$scalar"();
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_19(0 + 5) > builtin::array_len($local_1.repr)) {
@@ -89,17 +89,17 @@ fn "opt_drve_trait_method.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_19);
         }
-        start_82 = $local_1.used;
+        start_85 = $local_1.used;
         $local_1.used = new_used_19;
-        builtin::array_set_u8($local_1.repr, start_82, 45);
+        builtin::array_set_u8($local_1.repr, start_85, 45);
     } else {
     }
-    if @unlikely(local.tee start_82($local_1.used + start_20) > builtin::array_len($local_1.repr)) {
+    if @unlikely(local.tee start_85($local_1.used + start_20) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_82);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_85);
     }
     new_used_19 = $local_1.used;
-    $local_1.used = start_82;
+    $local_1.used = start_85;
     "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, new_used_19, x, start_20);
     start_20 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     new_used_19 = builtin::i32_wrap_i64(x >> 32_i64);

@@ -77,7 +77,7 @@ fn "ctfe_struct_result.wado/run"() with Stdout {
     let is_negative_18: bool;
     let x: i64;
     let other_38: ref "core:prelude/string.wado//String";
-    let start_97: i32;
+    let start_100: i32;
     c_0 = black_box(struct.new "ctfe_struct_result.wado//Config" { width: 10, name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(119, 105, 100, 101), used: 4 } });
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     is_negative_18 = local.tee self_12(c_0.width) < 0;
@@ -87,17 +87,17 @@ fn "ctfe_struct_result.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, is_negative_18);
         }
-        start_97 = $local_1.used;
+        start_100 = $local_1.used;
         $local_1.used = is_negative_18;
-        builtin::array_set_u8($local_1.repr, start_97, 45);
+        builtin::array_set_u8($local_1.repr, start_100, 45);
     } else {
     }
-    if @unlikely(local.tee start_97($local_1.used + self_12) > builtin::array_len($local_1.repr)) {
+    if @unlikely(local.tee start_100($local_1.used + self_12) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_97);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_100);
     }
     is_negative_18 = $local_1.used;
-    $local_1.used = start_97;
+    $local_1.used = start_100;
     "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, is_negative_18, x, self_12);
     if @unlikely(local.tee self_12($local_1.used + 1) > builtin::array_len($local_1.repr)) {
         cold_path;
@@ -113,14 +113,14 @@ fn "ctfe_struct_result.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, self_12);
         }
-        start_97 = $local_1.used;
+        start_100 = $local_1.used;
         $local_1.used = self_12;
-        builtin::array_copy<u8>($local_1.repr, start_97, other_38.repr, 0, is_negative_18);
+        builtin::array_copy<u8>($local_1.repr, start_100, other_38.repr, 0, is_negative_18);
     };
     is_negative_18 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    start_97 = builtin::i32_wrap_i64(x >> 32_i64);
+    start_100 = builtin::i32_wrap_i64(x >> 32_i64);
     is_negative_18 = "ctfe_struct_result.wado/$cm_binding__Stdout_write_via_stream"(is_negative_18);
-    "core:rt/write_string_to_stream"(start_97, $local_1.repr, $local_1.used);
+    "core:rt/write_string_to_stream"(start_100, $local_1.repr, $local_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(is_negative_18);
 }
 

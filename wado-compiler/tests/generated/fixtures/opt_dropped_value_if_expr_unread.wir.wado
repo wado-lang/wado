@@ -189,7 +189,7 @@ fn "opt_dropped_value_if_expr_unread.wado/run"() with Stdout {
     let self_11: i32;
     let is_negative_17: bool;
     let x: i64;
-    let start_68: i32;
+    let start_71: i32;
     elems = struct.new "core:prelude//List<opt_dropped_value_if_expr_unread.wado/Element>" { repr: local.tee elements(array.new_fixed<ref "opt_dropped_value_if_expr_unread.wado//Element">(struct.new "opt_dropped_value_if_expr_unread.wado//Element::RuleRef" { discriminant: 0, payload_0: struct.new "opt_dropped_value_if_expr_unread.wado//Ref" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(101, 120, 112, 114), used: 4 } } }, struct.new "opt_dropped_value_if_expr_unread.wado//Element::Tok" { discriminant: 1, payload_0: black_box(1) }, struct.new "opt_dropped_value_if_expr_unread.wado//Element::RuleRef" { discriminant: 0, payload_0: struct.new "opt_dropped_value_if_expr_unread.wado//Ref" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(115, 116, 109, 116), used: 4 } } }, struct.new "opt_dropped_value_if_expr_unread.wado//Element::RuleRef" { discriminant: 0, payload_0: struct.new "opt_dropped_value_if_expr_unread.wado//Ref" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(101, 120, 112, 114), used: 4 } } })), used: builtin::array_len(elements) };
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative_17 = local.tee self_11("opt_dropped_value_if_expr_unread.wado/distinct_rules"(elems)) < 0;
@@ -199,17 +199,17 @@ fn "opt_dropped_value_if_expr_unread.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, is_negative_17);
         }
-        start_68 = $local_1.used;
+        start_71 = $local_1.used;
         $local_1.used = is_negative_17;
-        builtin::array_set_u8($local_1.repr, start_68, 45);
+        builtin::array_set_u8($local_1.repr, start_71, 45);
     } else {
     }
-    if @unlikely(local.tee start_68($local_1.used + self_11) > builtin::array_len($local_1.repr)) {
+    if @unlikely(local.tee start_71($local_1.used + self_11) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_68);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_71);
     }
     is_negative_17 = $local_1.used;
-    $local_1.used = start_68;
+    $local_1.used = start_71;
     "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, is_negative_17, x, self_11);
     self_11 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_17 = builtin::i32_wrap_i64(x >> 32_i64);

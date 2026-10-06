@@ -76,7 +76,7 @@ fn "global_dce.wado/run"() with Stdout {
     let is_negative_15: bool;
     let x: i64;
     let v: ref "core:prelude/string.wado//String";
-    let start_97: i32;
+    let start_100: i32;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:global_dce.wado::$modules_initialized);
         cold_path;
@@ -92,17 +92,17 @@ fn "global_dce.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, is_negative_15);
         }
-        start_97 = $local_0.used;
+        start_100 = $local_0.used;
         $local_0.used = is_negative_15;
-        builtin::array_set_u8($local_0.repr, start_97, 45);
+        builtin::array_set_u8($local_0.repr, start_100, 45);
     } else {
     }
-    if @unlikely(local.tee start_97($local_0.used + self_9) > builtin::array_len($local_0.repr)) {
+    if @unlikely(local.tee start_100($local_0.used + self_9) > builtin::array_len($local_0.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, start_97);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, start_100);
     }
     is_negative_15 = $local_0.used;
-    $local_0.used = start_97;
+    $local_0.used = start_100;
     "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, is_negative_15, x, self_9);
     if @unlikely(local.tee self_9($local_0.used + 1) > builtin::array_len($local_0.repr)) {
         cold_path;
@@ -123,14 +123,14 @@ fn "global_dce.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, self_9);
         }
-        start_97 = $local_0.used;
+        start_100 = $local_0.used;
         $local_0.used = self_9;
-        builtin::array_copy<u8>($local_0.repr, start_97, $array_clone_dst_2, 0, is_negative_15);
+        builtin::array_copy<u8>($local_0.repr, start_100, $array_clone_dst_2, 0, is_negative_15);
     };
     is_negative_15 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    start_97 = builtin::i32_wrap_i64(x >> 32_i64);
+    start_100 = builtin::i32_wrap_i64(x >> 32_i64);
     is_negative_15 = "global_dce.wado/$cm_binding__Stdout_write_via_stream"(is_negative_15);
-    "core:rt/write_string_to_stream"(start_97, $local_0.repr, $local_0.used);
+    "core:rt/write_string_to_stream"(start_100, $local_0.repr, $local_0.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(is_negative_15);
 }
 

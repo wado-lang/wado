@@ -102,10 +102,10 @@ fn "temporary_mut_array_arg.wado/helper"(name, counts) {
     let a_end: i32;
     let b: ref Array<u8>;
     let i_95: i32;
-    let new_used_133: i32;
-    let start_134: i32;
-    let new_used_174: i32;
-    let start_175: i32;
+    let new_used_136: i32;
+    let start_137: i32;
+    let new_used_192: i32;
+    let start_193: i32;
     i_2 = 0;
     $licm_used_84 = counts.used;
     $licm_repr_85 = counts.repr;
@@ -199,20 +199,20 @@ fn "temporary_mut_array_arg.wado/helper"(name, counts) {
                     }
                     break $inline_count_digits_u64_18: 20;
                 }, if is_negative_58 {
-                    if @unlikely(local.tee new_used_133($local_4_4.used + 1) > builtin::array_len($load_10)) {
+                    if @unlikely(local.tee new_used_136($local_4_4.used + 1) > builtin::array_len($load_10)) {
                         cold_path;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, new_used_133);
+                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, new_used_136);
                     }
-                    start_134 = $local_4_4.used;
-                    $local_4_4.used = new_used_133;
-                    builtin::array_set_u8($local_4_4.repr, start_134, 45);
+                    start_137 = $local_4_4.used;
+                    $local_4_4.used = new_used_136;
+                    builtin::array_set_u8($local_4_4.repr, start_137, 45);
                 } else {
-                }, if @unlikely(local.tee new_used_174($local_4_4.used + digit_count_60) > builtin::array_len($local_4_4.repr)) {
+                }, if @unlikely(local.tee new_used_192($local_4_4.used + digit_count_60) > builtin::array_len($local_4_4.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, new_used_174);
-                }, start_175 = $local_4_4.used, $local_4_4.used = new_used_174, arr = $local_4_4.repr, pos = start_175 + digit_count_60, t = abs_val, b30: block {
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, new_used_192);
+                }, start_193 = $local_4_4.used, $local_4_4.used = new_used_192, arr = $local_4_4.repr, pos = start_193 + digit_count_60, t = abs_val, b30: block {
                     l31: loop {
-                        break_if b30 (pos - start_175) < 2;
+                        break_if b30 (pos - start_193) < 2;
                         q = t /u 100_i64;
                         tens = local.tee pair(builtin::i32_wrap_i64(t - (q * 100_i64))) / 10;
                         builtin::array_set_u8(arr, pos - 1, ((48 + pair) - (tens * 10)) & 255);
@@ -221,8 +221,8 @@ fn "temporary_mut_array_arg.wado/helper"(name, counts) {
                         t = q;
                         continue l31;
                     };
-                }, if pos > start_175 {
-                    builtin::array_set_u8(arr, start_175, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
+                }, if pos > start_193 {
+                    builtin::array_set_u8(arr, start_193, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
                 }, $local_4_4;
             }
             i_2 = i_2 + 1;

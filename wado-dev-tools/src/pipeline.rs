@@ -527,7 +527,7 @@ async fn render_phases(
             target_world.as_deref(),
             None,
             wado_compiler::OptOverrides::default(),
-            &[],
+            &inputs.codegen_flags,
             &params,
             wado_compiler::kiln::InvocationIndex::default(),
         )
@@ -605,6 +605,7 @@ async fn render_phases(
             opt_level,
             target_world: target_world.clone(),
             log_level: Some(wado_compiler::LogLevel::Off),
+            codegen_flags: inputs.codegen_flags.clone(),
             params,
             ..wado_compiler::CompilerOptions::default()
         };

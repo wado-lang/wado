@@ -66,35 +66,35 @@ fn "scalarize_chain.wado/run"() with Stdout {
     let $local_1: ref "core:prelude/string.wado//String";
     let packed: i64;
     let $sroa_$f_buf_79: ref "core:prelude/string.wado//String";
-    let new_used_149: i32;
-    let start_150: i32;
+    let new_used_167: i32;
+    let start_168: i32;
     $sroa_$f_buf_79 = local.tee $local_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 });
-    if @unlikely(local.tee new_used_149(0 + 2) > builtin::array_len($sroa_$f_buf_79.repr)) {
+    if @unlikely(local.tee new_used_167(0 + 2) > builtin::array_len($sroa_$f_buf_79.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_79, new_used_149);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_79, new_used_167);
     }
-    start_150 = $sroa_$f_buf_79.used;
-    $sroa_$f_buf_79.used = new_used_149;
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_79.repr, start_150, 22_i64, 2);
-    if @unlikely(local.tee start_150($local_1.used + 2) > builtin::array_len($local_1.repr)) {
+    start_168 = $sroa_$f_buf_79.used;
+    $sroa_$f_buf_79.used = new_used_167;
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_79.repr, start_168, 22_i64, 2);
+    if @unlikely(local.tee start_168($local_1.used + 2) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_150);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_168);
     }
-    new_used_149 = $local_1.used;
-    $local_1.used = start_150;
-    builtin::array_copy<u8>($local_1.repr, new_used_149, global:scalarize_chain.wado::$const_obj_3, 0, 2);
-    if @unlikely(local.tee new_used_149(local.tee $sroa_$f_buf_79($local_1).used + 2) > builtin::array_len($sroa_$f_buf_79.repr)) {
+    new_used_167 = $local_1.used;
+    $local_1.used = start_168;
+    builtin::array_copy<u8>($local_1.repr, new_used_167, global:scalarize_chain.wado::$const_obj_3, 0, 2);
+    if @unlikely(local.tee new_used_167(local.tee $sroa_$f_buf_79($local_1).used + 2) > builtin::array_len($sroa_$f_buf_79.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_79, new_used_149);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_79, new_used_167);
     }
-    start_150 = $sroa_$f_buf_79.used;
-    $sroa_$f_buf_79.used = new_used_149;
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_79.repr, start_150, 66_i64, 2);
-    start_150 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    new_used_149 = builtin::i32_wrap_i64(packed >> 32_i64);
-    start_150 = "scalarize_chain.wado/$cm_binding__Stdout_write_via_stream"(start_150);
-    "core:rt/write_string_to_stream"(new_used_149, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_150);
+    start_168 = $sroa_$f_buf_79.used;
+    $sroa_$f_buf_79.used = new_used_167;
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_79.repr, start_168, 66_i64, 2);
+    start_168 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    new_used_167 = builtin::i32_wrap_i64(packed >> 32_i64);
+    start_168 = "scalarize_chain.wado/$cm_binding__Stdout_write_via_stream"(start_168);
+    "core:rt/write_string_to_stream"(new_used_167, $local_1.repr, $local_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_168);
 }
 
 fn "scalarize_chain.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
