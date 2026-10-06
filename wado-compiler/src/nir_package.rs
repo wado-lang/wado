@@ -53,17 +53,16 @@ pub struct NirPackage {
     /// Which `$value_copy$` helper copies each type — the one join, so a
     /// consumer holding a `TypeId` asks here rather than re-deriving the key.
     pub value_copy_helpers: ValueCopyHelpers<FuncId>,
-    /// Functions `optimize/sroa_param` minted, so it can refuse its own output
-    /// as input. A clone is already scalarized in every position that pass
-    /// found; re-admitting it chains `$scalar$scalar` and makes the result
-    /// depend on how many fixpoint iterations happened to run. Identity, not a
-    /// name test — see the declaration-identity WEP.
+    /// Functions `optimize/sroa_param` minted. A clone may gain callers in a
+    /// later round, so its current call sites are not its whole contract.
+    /// Identity, not a name test — see the declaration-identity WEP.
     pub sroa_param_clones: IndexSet<FuncId>,
     /// For each of those clones, which of its locals holds a scalarized field
-    /// and the struct that field came from. Durable because the fact is: a
-    /// later run of the pass rewriting calls *inside* a clone must know its
-    /// param already holds the field, or it projects the wrapper's field onto
-    /// it a second time.
+    /// and the struct that field came from, its source's included. Durable
+    /// because the fact is: a later run of the pass rewriting calls *inside* a
+    /// clone must know its param already holds the field, or it projects the
+    /// wrapper's field onto it a second time; and it must not scalarize that
+    /// position again, which a one-field struct holding itself never ends.
     pub sroa_param_clone_fields: IndexMap<FuncId, IndexMap<u32, (String, ModuleSource)>>,
     /// All struct declarations (each carries its own `module_source`)
     pub structs: Vec<NirStruct>,

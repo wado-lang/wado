@@ -172,19 +172,19 @@ fn collect_and_validate(
     for fid in gate.dirty_funcs(GatedPass::SroaParam, project.functions.len()) {
         let func = project.functions[fid.index()].borrow();
         let Some(key) = func.id else { continue };
-        // This pass's own output. A clone is already scalarized in every
-        // position found for it, and unwrapping it again chains `$scalar$scalar`
-        // names whose depth depends on how many fixpoint iterations ran.
-        if project.sroa_param_clones.contains(&key) {
-            continue;
-        }
         if !is_eligible(&func) {
             continue;
         }
+        // A position this pass already scalarized holds the field now. Taking it
+        // again would unwrap a one-field struct holding itself without end.
+        let scalarized = project.sroa_param_clone_fields.get(&key);
         // A receiver is fair game like any parameter, a trait method's included:
         // the original function survives this pass for the calls it cannot
         // retarget — see `mint_scalarized_clones`.
         for (pi, param) in func.params.iter().enumerate() {
+            if scalarized.is_some_and(|fields| fields.contains_key(&param.local_index)) {
+                continue;
+            }
             if func.address_taken_locals.contains(&param.local_index) {
                 continue;
             }
@@ -957,18 +957,19 @@ fn mint_scalarized_clones(
         }
 
         project.func_index.insert(func_key, id);
-        project.sroa_param_clone_fields.insert(
-            id,
-            positions
-                .iter()
-                .map(|pi| {
-                    (
-                        clone.params[*pi].local_index,
-                        candidates[&(*key, *pi)].struct_key.clone(),
-                    )
-                })
-                .collect(),
-        );
+        // A clone of a clone keeps the positions its source already scalarized.
+        let mut fields = project
+            .sroa_param_clone_fields
+            .get(key)
+            .cloned()
+            .unwrap_or_default();
+        fields.extend(positions.iter().map(|pi| {
+            (
+                clone.params[*pi].local_index,
+                candidates[&(*key, *pi)].struct_key.clone(),
+            )
+        }));
+        project.sroa_param_clone_fields.insert(id, fields);
         copy_function_strings(project, &origin, (clone.module_source.clone(), name));
         clones.insert(*key, id);
         minted.push(Rc::new(RefCell::new(clone)));
