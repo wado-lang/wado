@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791261335807,
+  "lastUpdate": 1791265031264,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -64209,6 +64209,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9973f8f190e8943f555b12031c481418ab74eaf1"
         },
         "date": 1791261335299,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338523,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "32521eeaac406e926c600fa5f8ea644944c18bf5",
+          "message": "Merge pull request #2284 from wado-lang/dependabot/cargo/wado-bundled-icu/bdp-spike/datagen/cargo-e3be83c1e1\n\nchore(deps): Bump rustls from 0.23.40 to 0.23.45 in /wado-bundled-icu/bdp-spike/datagen in the cargo group across 1 directory",
+          "timestamp": "2026-10-06T14:13:52+09:00",
+          "tree_id": "ebeeedde07e4db55eddc1dbe5b60eb02e993cbeb",
+          "url": "https://github.com/wado-lang/wado/commit/32521eeaac406e926c600fa5f8ea644944c18bf5"
+        },
+        "date": 1791265030525,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
