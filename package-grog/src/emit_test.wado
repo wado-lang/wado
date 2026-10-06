@@ -153,10 +153,23 @@ test "an enum with no value is refused" {
     assert generate("syntax = \"proto2\";\nenum E {}") == "error: 2: E declares no value";
 }
 
-test "a map key is an integer, bool or string" {
-    assert generate("syntax = \"proto3\";\nmessage M { map<double, int32> m = 1; }") == "error: 2: m: a map key cannot be double";
-    assert generate("syntax = \"proto3\";\nmessage M { map<M, int32> m = 1; }") == "error: 2: m: a map key cannot be M";
-    assert !generate("syntax = \"proto3\"; message M { map<sfixed64, int32> m = 1; }").starts_with("error");
+test "an open enum's first value is 0" {
+    assert generate("syntax = \"proto3\";\nenum E { A = 1; B = 0; }") == "error: 2: E: an open enum's first value must be 0";
+    assert generate("edition = \"2023\";\nenum E { A = 1; }") == "error: 2: E: an open enum's first value must be 0";
+}
+
+test "an implicit field holds neither a closed enum nor a message" {
+    assert generate(
+        "edition = \"2023\";\nenum E { option features.enum_type = CLOSED; A = 0; }\nmessage M { E e = 1 [features.field_presence = IMPLICIT]; }",
+    ) == "error: 3: e: a closed enum field cannot have implicit presence";
+    assert generate("edition = \"2023\";\nmessage M { M m = 1 [features.field_presence = IMPLICIT]; }") == "error: 2: m: a message field cannot have implicit presence";
+    assert !generate("edition = \"2023\"; option features.field_presence = IMPLICIT; message M { M m = 1; }").starts_with(
+        "error",
+    );
+}
+
+test "two oneofs whose Wado names meet are refused" {
+    assert generate("syntax = \"proto3\";\nmessage M { oneof match { int32 a = 1; } oneof match_ { int32 b = 2; } }") == "error: 2: M has two fields named match_ in Wado";
 }
 
 test "a field number the wire format does not admit is refused" {
@@ -197,8 +210,8 @@ pub variant PointChoice {
 }
 
 impl grog::Message for Point {
-    fn size(&self, s: &mut grog::Sizer) -> i32 {
-        let mut n = self.unknown_fields.len();
+    fn size(&self, s: &mut grog::Sizer) -> i64 {
+        let mut n = self.unknown_fields.len() as i64;
         n += s.implicit::<grog::Int32>(1, &self.x);
         n += s.optional::<grog::SInt64>(2, &self.y);
         n += s.packed::<grog::Fixed32>(3, &self.tags);
@@ -252,10 +265,10 @@ impl grog::Message for Point {
                 return Result::Ok(true);
             },
             8 => {
-                let mut v = match self.choice {
-                    Some(PointChoice::Other(held)) => held,
-                    _ => Point {},
-                };
+                if let Some(PointChoice::Other(held)) = &mut self.choice {
+                    return r.message(held);
+                }
+                let mut v = Point {};
                 if !r.message(&mut v)? {
                     return Result::Ok(false);
                 }
@@ -283,7 +296,10 @@ test "an open enum holds a number it does not declare" {
 }");
     assert out.contains("Color::DarkRed => -1,");
     assert out.contains("Color::Unrecognized(n) => *n,");
-    assert out.contains("return Option::Some(Color::Unrecognized(number));");
+    assert out.contains("-1 => Option::Some(Color::DarkRed),");
+    assert out.contains("_ => Option::Some(Color::Unrecognized(number)),");
+    assert out.contains("impl Eq for Color {");
+    assert out.contains("impl Ord for Color {");
 }
 
 test "a closed enum refuses a number it does not declare" {
@@ -294,7 +310,7 @@ test "a closed enum refuses a number it does not declare" {
     ] {
         let out = generate(source);
         assert out.contains("pub enum ");
-        assert out.contains("return null;");
+        assert out.contains("_ => null,");
     }
 }
 
