@@ -183,7 +183,7 @@ type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceRefIter<i32
 
 type "functype//inspect_fn_in_generic_body.wado/fn(i64)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn(T)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(59)
 
-type "functype//inspect_fn_in_generic_body.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn(T)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(60)
+type "functype//inspect_fn_in_generic_body.wado/fn(&i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn(T)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(60)
 
 type "functype//inspect_fn_in_generic_body.wado/inspect_fn_in_generic_body.wado/$Closure_0::$call" = fn(i64) -> i32;  // TypeId(61)
 
@@ -374,12 +374,12 @@ condition: describe_items(xs.iter_ref(), [c, d]) == \"|&i32| -> i32;|&i32| -> i3
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($v2.repr, i_34, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($v2.repr, i_34 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 58, 32), used: 3 }, 3);
         $local_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($v2);
-        "inspect_fn_in_generic_body.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(T)->i32>" { value: b_1 }, $local_11);
+        "inspect_fn_in_generic_body.wado/fn(&i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(T)->i32>" { value: b_1 }, $local_11);
         i_34 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($v2, 4);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($v2.repr, i_34, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($v2.repr, i_34 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 58, 32), used: 3 }, 3);
         $local_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($v2);
-        "inspect_fn_in_generic_body.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(T)->i32>" { value: a_0 }, $local_11);
+        "inspect_fn_in_generic_body.wado/fn(&i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(T)->i32>" { value: a_0 }, $local_11);
         i_34 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($v2, 40);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($v2.repr, i_34, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($v2.repr, i_34 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("describe_items(xs.iter_ref(), [c, d]): "), used: 39 }, 39);
@@ -431,7 +431,7 @@ fn "inspect_fn_in_generic_body.wado/inspect_fn_in_generic_body.wado/describe_ite
             $sroa_$iter_0_index_46 = $sroa_$iter_0_index_46 + 1;
             $tmpl_buf_32.used = 0;
             $fmt_buf_33.indent = 0;
-            "inspect_fn_in_generic_body.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(T)->i32>" { value: item }, $fmt_buf_33);
+            "inspect_fn_in_generic_body.wado/fn(&i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(T)->i32>" { value: item }, $fmt_buf_33);
             $licm_end_30 = end;
             $licm_repr_31 = $sroa_$iter_0_repr_45;
             if @unlikely(local.tee new_used_25($tmpl_buf_32.used + 1) > builtin::array_len($tmpl_buf_32.repr)) {
@@ -2112,7 +2112,7 @@ fn "inspect_fn_in_generic_body.wado/fn(i64)->i32^core:prelude/traits.wado/Inspec
     call_ref "functype/$canonical_callback_fn"($typed_self.inspect, local.tee $typed_self(ref.cast "canonical//CanonicalInspectableBase"(self.value)).env, f);
 }
 
-fn "inspect_fn_in_generic_body.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self, f) {
+fn "inspect_fn_in_generic_body.wado/fn(&i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self, f) {
     let $typed_self: ref "canonical//CanonicalInspectableBase";
     call_ref "functype/$canonical_callback_fn"($typed_self.inspect, local.tee $typed_self(ref.cast "canonical//CanonicalInspectableBase"(self.value)).env, f);
 }
