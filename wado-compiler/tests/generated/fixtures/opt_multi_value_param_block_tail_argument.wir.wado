@@ -73,7 +73,7 @@ fn "opt_multi_value_param_block_tail_argument.wado/run"() {
     let $mv$$vr_9$0: i32;
     let $mv$$vr_9$1: i32;
     multivalue_bind [$mv$$vr_9$0, $mv$$vr_9$1] = "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::lookup<&core:prelude/string.wado/String>$scalar"($sroa_t_width_11, probe);
-    if @unlikely(local.tee $mv$$vr_9$1((if ($mv$$vr_9$0 == 0) & ($mv$$vr_9$1 == 1) -> bool {
+    if @unlikely(local.tee $mv$$vr_9$1((if ($mv$$vr_9$0 == 1) & ($mv$$vr_9$1 == 1) -> bool {
         1;
     } else {
         0;
@@ -83,7 +83,7 @@ fn "opt_multi_value_param_block_tail_argument.wado/run"() {
         unreachable;
     }
     multivalue_bind [$sroa_t_width_11, $mv$$vr_9$1] = "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::lookup<&core:prelude/string.wado/String>$scalar"($sroa_t_width_11, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122, 122, 122), used: 3 });
-    if @unlikely(local.tee $sroa_t_width_11($sroa_t_width_11 == 1) == 0) {
+    if @unlikely(local.tee $sroa_t_width_11($sroa_t_width_11 == 0) == 0) {
         cold_path;
         "opt_multi_value_param_block_tail_argument.wado/run$cold0"();
         unreachable;
@@ -200,9 +200,9 @@ fn "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_t
         $mv_field_4 = key.used;
         "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::find$scalar"(self, repr, 0, $mv_field_4);
     }) < 0 {
-        return 1, 0;
+        return 0, 0;
     }
-    return 0, $mv_field_4;
+    return 1, $mv_field_4;
 }
 
 fn "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::find$scalar"(self, $mv$key$repr, $mv$key$start, $mv$key$end) {
