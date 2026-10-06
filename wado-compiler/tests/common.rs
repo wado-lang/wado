@@ -35,17 +35,7 @@ use wado_compiler::{
 use wado_host::timezone;
 pub use wado_host::tls_trust::install_default_crypto_provider;
 pub use wado_host::{HostStubs, StubHost};
-use wado_lsp::host::install_dev_stdlib;
-use wado_lsp::install_stderr_trace_sink;
-
-/// An [`InMemoryCompilerHost`] serving `files`, set up as a binary would set
-/// up its own: an integration test links the compiler without `cfg(test)`, so
-/// nothing else hands it the stdlib.
-pub fn in_memory_host(files: &[(&str, &str)]) -> InMemoryCompilerHost {
-    install_stderr_trace_sink();
-    install_dev_stdlib();
-    InMemoryCompilerHost::with_files(files)
-}
+pub use wado_lsp::test_support::in_memory_host;
 
 /// Convert a `Bail` + host diagnostics into a `CompileError` for test backward compat
 pub fn bail_to_compile_error(diagnostics: &[Diagnostic], filename: Option<&str>) -> CompileError {

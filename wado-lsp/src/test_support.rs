@@ -11,8 +11,8 @@
 
 use wado_compiler::InMemoryCompilerHost;
 
-use crate::Engine;
 use crate::host::install_dev_stdlib;
+use crate::{Engine, install_stderr_trace_sink};
 
 /// Path a single-file fixture is analysed under.
 pub const TEST_PATH: &str = "/test.wado";
@@ -57,10 +57,13 @@ pub fn open_files(files: &[(&str, &str)], entry: &str) -> Opened {
     }
 }
 
-/// An [`InMemoryCompilerHost`] serving `files`, with the dev stdlib installed
-/// for a test that compiles without an [`Engine`].
+/// An [`InMemoryCompilerHost`] serving `files`, set up as a native binary sets
+/// up its own: the dev stdlib installed, for a test that compiles without an
+/// [`Engine`], and traces sent to stderr. `wado-compiler`'s integration tests
+/// take it too.
 #[must_use]
 pub fn in_memory_host(files: &[(&str, &str)]) -> InMemoryCompilerHost {
+    install_stderr_trace_sink();
     install_dev_stdlib();
     InMemoryCompilerHost::with_files(files)
 }
