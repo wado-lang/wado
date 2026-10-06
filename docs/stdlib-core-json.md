@@ -24,9 +24,10 @@ one document as different values. This module settles each one as follows.
   spelling.
 - Every number type reads a number, or a string holding exactly one number
   token, by one rule. `"1.5"` reads as a float, `"NaN"` and `" 1"` as none.
-- Every integer type reads exactly at any width. `1.0`, `1e2` and `10e-1` read when the value is
-  integral and in range. `1.5` is an `UnexpectedType` error and a value out
-  of the type's range an `Overflow`. `-0` reads as `0`, unsigned or not.
+- Every integer type reads exactly at any width. `1.0`, `1e2` and `10e-1`
+  read when the value is integral and in range. `1.5` is an
+  `UnexpectedType` error and a value out of the type's range an `Overflow`.
+  `-0` reads as `0`, unsigned or not.
 - A float reads as the decimal rounded once to the nearest value of its
   type, however many digits it spells. `0.000…0001e400` with 400 zeros
   reads as exactly `0.1`.
@@ -130,9 +131,12 @@ validated as UTF-8 (RFC 8259 §8.1). `max_depth` bounds nesting.
 Serializes a value to UTF-8 JSON bytes in the JSON Canonicalization Scheme
 (RFC 8785): keys sorted by their UTF-16 code units, numbers in ECMAScript's
 form, strings escaped as `JSON.stringify` escapes them. Equal values produce
-byte-identical output regardless of map insertion order, and the same bytes
-another JCS implementation produces. Use this for signing or content
-addressing; use `to_bytes` for the faster insertion-order form.
+byte-identical output regardless of map insertion order, and any JCS
+implementation canonicalizing that output reproduces it byte for byte. An
+f32 keeps its own shortest digits and an integer past 2^53 its string form,
+so a JCS implementation starting from the same values as doubles writes
+those differently. Use this for signing or content addressing; use
+`to_bytes` for the faster insertion-order form.
 
 Returns a read-only `ByteSlice` over the serializer's UTF-8 buffer.
 `trailing_char`, when `Some`, is appended after the value; leave it `null`
@@ -544,9 +548,6 @@ _Fields are private._
 #### `impl SerializeMap for CanonicalMapSerializer`
 
 ##### `fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError>`
-
-Spells the key as `JsonKeySerializer` does, refusals included, and
-unescapes it again to sort by.
 
 ##### `fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
 

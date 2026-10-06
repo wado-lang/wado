@@ -19,9 +19,10 @@
 //!   spelling.
 //! - Every number type reads a number, or a string holding exactly one number
 //!   token, by one rule. `"1.5"` reads as a float, `"NaN"` and `" 1"` as none.
-//! - Every integer type reads exactly at any width. `1.0`, `1e2` and `10e-1` read when the value is
-//!   integral and in range. `1.5` is an `UnexpectedType` error and a value out
-//!   of the type's range an `Overflow`. `-0` reads as `0`, unsigned or not.
+//! - Every integer type reads exactly at any width. `1.0`, `1e2` and `10e-1`
+//!   read when the value is integral and in range. `1.5` is an
+//!   `UnexpectedType` error and a value out of the type's range an `Overflow`.
+//!   `-0` reads as `0`, unsigned or not.
 //! - A float reads as the decimal rounded once to the nearest value of its
 //!   type, however many digits it spells. `0.000…0001e400` with 400 zeros
 //!   reads as exactly `0.1`.
@@ -347,9 +348,12 @@ fn write_json_null(buf: &mut String) -> Result<(), SerializeError> {
 /// `TextKeySerializer` spells, which `JsonKeyDeserializer` parses back. Only a
 /// string and a char can hold a byte JSON escapes, so only they are written
 /// here. A float key is refused where a float value is, as serde_json refuses
-/// one; the other refusals are `TextKeySerializer`'s.
+/// one; the other refusals are `TextKeySerializer`'s. With `encode` off it
+/// writes the key's text alone, neither quoted nor escaped, for the canonical
+/// form to sort by.
 struct JsonKeySerializer {
     buf: &mut String,
+    encode: bool = true,
 }
 
 impl JsonKeySerializer {
@@ -358,6 +362,9 @@ impl JsonKeySerializer {
     }
 
     fn quoted<T: Serialize>(&mut self, v: &T) -> Result<(), SerializeError> {
+        if !self.encode {
+            return v.serialize(&mut self.text());
+        }
         self.buf.push('"');
         let spelled = v.serialize(&mut self.text());
         self.buf.push('"');
@@ -414,10 +421,16 @@ impl Serializer for JsonKeySerializer {
     }
 
     fn serialize_char(&mut self, v: char) -> Result<(), SerializeError> {
+        if !self.encode {
+            return self.text().serialize_char(v);
+        }
         return write_json_char(self.buf, v);
     }
 
     fn serialize_string<S: AsStrSlice>(&mut self, v: S) -> Result<(), SerializeError> {
+        if !self.encode {
+            return self.text().serialize_string(v);
+        }
         return write_json_string(self.buf, v);
     }
 
@@ -1911,20 +1924,19 @@ impl JsonDeserializer {
     /// Parses an f64 directly from `self.input` using fpfmt, without an
     /// intermediate String allocation.
     pub fn parse_f64_direct(&mut self) -> Result<f64, DeserializeError> {
-        return Result::Ok(f64::from_bits(self.parse_float_bits(&BINARY64)?));
+        return Result::Ok(f64::from_bits(self.parse_float_bits(self.peek_after_whitespace(), &BINARY64)?));
     }
 
     /// `parse_f64_direct`, rounded once into f32 rather than through f64.
     pub fn parse_f32_direct(&mut self) -> Result<f32, DeserializeError> {
-        return Result::Ok(f32::from_bits(self.parse_float_bits(&BINARY32)? as u32));
+        return Result::Ok(f32::from_bits(self.parse_float_bits(self.peek_after_whitespace(), &BINARY32)? as u32));
     }
 
-    /// The next number token rounded once into `format`, as its bits. A token
-    /// that rounds to infinity is an error, as in serde_json and Go: reading it
-    /// as infinity would make readers of the same bytes disagree, and the
-    /// serializer refuses to write one back.
-    fn parse_float_bits(&mut self, format: &BinaryFormat) -> Result<u64, DeserializeError> {
-        let lead = self.peek_after_whitespace();
+    /// The number token at `lead`, rounded once into `format`, as its bits. A
+    /// token that rounds to infinity is an error, as in serde_json and Go:
+    /// reading it as infinity would make readers of the same bytes disagree,
+    /// and the serializer refuses to write one back.
+    fn parse_float_bits(&mut self, lead: i32, format: &BinaryFormat) -> Result<u64, DeserializeError> {
         let start = self.pos as i64;
         let n = &mut self.scratch;
         self.scan_number_into(lead, n)?;
@@ -2469,31 +2481,35 @@ impl Deserializer for JsonDeserializer {
     }
 
     fn deserialize_f32(&mut self) -> Result<f32, DeserializeError> {
-        if self.peek_after_whitespace() == b'"' {
+        let lead = self.peek_after_whitespace();
+        if lead == b'"' {
             return self.quoted_number::<f32>();
         }
-        return self.parse_f32_direct();
+        return Result::Ok(f32::from_bits(self.parse_float_bits(lead, &BINARY32)? as u32));
     }
 
     fn deserialize_f64(&mut self) -> Result<f64, DeserializeError> {
-        if self.peek_after_whitespace() == b'"' {
+        let lead = self.peek_after_whitespace();
+        if lead == b'"' {
             return self.quoted_number::<f64>();
         }
-        return self.parse_f64_direct();
+        return Result::Ok(f64::from_bits(self.parse_float_bits(lead, &BINARY64)?));
     }
 
     fn deserialize_f16(&mut self) -> Result<f16, DeserializeError> {
-        if self.peek_after_whitespace() == b'"' {
+        let lead = self.peek_after_whitespace();
+        if lead == b'"' {
             return self.quoted_number::<f16>();
         }
-        return Result::Ok(f16::from_bits(self.parse_float_bits(&BINARY16)? as u16));
+        return Result::Ok(f16::from_bits(self.parse_float_bits(lead, &BINARY16)? as u16));
     }
 
     fn deserialize_bf16(&mut self) -> Result<bf16, DeserializeError> {
-        if self.peek_after_whitespace() == b'"' {
+        let lead = self.peek_after_whitespace();
+        if lead == b'"' {
             return self.quoted_number::<bf16>();
         }
-        return Result::Ok(bf16::from_bits(self.parse_float_bits(&BFLOAT16)? as u16));
+        return Result::Ok(bf16::from_bits(self.parse_float_bits(lead, &BFLOAT16)? as u16));
     }
 
     fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
@@ -2674,7 +2690,7 @@ impl Deserializer for JsonDeserializer {
                 return visitor.visit_map(&mut map);
             },
             '-' | '0'..='9' => {
-                let v = self.deserialize_f64()?;
+                let v = f64::from_bits(self.parse_float_bits(lead, &BINARY64)?);
                 return visitor.visit_f64(v);
             },
             _ => {
@@ -2746,44 +2762,36 @@ fn write_canonical_f64(buf: &mut String, v: f64) -> Result<(), SerializeError> {
 /// An f32 in its own shortest digits, which a reader of the text as f64
 /// canonicalizes back to the same text.
 fn write_canonical_f32(buf: &mut String, v: f32) -> Result<(), SerializeError> {
-    if !v.is_finite() {
-        return write_json_f32(buf, v);
-    }
-    if v == 0.0 {
-        buf.push('0');
-    } else {
+    if v.is_finite() && v != 0.0 {
         write_ecmascript_number(buf, v < 0.0, short32(f32::abs(v)));
+        return Result::Ok(());
     }
-    return Result::Ok(());
-}
-
-/// The first UTF-16 code unit of `c`.
-fn utf16_lead_unit(c: char) -> u32 {
-    let cp = c as u32;
-    if cp < 0x10000 {
-        return cp;
-    }
-    return 0xD800 + (cp - 0x10000 >> 10);
+    return write_canonical_f64(buf, v as f64);
 }
 
 /// Orders `a` and `b` by their UTF-16 code units, as RFC 8785 §3.2.3 sorts
-/// keys. That differs from code point order only where a code point past
-/// U+FFFF, led by a surrogate, meets one in U+E000..=U+FFFF.
+/// keys. Their UTF-8 bytes order as code points do, which differs only where
+/// a code point past U+FFFF (lead byte 0xF0 and up, a surrogate pair in
+/// UTF-16) meets one in U+E000..=U+FFFF (lead byte 0xEE or 0xEF).
 fn utf16_cmp(a: &String, b: &String) -> Ordering {
-    let mut ia = a.chars();
-    let mut ib = b.chars();
-    loop {
-        let Some(ca) = ia.next() else {
-            return if ib.next() matches { Some(_) } { Ordering::Less } else { Ordering::Equal };
-        };
-        let Some(cb) = ib.next() else {
-            return Ordering::Greater;
-        };
-        if ca != cb {
-            let lead = utf16_lead_unit(ca).cmp(&utf16_lead_unit(cb));
-            return if lead == Ordering::Equal { ca.cmp(&cb) } else { lead };
+    let n = i32::min(a.len(), b.len());
+    for let mut i = 0; i < n; i += 1 {
+        let x = a.get_byte_unchecked(i);
+        let y = b.get_byte_unchecked(i);
+        if x == y {
+            continue;
         }
+        // The equal bytes before them make `x` and `y` both lead bytes, or both
+        // continuation bytes of sequences sharing a lead, which order alike.
+        if x >= 0xF0 && y >= 0xEE && y < 0xF0 {
+            return Ordering::Less;
+        }
+        if y >= 0xF0 && x >= 0xEE && x < 0xF0 {
+            return Ordering::Greater;
+        }
+        return x.cmp(&y);
     }
+    return a.len().cmp(&b.len());
 }
 
 /// Serialize a value canonically into a fresh `String` buffer (used to buffer
@@ -2829,13 +2837,10 @@ impl SerializeSeq for CanonicalSeqSerializer {
 }
 
 impl SerializeMap for CanonicalMapSerializer {
-    /// Spells the key as `JsonKeySerializer` does, refusals included, and
-    /// unescapes it again to sort by.
     fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
-        let mut encoded = String::with_capacity(16);
-        key.serialize(&mut JsonKeySerializer { buf: &mut encoded })?;
-        let mut de = JsonDeserializer { input: encoded.as_byte_slice(), pos: 0 };
-        self.pending_key = de.read_json_string().expect("a written key reads back");
+        let mut text = String::with_capacity(16);
+        key.serialize(&mut JsonKeySerializer { buf: &mut text, encode: false })?;
+        self.pending_key = text;
         return Result::Ok(());
     }
 
@@ -3073,9 +3078,12 @@ pub fn from_bytes<T: Deserialize, S: AsByteSlice>(
 /// Serializes a value to UTF-8 JSON bytes in the JSON Canonicalization Scheme
 /// (RFC 8785): keys sorted by their UTF-16 code units, numbers in ECMAScript's
 /// form, strings escaped as `JSON.stringify` escapes them. Equal values produce
-/// byte-identical output regardless of map insertion order, and the same bytes
-/// another JCS implementation produces. Use this for signing or content
-/// addressing; use `to_bytes` for the faster insertion-order form.
+/// byte-identical output regardless of map insertion order, and any JCS
+/// implementation canonicalizing that output reproduces it byte for byte. An
+/// f32 keeps its own shortest digits and an integer past 2^53 its string form,
+/// so a JCS implementation starting from the same values as doubles writes
+/// those differently. Use this for signing or content addressing; use
+/// `to_bytes` for the faster insertion-order form.
 ///
 /// Returns a read-only `ByteSlice` over the serializer's UTF-8 buffer.
 /// `trailing_char`, when `Some`, is appended after the value; leave it `null`
