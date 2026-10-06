@@ -1,0 +1,55 @@
+// A generic struct's literal, built where its type argument is the enclosing
+// function's own parameter, takes a field whose initializer is a type-path
+// static call (`Pair::empty()`). The field's declared type mixes a concrete
+// argument with the struct's parameter, and the call must not bind that
+// parameter to the concrete one: `Holder<T>` once came out `Holder<String>`.
+// The call's return was read at the receiver's arguments and then substituted
+// by slot index again, so the caller's `T` (slot 0) took `Pair`'s slot-0
+// argument. The namespaced spelling took the same second substitution.
+
+use dep from "./sub/infer_type_arg_struct_field_init_generic_holder_dep.wado";
+
+struct Pair<A, B> {
+    a: List<A>,
+    b: List<B>,
+}
+
+impl<A, B> Pair<A, B> {
+    fn empty() -> Pair<A, B> {
+        return Pair { a: [], b: [] };
+    }
+}
+
+struct Holder<H> {
+    by_name: Pair<String, H>,
+}
+
+fn make<T>() -> Holder<T> {
+    return Holder { by_name: Pair::empty() };
+}
+
+fn make_dep<T>() -> dep::Pair<String, T> {
+    let p: dep::Pair<String, T> = dep::Pair::empty();
+    return p;
+}
+
+impl<H> Holder<H> {
+    fn new() -> Holder<H> {
+        return Holder { by_name: Pair::empty() };
+    }
+}
+
+test "a static call's type args follow the field, not its first argument" {
+    let mut h = make::<i32>();
+    h.by_name.b.push(7);
+    h.by_name.a.push("x");
+    assert h.by_name.b[0] == 7;
+    let n = Holder::<bool>::new();
+    assert n.by_name.b.is_empty();
+    let mut d = make_dep::<i32>();
+    d.b.push(3);
+    assert d.b[0] == 3;
+}
+
+__DATA__
+{"test": {}}

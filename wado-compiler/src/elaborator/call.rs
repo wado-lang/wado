@@ -1867,30 +1867,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name,
                     );
 
-                    // The receiver's arguments come first: the declaration
-                    // numbers its own slots 0.. and the method's after them, so
-                    // one flat list substitutes by index (as the two-segment
-                    // spelling does).
-                    let mut combined_type_args = impl_type_args_inferred.clone();
-                    combined_type_args.extend_from_slice(&method_type_args);
-                    let mut return_type = resolved.return_type();
-                    if !combined_type_args.is_empty() {
-                        return_type = self
-                            .tysys
-                            .substitute_type_params(return_type, &combined_type_args);
-                    }
+                    let return_type = self.fill_static_method_slots(
+                        method_ref.method_id,
+                        &method_type_args,
+                        resolved.return_type(),
+                    );
 
                     let template = self.tysys.static_template(&method_ref, &receiver);
-                    let monomorph_info = if combined_type_args.is_empty() {
-                        None
-                    } else {
-                        Some(MonomorphInfo {
-                            generic_name: final_mangled.clone(),
-                            impl_type_args: impl_type_args_inferred.clone(),
-                            method_type_args: method_type_args.clone(),
-                            is_blanket: false,
-                        })
-                    };
+                    let monomorph_info =
+                        if impl_type_args_inferred.is_empty() && method_type_args.is_empty() {
+                            None
+                        } else {
+                            Some(MonomorphInfo {
+                                generic_name: final_mangled.clone(),
+                                impl_type_args: impl_type_args_inferred.clone(),
+                                method_type_args: method_type_args.clone(),
+                                is_blanket: false,
+                            })
+                        };
 
                     // From the same resolution the identity and the return type
                     // came from: a second lookup here answers with no list, and
@@ -3893,7 +3887,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.impl_method_entries(receiver, method_name).next()
     }
 
-    /// [`Self::qualified_method_sig`] where the name resolves to exactly one
+    /// [`Self::qualified_method_sig_keyed`] where the name resolves to exactly one
     /// declaration. An overloaded name (several `From` impls on one target)
     /// answers `None`: the call site chooses among the candidates by argument,
     /// so committing to the first indexed one would decide the overload here.
@@ -3947,21 +3941,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The canonical signature `struct_name::method_name` names, receiver-less
-    /// or instance: the spelling admits both, and a call site instantiates its
-    /// slots from whichever it names. Callers hold a name split out of a mangled
-    /// spelling, so there is no reference site to take.
-    pub(super) fn qualified_method_sig(
-        &self,
-        struct_name: &str,
-        method_name: &str,
-    ) -> Option<MethodSig> {
-        self.qualified_method_sig_keyed(&self.impl_target(struct_name), method_name)
-    }
-
-    /// [`Self::qualified_method_sig`] for a caller that already resolved its
-    /// receiver. Deriving a second key from the bare name answers from another
-    /// vantage than the one the call resolved at.
+    /// The canonical signature `method_name` names on the resolved `receiver`,
+    /// receiver-less or instance: the spelling admits both, and a call site
+    /// instantiates its slots from whichever it names. Deriving a second key
+    /// from the bare name answers from another vantage than the one the call
+    /// resolved at.
     pub(super) fn qualified_method_sig_keyed(
         &self,
         key: &ImplTargetKey,

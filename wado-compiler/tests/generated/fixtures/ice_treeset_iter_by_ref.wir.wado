@@ -21,12 +21,23 @@ array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado/
 
 array Array<()> (mut ());  // TypeId(7)
 
-struct core:collections/entries.wado//MapKeysValueIter<core:prelude/string.wado/String,()> {  // TypeId(8)
+struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,()> {  // TypeId(8)
+    mut log: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,()>",
+    mut slots: ref Array<i32>,
+    mut nkeys: ref "Array<core:prelude/string.wado/String>",
+    mut kids: ref Array<i32>,
+    mut lens: ref Array<i32>,
+    mut nodes: i32,
+    mut root: i32,
+    mut height: i32,
+}
+
+struct core:collections/entries.wado//MapKeysValueIter<core:prelude/string.wado/String,()> {  // TypeId(9)
     mut log: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,()>",
     mut index: i32,
 }
 
-struct core:collections/treemap.wado//TreeMap<i32,()> {  // TypeId(9)
+struct core:collections/treemap.wado//TreeMap<i32,()> {  // TypeId(10)
     mut log: ref "core:collections/entries.wado//EntryLog<i32,()>",
     mut slots: ref Array<i32>,
     mut nkeys: ref Array<i32>,
@@ -37,24 +48,13 @@ struct core:collections/treemap.wado//TreeMap<i32,()> {  // TypeId(9)
     mut height: i32,
 }
 
-struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,()> {  // TypeId(10)
+struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,()> {  // TypeId(11)
     mut keys: ref "Array<core:prelude/string.wado/String>",
     mut values: ref Array<()>,
     mut alive: ref Array<bool>,
     mut count: i32,
     mut size: i32,
     mut deleted_count: i32,
-}
-
-struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,()> {  // TypeId(11)
-    mut log: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,()>",
-    mut slots: ref Array<i32>,
-    mut nkeys: ref "Array<core:prelude/string.wado/String>",
-    mut kids: ref Array<i32>,
-    mut lens: ref Array<i32>,
-    mut nodes: i32,
-    mut root: i32,
-    mut height: i32,
 }
 
 struct core:collections/entries.wado//EntryLog<i32,()> {  // TypeId(12)

@@ -575,6 +575,14 @@ impl<T: Ord> TreeSet<T> {
     }
 }
 
+/// The lookup that takes any text, as `TreeMap<String, V>`'s do.
+impl TreeSet<String> {
+    /// Returns true if some element spells the same text as `value`.
+    pub fn contains_str<S: AsStrSlice>(&self, value: S) -> bool {
+        return self.inner.contains_key_str(value);
+    }
+}
+
 impl<T: Ord> IntoIterator for TreeSet<T> {
     type Item = T;
     type Iter = MapKeysValueIter<T, ()>;
