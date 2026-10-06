@@ -75,11 +75,12 @@ use crate::component_model::{
     CmInterfaceRegistry, bind_type_names, cm_bound_defs, try_for_each_operation_type,
     try_for_each_signed_type, wado_primitive_name_to_cm,
 };
+use crate::coverage::CoverageRequest;
 use crate::defs::DefId;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::name::entry_dir_of;
 use crate::wit_consume::module_host_leaf_imports;
-use crate::world_registry::WorldInfo;
+use crate::world_registry::{TEST_WORLD, WorldInfo};
 pub use stdlib_snapshot::prelude_names;
 pub use stdlib_snapshot::prewarm as prewarm_stdlib_snapshot;
 pub mod niri;
@@ -256,15 +257,16 @@ pub(crate) fn bail_with<H: CompilerHost>(
     Bail
 }
 
-/// The `-f` flags for `package`, whose target world must already be set: the
-/// test world checks contracts by default.
+/// The `-f` flags for a build of `target_world`: the test world checks
+/// contracts by default.
 fn parse_codegen_flags<H: CompilerHost>(
     flags: &[String],
     opt_level: OptLevel,
-    package: &Package,
+    target_world: Option<&str>,
     logger: &Logger<'_, H>,
 ) -> Result<CodegenFlags, Bail> {
-    CodegenFlags::parse(flags, opt_level, package.is_test_world()).map_err(|flag| {
+    let test_world = target_world == Some(TEST_WORLD);
+    CodegenFlags::parse(flags, opt_level, test_world).map_err(|flag| {
         bail_with(
             logger,
             Code::UnsupportedFeature,
@@ -314,6 +316,9 @@ pub struct DumpResult {
     /// Power-assert capture plans, one block per `assert` (unparsed text).
     /// See `docs/wep-2026-08-19-power-assert-coverage.md`.
     pub assert_plan_text: Option<String>,
+    /// The regions `wado test --coverage` counts in the entry module, under
+    /// this build's `-f` flags.
+    pub coverage_plan: coverage::ModulePlan,
     /// Monomorphized TIR snapshot (unparsed text)
     pub monomorphized_tir_text: Option<String>,
     /// Lowered TIR snapshot (unparsed text)
@@ -1282,7 +1287,17 @@ fn compile_after_load<H: CompilerHost>(
         options.coverage.is_none() || options.target_world.as_deref() == Some("test"),
         "coverage instruments the test world only"
     );
-    let sem = semantics::semantics_with_logger(load_result, logger, true, options.coverage);
+    let codegen_flags = parse_codegen_flags(
+        &options.codegen_flags,
+        options.opt_level,
+        options.target_world.as_deref(),
+        logger,
+    )?;
+    let coverage = options.coverage.map(|scope| CoverageRequest {
+        scope,
+        contract_checks: codegen_flags.contract_checks,
+    });
+    let sem = semantics::semantics_with_logger(load_result, logger, true, coverage);
     if !sem.is_complete() {
         return Err(Bail);
     }
@@ -1708,8 +1723,7 @@ fn compile_after_load<H: CompilerHost>(
     package.coverage_section = coverage.map(|map| map.encode());
     package.test_name_filters = options.test_name_filters;
     package.wasm_assets = wasm_assets;
-    package.codegen_flags =
-        parse_codegen_flags(&options.codegen_flags, options.opt_level, &package, logger)?;
+    package.codegen_flags = codegen_flags;
 
     select_allocator(&mut package, options.allocator, logger)?;
 
@@ -2169,10 +2183,13 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // into `TypeId`s the cached `TirModule`s do not carry, and left an
     // `Iterator::Item` projection to reach WIR build and panic on programs
     // `compile` handled fine.
+    let flags = parse_codegen_flags(codegen_flags, opt_level, target_world, &logger)?;
     let sem = semantics::semantics_with_logger(load_result, &logger, true, None);
     let symbols = sem.symbols.clone();
     let interner = sem.interner.clone();
     let entry_module_source_out = sem.entry_module_source.clone();
+    let (coverage_plan, ..) =
+        coverage::plan_module(&entry_module_source_out, &ast, flags.contract_checks);
     let moved_local_spans = sem.liveness.moved_spans.clone();
     // The resolved modules are kept as-is for the `--tir-resolved` view; the
     // pipeline below runs on its own snapshot, so these stay frozen here.
@@ -2225,8 +2242,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 package.target_world = world.to_string();
             }
             package.wasm_assets.clone_from(&wasm_assets);
-            package.codegen_flags =
-                parse_codegen_flags(codegen_flags, opt_level, &package, &logger)?;
+            package.codegen_flags = flags;
 
             // Validate target world (test world is synthetic, not in registry)
             if !package.is_test_world()
@@ -2336,6 +2352,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         entry_module_source: entry_module_source_out,
         tir_modules: tir_modules_by_source,
         assert_plan_text,
+        coverage_plan,
         monomorphized_tir_text,
         lowered_nir_text,
         optimized_package,

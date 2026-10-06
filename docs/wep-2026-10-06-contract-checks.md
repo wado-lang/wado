@@ -61,9 +61,10 @@ inliner sized the `if false` body before any pass pruned it, and
 reason each site writes its check out rather than calling a shared helper: the
 call to a helper a disabled check left empty would remain.
 
-Coverage counts the body as part of the enclosing region, not as a branch: the
-condition is a build constant, so the path that skips the body never runs in a
-test-world build.
+Coverage does not count a check as a branch, because its condition is a build
+constant. Where the build keeps the check, its body is part of the enclosing
+region. Where the build deletes it, under `-f no-contract-checks`, it holds no
+line.
 
 It is `internal` to `core:builtin`, so only the standard library calls it.
 Open to every program, it would be a removable `assert`. Every language that
