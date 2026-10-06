@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791280722587,
+  "lastUpdate": 1791283409594,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -64385,6 +64385,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d0b8f280b9ffc47ec25303d5991d5fc8e7482fd4"
         },
         "date": 1791280721857,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338502,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "860f3c20de423cb03e371a29e546fea6c012e222",
+          "message": "Merge pull request #2286 from wado-lang/ccr-5117b114-vbqsqr\n\nfeat: a variant derives Ord, and a derived method answers by type path",
+          "timestamp": "2026-10-06T19:18:41+09:00",
+          "tree_id": "a36b6069cdf77db9c2e75841cb0d43fb354863ad",
+          "url": "https://github.com/wado-lang/wado/commit/860f3c20de423cb03e371a29e546fea6c012e222"
+        },
+        "date": 1791283408776,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
