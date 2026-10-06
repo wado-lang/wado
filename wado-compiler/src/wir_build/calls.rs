@@ -10,7 +10,7 @@ use std::array;
 use crate::module_source::ModuleSource;
 use crate::name::MangledName;
 use crate::tir::{TypeId, TypeTable};
-use crate::wir::{WirAbstractHeapType, WirInstr, WirType, WirTypeDef, WirTypeId};
+use crate::wir::{WirInstr, WirType, WirTypeId};
 
 use super::context::WirContext;
 use super::primitive_ops::FloatWidth;
@@ -714,7 +714,7 @@ impl FunctionTranslator<'_, '_> {
             }
             "array_release" => Some(self.translate_array_release(args)),
 
-            "v128_const" =>Some(WirInstr::V128Const(
+            "v128_const" => Some(WirInstr::V128Const(
                 self.operand_const_wide_int(args[0].expr)
                     .expect("a v128 bit pattern must be an i128 / u128 literal"),
             )),
@@ -814,14 +814,15 @@ impl FunctionTranslator<'_, '_> {
     /// effect keeps are evaluated.
     fn translate_array_release(&mut self, args: &[ArenaCallArg]) -> WirInstr {
         let type_id = self.ref_type_id(self.operand_type_id(args[0].expr));
-        let Some(null) = self.bottom_null(&self.array_element_wir_type(&type_id)) else {
+        let elem = self.array_element_wir_type(&type_id);
+        if !elem.is_reference() {
             let effects: Vec<WirInstr> = args
                 .iter()
                 .filter(|a| matches!(a.expr, Operand::Expr(_)))
                 .map(|a| WirInstr::Drop(Box::new(self.translate_operand(a.expr))))
                 .collect();
             return WirInstr::Seq(effects);
-        };
+        }
         let arr = self.translate_operand(args[0].expr);
         let offset = self.translate_operand(args[1].expr);
         let len = self.translate_operand(args[2].expr);
@@ -829,51 +830,9 @@ impl FunctionTranslator<'_, '_> {
             type_id,
             array: Box::new(arr),
             offset: Box::new(offset),
-            value: Box::new(null),
+            value: Box::new(elem.default_value()),
             len: Box::new(len),
         }
-    }
-
-    /// The null of `elem`'s heap-type hierarchy, or `None` for a type that is
-    /// no reference.
-    fn bottom_null(&self, elem: &WirType) -> Option<WirInstr> {
-        let heap_type = match elem {
-            WirType::Ref { type_id, .. } => match self.ctx.types.get(type_id.index() as usize) {
-                Some(WirTypeDef::Func(_)) => WirAbstractHeapType::NoFunc,
-                Some(_) => WirAbstractHeapType::None,
-                None => panic!("[WIR] array element type {} is not registered", type_id.index()),
-            },
-            WirType::AbstractRef { heap_type, .. } => match heap_type {
-                WirAbstractHeapType::Func | WirAbstractHeapType::NoFunc => {
-                    WirAbstractHeapType::NoFunc
-                }
-                WirAbstractHeapType::Any
-                | WirAbstractHeapType::Eq
-                | WirAbstractHeapType::Struct
-                | WirAbstractHeapType::Array
-                | WirAbstractHeapType::None => WirAbstractHeapType::None,
-                WirAbstractHeapType::Extern => {
-                    panic!("[WIR] WIR has no `noextern` to null an externref array element")
-                }
-            },
-            WirType::I8
-            | WirType::I16
-            | WirType::I32
-            | WirType::I64
-            | WirType::U8
-            | WirType::U16
-            | WirType::U32
-            | WirType::U64
-            | WirType::F32
-            | WirType::F64
-            | WirType::Bool
-            | WirType::Char
-            | WirType::Enum { .. }
-            | WirType::Flags { .. }
-            | WirType::V128
-            | WirType::Unit => return None,
-        };
-        Some(WirInstr::RefNull { heap_type })
     }
 
     /// Lower a mechanical numeric or SIMD intrinsic: evaluate the operands

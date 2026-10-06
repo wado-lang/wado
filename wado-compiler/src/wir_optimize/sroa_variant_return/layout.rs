@@ -5,7 +5,7 @@
 //! nested result slot.
 
 use crate::hashmap::IndexMap;
-use crate::wir::{WirAbstractHeapType, WirInstr, WirPackage, WirType, WirVariantType};
+use crate::wir::{WirInstr, WirPackage, WirType, WirVariantType};
 
 /// Result-vector cap for the shared (homogeneous) layout:
 /// 1 discriminant + 3 shared payload slots.
@@ -49,7 +49,7 @@ pub(super) struct VariantSroaInfo {
 /// Returns true if a `WirType` is a valid Wasm value type for multi-value returns.
 ///
 /// Whitelist: every type here has a Wasm value-type representation and a
-/// default padding value in [`default_value_for_type`]. Concrete GC refs are
+/// default padding value in [`WirType::default_value`]. Concrete GC refs are
 /// eligible (Wasm multi-value returns support any value type). Abstract heap
 /// refs are excluded as they lack the precise type information needed for
 /// `StructGet` replacement; `Unit` has no Wasm representation.
@@ -235,7 +235,7 @@ pub(super) fn pad_variant_fields(
 
         // Initialize all payload slots with defaults
         for slot in 0..total_payload_slots {
-            result.push(default_value_for_type(&result_types[1 + slot]));
+            result.push(result_types[1 + slot].default_value());
         }
 
         // Place this case's payloads in their dedicated slots
@@ -243,7 +243,7 @@ pub(super) fn pad_variant_fields(
             let offset = offsets[ci];
             for (pi, payload) in payload_exprs.into_iter().enumerate() {
                 let payload = if matches!(payload, WirInstr::Nop) {
-                    default_value_for_type(&result_types[1 + offset + pi])
+                    result_types[1 + offset + pi].default_value()
                 } else {
                     payload
                 };
@@ -262,41 +262,14 @@ pub(super) fn pad_variant_fields(
             if matches!(field, WirInstr::Nop) {
                 let pos = i - 1; // payload position (skip discriminant)
                 if pos < result_types.len() - 1 {
-                    *field = default_value_for_type(&result_types[1 + pos]);
+                    *field = result_types[1 + pos].default_value();
                 }
             }
         }
         for pos in payload_count..vi.payload_slot_count {
             let ty = &result_types[1 + pos]; // +1 to skip discriminant
-            new_fields.push(default_value_for_type(ty));
+            new_fields.push(ty.default_value());
         }
         new_fields
-    }
-}
-
-/// Produce a default (zero) value for a given WIR type, used to pad the
-/// result-vector slots a variant case leaves unused. Exhaustive over every
-/// type [`is_eligible_field_type`] admits — a wrong-typed pad is invalid
-/// Wasm, so an unpaddable type is a bug in the eligibility whitelist.
-pub(super) fn default_value_for_type(ty: &WirType) -> WirInstr {
-    match ty {
-        WirType::I32
-        | WirType::I8
-        | WirType::I16
-        | WirType::U8
-        | WirType::U16
-        | WirType::U32
-        | WirType::Bool
-        | WirType::Char
-        | WirType::Enum { .. }
-        | WirType::Flags { .. } => WirInstr::I32Const(0),
-        WirType::I64 | WirType::U64 => WirInstr::I64Const(0),
-        WirType::F32 => WirInstr::F32Const(0.0),
-        WirType::F64 => WirInstr::F64Const(0.0),
-        WirType::V128 => WirInstr::V128Const(0),
-        WirType::Ref { .. } | WirType::AbstractRef { .. } => WirInstr::RefNull {
-            heap_type: WirAbstractHeapType::None,
-        },
-        WirType::Unit => panic!("variant SROA cannot pad a unit-typed result slot"),
     }
 }
