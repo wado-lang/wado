@@ -59,8 +59,7 @@ pub fn open_files(files: &[(&str, &str)], entry: &str) -> Opened {
 
 /// An [`InMemoryCompilerHost`] serving `files`, set up as a native binary sets
 /// up its own: the dev stdlib installed, for a test that compiles without an
-/// [`Engine`], and traces sent to stderr. `wado-compiler`'s integration tests
-/// take it too.
+/// [`Engine`], and traces sent to stderr. `wado-compiler-tests` takes it too.
 #[must_use]
 pub fn in_memory_host(files: &[(&str, &str)]) -> InMemoryCompilerHost {
     install_stderr_trace_sink();

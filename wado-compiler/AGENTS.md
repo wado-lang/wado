@@ -104,11 +104,9 @@ into a branchless select only where both arms are duplicable pure leaves.
 `.wado` files in `tests/fixtures/`, expectations in a trailing `__DATA__` JSON
 section whose fields are the `serde` structs in `tests/e2e.rs`.
 
-`tests/` is a package of its own, `wado-compiler-tests`. It depends on
-`wado-host` and `wado-lsp`, which depend on the compiler, and a test binary
-links only after every dependency is built. As the compiler's own test targets,
-they held the unit tests back by that much. A path in `__DATA__` is relative to
-`tests/`, since that is where `cargo test` runs the binary.
+`tests/` is a package of its own, `wado-compiler-tests`; its `Cargo.toml` says
+why. A path in `__DATA__` is relative to `tests/`, where `cargo test` runs the
+binary.
 
 - Run `touch tests/e2e.rs` after adding or removing a fixture, or after changing
   `WADO_FULL_TEST`. `datatest_mini` resolves fixtures at macro-expansion time and

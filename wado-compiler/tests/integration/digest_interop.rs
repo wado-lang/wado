@@ -24,8 +24,7 @@ static DIGEST_COMPONENT: OnceLock<Component> = OnceLock::new();
 
 fn digest_component() -> &'static Component {
     DIGEST_COMPONENT.get_or_init(|| {
-        let path =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/sub/digest_driver.wado");
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/sub/digest_driver.wado");
         let result = compile_file(&path)
             .unwrap_or_else(|e| panic!("Failed to compile digest_driver.wado: {e:?}"));
         let engine = cli_engine();

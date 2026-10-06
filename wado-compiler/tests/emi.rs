@@ -1723,10 +1723,7 @@ fn mutate_corpus() {
 }
 
 fn out_dir() -> PathBuf {
-    selection("WADO_EMI_OUT").map_or_else(
-        || repository_root().join("target/emi"),
-        PathBuf::from,
-    )
+    selection("WADO_EMI_OUT").map_or_else(|| repository_root().join("target/emi"), PathBuf::from)
 }
 
 fn write_corpus(results: &Results) {

@@ -148,10 +148,7 @@ pub(crate) const LIB_WORLD_FQ: &str = concat!(
     env!("CARGO_PKG_VERSION")
 );
 
-pub(crate) const FIXTURE: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/fixtures/cm_catalog.wado"
-);
+pub(crate) const FIXTURE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/cm_catalog.wado");
 
 /// A single round-trip case: call the kebab-named export with `value` and
 /// assert the returned value equals `value`.

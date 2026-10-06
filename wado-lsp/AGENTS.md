@@ -36,7 +36,7 @@ Language service engine for the Wado compiler toolchain.
 | `src/server/rpc.rs`         | LSP wire types (params, capabilities, notifications)                                                                                                                                    |
 | `src/trace_sink.rs`         | `install_stderr_trace_sink`: the one stderr `TraceSink` the native hosts install, so `WADO_TRACE` / `WADO_DUMP_PASS_*` reach a stream                                                   |
 | `src/bin/wado-lsp.rs`       | Binary entrypoint; drives `run_stdio()` via `futures::executor::block_on`                                                                                                               |
-| `src/test_support.rs`       | `in_memory_host` (the compiler's `InMemoryCompilerHost`, stdlib installed) and the `open` / `open_files` fixture builders for unit + integration tests (`#[doc(hidden)] pub`)            |
+| `src/test_support.rs`       | `in_memory_host` (the compiler's `InMemoryCompilerHost`, stdlib installed) and the `open` / `open_files` fixture builders for unit + integration tests (`#[doc(hidden)] pub`)           |
 
 ### AST walking
 

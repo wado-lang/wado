@@ -42,8 +42,7 @@ fn compiled_test_names(filters: &[&str]) -> Vec<(String, Option<String>)> {
         test_name_filters: filters.iter().map(|s| (*s).to_string()).collect(),
         ..Default::default()
     };
-    let path =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/__test_name_filter__.wado");
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/__test_name_filter__.wado");
     let result = compile_source_with_compiler_options(&path, SOURCE, options)
         .expect("compile should succeed");
     // The section is present whenever at least one test survives; a fully
