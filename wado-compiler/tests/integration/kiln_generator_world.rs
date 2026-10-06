@@ -12,7 +12,7 @@
 //! See WEP 2026-04-12 §"Options are a typed argument in each generator's own
 //! world".
 
-use crate::common::{MapHost, block_on};
+use crate::common::{block_on, in_memory_host};
 use wado_compiler::{
     Code, CompileResult, CompilerOptions, Diagnostic, LogLevel, OptLevel, Severity,
     compile_with_options, wir::ImportKind,
@@ -50,7 +50,7 @@ fn compile_generator(source: &str, what: &str) -> CompileResult {
 }
 
 fn compile_generator_at(source: &str, what: &str, opt_level: OptLevel) -> CompileResult {
-    let host = MapHost::new(&[]);
+    let host = in_memory_host(&[]);
     let result = block_on(compile_with_options(
         source,
         &host,
@@ -68,7 +68,7 @@ fn compile_generator_at(source: &str, what: &str, opt_level: OptLevel) -> Compil
 
 /// Assert `source` is refused for importing `interface`, whatever reached it.
 fn expect_forbidden_import(source: &str, interface: &str, what: &str) {
-    let host = MapHost::new(&[]);
+    let host = in_memory_host(&[]);
     let result = block_on(compile_with_options(
         source,
         &host,
@@ -166,7 +166,7 @@ pub struct Rule {
 
 #[test]
 fn options_field_type_from_another_module_compiles() {
-    let host = MapHost::new(&[("./rule.wado", CROSS_MODULE_OPTIONS_RULE)]);
+    let host = in_memory_host(&[("./rule.wado", CROSS_MODULE_OPTIONS_RULE)]);
     let result = block_on(compile_with_options(
         CROSS_MODULE_OPTIONS_GENERATOR,
         &host,
@@ -247,7 +247,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
 
 #[test]
 fn a_private_entry_type_still_claims_its_name_against_a_submodule() {
-    let host = MapHost::new(&[("./rule.wado", DUPLICATE_TYPE_RULE)]);
+    let host = in_memory_host(&[("./rule.wado", DUPLICATE_TYPE_RULE)]);
     let result = block_on(compile_with_options(
         PRIVATE_ENTRY_TYPE_GENERATOR,
         &host,
@@ -272,7 +272,7 @@ fn a_private_entry_type_still_claims_its_name_against_a_submodule() {
 
 #[test]
 fn duplicate_public_type_across_generator_modules_is_diagnosed() {
-    let host = MapHost::new(&[
+    let host = in_memory_host(&[
         ("./rule.wado", DUPLICATE_TYPE_RULE),
         ("./other.wado", DUPLICATE_TYPE_OTHER),
     ]);

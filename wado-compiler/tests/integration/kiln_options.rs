@@ -1,6 +1,6 @@
 //! Tests for [`wado_compiler::kiln::extract_options_descriptor`].
 
-use crate::common::{InMemoryHost, block_on};
+use crate::common::{block_on, in_memory_host};
 use std::assert_matches;
 use wado_compiler::ModuleSource;
 use wado_compiler::kiln::{CanonicalValue, OptionsType, extract_options_descriptor};
@@ -21,7 +21,7 @@ pub struct Options {
 
 pub fn generate() {}
 ";
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
     let desc = extract_options_descriptor(&sem, &entry(&sem)).unwrap();
     assert_eq!(desc.fields.len(), 3);
@@ -48,7 +48,7 @@ pub struct Options {
 
 pub fn generate() {}
 ";
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
     let desc = extract_options_descriptor(&sem, &entry(&sem)).unwrap();
     assert_eq!(desc.fields.len(), 1);
@@ -73,7 +73,7 @@ pub struct Options {
 
 pub fn generate() {}
 ";
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
     let desc = extract_options_descriptor(&sem, &entry(&sem)).unwrap();
     assert_eq!(desc.fields.len(), 1);
@@ -104,7 +104,7 @@ pub struct Options {
 
 pub fn generate() {}
 ";
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
     let desc = extract_options_descriptor(&sem, &entry(&sem)).unwrap();
     assert_eq!(desc.fields.len(), 1);
@@ -134,7 +134,7 @@ pub struct Options {
 
 pub fn generate() {}
 "#;
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
     let desc = extract_options_descriptor(&sem, &entry(&sem)).unwrap();
     match &desc.fields[0].ty {
@@ -154,7 +154,7 @@ pub struct Options {
 
 pub fn generate() {}
 "#;
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
     let err = extract_options_descriptor(&sem, &entry(&sem)).unwrap_err();
     assert!(err.iter().any(|d| {
@@ -171,7 +171,7 @@ fn descriptor_missing_options_struct_is_empty() {
     let source = r"
 pub fn generate() {}
 ";
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
     let descriptor =
         extract_options_descriptor(&sem, &entry(&sem)).expect("missing Options is allowed");
@@ -185,7 +185,7 @@ pub struct Options {
     pub foo: bool = false,
 }
 ";
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
     let err = extract_options_descriptor(&sem, &entry(&sem)).unwrap_err();
     assert!(

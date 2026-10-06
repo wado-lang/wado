@@ -7,7 +7,7 @@
 //! 64 bits, so the pipeline absorbed the difference and no output moved — the
 //! shape is what the test has to read.
 
-use crate::common::{InMemoryHost, block_on};
+use crate::common::{block_on, in_memory_host};
 use wado_compiler::{OptLevel, dump_with_host_and_world, unparse::unparse_tir};
 
 const SOURCE: &str = r#"
@@ -21,7 +21,7 @@ export fn run() {
 
 #[test]
 fn byte_literal_at_int128_reifies_to_the_constructor_call() {
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let dump = block_on(dump_with_host_and_world(
         SOURCE,
         &host,

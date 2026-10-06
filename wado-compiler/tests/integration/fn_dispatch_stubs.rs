@@ -4,7 +4,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::common::{InMemoryHost, block_on};
+use crate::common::{block_on, in_memory_host};
 use wado_compiler::{OptLevel, dump_with_host_and_world};
 
 /// `map` takes `f: fn(Self::Item) -> U`, so elaborating this call instantiates
@@ -26,7 +26,7 @@ export fn run() {
 "#;
 
 fn monomorphized_tir(source: &str) -> String {
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let dump = block_on(dump_with_host_and_world(
         source,
         &host,

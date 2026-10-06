@@ -296,7 +296,7 @@ fn add_dom_to_linker(
 
 /// Compile `program`, run it against the stub, and hand back the host's table.
 fn run_against_stub(program: &str) -> DomObjects {
-    common::install_rustls_provider_for_tests();
+    common::install_default_crypto_provider();
     let wasm = compile_against_web(program)
         .result
         .unwrap_or_else(|e| panic!("the wado-lang:web program should compile, got {e}"))

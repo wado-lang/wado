@@ -1,6 +1,6 @@
 //! Tests for the LSP-friendly `semantics` entry point.
 
-use crate::common::{InMemoryHost, block_on};
+use crate::common::{block_on, in_memory_host};
 use std::assert_matches;
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::semantics::{Semantics, semantics};
@@ -13,7 +13,7 @@ type Meters = f64;
 type Pair = [i32, i32];
 type Maybe = Option<i32>;
 ";
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
 
     let entry = sem.interner.borrow_mut().entry_point("entry.wado");
@@ -43,7 +43,7 @@ export fn run() {
     let _p = Point { x: 1, y: 2 };
 }
 ";
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
 
     let entry = sem.interner.borrow_mut().entry_point("entry.wado");
@@ -78,7 +78,7 @@ export fn run() {
 #[test]
 fn semantics_exposes_world_and_cm_interface_registries() {
     let source = "export fn run() {}\n";
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
 
     assert!(
@@ -130,7 +130,7 @@ fn semantics_exposes_world_and_cm_interface_registries() {
 #[test]
 fn semantics_resolves_position_to_ast_id() {
     let source = "export fn run() {}\n";
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
 
     let entry = sem.interner.borrow_mut().entry_point("entry.wado");
@@ -163,7 +163,7 @@ export fn run() with Stdout {
     println("hello");
 }
 "#;
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
 
     let entry = sem.interner.borrow_mut().entry_point("entry.wado");
@@ -203,7 +203,7 @@ export fn run() {
     let _y = x;
 }
 ";
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
 
     let entry = sem.interner.borrow_mut().entry_point("entry.wado");
@@ -242,7 +242,7 @@ export fn run() with Stdout {
     println(msg);
 }
 "#;
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
 
     // Resolve the same use→def edge under both a cold and a (potentially
     // cached) compile and require they agree exactly.  We compare both
@@ -292,7 +292,7 @@ export fn run() {
     let _n = xs.len();
 }
 ";
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
 
     let entry = sem.interner.borrow_mut().entry_point("entry.wado");
@@ -376,7 +376,7 @@ export fn run() {
     }
 }
 ";
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
 
     let entry = sem.interner.borrow_mut().entry_point("entry.wado");
@@ -421,7 +421,7 @@ export fn run() {
     let _y: Option<i32> = null;
 }
 ";
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
 
     let entry = sem.interner.borrow_mut().entry_point("entry.wado");
@@ -465,7 +465,7 @@ export fn run() {
     let _y = x;
 }
 ";
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
 
     let entry = sem.interner.borrow_mut().entry_point("entry.wado");
@@ -511,7 +511,7 @@ export fn run() {
     let _xs = [10, 20, 30] as List<i32>;
 }
 ";
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
 
     let entry = sem.interner.borrow_mut().entry_point("entry.wado");
@@ -544,7 +544,7 @@ export fn run() {
     let _v = two::<i64>(1, 2);
 }
 ";
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
 
     let entry = sem.interner.borrow_mut().entry_point("entry.wado");
@@ -582,7 +582,7 @@ export fn run() {
     let _ = xs.no_such_method();
 }
 ";
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
 
     let entry = sem.interner.borrow_mut().entry_point("entry.wado");
@@ -614,7 +614,7 @@ export fn run() {
     }
 }
 ";
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
 
     let entry = sem.interner.borrow_mut().entry_point("entry.wado");

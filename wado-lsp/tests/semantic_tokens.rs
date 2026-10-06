@@ -10,7 +10,7 @@
 
 use wado_lsp::Engine;
 use wado_lsp::semantic_tokens::{token_modifier, token_type};
-use wado_lsp::test_support::MapHost;
+use wado_lsp::test_support::in_memory_host;
 
 /// One decoded semantic token at an absolute position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,7 +51,7 @@ fn decode(data: &[u32]) -> Vec<Decoded> {
 fn tokens_for(source: &str) -> Vec<Decoded> {
     let path = "/test.wado";
     let uri = format!("file://{path}");
-    let host = MapHost::single(path, source);
+    let host = in_memory_host(&[(path, source)]);
     let mut engine = Engine::new();
     engine.open_document(&uri, source.to_string());
     let data = futures::executor::block_on(engine.semantic_tokens(&uri, &host));

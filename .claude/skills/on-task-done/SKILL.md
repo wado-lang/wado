@@ -47,16 +47,16 @@ mise run check-highlight
 Some commands are flaky and may segfault:
 
 - `mise run update-golden-fixtures` — the `golden-dump` batch tool sometimes segfaults mid-run (pre-existing issue). If it fails, run the individual golden generation manually for any new fixtures, then proceed.
-- `mise run test` (i.e., `cargo test -p wado-compiler --test e2e`) — the e2e test runner sometimes crashes with SIGSEGV when running all tests in parallel (pre-existing issue unrelated to compiler correctness).
+- `mise run test` (i.e., `cargo test -p wado-compiler-tests --test e2e`) — the e2e test runner sometimes crashes with SIGSEGV when running all tests in parallel (pre-existing issue unrelated to compiler correctness).
 
 If `cargo test` segfaults, reduce parallelism:
 
 ```sh
-cargo test -p wado-compiler --test e2e -- --test-threads=4
+cargo test -p wado-compiler-tests --test e2e -- --test-threads=4
 ```
 
 Or run individual fixture tests directly:
 
 ```sh
-cargo test -p wado-compiler --test e2e -- <fixture_name>
+cargo test -p wado-compiler-tests --test e2e -- <fixture_name>
 ```

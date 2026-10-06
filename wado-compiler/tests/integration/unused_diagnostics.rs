@@ -6,7 +6,7 @@
 //! a reachable one (and the export root itself) is not. The `--no-unused`
 //! toggle (`CompilerOptions::unused_diagnostics`) silences the lints.
 
-use crate::common::{InMemoryHost, runtime};
+use crate::common::{in_memory_host, runtime};
 use wado_compiler::{Code, CompilerOptions, OptLevel};
 
 /// Compile `source` and return the unused-diagnostic `(code, message)` pairs.
@@ -15,7 +15,7 @@ fn unused_for(source: &str) -> Vec<(Code, String)> {
 }
 
 fn unused_for_with(source: &str, unused_diagnostics: bool) -> Vec<(Code, String)> {
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let options = CompilerOptions {
         opt_level: OptLevel::O0,
         unused_diagnostics,

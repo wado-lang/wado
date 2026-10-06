@@ -3284,7 +3284,6 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
- "iana-time-zone",
  "indexmap",
  "jsonschema",
  "lexopt",
@@ -3303,6 +3302,7 @@ dependencies = [
  "tokio-rustls",
  "toml",
  "wado-compiler",
+ "wado-host",
  "wado-lsp",
  "wado-manifest",
  "wasm-encoder",
@@ -3312,7 +3312,6 @@ dependencies = [
  "wasmtime-wasi",
  "wasmtime-wasi-http",
  "wasmtime-wasi-tls",
- "webpki-roots",
  "wit-component",
  "wit-parser",
 ]
@@ -3322,28 +3321,49 @@ name = "wado-compiler"
 version = "0.0.34"
 dependencies = [
  "anyhow",
- "bytes",
  "cranelift-entity",
- "datatest-mini",
  "fluent-uri",
  "futures",
  "heck",
+ "indexmap",
+ "rustc-hash",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tokio",
+ "wado-wasm-embed",
+ "wasm-compose",
+ "wasm-encoder",
+ "wasmparser",
+ "wat",
+ "wit-component",
+ "wit-encoder",
+ "wit-parser",
+]
+
+[[package]]
+name = "wado-compiler-tests"
+version = "0.0.34"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "cranelift-entity",
+ "datatest-mini",
+ "futures",
  "http",
  "http-body-util",
- "iana-time-zone",
  "indexmap",
- "libc",
- "rustc-hash",
- "rustls",
- "semver",
  "serde",
  "serde_json",
  "sha2 0.11.0",
  "tempfile",
  "tokio",
+ "wado-compiler",
+ "wado-host",
+ "wado-lsp",
  "wado-wasm-embed",
  "wasm-compose",
- "wasm-encoder",
  "wasmparser",
  "wasmprinter",
  "wasmtime",
@@ -3352,7 +3372,6 @@ dependencies = [
  "wasmtime-wasi-tls",
  "wat",
  "wit-component",
- "wit-encoder",
  "wit-parser",
  "zlib-rs",
 ]
@@ -3367,6 +3386,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "wado-compiler",
+ "wado-host",
  "wado-lsp",
  "wado-wasm-embed",
  "wasm-encoder",
@@ -3386,6 +3406,24 @@ dependencies = [
  "serde_json",
  "wado-compiler",
  "wit-parser",
+]
+
+[[package]]
+name = "wado-host"
+version = "0.0.34"
+dependencies = [
+ "anyhow",
+ "iana-time-zone",
+ "indexmap",
+ "libc",
+ "rustls",
+ "rustls-pemfile",
+ "serde",
+ "wado-compiler",
+ "wado-lsp",
+ "wasmtime",
+ "wasmtime-wasi",
+ "webpki-roots",
 ]
 
 [[package]]

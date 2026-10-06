@@ -4,7 +4,7 @@
 //! info-level `remark:` diagnostic with a source span; a copy the optimizer
 //! removes (scalarizes / elides) is not.
 
-use crate::common::{InMemoryHost, MapHost, runtime};
+use crate::common::{in_memory_host, runtime};
 use wado_compiler::{CompilerOptions, OptLevel, Severity};
 
 /// Compile `source` under `options` and return the `remark:` diagnostics as
@@ -13,7 +13,7 @@ use wado_compiler::{CompilerOptions, OptLevel, Severity};
 /// The compile is asserted: a source that fails to compile emits no remark
 /// either, which would pass an "is empty" expectation for the wrong reason.
 fn remarks_under(source: &str, options: CompilerOptions) -> Vec<String> {
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let compiled = runtime().block_on(wado_compiler::compile_with_options(
         source,
         &host,
@@ -319,7 +319,7 @@ export fn run() with Stdout {
 /// Compile `entry` at `-O2` alongside `files`, and return the `remark:`
 /// diagnostics as `"file:line:col message"` strings.
 fn remarks_across_modules(entry: &str, files: &[(&str, &str)]) -> Vec<String> {
-    let host = MapHost::new(files);
+    let host = in_memory_host(files);
     let options = CompilerOptions {
         opt_level: OptLevel::O2,
         ..CompilerOptions::default()

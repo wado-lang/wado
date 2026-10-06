@@ -2,7 +2,7 @@
 //! (Design B). It runs on the LSP analysis result (no TIR), so an effect in a
 //! default expression or a global initializer surfaces even without reify.
 
-use crate::common::{InMemoryHost, block_on};
+use crate::common::{block_on, in_memory_host};
 use wado_compiler::semantics::semantics;
 use wado_compiler::{INDIRECT_CALLEE, Impurity, PureContext, check_purity_semantic};
 
@@ -29,7 +29,7 @@ fn in_global(source: &str) -> Vec<Impurity> {
 
 /// Every purity violation for `source`, with the position it was found in.
 fn reported(source: &str) -> Vec<(PureContext, Impurity)> {
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
     check_purity_semantic(&sem)
         .into_iter()

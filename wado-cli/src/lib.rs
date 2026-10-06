@@ -49,8 +49,6 @@ pub mod sync;
 pub mod syntax;
 pub mod test;
 mod test_report;
-pub mod timezone_host;
-pub mod tls_trust;
 pub mod update;
 pub mod wit;
 

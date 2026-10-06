@@ -54,22 +54,16 @@ fn "param_folds_through_let.wado/$cm_binding__Stdout_write_via_stream"(data) wit
 }
 
 fn "param_folds_through_let.wado/$cm_export__run"() {
-    let packed_6: i64;
-    let rx_7: i32;
-    let tx_8: i32;
-    rx_7 = builtin::i32_wrap_i64(local.tee packed_6("wasi/stream-new"()));
-    tx_8 = builtin::i32_wrap_i64(packed_6 >> 32_i64);
-    rx_7 = "param_folds_through_let.wado/$cm_binding__Stdout_write_via_stream"(rx_7);
+    let packed_18: i64;
+    let rx_19: i32;
+    let tx_20: i32;
+    rx_19 = builtin::i32_wrap_i64(local.tee packed_18("wasi/stream-new"()));
+    tx_20 = builtin::i32_wrap_i64(packed_18 >> 32_i64);
+    rx_19 = "param_folds_through_let.wado/$cm_binding__Stdout_write_via_stream"(rx_19);
     let $mv_field_2: ref Array<u8>;
-    $mv_field_2 = array.new_data<u8>("this text only exists inside the folded branch");
-    "core:rt/write_string_to_stream"(tx_8, $mv_field_2, 46);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_7);
-    rx_7 = builtin::i32_wrap_i64(local.tee packed_6("wasi/stream-new"()));
-    tx_8 = builtin::i32_wrap_i64(packed_6 >> 32_i64);
-    rx_7 = "param_folds_through_let.wado/$cm_binding__Stdout_write_via_stream"(rx_7);
     $mv_field_2 = array.new_fixed<u8>(100, 111, 110, 101);
-    "core:rt/write_string_to_stream"(tx_8, $mv_field_2, 4);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_7);
+    "core:rt/write_string_to_stream"(tx_20, $mv_field_2, 4);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_19);
     "wasi/task-return"(0);
 }
 

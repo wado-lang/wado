@@ -10,15 +10,16 @@
 //! [WEP: Compiler Fuzzing](../../docs/wep-2026-08-19-compiler-fuzzing.md).
 //!
 //! ```sh
-//! cargo test --test emi -- --ignored --nocapture
+//! cargo test -p wado-compiler-tests --test emi -- --ignored --nocapture
 //! ```
 //!
 //! Knobs: `WADO_EMI_JOBS`, `WADO_EMI_FILTER`, `WADO_EMI_ROOTS`,
 //! `WADO_EMI_LEVELS`, `WADO_EMI_SHARD` (`k/n`), `WADO_EMI_LIMIT`,
 //! `WADO_EMI_OUT`.
 
-mod common;
+use wado_compiler_tests as common;
 
+use common::repository_root;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -154,7 +155,7 @@ impl Root {
     }
 
     fn dir(self) -> PathBuf {
-        repo_root().join(self.rel_dir())
+        repository_root().join(self.rel_dir())
     }
 
     /// The stdlib is a tree; the other two are flat.
@@ -224,7 +225,7 @@ impl Source {
     /// file name would not do — `json_test.wado` names two programs.
     fn name(&self) -> String {
         self.path
-            .strip_prefix(repo_root())
+            .strip_prefix(repository_root())
             .expect("a corpus path is under the repository root")
             .to_string_lossy()
             .to_string()
@@ -236,7 +237,7 @@ impl Source {
             .into_iter()
             .find(|root| name.starts_with(root.rel_dir()))
             .unwrap_or_else(|| panic!("`{name}` is under no corpus root"));
-        Self::new(root, repo_root().join(name))
+        Self::new(root, repository_root().join(name))
     }
 
     /// The shapes named in a `corpus.txt` column, `if,while`.
@@ -285,7 +286,7 @@ struct Spec {
 impl Spec {
     /// A source with no `__DATA__` section runs the way its root says.
     fn parse(root: Root, source: &str) -> Result<Self, Excluded> {
-        let Some(data) = common::extract_data_section(source) else {
+        let Some(data) = wado_host::fixture::data_section(source) else {
             return Ok(root.default_spec());
         };
         let value: serde_json::Value =
@@ -1493,10 +1494,6 @@ fn take_shard<T>(items: Vec<T>, spec: &str) -> Vec<T> {
         .collect()
 }
 
-fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
-}
-
 /// Every `.wado` file under `dir`, the tree below it included when `recursive`.
 fn wado_files(dir: &Path, recursive: bool) -> Vec<PathBuf> {
     let entries =
@@ -1687,7 +1684,7 @@ fn campaign(
 /// Calibrate the corpus: keep the sources an empty guard leaves alone.
 ///
 /// `#[ignore]`d because it compiles and runs the whole corpus several times
-/// over; run it on demand with `cargo test --test emi -- --ignored --nocapture`.
+/// over; run it on demand with `mise run emi-calibrate`.
 #[test]
 #[ignore = "EMI campaign — minutes to hours over the full corpus"]
 fn calibrate_corpus() {
@@ -1726,10 +1723,7 @@ fn mutate_corpus() {
 }
 
 fn out_dir() -> PathBuf {
-    selection("WADO_EMI_OUT").map_or_else(
-        || Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/emi"),
-        PathBuf::from,
-    )
+    selection("WADO_EMI_OUT").map_or_else(|| repository_root().join("target/emi"), PathBuf::from)
 }
 
 fn write_corpus(results: &Results) {
@@ -1891,7 +1885,7 @@ fn describe_sites(source: &str, sites: &[Site]) -> String {
 /// source instead of inferred from a line and column.
 ///
 /// ```sh
-/// WADO_EMI_FILTER=if_expression cargo test --test emi -- --ignored --nocapture dump_mutants
+/// WADO_EMI_FILTER=if_expression cargo test -p wado-compiler-tests --test emi -- --ignored --nocapture dump_mutants
 /// ```
 #[test]
 #[ignore = "inspection aid — writes files, asserts nothing"]
