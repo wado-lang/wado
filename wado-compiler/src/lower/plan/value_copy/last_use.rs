@@ -484,6 +484,18 @@ impl Analyzer<'_> {
         paths: &IndexMap<u32, Vec<AccessPath>>,
         place_move_bases: &IndexSet<u32>,
     ) -> IndexSet<u32> {
+        // A call's result that keeps an argument (`s.into_iter()`, `s[0..<2]`)
+        // reads that argument's storage for as long as the result is live.
+        let mut paths = paths.clone();
+        for (root, _, holders) in &self.pending_bounded {
+            for &holder in holders {
+                paths
+                    .entry(holder)
+                    .or_default()
+                    .push(AccessPath::local(*root));
+            }
+        }
+        let paths = &paths;
         let inputs = ShareInputs {
             at_write: self
                 .mutations
@@ -532,6 +544,9 @@ impl Analyzer<'_> {
             // scan above never sees, as is a root a `&mut` outlives.
             && !path.through_borrow
             && !self.written_through_escape.contains(&path.root)
+            // A reference to the binding kept out of this body's sight reads its
+            // storage after any write the scan above weighs.
+            && !self.borrow_escaped.contains_key(&local)
             // A share skips a copy's right-sizing: a binding whose capacity is read keeps its copy.
             && !inputs.capacity_observed.contains(&local)
             && !moved_out

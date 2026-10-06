@@ -117,9 +117,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_a
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice_unchecked" = fn(ref "core:prelude/string.wado//StrSlice", i32, i32) -> [ref Array<u8>, i32, i32];  // TypeId(41)
 
-type "functype//core:json/core:json/JsonStructSerializer^core:serde/SerializeStruct::field<i32,&core:prelude/string.wado/String>$scalar" = fn(ref "core:json//JsonStructSerializer", ref "core:prelude/string.wado//String", i32) -> ref null "core:serde//SerializeError";  // TypeId(42)
+type "functype//core:serde/reflect_wire_name_policy_local.wado/Local@5^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar" = fn(i32, ref "core:json//JsonSerializer") -> ref null "core:serde//SerializeError";  // TypeId(42)
 
-type "functype//core:serde/reflect_wire_name_policy_local.wado/Local@5^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar" = fn(i32, ref "core:json//JsonSerializer") -> ref null "core:serde//SerializeError";  // TypeId(43)
+type "functype//core:json/core:json/JsonStructSerializer^core:serde/SerializeStruct::field<i32,&core:prelude/string.wado/String>$scalar" = fn(ref "core:json//JsonStructSerializer", ref "core:prelude/string.wado//String", i32) -> ref null "core:serde//SerializeError";  // TypeId(43)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_sign$spec0" = fn(ref "core:prelude/format.wado//Formatter", bool);  // TypeId(44)
 
@@ -201,9 +201,9 @@ global global:core:prelude/string.wado::$const_obj_131: ref Array<u8> = array.ne
 global mut global:reflect_wire_name_policy_local.wado::$const_obj_133: ref null Array<u8> = ref.null none;
 global global:reflect_wire_name_policy_local.wado::$const_obj_135: ref Array<u8> = array.new_fixed<u8>(114, 101, 102, 108, 101, 99, 116, 95, 119, 105, 114, 101, 95, 110, 97, 109, 101, 95, 112, 111, 108, 105, 99, 121, 95, 108, 111, 99, 97, 108, 46, 119, 97, 100, 111);
 global global:reflect_wire_name_policy_local.wado::$const_obj_137: ref Array<u8> = array.new_fixed<u8>(36, 116, 101, 115, 116, 95, 48, 95, 97, 95, 108, 111, 99, 97, 108, 95, 115, 116, 114, 117, 99, 116, 95, 115, 95, 110, 97, 109, 101, 95, 112, 111, 108, 105, 99, 121, 95, 114, 101, 97, 99, 104, 101, 115, 95, 116, 104, 101, 95, 119, 105, 114, 101);
-global global:core:serde::$const_obj_160: ref Array<u8> = array.new_fixed<u8>(125);
-global global:core:serde::$const_obj_161: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(117, 115, 101, 114, 95, 105, 100), used: 7 };
-global global:core:serde::$const_obj_162: ref Array<u8> = array.new_fixed<u8>(123);
+global global:core:serde::$const_obj_158: ref Array<u8> = array.new_fixed<u8>(125);
+global global:core:serde::$const_obj_159: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(117, 115, 101, 114, 95, 105, 100), used: 7 };
+global global:core:serde::$const_obj_160: ref Array<u8> = array.new_fixed<u8>(123);
 
 fn "reflect_wire_name_policy_local.wado/$test_0_a_local_struct_s_name_policy_reaches_the_wire"() {
     let t: ref "core:prelude/string.wado//String";
@@ -1349,6 +1349,41 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice_unchecked"
     return self.repr, $v7_seen + start, $v7_seen + end;
 }
 
+fn "core:serde/reflect_wire_name_policy_local.wado/Local@5^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar"(self, s) {
+    let st: ref "core:json//JsonStructSerializer";
+    let $qm_e_10: ref "core:serde//SerializeError";
+    let $match_13: ref null "core:serde//SerializeError";
+    let self_18: ref "core:prelude/string.wado//String";
+    let new_used_28: i32;
+    let start_29: i32;
+    if @unlikely(local.tee new_used_28(local.tee self_18(s.buf).used + 1) > builtin::array_len(self_18.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_18, new_used_28);
+    }
+    start_29 = self_18.used;
+    self_18.used = new_used_28;
+    builtin::array_copy<u8>(self_18.repr, start_29, global:core:serde::$const_obj_160, 0, 1);
+    st = struct.new "core:json//JsonStructSerializer" { buf: s.buf, count: 0 };
+    start_29 = local.tee self_18(block -> ref "core:prelude/string.wado//String" {
+        "core:serde/core/serde/apply_case<core:prelude/string.wado/String>"(local.tee self_18(global:core:serde::$const_obj_159).repr, self_18.used);
+    }).used;
+    self_18 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_2: ref Array<u8>; $array_clone_src_2 = self_18.repr; let $array_clone_dst_3: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>(start_29)), 0, $array_clone_src_2, 0, start_29); $array_clone_dst_3, used: start_29 };
+    if @likely(ref.is_null(local.tee $match_13("core:json/core:json/JsonStructSerializer^core:serde/SerializeStruct::field<i32,&core:prelude/string.wado/String>$scalar"(st, self_18, self)))) {
+    } else {
+        $qm_e_10 = ref.as_non_null($match_13);
+        cold_path;
+        return $qm_e_10;
+    }
+    if @unlikely(local.tee self(local.tee self_18(st.buf).used + 1) > builtin::array_len(self_18.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_18, self);
+    }
+    start_29 = self_18.used;
+    self_18.used = self;
+    builtin::array_copy<u8>(self_18.repr, start_29, global:core:serde::$const_obj_158, 0, 1);
+    return ref.null none;
+}
+
 fn "core:json/core:json/JsonStructSerializer^core:serde/SerializeStruct::field<i32,&core:prelude/string.wado/String>$scalar"(self, name, value) {
     let $load_0: i32;
     let i: i32;
@@ -1360,9 +1395,9 @@ fn "core:json/core:json/JsonStructSerializer^core:serde/SerializeStruct::field<i
         $load_0 = name.used;
         i = 0;
         $licm_repr_44 = name.repr;
-        b148: block {
-            l149: loop {
-                break_if b148 i >= $load_0;
+        b152: block {
+            l153: loop {
+                break_if b152 i >= $load_0;
                 $inline_core_json_json_escape_free__core_prelude_string_wado_String__0__$for_0_body: block {
                     if @unlikely(((0 <= i) & (i < $load_0)) == 0) {
                         cold_path;
@@ -1373,7 +1408,7 @@ fn "core:json/core:json/JsonStructSerializer^core:serde/SerializeStruct::field<i
                     break $inline_core_json_json_escape_free__core_prelude_string_wado_String__0: 0;
                 };
                 i = i + 1;
-                continue l149;
+                continue l153;
             };
         };
         break $inline_core_json_json_escape_free__core_prelude_string_wado_String__0: 1;
@@ -1391,41 +1426,6 @@ fn "core:json/core:json/JsonStructSerializer^core:serde/SerializeStruct::field<i
     f = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf_7 };
     "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar$spec0"(value, f);
     self.count = self.count + 1;
-    return ref.null none;
-}
-
-fn "core:serde/reflect_wire_name_policy_local.wado/Local@5^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar"(self, s) {
-    let st: ref "core:json//JsonStructSerializer";
-    let $qm_e_10: ref "core:serde//SerializeError";
-    let $match_13: ref null "core:serde//SerializeError";
-    let self_18: ref "core:prelude/string.wado//String";
-    let new_used_28: i32;
-    let start_29: i32;
-    if @unlikely(local.tee new_used_28(local.tee self_18(s.buf).used + 1) > builtin::array_len(self_18.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_18, new_used_28);
-    }
-    start_29 = self_18.used;
-    self_18.used = new_used_28;
-    builtin::array_copy<u8>(self_18.repr, start_29, global:core:serde::$const_obj_162, 0, 1);
-    st = struct.new "core:json//JsonStructSerializer" { buf: s.buf, count: 0 };
-    start_29 = local.tee self_18(block -> ref "core:prelude/string.wado//String" {
-        "core:serde/core/serde/apply_case<core:prelude/string.wado/String>"(local.tee self_18(global:core:serde::$const_obj_161).repr, self_18.used);
-    }).used;
-    self_18 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_2: ref Array<u8>; $array_clone_src_2 = self_18.repr; let $array_clone_dst_3: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>(start_29)), 0, $array_clone_src_2, 0, start_29); $array_clone_dst_3, used: start_29 };
-    if @likely(ref.is_null(local.tee $match_13("core:json/core:json/JsonStructSerializer^core:serde/SerializeStruct::field<i32,&core:prelude/string.wado/String>$scalar"(st, self_18, self)))) {
-    } else {
-        $qm_e_10 = ref.as_non_null($match_13);
-        cold_path;
-        return $qm_e_10;
-    }
-    if @unlikely(local.tee self(local.tee self_18(st.buf).used + 1) > builtin::array_len(self_18.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_18, self);
-    }
-    start_29 = self_18.used;
-    self_18.used = self;
-    builtin::array_copy<u8>(self_18.repr, start_29, global:core:serde::$const_obj_160, 0, 1);
     return ref.null none;
 }
 

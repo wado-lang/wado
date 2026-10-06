@@ -783,35 +783,6 @@ fn option_none(wir_type: &WirType, type_table: &TypeTable) -> WirInstr {
     }
 }
 
-/// The value a slot starts at when its initializer is assigned by the module
-/// initialization function instead of being reduced here. It has to inhabit the
-/// slot's own Wasm type: `ref.null` is a value only for a reference slot.
-fn init_placeholder(wir_type: &WirType) -> WirInstr {
-    use crate::wir::WirInstr;
-
-    match wir_type {
-        WirType::Ref { .. } | WirType::AbstractRef { .. } => WirInstr::RefNull {
-            heap_type: WirAbstractHeapType::None,
-        },
-        WirType::I64 | WirType::U64 => WirInstr::I64Const(0),
-        WirType::F32 => WirInstr::F32Const(0.0),
-        WirType::F64 => WirInstr::F64Const(0.0),
-        WirType::I8
-        | WirType::I16
-        | WirType::I32
-        | WirType::U8
-        | WirType::U16
-        | WirType::U32
-        | WirType::Bool
-        | WirType::Char
-        | WirType::Enum { .. }
-        | WirType::Flags { .. } => WirInstr::I32Const(0),
-        WirType::V128 => WirInstr::V128Const(0),
-        // `register_globals` gives a unit global no slot, so it never gets here.
-        WirType::Unit => panic!("[WIR] unit-typed global has no Wasm slot to initialize"),
-    }
-}
-
 /// Convert a NIR global initializer operand to a WIR constant instruction.
 /// `type_id` is the global's declared type, which decides the constant's
 /// width; `wir_type` is the slot it has to inhabit.
@@ -826,9 +797,10 @@ fn translate_global_init(
     use crate::wir::WirInstr;
 
     // What the evaluator cannot reduce is assigned by the initialization
-    // function instead, so the slot starts at a placeholder.
+    // function instead, so the slot starts at its type's default. A unit global
+    // never gets here: `register_globals` gives it no slot.
     let Some(value) = global_init_value(body, op, type_table) else {
-        return init_placeholder(wir_type);
+        return wir_type.default_value();
     };
     let bits = match value {
         Value::Int { value, .. } => value,

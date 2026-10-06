@@ -345,6 +345,7 @@ pub(super) fn run_peephole(instrs: &mut [WirInstr], null: &Nullability, _types: 
         changed |= rewrite_everywhere(instrs, &mut try_fold_rotate);
         changed |= rewrite_everywhere(instrs, &mut try_fold_vector_const);
         changed |= rewrite_everywhere(instrs, &mut try_fold_sign_extension);
+        changed |= rewrite_everywhere(instrs, &mut |instr| try_fold_short_fill(instr, null));
         changed |= rewrite_everywhere(instrs, &mut |instr| try_simplify_ref_op(instr, null));
         changed |= rewrite_everywhere(instrs, &mut |instr| {
             try_relax_gc_operands(instr, null.locals())
@@ -394,6 +395,47 @@ fn rewrite_everywhere(
         driver.visit_instr(instr);
     }
     driver.changed
+}
+
+/// A fill of a constant length short enough to need no loop. wasmtime compiles
+/// `array.fill` to a bulk operation and a loop around the store whatever the
+/// length.
+///
+/// - `array.fill(a, 0, v, 0)` on a non-null `a` cannot trap, so it is dropped
+///   with its operands where they are side-effect free.
+/// - `array.fill(a, i, v, 1)` → `array.set(a, i, v)`. Both trap exactly when
+///   `a` is null or `i >= len(a)`, and evaluate their operands in the same
+///   order.
+fn try_fold_short_fill(instr: &mut WirInstr, null: &Nullability) -> bool {
+    let WirInstr::ArrayFill {
+        type_id,
+        array,
+        offset,
+        value,
+        len,
+    } = instr
+    else {
+        return false;
+    };
+    if matches!(len.as_ref(), WirInstr::I32Const(0))
+        && matches!(offset.as_ref(), WirInstr::I32Const(0))
+        && null.is_nonnull(array)
+        && is_side_effect_free(array)
+        && is_side_effect_free(value)
+    {
+        *instr = WirInstr::Nop;
+        return true;
+    }
+    if !matches!(len.as_ref(), WirInstr::I32Const(1)) {
+        return false;
+    }
+    *instr = WirInstr::ArraySet {
+        type_id: type_id.clone(),
+        array: std::mem::replace(array, Box::new(WirInstr::Nop)),
+        index: std::mem::replace(offset, Box::new(WirInstr::Nop)),
+        value: std::mem::replace(value, Box::new(WirInstr::Nop)),
+    };
+    true
 }
 
 /// Try to evaluate a WIR condition to a boolean constant. Looks through a
@@ -1540,6 +1582,53 @@ mod tests {
         WirType::Ref {
             type_id: tid(index),
             nullable,
+        }
+    }
+
+    fn fill(nullable: bool, offset: WirInstr, len: WirInstr) -> WirInstr {
+        WirInstr::ArrayFill {
+            type_id: tid(1),
+            array: Box::new(local_get("a", ref_ty(1, nullable))),
+            offset: Box::new(offset),
+            value: Box::new(WirInstr::RefNull {
+                heap_type: WirAbstractHeapType::None,
+            }),
+            len: Box::new(len),
+        }
+    }
+
+    fn fold_short_fill(instr: &mut WirInstr) -> bool {
+        try_fold_short_fill(instr, &Nullability::new(&WirLocals::default()))
+    }
+
+    #[test]
+    fn one_element_fill_becomes_a_set() {
+        let mut instr = fill(true, local_get("i", WirType::I32), WirInstr::I32Const(1));
+        assert!(fold_short_fill(&mut instr));
+        let WirInstr::ArraySet { index, value, .. } = &instr else {
+            panic!("expected ArraySet, got {instr:?}");
+        };
+        assert_matches!(index.as_ref(), WirInstr::LocalGet { name, .. } if name == "i");
+        assert_matches!(value.as_ref(), WirInstr::RefNull { .. });
+    }
+
+    #[test]
+    fn empty_fill_of_a_non_null_array_at_zero_is_dropped() {
+        let mut instr = fill(false, WirInstr::I32Const(0), WirInstr::I32Const(0));
+        assert!(fold_short_fill(&mut instr));
+        assert_matches!(instr, WirInstr::Nop);
+    }
+
+    #[test]
+    fn a_fill_that_may_trap_or_loop_stays() {
+        for mut instr in [
+            fill(true, WirInstr::I32Const(0), WirInstr::I32Const(0)),
+            fill(false, WirInstr::I32Const(3), WirInstr::I32Const(0)),
+            fill(false, WirInstr::I32Const(0), WirInstr::I32Const(2)),
+            fill(false, WirInstr::I32Const(0), local_get("n", WirType::I32)),
+        ] {
+            assert!(!fold_short_fill(&mut instr));
+            assert_matches!(instr, WirInstr::ArrayFill { .. });
         }
     }
 

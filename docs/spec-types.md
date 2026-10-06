@@ -535,6 +535,13 @@ consequences follow, both memory-safe:
 - Aliasing. A write to the source that does not reallocate is visible through
   the view.
 
+A source `List` that shrinks (`truncate`, `clear`, `pop`, `remove`) may release
+the slots past its new length, so the collector can reclaim what they held.
+Reading a released slot through a view, or through an iterator over the list,
+is a [contract violation](./spec-overview.md#behavior-classes). The result is
+unspecified: some value of the element type, or a trap. That value need not be
+the one the slot held; an `Option` element may read as `None`.
+
 A slice compares, orders, displays, and inspects by its elements, not by the
 buffer it refers to.
 

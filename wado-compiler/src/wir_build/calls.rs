@@ -712,6 +712,7 @@ impl FunctionTranslator<'_, '_> {
                     len: Box::new(len),
                 })
             }
+            "array_release" => Some(self.translate_array_release(args)),
 
             "v128_const" => Some(WirInstr::V128Const(
                 self.operand_const_wide_int(args[0].expr)
@@ -805,6 +806,32 @@ impl FunctionTranslator<'_, '_> {
             }
 
             _ => None,
+        }
+    }
+
+    /// `array_release` nulls a reference element's slots. A reference-free
+    /// element holds nothing the collector traces, so only the operands an
+    /// effect keeps are evaluated.
+    fn translate_array_release(&mut self, args: &[ArenaCallArg]) -> WirInstr {
+        let type_id = self.ref_type_id(self.operand_type_id(args[0].expr));
+        let elem = self.array_element_wir_type(&type_id);
+        if !elem.is_reference() {
+            let effects: Vec<WirInstr> = args
+                .iter()
+                .filter(|a| matches!(a.expr, Operand::Expr(_)))
+                .map(|a| WirInstr::Drop(Box::new(self.translate_operand(a.expr))))
+                .collect();
+            return WirInstr::Seq(effects);
+        }
+        let arr = self.translate_operand(args[0].expr);
+        let offset = self.translate_operand(args[1].expr);
+        let len = self.translate_operand(args[2].expr);
+        WirInstr::ArrayFill {
+            type_id,
+            array: Box::new(arr),
+            offset: Box::new(offset),
+            value: Box::new(elem.default_value()),
+            len: Box::new(len),
         }
     }
 

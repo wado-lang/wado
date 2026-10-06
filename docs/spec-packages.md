@@ -286,13 +286,22 @@ with no operator is an error.
 "acme:ui" = { version = "0.2.0" }     # error: bare version "0.2.0" requires explicit prefix (^, ~, or =)
 ```
 
-Resolution picks, for each dependency, the highest version that meets every
-requirement on it anywhere in the dependency graph. When no version meets them
-all, resolution fails and says which requirements conflict.
+A compatibility range is the set of versions `^` accepts from one version: one
+major version, one minor before `1.0.0`, one patch before `0.1.0`. Resolution
+groups the requirements on a package anywhere in the dependency graph by the
+range they fall in. In each group it picks the highest version that meets every
+requirement, and when none does, resolution fails and says which requirements
+conflict. Two groups resolve to two versions, which are two packages
+([One Package, One Set of Types](#one-package-one-set-of-types)). This is how
+two `lib:` aliases depend on two major versions of one coordinate.
+
+> Not yet implemented: the resolver gives each package one version, so
+> requirements in two compatibility ranges conflict.
 
 A range is allowed only in `wado.toml`, where a lock file resolves it. A
-specifier's `@version` and an inline source take an exact version, and a range
-there is an error.
+specifier's `@version` and an inline source's `version` are a bare version
+(`1.0.0`), which names exactly that version. An operator or a range there is an
+error.
 
 ## Package Specifiers
 

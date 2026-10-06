@@ -585,9 +585,9 @@ global global:core:prelude/slice.wado::$const_obj_264: ref Array<u8> = array.new
 global global:core:prelude/slice.wado::$const_obj_268: ref Array<u8> = array.new_fixed<u8>(99, 111, 114, 101, 58, 112, 114, 101, 108, 117, 100, 101, 47, 115, 108, 105, 99, 101, 46, 119, 97, 100, 111);
 global global:core:prelude/slice.wado::$const_obj_270: ref Array<u8> = array.new_fixed<u8>(83, 108, 105, 99, 101, 58, 58, 103, 101, 116, 95, 117, 110, 99, 104, 101, 99, 107, 101, 100);
 global global:core:json::$const_obj_275: ref Array<u8> = array.new_fixed<u8>(101, 120, 112, 101, 99, 116, 101, 100, 32, 39, 44, 39, 32, 111, 114, 32, 39);
-global global:core:prelude/traits.wado::$const_obj_281: ref Array<u8> = array.new_fixed<u8>(58, 58);
-global global:core:prelude/traits.wado::$const_obj_282: ref Array<u8> = array.new_fixed<u8>(68, 101, 115, 101, 114, 105, 97, 108, 105, 122, 101, 69, 114, 114, 111, 114, 75, 105, 110, 100);
-global mut global:core:prelude/traits.wado::$const_obj_303: ref null "tuple//[core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>]" = ref.null none;
+global global:core:prelude/traits.wado::$const_obj_282: ref Array<u8> = array.new_fixed<u8>(58, 58);
+global global:core:prelude/traits.wado::$const_obj_283: ref Array<u8> = array.new_fixed<u8>(68, 101, 115, 101, 114, 105, 97, 108, 105, 122, 101, 69, 114, 114, 111, 114, 75, 105, 110, 100);
+global mut global:core:prelude/traits.wado::$const_obj_304: ref null "tuple//[core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>]" = ref.null none;
 global global:core:prelude/format.wado::$const_obj_319: ref Array<u8> = array.new_fixed<u8>(38);
 
 fn "spec_serialization_optional_fields.wado/$test_0"() {
@@ -2658,7 +2658,7 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::get_unchecked$col
     start_21 = start_21 + 67;
     builtin::array_copy<u8>($load_2, start_21, global:core:json::$const_obj_151, 0, 1);
     $sroa_$f_buf_161 = $local_8;
-    "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar$spec0$scalar"(103, $sroa_$f_buf_161);
+    "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar$spec0$scalar"(106, $sroa_$f_buf_161);
     if @unlikely(local.tee start_21($local_8.used + 75) > builtin::array_len($local_8.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8, start_21);
@@ -5678,17 +5678,21 @@ fn "core:json/core:json/JsonDeserializer::quoted_number<i32>"(self) {
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push_bytes_unchecked<core:prelude/bytes.wado/ByteSlice>"(self, bytes) {
     let n_3: i32;
     let new_used: i32;
-    let start_10: i32;
-    if local.tee n_3(bytes.end - bytes.start) == 0 {
+    let start_11: i32;
+    let $sroa_slice_repr_15: ref Array<u8>;
+    let $sroa_slice_start_16: i32;
+    $sroa_slice_repr_15 = bytes.repr;
+    $sroa_slice_start_16 = bytes.start;
+    if local.tee n_3(bytes.end - $sroa_slice_start_16) == 0 {
         return;
     }
     if @unlikely(local.tee new_used(self.used + n_3) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used);
     }
-    start_10 = self.used;
+    start_11 = self.used;
     self.used = new_used;
-    builtin::array_copy<u8>(self.repr, start_10, bytes.repr, bytes.start, n_3);
+    builtin::array_copy<u8>(self.repr, start_11, $sroa_slice_repr_15, $sroa_slice_start_16, n_3);
 }
 
 fn "core:serde/core:serde/DeserializeError::malformed<core:prelude/string.wado/String>"($mv$msg$repr, $mv$msg$used, offset) {
@@ -6527,10 +6531,10 @@ fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits
     let new_used_31: i32;
     let start_32: i32;
     let self_51: ref "core:prelude/string.wado//String";
-    if ref.is_null(global:core:prelude/traits.wado::$const_obj_303) {
-        global:core:prelude/traits.wado::$const_obj_303 = "core:serde/core:serde/DeserializeErrorKind^core:prelude/traits.wado/ReflectEnum::members"();
+    if ref.is_null(global:core:prelude/traits.wado::$const_obj_304) {
+        global:core:prelude/traits.wado::$const_obj_304 = "core:serde/core:serde/DeserializeErrorKind^core:prelude/traits.wado/ReflectEnum::members"();
     }
-    case_4 = global:core:prelude/traits.wado::$const_obj_303.0;
+    case_4 = global:core:prelude/traits.wado::$const_obj_304.0;
     if self == 0 {
         if @unlikely(local.tee new_used_31(f.used + 20) > builtin::array_len(f.repr)) {
             cold_path;
@@ -6538,14 +6542,14 @@ fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits
         }
         start_32 = f.used;
         f.used = new_used_31;
-        builtin::array_copy<u8>(local.tee $load_3(f.repr), start_32, global:core:prelude/traits.wado::$const_obj_282, 0, 20);
+        builtin::array_copy<u8>(local.tee $load_3(f.repr), start_32, global:core:prelude/traits.wado::$const_obj_283, 0, 20);
         if @unlikely(local.tee start_32(f.used + 2) > builtin::array_len($load_3)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, start_32);
         }
         new_used_31 = f.used;
         f.used = start_32;
-        builtin::array_copy<u8>(local.tee $load_3(f.repr), new_used_31, global:core:prelude/traits.wado::$const_obj_281, 0, 2);
+        builtin::array_copy<u8>(local.tee $load_3(f.repr), new_used_31, global:core:prelude/traits.wado::$const_obj_282, 0, 2);
         self_51 = case_4.case_name;
         if @unlikely(local.tee new_used_31(f.used + 14) > builtin::array_len($load_3)) {
             cold_path;
@@ -6555,7 +6559,7 @@ fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits
         f.used = new_used_31;
         builtin::array_copy<u8>(f.repr, start_32, self_51.repr, 0, 14);
     }
-    case_4 = global:core:prelude/traits.wado::$const_obj_303.1;
+    case_4 = global:core:prelude/traits.wado::$const_obj_304.1;
     if self == 1 {
         if @unlikely(local.tee start_32(f.used + 20) > builtin::array_len(f.repr)) {
             cold_path;
@@ -6563,14 +6567,14 @@ fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits
         }
         new_used_31 = f.used;
         f.used = start_32;
-        builtin::array_copy<u8>(local.tee $load_3(f.repr), new_used_31, global:core:prelude/traits.wado::$const_obj_282, 0, 20);
+        builtin::array_copy<u8>(local.tee $load_3(f.repr), new_used_31, global:core:prelude/traits.wado::$const_obj_283, 0, 20);
         if @unlikely(local.tee new_used_31(f.used + 2) > builtin::array_len($load_3)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used_31);
         }
         start_32 = f.used;
         f.used = new_used_31;
-        builtin::array_copy<u8>(local.tee $load_3(f.repr), start_32, global:core:prelude/traits.wado::$const_obj_281, 0, 2);
+        builtin::array_copy<u8>(local.tee $load_3(f.repr), start_32, global:core:prelude/traits.wado::$const_obj_282, 0, 2);
         self_51 = case_4.case_name;
         if @unlikely(local.tee start_32(f.used + 12) > builtin::array_len($load_3)) {
             cold_path;
@@ -6580,7 +6584,7 @@ fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits
         f.used = start_32;
         builtin::array_copy<u8>(f.repr, new_used_31, self_51.repr, 0, 12);
     }
-    case_4 = global:core:prelude/traits.wado::$const_obj_303.2;
+    case_4 = global:core:prelude/traits.wado::$const_obj_304.2;
     if self == 2 {
         if @unlikely(local.tee new_used_31(f.used + 20) > builtin::array_len(f.repr)) {
             cold_path;
@@ -6588,14 +6592,14 @@ fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits
         }
         start_32 = f.used;
         f.used = new_used_31;
-        builtin::array_copy<u8>(local.tee $load_3(f.repr), start_32, global:core:prelude/traits.wado::$const_obj_282, 0, 20);
+        builtin::array_copy<u8>(local.tee $load_3(f.repr), start_32, global:core:prelude/traits.wado::$const_obj_283, 0, 20);
         if @unlikely(local.tee start_32(f.used + 2) > builtin::array_len($load_3)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, start_32);
         }
         new_used_31 = f.used;
         f.used = start_32;
-        builtin::array_copy<u8>(local.tee $load_3(f.repr), new_used_31, global:core:prelude/traits.wado::$const_obj_281, 0, 2);
+        builtin::array_copy<u8>(local.tee $load_3(f.repr), new_used_31, global:core:prelude/traits.wado::$const_obj_282, 0, 2);
         self_51 = case_4.case_name;
         if @unlikely(local.tee new_used_31(f.used + 14) > builtin::array_len($load_3)) {
             cold_path;
@@ -6605,7 +6609,7 @@ fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits
         f.used = new_used_31;
         builtin::array_copy<u8>(f.repr, start_32, self_51.repr, 0, 14);
     }
-    case_4 = global:core:prelude/traits.wado::$const_obj_303.3;
+    case_4 = global:core:prelude/traits.wado::$const_obj_304.3;
     if self == 3 {
         if @unlikely(local.tee start_32(f.used + 20) > builtin::array_len(f.repr)) {
             cold_path;
@@ -6613,14 +6617,14 @@ fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits
         }
         new_used_31 = f.used;
         f.used = start_32;
-        builtin::array_copy<u8>(local.tee $load_3(f.repr), new_used_31, global:core:prelude/traits.wado::$const_obj_282, 0, 20);
+        builtin::array_copy<u8>(local.tee $load_3(f.repr), new_used_31, global:core:prelude/traits.wado::$const_obj_283, 0, 20);
         if @unlikely(local.tee new_used_31(f.used + 2) > builtin::array_len($load_3)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used_31);
         }
         start_32 = f.used;
         f.used = new_used_31;
-        builtin::array_copy<u8>(local.tee $load_3(f.repr), start_32, global:core:prelude/traits.wado::$const_obj_281, 0, 2);
+        builtin::array_copy<u8>(local.tee $load_3(f.repr), start_32, global:core:prelude/traits.wado::$const_obj_282, 0, 2);
         self_51 = case_4.case_name;
         if @unlikely(local.tee start_32(f.used + 14) > builtin::array_len($load_3)) {
             cold_path;
@@ -6630,7 +6634,7 @@ fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits
         f.used = start_32;
         builtin::array_copy<u8>(f.repr, new_used_31, self_51.repr, 0, 14);
     }
-    case_4 = global:core:prelude/traits.wado::$const_obj_303.4;
+    case_4 = global:core:prelude/traits.wado::$const_obj_304.4;
     if self == 4 {
         if @unlikely(local.tee new_used_31(f.used + 20) > builtin::array_len(f.repr)) {
             cold_path;
@@ -6638,14 +6642,14 @@ fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits
         }
         start_32 = f.used;
         f.used = new_used_31;
-        builtin::array_copy<u8>(local.tee $load_3(f.repr), start_32, global:core:prelude/traits.wado::$const_obj_282, 0, 20);
+        builtin::array_copy<u8>(local.tee $load_3(f.repr), start_32, global:core:prelude/traits.wado::$const_obj_283, 0, 20);
         if @unlikely(local.tee start_32(f.used + 2) > builtin::array_len($load_3)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, start_32);
         }
         new_used_31 = f.used;
         f.used = start_32;
-        builtin::array_copy<u8>(local.tee $load_3(f.repr), new_used_31, global:core:prelude/traits.wado::$const_obj_281, 0, 2);
+        builtin::array_copy<u8>(local.tee $load_3(f.repr), new_used_31, global:core:prelude/traits.wado::$const_obj_282, 0, 2);
         self_51 = case_4.case_name;
         if @unlikely(local.tee new_used_31(f.used + 12) > builtin::array_len($load_3)) {
             cold_path;
@@ -6655,7 +6659,7 @@ fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits
         f.used = new_used_31;
         builtin::array_copy<u8>(f.repr, start_32, self_51.repr, 0, 12);
     }
-    case_4 = global:core:prelude/traits.wado::$const_obj_303.5;
+    case_4 = global:core:prelude/traits.wado::$const_obj_304.5;
     if self == 5 {
         if @unlikely(local.tee start_32(f.used + 20) > builtin::array_len(f.repr)) {
             cold_path;
@@ -6663,14 +6667,14 @@ fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits
         }
         new_used_31 = f.used;
         f.used = start_32;
-        builtin::array_copy<u8>(local.tee $load_3(f.repr), new_used_31, global:core:prelude/traits.wado::$const_obj_282, 0, 20);
+        builtin::array_copy<u8>(local.tee $load_3(f.repr), new_used_31, global:core:prelude/traits.wado::$const_obj_283, 0, 20);
         if @unlikely(local.tee new_used_31(f.used + 2) > builtin::array_len($load_3)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used_31);
         }
         start_32 = f.used;
         f.used = new_used_31;
-        builtin::array_copy<u8>(local.tee $load_3(f.repr), start_32, global:core:prelude/traits.wado::$const_obj_281, 0, 2);
+        builtin::array_copy<u8>(local.tee $load_3(f.repr), start_32, global:core:prelude/traits.wado::$const_obj_282, 0, 2);
         self_51 = case_4.case_name;
         if @unlikely(local.tee start_32(f.used + 8) > builtin::array_len($load_3)) {
             cold_path;
@@ -6680,7 +6684,7 @@ fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits
         f.used = start_32;
         builtin::array_copy<u8>(f.repr, new_used_31, self_51.repr, 0, 8);
     }
-    case_4 = global:core:prelude/traits.wado::$const_obj_303.6;
+    case_4 = global:core:prelude/traits.wado::$const_obj_304.6;
     if self == 6 {
         if @unlikely(local.tee new_used_31(f.used + 20) > builtin::array_len(f.repr)) {
             cold_path;
@@ -6688,14 +6692,14 @@ fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits
         }
         start_32 = f.used;
         f.used = new_used_31;
-        builtin::array_copy<u8>(local.tee $load_3(f.repr), start_32, global:core:prelude/traits.wado::$const_obj_282, 0, 20);
+        builtin::array_copy<u8>(local.tee $load_3(f.repr), start_32, global:core:prelude/traits.wado::$const_obj_283, 0, 20);
         if @unlikely(local.tee start_32(f.used + 2) > builtin::array_len($load_3)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, start_32);
         }
         new_used_31 = f.used;
         f.used = start_32;
-        builtin::array_copy<u8>(local.tee $load_3(f.repr), new_used_31, global:core:prelude/traits.wado::$const_obj_281, 0, 2);
+        builtin::array_copy<u8>(local.tee $load_3(f.repr), new_used_31, global:core:prelude/traits.wado::$const_obj_282, 0, 2);
         self_51 = case_4.case_name;
         if @unlikely(local.tee new_used_31(f.used + 14) > builtin::array_len($load_3)) {
             cold_path;
@@ -6705,7 +6709,7 @@ fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits
         f.used = new_used_31;
         builtin::array_copy<u8>(f.repr, start_32, self_51.repr, 0, 14);
     }
-    case_4 = global:core:prelude/traits.wado::$const_obj_303.7;
+    case_4 = global:core:prelude/traits.wado::$const_obj_304.7;
     if self == 7 {
         if @unlikely(local.tee start_32(f.used + 20) > builtin::array_len(f.repr)) {
             cold_path;
@@ -6713,14 +6717,14 @@ fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits
         }
         new_used_31 = f.used;
         f.used = start_32;
-        builtin::array_copy<u8>(local.tee $load_3(f.repr), new_used_31, global:core:prelude/traits.wado::$const_obj_282, 0, 20);
+        builtin::array_copy<u8>(local.tee $load_3(f.repr), new_used_31, global:core:prelude/traits.wado::$const_obj_283, 0, 20);
         if @unlikely(local.tee new_used_31(f.used + 2) > builtin::array_len($load_3)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used_31);
         }
         start_32 = f.used;
         f.used = new_used_31;
-        builtin::array_copy<u8>(local.tee $load_3(f.repr), start_32, global:core:prelude/traits.wado::$const_obj_281, 0, 2);
+        builtin::array_copy<u8>(local.tee $load_3(f.repr), start_32, global:core:prelude/traits.wado::$const_obj_282, 0, 2);
         self_51 = case_4.case_name;
         if @unlikely(local.tee start_32(f.used + 12) > builtin::array_len($load_3)) {
             cold_path;
@@ -6730,7 +6734,7 @@ fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits
         f.used = start_32;
         builtin::array_copy<u8>(f.repr, new_used_31, self_51.repr, 0, 12);
     }
-    case_4 = global:core:prelude/traits.wado::$const_obj_303.8;
+    case_4 = global:core:prelude/traits.wado::$const_obj_304.8;
     if self == 8 {
         if @unlikely(local.tee new_used_31(f.used + 20) > builtin::array_len(f.repr)) {
             cold_path;
@@ -6738,14 +6742,14 @@ fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits
         }
         start_32 = f.used;
         f.used = new_used_31;
-        builtin::array_copy<u8>(local.tee $load_3(f.repr), start_32, global:core:prelude/traits.wado::$const_obj_282, 0, 20);
+        builtin::array_copy<u8>(local.tee $load_3(f.repr), start_32, global:core:prelude/traits.wado::$const_obj_283, 0, 20);
         if @unlikely(local.tee start_32(f.used + 2) > builtin::array_len($load_3)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, start_32);
         }
         new_used_31 = f.used;
         f.used = start_32;
-        builtin::array_copy<u8>(local.tee $load_3(f.repr), new_used_31, global:core:prelude/traits.wado::$const_obj_281, 0, 2);
+        builtin::array_copy<u8>(local.tee $load_3(f.repr), new_used_31, global:core:prelude/traits.wado::$const_obj_282, 0, 2);
         self_51 = case_4.case_name;
         if @unlikely(local.tee new_used_31(f.used + 3) > builtin::array_len($load_3)) {
             cold_path;
@@ -6755,7 +6759,7 @@ fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits
         f.used = new_used_31;
         builtin::array_copy<u8>(f.repr, start_32, self_51.repr, 0, 3);
     }
-    case_4 = global:core:prelude/traits.wado::$const_obj_303.9;
+    case_4 = global:core:prelude/traits.wado::$const_obj_304.9;
     if self == 9 {
         if @unlikely(local.tee start_32(f.used + 20) > builtin::array_len(f.repr)) {
             cold_path;
@@ -6763,14 +6767,14 @@ fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits
         }
         new_used_31 = f.used;
         f.used = start_32;
-        builtin::array_copy<u8>(local.tee $load_3(f.repr), new_used_31, global:core:prelude/traits.wado::$const_obj_282, 0, 20);
+        builtin::array_copy<u8>(local.tee $load_3(f.repr), new_used_31, global:core:prelude/traits.wado::$const_obj_283, 0, 20);
         if @unlikely(local.tee new_used_31(f.used + 2) > builtin::array_len($load_3)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used_31);
         }
         start_32 = f.used;
         f.used = new_used_31;
-        builtin::array_copy<u8>(local.tee $load_3(f.repr), start_32, global:core:prelude/traits.wado::$const_obj_281, 0, 2);
+        builtin::array_copy<u8>(local.tee $load_3(f.repr), start_32, global:core:prelude/traits.wado::$const_obj_282, 0, 2);
         self_51 = case_4.case_name;
         if @unlikely(local.tee start_32(f.used + 6) > builtin::array_len($load_3)) {
             cold_path;
@@ -6780,7 +6784,7 @@ fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits
         f.used = start_32;
         builtin::array_copy<u8>(f.repr, new_used_31, self_51.repr, 0, 6);
     }
-    case_4 = global:core:prelude/traits.wado::$const_obj_303.10;
+    case_4 = global:core:prelude/traits.wado::$const_obj_304.10;
     if self == 10 {
         if @unlikely(local.tee self(f.used + 20) > builtin::array_len(f.repr)) {
             cold_path;
@@ -6788,14 +6792,14 @@ fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits
         }
         new_used_31 = f.used;
         f.used = self;
-        builtin::array_copy<u8>(local.tee $load_3(f.repr), new_used_31, global:core:prelude/traits.wado::$const_obj_282, 0, 20);
+        builtin::array_copy<u8>(local.tee $load_3(f.repr), new_used_31, global:core:prelude/traits.wado::$const_obj_283, 0, 20);
         if @unlikely(local.tee new_used_31(f.used + 2) > builtin::array_len($load_3)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used_31);
         }
         self = f.used;
         f.used = new_used_31;
-        builtin::array_copy<u8>(local.tee $load_3(f.repr), self, global:core:prelude/traits.wado::$const_obj_281, 0, 2);
+        builtin::array_copy<u8>(local.tee $load_3(f.repr), self, global:core:prelude/traits.wado::$const_obj_282, 0, 2);
         self_51 = case_4.case_name;
         if @unlikely(local.tee self(f.used + 18) > builtin::array_len($load_3)) {
             cold_path;
