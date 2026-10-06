@@ -11,8 +11,6 @@
 //! Authentication mirrors `wado publish`: the `WKG_OCI_USERNAME` /
 //! `WKG_OCI_PASSWORD` environment variables, else an anonymous pull.
 
-use std::sync::LazyLock;
-
 use bytes::Bytes;
 use oci_client::client::{Certificate, CertificateEncoding, ClientConfig};
 use oci_client::secrets::RegistryAuth;
@@ -122,19 +120,14 @@ fn auth() -> RegistryAuth {
 
 /// The CAs `wado run` trusts beyond the default webpki roots, so a registry
 /// behind a custom or corporate CA (e.g. an intercepting proxy) is reached the
-/// same way a guest's HTTPS is. Read once per process, as `http_hooks` does,
-/// rather than once per registry call.
+/// same way a guest's HTTPS is.
 fn extra_root_certificates() -> Vec<Certificate> {
-    static CERTS: LazyLock<Vec<Certificate>> = LazyLock::new(|| {
-        extra_ca_certs()
-            .into_iter()
-            .map(|der| Certificate {
-                encoding: CertificateEncoding::Der,
-                data: der.to_vec(),
-            })
-            .collect()
-    });
-    CERTS.clone()
+    extra_ca_certs()
+        .map(|der| Certificate {
+            encoding: CertificateEncoding::Der,
+            data: der.to_vec(),
+        })
+        .collect()
 }
 
 #[cfg(test)]
