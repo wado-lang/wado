@@ -325,6 +325,10 @@ declaration still to be written.
 
 ## Known gaps
 
+- `hole_fmt` declares `suspend` though it never suspends. It runs a `Display`
+  impl, which may read and write globals, and no other fact states that. It is
+  a stand-in until reading and writing globals is an effect of its own.
+
 - A Component Model import that passes GC references at the boundary, as
   [WEP: Migration to GC in Components](./wep-2026-03-28-gc-in-components.md)
   plans, shares storage with what it is handed. The raw call of every import
