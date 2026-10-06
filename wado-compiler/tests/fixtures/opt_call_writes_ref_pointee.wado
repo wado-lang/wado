@@ -2,7 +2,8 @@
 // the pointee: through a global the reference may name, whether or not the call
 // takes the reference, or through a `&mut` another argument holds. That holds
 // for a read, a stored value, a condition, and a reference held in a struct
-// field. A call writing only objects of another type keeps the read.
+// field, and for an opaque call, which may let another task run. A call writing
+// only objects of another type keeps the read.
 
 use { println, Stdout } from "core:cli";
 
@@ -141,6 +142,32 @@ fn across_unrelated_write(r: &mut P, l: &mut List<i32>, c: bool) -> i32 {
     return s + r.x;
 }
 
+// Another task may run at an opaque Component Model call and write a global.
+#[inline(never)]
+fn across_opaque(r: &P, c: bool) -> i32 {
+    let mut s = 0;
+    if c {
+        s = r.x * 100;
+    }
+    builtin::waitable_set_drop(builtin::waitable_set_new());
+    return s + r.x;
+}
+
+#[inline(never)]
+fn opaque_inside() {
+    builtin::waitable_set_drop(builtin::waitable_set_new());
+}
+
+#[inline(never)]
+fn across_opaque_caller(r: &P, c: bool) -> i32 {
+    let mut s = 0;
+    if c {
+        s = r.x * 100;
+    }
+    opaque_inside();
+    return s + r.x;
+}
+
 export fn run() with Stdout {
     let c = builtin::black_box(true);
     println(`${through_ref(&G, c)}`);
@@ -161,10 +188,16 @@ export fn run() with Stdout {
     p.x = 1;
     let mut l: List<i32> = [];
     println(`${across_unrelated_write(&mut p, &mut l, c)} ${p.y}`);
+    G.x = 1;
+    println(`${across_opaque(&G, c)} ${across_opaque_caller(&G, c)}`);
 }
 
 __DATA__
 {
-    "stdout": "102\n102\n1102\n6\n10\n102\n102\n102\n101 100\n",
-    "wir_expect:O2": ["r.y = s;\n    return s + $av_"]
+    "stdout": "102\n102\n1102\n6\n10\n102\n102\n102\n101 100\n101 101\n",
+    "wir_expect:O2": [
+        "r.y = s;\n    return s + $av_",
+        "\"wasi/waitable-set-drop\"(\"wasi/waitable-set-new\"());\n    return s + r.x;",
+        "\"opt_call_writes_ref_pointee.wado/opaque_inside\"();\n    return s + r.x;"
+    ]
 }

@@ -21,6 +21,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::builtin_facts::SideEffect;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirFunction, NirUnaryOp};
@@ -571,6 +572,14 @@ fn transitive_reachable_writes(project: &NirPackage) -> Vec<ReachableWrites> {
         let func = project.functions[i].borrow();
         let mut direct: IndexSet<(ModuleSource, String)> = IndexSet::default();
         let mut indirect = false;
+        if func.body.is_none() && yields_to_other_tasks(project, &func) {
+            direct.extend(
+                project
+                    .globals
+                    .iter()
+                    .map(|g| (g.module_source.clone(), g.name.clone())),
+            );
+        }
         if let Some(body) = func.body.as_ref() {
             for node in body.exprs.values() {
                 match &node.kind {
@@ -616,6 +625,15 @@ fn transitive_reachable_writes(project: &NirPackage) -> Vec<ReachableWrites> {
         }
     }
     writes
+}
+
+/// Whether a call to the body-less `func` may let another task run, which may
+/// write any global: it declares nothing, or `#[side_effect(opaque)]`.
+fn yields_to_other_tasks(project: &NirPackage, func: &NirFunction) -> bool {
+    project
+        .builtin_declarations
+        .get(func)
+        .is_none_or(|d| matches!(d.facts.side_effect, SideEffect::Opaque))
 }
 
 fn global_type_index(project: &NirPackage) -> IndexMap<(ModuleSource, String), TypeId> {
