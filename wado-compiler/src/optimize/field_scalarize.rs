@@ -1268,10 +1268,13 @@ struct CallTouchedScan<'a> {
 impl NirRefVisitor for CallTouchedScan<'_> {
     fn visit_node(&mut self, body: &Body, node: NodeRef) {
         if let NodeRef::Expr(e) = node {
+            // A call typed `!` gets its sync where the walker meets it, and no
+            // iteration follows it, so it leaves the back-edge state alone.
             if matches!(
                 &body.exprs[e].kind,
                 ExprKind::Call { .. } | ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. }
-            ) {
+            ) && !self.type_table.is_never(body.exprs[e].type_id)
+            {
                 let mut sync = SyncFields::default();
                 accumulate_call_sync(
                     body,
