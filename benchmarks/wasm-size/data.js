@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791283409594,
+  "lastUpdate": 1791292220055,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -64429,6 +64429,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/860f3c20de423cb03e371a29e546fea6c012e222"
         },
         "date": 1791283408776,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338502,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6d52abbfe0359c7115b8dddaa571398cd7b1cbca",
+          "message": "Merge pull request #2290 from wado-lang/ccr-4293f746-rmzst6\n\nfeat(traits): the trait solver answers every trait question",
+          "timestamp": "2026-10-06T21:51:01+09:00",
+          "tree_id": "08883341fd81a089685ef3bc510168f357a82dae",
+          "url": "https://github.com/wado-lang/wado/commit/6d52abbfe0359c7115b8dddaa571398cd7b1cbca"
+        },
+        "date": 1791292219470,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
