@@ -208,6 +208,7 @@ impl Lowering {
             assocs: IndexMap::default(),
             methods: IndexMap::default(),
             impl_defs: IndexMap::default(),
+            written_impls: IndexMap::default(),
             derivation_source: IndexMap::default(),
             unstated: IndexSet::default(),
         };
@@ -2171,7 +2172,7 @@ impl SolverBridge {
         table: &'a TypeTable,
         instance: TypeId,
     ) -> impl Fn(DefId) -> bool + 'a {
-        let ty = self.lowering.type_id(table, instance, &|_, _| None);
+        let ty = self.lowering.type_id(table, instance, &|_| None).ok();
         move |block| {
             table.impl_reaches_instance(block, instance)
                 && self

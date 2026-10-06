@@ -1193,17 +1193,7 @@ impl TraitEnv {
         let trait_impl_modules = index_impl_modules(&impl_headers, defs, false);
         let concrete_trait_impl_modules = index_impl_modules(&impl_headers, defs, true);
 
-<<<<<<< HEAD
-        violations.extend(check_impl_coherence(&impl_headers, resolutions));
-        violations.extend(check_variadic_impl_targets(&impl_headers));
-
-||||||| 860f3c20de
-        violations.extend(check_impl_coherence(&impl_headers, resolutions));
-        violations.extend(check_variadic_impl_overlap(defs, &impl_headers));
-
-=======
-        let variadic_overlaps = check_variadic_impl_overlap(defs, &impl_headers);
->>>>>>> origin/main
+        let variadic_targets = check_variadic_impl_targets(&impl_headers);
         let (supertrait_closures, cycles) =
             build_supertrait_closures(defs, &trait_decl_headers, &resolve_trait);
         let unnamed_traits = check_bounds_name_traits(modules, &resolve_trait);
@@ -1234,7 +1224,7 @@ impl TraitEnv {
             solver: None,
         });
         violations.extend(check_impl_coherence(&env, resolutions));
-        violations.extend(variadic_overlaps);
+        violations.extend(variadic_targets);
         violations.extend(cycles);
         violations.extend(unnamed_traits);
         (env, violations)
