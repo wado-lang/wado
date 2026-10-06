@@ -2698,6 +2698,10 @@ pub struct CanonicalStructSerializer {
     entries: List<[String, String]>,
 }
 
+pub struct CanonicalVariantSerializer {
+    buf: &mut String,
+}
+
 /// Writes the finite nonzero float whose shortest digits are `r` as
 /// ECMAScript's `Number.prototype.toString` does (RFC 8785 §3.2.2.3).
 fn write_ecmascript_number(buf: &mut String, negative: bool, r: FormatResult) {
@@ -2767,10 +2771,6 @@ fn utf16_cmp(a: &String, b: &String) -> Ordering {
             return if lead == Ordering::Equal { ca.cmp(&cb) } else { lead };
         }
     }
-}
-
-pub struct CanonicalVariantSerializer {
-    buf: &mut String,
 }
 
 /// Serialize a value canonically into a fresh `String` buffer (used to buffer
