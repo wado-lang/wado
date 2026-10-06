@@ -59,8 +59,7 @@ impl TirMutVisitor for ContractChecksLowering {
     }
 
     fn visit_expr(&mut self, expr: &mut TirExpr) {
-        // Only the standard library can call it (`internal`), and only as a
-        // check: elsewhere the folded `false` would cost what a check may not.
+        // Reify reports a call standing anywhere else.
         assert!(
             !is_contract_checks_call(expr),
             "`builtin::contract_checks()` outside `if builtin::contract_checks() {{ … }}`"

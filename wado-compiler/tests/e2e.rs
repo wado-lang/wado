@@ -406,27 +406,23 @@ fn one_or_many<'de, D: serde::Deserializer<'de>>(de: D) -> Result<Vec<String>, D
     }
 }
 
-/// Whether `wir` contains `pattern`, where `{}` stands for a run of digits.
-/// A generated local's number is an allocation counter, not what a golden means.
+/// Whether `wir` contains `pattern`, where `{}` stands for a run of digits and
+/// `{name}` for one run that every `{name}` in the pattern repeats. A generated
+/// local's number is an allocation counter, not what a golden means; that two
+/// sites name the same local is.
 fn wir_contains(wir: &str, pattern: &str) -> bool {
-    let parts: Vec<&str> = pattern.split("{}").collect();
-    if parts.len() == 1 {
-        return wir.contains(pattern);
+    let mut texts = Vec::new();
+    let mut holes = Vec::new();
+    let mut rest = pattern;
+    while let Some((start, name, end)) = next_hole(rest) {
+        texts.push(&rest[..start]);
+        holes.push(name);
+        rest = &rest[end..];
     }
+    texts.push(rest);
     let mut from = 0;
-    while let Some(hit) = wir[from..].find(parts[0]) {
-        let mut pos = from + hit + parts[0].len();
-        let mut matched = true;
-        for part in &parts[1..] {
-            let rest = &wir[pos..];
-            let digits = rest.len() - rest.trim_start_matches(|c: char| c.is_ascii_digit()).len();
-            if digits == 0 || !wir[pos + digits..].starts_with(part) {
-                matched = false;
-                break;
-            }
-            pos += digits + part.len();
-        }
-        if matched {
+    while let Some(hit) = wir[from..].find(texts[0]) {
+        if holes_match(&wir[from + hit + texts[0].len()..], &holes, &texts[1..]) {
             return true;
         }
         from += hit + 1;
@@ -435,6 +431,55 @@ fn wir_contains(wir: &str, pattern: &str) -> bool {
         }
     }
     false
+}
+
+/// The first hole in `pattern`: where it starts, its name (empty for `{}`),
+/// and where it ends.
+fn next_hole(pattern: &str) -> Option<(usize, &str, usize)> {
+    pattern.match_indices('{').find_map(|(start, _)| {
+        let after = &pattern[start + 1..];
+        let name = after.trim_start_matches(|c: char| c.is_ascii_lowercase() || c == '_');
+        let name = &after[..after.len() - name.len()];
+        after[name.len()..]
+            .starts_with('}')
+            .then_some((start, name, start + name.len() + 2))
+    })
+}
+
+/// Whether `wir` opens with each hole's digits followed by its text, a named
+/// hole repeating the digits it took first.
+fn holes_match(mut wir: &str, holes: &[&str], texts: &[&str]) -> bool {
+    let mut taken: Vec<(&str, &str)> = Vec::new();
+    for (&name, text) in holes.iter().zip(texts) {
+        let digits = wir.len() - wir.trim_start_matches(|c: char| c.is_ascii_digit()).len();
+        let serial = &wir[..digits];
+        if digits == 0 {
+            return false;
+        }
+        if !name.is_empty() {
+            match taken.iter().find(|(taken_name, _)| *taken_name == name) {
+                Some((_, first)) if *first != serial => return false,
+                Some(_) => {}
+                None => taken.push((name, serial)),
+            }
+        }
+        let Some(after) = wir[digits..].strip_prefix(text) else {
+            return false;
+        };
+        wir = after;
+    }
+    true
+}
+
+#[test]
+fn wir_patterns_match_serials_by_hole() {
+    let wir = "$a_16 = $a_16 + 1; $b_3 = $a_16;";
+    assert!(wir_contains(wir, "$a_{} = $a_{} + 1"));
+    assert!(wir_contains(wir, "$a_{p} = $a_{p} + 1"));
+    assert!(wir_contains(wir, "$b_{} = $a_{p};"));
+    assert!(!wir_contains(wir, "$b_{p} = $a_{p};"));
+    assert!(!wir_contains("$a_16 = $a_17 + 1", "$a_{p} = $a_{p} + 1"));
+    assert!(wir_contains("{ x }", "{ x }"));
 }
 
 /// The body of the first function in `wir` whose name contains `scope`, from

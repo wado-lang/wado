@@ -598,10 +598,20 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
     }
     if opts.show_coverage_plan {
         println!("=== Coverage Plan ===");
-        print!(
-            "{}",
-            wado_compiler::coverage::render_plan(&result.coverage_plan)
+        // What `wado test --coverage` plans: the test world's flags, whatever
+        // world this dump compiled.
+        let flags = wado_compiler::CodegenFlags::parse(
+            &opts.knobs.codegen_flags,
+            opts.knobs.opt_level.to_compiler(),
+            true,
+        )
+        .expect("the dump compiled with these flags");
+        let (plan, ..) = wado_compiler::coverage::plan_module(
+            &result.entry_module_source,
+            &result.ast,
+            flags.contract_checks,
         );
+        print!("{}", wado_compiler::coverage::render_plan(&plan));
         println!();
     }
     if opts.show_tir_monomorphized {

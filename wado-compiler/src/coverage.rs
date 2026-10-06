@@ -468,7 +468,7 @@ type ForOfBodies = Vec<(AstId, Range<u32>)>;
 /// regions, the site each region's probe goes at, and the regions of each
 /// `for-of` body.
 #[must_use]
-pub(crate) fn plan_module(
+pub fn plan_module(
     source: &ModuleSource,
     module: &ast::Module,
     contract_checks: bool,
@@ -882,18 +882,27 @@ fn enters_choice(stmt: &Stmt) -> bool {
     }
 }
 
-/// Whether `stmt` is `if builtin::contract_checks() { … }`. Its condition is a
-/// build constant, not a choice a run makes: where the build keeps the check,
-/// its body runs wherever the enclosing region runs, and where it does not,
-/// the check is deleted and holds no line.
-fn is_contract_check(stmt: &Stmt) -> bool {
-    let Stmt::If(s) = stmt else { return false };
+/// The call heading `s` when `s` is a contract check,
+/// `if builtin::contract_checks() { … }`, the only place that call may stand:
+/// reify reports any other. `builtin::` names `core:builtin` whatever the
+/// module declares, so the spelling identifies the callee.
+///
+/// The condition is a build constant, not a choice a run makes: where the
+/// build keeps the check, its body runs wherever the enclosing region runs,
+/// and where it does not, the check is deleted and holds no line.
+pub(crate) fn contract_check_call(s: &ast::IfStmt) -> Option<AstId> {
     let ast::Condition::Expr(Expr::Call(call)) = &s.condition else {
-        return false;
+        return None;
     };
-    s.else_block.is_none()
+    let canonical = s.else_block.is_none()
         && call.args.is_empty()
-        && matches!(&call.callee, Expr::Ident(ident) if ident.name == "builtin::contract_checks")
+        && call.type_args.is_empty()
+        && matches!(&call.callee, Expr::Ident(ident) if ident.name == "builtin::contract_checks");
+    canonical.then_some(call.id)
+}
+
+fn is_contract_check(stmt: &Stmt) -> bool {
+    matches!(stmt, Stmt::If(s) if contract_check_call(s).is_some())
 }
 
 fn match_head_may_leave(m: &MatchExpr) -> bool {
@@ -1286,6 +1295,29 @@ mod tests {
                 .iter()
                 .all(|&(site, _, _)| site == ProbeSite::BlockStart)
         );
+    }
+
+    #[test]
+    fn only_the_canonical_shape_is_a_contract_check() {
+        let shapes = [
+            ("if builtin::contract_checks() { }", true),
+            ("if (builtin::contract_checks()) { }", true),
+            ("if builtin::contract_checks() { } else { }", false),
+            ("if !builtin::contract_checks() { }", false),
+            ("if contract_checks() { }", false),
+            ("if builtin::contract_checks::<i32>() { }", false),
+        ];
+        for (shape, is_check) in shapes {
+            let lexed = lex(&format!("fn f() {{\n    {shape}\n}}\n"));
+            let module = Parser::new(lexed.tokens).parse_strict().expect("parse");
+            let Item::Function(f) = &module.items[0] else {
+                unreachable!("the source declares one function");
+            };
+            let Stmt::If(s) = &f.body.as_ref().expect("a body").stmts[0] else {
+                unreachable!("the body is one `if`");
+            };
+            assert_eq!(contract_check_call(s).is_some(), is_check, "{shape}");
+        }
     }
 
     #[test]

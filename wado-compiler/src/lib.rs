@@ -315,9 +315,6 @@ pub struct DumpResult {
     /// Power-assert capture plans, one block per `assert` (unparsed text).
     /// See `docs/wep-2026-08-19-power-assert-coverage.md`.
     pub assert_plan_text: Option<String>,
-    /// The regions `wado test --coverage` counts in the entry module, under
-    /// this build's `-f` flags.
-    pub coverage_plan: coverage::ModulePlan,
     /// Monomorphized TIR snapshot (unparsed text)
     pub monomorphized_tir_text: Option<String>,
     /// Lowered TIR snapshot (unparsed text)
@@ -2188,8 +2185,6 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     let symbols = sem.symbols.clone();
     let interner = sem.interner.clone();
     let entry_module_source_out = sem.entry_module_source.clone();
-    let (coverage_plan, ..) =
-        coverage::plan_module(&entry_module_source_out, &ast, flags.contract_checks);
     let moved_local_spans = sem.liveness.moved_spans.clone();
     // The resolved modules are kept as-is for the `--tir-resolved` view; the
     // pipeline below runs on its own snapshot, so these stay frozen here.
@@ -2352,7 +2347,6 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         entry_module_source: entry_module_source_out,
         tir_modules: tir_modules_by_source,
         assert_plan_text,
-        coverage_plan,
         monomorphized_tir_text,
         lowered_nir_text,
         optimized_package,

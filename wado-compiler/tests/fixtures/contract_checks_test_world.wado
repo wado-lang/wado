@@ -76,6 +76,24 @@ test "String::insert_str_unchecked off a character boundary" {
 }
 
 #[expect_trap]
+test "String::push_str_range_unchecked with the end before the start" {
+    let mut s = "";
+    s.push_str_range_unchecked("abcd", 3, builtin::black_box(1));
+}
+
+#[expect_trap]
+test "String::substr_bytes_unchecked off a character boundary" {
+    let _ = "héllo".substr_bytes_unchecked(0, builtin::black_box(2));
+}
+
+#[expect_trap]
+test "ByteList::get_byte_unchecked past the length" {
+    let mut bytes = ByteList::with_capacity(16);
+    bytes.push(1);
+    let _ = bytes.get_byte_unchecked(builtin::black_box(1));
+}
+
+#[expect_trap]
 test "String::remove_unchecked at the length" {
     let mut s = String::with_capacity(16);
     s.push_str("abc");

@@ -42,7 +42,8 @@ is for. It already pays for that with the `debug` allocator.
 
 `builtin::contract_checks()` answers whether the build checks contracts. A
 function checks its contract with it, and this is the only shape it takes: the
-whole condition of an `if` with no `else`.
+whole condition of an `if` statement with no `else`. A call anywhere else is a
+compile error.
 
 ```text
 if builtin::contract_checks() {
