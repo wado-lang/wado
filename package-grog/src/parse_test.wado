@@ -24,11 +24,11 @@ message Outer {
     assert file.messages[1].path == ["Outer", "Inner"];
     assert outer.fields.len() == 6;
     assert outer.fields[0].label matches { None };
-    assert outer.fields[0].type_ matches { Scalar(t) && t == "int32" };
+    assert outer.fields[0].type_ matches { Scalar(Int32) };
     assert outer.fields[1].label matches { Optional };
     assert outer.fields[2].number == 3;
     assert outer.fields[2].type_ matches { Named(t) && t == "Inner" };
-    assert outer.fields[3].type_ matches { Map([k, Scalar(v)]) && k == "string" && v == "int64" };
+    assert outer.fields[3].type_ matches { Map([Str, Scalar(Int64)]) };
     assert outer.fields[4].oneof matches { Some(o) && o == "choice" };
     assert outer.fields[5].line == 9;
     assert file.enums[0].path == ["Outer", "Kind"];
@@ -80,6 +80,12 @@ test "descriptor.proto" {
     let file = read(#include_str("../tests/proto/protobuf/src/google/protobuf/descriptor.proto")).unwrap();
     assert file.package == "google.protobuf";
     assert file.messages.len() > 30;
+}
+
+test "a map key is an integer, bool or string" {
+    assert read("syntax = \"proto3\";\nmessage M { map<double, int32> m = 1; }") matches { Err(e) && e == "2: m: a map key cannot be double" };
+    assert read("syntax = \"proto3\";\nmessage M { map<M, int32> m = 1; }") matches { Err(e) && e == "2: m: a map key cannot be M" };
+    assert read("syntax = \"proto3\"; message M { map<sfixed64, int32> m = 1; }") matches { Ok(_) };
 }
 
 test "a field number past i32 is refused" {
