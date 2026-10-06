@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791297969965,
+  "lastUpdate": 1791305685313,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -64517,6 +64517,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c5f7e3b13c62a827210116d82141fb7096712ace"
         },
         "date": 1791297968968,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338446,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7465a762f88db79d93307ffd0d09fcdf8a499f83",
+          "message": "Merge pull request #2293 from wado-lang/ccr-91ea095b-lg6uyu\n\nfix(grog): hold decode, encode and schema checks to the protobuf spec",
+          "timestamp": "2026-10-07T01:32:53+09:00",
+          "tree_id": "75f1ff6d973eec49e286f0c6a2d671d6b1ad5ac5",
+          "url": "https://github.com/wado-lang/wado/commit/7465a762f88db79d93307ffd0d09fcdf8a499f83"
+        },
+        "date": 1791305684141,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
