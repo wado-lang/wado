@@ -104,9 +104,10 @@ pub fn hole_get<T, V>(t: &T, index: i32) -> V;
 /// Renders hole `index` of template `t` through its specifier into `f`.
 /// Rewritten by lowering to the per-shape helper synthesized alongside
 /// `ReflectTemplate` (WEP 2026-01-10). Used by `TemplateHole::fmt`. It runs
-/// the hole's `Display` impl, which may do anything a body may.
+/// the hole's `Display` impl, which may do anything a body may, so it reaches
+/// what is held elsewhere as a call that suspends does.
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn hole_fmt<T>(t: &T, index: i32, f: &mut Formatter);
 
 /// Returns the length of a GC array. `array.len` reads the header, so the
@@ -486,16 +487,18 @@ pub fn stream_read(handle: i32, ptr: i32, max: i32) -> i32;
 #[side_effect(opaque)]
 pub fn stream_write(handle: i32, ptr: i32, len: i32) -> i32;
 
-/// Cancel an in-progress read on a readable stream.
+/// Cancel an in-progress read on a readable stream, blocking until the
+/// cancellation completes.
 #[canonical("wasi", "stream-cancel-read")]
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn stream_cancel_read(handle: i32) -> i32;
 
-/// Cancel an in-progress write on a writable stream.
+/// Cancel an in-progress write on a writable stream, blocking until the
+/// cancellation completes.
 #[canonical("wasi", "stream-cancel-write")]
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn stream_cancel_write(handle: i32) -> i32;
 
 /// Drop a readable stream handle.
@@ -533,16 +536,18 @@ pub fn future_read(handle: i32, ptr: i32) -> i32;
 #[side_effect(opaque)]
 pub fn future_write(handle: i32, ptr: i32) -> i32;
 
-/// Cancel an in-progress read on a future.
+/// Cancel an in-progress read on a future, blocking until the cancellation
+/// completes.
 #[canonical("wasi", "future-cancel-read")]
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn future_cancel_read(handle: i32) -> i32;
 
-/// Cancel an in-progress write on a future.
+/// Cancel an in-progress write on a future, blocking until the cancellation
+/// completes.
 #[canonical("wasi", "future-cancel-write")]
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn future_cancel_write(handle: i32) -> i32;
 
 /// Drop a readable future handle.
@@ -569,7 +574,7 @@ pub fn waitable_set_new() -> i32;
 /// Returns the event code (i32).
 #[canonical("wasi", "waitable-set-wait")]
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn waitable_set_wait(ws: i32, outptr: i32) -> i32;
 
 /// Non-blocking poll.  Writes (handle, payload) to `outptr`.
@@ -593,10 +598,10 @@ pub fn waitable_set_drop(ws: i32);
 #[side_effect(opaque)]
 pub fn subtask_drop(handle: i32);
 
-/// Cancel an in-progress subtask.
+/// Cancel an in-progress subtask, blocking until it resolves.
 #[canonical("wasi", "subtask-cancel")]
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn subtask_cancel(handle: i32);
 
 /// Join a waitable (subtask/stream/future) to a waitable set.

@@ -2,8 +2,9 @@
 // the pointee: through a global the reference may name, whether or not the call
 // takes the reference, or through a `&mut` another argument holds. That holds
 // for a read, a stored value, a condition, and a reference held in a struct
-// field, and for an opaque call, which may let another task run. A call writing
-// only objects of another type keeps the read.
+// field, and for a call that may suspend, which lets another task run. A call
+// writing only objects of another type keeps the read, and so does an opaque
+// call that does not suspend.
 
 use { println, Stdout } from "core:cli";
 
@@ -142,7 +143,7 @@ fn across_unrelated_write(r: &mut P, l: &mut List<i32>, c: bool) -> i32 {
     return s + r.x;
 }
 
-// Another task may run at an opaque Component Model call and write a global.
+// An opaque call that does not suspend reaches only what it is handed.
 #[inline(never)]
 fn across_opaque(r: &P, c: bool) -> i32 {
     let mut s = 0;
@@ -153,18 +154,33 @@ fn across_opaque(r: &P, c: bool) -> i32 {
     return s + r.x;
 }
 
+// Another task may run while a call suspends, and write a global.
 #[inline(never)]
-fn opaque_inside() {
-    builtin::waitable_set_drop(builtin::waitable_set_new());
-}
-
-#[inline(never)]
-fn across_opaque_caller(r: &P, c: bool) -> i32 {
+fn across_suspend(r: &P, c: bool, wait: bool) -> i32 {
     let mut s = 0;
     if c {
         s = r.x * 100;
     }
-    opaque_inside();
+    if wait {
+        builtin::waitable_set_wait(builtin::waitable_set_new(), 0);
+    }
+    return s + r.x;
+}
+
+#[inline(never)]
+fn suspend_inside(wait: bool) {
+    if wait {
+        builtin::waitable_set_wait(builtin::waitable_set_new(), 0);
+    }
+}
+
+#[inline(never)]
+fn across_suspend_caller(r: &P, c: bool, wait: bool) -> i32 {
+    let mut s = 0;
+    if c {
+        s = r.x * 100;
+    }
+    suspend_inside(wait);
     return s + r.x;
 }
 
@@ -189,15 +205,17 @@ export fn run() with Stdout {
     let mut l: List<i32> = [];
     println(`${across_unrelated_write(&mut p, &mut l, c)} ${p.y}`);
     G.x = 1;
-    println(`${across_opaque(&G, c)} ${across_opaque_caller(&G, c)}`);
+    let wait = builtin::black_box(false);
+    println(`${across_opaque(&G, c)} ${across_suspend(&G, c, wait)} ${across_suspend_caller(&G, c, wait)}`);
 }
 
 __DATA__
 {
-    "stdout": "102\n102\n1102\n6\n10\n102\n102\n102\n101 100\n101 101\n",
+    "stdout": "102\n102\n1102\n6\n10\n102\n102\n102\n101 100\n101 101 101\n",
     "wir_expect:O2": [
         "r.y = s;\n    return s + $av_",
-        "\"wasi/waitable-set-drop\"(\"wasi/waitable-set-new\"());\n    return s + r.x;",
-        "\"opt_call_writes_ref_pointee.wado/opaque_inside\"();\n    return s + r.x;"
+        "\"wasi/waitable-set-drop\"(\"wasi/waitable-set-new\"());\n    return s + r;",
+        "drop(\"wasi/waitable-set-wait\"(\"wasi/waitable-set-new\"(), 0));\n    }\n    return s + r.x;",
+        "\"opt_call_writes_ref_pointee.wado/suspend_inside\"(wait);\n    return s + r.x;"
     ]
 }

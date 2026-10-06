@@ -575,7 +575,7 @@ fn transitive_reachable_writes(
         let mut direct: IndexSet<(ModuleSource, String)> = IndexSet::default();
         let mut indirect = false;
         // Another task may write any global.
-        if func.body.is_none() && project.builtin_declarations.leaves_for_host(&*func) {
+        if func.body.is_none() && project.builtin_declarations.may_suspend(&*func) {
             direct.extend(
                 project
                     .globals

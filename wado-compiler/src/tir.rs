@@ -8320,6 +8320,9 @@ pub struct BuiltinDeclaration {
     pub element_access: Option<(usize, ArrayElementAccess)>,
     /// Every call ends in a trap, as a `!` return states.
     pub never_returns: bool,
+    /// No parameter's type can carry storage, so the call is handed nothing it
+    /// could write a field of.
+    pub handed_no_storage: bool,
 }
 
 impl BuiltinDeclaration {
@@ -8391,6 +8394,7 @@ impl BuiltinDeclaration {
             _ => None,
         };
         let ranged_params = facts.ranged_arrays().copied().collect();
+        let handed_no_storage = shape.storage_params.is_empty();
         Self {
             arity: shape.arity,
             facts,
@@ -8401,6 +8405,7 @@ impl BuiltinDeclaration {
             immediate_params: shape.immediate_params,
             element_access,
             never_returns: shape.returns_never,
+            handed_no_storage,
         }
     }
 
@@ -8429,13 +8434,16 @@ impl BuiltinDeclaration {
                 .all(|&p| self.element_access == Some((p, ArrayElementAccess::Write)))
     }
 
-    /// Whether the call writes no struct field: its storage and effects are
-    /// stated, and every `&mut` parameter is an array it ranges over. An
-    /// opaque call may suspend, and another task may write any field meanwhile.
+    /// Whether the call writes no struct field. A call that suspends may let
+    /// another task write any field. Otherwise it reaches only what it is
+    /// handed: nothing that carries storage, or, where its storage and effects
+    /// are stated, arrays it ranges over through its `&mut` parameters.
     pub fn writes_no_field(&self) -> bool {
-        self.facts.storage != Storage::Opaque
-            && !self.facts.is_opaque()
-            && self.mut_params.is_subset(&self.ranged_params)
+        !self.facts.suspend
+            && (self.handed_no_storage
+                || self.facts.storage != Storage::Opaque
+                    && !self.facts.is_opaque()
+                    && self.mut_params.is_subset(&self.ranged_params))
     }
 }
 
@@ -8544,12 +8552,18 @@ impl DeclarationTable<BuiltinDeclaration> {
         self.get(call.into()).is_some_and(|d| d.returns.is_some())
     }
 
-    /// Whether a call to the body-less `call` may leave for the host, where
-    /// another task may run: nothing declares it, or it declares
-    /// `#[side_effect(opaque)]`.
+    /// Whether a call to the body-less `call` may leave for the host: nothing
+    /// declares it, or it declares `#[side_effect(opaque)]`.
     pub fn leaves_for_host<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {
         self.get(call.into())
             .is_none_or(|d| matches!(d.facts.side_effect, SideEffect::Opaque))
+    }
+
+    /// Whether another task may run before a call to the body-less `call`
+    /// returns, and read or write anything held elsewhere: nothing declares
+    /// it, as for a Component Model import, or it declares `suspend`.
+    pub fn may_suspend<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {
+        self.get(call.into()).is_none_or(|d| d.facts.suspend)
     }
 
     /// Whether the call leaves the argument *object* at `pos` where the caller
