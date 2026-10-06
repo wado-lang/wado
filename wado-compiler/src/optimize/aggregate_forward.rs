@@ -15,7 +15,7 @@
 //! `copy_prop` will not propagate into one later written. Both collapse here,
 //! leaving `seq = S { … }` for SROA to scalarize.
 
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 
 pub(super) struct AggregateForwardRule;
@@ -29,7 +29,7 @@ fn is_aggregate_literal(body: &Body, expr: ExprId) -> bool {
 }
 
 /// The payload `expr` hands back when it is `case_index`'s construct.
-fn construct_payload(body: &Body, expr: ExprId, case_index: u32) -> Option<ExprId> {
+fn construct_payload(body: &Body, expr: ExprId, case_index: u32) -> Option<Operand> {
     let ExprKind::VariantConstruct {
         case_index: built,
         payload: Some(payload),
@@ -38,7 +38,19 @@ fn construct_payload(body: &Body, expr: ExprId, case_index: u32) -> Option<ExprI
     else {
         return None;
     };
-    (*built == case_index).then(|| payload.as_expr())?
+    (*built == case_index).then_some(*payload)
+}
+
+/// Make `dst` read `payload`: an expression moves into its place, a constant
+/// is spliced into its parent's slot.
+fn forward(engine: &mut Engine, dst: ExprId, payload: Operand) -> bool {
+    match payload {
+        Operand::Expr(src) => {
+            engine.become_expr(dst, src);
+            true
+        }
+        Operand::Value(_) => engine.redirect_expr(dst, payload),
+    }
 }
 
 /// The value `stmt` binds, with the local it binds it to.
@@ -54,13 +66,13 @@ fn binding(body: &Body, stmt: StmtId) -> Option<(u32, ExprId)> {
 
 /// Reading `local` back out of `source`: either the whole value, or the payload
 /// of the case `source` constructs. Returns the node to overwrite and the
-/// expression that should replace it.
-fn consumer(body: &Body, stmt: StmtId, local: u32, source: ExprId) -> Option<(ExprId, ExprId)> {
+/// operand that should replace it.
+fn consumer(body: &Body, stmt: StmtId, local: u32, source: ExprId) -> Option<(ExprId, Operand)> {
     let (_, read) = binding(body, stmt)?;
     match &body.exprs[read].kind {
         // `let b = a` — a copy, kept alive only because `b` is later written.
         ExprKind::Local { index, .. } if *index == local && is_aggregate_literal(body, source) => {
-            Some((read, source))
+            Some((read, Operand::Expr(source)))
         }
         // `let b = $variant_payload(a, c)` — the construct/extract pair.
         ExprKind::VariantPayload {
@@ -94,8 +106,7 @@ impl Rule for AggregateForwardRule {
         let Some(payload) = construct_payload(engine.body, source, case_index) else {
             return false;
         };
-        engine.become_expr(id, payload);
-        true
+        forward(engine, id, payload)
     }
 
     /// The value bound to a local that the next statement reads. The aggregate
@@ -115,7 +126,9 @@ impl Rule for AggregateForwardRule {
         let Some((at, (read, forwarded))) = found else {
             return false;
         };
-        engine.become_expr(read, forwarded);
+        if !forward(engine, read, forwarded) {
+            return false;
+        }
         let mut kept = stmts;
         kept.remove(at);
         engine.set_block_stmts(id, kept);
