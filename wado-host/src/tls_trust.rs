@@ -174,6 +174,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn takes_each_certificate_once_across_symlinks_and_bundles() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("isrg.pem");
