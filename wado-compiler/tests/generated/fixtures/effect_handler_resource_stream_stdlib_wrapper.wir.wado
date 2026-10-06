@@ -634,14 +634,14 @@ fn "core:rt/panic"(message) {
 
 fn "core:rt/cm_lower_array_u8"(arr) {
     let len_1: i32;
-    let data: ref Array<u8>;
     let ptr_6: i32;
     let i: i32;
+    let $licm_repr_15: ref Array<u8>;
     len_1 = arr.used;
-    return data = arr.repr, ptr_6 = "mem/realloc"(0, 0, 1, len_1), i = 0, b49: block {
+    return ptr_6 = "mem/realloc"(0, 0, 1, len_1), i = 0, $licm_repr_15 = arr.repr, b49: block {
         l50: loop {
             break_if b49 i >= len_1;
-            builtin::store_u8(ptr_6 + i, builtin::array_get_value_u8(data, i));
+            builtin::store_u8(ptr_6 + i, builtin::array_get_value_u8($licm_repr_15, i));
             i = i + 1;
             continue l50;
         };
@@ -1644,17 +1644,12 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
                         global:effect_handler_resource_stream_stdlib_wrapper.wado::$effect_StreamWritable<u8> = $local_2_9;
                         break $inline__effect_dispatch__StreamWritable_u8___write_2: $local_4_11;
                     } else {
-                        packed_15 = "core:rt/cm_lower_array_u8"(data_8);
-                        $licm_repr_56 = data.repr;
-                        $load_0 = data.used;
-                        ptr_16 = builtin::i32_wrap_i64(packed_15);
+                        ptr_16 = builtin::i32_wrap_i64(local.tee packed_15("core:rt/cm_lower_array_u8"(data_8)));
                         len_17 = builtin::i32_wrap_i64(packed_15 >> 32_i64);
                         written_18 = "core:rt/cm_stream_write_once"(self, ptr_16, len_17);
                         $licm_repr_56 = data.repr;
                         $load_0 = data.used;
                         drop("mem/realloc"(ptr_16, len_17, 1, 0));
-                        $licm_repr_56 = data.repr;
-                        $load_0 = data.used;
                         break $inline__effect_dispatch__StreamWritable_u8___write_2: written_18;
                     }
                     unreachable;
@@ -1693,17 +1688,12 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
                         global:effect_handler_resource_stream_stdlib_wrapper.wado::$effect_StreamWritable<u8> = $local_2_25;
                         break $inline__effect_dispatch__StreamWritable_u8___write_7: $local_4_27;
                     } else {
-                        packed_46 = "core:rt/cm_lower_array_u8"(data_24);
-                        $licm_repr_56 = data.repr;
-                        $load_0 = data.used;
-                        ptr_47 = builtin::i32_wrap_i64(packed_46);
+                        ptr_47 = builtin::i32_wrap_i64(local.tee packed_46("core:rt/cm_lower_array_u8"(data_24)));
                         len_48 = builtin::i32_wrap_i64(packed_46 >> 32_i64);
                         written_49 = "core:rt/cm_stream_write_once"(self, ptr_47, len_48);
                         $licm_repr_56 = data.repr;
                         $load_0 = data.used;
                         drop("mem/realloc"(ptr_47, len_48, 1, 0));
-                        $licm_repr_56 = data.repr;
-                        $load_0 = data.used;
                         break $inline__effect_dispatch__StreamWritable_u8___write_7: written_49;
                     }
                     unreachable;

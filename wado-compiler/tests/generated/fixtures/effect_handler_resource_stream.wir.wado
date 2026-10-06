@@ -586,14 +586,14 @@ fn "core:rt/panic"(message) {
 
 fn "core:rt/cm_lower_array_u8"(arr) {
     let len_1: i32;
-    let data: ref Array<u8>;
     let ptr_6: i32;
     let i: i32;
+    let $licm_repr_15: ref Array<u8>;
     len_1 = arr.used;
-    return data = arr.repr, ptr_6 = "mem/realloc"(0, 0, 1, len_1), i = 0, b44: block {
+    return ptr_6 = "mem/realloc"(0, 0, 1, len_1), i = 0, $licm_repr_15 = arr.repr, b44: block {
         l45: loop {
             break_if b44 i >= len_1;
-            builtin::store_u8(ptr_6 + i, builtin::array_get_value_u8(data, i));
+            builtin::store_u8(ptr_6 + i, builtin::array_get_value_u8($licm_repr_15, i));
             i = i + 1;
             continue l45;
         };
