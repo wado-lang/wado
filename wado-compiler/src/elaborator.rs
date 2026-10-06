@@ -1103,6 +1103,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         type_params: &[ast::GenericParam],
         owner: Option<DefId>,
     ) -> FqTypeName {
+        // A function type's name is its whole signature, `mut` and effects
+        // included, as `TypeTable::fn_receiver_name` spells a call's receiver.
+        if let ast::Type::Function(_) = impl_ty {
+            return trait_env::written_type_arg(impl_ty, &self.tysys.resolutions);
+        }
         if RefKind::from_ast(impl_ty).is_some() {
             let target = trait_env::written_type_arg(impl_ty, &self.tysys.resolutions);
             if Receiver::ref_to(&target).is_some() {
@@ -2012,9 +2017,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // block writes two templates. `receiver` keys `method_info` against
             // receivers built elsewhere, so it stays plain.
             let qualified_struct_name = scope.impl_receiver_name(impl_block);
-            let receiver = match RefKind::from_ast(&impl_block.ty) {
-                Some(kind) => Receiver::of_ref_impl(kind, &qualified_struct_name),
-                None => Receiver::Type(scope.qualified_receiver_name(&struct_name)),
+            let receiver = match (&impl_block.ty, RefKind::from_ast(&impl_block.ty)) {
+                (_, Some(kind)) => Receiver::of_ref_impl(kind, &qualified_struct_name),
+                (ast::Type::Function(_), None) => Receiver::Type(qualified_struct_name.clone()),
+                (_, None) => Receiver::Type(scope.qualified_receiver_name(&struct_name)),
             };
             let is_ref_impl = receiver.ref_kind().is_some();
             // Concrete type args of the impl's trait reference

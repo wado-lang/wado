@@ -112,9 +112,15 @@ pub(crate) enum ImplTargetKey {
     /// impl out of the bucket of a type that happens to share the parameter's
     /// name. The module is the impl's own — the parameter is scoped to it.
     TypeParam(ModuleSource, String),
-    /// A builtin shape: a primitive, `Array`, the tuple family, a function type.
+    /// A builtin shape: a primitive, `Array`, the tuple family.
     /// Every mangler spells it bare, so a definition and a lookup agree on it.
     Builtin(String),
+    /// A function type: its whole signature, `mut` and effects included, the
+    /// name `TypeTable::impl_receiver_key` reads off a function value.
+    Function {
+        name: name::FqTypeName,
+        display: String,
+    },
 }
 
 impl ImplTargetKey {
@@ -160,6 +166,7 @@ impl ImplTargetKey {
             }
             ImplTargetKey::Ref(kind) => name::Receiver::Ref(*kind),
             ImplTargetKey::Builtin(name) => name::Receiver::Type(name::FqTypeName::builtin(name)),
+            ImplTargetKey::Function { name, .. } => name::Receiver::Type(name.clone()),
         }
     }
 
@@ -169,7 +176,7 @@ impl ImplTargetKey {
             ImplTargetKey::Undeclared(_, name)
             | ImplTargetKey::TypeParam(_, name)
             | ImplTargetKey::Builtin(name) => Some(name),
-            ImplTargetKey::Ref(_) => None,
+            ImplTargetKey::Ref(_) | ImplTargetKey::Function { .. } => None,
         }
     }
 
@@ -180,7 +187,8 @@ impl ImplTargetKey {
             ImplTargetKey::Decl(def) => defs.name(*def),
             ImplTargetKey::Undeclared(_, name)
             | ImplTargetKey::TypeParam(_, name)
-            | ImplTargetKey::Builtin(name) => name,
+            | ImplTargetKey::Builtin(name)
+            | ImplTargetKey::Function { display: name, .. } => name,
             ImplTargetKey::Ref(kind) => kind.prefix(),
         }
     }
@@ -192,7 +200,8 @@ impl ImplTargetKey {
             ImplTargetKey::Decl(_)
             | ImplTargetKey::Undeclared(..)
             | ImplTargetKey::TypeParam(..)
-            | ImplTargetKey::Builtin(_) => None,
+            | ImplTargetKey::Builtin(_)
+            | ImplTargetKey::Function { .. } => None,
         }
     }
 }
@@ -335,7 +344,6 @@ impl ImplHeader {
     pub(super) fn ref_receiver(&self) -> Option<name::Receiver> {
         name::Receiver::ref_to(&self.target_id)
     }
-
     /// What a `&X` / `&mut X` target refers to, keyed as a value target is;
     /// `None` for any other target.
     pub(super) fn referent_key(&self, resolutions: &Resolutions) -> Option<ImplTargetKey> {
@@ -1931,14 +1939,22 @@ pub(crate) enum ImplReceiver<'a> {
 
 /// The impl header's target, from the site the header wrote.
 ///
-/// A site behind no declaration — a tuple, a function type, a name that
-/// reaches nothing — is keyed to the impl's own module. Nothing else claims
-/// it, and coherence for exactly those is decided per module.
+/// A function type is keyed by its signature. Any other site behind no
+/// declaration — a tuple, a name that reaches nothing — is keyed to the impl's
+/// own module. Nothing else claims it, and coherence for exactly those is
+/// decided per module.
 fn impl_target_key_at(
     ty: &ast::Type,
     module_source: &ModuleSource,
     resolutions: &Resolutions,
 ) -> ImplTargetKey {
+    if let ast::Type::Function(_) = ty {
+        let name = written_type_arg(ty, resolutions);
+        return ImplTargetKey::Function {
+            display: name.to_display(),
+            name,
+        };
+    }
     sited_impl_target_key(ty, module_source, resolutions)
         .unwrap_or_else(|| ImplTargetKey::of_undeclared(module_source, &get_type_name_static(ty)))
 }
@@ -2049,6 +2065,7 @@ fn classify_position(
                 | ImplTargetKey::TypeParam(..)
                 | ImplTargetKey::Builtin(_)
                 | ImplTargetKey::Undeclared(..) => PositionKind::ForeignType,
+                ImplTargetKey::Function { .. } => unreachable!("a name is no `fn(..)` signature"),
             }
         }
         // Tuples are local if the current crate owns them (via `pub type [..T];`)
