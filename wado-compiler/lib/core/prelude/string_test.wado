@@ -1467,3 +1467,11 @@ test "a whole buffer ending mid-character is malformed, not pending" {
     assert utf8_err([0xE6, 0x97] as List<u8>) == Utf8Error::incomplete(0);
     assert utf8_err([0xC3] as List<u8>) == Utf8Error::incomplete(0);
 }
+
+test "a String compares its bytes against any text with cmp_str" {
+    let s: String = "beta";
+    let text = "xbetax";
+    assert s.cmp_str(text.as_str_slice().slice(1, 5)) matches { Equal };
+    assert s.cmp_str("alpha") matches { Greater };
+    assert s.cmp_str("betamax") matches { Less };
+}
