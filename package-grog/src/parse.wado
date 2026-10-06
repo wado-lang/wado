@@ -4,7 +4,18 @@ use protobuf from "../grammar/Protobuf.g4"
     with {
         generator: { module: "lib:gale" },
     };
-use { EnumDecl, EnumValue, Features, Field, FieldType, Label, MessageDecl, ProtoFile, Syntax } from "./schema.wado";
+use {
+    EnumDecl,
+    EnumValue,
+    Features,
+    Field,
+    FieldType,
+    Label,
+    MessageDecl,
+    ProtoFile,
+    Syntax,
+    scalar_type,
+} from "./schema.wado";
 
 /// Read a `.proto` file. A syntax error comes back as its first diagnostic,
 /// `line:col: message`.
@@ -352,18 +363,10 @@ impl Reader {
 }
 
 fn type_of(name: String) -> FieldType {
-    if is_scalar(&name) {
-        return FieldType::Scalar(name);
-    }
-    return FieldType::Named(name);
-}
-
-pub fn is_scalar(name: &String) -> bool {
-    let scalars: List<String> = [
-        "double", "float", "int32", "int64", "uint32", "uint64", "sint32", "sint64", "fixed32", "fixed64", "sfixed32",
-        "sfixed64", "bool", "string", "bytes",
-    ];
-    return scalars.contains_str(name);
+    return match scalar_type(&name) {
+        Some(t) => FieldType::Scalar(t),
+        None => FieldType::Named(name),
+    };
 }
 
 /// A `signedInt` or an `INT` as protoc reads it: `0x` is hex, a leading `0`

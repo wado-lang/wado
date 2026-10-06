@@ -25,12 +25,53 @@ pub enum Label {
     Repeated,
 }
 
+/// A protobuf scalar type, each case named as the runtime type that encodes it.
+pub enum ScalarType {
+    Double,
+    Float,
+    Int32,
+    Int64,
+    UInt32,
+    UInt64,
+    SInt32,
+    SInt64,
+    Fixed32,
+    Fixed64,
+    SFixed32,
+    SFixed64,
+    Bool,
+    Str,
+    Bytes,
+}
+
+/// The scalar type a `.proto` names, if `name` names one.
+pub fn scalar_type(name: &String) -> Option<ScalarType> {
+    return match name.as_str_slice() {
+        "double" => Option::Some(ScalarType::Double),
+        "float" => Option::Some(ScalarType::Float),
+        "int32" => Option::Some(ScalarType::Int32),
+        "int64" => Option::Some(ScalarType::Int64),
+        "uint32" => Option::Some(ScalarType::UInt32),
+        "uint64" => Option::Some(ScalarType::UInt64),
+        "sint32" => Option::Some(ScalarType::SInt32),
+        "sint64" => Option::Some(ScalarType::SInt64),
+        "fixed32" => Option::Some(ScalarType::Fixed32),
+        "fixed64" => Option::Some(ScalarType::Fixed64),
+        "sfixed32" => Option::Some(ScalarType::SFixed32),
+        "sfixed64" => Option::Some(ScalarType::SFixed64),
+        "bool" => Option::Some(ScalarType::Bool),
+        "string" => Option::Some(ScalarType::Str),
+        "bytes" => Option::Some(ScalarType::Bytes),
+        _ => null,
+    };
+}
+
 /// What a field holds. A named type is a message or an enum, resolved only
 /// once every declaration in the file is known.
 pub variant FieldType {
-    Scalar(String),
+    Scalar(ScalarType),
     Named(String),
-    /// `map<K, V>`: the key's scalar name and the value's type.
+    /// `map<K, V>`: the key's type as written, and the value's type.
     Map([String, FieldType]),
     /// A `group`, whose body is the nested message named here.
     Group(String),

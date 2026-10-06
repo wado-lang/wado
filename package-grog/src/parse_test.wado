@@ -24,11 +24,11 @@ message Outer {
     assert file.messages[1].path == ["Outer", "Inner"];
     assert outer.fields.len() == 6;
     assert outer.fields[0].label matches { None };
-    assert outer.fields[0].type_ matches { Scalar(t) && t == "int32" };
+    assert outer.fields[0].type_ matches { Scalar(Int32) };
     assert outer.fields[1].label matches { Optional };
     assert outer.fields[2].number == 3;
     assert outer.fields[2].type_ matches { Named(t) && t == "Inner" };
-    assert outer.fields[3].type_ matches { Map([k, Scalar(v)]) && k == "string" && v == "int64" };
+    assert outer.fields[3].type_ matches { Map([k, Scalar(Int64)]) && k == "string" };
     assert outer.fields[4].oneof matches { Some(o) && o == "choice" };
     assert outer.fields[5].line == 9;
     assert file.enums[0].path == ["Outer", "Kind"];

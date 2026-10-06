@@ -1,12 +1,22 @@
 //! A `ProtoFile` as Wado: a struct per message, an enum per enum, and the
 //! `Message` and `Enumeration` impls through which Grog's runtime encodes them.
 
-use { TreeMap } from "core:collections";
+use { TreeMap, TreeSet } from "core:collections";
 use { apply_case } from "core:serde";
 use { CodeWriter, EnumSpec, FieldSpec, StructSpec, VariantSpec, Vis, is_keyword, is_reserved } from "lib:wadopoet";
 use { FIELD_NUMBER_MAX } from "./lib.wado";
-use { is_scalar } from "./parse.wado";
-use { EnumDecl, EnumValue, Features, Field, FieldType, Label, MessageDecl, ProtoFile, Syntax } from "./schema.wado";
+use {
+    EnumDecl,
+    Features,
+    Field,
+    FieldType,
+    Label,
+    MessageDecl,
+    ProtoFile,
+    ScalarType,
+    Syntax,
+    scalar_type,
+} from "./schema.wado";
 
 pub variant EmitError {
     /// The schema breaks a rule of its own, or names what the file does not declare.
@@ -136,22 +146,80 @@ impl EnumPlan {
         w.end();
         w.blank();
         w.begin(`fn from_number(number: i32) -> Option<${self.name}>`);
+        w.begin("return match number");
         for let c of &self.cases {
-            w.begin(`if number == ${c.number}`);
-            w.line(`return Option::Some(${self.name}::${c.name});`);
-            w.end();
+            w.line(`${c.number} => Option::Some(${self.name}::${c.name}),`);
         }
         if let Some(other) = &self.unrecognized {
-            w.line(`return Option::Some(${self.name}::${other}(number));`);
+            w.line(`_ => Option::Some(${self.name}::${other}(number)),`);
         } else {
-            w.line("return null;");
+            w.line("_ => null,");
         }
+        w.end_with(";");
         w.end();
         w.blank();
         w.begin(`fn first() -> ${self.name}`);
         w.line(`return ${self.name}::${self.cases[0].name};`);
         w.end();
         w.end();
+        if self.unrecognized matches { Some(_) } {
+            self.write_order(w);
+        }
+    }
+
+    /// An open enum compares as its number, so the undeclared case holding a
+    /// declared number is that number's case, as it is on the wire.
+    fn write_order(&self, w: &mut CodeWriter) {
+        w.blank();
+        w.begin(`impl Eq for ${self.name}`);
+        w.begin(`fn eq(&self, other: &${self.name}) -> bool`);
+        w.line("return self.number() == other.number();");
+        w.end();
+        w.end();
+        w.blank();
+        w.begin(`impl Ord for ${self.name}`);
+        w.begin(`fn cmp(&self, other: &${self.name}) -> Ordering`);
+        w.line("return self.number().cmp(&other.number());");
+        w.end();
+        w.end();
+    }
+}
+
+/// A method `Sizer`, `Writer` and `Reader` share the name of, which the
+/// generated code calls.
+enum Call {
+    Scalar,
+    Implicit,
+    Optional,
+    Repeated,
+    Packed,
+    Message,
+    OptionalMessage,
+    Messages,
+    Group,
+    OptionalGroup,
+    Groups,
+    Map,
+    MessageMap,
+}
+
+impl Display for Call {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(match self {
+            Scalar => "scalar",
+            Implicit => "implicit",
+            Optional => "optional",
+            Repeated => "repeated",
+            Packed => "packed",
+            Message => "message",
+            OptionalMessage => "optional_message",
+            Messages => "messages",
+            Group => "group",
+            OptionalGroup => "optional_group",
+            Groups => "groups",
+            Map => "map",
+            MessageMap => "message_map",
+        });
     }
 }
 
@@ -159,7 +227,7 @@ impl EnumPlan {
 struct Access {
     number: i32,
     /// The Sizer and Writer method.
-    put: String,
+    put: Call,
     take: Take,
     /// The turbofish every call names, or `""`.
     types: String,
@@ -168,7 +236,7 @@ struct Access {
 /// How `merge_field` reads a field.
 variant Take {
     /// A Reader method that merges into the field in place.
-    Into(String),
+    Into(Call),
     /// One scalar, stored as the expression this holds, which reads it as `v`.
     Stored(String),
 }
@@ -179,7 +247,7 @@ struct Member {
     payload: String,
     number: i32,
     /// The runtime method for one value, `scalar`, `message` or `group`, on every pass.
-    put: String,
+    put: Call,
     types: String,
     /// A message case's fresh value, which a read merges into unless the case
     /// already holds one. `None` for a scalar, which a read replaces.
@@ -231,8 +299,8 @@ impl MessagePlan {
         let name = &self.spec.name;
         w.blank();
         w.begin(`impl ${RUNTIME}::Message for ${name}`);
-        w.begin(`fn size(&self, s: &mut ${RUNTIME}::Sizer) -> i32`);
-        w.line(`let mut n = self.${UNKNOWN_FIELDS}.len();`);
+        w.begin(`fn size(&self, s: &mut ${RUNTIME}::Sizer) -> i64`);
+        w.line(`let mut n = self.${UNKNOWN_FIELDS}.len() as i64;`);
         self.calls(w, "n += s.");
         w.line("return n;");
         w.end();
@@ -284,18 +352,18 @@ fn write_stored_merge(w: &mut CodeWriter, number: i32, types: &String, field: &S
     w.end_with(",");
 }
 
-/// A oneof member's arm: a scalar replaces the case, a message merges into the
-/// one the case holds.
+/// A oneof member's arm: a scalar replaces the case, a message merges in place
+/// into the one the case holds, so reading it again copies nothing.
 fn write_member_merge(w: &mut CodeWriter, field: &String, sum: &String, m: &Member) {
     let Some(fresh) = &m.fresh else {
         write_stored_merge(w, m.number, &m.types, field, &`Option::Some(${sum}::${m.case}(v))`);
         return;
     };
     w.begin(`${m.number} =>`);
-    w.begin(`let mut v = match self.${field}`);
-    w.line(`Some(${sum}::${m.case}(held)) => held,`);
-    w.line(`_ => ${fresh},`);
-    w.end_with(";");
+    w.begin(`if let Some(${sum}::${m.case}(held)) = &mut self.${field}`);
+    w.line(`return r.${m.put}(held);`);
+    w.end();
+    w.line(`let mut v = ${fresh};`);
     w.begin(`if !r.${m.put}(&mut v)?`);
     w.line("return Result::Ok(false);");
     w.end();
@@ -309,12 +377,26 @@ enum Presence {
     Explicit,
 }
 
+/// A scalar or enum field's Wado type, the runtime's `Scalar` for it, and its zero.
+struct ScalarPlan {
+    wado: String,
+    runtime: String,
+    zero: String,
+}
+
 /// A field type as Wado spells it and as the runtime reads it.
 variant Resolved {
-    /// The Wado type, the runtime's `Scalar` for it, and its zero.
-    Scalar([String, String, String]),
+    Scalar(ScalarPlan),
     /// A message, and whether it sits on the wire as a group.
     Message([String, bool]),
+}
+
+/// A `oneof` being planned: its field, its variant, and its members so far.
+struct OneofPlan {
+    field: String,
+    sum: String,
+    members: List<Member>,
+    cases: TreeSet<String>,
 }
 
 struct Emitter {
@@ -359,14 +441,15 @@ impl Emitter {
         let mut cases: List<PlannedCase> = [];
         let mut aliases: List<[String, String]> = [];
         let mut named_by = TreeMap::<String, String>::new();
+        let mut case_of = TreeMap::<i32, String>::new();
         if decl.values.is_empty() {
             return Result::Err(EmitError::Invalid(`${decl.line}: ${decl.path.join(".")} declares no value`));
         }
         for let value of &decl.values {
             let case = case_name(&value.name, &prefix);
-            let aliased = cases.into_iter().find(|c| c.number == value.number);
+            let aliased = case_of.get(value.number);
             if let Some(other) = named_by.get_str(&case) {
-                if aliased matches { Some(c) && c.name == case } {
+                if aliased matches { Some(c) && c == case } {
                     continue;
                 }
                 return Result::Err(
@@ -377,8 +460,11 @@ impl Emitter {
             }
             named_by[case] = value.name;
             match aliased {
-                Some(c) => aliases.push([case, c.name]),
-                None => cases.push(PlannedCase { name: case, number: value.number }),
+                Some(c) => aliases.push([case, c]),
+                None => {
+                    case_of[value.number] = case;
+                    cases.push(PlannedCase { name: case, number: value.number });
+                },
             }
         }
         let mut unrecognized: Option<String> = null;
@@ -406,10 +492,12 @@ impl Emitter {
         let name = self.names[self.full_name(&decl.path)].name;
         let mut spec = StructSpec::new(&name, Vis::Pub);
         let mut slots: List<Slot> = [];
-        let mut field_names: List<String> = [UNKNOWN_FIELDS];
-        // Each oneof in the order its first member appears: its field, its variant, its members.
-        let mut oneofs: List<[String, String, List<Member>]> = [];
-        let mut numbered: List<[i32, String]> = [];
+        let mut field_names = TreeSet::<String>::new();
+        field_names.insert(UNKNOWN_FIELDS);
+        // Each oneof in the order its first member appears, and where each sits by its Wado name.
+        let mut oneofs: List<OneofPlan> = [];
+        let mut oneof_at = TreeMap::<String, i32>::new();
+        let mut numbered = TreeMap::<i32, String>::new();
         for let field of &decl.fields {
             let n = field.number;
             if !is_assignable_field_number(n) {
@@ -417,34 +505,32 @@ impl Emitter {
                     `${field.line}: ${field.name}: ${n} is not a field number the wire format admits`,
                 ));
             }
-            for let [number, other] of &numbered {
-                if *number == n {
-                    return Result::Err(EmitError::Invalid(
-                        `${field.line}: ${decl.path.join(".")}: ${other} and ${field.name} are both field ${n}`,
-                    ));
-                }
+            if let Some(other) = numbered.get(n) {
+                return Result::Err(EmitError::Invalid(
+                    `${field.line}: ${decl.path.join(".")}: ${other} and ${field.name} are both field ${n}`,
+                ));
             }
-            numbered.push([n, field.name]);
+            numbered[n] = field.name;
             if let Some(oneof) = &field.oneof {
                 let wado_name = field_name_of(oneof);
-                let at = match oneofs.into_iter().position(|o| o.0 == wado_name) {
+                let at = match oneof_at.get_str(&wado_name) {
                     Some(at) => at,
                     None => {
-                        field_names.push(field_name(oneof, &field_names, decl, field)?);
+                        claim_field_name(oneof, &mut field_names, decl, field)?;
                         let sum = self.take(`${name}${pascal(oneof)}`, `${decl.path.join(".")}.${oneof}`, field.line)?;
                         let mut out = FieldSpec::new_pub(&wado_name, &`Option<${sum}>`);
                         out.default = Option::Some("null");
                         spec.add_field_spec(out);
-                        oneofs.push([wado_name, sum, []]);
+                        oneof_at[wado_name] = oneofs.len();
+                        oneofs.push(OneofPlan { field: wado_name, sum, members: [], cases: TreeSet::new() });
                         oneofs.len() - 1;
                     },
                 };
-                let member = self.plan_member(decl, field, &oneofs[at].2)?;
-                oneofs[at].2.push(member);
+                let member = self.plan_member(decl, field, &mut oneofs[at].cases)?;
+                oneofs[at].members.push(member);
                 continue;
             }
-            let wado_name = field_name(&field.name, &field_names, decl, field)?;
-            field_names.push(wado_name);
+            let wado_name = claim_field_name(&field.name, &mut field_names, decl, field)?;
             let [type_str, default, wire] = self.plan_field(decl, field)?;
             let mut out = FieldSpec::new_pub(&wado_name, &type_str);
             out.default = Option::Some(default);
@@ -455,11 +541,11 @@ impl Emitter {
         unknown.default = Option::Some("b\"\"");
         spec.add_field_spec(unknown);
         let mut variants: List<VariantSpec> = [];
-        for let [field, sum, members] of oneofs {
-            let mut v = VariantSpec::new(&sum, Vis::Pub);
-            for let m of members {
+        for let oneof of oneofs {
+            let mut v = VariantSpec::new(&oneof.sum, Vis::Pub);
+            for let m of oneof.members {
                 v.add_case_with_payload(&m.case, &m.payload);
-                slots.push(Slot::Member([field, sum, m]));
+                slots.push(Slot::Member([oneof.field, oneof.sum, m]));
             }
             variants.push(v);
         }
@@ -476,28 +562,34 @@ impl Emitter {
         let resolved = self.resolve_type(decl, field, &field.type_)?;
         if field.label matches { Repeated } {
             return match resolved {
-                Scalar([wado, runtime, _]) => {
-                    let put = if self.packed(decl, field) { "packed" } else { "repeated" };
-                    Result::Ok([`List<${wado}>`, "[]", access(n, put, Take::Into("repeated"), `::<${runtime}>`)]);
+                Scalar(s) => {
+                    let put = if self.packed(decl, field) { Call::Packed } else { Call::Repeated };
+                    Result::Ok(
+                        [`List<${s.wado}>`, "[]", access(n, put, Take::Into(Call::Repeated), `::<${s.runtime}>`)],
+                    );
                 },
                 Message([wado, group]) => {
-                    let put = if group { "groups" } else { "messages" };
+                    let put = if group { Call::Groups } else { Call::Messages };
                     Result::Ok([`List<${wado}>`, "[]", access(n, put, Take::Into(put), "")]);
                 },
             };
         }
         return match resolved {
-            Scalar([wado, runtime, zero]) => {
+            Scalar(s) => {
                 match self.presence(decl, field) {
-                    Implicit => Result::Ok([wado, zero, access(n, "implicit", Take::Stored("v"), `::<${runtime}>`)]),
+                    Implicit => Result::Ok([
+                        s.wado,
+                        s.zero,
+                        access(n, Call::Implicit, Take::Stored("v"), `::<${s.runtime}>`),
+                    ]),
                     Explicit => {
-                        let optional = access(n, "optional", Take::Stored("Option::Some(v)"), `::<${runtime}>`);
-                        Result::Ok([`Option<${wado}>`, "null", optional]);
+                        let optional = access(n, Call::Optional, Take::Stored("Option::Some(v)"), `::<${s.runtime}>`);
+                        Result::Ok([`Option<${s.wado}>`, "null", optional]);
                     },
                 }
             },
             Message([wado, group]) => {
-                let put = if group { "optional_group" } else { "optional_message" };
+                let put = if group { Call::OptionalGroup } else { Call::OptionalMessage };
                 Result::Ok([`Option<${wado}>`, "null", access(n, put, Take::Into(put), "")]);
             },
         };
@@ -511,42 +603,44 @@ impl Emitter {
         key: &String,
         value: &FieldType,
     ) -> Result<[String, String, Access], EmitError> {
-        if !is_map_key(key) {
-            return Result::Err(EmitError::Invalid(`${field.line}: ${field.name}: a map key cannot be ${key}`));
-        }
-        self.uses_map = true;
-        let [key_wado, key_runtime, _] = scalar(key);
-        let [wado, put, types] = match self.resolve_type(decl, field, value)? {
-            Scalar([wado, runtime, _]) => [wado, "map", `::<${key_runtime}, ${runtime}, ${key_wado}, ${wado}>`],
-            // An entry's value is length-prefixed whatever the message's encoding.
-            Message([wado, _]) => [wado, "message_map", `::<${key_runtime}, ${key_wado}, ${wado}>`],
+        let k = match scalar_type(key) {
+            Some(t) && is_map_key(t) => scalar(t),
+            _ => {
+                return Result::Err(EmitError::Invalid(`${field.line}: ${field.name}: a map key cannot be ${key}`));
+            },
         };
-        let map = `TreeMap<${key_wado}, ${wado}>`;
+        self.uses_map = true;
+        let [wado, put, types] = match self.resolve_type(decl, field, value)? {
+            Scalar(v) => [v.wado, Call::Map, `::<${k.runtime}, ${v.runtime}, ${k.wado}, ${v.wado}>`],
+            // An entry's value is length-prefixed whatever the message's encoding.
+            Message([wado, _]) => [wado, Call::MessageMap, `::<${k.runtime}, ${k.wado}, ${wado}>`],
+        };
+        let map = `TreeMap<${k.wado}, ${wado}>`;
         return Result::Ok([map, "TreeMap::new()", access(field.number, put, Take::Into(put), types)]);
     }
 
     /// A `oneof` member: its case, and how its value sits on the wire.
-    fn plan_member(&self, decl: &MessageDecl, field: &Field, others: &List<Member>) -> Result<Member, EmitError> {
+    fn plan_member(&self, decl: &MessageDecl, field: &Field, cases: &mut TreeSet<String>) -> Result<Member, EmitError> {
         let case = case_name(&field.name, &"");
-        if others.into_iter().any(|m| m.case == case) {
+        if !cases.insert(case) {
             return Result::Err(EmitError::Invalid(
                 `${field.line}: ${decl.path.join(".")} has two oneof members named ${case} in Wado`,
             ));
         }
         return match self.resolve_type(decl, field, &field.type_)? {
-            Scalar([wado, runtime, _]) => Result::Ok(Member {
+            Scalar(s) => Result::Ok(Member {
                 case,
-                payload: wado,
+                payload: s.wado,
                 number: field.number,
-                put: "scalar",
-                types: `::<${runtime}>`,
+                put: Call::Scalar,
+                types: `::<${s.runtime}>`,
                 fresh: null,
             }),
             Message([wado, group]) => Result::Ok(Member {
                 case,
                 payload: wado,
                 number: field.number,
-                put: if group { "group" } else { "message" },
+                put: if group { Call::Group } else { Call::Message },
                 types: "",
                 fresh: Option::Some(`${wado} {}`),
             }),
@@ -556,8 +650,7 @@ impl Emitter {
     fn resolve_type(&self, decl: &MessageDecl, field: &Field, ty: &FieldType) -> Result<Resolved, EmitError> {
         match ty {
             Scalar(s) => {
-                let [wado, runtime, zero] = scalar(s);
-                return Result::Ok(Resolved::Scalar([wado, runtime, zero]));
+                return Result::Ok(Resolved::Scalar(scalar(*s)));
             },
             Named(n) | Group(n) => {
                 let Some(named) = self.resolve(n, decl) else {
@@ -572,7 +665,11 @@ impl Emitter {
                         named.name,
                         ty matches { Group(_) } || self.delimited(decl, field),
                     ])),
-                    Enum(first) => Result::Ok(Resolved::Scalar([named.name, `${RUNTIME}::Enum<${named.name}>`, first])),
+                    Enum(first) => Result::Ok(Resolved::Scalar(ScalarPlan {
+                        wado: named.name,
+                        runtime: `${RUNTIME}::Enum<${named.name}>`,
+                        zero: first,
+                    })),
                 };
             },
             Map(_) => unreachable(),
@@ -615,7 +712,7 @@ impl Emitter {
 
     /// Whether a repeated scalar is written as one length-prefixed run.
     fn packed(&self, decl: &MessageDecl, field: &Field) -> bool {
-        if field.type_ matches { Scalar(s) && s == "string" || s == "bytes" } {
+        if field.type_ matches { Scalar(Str) | Scalar(Bytes) } {
             return false;
         }
         return match &self.file.syntax {
@@ -660,15 +757,21 @@ fn joined_prefix(path: &List<String>, depth: i32) -> String {
     return path.as_slice().slice(0, depth).to_list().join(".");
 }
 
-fn access(number: i32, put: String, take: Take, types: String) -> Access {
+fn access(number: i32, put: Call, take: Take, types: String) -> Access {
     return Access { number, put, take, types };
 }
 
-/// A field's Wado name: a keyword or the unknown-fields name suffixed, and
-/// refused where two fields would share one.
-fn field_name(name: &String, taken: &List<String>, decl: &MessageDecl, field: &Field) -> Result<String, EmitError> {
+/// A field's Wado name, added to those its message has handed out: a keyword
+/// or the unknown-fields name suffixed, and refused where two fields would
+/// share one.
+fn claim_field_name(
+    name: &String,
+    taken: &mut TreeSet<String>,
+    decl: &MessageDecl,
+    field: &Field,
+) -> Result<String, EmitError> {
     let wado_name = field_name_of(name);
-    if taken.contains_str(&wado_name) {
+    if !taken.insert(wado_name) {
         return Result::Err(EmitError::Invalid(
             `${field.line}: ${decl.path.join(".")} has two fields named ${wado_name} in Wado`,
         ));
@@ -698,34 +801,26 @@ fn is_assignable_field_number(n: i32) -> bool {
     return n >= 1 && n <= FIELD_NUMBER_MAX && !(n >= 19000 && n <= 19999);
 }
 
-/// A scalar's Wado type, the runtime's `Scalar` for it, and its zero.
-fn scalar(name: &String) -> [String, String, String] {
-    let [wado, runtime, zero] = match name.as_str_slice() {
-        "double" => ["f64", "Double", "0.0"],
-        "float" => ["f32", "Float", "0.0"],
-        "int32" => ["i32", "Int32", "0"],
-        "int64" => ["i64", "Int64", "0"],
-        "uint32" => ["u32", "UInt32", "0"],
-        "uint64" => ["u64", "UInt64", "0"],
-        "sint32" => ["i32", "SInt32", "0"],
-        "sint64" => ["i64", "SInt64", "0"],
-        "fixed32" => ["u32", "Fixed32", "0"],
-        "fixed64" => ["u64", "Fixed64", "0"],
-        "sfixed32" => ["i32", "SFixed32", "0"],
-        "sfixed64" => ["i64", "SFixed64", "0"],
-        "bool" => ["bool", "Bool", "false"],
-        "string" => ["String", "Str", "\"\""],
-        "bytes" => ["ByteList", "Bytes", "b\"\""],
-        _ => unreachable(),
+fn scalar(t: ScalarType) -> ScalarPlan {
+    let [wado, zero] = match t {
+        Double => ["f64", "0.0"],
+        Float => ["f32", "0.0"],
+        Int32 | SInt32 | SFixed32 => ["i32", "0"],
+        Int64 | SInt64 | SFixed64 => ["i64", "0"],
+        UInt32 | Fixed32 => ["u32", "0"],
+        UInt64 | Fixed64 => ["u64", "0"],
+        Bool => ["bool", "false"],
+        Str => ["String", "\"\""],
+        Bytes => ["ByteList", "b\"\""],
     };
-    return [wado, `${RUNTIME}::${runtime}`, zero];
+    return ScalarPlan { wado, runtime: `${RUNTIME}::${t}`, zero };
 }
 
 /// Any scalar but a float or `bytes`, as protobuf's language guide allows.
-fn is_map_key(name: &String) -> bool {
-    return match name.as_str_slice() {
-        "double" | "float" | "bytes" => false,
-        _ => is_scalar(name),
+fn is_map_key(t: ScalarType) -> bool {
+    return match t {
+        Double | Float | Bytes => false,
+        Int32 | Int64 | UInt32 | UInt64 | SInt32 | SInt64 | Fixed32 | Fixed64 | SFixed32 | SFixed64 | Bool | Str => true,
     };
 }
 

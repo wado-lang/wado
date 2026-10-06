@@ -197,8 +197,8 @@ pub variant PointChoice {
 }
 
 impl grog::Message for Point {
-    fn size(&self, s: &mut grog::Sizer) -> i32 {
-        let mut n = self.unknown_fields.len();
+    fn size(&self, s: &mut grog::Sizer) -> i64 {
+        let mut n = self.unknown_fields.len() as i64;
         n += s.implicit::<grog::Int32>(1, &self.x);
         n += s.optional::<grog::SInt64>(2, &self.y);
         n += s.packed::<grog::Fixed32>(3, &self.tags);
@@ -252,10 +252,10 @@ impl grog::Message for Point {
                 return Result::Ok(true);
             },
             8 => {
-                let mut v = match self.choice {
-                    Some(PointChoice::Other(held)) => held,
-                    _ => Point {},
-                };
+                if let Some(PointChoice::Other(held)) = &mut self.choice {
+                    return r.message(held);
+                }
+                let mut v = Point {};
                 if !r.message(&mut v)? {
                     return Result::Ok(false);
                 }
@@ -283,7 +283,10 @@ test "an open enum holds a number it does not declare" {
 }");
     assert out.contains("Color::DarkRed => -1,");
     assert out.contains("Color::Unrecognized(n) => *n,");
-    assert out.contains("return Option::Some(Color::Unrecognized(number));");
+    assert out.contains("-1 => Option::Some(Color::DarkRed),");
+    assert out.contains("_ => Option::Some(Color::Unrecognized(number)),");
+    assert out.contains("impl Eq for Color {");
+    assert out.contains("impl Ord for Color {");
 }
 
 test "a closed enum refuses a number it does not declare" {
@@ -294,7 +297,8 @@ test "a closed enum refuses a number it does not declare" {
     ] {
         let out = generate(source);
         assert out.contains("pub enum ");
-        assert out.contains("return null;");
+        assert out.contains("_ => null,");
+        assert !out.contains("impl Eq for");
     }
 }
 
