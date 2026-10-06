@@ -5382,7 +5382,7 @@ If `count` is negative, replaces all occurrences.
 
 A growable sequence.
 
-Contract: shrinking (`truncate`, `clear`, `pop`, `remove`) releases the
+Contract: shrinking (`truncate`, `clear`, `pop`, `remove`) may release the
 slots past the new length, so the collector can reclaim what they held. A
 slice or an iterator taken before the shrink, a `for` loop's included, must
 not read those slots: what it reads is unspecified, some value of `T` or a
@@ -5427,9 +5427,6 @@ instead of one per element. The Wasm array bounds check still guards the
 store, so an under-reserved call traps rather than corrupting memory.
 
 #### `pub fn pop(&mut self) -> Option<T>`
-
-Removes and returns the last element, or null when empty. Releases its
-slot, under the contract on `List`.
 
 #### `pub fn to_array(&self) -> Array<T>`
 

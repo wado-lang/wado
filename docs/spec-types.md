@@ -535,7 +535,7 @@ consequences follow, both memory-safe:
 - Aliasing. A write to the source that does not reallocate is visible through
   the view.
 
-A source `List` that shrinks (`truncate`, `clear`, `pop`, `remove`) releases
+A source `List` that shrinks (`truncate`, `clear`, `pop`, `remove`) may release
 the slots past its new length, so the collector can reclaim what they held.
 Reading a released slot through a view, or through an iterator over the list,
 is a [contract violation](./spec-overview.md#behavior-classes). The result is

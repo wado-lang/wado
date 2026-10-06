@@ -41,7 +41,7 @@ use { AsByteSlice, FromLeBytes } from "core:prelude/bytes.wado";
 
 /// A growable sequence.
 ///
-/// Contract: shrinking (`truncate`, `clear`, `pop`, `remove`) releases the
+/// Contract: shrinking (`truncate`, `clear`, `pop`, `remove`) may release the
 /// slots past the new length, so the collector can reclaim what they held. A
 /// slice or an iterator taken before the shrink, a `for` loop's included, must
 /// not read those slots: what it reads is unspecified, some value of `T` or a
@@ -141,16 +141,16 @@ impl<T> List<T> {
         self.used = used + 1;
     }
 
-    /// Removes and returns the last element, or null when empty. Releases its
-    /// slot, under the contract on `List`.
+    /// Removes and returns the last element, or null when empty.
+    // Keeps its slot: binding the element to release the slot after costs a
+    // deep copy of it, since a returned `let` reads as owned rather than as a
+    // projection of `self`.
     pub fn pop(&mut self) -> Option<T> {
         if self.used == 0 {
             return null;
         }
         self.used -= 1;
-        let value = self.repr[self.used];
-        builtin::array_release(&mut self.repr, self.used, 1);
-        return Option::Some(value);
+        return Option::Some(self.repr[self.used]);
     }
 
     /// Copy the live `0..<len()` elements into a fresh fixed `Array<T>` of exactly
