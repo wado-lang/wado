@@ -249,7 +249,7 @@ pub(super) fn first_param_types(project: &NirPackage) -> FirstParamTypes {
 
 /// The [`AliasSets`] the `ValueGraph` builder needs. Wraps [`build_alias_info`]
 /// (for `aliased` / `untrackable`) with the mutable-escape analysis
-/// (`mut_escaped`), and reads `references` off the local types.
+/// (`mut_escaped`).
 ///
 /// `mut_escaped` ⊆ `aliased` is the subset a call can actually mutate, derived
 /// subtractively: a local is dropped only when its type is transitively free of
@@ -309,14 +309,10 @@ pub(super) fn builder_alias_sets(
         call_immutability,
         &info.alias_groups,
     );
-    let references = (0..locals.len() as u32)
-        .filter(|&i| type_table.is_reference_shaped(locals[i as usize].type_id))
-        .collect();
     AliasSets {
         aliased,
         untrackable: info.untrackable.iter().collect(),
         mut_escaped,
-        references,
     }
 }
 

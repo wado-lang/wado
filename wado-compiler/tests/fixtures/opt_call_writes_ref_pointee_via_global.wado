@@ -1,12 +1,18 @@
-// A field read through a reference parameter is not shared across a call that
-// writes the pointee through a global: the reference may name the global, so
-// the call is a write to it whether or not it takes the reference.
+// A field read through a reference is not shared across a call that writes the
+// pointee through a global: the reference may name the global, so the call is a
+// write to it whether or not it takes the reference. That holds for a read, a
+// stored value, a condition, and a reference held in a struct field.
 
 use { println, Stdout } from "core:cli";
 
 struct P {
     x: i32,
     y: i32,
+}
+
+struct H {
+    p: &P,
+    k: i32,
 }
 
 global mut G: P = P { x: 1, y: 0 };
@@ -53,6 +59,37 @@ fn across_call_with_mut_arg(r: &P, c: bool) -> i32 {
     return s + r.x + n * 1000;
 }
 
+#[inline(never)]
+fn stored_then_call(r: &mut P) -> i32 {
+    r.x = 5;
+    bump_global();
+    return r.x;
+}
+
+#[inline(never)]
+fn condition_across_call(r: &P) -> i32 {
+    let before = r.x == 1;
+    bump_global();
+    let mut n = 0;
+    if before {
+        n += 10;
+        if r.x == 1 {
+            n += 1;
+        }
+    }
+    return n;
+}
+
+#[inline(never)]
+fn through_held_ref(h: H, c: bool) -> i32 {
+    let mut s = 0;
+    if c {
+        s = h.p.x * 100;
+    }
+    bump_global();
+    return s + h.p.x;
+}
+
 export fn run() with Stdout {
     let c = builtin::black_box(true);
     println(`${through_ref(&G, c)}`);
@@ -60,9 +97,14 @@ export fn run() with Stdout {
     println(`${through_mut_ref(&mut G, c)}`);
     G.x = 1;
     println(`${across_call_with_mut_arg(&G, c)}`);
+    println(`${stored_then_call(&mut G)}`);
+    G.x = 1;
+    println(`${condition_across_call(&G)}`);
+    G.x = 1;
+    println(`${through_held_ref(H { p: &G, k: 0 }, c)}`);
 }
 
 __DATA__
 {
-    "stdout": "102\n102\n1102\n"
+    "stdout": "102\n102\n1102\n6\n10\n102\n"
 }

@@ -19,7 +19,7 @@ use crate::nir::{FuncId, NirBinaryOp, NirLiteralPattern, NirLocal, NirUnaryOp};
 use crate::nir_value_graph::builder::ValueGraphBuild;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
 use crate::primitive::PrimitiveType;
-use crate::tir::TypeId;
+use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
 /// An operand position in the skeleton — an expression's value, after operand
@@ -1878,6 +1878,35 @@ impl Body {
         match self.block_exits(e)?.as_slice() {
             [Some(one)] => Some(*one),
             _ => None,
+        }
+    }
+
+    /// Whether some step of the place `e`, its root included, may name storage
+    /// rather than hold a value ([`TypeTable::is_reference_shaped`]): what it
+    /// reaches the frame need not own. Without a type table, and past a step
+    /// that is no place, every step might be.
+    pub fn place_crosses_reference(&self, e: ExprId, types: Option<&TypeTable>) -> bool {
+        let Some(types) = types else {
+            return true;
+        };
+        let mut cur = e;
+        loop {
+            if types.is_reference_shaped(self.exprs[cur].type_id) {
+                return true;
+            }
+            let inner = match &self.exprs[cur].kind {
+                ExprKind::Local { .. } => return false,
+                ExprKind::Unary { expr: inner, .. }
+                | ExprKind::Cast { expr: inner, .. }
+                | ExprKind::FieldAccess { expr: inner, .. }
+                | ExprKind::VariantPayload { expr: inner, .. }
+                | ExprKind::Index { expr: inner, .. } => Some(*inner),
+                _ => self.block_yield(cur),
+            };
+            match inner.and_then(Operand::as_expr) {
+                Some(inner) => cur = inner,
+                None => return true,
+            }
         }
     }
 

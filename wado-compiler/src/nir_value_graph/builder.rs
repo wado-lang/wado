@@ -37,6 +37,9 @@ struct HeapState {
     /// *alongside* `per_local`, never in place of it — `per_local` still carries
     /// the bumps aimed at one local.
     escaped_version: HeapVersion,
+    /// The generation of storage reached through a reference, which any call
+    /// may write through a global, so a call taking no argument still bumps it.
+    reference_version: HeapVersion,
 }
 
 impl HeapState {
@@ -48,6 +51,7 @@ impl HeapState {
             field_global: IndexMap::default(),
             default_version: HeapVersion::INITIAL,
             escaped_version: HeapVersion::INITIAL,
+            reference_version: HeapVersion::INITIAL,
         }
     }
 
@@ -59,14 +63,22 @@ impl HeapState {
 
     /// The effective version a read of `root.field` sees: the max of every
     /// generation that could have invalidated it. With no known `root`, that is
-    /// every generation that could have touched `field` under any root.
-    fn version_of(&self, root: Option<u32>, field: u32, root_escaped: bool) -> HeapVersion {
+    /// every generation that could have touched `field` under any root. A
+    /// `foreign` read reaches its slot through a reference, so any write to
+    /// storage outside the frame may have touched it.
+    fn version_of(
+        &self,
+        root: Option<u32>,
+        field: u32,
+        root_escaped: bool,
+        foreign: bool,
+    ) -> HeapVersion {
         let mut v = self.default_version;
         if let Some(&fg) = self.field_global.get(&field) {
             v = v.max(fg);
         }
         let Some(r) = root else {
-            v = v.max(self.escaped_version);
+            v = v.max(self.escaped_version).max(self.reference_version);
             v = self.per_local.values().fold(v, |acc, &pl| acc.max(pl));
             return self
                 .per_slot
@@ -74,8 +86,11 @@ impl HeapState {
                 .filter(|((_, f), _)| *f == field)
                 .fold(v, |acc, (_, &ps)| acc.max(ps));
         };
-        if root_escaped {
+        if root_escaped || foreign {
             v = v.max(self.escaped_version);
+        }
+        if foreign {
+            v = v.max(self.reference_version);
         }
         if let Some(&pl) = self.per_local.get(&r) {
             v = v.max(pl);
@@ -90,6 +105,11 @@ impl HeapState {
     fn bump_escaped(&mut self) {
         let v = self.fresh();
         self.escaped_version = v;
+    }
+
+    fn bump_references(&mut self) {
+        let v = self.fresh();
+        self.reference_version = v;
     }
 
     fn bump_slot(&mut self, root: u32, field: u32) {
@@ -113,6 +133,7 @@ impl HeapState {
         self.per_local.clear();
         self.field_global.clear();
         self.escaped_version = HeapVersion::INITIAL;
+        self.reference_version = HeapVersion::INITIAL;
         self.default_version = v;
     }
 
@@ -126,6 +147,7 @@ impl HeapState {
             field_global: self.field_global.clone(),
             default_version: self.default_version,
             escaped_version: self.escaped_version,
+            reference_version: self.reference_version,
         }
     }
 
@@ -135,6 +157,7 @@ impl HeapState {
         self.field_global = snap.field_global;
         self.default_version = snap.default_version;
         self.escaped_version = snap.escaped_version;
+        self.reference_version = snap.reference_version;
     }
 
     /// Seed a fresh `HeapState` (as in [`build_scoped`]) with a snapshot taken at
@@ -149,6 +172,7 @@ impl HeapState {
         self.field_global.clone_from(&snap.field_global);
         self.default_version = snap.default_version;
         self.escaped_version = snap.escaped_version;
+        self.reference_version = snap.reference_version;
         let max = snap
             .per_slot
             .values()
@@ -156,6 +180,7 @@ impl HeapState {
             .chain(snap.field_global.values())
             .chain(std::iter::once(&snap.default_version))
             .chain(std::iter::once(&snap.escaped_version))
+            .chain(std::iter::once(&snap.reference_version))
             .copied()
             .max()
             .unwrap_or(HeapVersion::INITIAL);
@@ -170,6 +195,7 @@ pub(crate) struct HeapSnapshot {
     field_global: IndexMap<u32, HeapVersion>,
     default_version: HeapVersion,
     escaped_version: HeapVersion,
+    reference_version: HeapVersion,
 }
 
 /// A snapshot of *all* flow-sensitive builder state at a program point:
@@ -219,10 +245,6 @@ pub struct AliasSets {
     pub untrackable: IndexSet<u32>,
     /// The subset of `aliased` a call may mutate.
     pub mut_escaped: IndexSet<u32>,
-    /// Locals that may name storage ([`TypeTable::is_reference_shaped`]). The
-    /// body does not own that storage and any call may reach it through a
-    /// global, so a call taking no argument still writes it.
-    pub references: IndexSet<u32>,
 }
 
 /// Build the `ValueGraph` for one function body. Each parameter in
@@ -477,9 +499,11 @@ struct Builder<'a> {
     /// Locals a call may mutate (mutable escape). Only these are bumped by
     /// [`Builder::bump_call_effects`]. See [`build`].
     mut_escaped: IndexSet<u32>,
-    /// Reference-typed locals, ascending. Every call that may write a struct
-    /// field invalidates their fields. See [`AliasSets::references`].
-    references: Vec<u32>,
+    /// Receivers bound to a struct literal, or a borrow of one (`&S { … }`):
+    /// an object the frame just built, which nothing outside it reaches unless
+    /// it escapes, and escaping marks it `untrackable` or `mut_escaped` as for
+    /// any other local.
+    owned_pointees: IndexSet<ValueId>,
     /// `local → pointee local` for `let r = &v` references, so `r.f` forwards
     /// from `v`'s field slot (reference look-through). Cleared when `r` or the
     /// pointee is reassigned ([`Builder::update_ref_target`]). This is
@@ -524,7 +548,7 @@ struct Builder<'a> {
     /// still sees it.
     stmt_entry_version: IndexMap<StmtId, HeapVersion>,
     /// `ExprId` indices of calls that mutate no caller local. See
-    /// [`BuildConfig::pure_calls`].
+    /// [`CallFacts::pure`].
     pure_calls: IndexSet<ExprId>,
     /// Callees that write no tracked `(root, field)` slot: an intrinsic below
     /// the field layer, a value-copy helper, or a bodied function that never
@@ -542,11 +566,6 @@ impl<'a> Builder<'a> {
         type_table: Option<&'a TypeTable>,
         pool: ValuePool,
     ) -> Self {
-        let sorted = |set: &IndexSet<u32>| {
-            let mut v: Vec<u32> = set.iter().copied().collect();
-            v.sort_unstable();
-            v
-        };
         Self {
             body,
             pool,
@@ -564,8 +583,12 @@ impl<'a> Builder<'a> {
             aliased: alias.aliased.clone(),
             untrackable: alias.untrackable.clone(),
             mut_escaped: alias.mut_escaped.clone(),
-            mut_escaped_sorted: sorted(&alias.mut_escaped),
-            references: sorted(&alias.references),
+            mut_escaped_sorted: {
+                let mut v: Vec<u32> = alias.mut_escaped.iter().copied().collect();
+                v.sort_unstable();
+                v
+            },
+            owned_pointees: IndexSet::default(),
             ref_targets: IndexMap::default(),
             field_ref_targets: IndexMap::default(),
             assigned_fields: assigned_field_indices(body),
@@ -836,15 +859,21 @@ impl<'a> Builder<'a> {
         }
     }
 
-    fn heap_version_of(&self, root: Option<u32>, field: u32) -> HeapVersion {
-        let escaped = root.is_some_and(|r| {
-            self.mut_escaped.contains(&r) || self.references.binary_search(&r).is_ok()
-        });
-        self.heap_state.version_of(root, field, escaped)
+    fn heap_version_of(&self, root: Option<u32>, field: u32, foreign: bool) -> HeapVersion {
+        let escaped = root.is_some_and(|r| self.mut_escaped.contains(&r));
+        self.heap_state.version_of(root, field, escaped, foreign)
+    }
+
+    /// Whether a field of the object `recv_expr` (valued `recv`) evaluates to
+    /// is reached through a reference to storage the frame does not own.
+    fn reaches_foreign(&self, recv_expr: ExprId, recv: Option<ValueId>) -> bool {
+        self.body
+            .place_crosses_reference(recv_expr, self.type_table)
+            && recv.is_none_or(|v| !self.owned_pointees.contains(&v))
     }
 
     /// What a call mutating no caller local still reaches: the `untrackable`
-    /// locals, and the pointee of every reference. One that is not pure bumps
+    /// locals, and storage behind a reference. One that is not pure bumps
     /// `escaped_version`, which a read through a reference also observes.
     fn bump_pure_call_reach(&mut self) {
         for i in 0..self.mut_escaped_sorted.len() {
@@ -853,13 +882,11 @@ impl<'a> Builder<'a> {
                 self.heap_state.bump_local(l);
             }
         }
-        for i in 0..self.references.len() {
-            self.heap_state.bump_local(self.references[i]);
-        }
+        self.heap_state.bump_references();
     }
 
     /// Invalidate the locals a call may mutate. One proven to mutate nothing
-    /// ([`BuildConfig::pure_calls`]) bumps only what
+    /// ([`CallFacts::pure`]) bumps only what
     /// [`Builder::bump_pure_call_reach`] names; otherwise every `mut_escaped`
     /// local is bumped — not just this call's arguments, since a mutable
     /// reference that escaped earlier may have been retained.
@@ -1122,8 +1149,9 @@ impl<'a> Builder<'a> {
                 // those reads.
                 let target_kind = self.body.exprs[target].kind.clone();
                 // Capture the field place's root local, receiver `ValueId`,
-                // and whether it is a bare `Local` — so the post-bump version
-                // can be seeded for store→load forwarding.
+                // whether it is a bare `Local`, and whether it reaches foreign
+                // storage — so the post-bump version can be seeded for
+                // store→load forwarding.
                 let field_place = match &target_kind {
                     ExprKind::Local { .. } => None,
                     // An assign target is an lvalue, so its receiver is a place
@@ -1139,11 +1167,12 @@ impl<'a> Builder<'a> {
                         // read that looks through the borrow finds nothing.
                         if let Some((pointee_vn, pointee)) = self.reference_lookthrough(recv_e) {
                             self.walk_operand(*recv);
-                            Some((Some(pointee), Some(pointee_vn), true))
+                            Some((Some(pointee), Some(pointee_vn), true, false))
                         } else {
                             let root = self.receiver_root(recv_e);
                             let recv_v = self.walk_operand(*recv);
-                            Some((root, recv_v, bare_local))
+                            let foreign = self.reaches_foreign(recv_e, recv_v);
+                            Some((root, recv_v, bare_local, foreign))
                         }
                     }
                     _ => {
@@ -1166,7 +1195,8 @@ impl<'a> Builder<'a> {
                         }
                     }
                     ExprKind::FieldAccess { field_index, .. } => {
-                        let (root, recv_v, bare_local) = field_place.expect("field target");
+                        let (root, recv_v, bare_local, foreign) =
+                            field_place.expect("field target");
                         // A non-aliased bare-`Local` root takes the precise
                         // per-slot bump — a write to `a.f` leaves every other
                         // object's `f` untouched. An aliased root, or a deeper
@@ -1186,7 +1216,7 @@ impl<'a> Builder<'a> {
                             && bare_local
                             && !self.untrackable.contains(&r)
                         {
-                            let ver = self.heap_version_of(Some(r), field_index);
+                            let ver = self.heap_version_of(Some(r), field_index, foreign);
                             self.field_store.insert((rv, field_index, ver), v);
                         }
                     }
@@ -1308,11 +1338,16 @@ impl<'a> Builder<'a> {
                 // A promoted `Operand::Value` receiver has no skeleton place: no
                 // reference target and no receiver root local.
                 let inner_e = inner.as_expr();
-                let (recv, root) = match inner_e.and_then(|ie| self.reference_lookthrough(ie)) {
-                    Some((pointee_vn, pointee)) => (pointee_vn, Some(pointee)),
-                    None => (walked, inner_e.and_then(|ie| self.receiver_root(ie))),
-                };
-                let heap_ver = self.heap_version_of(root, field_index);
+                let (recv, root, foreign) =
+                    match inner_e.and_then(|ie| self.reference_lookthrough(ie)) {
+                        Some((pointee_vn, pointee)) => (pointee_vn, Some(pointee), false),
+                        None => (
+                            walked,
+                            inner_e.and_then(|ie| self.receiver_root(ie)),
+                            inner_e.is_none_or(|ie| self.reaches_foreign(ie, Some(walked))),
+                        ),
+                    };
+                let heap_ver = self.heap_version_of(root, field_index, foreign);
                 // Store→load forwarding: a value stored to this exact
                 // `(receiver, field, version)` is the value this read sees.
                 if let Some(&stored) = self.field_store.get(&(recv, field_index, heap_ver)) {
@@ -1458,7 +1493,7 @@ impl<'a> Builder<'a> {
                 // same field constants.
                 ExprKind::Local { index, .. } => {
                     let src = *index;
-                    self.copy_local_field_slots(src, root, recv);
+                    self.copy_local_field_slots(producer, src, root, recv);
                     return;
                 }
                 ExprKind::LabeledBlock { .. } => {
@@ -1478,6 +1513,7 @@ impl<'a> Builder<'a> {
         let ExprKind::StructLiteral { fields, .. } = &self.body.exprs[producer].kind else {
             return;
         };
+        self.owned_pointees.insert(recv);
         // Clone out the (field_index, value-expr) pairs to release the body
         // borrow before mutating `field_store`.
         let pairs: Vec<(u32, Operand)> = fields.iter().map(|f| (f.field_index, f.value)).collect();
@@ -1504,7 +1540,7 @@ impl<'a> Builder<'a> {
                 self.field_ref_targets.insert((recv, field_index), pointee);
             }
             if let Some(fv) = self.walked_value(field_value) {
-                let ver = self.heap_version_of(Some(root), field_index);
+                let ver = self.heap_version_of(Some(root), field_index, false);
                 self.field_store.insert((recv, field_index, ver), fv);
                 seeded += 1;
             }
@@ -1531,7 +1567,13 @@ impl<'a> Builder<'a> {
     /// the stale copy becomes unreachable (the seeding monotonicity argument).
     /// `untrackable` (`stores`-aliased) locals, which can't be versioned, are
     /// excluded.
-    fn copy_local_field_slots(&mut self, src: u32, dst_root: u32, dst_recv: ValueId) {
+    fn copy_local_field_slots(
+        &mut self,
+        src_expr: ExprId,
+        src: u32,
+        dst_root: u32,
+        dst_recv: ValueId,
+    ) {
         if src == dst_root
             || self.untrackable.contains(&src)
             || self.untrackable.contains(&dst_root)
@@ -1546,18 +1588,20 @@ impl<'a> Builder<'a> {
         let Some(&src_recv) = self.current_value.get(&src) else {
             return;
         };
+        // `dst` holds a copy of what `src` holds, so it is foreign alike.
+        let foreign = self.reaches_foreign(src_expr, Some(src_recv));
         // Collect the live (field, value) pairs first to release the borrow on
         // `field_store` before inserting.
         let live: Vec<(u32, ValueId)> = self
             .field_store
             .iter()
             .filter_map(|(&(recv, field, ver), &stored)| {
-                (recv == src_recv && ver == self.heap_version_of(Some(src), field))
+                (recv == src_recv && ver == self.heap_version_of(Some(src), field, foreign))
                     .then_some((field, stored))
             })
             .collect();
         for (field, stored) in live {
-            let dst_ver = self.heap_version_of(Some(dst_root), field);
+            let dst_ver = self.heap_version_of(Some(dst_root), field, foreign);
             self.field_store.insert((dst_recv, field, dst_ver), stored);
         }
     }
@@ -1817,14 +1861,15 @@ impl<'a> Builder<'a> {
         };
         // An arm that bumped it may have written the set, so the merge takes a
         // fresh version no pre-branch read can match.
-        let escaped_changed = live
-            .iter()
-            .any(|a| a.escaped_version != pre.escaped_version);
-        let new_escaped = if escaped_changed {
-            self.heap_state.fresh()
-        } else {
-            pre.escaped_version
+        let mut join_generation = |version: fn(&HeapSnapshot) -> HeapVersion| {
+            if live.iter().any(|a| version(a) != version(pre)) {
+                self.heap_state.fresh()
+            } else {
+                version(pre)
+            }
         };
+        let new_escaped = join_generation(|h| h.escaped_version);
+        let new_reference = join_generation(|h| h.reference_version);
         let new_per_slot = self.join_overlay(
             new_default,
             &pre.per_slot,
@@ -1848,6 +1893,7 @@ impl<'a> Builder<'a> {
         self.heap_state.field_global = new_field_global;
         self.heap_state.default_version = new_default;
         self.heap_state.escaped_version = new_escaped;
+        self.heap_state.reference_version = new_reference;
     }
 
     /// Join one overlay map across the live arms. A key keeps its pre version
@@ -2425,19 +2471,32 @@ mod tests {
     #[test]
     fn unknown_root_read_sees_every_bump_of_its_field() {
         let mut heap = HeapState::new();
-        let bumps: [fn(&mut HeapState); 3] = [
+        let bumps: [fn(&mut HeapState); 4] = [
             |h| h.bump_slot(3, 0),
             |h| h.bump_local(5),
             HeapState::bump_escaped,
+            HeapState::bump_references,
         ];
         for bump in bumps {
-            let before = heap.version_of(None, 0, false);
+            let before = heap.version_of(None, 0, false, false);
             bump(&mut heap);
-            assert_ne!(heap.version_of(None, 0, false), before);
+            assert_ne!(heap.version_of(None, 0, false, false), before);
         }
-        let before = heap.version_of(None, 0, false);
+        let before = heap.version_of(None, 0, false, false);
         heap.bump_slot(3, 1);
-        assert_eq!(heap.version_of(None, 0, false), before);
+        assert_eq!(heap.version_of(None, 0, false, false), before);
+    }
+
+    /// A read through a reference sees a call that mutates no caller local,
+    /// and one rooted at an owned local does not.
+    #[test]
+    fn only_a_foreign_read_sees_a_reference_bump() {
+        let mut heap = HeapState::new();
+        let foreign = heap.version_of(Some(0), 0, false, true);
+        let owned = heap.version_of(Some(0), 0, false, false);
+        heap.bump_references();
+        assert_ne!(heap.version_of(Some(0), 0, false, true), foreign);
+        assert_eq!(heap.version_of(Some(0), 0, false, false), owned);
     }
 
     /// `f(); a + b`, where locals `a` (0) and `b` (1) are both mutably escaped:

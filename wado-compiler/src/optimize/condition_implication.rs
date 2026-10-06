@@ -25,7 +25,7 @@ use crate::optimize::arena_query::{
 };
 use crate::optimize::gate::{FunctionGate, GatedPass};
 use crate::optimize::value_copy::mutation::{MutationOracle, Witness, expr_witnesses};
-use crate::tir::{ResolvedType, TypeTable};
+use crate::tir::TypeTable;
 use crate::{hashmap, nir_arena};
 
 /// Run condition implication at the body root on an existing engine session.
@@ -1084,56 +1084,36 @@ fn write_through(engine: &Engine, place: ExprId, sink: &mut impl FnMut(Write)) {
     }
 }
 
-/// Whether some step of the place chain at `e`, its root included, is a
-/// reference. Without a type table every step might be.
 fn place_crosses_reference(engine: &Engine, e: ExprId) -> bool {
-    let Some(types) = engine.value_graph_type_table() else {
-        return true;
-    };
-    let mut cur = e;
-    loop {
-        if matches!(
-            types.get(engine.body.exprs[cur].type_id),
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-        ) {
-            return true;
-        }
-        let next = match &engine.body.exprs[cur].kind {
-            ExprKind::Unary { expr: inner, .. }
-            | ExprKind::Cast { expr: inner, .. }
-            | ExprKind::FieldAccess { expr: inner, .. }
-            | ExprKind::VariantPayload { expr: inner, .. }
-            | ExprKind::Index { expr: inner, .. } => inner.as_expr(),
-            _ => None,
-        };
-        match next {
-            Some(inner) => cur = inner,
-            None => return false,
-        }
-    }
+    engine
+        .body
+        .place_crosses_reference(e, engine.value_graph_type_table())
 }
 
-/// Whether `w` may change what `root` holds.
+/// Whether `w` may change what `root` holds. A call reaches a reference's
+/// pointee through a global without taking the reference.
 fn write_hits(engine: &Engine, w: Write, root: u32) -> bool {
     match w {
         Write::Root(r) => r == root,
         Write::Aliased => reachable_elsewhere(engine, root),
-        Write::Call => engine.mut_escaped().contains(&root),
+        Write::Call => engine.mut_escaped().contains(&root) || is_reference(engine, root),
     }
 }
 
 /// Whether another handle may reach what `root` holds: an aliased local, or a
 /// reference, whose pointee the frame does not own.
 fn reachable_elsewhere(engine: &Engine, root: u32) -> bool {
-    engine.aliased().contains(&root)
-        || engine.locals().get(root as usize).is_none_or(|l| {
-            engine.value_graph_type_table().is_none_or(|types| {
-                matches!(
-                    types.get(l.type_id),
-                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-                )
-            })
-        })
+    engine.aliased().contains(&root) || is_reference(engine, root)
+}
+
+/// Whether `local` may name storage rather than hold a value. A local minted
+/// past the type table's reach might.
+fn is_reference(engine: &Engine, local: u32) -> bool {
+    engine.locals().get(local as usize).is_none_or(|l| {
+        engine
+            .value_graph_type_table()
+            .is_none_or(|types| types.is_reference_shaped(l.type_id))
+    })
 }
 
 /// Whether anything under `node` may change what one of `roots` holds.
