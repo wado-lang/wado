@@ -2305,9 +2305,6 @@ fn spreads_pack(ty: &ast::Type) -> bool {
     }
 }
 
-/// The coherence checks the solver owns, given spans and names by the headers
-/// they came from. Only a user-local impl is reported: a stdlib pair the check
-/// would name is not something a program can fix.
 /// How a finding names the impl at `conflict`, reported at `here`.
 fn conflicting_impl_location(conflict: &ModuleSource, here: &ModuleSource) -> String {
     if conflict == here {
@@ -2317,6 +2314,9 @@ fn conflicting_impl_location(conflict: &ModuleSource, here: &ModuleSource) -> St
     }
 }
 
+/// The coherence checks the solver owns, given spans and names by the headers
+/// they came from. Only a user-local impl is reported: a stdlib pair the check
+/// would name is not something a program can fix.
 fn check_impl_coherence(
     impl_headers: &IndexMap<DefId, ImplHeader>,
     resolutions: &Resolutions,

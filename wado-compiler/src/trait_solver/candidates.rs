@@ -2,7 +2,6 @@
 //! (`docs/wep-2026-09-01-trait-resolution.md`, "The candidates"). What picks
 //! between them is [`rank`](super::rank).
 
-use super::coherence::{ImplKey, impl_key};
 use super::holds::{answers_args, impl_applies, newtype_base, withheld_at};
 use super::program::{Env, ImplId, MethodId, ModuleId, Program, SolverType, TraitDeclId};
 use super::rank::{Candidate, Generality};
@@ -106,9 +105,6 @@ fn collect(
     // What a level withholds, no impl on it answers and no level below it
     // lends.
     let mut withheld: Vec<TraitDeclId> = Vec::new();
-    // An impl written twice is coherence's error where it is written, so it
-    // answers once rather than tying with itself at every call.
-    let mut answered: Vec<ImplKey> = Vec::new();
     for (depth, ty) in chain(program, receiver).iter().enumerate() {
         let depth = u32::try_from(depth).expect("a chain shorter than 2^32");
         withheld.extend(withheld_at(program, ty));
@@ -116,6 +112,9 @@ fn collect(
             let Some(trait_) = def.trait_ else {
                 continue;
             };
+            if program.duplicates.contains(&impl_) {
+                continue;
+            }
             let own = program
                 .impl_methods
                 .get(&impl_)
@@ -126,12 +125,6 @@ fn collect(
             let Some(trait_args) = impl_applies(program, env, scope, impl_, def, ty) else {
                 continue;
             };
-            if let Some(key) = impl_key(program, def) {
-                if answered.contains(&key) {
-                    continue;
-                }
-                answered.push(key);
-            }
             let candidate = Candidate {
                 impl_,
                 trait_,

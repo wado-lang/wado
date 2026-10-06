@@ -55,8 +55,11 @@ pub enum Selection {
     /// One trait declaration at several argument lists. The call's arguments
     /// choose (WEP 2026-07-31), which is not this function's question.
     Overloaded(Vec<usize>),
-    /// Several impls of one `(Trait, Type)` pair, which coherence rejects where
-    /// they are written; ranking has nothing to say about them.
+    /// Several impls written for the receiver at one argument list, kept apart
+    /// only by their bounds, which hold together here. A copy of one impl never
+    /// gets here: [`Program::duplicates`] keeps it out of the candidates.
+    ///
+    /// [`Program::duplicates`]: super::Program::duplicates
     Duplicated(Vec<usize>),
 }
 
@@ -125,8 +128,7 @@ fn classify(candidates: &[Candidate], live: Vec<usize>) -> Selection {
         return Selection::Overloaded(live);
     }
     // Rank 2 left one generality standing, so either every survivor was written
-    // for the receiver — two impls of one pair, which coherence rejects where
-    // they are written — or none was.
+    // for the receiver, their bounds all holding, or none was.
     if first.generality == Generality::Exact {
         return Selection::Duplicated(live);
     }
@@ -352,9 +354,9 @@ mod tests {
         assert_eq!(rank(&candidates), Selection::Overloaded(vec![0, 1]));
     }
 
-    /// Two impls of one pair are what coherence rejects where they are written.
+    /// Two impls written for the receiver at one argument list tie at every rank.
     #[test]
-    fn two_impls_of_one_pair_are_reported_as_the_duplicate_they_are() {
+    fn two_impls_written_for_the_receiver_are_reported_as_duplicated() {
         assert_eq!(
             rank(&Build::new().concrete(TR, 0).concrete(TR, 0).done()),
             Selection::Duplicated(vec![0, 1])

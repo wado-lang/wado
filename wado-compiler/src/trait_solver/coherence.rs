@@ -40,9 +40,21 @@ pub fn coherence_errors(program: &Program) -> Vec<CoherenceError> {
     errors
 }
 
-/// What makes two impls one pair: trait, arguments at defaults, target, and
-/// each parameter's bounds and pins as sets.
-pub(super) type ImplKey = (
+/// Record every impl written again after its first copy in
+/// [`Program::duplicates`], which keeps it out of every candidate set.
+pub fn mark_duplicates(program: &mut Program) {
+    program.duplicates = coherence_errors(program)
+        .into_iter()
+        .filter_map(|error| match error {
+            CoherenceError::DuplicateImpl { second, .. } => Some(second),
+            CoherenceError::UnboundedValueBlanket { .. } => None,
+        })
+        .collect();
+}
+
+/// What makes two impls one: trait, arguments at defaults, target, and each
+/// parameter's bounds and pins as sets.
+type ImplKey = (
     TraitDeclId,
     Vec<SolverType>,
     SolverType,
@@ -51,7 +63,7 @@ pub(super) type ImplKey = (
 
 /// An inherent impl and a marker have no key: several inherent impls spread a
 /// type's methods across modules, and a marker asks for a body.
-pub(super) fn impl_key(program: &Program, def: &ImplDef) -> Option<ImplKey> {
+fn impl_key(program: &Program, def: &ImplDef) -> Option<ImplKey> {
     if def.origin == ImplOrigin::Marker {
         return None;
     }

@@ -13,7 +13,7 @@ use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
     ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, Selection, SolverType,
     TraitDeclId, TypeDeclId, TypeDef, applies, bound_candidates, candidates, comparison_row,
-    derive, holds_with_args, owed, pair_comparisons, rank,
+    derive, holds_with_args, mark_duplicates, owed, pair_comparisons, rank,
 };
 
 use super::trait_env::{BlanketReceiver, ImplHeader, ImplTargetKey, written_arg_nodes};
@@ -742,6 +742,7 @@ impl SolverBridge {
             &tysys.resolutions,
         );
         Self::state_primitive_impls(tysys, &mut lowering, &mut program);
+        mark_duplicates(&mut program);
         Self::state_traits(tysys, &mut lowering, &mut program);
         Self::state_scopes(tysys, modules, &mut lowering, &mut program);
         if let (Some(eq), Some(ord)) = (
@@ -988,8 +989,8 @@ impl SolverBridge {
                 .map(|(_, def)| *def);
             for trait_ in eq_ord.iter().copied().chain(carried) {
                 let trait_ = lowering.trait_decl(trait_);
-                // The prelude writes many of these pairs; one impl per pair,
-                // or every call on a primitive would rank `Duplicated`.
+                // The prelude writes many of these, at any trait arguments, and
+                // what it writes stands for the primitive's.
                 let written = program
                     .impls
                     .values()
@@ -1787,21 +1788,35 @@ impl SolverBridge {
         ))
     }
 
-    /// Whether `block` applies at `instance`, its bounds included: what a
-    /// generic body's instance selects by, every parameter settled. `None`
-    /// where the lowering states nothing about either.
-    pub(crate) fn block_applies(
+    /// Whether a written block applies at `instance`, its bounds included: what
+    /// a generic body's instance selects by, every parameter settled. Where the
+    /// lowering states nothing about the block or the instance (a closure
+    /// environment), the target match alone decides.
+    pub(crate) fn blocks_applying_at<'a>(
+        &'a self,
+        table: &'a TypeTable,
+        instance: TypeId,
+    ) -> impl Fn(DefId) -> bool + 'a {
+        let ty = self
+            .lowering
+            .type_id(table, instance, &|_, index| Some(index));
+        move |block| {
+            table.impl_reaches_instance(block, instance)
+                && self
+                    .block_applies(table, block, ty.as_ref())
+                    .is_none_or(|applies| applies)
+        }
+    }
+
+    fn block_applies(
         &self,
         table: &TypeTable,
         block: DefId,
-        instance: TypeId,
+        ty: Option<&SolverType>,
     ) -> Option<bool> {
         let impl_ = *self.lowering.written_impls.get(&block)?;
-        let ty = self
-            .lowering
-            .type_id(table, instance, &|_, index| Some(index))?;
         let scope = self.lowering.known_module(table.def_module(block))?;
-        Some(applies(&self.program, &Env::default(), scope, impl_, &ty))
+        Some(applies(&self.program, &Env::default(), scope, impl_, ty?))
     }
 
     /// The impl block a candidate names: the one it was lowered from, or for a
@@ -1836,8 +1851,8 @@ pub(super) enum Ordered {
     AmbiguousBlankets(Vec<Option<DefId>>),
     /// One trait at several argument lists — the call's arguments choose.
     Overloaded(Vec<Option<DefId>>),
-    /// Several impls of one pair, which coherence rejects where they are
-    /// written.
+    /// Several impls written for the receiver at one argument list, kept apart
+    /// only by bounds that all hold here.
     Duplicated(Vec<Option<DefId>>),
 }
 

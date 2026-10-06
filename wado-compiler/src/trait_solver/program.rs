@@ -1,7 +1,7 @@
 //! The value trait resolution answers questions about. An id is a plain index,
 //! so a test writes the program it needs rather than compiling source.
 
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 
 /// A type declaration — a struct, variant, enum, flags, newtype, resource, or
 /// builtin.
@@ -399,6 +399,10 @@ pub struct Program {
     /// `Eq` and `Ord`, the pair the comparison table relates. Set by
     /// [`super::pair_comparisons`].
     pub comparisons: Option<(TraitDeclId, TraitDeclId)>,
+    /// Every impl written again after its first copy. Coherence reports each
+    /// where it is written, and no candidate set holds one, so a copy never
+    /// ties with its original. Set by [`super::mark_duplicates`].
+    pub duplicates: IndexSet<ImplId>,
 }
 
 /// The bounds in force where a question was asked: a generic body's `T: Tr`
