@@ -955,6 +955,7 @@ impl Receiver {
                 | TypeHead::Shape { .. }
                 | TypeHead::ParamBucket { .. }
                 | TypeHead::Builtin(_)
+                | TypeHead::Unresolved(_)
                 | TypeHead::Projection { .. }
                 | TypeHead::Tuple
                 | TypeHead::Function { .. } => None,
@@ -2097,6 +2098,38 @@ pub fn mangle_fn_type(
     out
 }
 
+/// How a function type is spelled from its parts, as [`mangle_fn_type`] and
+/// [`display_fn_type`] take them.
+type FnTypeSpeller = fn(bool, &[String], &str, bool, &[String]) -> String;
+
+/// Spell a function type for a diagnostic, as source writes it:
+/// `fn(i32, String) -> bool with (Stdout, Stderr)`. A function-typed return is
+/// parenthesised for the reason [`mangle_fn_type`] gives.
+#[must_use]
+pub fn display_fn_type(
+    is_mut: bool,
+    params: &[String],
+    ret_type: &str,
+    return_is_function: bool,
+    with_clause: &[String],
+) -> String {
+    let ret_type = if return_is_function {
+        format!("({ret_type})")
+    } else {
+        ret_type.to_string()
+    };
+    let clause = match with_clause {
+        [] => String::new(),
+        [one] => format!(" with {one}"),
+        many => format!(" with ({})", many.join(", ")),
+    };
+    format!(
+        "{}({}) -> {ret_type}{clause}",
+        fn_keyword(is_mut),
+        params.join(", ")
+    )
+}
+
 fn fn_keyword(is_mut: bool) -> &'static str {
     if is_mut { "fn mut" } else { "fn" }
 }
@@ -2310,18 +2343,13 @@ mod tests {
             true,
             vec![t.clone(), i32_.clone()],
             inner,
-            vec!["wasi:cli/Stdout".into()],
+            vec![tir::EffectRef::Param { name: "E".into() }],
         );
-        assert_eq!(
-            f.to_mangled(),
-            "fn mut(T,i32)->(fn()->())with(wasi:cli/Stdout)"
-        );
+        assert_eq!(f.to_mangled(), "fn mut(T,i32)->(fn()->())with(E)");
+        assert_eq!(f.to_display(), "fn mut(T, i32) -> (fn() -> ()) with E");
         assert!(f.mentions_binder());
         let at = f.substitute(&t, &i32_);
-        assert_eq!(
-            at.to_mangled(),
-            "fn mut(i32,i32)->(fn()->())with(wasi:cli/Stdout)"
-        );
+        assert_eq!(at.to_mangled(), "fn mut(i32,i32)->(fn()->())with(E)");
         assert!(!at.mentions_binder());
         assert_eq!(at.head_only(), at);
     }
@@ -2822,6 +2850,9 @@ pub enum TypeHead {
     /// A shape no module declares — a primitive, `()`, `!`, the raw GC `Array`.
     /// Every mangler spells one the same way.
     Builtin(String),
+    /// A written name that reaches no declaration, by its spelling. Resolving
+    /// it reported the error, so nothing asks about it again.
+    Unresolved(String),
     /// A function type, its signature held as names so a binder inside one
     /// stays a binder and the solver can match it. The signature is the head:
     /// it is the shape itself, not an instantiation of one, so no name carries
@@ -2830,8 +2861,7 @@ pub enum TypeHead {
         is_mut: bool,
         /// The parameters, then the return.
         signature: Vec<FqTypeName>,
-        /// Each effect as [`mangle_effect_ref`] spells it.
-        effects: Vec<String>,
+        effects: Vec<tir::EffectRef>,
     },
     /// The index bucket one module's `impl` blocks binding a parameter of this
     /// spelling share. Its own head: spelled as a shape, an `impl` on an
@@ -2890,6 +2920,7 @@ impl TypeHead {
             Self::Shape { name, .. }
             | Self::ParamBucket { name, .. }
             | Self::Builtin(name)
+            | Self::Unresolved(name)
             | Self::Binder { name, .. } => name,
             Self::Projection(head) => &head.assoc,
             Self::Tuple => TUPLE_TYPE_NAME,
@@ -2907,6 +2938,7 @@ impl TypeHead {
             Self::Shape { name, .. }
             | Self::ParamBucket { name, .. }
             | Self::Builtin(name)
+            | Self::Unresolved(name)
             | Self::Binder { name, .. } => name,
             Self::Projection(head) => &head.assoc,
             Self::Tuple => TUPLE_TYPE_NAME,
@@ -2923,6 +2955,7 @@ impl TypeHead {
             Self::Shape { .. }
             | Self::ParamBucket { .. }
             | Self::Builtin(_)
+            | Self::Unresolved(_)
             | Self::Binder { .. }
             | Self::Projection { .. }
             | Self::Tuple
@@ -2937,6 +2970,7 @@ impl TypeHead {
             Self::Declared(head) => Some(head.module()),
             Self::Shape { module, .. } | Self::ParamBucket { module, .. } => Some(module),
             Self::Builtin(_)
+            | Self::Unresolved(_)
             | Self::Binder { .. }
             | Self::Projection { .. }
             | Self::Tuple
@@ -3068,13 +3102,13 @@ impl FqTypeName {
     }
 
     /// A function type taking `params` and returning `ret`, its `with` clause
-    /// spelled as [`mangle_effect_ref`] spells each member.
+    /// `effects`.
     #[must_use]
     pub fn function(
         is_mut: bool,
         params: Vec<FqTypeName>,
         ret: FqTypeName,
-        effects: Vec<String>,
+        effects: Vec<tir::EffectRef>,
     ) -> Self {
         let mut signature = params;
         signature.push(ret);
@@ -3093,6 +3127,12 @@ impl FqTypeName {
             return Self::of_head_kind(TypeHead::Tuple);
         }
         Self::of_head_kind(TypeHead::Builtin(name.to_string()))
+    }
+
+    /// A written name that reaches no declaration.
+    #[must_use]
+    pub fn unresolved(name: &str) -> Self {
+        Self::of_head_kind(TypeHead::Unresolved(name.to_string()))
     }
 
     /// [`Self::builtin`] for a declaration every mangler spells bare (`i32`,
@@ -3196,6 +3236,7 @@ impl FqTypeName {
             | TypeHead::Shape { .. }
             | TypeHead::ParamBucket { .. }
             | TypeHead::Builtin(_)
+            | TypeHead::Unresolved(_)
             | TypeHead::Tuple
             | TypeHead::Function { .. } => false,
         };
@@ -3270,7 +3311,9 @@ impl FqTypeName {
             out.push_str(&mangle_tuple_type(&elems));
             return out;
         }
-        if let Some(spelled) = self.fn_spelling(FqTypeName::to_mangled) {
+        if let Some(spelled) =
+            self.fn_spelling(FqTypeName::to_mangled, mangle_effect_ref, mangle_fn_type)
+        {
             out.push_str(&spelled);
             return out;
         }
@@ -3284,7 +3327,7 @@ impl FqTypeName {
             TypeHead::ParamBucket { module, name } => {
                 out.push_str(&format!("{module}/{name}#param"));
             }
-            TypeHead::Builtin(name) => out.push_str(name),
+            TypeHead::Builtin(name) | TypeHead::Unresolved(name) => out.push_str(name),
             TypeHead::Binder { name, owner } => match owner {
                 Some(owner) => out.push_str(&format!("{name}#{}", owner.rendered())),
                 None => out.push_str(name),
@@ -3395,8 +3438,8 @@ impl FqTypeName {
         }
     }
 
-    /// The spelling a diagnostic prints: modules dropped from the head and,
-    /// recursively, from every type argument.
+    /// The spelling a diagnostic prints: the type as source writes it, modules
+    /// dropped from the head and, recursively, from every type in it.
     #[must_use]
     pub fn to_display(&self) -> String {
         let mut out = String::new();
@@ -3405,10 +3448,14 @@ impl FqTypeName {
         }
         let args: Vec<String> = self.args.iter().map(FqTypeName::to_display).collect();
         if let TypeHead::Tuple = self.head {
-            out.push_str(&mangle_tuple_type(&args));
+            out.push_str(&format!("[{}]", args.join(", ")));
             return out;
         }
-        if let Some(spelled) = self.fn_spelling(FqTypeName::to_display) {
+        if let Some(spelled) = self.fn_spelling(
+            FqTypeName::to_display,
+            |effect| effect.name().to_string(),
+            display_fn_type,
+        ) {
             out.push_str(&spelled);
             return out;
         }
@@ -3419,15 +3466,20 @@ impl FqTypeName {
         }
         if !args.is_empty() {
             out.push('<');
-            out.push_str(&args.join(","));
+            out.push_str(&args.join(", "));
             out.push('>');
         }
         out
     }
 
-    /// A function type spelled as [`mangle_fn_type`] writes one, each argument
-    /// by `render`. `None` for any other head.
-    fn fn_spelling(&self, render: fn(&FqTypeName) -> String) -> Option<String> {
+    /// A function type spelled by `spell`, each type in it by `render` and
+    /// each effect by `effect`. `None` for any other head.
+    fn fn_spelling(
+        &self,
+        render: fn(&FqTypeName) -> String,
+        effect: fn(&tir::EffectRef) -> String,
+        spell: FnTypeSpeller,
+    ) -> Option<String> {
         let TypeHead::Function {
             is_mut,
             signature,
@@ -3440,12 +3492,13 @@ impl FqTypeName {
             .split_last()
             .expect("a function type's signature ends in its return");
         let params: Vec<String> = params.iter().map(render).collect();
-        Some(mangle_fn_type(
+        let effects: Vec<String> = effects.iter().map(effect).collect();
+        Some(spell(
             *is_mut,
             &params,
             &render(ret),
             matches!(ret.head, TypeHead::Function { .. }) && ret.reference.is_empty(),
-            effects,
+            &effects,
         ))
     }
 

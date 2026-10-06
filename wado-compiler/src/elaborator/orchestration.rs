@@ -1857,12 +1857,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 match item {
                     Item::Struct(struct_decl) => {
                         check.type_params = param_names(&struct_decl.type_params);
+                        check.bounds_of(&struct_decl.type_params);
                         for field in &struct_decl.fields {
                             check.visit_type(&field.ty);
                         }
                     }
                     Item::Variant(variant_decl) => {
                         check.type_params = param_names(&variant_decl.type_params);
+                        check.bounds_of(&variant_decl.type_params);
                         for payload in variant_decl.cases.iter().filter_map(|c| c.payload.as_ref())
                         {
                             check.visit_type(payload);
@@ -1870,6 +1872,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     }
                     Item::Newtype(newtype_decl) => {
                         check.type_params = param_names(&newtype_decl.type_params);
+                        check.bounds_of(&newtype_decl.type_params);
                         check.visit_type(&newtype_decl.ty);
                     }
                     Item::Function(func) => {
@@ -1887,6 +1890,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 _ => None,
                             }));
                         }
+                        check.type_params.clone_from(&type_params);
+                        check.bounds_of(&impl_block.type_params);
+                        // The trait's head is left to resolution, as a generic's is.
+                        if let Some(trait_type) = &impl_block.trait_type {
+                            for arg in written_arg_nodes(trait_type) {
+                                check.visit_type(arg);
+                            }
+                        }
                         for method in &impl_block.methods {
                             check.type_params =
                                 [&type_params[..], &param_names(&method.type_params)].concat();
@@ -1898,6 +1909,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         type_params.push("Self");
                         type_params
                             .extend(trait_decl.associated_types.iter().map(|a| a.name.as_str()));
+                        check.type_params.clone_from(&type_params);
+                        check.bounds_of(&trait_decl.type_params);
+                        check.visit_trait_bounds(&trait_decl.supertraits);
+                        for assoc in &trait_decl.associated_types {
+                            check.type_params =
+                                [&type_params[..], &param_names(&assoc.type_params)].concat();
+                            check.bounds_of(&assoc.type_params);
+                            check.visit_trait_bounds(&assoc.bounds);
+                        }
                         for method in &trait_decl.methods {
                             check.type_params =
                                 [&type_params[..], &param_names(&method.type_params)].concat();
@@ -2629,6 +2649,7 @@ impl<'a, 'l, 'm, H: CompilerHost> TypeNameCheck<'a, 'l, 'm, H> {
     }
 
     fn function(&mut self, func: &ast::Function) {
+        self.bounds_of(&func.type_params);
         for param in &func.params {
             self.visit_type(&param.ty);
         }
@@ -2637,6 +2658,14 @@ impl<'a, 'l, 'm, H: CompilerHost> TypeNameCheck<'a, 'l, 'm, H> {
         }
         if let Some(body) = &func.body {
             self.visit_body(body);
+        }
+    }
+
+    /// The trait references bounding `params`. A default is left to the
+    /// application that fills it, which reports what it names.
+    fn bounds_of(&mut self, params: &[GenericParam]) {
+        for param in params {
+            self.visit_trait_bounds(&param.bounds);
         }
     }
 

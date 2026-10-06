@@ -6,11 +6,9 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{
-    FqTraitName, FqTypeName, NEVER_TYPE_NAME, RefKind, TypeHead, UNIT_TYPE_NAME, mangle_effect_ref,
-};
+use crate::name::{FqTraitName, FqTypeName, NEVER_TYPE_NAME, RefKind, TypeHead, UNIT_TYPE_NAME};
 use crate::primitive::PrimitiveType;
-use crate::tir::{AnonStructId, ResolvedType, TypeId, TypeTable};
+use crate::tir::{AnonStructId, EffectRef, ResolvedType, TypeId, TypeTable};
 use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
     ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, Selection, SolverType,
@@ -161,10 +159,9 @@ enum Binder<'a> {
 /// and a receiver lowered from the type table name one declaration by one id.
 pub(super) struct Lowering {
     decls: IndexMap<DeclKey, u32>,
-    /// Each declared effect's head, by the spelling
-    /// [`crate::name::mangle_effect_ref`] gives it, which is how a function
-    /// type carries its effects.
-    effects: IndexMap<String, TypeDeclId>,
+    /// Each declared effect's head, by the reference a function type carries
+    /// it by.
+    effects: IndexMap<EffectRef, TypeDeclId>,
     modules: IndexMap<ModuleSource, u32>,
     /// The declaration a tuple type is an instance of. An impl writes a tuple
     /// as `[..T]`, so an instance lowers to [`SolverType::Tuple`] as well.
@@ -274,13 +271,12 @@ impl Lowering {
         lowering
     }
 
-    /// `head` as the effect `def` declares, under the spelling a function
-    /// type carries it by.
+    /// `head` as the effect `def` declares.
     fn effect_named(&mut self, resolutions: &Resolutions, def: DefId, head: TypeDeclId) {
         let effect = resolutions
             .effect_decl(def)
             .expect("an interface or a resource is an effect");
-        self.effects.insert(mangle_effect_ref(&effect), head);
+        self.effects.insert(effect, head);
     }
 
     /// Every trait's associated types, which a projection reads by the
@@ -353,10 +349,9 @@ impl Lowering {
         SolverType::Decl(head, signature)
     }
 
-    /// The head of an effect spelled as [`mangle_effect_ref`] spells it.
-    fn effect_spelled(&self, spelling: &str) -> TypeDeclId {
+    fn effect_head(&self, effect: &EffectRef) -> TypeDeclId {
         self.effects
-            .get(spelling)
+            .get(effect)
             .copied()
             .unwrap_or_else(|| self.undeclared_effect())
     }
@@ -407,6 +402,7 @@ impl Lowering {
                     .ok_or(Unsaid::Unsayable)?,
                 args,
             ),
+            TypeHead::Unresolved(_) => return Err(Unsaid::Failed),
             TypeHead::Function {
                 is_mut,
                 signature,
@@ -414,7 +410,7 @@ impl Lowering {
             } => self.fn_type(
                 *is_mut,
                 said(signature.iter().map(|ty| self.named_arg(ty, param)))?,
-                effects.iter().map(|e| self.effect_spelled(e)),
+                effects.iter().map(|e| self.effect_head(e)),
             ),
             TypeHead::Projection(_) => {
                 let projected = name.projected().expect("a projection head projects");
@@ -714,9 +710,7 @@ impl Lowering {
                 Ok(self.fn_type(
                     *is_mut,
                     signature,
-                    effects
-                        .iter()
-                        .map(|e| self.effect_spelled(&mangle_effect_ref(e))),
+                    effects.iter().map(|e| self.effect_head(e)),
                 ))
             }
             // `impl Inspect for !` is written in the prelude, so the receiver

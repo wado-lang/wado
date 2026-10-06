@@ -1,0 +1,19 @@
+// An associated type's bound argument naming no type is reported where it is
+// written.
+trait Conv<X> with () {
+    fn conv(&self) -> i32;
+}
+
+struct A {
+    v: i32,
+}
+
+
+trait Src with () {
+    type Item: Conv<Nope>;
+}
+
+test {}
+
+__DATA__
+{"compile_error": ":13:21: analysis error: unknown type 'Nope'"}

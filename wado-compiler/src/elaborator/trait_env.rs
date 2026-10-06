@@ -2879,8 +2879,9 @@ pub(super) fn args_at_impl_target(
 
 /// One written type argument as the identity it names.
 ///
-/// A name that reaches no declaration keeps its spelling — there is no identity
-/// to hold, and [`name::TypeHead::Builtin`] is the case that says so.
+/// A name that reaches no declaration keeps its spelling as
+/// [`name::TypeHead::Unresolved`], and so does a function type whose `with`
+/// clause names an effect that reaches none.
 pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> name::FqTypeName {
     let nested = |args: &[ast::Type]| -> Vec<name::FqTypeName> {
         args.iter()
@@ -2897,15 +2898,13 @@ pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> nam
         ast::Type::Tuple(elems) => name::FqTypeName::tuple(nested(elems)),
         ast::Type::TypePackSpread(name, _) => name::FqTypeName::pack_spread(name),
         ast::Type::Function(ft) => {
-            let with_clause: Vec<String> = ft
-                .effects
-                .iter()
-                .map(|effect| {
-                    resolutions
-                        .effect_at(effect.id, &effect.name)
-                        .map_or_else(|| effect.name.clone(), |e| name::mangle_effect_ref(&e))
-                })
-                .collect();
+            let mut with_clause = Vec::new();
+            for effect in &ft.effects {
+                match resolutions.effect_at(effect.id, &effect.name) {
+                    Some(resolved) => with_clause.push(resolved),
+                    None => return name::FqTypeName::unresolved(&effect.name),
+                }
+            }
             name::FqTypeName::function(
                 ft.is_mut,
                 nested(&ft.params),
@@ -2930,8 +2929,11 @@ pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> nam
                 // trait declaring the member is part of that name
                 // (WEP-2026-08-12). A site that must know resolves it at its own
                 // arguments rather than reading this spelling.
-                Some(Resolution::Projection(_) | Resolution::Unresolved) | None => {
+                Some(Resolution::Projection(_)) | None => {
                     name::FqTypeName::builtin(&get_type_name_static(ty))
+                }
+                Some(Resolution::Unresolved) => {
+                    name::FqTypeName::unresolved(&get_type_name_static(ty))
                 }
             };
             match ty {

@@ -5302,25 +5302,14 @@ impl TypeTable {
                 effects,
             } => {
                 let param_names: Vec<String> = params.iter().map(|p| type_name(*p)).collect();
-                let keyword = if *is_mut { "fn mut" } else { "fn" };
                 let effect_names: Vec<String> =
                     effects.iter().map(|e| e.display_name(qualified)).collect();
-                let clause = match effect_names.as_slice() {
-                    [] => String::new(),
-                    [one] => format!(" with {one}"),
-                    many => format!(" with ({})", many.join(", ")),
-                };
-                // A function-typed return is parenthesized, or a `with` after it
-                // would not say which of the two function types carries it.
-                let return_name = type_name(*return_type);
-                let return_name = match self.get(*return_type) {
-                    ResolvedType::Function { .. } => format!("({return_name})"),
-                    _ => return_name,
-                };
-                format!(
-                    "{}({}) -> {return_name}{clause}",
-                    keyword,
-                    param_names.join(", ")
+                name::display_fn_type(
+                    *is_mut,
+                    &param_names,
+                    &type_name(*return_type),
+                    matches!(self.get(*return_type), ResolvedType::Function { .. }),
+                    &effect_names,
                 )
             }
             ResolvedType::Ref(inner) => format!("&{}", type_name(*inner)),
@@ -5648,7 +5637,7 @@ impl TypeTable {
             *is_mut,
             params.iter().map(|&p| name_of(p)).collect(),
             name_of(*return_type),
-            effects.iter().map(name::mangle_effect_ref).collect(),
+            effects.clone(),
         )
     }
 

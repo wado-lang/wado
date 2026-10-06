@@ -182,6 +182,21 @@ impl Query<'_> {
         {
             return None;
         }
+        self.asking.push((ty.clone(), trait_, args.to_vec()));
+        let answer = self.answer(ty, trait_, args, subject);
+        self.asking.pop();
+        answer
+    }
+
+    /// [`Self::holds_at`] once the question is open: every step that asks
+    /// another, a bound's projection normalized included, finds it asked.
+    fn answer(
+        &mut self,
+        ty: &SolverType,
+        trait_: TraitDeclId,
+        args: &[SolverType],
+        subject: Option<&SolverType>,
+    ) -> Option<Holds> {
         let program = self.program;
         let trait_def = program.traits.get(&trait_);
         if trait_def.is_some_and(|def| def.holds_for_all) {
@@ -244,9 +259,7 @@ impl Query<'_> {
                 ..Holds::default()
             });
         }
-
-        self.asking.push((ty.clone(), trait_, args.to_vec()));
-        let answer = program
+        program
             .impls
             .iter()
             .find_map(|(&id, def)| {
@@ -279,9 +292,7 @@ impl Query<'_> {
                     RefRule::Inherits => self.holds(inner, trait_, args),
                     RefRule::Always | RefRule::Never => None,
                 }
-            });
-        self.asking.pop();
-        answer
+            })
     }
 
     /// Whether one impl applies to `ty`: its target matches, and every bound
