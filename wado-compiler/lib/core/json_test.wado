@@ -903,7 +903,9 @@ test "to_bytes_canonical writes numbers in the ECMAScript form" {
     assert canonical_text(&1.0e-7_f32) == "1e-7";
     assert canonical_text(&-0.0_f32) == "0";
     assert canonical_text(&-2.5_f32) == "-2.5";
-    assert to_bytes_canonical(&f32::INFINITY).unwrap_err() == SerializeError::unsupported_value("Infinity is not allowed in JSON");
+    assert to_bytes_canonical(&f32::INFINITY).unwrap_err() == SerializeError::unsupported_value(
+        "Infinity is not allowed in JSON",
+    );
 }
 
 test "every writer escapes as ECMAScript's JSON.stringify" {
