@@ -123,7 +123,7 @@ pub struct GenContext {
     token_kinds: TokenKinds,
     /// `kind_rank[id]` is the lexicographic rank of `token_kinds.names[id]`,
     /// rebuilt lazily whenever the table has grown. Kind-set canonicalisation
-    /// sorts ids by rank, i.e. by token name.
+    /// orders ids by rank, i.e. by token name.
     kind_rank: List<i32>,
     /// The inverse of `kind_rank`: the id at each rank.
     kind_by_rank: List<i32>,
@@ -145,7 +145,6 @@ pub struct GenContext {
     /// the same input grammar always produces the same helper names.
     kind_set_registry: HashMap<List<i32>, KindSetEntry>,
     /// Only a `LeftRecursive` rule carries a `min_prec` parameter.
-    /// A map for `contains_key_str`, which `HashSet` lacks, as is the next.
     lr_rule_snakes: HashMap<String, ()>,
     /// Rules whose functions carry the FOLLOW slots, by snake name. Set once
     /// from `rule_reads_follow` when lowering is done; the same question
@@ -413,8 +412,8 @@ impl GenContext {
             open_end_cache: none_bool_cache(rule_count),
             single_alt_owner,
             kind_set_registry: HashMap::with_seed(GALE_SEED),
-            lr_rule_snakes: HashMap::<String, ()>::with_seed(GALE_SEED),
-            follow_rule_snakes: HashMap::<String, ()>::with_seed(GALE_SEED),
+            lr_rule_snakes: name_set(&[]),
+            follow_rule_snakes: name_set(&[]),
             rule_reads_follow: false_flags(rule_count),
             rule_body_predicts: false_flags(rule_count),
             rule_asks_simulator: false_flags(rule_count),
@@ -1069,10 +1068,7 @@ impl GenContext {
 
     /// Must run before any body emit: a call site may target a later rule.
     pub fn set_lr_rule_snakes(&mut self, names: &List<String>) {
-        self.lr_rule_snakes.clear();
-        for let name of names {
-            self.lr_rule_snakes[*name] = ();
-        }
+        self.lr_rule_snakes = name_set(names);
     }
 
     pub fn rule_takes_min_prec_arg<S: AsStrSlice>(&self, snake: S) -> bool {
@@ -1110,10 +1106,7 @@ impl GenContext {
     }
 
     pub fn set_follow_rule_snakes(&mut self, names: &List<String>) {
-        self.follow_rule_snakes.clear();
-        for let name of names {
-            self.follow_rule_snakes[*name] = ();
-        }
+        self.follow_rule_snakes = name_set(names);
     }
 
     /// Whether `snake`'s functions carry the FOLLOW slots. Asked at the
@@ -3059,6 +3052,16 @@ impl GenContext {
         }
         return `!${self.kind_set_fn(tokens)}(${expr})`;
     }
+}
+
+/// `names` as a set, a map so it answers `contains_key_str`, which `HashSet`
+/// lacks.
+fn name_set(names: &List<String>) -> HashMap<String, ()> {
+    let mut set = HashMap::<String, ()>::with_seed(GALE_SEED);
+    for let name of names {
+        set[*name] = ();
+    }
+    return set;
 }
 
 /// `scan_<snake>`, the name of the rule `snake`'s scan function where it is
