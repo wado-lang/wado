@@ -73,9 +73,10 @@ each world it targets to an entry module, or the `--world` option of
 `wado compile` and `wado run` target `wasi:cli/command`, and `wado serve`
 targets `wasi:http/service`.
 
-An effect the selected world does not import is not rejected. The compiler adds
-the effect's interface to the component's imports, and the host decides whether
-it can instantiate the component.
+A program's effects declare its imports: the component imports the interface of
+every effect the program performs and does not handle itself. An effect the selected world does not import
+is no exception. It is imported all the same, and the host decides whether it
+can instantiate the component.
 
 The manifest declares worlds in two places:
 

@@ -94,19 +94,24 @@ export(SomeWorld::MyType) struct AliasedRecord { x: i32 }
 
 ### World Imports and Effect System
 
-World imports (dependencies the component needs from its host) are not explicitly declared. Instead:
-
-- Use `use` to import capabilities from WASI modules
-- Effect system tracks which capabilities a function requires
-- **Compile-time check**: Using an effect not provided by the selected world's imports is a compile error
+A program declares its imports through its effects. No effect is performed
+without a `with` clause naming it, and that clause, where no handler takes the
+effect over, is what tells the compiler to import the effect's interface. No
+separate import declaration exists.
 
 ```wado
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
-    println("Hello!");  // OK: Command world imports Stdout
+    println("Hello!");  // the component imports the interface behind Stdout
 }
 ```
+
+An effect the selected world does not import is imported all the same, not
+rejected. The program has already declared it, and whether the host provides it
+is the host's call: a `wasi:cli/command` program performing `wasi:http/types`
+operations compiles to a component importing `wasi:http/types`, which a host
+that lacks it refuses to instantiate.
 
 ## Examples
 
@@ -159,7 +164,7 @@ export(Command::run, Daemon::run) fn run() {
 - **Clear separation**:
   - `pub`: Wado module visibility
   - `export`: CM boundary accessibility
-- **Effect system integration**: World import requirements checked at compile time
+- **Effect system integration**: the effects a program declares are its imports, with no second declaration
 
 ### Negative
 
@@ -168,20 +173,12 @@ export(Command::run, Daemon::run) fn run() {
 
 ## Known gaps
 
-The design is to be reviewed again before it is implemented, so the
-specification states the current behaviour and leaves the rest undecided.
-
 - `export(World::name)` mapping and type export do not parse.
 - What `export(World::name)` means when `World` is not the selected world is
   undecided.
 - `wasi:cli` and `wasi:http` do not re-export their worlds, so
   `use { Command } from "wasi:cli"` fails. The world is reached through
   `wasi:cli/worlds.wado`.
-- An effect the selected world does not import is not rejected. The compiler
-  adds the interface to the component's imports instead: a `wasi:cli/command`
-  program performing `wasi:http/types` operations compiles to a component
-  importing `wasi:http/types`, which the host then refuses to instantiate or
-  provides by accident.
 
 ## References
 
