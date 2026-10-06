@@ -86,7 +86,8 @@ pub trait Enumeration: Eq with () {
     fn from_number(number: i32) -> Option<Self>;
 
     /// The value an unset field reads as, and the zero an implicit field
-    /// leaves off the wire: the enum's first, which an open enum numbers 0.
+    /// leaves off the wire: the enum's first, which protobuf requires an open
+    /// enum to number 0.
     fn first() -> Self;
 }
 
@@ -759,46 +760,41 @@ impl Reader {
         &mut self,
         map: &mut TreeMap<K, V>,
     ) -> Result<bool, DecodeError> {
-        if self.wire_type != WireType::Len {
-            return Result::Ok(false);
-        }
-        let outer = self.open()?;
-        let mut key = KS::zero();
-        let mut value = VS::zero();
-        let mut held = true;
-        while self.next_field(0)? {
-            if self.number == 1 && self.wire_type == KS::wire_type() {
-                match KS::take(self)? {
-                    Some(k) => key = k,
-                    None => held = false,
-                }
-            } else if self.number == 2 && self.wire_type == VS::wire_type() {
-                match VS::take(self)? {
-                    Some(v) => value = v,
-                    None => held = false,
-                }
-            } else {
-                self.skip_value()?;
-            }
-        }
-        self.close(outer);
-        if !held {
-            return Result::Ok(false);
-        }
-        map[key] = value;
-        return Result::Ok(true);
+        return self.entry::<KS, K, V>(map, VS::zero(), VS::wire_type(), |r, v| {
+            let Some(taken) = VS::take(r)? else {
+                return Result::Ok(false);
+            };
+            *v = taken;
+            return Result::Ok(true);
+        });
     }
 
     pub fn message_map<KS: Scalar<Value = K>, K: Ord, M: Message + Default>(
         &mut self,
         map: &mut TreeMap<K, M>,
     ) -> Result<bool, DecodeError> {
+        return self.entry::<KS, K, M>(map, M::default(), WireType::Len, |r, m| {
+            r.merge_nested(m)?;
+            return Result::Ok(true);
+        });
+    }
+
+    /// A map entry into `map`: the key numbered 1, and the value numbered 2,
+    /// starting from `value` and read by `take_value` where it arrives as
+    /// `value_wire_type`. `take_value` answers whether the type holds it.
+    fn entry<KS: Scalar<Value = K>, K: Ord, V>(
+        &mut self,
+        map: &mut TreeMap<K, V>,
+        value: V,
+        value_wire_type: WireType,
+        take_value: fn(&mut Reader, &mut V) -> Result<bool, DecodeError>,
+    ) -> Result<bool, DecodeError> {
         if self.wire_type != WireType::Len {
             return Result::Ok(false);
         }
         let outer = self.open()?;
         let mut key = KS::zero();
-        let mut value = M::default();
+        let mut value = value;
         let mut held = true;
         while self.next_field(0)? {
             if self.number == 1 && self.wire_type == KS::wire_type() {
@@ -806,8 +802,8 @@ impl Reader {
                     Some(k) => key = k,
                     None => held = false,
                 }
-            } else if self.number == 2 && self.wire_type == WireType::Len {
-                self.merge_nested(&mut value)?;
+            } else if self.number == 2 && self.wire_type == value_wire_type {
+                held = take_value(self, &mut value)? && held;
             } else {
                 self.skip_value()?;
             }
