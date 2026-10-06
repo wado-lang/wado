@@ -145,11 +145,11 @@ pub struct GenContext {
     /// the same input grammar always produces the same helper names.
     kind_set_registry: HashMap<List<i32>, KindSetEntry>,
     /// Only a `LeftRecursive` rule carries a `min_prec` parameter.
-    lr_rule_snakes: HashMap<String, ()>,
+    lr_rule_snakes: HashSet<String>,
     /// Rules whose functions carry the FOLLOW slots, by snake name. Set once
     /// from `rule_reads_follow` when lowering is done; the same question
     /// answers both the declaration and every call site.
-    follow_rule_snakes: HashMap<String, ()>,
+    follow_rule_snakes: HashSet<String>,
     /// Per rule index: the rule runs a caller-FOLLOW gate or a probe, so it
     /// reads the slots itself. `caller_follow_gate_seen`'s question, asked per
     /// rule; the seeds of the fixpoint `lower` closes.
@@ -1072,7 +1072,7 @@ impl GenContext {
     }
 
     pub fn rule_takes_min_prec_arg<S: AsStrSlice>(&self, snake: S) -> bool {
-        return self.lr_rule_snakes.contains_key_str(snake);
+        return self.lr_rule_snakes.contains_str(snake);
     }
 
     /// Record that the rule being lowered reads the continuation it was called
@@ -1112,7 +1112,7 @@ impl GenContext {
     /// Whether `snake`'s functions carry the FOLLOW slots. Asked at the
     /// declaration and at every call site, so the two cannot disagree.
     pub fn rule_reads_follow<S: AsStrSlice>(&self, snake: S) -> bool {
-        return self.caller_follow_gate_seen && self.follow_rule_snakes.contains_key_str(snake);
+        return self.caller_follow_gate_seen && self.follow_rule_snakes.contains_str(snake);
     }
 
     /// Store the per-rule ATN loop-entry decision numbers (after `build_atn`).
@@ -3054,12 +3054,10 @@ impl GenContext {
     }
 }
 
-/// `names` as a set, a map so it answers `contains_key_str`, which `HashSet`
-/// lacks.
-fn name_set(names: &List<String>) -> HashMap<String, ()> {
-    let mut set = HashMap::<String, ()>::with_seed(GALE_SEED);
+fn name_set(names: &List<String>) -> HashSet<String> {
+    let mut set = HashSet::<String>::with_seed(GALE_SEED);
     for let name of names {
-        set[*name] = ();
+        set.insert(*name);
     }
     return set;
 }
