@@ -288,9 +288,9 @@ type "functype//core:serde/core:serde/DeserializeError::duplicate_field<core:pre
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/Utf8Error^core:prelude/traits.wado/Display::fmt$scalar" = fn(ref "core:prelude/string.wado//Utf8Error", ref "core:prelude/string.wado//String");  // TypeId(104)
 
-type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(105)
+type "functype//core:cbor/core:cbor/CborDeserializer::unexpected_break$scalar" = fn(i32) -> ["core:serde//enum:DeserializeErrorKind", ref "core:prelude/string.wado//String", i64];  // TypeId(105)
 
-type "functype//core:cbor/core:cbor/CborDeserializer::unexpected_break$scalar" = fn(i32) -> ["core:serde//enum:DeserializeErrorKind", ref "core:prelude/string.wado//String", i64];  // TypeId(106)
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(106)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(107)
 
@@ -4695,12 +4695,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/Utf8Error^core:prelude/tra
     }
 }
 
-fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar"(self, f) {
-    "core:prelude/primitive.wado/i32::fmt_into$scalar"(self, f);
-}
-
 fn "core:cbor/core:cbor/CborDeserializer::unexpected_break$scalar"(self) {
     return 6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected break"), used: 16 }, builtin::i64_extend_i32_s(self - 1);
+}
+
+fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar"(self, f) {
+    "core:prelude/primitive.wado/i32::fmt_into$scalar"(self, f);
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {

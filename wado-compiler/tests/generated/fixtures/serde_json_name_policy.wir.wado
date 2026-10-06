@@ -6410,9 +6410,9 @@ fn "core:json/core:json/JsonStructSerializer^core:serde/SerializeStruct::field<b
         $load_0 = name.used;
         i = 0;
         $licm_repr_34 = name.repr;
-        b857: block {
-            l858: loop {
-                break_if b857 i >= $load_0;
+        b864: block {
+            l865: loop {
+                break_if b864 i >= $load_0;
                 $inline_core_json_json_escape_free__core_prelude_string_wado_String__0__$for_0_body: block {
                     if @unlikely(((0 <= i) & (i < $load_0)) == 0) {
                         cold_path;
@@ -6423,7 +6423,7 @@ fn "core:json/core:json/JsonStructSerializer^core:serde/SerializeStruct::field<b
                     break $inline_core_json_json_escape_free__core_prelude_string_wado_String__0: 0;
                 };
                 i = i + 1;
-                continue l858;
+                continue l865;
             };
         };
         break $inline_core_json_json_escape_free__core_prelude_string_wado_String__0: 1;
@@ -6473,126 +6473,6 @@ fn "core:json/core:json/JsonDeserializer::entry_separator_error$scalar"(self, cl
     return struct.new "core:serde//DeserializeError" { kind: 6, message: struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = $local_2.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(start_18)), 0, $array_clone_src_1, 0, start_18); $array_clone_dst_2, used: start_18 }, offset: builtin::i64_extend_i32_s(self) };
 }
 
-<<<<<<< HEAD
-||||||| c5f7e3b13c6
-fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {
-    builtin::array_copy<u8>(self, offset, s.repr, 0, n);
-}
-
-fn "core:json/core:json/JsonStructSerializer^core:serde/SerializeStruct::field<i64,&core:prelude/string.wado/String>$scalar"(self, name, value) {
-    let $load_0: i32;
-    let r: ref null "core:serde//SerializeError";
-    let i: i32;
-    let buf_7: ref "core:prelude/string.wado//String";
-    let b: u8;
-    let $licm_repr_34: ref Array<u8>;
-    if $inline_core_json_json_escape_free__core_prelude_string_wado_String__0: block -> bool {
-        $load_0 = name.used;
-        i = 0;
-        $licm_repr_34 = name.repr;
-        b860: block {
-            l861: loop {
-                break_if b860 i >= $load_0;
-                $inline_core_json_json_escape_free__core_prelude_string_wado_String__0__$for_0_body: block {
-                    if @unlikely(((0 <= i) & (i < $load_0)) == 0) {
-                        cold_path;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::get_byte_unchecked$cold0"(i, $load_0);
-                        unreachable;
-                    }
-                    break_if $inline_core_json_json_escape_free__core_prelude_string_wado_String__0__$for_0_body ((local.tee b(builtin::array_get_value<u8>($licm_repr_34, i)) >=u 32) & (b != 34)) & (b != 92);
-                    break $inline_core_json_json_escape_free__core_prelude_string_wado_String__0: 0;
-                };
-                i = i + 1;
-                continue l861;
-            };
-        };
-        break $inline_core_json_json_escape_free__core_prelude_string_wado_String__0: 1;
-    } {
-        "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>"(self.buf, name, self.count);
-    } else {
-        buf_7 = self.buf;
-        if self.count > 0 {
-            "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(buf_7, 44);
-        }
-        "core:json/core/json/write_escaped_string<&core:prelude/string.wado/String>"(buf_7, name);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(buf_7, 58);
-    }
-    r = "core:json/core:json/JsonSerializer^core:serde/Serializer::serialize_i64$scalar"(local.tee buf_7(self.buf), value);
-    self.count = self.count + 1;
-    return r;
-}
-
-fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/format.wado/PushDisplay::push_display<i64>$scalar"(self, value) {
-    let f_2: ref "core:prelude/format.wado//Formatter";
-    let is_negative: bool;
-    let digit_count: i32;
-    f_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: self };
-    is_negative = value < 0_i64;
-    digit_count = "core:prelude/primitive.wado/count_digits_u64"(local.tee value(select i64(value < 0_i64, 0_i64 - value, value)));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1"(f_2, is_negative, digit_count);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee self(f_2.buf).repr, is_negative, value, digit_count);
-}
-
-=======
-fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {
-    builtin::array_copy<u8>(self, offset, s.repr, 0, n);
-}
-
-fn "core:json/core:json/JsonStructSerializer^core:serde/SerializeStruct::field<i64,&core:prelude/string.wado/String>$scalar"(self, name, value) {
-    let $load_0: i32;
-    let r: ref null "core:serde//SerializeError";
-    let i: i32;
-    let buf_7: ref "core:prelude/string.wado//String";
-    let b: u8;
-    let $licm_repr_34: ref Array<u8>;
-    if $inline_core_json_json_escape_free__core_prelude_string_wado_String__0: block -> bool {
-        $load_0 = name.used;
-        i = 0;
-        $licm_repr_34 = name.repr;
-        b867: block {
-            l868: loop {
-                break_if b867 i >= $load_0;
-                $inline_core_json_json_escape_free__core_prelude_string_wado_String__0__$for_0_body: block {
-                    if @unlikely(((0 <= i) & (i < $load_0)) == 0) {
-                        cold_path;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::get_byte_unchecked$cold0"(i, $load_0);
-                        unreachable;
-                    }
-                    break_if $inline_core_json_json_escape_free__core_prelude_string_wado_String__0__$for_0_body ((local.tee b(builtin::array_get_value<u8>($licm_repr_34, i)) >=u 32) & (b != 34)) & (b != 92);
-                    break $inline_core_json_json_escape_free__core_prelude_string_wado_String__0: 0;
-                };
-                i = i + 1;
-                continue l868;
-            };
-        };
-        break $inline_core_json_json_escape_free__core_prelude_string_wado_String__0: 1;
-    } {
-        "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>"(self.buf, name, self.count);
-    } else {
-        buf_7 = self.buf;
-        if self.count > 0 {
-            "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(buf_7, 44);
-        }
-        "core:json/core/json/write_escaped_string<&core:prelude/string.wado/String>"(buf_7, name);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(buf_7, 58);
-    }
-    r = "core:json/core:json/JsonSerializer^core:serde/Serializer::serialize_i64$scalar"(local.tee buf_7(self.buf), value);
-    self.count = self.count + 1;
-    return r;
-}
-
-fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/format.wado/PushDisplay::push_display<i64>$scalar"(self, value) {
-    let f_2: ref "core:prelude/format.wado//Formatter";
-    let is_negative: bool;
-    let digit_count: i32;
-    f_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: self };
-    is_negative = value < 0_i64;
-    digit_count = "core:prelude/primitive.wado/count_digits_u64"(local.tee value(select i64(value < 0_i64, 0_i64 - value, value)));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1"(f_2, is_negative, digit_count);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee self(f_2.buf).repr, is_negative, value, digit_count);
-}
-
->>>>>>> origin/main
 fn "core:prelude/intparse.wado/core:prelude/intparse.wado/ParseIntError::kind$scalar"(self) {
     return self;
 }
