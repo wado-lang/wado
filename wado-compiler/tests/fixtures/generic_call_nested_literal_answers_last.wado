@@ -36,7 +36,7 @@ fn doubled<T: Add<Output = T> + Eq>(f: fn(T) -> T, p: Pair<T>, fallback: T) -> T
     return f(second(p, fallback));
 }
 
-fn end_of<T: Eq>(r: &RangeExclusive<T>, fallback: T) -> T {
+fn end_of<T: Ord>(r: &RangeExclusive<T>, fallback: T) -> T {
     return if r.start == r.end { fallback } else { r.end };
 }
 
