@@ -196,6 +196,15 @@ pub fn array_clone_prefix<T>(src: &Array<T>, len: i32) -> Array<T>;
 #[side_effect(trap, outside = [arr], at = [offset], count = len)]
 pub fn array_fill<T>(arr: &mut Array<T>, offset: i32, value: T, len: i32);
 
+/// Drops the references `len` elements starting at `offset` hold, so the
+/// collector can reclaim what they reach. Leaves the slots unreadable until
+/// written again. Fills them with null where `T` holds a reference and does
+/// nothing where it does not, so the range must lie within `arr`: past it, the
+/// first traps and the second does not.
+#[storage(none)]
+#[side_effect(trap, outside = [arr], at = [offset], count = len)]
+pub fn array_release<T>(arr: &mut Array<T>, offset: i32, len: i32);
+
 /// Loads an i32 from linear memory (Wasm i32.load).
 #[storage(none)]
 #[side_effect(read, trap)]

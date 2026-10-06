@@ -139,7 +139,9 @@ impl<T> List<T> {
             return null;
         }
         self.used -= 1;
-        return Option::Some(self.repr[self.used]);
+        let value = self.repr[self.used];
+        builtin::array_release(&mut self.repr, self.used, 1);
+        return Option::Some(value);
     }
 
     /// Copy the live `0..<len()` elements into a fresh fixed `Array<T>` of exactly
@@ -176,6 +178,7 @@ impl<T> List<T> {
         // Shift elements left
         builtin::array_copy(&mut self.repr, index, &self.repr, index + 1, self.used - 1 - index);
         self.used -= 1;
+        builtin::array_release(&mut self.repr, self.used, 1);
         return value;
     }
 
@@ -189,14 +192,18 @@ impl<T> List<T> {
         self.repr[b] = tmp;
     }
 
+    // Every way to shrink a list releases the slots it gives up: one still
+    // holding its element would keep that element alive for the collector.
     pub fn truncate(&mut self, len: i32) {
         if len < self.used {
+            builtin::array_release(&mut self.repr, len, self.used - len);
             self.used = len;
         }
     }
 
     /// Removes all elements.
     pub fn clear(&mut self) {
+        builtin::array_release(&mut self.repr, 0, self.used);
         self.used = 0;
     }
 

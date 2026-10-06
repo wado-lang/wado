@@ -82,6 +82,9 @@ pub enum CtfeBuiltin {
     ArraySet,
     ArrayCopy,
     ArrayClonePrefix,
+    /// `array_release`: no slot it empties is read before a write refills it,
+    /// so the interpreter leaves the elements where they are.
+    ArrayRelease,
     ColdPath,
     Select,
     I32AsChar,
@@ -106,6 +109,7 @@ impl CtfeBuiltin {
             | Self::ArrayLen
             | Self::ArrayNew
             | Self::ArrayClonePrefix
+            | Self::ArrayRelease
             | Self::ColdPath
             | Self::Select
             | Self::I32AsChar
@@ -280,6 +284,7 @@ pub(crate) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
             Some("array_set" | "array_set_u8") => CtfeBuiltin::ArraySet,
             Some("array_copy") => CtfeBuiltin::ArrayCopy,
             Some("array_clone_prefix") => CtfeBuiltin::ArrayClonePrefix,
+            Some("array_release") => CtfeBuiltin::ArrayRelease,
             Some("cold_path") => CtfeBuiltin::ColdPath,
             Some("select") => CtfeBuiltin::Select,
             Some("i32_as_char") => CtfeBuiltin::I32AsChar,

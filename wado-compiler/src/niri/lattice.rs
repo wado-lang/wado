@@ -614,7 +614,10 @@ impl Interpreter<'_> {
                 value: u64::from(address.cast_unsigned()),
                 prim: PrimitiveType::I32,
             }),
-            CtfeBuiltin::ArraySet | CtfeBuiltin::ArrayCopy | CtfeBuiltin::ColdPath => {
+            CtfeBuiltin::ArraySet
+            | CtfeBuiltin::ArrayCopy
+            | CtfeBuiltin::ArrayRelease
+            | CtfeBuiltin::ColdPath => {
                 Lattice::Unevaluated
             }
         }
