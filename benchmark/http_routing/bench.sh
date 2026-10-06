@@ -3,7 +3,7 @@
 # one worker shape per entry in SHAPES. README.md covers the methodology.
 #
 # Overrides: SLICE, ROUNDS, SHAPES, CONNECTIONS_PER_WORKER, OHA_CORE_COUNT,
-# HEADROOM_CHECK.
+# HEADROOM_CHECK, WADO_BIN (an A/B arm), SERVERS (e.g. "wado" alone).
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -12,7 +12,7 @@ ROUNDS="${ROUNDS:-3}"
 SHAPES="${SHAPES:-1 4}"
 CONNECTIONS_PER_WORKER="${CONNECTIONS_PER_WORKER:-200}"
 HEADROOM_CHECK="${HEADROOM_CHECK:-0}"
-WADO_BIN="../../target/release/wado"
+WADO_BIN="${WADO_BIN:-../../target/release/wado}"
 HONO_PORT="3000"
 AXUM_PORT="3001"
 BUN_PORT="3002"
@@ -93,11 +93,14 @@ measure() {
     awk '/Requests\/sec/ {printf "%.0f", $2}'
 }
 
-SERVER_KEYS=(wado node bun axum)
-if ! command -v bun >/dev/null 2>&1; then
-  echo "SKIP: bun not found (install bun or add it to benchmark/mise.toml)"
-  SERVER_KEYS=(wado node axum)
-fi
+SERVER_KEYS=()
+for key in ${SERVERS:-wado node bun axum}; do
+  if [ "$key" = bun ] && ! command -v bun >/dev/null 2>&1; then
+    echo "SKIP: bun not found (install bun or add it to benchmark/mise.toml)"
+    continue
+  fi
+  SERVER_KEYS+=("$key")
+done
 
 server_name() {
   case "$1" in
