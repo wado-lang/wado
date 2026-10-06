@@ -188,7 +188,13 @@ mod tests {
 
     #[test]
     fn contract_checks_default_on_in_the_test_world_and_at_o0() {
-        for opt_level in [OptLevel::O0, OptLevel::O1, OptLevel::O2, OptLevel::O3, OptLevel::Os] {
+        for opt_level in [
+            OptLevel::O0,
+            OptLevel::O1,
+            OptLevel::O2,
+            OptLevel::O3,
+            OptLevel::Os,
+        ] {
             assert!(CodegenFlags::for_build(opt_level, true).contract_checks);
             assert_eq!(
                 CodegenFlags::for_build(opt_level, false).contract_checks,
