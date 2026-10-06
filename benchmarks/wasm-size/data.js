@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791278153925,
+  "lastUpdate": 1791280722587,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -64341,6 +64341,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/64ee6131f01e1490cff5357d14ae42c627690578"
         },
         "date": 1791278153051,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338502,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d0b8f280b9ffc47ec25303d5991d5fc8e7482fd4",
+          "message": "Merge pull request #2287 from wado-lang/dependabot/npm_and_yarn/scripts/jco/npm_and_yarn-501f592bae\n\nchore(deps-dev): Bump source-map-js from 1.2.1 to 1.2.2 in /scripts/jco in the npm_and_yarn group across 1 directory",
+          "timestamp": "2026-10-06T18:37:39+09:00",
+          "tree_id": "3bd75b88b3ace8c36ac8a591e38ecfa465b7e3cb",
+          "url": "https://github.com/wado-lang/wado/commit/d0b8f280b9ffc47ec25303d5991d5fc8e7482fd4"
+        },
+        "date": 1791280721857,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
