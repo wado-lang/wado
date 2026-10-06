@@ -3257,9 +3257,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: token::Span,
         receiver_key: Option<&ImplTargetKey>,
     ) {
-        let key = receiver_key
-            .cloned()
-            .unwrap_or_else(|| self.impl_target(prefix));
+        let key = self.static_receiver_key(prefix, receiver_key);
         let Some(sig) = self.derived_method_signature(&key, suffix) else {
             return;
         };
@@ -3764,9 +3762,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return false;
         }
-        let key = receiver_key
-            .cloned()
-            .unwrap_or_else(|| self.impl_target(struct_name));
+        let key = self.static_receiver_key(struct_name, receiver_key);
         let Some(declared) = key.decl().and_then(|def| self.declared_self_type(def)) else {
             return false;
         };
@@ -3789,10 +3785,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Vec::new();
         };
         let expected_key = ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
-        let receiver = receiver_key
-            .cloned()
-            .unwrap_or_else(|| self.impl_target(type_name));
-        if expected_key != receiver {
+        if expected_key != self.static_receiver_key(type_name, receiver_key) {
             return Vec::new();
         }
         self.tysys
@@ -3867,15 +3860,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &expected_args,
             )
             .or_else(|| {
-                let key = receiver_key
-                    .cloned()
-                    .unwrap_or_else(|| self.impl_target(struct_name));
+                let key = self.static_receiver_key(struct_name, receiver_key);
                 self.tysys.inherited_default_method_sig(&key, method_name)
             })
         else {
-            let key = receiver_key
-                .cloned()
-                .unwrap_or_else(|| self.impl_target(struct_name));
+            let key = self.static_receiver_key(struct_name, receiver_key);
             return (self.derived_impl_args(&key, method_name, args), vec![]);
         };
         if sig.decl.type_params.is_empty() {

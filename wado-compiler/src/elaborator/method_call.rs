@@ -3114,10 +3114,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether `ty` is a flags type answering `method_name` itself rather than
     /// through `u32`: its bitmask's derived `eq` and `cmp` are its own.
     fn flags_answers_itself(&mut self, ty: TypeId, method_name: &str) -> bool {
-        matches!(self.tysys.type_table.borrow().get(ty), ResolvedType::Flags { .. })
-            && self
-                .try_auto_derived_method_match(method_name, ty, DerivedAt::Instance)
-                .is_some()
+        matches!(
+            self.tysys.type_table.borrow().get(ty),
+            ResolvedType::Flags { .. }
+        ) && self
+            .try_auto_derived_method_match(method_name, ty, DerivedAt::Instance)
+            .is_some()
     }
 
     /// Resolve a static method call from a qualified name like `Point::origin()`
@@ -3160,8 +3162,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     tt.representation_head(newtype_id),
                                 )
                             };
-                            let base_type_id = if self.flags_answers_itself(declared, method_name)
-                            {
+                            let base_type_id = if self.flags_answers_itself(declared, method_name) {
                                 declared
                             } else {
                                 representation
@@ -3244,11 +3245,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver_key.as_ref(),
                 impl_type_args,
             ) || self.declared_by_no_reaching_block(
-                    &actual_struct_name,
-                    method_name,
-                    receiver_key.as_ref(),
-                    impl_type_args,
-                ))
+                &actual_struct_name,
+                method_name,
+                receiver_key.as_ref(),
+                impl_type_args,
+            ))
         {
             let _ = self.emit(TypeError::UnknownFunction {
                 name: format!("{actual_struct_name}::{method_name}"),

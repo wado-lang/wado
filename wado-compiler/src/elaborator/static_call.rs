@@ -423,10 +423,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: Option<TypeId>,
         arg_types: &[TypeId],
     ) -> (Option<TypeId>, Vec<TypeId>) {
-        let Some((newtype, base)) = receiver.and_then(|newtype| {
-            let base = self.tysys.type_table.borrow().get_newtype_base(newtype)?;
-            Some((newtype, base))
-        }) else {
+        let Some(newtype) = receiver else {
+            return (None, arg_types.to_vec());
+        };
+        let Some(base) = self.tysys.type_table.borrow().get_newtype_base(newtype) else {
             return (None, arg_types.to_vec());
         };
         let at_base = arg_types
@@ -446,11 +446,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 break;
             };
             for param in &mut callee.params.param_types {
-                *param = self.tysys.substitute_newtype_in_type(*param, base, receiver);
+                *param = self
+                    .tysys
+                    .substitute_newtype_in_type(*param, base, receiver);
             }
-            callee.return_type = self
-                .tysys
-                .substitute_newtype_in_type(callee.return_type, base, receiver);
+            callee.return_type =
+                self.tysys
+                    .substitute_newtype_in_type(callee.return_type, base, receiver);
             link = base;
         }
     }
@@ -491,7 +493,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The type a struct, resource, variant or enum declaration `def` declares,
+    /// The type a struct, resource, variant, enum or flags declaration `def` declares,
     /// a generic one applied to its own parameters.
     pub(super) fn declared_self_type(&self, def: DefId) -> Option<TypeId> {
         let lookup = self.type_lookup();
