@@ -1804,6 +1804,7 @@ for let [k, v] of map.entries() { println(`${k}=${v}`); }
 let sizes = { small: 1, large: 3 } as TreeMap<String, i32>;
 let set = ["foo", "bar", "baz"] as TreeSet<String>;
 set.contains("foo");          // -> bool; set.insert(x) -> bool
+set.contains_str(view);       // String set: test a view, no copy
 ```
 
 ### core:serde

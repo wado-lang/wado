@@ -461,6 +461,17 @@ test "insert at end" {
     assert arr[2] == 30;
 }
 
+test "insert into spare capacity shifts without growing" {
+    let mut arr = List::<i32>::with_capacity(4);
+    arr.push(10);
+    arr.push(30);
+    arr.insert(1, 20);
+    assert arr.len() == 3;
+    assert arr[0] == 10;
+    assert arr[1] == 20;
+    assert arr[2] == 30;
+}
+
 test "remove from beginning" {
     let mut arr: List<i32> = [10, 20, 30];
     let v = arr.remove(0);

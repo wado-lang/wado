@@ -1,4 +1,4 @@
-//! Custom `WasiHttpHooks` that uses [`crate::tls_trust`]'s augmented
+//! Custom `WasiHttpHooks` that uses [`wado_host::tls_trust`]'s augmented
 //! trust store for outbound HTTPS.
 //!
 //! wasmtime's stock `default_send_request` hardcodes `webpki-roots`, which is
@@ -17,7 +17,7 @@ use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
 use wasmtime_wasi_http::{Error as HttpError, RequestOptions, WasiBody, WasiHttpHooks};
 
-use crate::tls_trust::{build_root_cert_store, install_default_crypto_provider};
+use wado_host::tls_trust::{build_root_cert_store, install_default_crypto_provider};
 
 macro_rules! warn_log {
     ($($arg:tt)*) => { eprintln!("warning: {}", format_args!($($arg)*)) };

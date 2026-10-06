@@ -7,7 +7,7 @@
 //! punched holes the snapshot still referenced. Unparsing `struct Holder<T>`'s
 //! `payload: T` field then panicked with "`TypeId`(..) not found in `TypeTable`".
 
-use crate::common::{InMemoryHost, block_on};
+use crate::common::{block_on, in_memory_host};
 use wado_compiler::{OptLevel, dump_with_host_and_world, unparse::unparse_tir};
 
 const SOURCE: &str = r#"
@@ -32,7 +32,7 @@ fn resolved_modules() -> Vec<String> {
 
 /// The resolved TIR of every module `source` pulls in, unparsed.
 fn resolved_modules_of(source: &str) -> Vec<String> {
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let dump = block_on(dump_with_host_and_world(
         source,
         &host,

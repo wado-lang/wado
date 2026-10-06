@@ -339,8 +339,8 @@ fn "spec_worlds_command_stdio.wado/run"() with Stdin, Stdout, Stderr {
     $mv$scalar$valid = "spec_worlds_command_stdio.wado/$cm_binding__Stdout_write_via_stream"($mv$scalar$valid);
     other_len = s.used;
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        slice = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: local.tee elements_14(s.repr), start: 0, end: other_len };
-        "core:rt/cm_stream_write_raw_all_u8"(new_used_113, slice.repr, 0, other_len);
+        elements_14 = s.repr;
+        "core:rt/cm_stream_write_raw_all_u8"(new_used_113, elements_14, 0, other_len);
     });
     "wasi/stream-drop-writable"(new_used_113);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$scalar$valid);

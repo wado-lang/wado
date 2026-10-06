@@ -6,7 +6,7 @@ use crate::common::compile_source_with_compiler_options;
 use std::path::{Path, PathBuf};
 
 fn core_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("lib/core")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../lib/core")
 }
 
 /// Every bundled `core:` module — the ones an editor opens like any other file.

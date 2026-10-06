@@ -3062,9 +3062,10 @@ fn "core:fs/core/fs/stream_out<core:prelude/string.wado/String,core:prelude/stri
     tx_10 = builtin::i32_wrap_i64(packed >> 32_i64);
     rx_9 = "spec_worlds_command_files.wado/$cm_binding__Descriptor_write_via_stream"(file, rx_9, 0_i64);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $mv_arg_2: ref "core:prelude/slice.wado//Slice<u8>";
-        $mv_arg_2 = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: local.tee repr(data.repr), start: 0, end: data.used };
-        "core:rt/cm_stream_write_raw_all_u8"(tx_10, $mv_arg_2.repr, 0, $mv_arg_2.end);
+        repr = data.repr;
+        let $mv_field_4: i32;
+        $mv_field_4 = data.used;
+        "core:rt/cm_stream_write_raw_all_u8"(tx_10, repr, 0, $mv_field_4);
     });
     "wasi/stream-drop-writable"(tx_10);
     $drop_spill_6 = $inline_core_fs_finish_core_prelude_string_wado_String__2: block -> ref null "core:fs//FsError" {
@@ -3085,7 +3086,7 @@ fn "core:fs/core/fs/stream_out<core:prelude/string.wado/String,core:prelude/stri
             } else {
                 struct.new "core:fs//FsErrorKind::Io" { discriminant: 3, payload_0: ref.as_non_null(e) };
             });
-            struct.new "core:fs//FsError" { path: rx_9 = path.used; struct.new "core:prelude/string.wado//String" { repr: repr = path.repr; let $array_clone_dst_4: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>(rx_9)), 0, repr, 0, rx_9); $array_clone_dst_4, used: rx_9 }, kind: kind };
+            struct.new "core:fs//FsError" { path: rx_9 = path.used; struct.new "core:prelude/string.wado//String" { repr: repr = path.repr; let $array_clone_dst_6: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_6(builtin::array_new<u8>(rx_9)), 0, repr, 0, rx_9); $array_clone_dst_6, used: rx_9 }, kind: kind };
             break $inline_core_fs_finish_core_prelude_string_wado_String__2;
         } else {
         }

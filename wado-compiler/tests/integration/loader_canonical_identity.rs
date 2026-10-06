@@ -8,7 +8,7 @@
 //! the Kiln redirect on that path. Canonical identities collapse both spellings
 //! onto `./gen/parser.wado`.
 
-use crate::common::{MapHost, block_on};
+use crate::common::{block_on, in_memory_host};
 use wado_compiler::{LogLevel, ModuleSource, kiln::InvocationIndex, load, parse, semantics_of};
 
 #[test]
@@ -16,13 +16,11 @@ fn escape_reentry_import_loads_one_module() {
     // The host keys files by the path the loader hands `load_source`. The entry
     // is `p/src/main.wado`; `parser.wado` sits under the entry dir and `helper`
     // sits *above* it. `helper` re-imports `parser` via a `../`-chain.
-    let host = MapHost::new(&[
-        (
-            "p/src/main.wado",
-            "use { parse_it } from \"./gen/parser.wado\";\n\
-             use { use_helper } from \"../shared/helper.wado\";\n\
-             export fn run() { let _ = parse_it(); let _ = use_helper(); }\n",
-        ),
+    let main = "use { parse_it } from \"./gen/parser.wado\";\n\
+                use { use_helper } from \"../shared/helper.wado\";\n\
+                export fn run() { let _ = parse_it(); let _ = use_helper(); }\n";
+    let host = in_memory_host(&[
+        ("p/src/main.wado", main),
         (
             "./gen/parser.wado",
             "pub struct Ast { pub n: i32 }\npub fn parse_it() -> Ast { return Ast { n: 1 } }\n",
@@ -35,7 +33,7 @@ fn escape_reentry_import_loads_one_module() {
     ]);
 
     let loaded = block_on(async {
-        let parsed = parse(host.sources.get("p/src/main.wado").unwrap());
+        let parsed = parse(main);
         load(
             parsed,
             Some("p/src/main.wado"),
@@ -77,13 +75,11 @@ fn entry_escape_reentry_loads_once() {
     // The entry itself spells an import with a redundant `..`-escape that
     // re-enters its own directory; it must canonicalize to the direct identity,
     // not intern a second copy (the entry branch is canonicalized too).
-    let host = MapHost::new(&[
-        (
-            "p/src/main.wado",
-            "use { p } from \"../src/gen/parser.wado\";\n\
-             use { q } from \"./gen/parser.wado\";\n\
-             export fn run() { let _ = p(); let _ = q(); }\n",
-        ),
+    let main = "use { p } from \"../src/gen/parser.wado\";\n\
+                use { q } from \"./gen/parser.wado\";\n\
+                export fn run() { let _ = p(); let _ = q(); }\n";
+    let host = in_memory_host(&[
+        ("p/src/main.wado", main),
         (
             "./gen/parser.wado",
             "pub fn p() -> i32 { return 1 }\npub fn q() -> i32 { return 2 }\n",
@@ -91,7 +87,7 @@ fn entry_escape_reentry_loads_once() {
     ]);
 
     let loaded = block_on(async {
-        let parsed = parse(host.sources.get("p/src/main.wado").unwrap());
+        let parsed = parse(main);
         load(
             parsed,
             Some("p/src/main.wado"),
@@ -124,13 +120,11 @@ fn imported_global_resolves_through_escape_reentry() {
     // a `..`-chain that re-enters. The elaborator's imported-global resolution
     // must canonicalize like the loader, or the global is looked up under an
     // identity absent from the loaded modules and silently dropped.
-    let host = MapHost::new(&[
-        (
-            "p/src/main.wado",
-            "use { uses_g } from \"../shared/helper.wado\";\n\
-             use { p } from \"./gen/parser.wado\";\n\
-             export fn run() { let _ = uses_g(); let _ = p(); }\n",
-        ),
+    let main = "use { uses_g } from \"../shared/helper.wado\";\n\
+                use { p } from \"./gen/parser.wado\";\n\
+                export fn run() { let _ = uses_g(); let _ = p(); }\n";
+    let host = in_memory_host(&[
+        ("p/src/main.wado", main),
         (
             "./gen/parser.wado",
             "pub global ANSWER: i32 = 42;\npub fn p() -> i32 { return ANSWER }\n",
@@ -143,7 +137,7 @@ fn imported_global_resolves_through_escape_reentry() {
     ]);
 
     let sem = block_on(async {
-        let parsed = parse(host.sources.get("p/src/main.wado").unwrap());
+        let parsed = parse(main);
         let loaded = load(
             parsed,
             Some("p/src/main.wado"),

@@ -175,13 +175,20 @@ test "router: last-write-wins" {
     assert r.match_path(Method::Get, &"/foo").unwrap().handler == 2;
 }
 
-test "router: bsearch keeps literal edges sorted across many inserts" {
+test "router: many static routes, and many literal edges out of one state" {
     let mut r = Router::<i32>::new();
     r.get("/zoo", 1);
     r.get("/apple", 2);
     r.get("/mango", 3);
     r.get("/banana", 4);
     r.get("/cherry", 5);
+    // A parameter after each makes these dynamic, so the root state carries
+    // one literal edge per name rather than the static table.
+    r.get("/zoo/:id", 11);
+    r.get("/apple/:id", 12);
+    r.get("/mango/:id", 13);
+    r.get("/banana/:id", 14);
+    r.get("/cherry/:id", 15);
 
     assert r.match_path(Method::Get, &"/zoo").unwrap().handler == 1;
     assert r.match_path(Method::Get, &"/apple").unwrap().handler == 2;
@@ -189,6 +196,25 @@ test "router: bsearch keeps literal edges sorted across many inserts" {
     assert r.match_path(Method::Get, &"/banana").unwrap().handler == 4;
     assert r.match_path(Method::Get, &"/cherry").unwrap().handler == 5;
     assert r.match_path(Method::Get, &"/coconut") matches { None };
+    assert r.match_path(Method::Get, &"/zoo/7").unwrap().handler == 11;
+    assert r.match_path(Method::Get, &"/apple/7").unwrap().handler == 12;
+    assert r.match_path(Method::Get, &"/mango/7").unwrap().handler == 13;
+    assert r.match_path(Method::Get, &"/banana/7").unwrap().handler == 14;
+    assert r.match_path(Method::Get, &"/cherry/7").unwrap().handler == 15;
+    assert r.match_path(Method::Get, &"/coconut/7") matches { None };
+}
+
+test "router: allowed_methods lists a path's methods in registration order" {
+    let mut r = Router::<i32>::new();
+    r.get("/users", 1);
+    r.post("/users", 2);
+    r.any("/users", 3);
+    r.delete("/users", 4);
+    r.put("/users/:id", 5);
+    r.get("/users/:id", 6);
+
+    assert r.allowed_methods("/users") == [Method::Get, Method::Post, Method::Delete];
+    assert r.allowed_methods("/users/7") == [Method::Put, Method::Get];
 }
 
 test "router: generic over String handler" {

@@ -2139,18 +2139,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        // Substitute the method's own parameters, taken from the signature
-        // rather than counted off the receiver. The declaring block's are
-        // already filled: the resolution read the signature at the receiver,
-        // and binding them a second time here is what let the two answers
-        // differ.
-        {
-            let method_params = self.qualified_method_own_slots(&struct_name, &static_call.method);
-            let subst_ctx = SubstitutionContext::new().bind(&method_params, &method_type_args);
-            if !subst_ctx.is_empty() {
-                return_type = self.substitute_ctx_in_frame(&subst_ctx, return_type);
-            }
-        }
+        return_type = self.fill_static_method_slots(declaration, &method_type_args, return_type);
 
         // The receiver as the match above resolved it, which carries the
         // declaring module. Re-deriving it from `struct_name` asks the call
@@ -2428,13 +2417,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// A qualified method's own type parameters — the slots past the declaring
-    /// block's, split where its signature says they split. The block's are the
-    /// resolution's to fill, so only these are left for a call site.
-    fn qualified_method_own_slots(&self, struct_name: &str, method_name: &str) -> Vec<TypeId> {
-        self.qualified_method_sig(struct_name, method_name)
-            .map(|sig| sig.own_type_param_ids())
-            .unwrap_or_default()
+    /// A static call's `return_type` with the method's own parameters filled
+    /// by `method_type_args`. The resolution read it at the receiver's
+    /// arguments, so the declaring block's slots are already filled; filling
+    /// them again by index rewrites the caller's own parameters those arguments
+    /// carry, as `Pair::empty()` at `Pair<String, T>` once became
+    /// `Pair<String, String>` in `fn make<T>`.
+    pub(super) fn fill_static_method_slots(
+        &mut self,
+        method: Option<DefId>,
+        method_type_args: &[TypeId],
+        return_type: TypeId,
+    ) -> TypeId {
+        let own_slots = method
+            .and_then(|def| self.tysys.signatures.method_sig(def))
+            .map(MethodSig::own_type_param_ids)
+            .unwrap_or_default();
+        let subst_ctx = SubstitutionContext::new().bind(&own_slots, method_type_args);
+        if subst_ctx.is_empty() {
+            return return_type;
+        }
+        self.substitute_ctx_in_frame(&subst_ctx, return_type)
     }
 
     /// Whether `args` arguments fill a callee declaring `params` parameters,
@@ -3217,6 +3220,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let receiver_key = newtype_dispatch.as_ref().map(|(_, base_type_id, _)| {
             self.impl_target_of(*base_type_id, &DeclName::new(&actual_struct_name))
         });
+<<<<<<< HEAD
         // The resolution walks from the newtype to its base itself, so it reads
         // the arguments at the base and answers in the newtype.
         let newtype_key = newtype_dispatch
@@ -3224,6 +3228,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|(newtype, _, _)| self.impl_target_of(*newtype, &DeclName::new(struct_name)));
         // `impl_type_args` is what the site substitutes with afterwards, so the
         // resolution reading them says the same thing.
+||||||| a03e903f91
+        // The receiver a newtype dispatches to, and the arguments this site
+        // resolves it with — inferred at the call, since the receiver is
+        // spelled as a bare name. `impl_type_args` is what the site substitutes
+        // with afterwards, so the resolution reading them says the same thing.
+        let receiver_type = newtype_dispatch.as_ref().map(|(_, base, _)| *base);
+=======
+        // The receiver a newtype dispatches to, and the arguments this site
+        // resolves it with — inferred at the call, since the receiver is
+        // spelled as a bare name. The resolution reads the signature at
+        // `impl_type_args`, which is the only place they are substituted.
+        let receiver_type = newtype_dispatch.as_ref().map(|(_, base, _)| *base);
+>>>>>>> origin/main
         let Ok(resolution) = self.static_trait_ref(
             StaticQuery {
                 receiver_key: newtype_key.as_ref(),
@@ -3290,18 +3307,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             actual_mangled_name
         };
 
-        let mut return_type = resolution.return_type;
-
-        // Substitute impl-level + method-level type parameters in return type.
-        // `lookup_static_method_return_type` registers impl params at indices
-        // 0..impl_count and method params at indices impl_count..total, so a
-        // single flat substitution list `[impl_args.., method_args..]` lines
-        // up correctly with `substitute_type_params` (which substitutes by index).
-        if !impl_type_args.is_empty() || !method_type_args.is_empty() {
-            let mut combined = impl_type_args.to_vec();
-            combined.extend_from_slice(method_type_args);
-            return_type = self.substitute_in_frame(return_type, &combined);
-        }
+        let mut return_type =
+            self.fill_static_method_slots(declaration, method_type_args, resolution.return_type);
 
         let template = self.tysys.static_template(&method_ref, &receiver_fq);
         let monomorph_info = if impl_type_args.is_empty() && method_type_args.is_empty() {

@@ -8891,6 +8891,7 @@ fn "core:serde/half_serde.wado/Weights^core:serde/Serialize::serialize<core:cbor
     let $match_21: ref null "core:serde//SerializeError";
     let v_39: u16;
     let v_79: ref "core:prelude/string.wado//String";
+    let repr_137: ref Array<u8>;
     "core:cbor/write_head"(s, 5, 3_i64);
     v_39 = self.scale;
     "core:cbor/write_head"(s, 3, 5_i64);
@@ -8918,8 +8919,9 @@ fn "core:serde/half_serde.wado/Weights^core:serde/Serialize::serialize<core:cbor
     $mv_arg_2 = global:core:serde::$const_obj_438;
     "core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend_from_slice"(s, $mv_arg_2.repr, $mv_arg_2.start, $mv_arg_2.end);
     "core:cbor/write_head"(s, 3, builtin::i64_extend_i32_s(v_79.used));
-    $mv_arg_2 = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: v_79.repr, start: 0, end: v_79.used };
-    "core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend_from_slice"(s, $mv_arg_2.repr, 0, $mv_arg_2.end);
+    repr_137 = v_79.repr;
+    v_39 = v_79.used;
+    "core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend_from_slice"(s, repr_137, 0, v_39);
     return ref.null none;
 }
 

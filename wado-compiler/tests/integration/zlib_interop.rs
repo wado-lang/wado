@@ -11,8 +11,8 @@
 //! - `zlib_cross_inflate.wado`: inflate/decompress operations
 
 use crate::common::{
-    TestHttpCtx, WasiState, cli_engine, cli_linker, compile_file,
-    install_rustls_provider_for_tests, limit_store, report_fuel_used, runtime,
+    TestHttpCtx, WasiState, cli_engine, cli_linker, compile_file, install_default_crypto_provider,
+    limit_store, report_fuel_used, runtime,
 };
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -27,7 +27,7 @@ static COMPRESS_COMPONENT: OnceLock<Component> = OnceLock::new();
 static INFLATE_COMPONENT: OnceLock<Component> = OnceLock::new();
 
 fn compile_driver(fixture_name: &str) -> Component {
-    let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sub");
+    let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/sub");
     let path = fixtures_dir.join(fixture_name);
     let result = compile_file(&path).unwrap_or_else(|e| {
         panic!("Failed to compile {fixture_name}: {e:?}");
@@ -62,7 +62,7 @@ fn run_component(component: &Component, stdin: &[u8]) -> String {
             .stdout(stdout_pipe)
             .stderr(stderr_pipe)
             .build();
-        install_rustls_provider_for_tests();
+        install_default_crypto_provider();
         let state = WasiState {
             ctx,
             table: wasmtime::component::ResourceTable::new(),

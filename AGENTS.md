@@ -89,7 +89,7 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 - Merge origin/main only through the `git-upstream-sync` skill, conflicts or not; a clean merge still ends with its sanity check.
 - A failure that shows only in CI is usually not the environment: a pull request's test jobs run on the branch merged with `main`, not on the branch head. Sync first with the `git-upstream-sync` skill and reproduce on the merged tree before suspecting anything else. `tidy` is the exception, checking out the head ref.
 - Test the language from an e2e fixture: a `.wado` file in `wado-compiler/tests/fixtures/`, expectations in its `__DATA__` section. Nearly everything the language does is stated there, diagnostics included. A fixture states a rejection two ways. `{"compile_error": "…"}` matches the whole report, so writing `":4:13: parse error: …"` pins the position as well as the message. `{"compile_error_codes": ["INVALID_SYNTAX"]}` names the `Code` it was raised under. Kiln is the exception: a generator runs against the filesystem, which a fixture cannot set up.
-- Write an integration test only for what no fixture can state — the CLI, the loader, `dump` output, a host API. Put it in `tests/integration/` and declare it in that directory's `main.rs`. A file dropped directly in `tests/` becomes its own target, and each one statically links the compiler and wasmtime for another ~150 MB.
+- Write an integration test only for what no fixture can state — the CLI, the loader, `dump` output, a host API. Put it in `tests/integration/` and declare it in that directory's `main.rs`. Each test target statically links the compiler and wasmtime for another ~150 MB, so a file in `wado-cli/tests/` becomes one, and one in `wado-compiler/tests/` is not compiled at all: that package lists its targets.
 - A regression fixture's shape is its point: when a harness cannot classify one, fix the harness, not the fixture.
 - Run what the change can reach, not more: a test-only addition does not need the full suite.
 - An unexplained failure indicts the measurement as often as the change: re-run the exact command by hand before believing it, and never revert a design over one. zsh does not word-split `$VAR`, so a flag list in one variable reaches a command as one argument.
@@ -117,6 +117,7 @@ form means the same, commit that instead (`.wat` for `.wasm`, `.onnxtext` for
 
 - `wado-compiler/` — the compiler: frontend, IR pipeline, optimizer, codegen. The Wado standard library (`core:*`, `wasi:*`) lives in `wado-compiler/lib/`. Internals: `docs/compiler.md`, `docs/optimizer.md`.
 - `wado-cli/` — the `wado` binary.
+- `wado-host/` — the native host pieces `wado-cli`, `wado-dev-tools` and the compiler's tests share: the `wasi:clocks/timezone` host, the TLS trust store, and `StubHost`, the `CompilerHost` that compiles e2e fixtures from the `__DATA__` inputs it reads.
 - `wado-run-webgpu/` — the `wado run-webgpu` subcommand, a separate binary and a workspace of its own: it links a GPU stack on a wasmtime other than the pin. The `test-webgpu` CI job is the only one that builds it.
 - `wado-lsp/` — the language service engine, also compiled to Wasm for the browser.
 - `wado-vscode/` — the VS Code extension.

@@ -1,12 +1,10 @@
 //! Every wado-compiler integration test except `e2e` and `format`, in one
 //! binary. Those two stay separate because ci.yml and `mise run test-format`
-//! select them by target name; `common.rs` stays beside them for `e2e`, so it
-//! is reached from here by path.
+//! select them by target name.
 
 #![allow(unused_crate_dependencies)]
 
-#[path = "../common.rs"]
-mod common;
+use wado_compiler_tests as common;
 
 mod array_literal_sroa;
 mod assert_capture_plan;

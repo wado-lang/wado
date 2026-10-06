@@ -31,6 +31,7 @@ use {
     bits_is_empty,
     bits_equal,
     bits_ids,
+    bits_set,
     bits_test,
     bits_union_into,
 } from "./token_kinds.wado";
@@ -122,8 +123,10 @@ pub struct GenContext {
     token_kinds: TokenKinds,
     /// `kind_rank[id]` is the lexicographic rank of `token_kinds.names[id]`,
     /// rebuilt lazily whenever the table has grown. Kind-set canonicalisation
-    /// sorts ids by rank, i.e. by token name.
+    /// orders ids by rank, i.e. by token name.
     kind_rank: List<i32>,
+    /// The inverse of `kind_rank`: the id at each rank.
+    kind_by_rank: List<i32>,
     /// Per-rule memo caches indexed by dense rule id (position in
     /// `parser_rules`, i.e. what `rule_index_of` returns). `null` means
     /// "not yet computed"; `Some(v)` is the memoized value. A cache probe on
@@ -137,16 +140,16 @@ pub struct GenContext {
     /// Maps single-alt group type name → the rule name that first defines it.
     /// Used to resolve general group type names inside shared single-alt groups.
     single_alt_owner: HashMap<String, String>,
-    /// Registry of token-kind sets keyed by canonical (sorted, joined
-    /// with `|`) representation. IDs are assigned in insertion order so
+    /// Registry of token-kind sets keyed by canonical (`canonical_ids`)
+    /// representation. IDs are assigned in insertion order so
     /// the same input grammar always produces the same helper names.
-    kind_set_registry: HashMap<String, KindSetEntry>,
+    kind_set_registry: HashMap<List<i32>, KindSetEntry>,
     /// Only a `LeftRecursive` rule carries a `min_prec` parameter.
-    lr_rule_snakes: List<String>,
+    lr_rule_snakes: HashSet<String>,
     /// Rules whose functions carry the FOLLOW slots, by snake name. Set once
     /// from `rule_reads_follow` when lowering is done; the same question
     /// answers both the declaration and every call site.
-    follow_rule_snakes: List<String>,
+    follow_rule_snakes: HashSet<String>,
     /// Per rule index: the rule runs a caller-FOLLOW gate or a probe, so it
     /// reads the slots itself. `caller_follow_gate_seen`'s question, asked per
     /// rule; the seeds of the fixpoint `lower` closes.
@@ -168,14 +171,14 @@ pub struct GenContext {
     /// per-depth representation. IDs are assigned in insertion order so
     /// `FOLLOW_MASK_<id>` global names are stable across runs. See
     /// `FollowMaskEntry`.
-    follow_mask_registry: HashMap<String, FollowMaskEntry>,
+    follow_mask_registry: HashMap<List<List<i32>>, FollowMaskEntry>,
     /// Positions each interned mask constrains, indexed by its id.
     follow_mask_depths: List<i32>,
     /// Registry of recovery sync sets (a leaf's FIRST-of-rest) keyed by
     /// canonical representation. Each distinct non-empty set becomes one
     /// `SYNC_<id>: List<i32>` global passed to `expect` by reference, so a
     /// terminal on the valid hot path never rebuilds or copies the set.
-    sync_set_registry: HashMap<String, KindSetEntry>,
+    sync_set_registry: HashMap<List<i32>, KindSetEntry>,
     /// Per function being emitted, innermost last, the top-level names its text
     /// references, which it `note`s at its end for `CodeWriter::prune`.
     ref_frames: List<HashSet<String>>,
@@ -401,6 +404,7 @@ impl GenContext {
             gate_bodies: HashMap::<i32, String>::with_seed(GALE_SEED),
             token_kinds: TokenKinds::empty(),
             kind_rank: [],
+            kind_by_rank: [],
             first_cache: none_int_list_cache(rule_count),
             single_token_cache: none_bool_cache(rule_count),
             nullable_cache: none_bool_cache(rule_count),
@@ -408,8 +412,8 @@ impl GenContext {
             open_end_cache: none_bool_cache(rule_count),
             single_alt_owner,
             kind_set_registry: HashMap::with_seed(GALE_SEED),
-            lr_rule_snakes: [],
-            follow_rule_snakes: [],
+            lr_rule_snakes: name_set(&[]),
+            follow_rule_snakes: name_set(&[]),
             rule_reads_follow: false_flags(rule_count),
             rule_body_predicts: false_flags(rule_count),
             rule_asks_simulator: false_flags(rule_count),
@@ -1064,16 +1068,11 @@ impl GenContext {
 
     /// Must run before any body emit: a call site may target a later rule.
     pub fn set_lr_rule_snakes(&mut self, names: &List<String>) {
-        self.lr_rule_snakes = *names;
+        self.lr_rule_snakes = name_set(names);
     }
 
     pub fn rule_takes_min_prec_arg<S: AsStrSlice>(&self, snake: S) -> bool {
-        for let n of &self.lr_rule_snakes {
-            if *n == snake.as_str_slice() {
-                return true;
-            }
-        }
-        return false;
+        return self.lr_rule_snakes.contains_str(snake);
     }
 
     /// Record that the rule being lowered reads the continuation it was called
@@ -1107,21 +1106,13 @@ impl GenContext {
     }
 
     pub fn set_follow_rule_snakes(&mut self, names: &List<String>) {
-        self.follow_rule_snakes = *names;
+        self.follow_rule_snakes = name_set(names);
     }
 
     /// Whether `snake`'s functions carry the FOLLOW slots. Asked at the
     /// declaration and at every call site, so the two cannot disagree.
     pub fn rule_reads_follow<S: AsStrSlice>(&self, snake: S) -> bool {
-        if !self.caller_follow_gate_seen {
-            return false;
-        }
-        for let n of &self.follow_rule_snakes {
-            if *n == snake.as_str_slice() {
-                return true;
-            }
-        }
-        return false;
+        return self.caller_follow_gate_seen && self.follow_rule_snakes.contains_str(snake);
     }
 
     /// Store the per-rule ATN loop-entry decision numbers (after `build_atn`).
@@ -1460,11 +1451,12 @@ impl GenContext {
 
     /// Install the canonical token-kind table (production path). Ids then match
     /// the resolved `Element::kind_id`, and `name_of` reproduces the emitted
-    /// `TK_*` names. Clears `kind_rank`: its length-based staleness check
-    /// cannot see a same-length table swap.
+    /// `TK_*` names. Clears `kind_rank` and its inverse: the length-based
+    /// staleness check cannot see a same-length table swap.
     pub fn set_token_kinds(&mut self, kinds: TokenKinds) {
         self.token_kinds = kinds;
         self.kind_rank = [];
+        self.kind_by_rank = [];
     }
 
     /// The `TK_*` names by kind id, the order a vocabulary table is built in.
@@ -2658,12 +2650,11 @@ impl GenContext {
     /// first-seen order across the codegen pass.
     pub fn intern_kind_set(&mut self, tokens: &List<String>) -> i32 {
         let ids = self.canonical_kind_ids(tokens);
-        let key = join_ids(&ids);
-        if let Some(entry) = self.kind_set_registry.get(key) {
+        if let Some(entry) = self.kind_set_registry.get(ids) {
             return entry.id;
         }
         let id = self.kind_set_registry.len();
-        self.kind_set_registry[key] = KindSetEntry { id, tokens: ids };
+        self.kind_set_registry[ids] = KindSetEntry { id, tokens: ids };
         return id;
     }
 
@@ -2684,15 +2675,15 @@ impl GenContext {
         return self.canonical_ids(self.names_to_ids(tokens));
     }
 
-    fn canonical_ids(&mut self, mut ids: List<i32>) -> List<i32> {
+    fn canonical_ids(&mut self, ids: List<i32>) -> List<i32> {
         self.ensure_kind_rank();
-        let rank = &self.kind_rank;
-        ids.sort_by(|a: &i32, b: &i32| rank[*a].cmp(&rank[*b]));
+        let mut ranks: List<u64> = [];
+        for let id of &ids {
+            bits_set(&mut ranks, self.kind_rank[*id]);
+        }
         let mut out: List<i32> = [];
-        for let mut i = 0; i < ids.len(); i += 1 {
-            if i == 0 || ids[i] != ids[i - 1] {
-                out.push(ids[i]);
-            }
+        for let rank of bits_ids(&ranks) {
+            out.push(self.kind_by_rank[rank]);
         }
         return out;
     }
@@ -2718,6 +2709,7 @@ impl GenContext {
             rank[order[pos]] = pos;
         }
         self.kind_rank = rank;
+        self.kind_by_rank = order;
     }
 
     /// All interned kind sets in helper-ID order (i.e. insertion order).
@@ -2767,12 +2759,11 @@ impl GenContext {
         if ids.is_empty() {
             return null;
         }
-        let key = join_ids(&ids);
-        if let Some(entry) = self.sync_set_registry.get(key) {
+        if let Some(entry) = self.sync_set_registry.get(ids) {
             return Option::<i32>::Some(entry.id);
         }
         let id = self.sync_set_registry.len();
-        self.sync_set_registry[key] = KindSetEntry { id, tokens: ids };
+        self.sync_set_registry[ids] = KindSetEntry { id, tokens: ids };
         return Option::<i32>::Some(id);
     }
 
@@ -2841,13 +2832,12 @@ impl GenContext {
         for let mut d = 0; d <= last_constrained; d += 1 {
             canonical.push(sorted[d]);
         }
-        let key = ids_prefix_key(&canonical);
-        if let Some(entry) = self.follow_mask_registry.get(key) {
+        if let Some(entry) = self.follow_mask_registry.get(canonical) {
             return Option::<i32>::Some(entry.id);
         }
         let id = self.follow_mask_registry.len();
         self.follow_mask_depths.push(canonical.len());
-        self.follow_mask_registry[key] = FollowMaskEntry { id, mask: canonical };
+        self.follow_mask_registry[canonical] = FollowMaskEntry { id, mask: canonical };
         return Option::<i32>::Some(id);
     }
 
@@ -3065,17 +3055,12 @@ impl GenContext {
     }
 }
 
-/// Join a canonical id list with `|` into a registry key. Ids are stable for
-/// the lifetime of the table (append-only), so the key is unambiguous.
-fn join_ids(ids: &List<i32>) -> String {
-    let mut s = String::with_capacity(32);
-    for let mut i = 0; i < ids.len(); i += 1 {
-        if i > 0 {
-            s.push('|');
-        }
-        s.push_display(&ids[i]);
+fn name_set(names: &List<String>) -> HashSet<String> {
+    let mut set = HashSet::<String>::with_seed(GALE_SEED);
+    for let name of names {
+        set.insert(*name);
     }
-    return s;
+    return set;
 }
 
 /// `scan_<snake>`, the name of the rule `snake`'s scan function where it is
@@ -3110,21 +3095,6 @@ fn expect_ids(sets: &List<Option<List<i32>>>, i: i32) -> Option<List<i32>> {
         return null;
     }
     return sets[i];
-}
-
-/// Registry key of a canonical K-prefix mask: depths joined with `;`,
-/// ids within a depth joined with `|`.
-fn ids_prefix_key(prefix: &List<List<i32>>) -> String {
-    let mut s = String::with_capacity(64);
-    let mut first_depth = true;
-    for let depth of prefix {
-        if !first_depth {
-            s.push(';');
-        }
-        first_depth = false;
-        s.push_str(&join_ids(depth));
-    }
-    return s;
 }
 
 /// Build a map from single-alt group type name to the first rule that contains it.

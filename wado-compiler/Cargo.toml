@@ -4,17 +4,12 @@ version = { workspace = true }
 edition = "2024"
 description = "Compiler for the Wado programming language"
 license = { workspace = true }
+# The tests are the `wado-compiler-tests` package in `tests/`.
+autotests = false
 
 [lib]
 name = "wado_compiler"
 path = "src/lib.rs"
-
-# Shared helpers, not a test target: without this cargo auto-discovers
-# tests/common.rs and links a binary holding zero tests.
-[[test]]
-name = "common"
-path = "tests/common.rs"
-test = false
 
 [dependencies]
 wado-wasm-embed = { path = "../wado-wasm-embed" }
@@ -36,27 +31,9 @@ anyhow = { workspace = true }
 semver = { workspace = true }
 
 [dev-dependencies]
-datatest-mini = { workspace = true }
-anyhow = { workspace = true }
-wasmprinter = { workspace = true }
-wit-component = { workspace = true }
-wit-parser = { workspace = true }
-tempfile = { workspace = true }
-wasmtime = { workspace = true }
-wasmtime-wasi = { workspace = true }
-wasmtime-wasi-http = { workspace = true }
-wasmtime-wasi-tls = { workspace = true }
-rustls = { workspace = true }
-tokio = { workspace = true }
-bytes = { workspace = true }
 futures = { workspace = true }
-http = { workspace = true }
-http-body-util = { workspace = true }
-zlib-rs = { workspace = true }
-sha2 = { workspace = true }
 serde_json = { workspace = true }
-iana-time-zone = { workspace = true }
-libc = { workspace = true }
+tokio = { workspace = true }
 
 [lints]
 workspace = true
