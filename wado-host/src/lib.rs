@@ -2,6 +2,7 @@
 //! tests share. A crate of its own because the compiler's tests cannot depend
 //! on `wado-cli`, which depends on the compiler.
 
+pub mod fixture;
 pub mod stub_host;
 pub mod timezone;
 pub mod tls_trust;

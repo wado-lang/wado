@@ -2,9 +2,9 @@
 //
 // Wasmtime ships only the binding for this interface (gated by the unstable
 // `clocks-timezone` feature) and not the host implementation, so the test
-// runtime in `tests/common.rs` (and `wado run`/`wado serve` via
-// `wado_cli::timezone_host`) wires its own implementation backed by
-// `localtime_r` + the `iana-time-zone` crate.
+// runtime in `tests/common.rs` and `wado run`/`wado serve` share one,
+// `wado_host::timezone`, backed by `localtime_r` + the `iana-time-zone`
+// crate.
 
 use { SystemClock, Instant, Timezone } from "wasi:clocks";
 

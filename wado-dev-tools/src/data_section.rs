@@ -1,3 +1,5 @@
+use wado_host::fixture::{CompileInputs, data_section};
+
 pub fn should_skip_file(source: &str) -> bool {
     // Skip if __DATA__ contains "compile_error"
     let data = source.find("\n__DATA__\n").map_or("", |p| &source[p..]);
@@ -21,47 +23,31 @@ pub fn should_skip_file(source: &str) -> bool {
     false
 }
 
+/// The compile inputs a fixture's `__DATA__` declares. Golden generation
+/// compiles a fixture the way the e2e harness does, so it reads them through
+/// the same [`CompileInputs`].
+///
+/// # Panics
+/// If the `__DATA__` section is not JSON of that shape.
+#[must_use]
+pub fn extract_compile_inputs(source: &str) -> CompileInputs {
+    data_section(source).map_or_else(CompileInputs::default, |data| {
+        serde_json::from_str(data.trim())
+            .unwrap_or_else(|e| panic!("__DATA__ is not a fixture spec: {e}"))
+    })
+}
+
 /// Resolve a fixture's target world. `no_data_default` is the world used when
 /// the source has **no `__DATA__` section at all** — the `tests/fixtures` e2e
 /// set passes `Some("test")` so a library-shaped source runs under the test
 /// world (mirroring `run_fixture` in e2e.rs), while the `format.fixtures` set
 /// passes `None` to keep the CLI default. A `__DATA__` section that is present
 /// but carries no world key always falls through to the CLI default (`None`).
-/// The stubbed path `[dependencies]` a fixture declares, name → the
-/// dependency's `[package].lib` relative to the fixture directory. Golden
-/// generation compiles a fixture the way the e2e harness does, so it reads the
-/// same key.
-#[must_use]
-pub fn extract_dependencies_from_data_section(source: &str) -> Vec<(String, String)> {
-    let marker = "\n__DATA__\n";
-    let data = if let Some(pos) = source.find(marker) {
-        &source[pos + marker.len()..]
-    } else if let Some(stripped) = source.strip_prefix("__DATA__\n") {
-        stripped
-    } else {
-        return Vec::new();
-    };
-    let Ok(json) = serde_json::from_str::<serde_json::Value>(data.trim()) else {
-        return Vec::new();
-    };
-    let Some(deps) = json.get("dependencies").and_then(|v| v.as_object()) else {
-        return Vec::new();
-    };
-    deps.iter()
-        .filter_map(|(name, lib)| Some((name.clone(), lib.as_str()?.to_string())))
-        .collect()
-}
-
 pub fn extract_world_from_data_section(
     source: &str,
     no_data_default: Option<&str>,
 ) -> Option<String> {
-    let marker = "\n__DATA__\n";
-    let data = if let Some(pos) = source.find(marker) {
-        &source[pos + marker.len()..]
-    } else if let Some(stripped) = source.strip_prefix("__DATA__\n") {
-        stripped
-    } else {
+    let Some(data) = data_section(source) else {
         return no_data_default.map(str::to_string);
     };
     let json: serde_json::Value = serde_json::from_str(data.trim()).ok()?;

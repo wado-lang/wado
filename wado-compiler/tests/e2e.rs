@@ -31,6 +31,7 @@ use wasmtime_wasi_http::p3::bindings::Service;
 use wado_compiler::ast::TodoMark;
 use wado_compiler::coverage::{Branch, Coverage, CoverageScope, read_from_component, render_plan};
 use wado_compiler::{CompilerOptions, OptLevel};
+use wado_host::fixture::{CompileInputs, data_section};
 
 // ---------------------------------------------------------------------------
 // __DATA__ spec
@@ -219,34 +220,10 @@ struct TestSpec {
     #[serde(default, deserialize_with = "one_or_many")]
     allocator: Vec<String>,
 
-    /// Compile-time parameter overrides (`-D NAME=value`) for `#[param]` globals.
-    #[serde(default)]
-    params: indexmap::IndexMap<String, String>,
-
-    /// Stubbed compile-time environment for `#[param(from_env = ...)]`.
-    #[serde(default)]
-    param_env: indexmap::IndexMap<String, String>,
-
-    /// Host-supplied parameter fallbacks, as `wado test` supplies `log.level`.
-    #[serde(default)]
-    param_defaults: indexmap::IndexMap<String, String>,
-
-    /// Stubbed path `[dependencies]`: name → the dependency's `[package].lib`,
-    /// relative to the fixture directory. Each entry is its own package.
-    #[serde(default)]
-    dependencies: indexmap::IndexMap<String, String>,
-
-    /// Override the `--param-unknown` policy level (`error` / `warn` / `ignore`).
-    #[serde(default)]
-    param_unknown: Option<String>,
-
-    /// Override the `--param-invalid` policy level (`error` / `warn` / `ignore`).
-    #[serde(default)]
-    param_invalid: Option<String>,
-
-    /// Override the `--param-missing` policy level (`error` / `warn` / `ignore`).
-    #[serde(default)]
-    param_missing: Option<String>,
+    /// The keys that say how to compile the fixture, shared with the golden
+    /// dumps.
+    #[serde(flatten)]
+    compile: CompileInputs,
 
     /// Mock responses for outgoing HTTP requests (keyed by URL or path).
     /// When present, any `wasi:http/client#send` from the guest will be
@@ -765,7 +742,7 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
     // without is a library-shaped source run under the test world (compile +
     // instantiate, executing its `test` blocks). The latter lets a published
     // library double as a fixture verbatim — see `cm_catalog.wado`.
-    let spec: TestSpec = match common::extract_data_section(source) {
+    let spec: TestSpec = match data_section(source) {
         Some(data_section) => common::parse_data_section(data_section, &test_id),
         None => TestSpec {
             test_world: Some(TestWorldSpec::default()),
@@ -870,43 +847,13 @@ fn run_with_allocator(
         None
     };
 
-    let allocator = Some(allocator.to_string());
-    let mut param_policy = wado_compiler::param_resolution::ParamPolicy::default();
-    let parse_level = |s: &Option<String>, field: &str| {
-        s.as_ref().map(|v| {
-            wado_compiler::param_resolution::ParamPolicyLevel::parse(v)
-                .unwrap_or_else(|| panic!("[{test_id}] invalid {field} level: {v:?}"))
-        })
-    };
-    if let Some(level) = parse_level(&spec.param_unknown, "param_unknown") {
-        param_policy.unknown = level;
-    }
-    if let Some(level) = parse_level(&spec.param_invalid, "param_invalid") {
-        param_policy.invalid = level;
-    }
-    if let Some(level) = parse_level(&spec.param_missing, "param_missing") {
-        param_policy.missing = level;
-    }
-
     let options = CompilerOptions {
         opt_level,
         target_world,
         skip_validation: false,
         retain_wir: spec.has_wir_expectations(opt_level),
-        allocator,
-        params: wado_compiler::param_resolution::ParamInputs {
-            overrides: spec
-                .params
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect(),
-            defaults: spec
-                .param_defaults
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect(),
-            policy: param_policy,
-        },
+        allocator: Some(allocator.to_string()),
+        params: spec.compile.param_inputs(),
         coverage: spec.coverage.as_ref().map(|_| CoverageScope::default()),
         ..Default::default()
     };
@@ -920,10 +867,7 @@ fn run_with_allocator(
         fixture_path.to_path_buf(),
         source.to_string(),
         options,
-        common::HostStubs {
-            env: spec.param_env.clone(),
-            dependencies: spec.dependencies.clone(),
-        },
+        spec.compile.host_stubs(),
     );
 
     // Assert compile-time warnings (e.g. DeadFunction / DeadGlobal). These are

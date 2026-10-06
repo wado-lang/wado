@@ -1174,16 +1174,6 @@ pub async fn compile_file_async(
         .map_err(|_: CompileFailure| bail_to_compile_error(&host.diagnostics(), Some(&filename)))
 }
 
-/// Extract __DATA__ section from source file content
-pub fn extract_data_section(source: &str) -> Option<&str> {
-    let marker = "\n__DATA__\n";
-    if let Some(pos) = source.find(marker) {
-        Some(&source[pos + marker.len()..])
-    } else {
-        source.strip_prefix("__DATA__\n")
-    }
-}
-
 /// Parse JSON from __DATA__ section with helpful error message
 pub fn parse_data_section<T: serde::de::DeserializeOwned>(data_section: &str, context: &str) -> T {
     serde_json::from_str(data_section).unwrap_or_else(|e| {

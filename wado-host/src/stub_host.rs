@@ -27,6 +27,7 @@ pub struct StubHost {
 }
 
 impl StubHost {
+    /// A host loading sources relative to `base_path`, with nothing stubbed.
     #[must_use]
     pub fn new(base_path: PathBuf) -> Self {
         wado_lsp::install_stderr_trace_sink();
@@ -38,6 +39,8 @@ impl StubHost {
         }
     }
 
+    /// This host, answering from `stubs` what a real host would ask its
+    /// environment.
     #[must_use]
     pub fn with_stubs(mut self, stubs: HostStubs) -> Self {
         self.stubs = stubs;

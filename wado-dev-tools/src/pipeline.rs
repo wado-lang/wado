@@ -5,10 +5,10 @@ use std::time::{Duration, Instant};
 use wado_compiler::hashmap::{IndexMap, IndexSet};
 
 use wado_compiler::OptLevel;
-use wado_host::{HostStubs, StubHost};
+use wado_host::StubHost;
 
 use crate::data_section::{
-    extract_dependencies_from_data_section, extract_world_from_data_section, should_skip_file,
+    extract_compile_inputs, extract_world_from_data_section, should_skip_file,
 };
 use crate::template::Template;
 
@@ -514,15 +514,11 @@ async fn render_phases(
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
     let target_world = extract_world_from_data_section(source, default_world);
-    let stubs = HostStubs {
-        dependencies: extract_dependencies_from_data_section(source)
-            .into_iter()
-            .collect(),
-        ..HostStubs::default()
-    };
+    let inputs = extract_compile_inputs(source);
+    let params = inputs.param_inputs();
 
     if needs_dump {
-        let host = StubHost::new(base_path.clone()).with_stubs(stubs.clone());
+        let host = StubHost::new(base_path.clone()).with_stubs(inputs.host_stubs());
         let dumped = wado_compiler::dump_with_host_and_world(
             source,
             &host,
@@ -532,7 +528,7 @@ async fn render_phases(
             None,
             wado_compiler::OptOverrides::default(),
             &[],
-            &wado_compiler::param_resolution::ParamInputs::default(),
+            &params,
             wado_compiler::kiln::InvocationIndex::default(),
         )
         .await;
@@ -604,11 +600,12 @@ async fn render_phases(
     }
 
     if needs_wat {
-        let host = StubHost::new(base_path).with_stubs(stubs);
+        let host = StubHost::new(base_path).with_stubs(inputs.host_stubs());
         let options = wado_compiler::CompilerOptions {
             opt_level,
             target_world: target_world.clone(),
             log_level: Some(wado_compiler::LogLevel::Off),
+            params,
             ..wado_compiler::CompilerOptions::default()
         };
         let res =

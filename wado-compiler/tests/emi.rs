@@ -285,7 +285,7 @@ struct Spec {
 impl Spec {
     /// A source with no `__DATA__` section runs the way its root says.
     fn parse(root: Root, source: &str) -> Result<Self, Excluded> {
-        let Some(data) = common::extract_data_section(source) else {
+        let Some(data) = wado_host::fixture::data_section(source) else {
             return Ok(root.default_spec());
         };
         let value: serde_json::Value =
