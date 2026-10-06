@@ -257,15 +257,14 @@ pub(crate) fn bail_with<H: CompilerHost>(
     Bail
 }
 
-/// The `-f` flags for a build of `target_world`: the test world checks
+/// The `-f` flags for a build, in the test world or not: the test world checks
 /// contracts by default.
 fn parse_codegen_flags<H: CompilerHost>(
     flags: &[String],
     opt_level: OptLevel,
-    target_world: Option<&str>,
+    test_world: bool,
     logger: &Logger<'_, H>,
 ) -> Result<CodegenFlags, Bail> {
-    let test_world = target_world == Some(TEST_WORLD);
     CodegenFlags::parse(flags, opt_level, test_world).map_err(|flag| {
         bail_with(
             logger,
@@ -1283,14 +1282,15 @@ fn compile_after_load<H: CompilerHost>(
     // compilation refuses to continue on an incomplete one — the downstream
     // phases assume populated `state` / `tir_modules` — and its diagnostics have
     // already reached the host.
+    let is_test_world = options.target_world.as_deref() == Some(TEST_WORLD);
     assert!(
-        options.coverage.is_none() || options.target_world.as_deref() == Some("test"),
+        options.coverage.is_none() || is_test_world,
         "coverage instruments the test world only"
     );
     let codegen_flags = parse_codegen_flags(
         &options.codegen_flags,
         options.opt_level,
-        options.target_world.as_deref(),
+        is_test_world,
         logger,
     )?;
     let coverage = options.coverage.map(|scope| CoverageRequest {
@@ -1318,7 +1318,6 @@ fn compile_after_load<H: CompilerHost>(
         )
     });
 
-    let is_test_world = options.target_world.as_deref() == Some("test");
     for diag in lint_diagnostics(&sem, options.unused_diagnostics, is_test_world) {
         // A lint carries the severity it words itself at, so one that only
         // remarks is not raised to a warning on the way out.
@@ -2183,7 +2182,8 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // into `TypeId`s the cached `TirModule`s do not carry, and left an
     // `Iterator::Item` projection to reach WIR build and panic on programs
     // `compile` handled fine.
-    let flags = parse_codegen_flags(codegen_flags, opt_level, target_world, &logger)?;
+    let test_world = target_world == Some(TEST_WORLD);
+    let flags = parse_codegen_flags(codegen_flags, opt_level, test_world, &logger)?;
     let sem = semantics::semantics_with_logger(load_result, &logger, true, None);
     let symbols = sem.symbols.clone();
     let interner = sem.interner.clone();
