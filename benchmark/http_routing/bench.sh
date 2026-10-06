@@ -95,12 +95,23 @@ measure() {
 
 SERVER_KEYS=()
 for key in ${SERVERS:-wado node bun axum}; do
+  case "$key" in
+    wado | node | bun | axum) ;;
+    *)
+      echo "ERROR: unknown server '$key' in SERVERS (wado, node, bun, axum)" >&2
+      exit 1
+      ;;
+  esac
   if [ "$key" = bun ] && ! command -v bun >/dev/null 2>&1; then
     echo "SKIP: bun not found (install bun or add it to benchmark/mise.toml)"
     continue
   fi
   SERVER_KEYS+=("$key")
 done
+if [ ${#SERVER_KEYS[@]} -eq 0 ]; then
+  echo "ERROR: no server left to measure" >&2
+  exit 1
+fi
 
 server_name() {
   case "$1" in
