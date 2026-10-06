@@ -1306,7 +1306,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !turbofish_leaves_slot(&explicit, input.slots.len()) {
             return explicit;
         }
-        let inferred = self.infer_method_type_args(input);
+        let inferred = self.infer_method_type_args(input, &explicit);
         if explicit.is_empty() {
             return inferred;
         }
@@ -1408,10 +1408,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// already-resolved parameter and return types, which must come from a method
     /// lookup so their slots are the ones the caller binds. Deliberately does not
     /// re-resolve the method's AST: a fresh scope would report spurious errors for
-    /// a `Self::Item`. An unbound parameter keeps its `TypeParam` id.
-    pub(super) fn infer_method_type_args(
+    /// a `Self::Item`. An unbound parameter keeps its `TypeParam` id. A slot
+    /// `written` names (its turbofish, `UNKNOWN` for `_`) is answered from it.
+    fn infer_method_type_args(
         &mut self,
         input: MethodInferenceInput<'_>,
+        written: &[TypeId],
     ) -> Vec<TypeId> {
         let MethodInferenceInput {
             receiver_type,
@@ -1445,9 +1447,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 kind: InstanceKind::Method,
                 name: method_name,
                 span,
-                // The inference pass itself: its caller merges the turbofish in
-                // afterwards, so every slot is open here.
-                type_args: &[],
+                type_args: written,
                 self_binding,
             },
         );

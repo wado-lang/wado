@@ -1,0 +1,18 @@
+// A method turbofish naming only `A` leaves `B` to report, and `A` not.
+struct M {}
+
+impl M {
+    fn make<A, B: Default>(&self) -> B {
+        return B::default();
+    }
+}
+
+export fn run() {
+    let m = M {};
+    let v = m.make::<i32>();
+}
+
+__DATA__
+{
+  "compile_error": ":12:13: analysis error: cannot infer type parameter `B` of method `make`; add a turbofish (`make::<...>()`) or a type annotation"
+}

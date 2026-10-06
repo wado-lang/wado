@@ -3085,19 +3085,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         params: &[ast::GenericParam],
         type_args: &mut Vec<TypeId>,
     ) {
-        // A turbofish naming only the non-pack params (`parse::<Perms>()`,
+        // A turbofish naming only the leading params (`parse::<Perms>()`,
         // where the subject appears solely in the return type) leaves the
-        // trailing pack slot absent. Seed it with its declared, still-unbound
-        // form so the projection below can pin it from the owner's bound.
+        // trailing slots absent. Seed them open so the projection below can
+        // pin them from the owner's bound.
         for (i, param) in params.iter().enumerate().skip(type_args.len()) {
-            let declared = self.tysys.type_table.borrow_mut().make_declared_param(
-                param.name.clone(),
-                i as u32,
-                param.is_pack,
-            );
-            type_args.push(declared);
+            let open = self.open_slot(param, i);
+            type_args.push(open);
         }
         self.resolve_assoc_bound_args(params, type_args);
+    }
+
+    /// A call's slot for `param` at `index` that nothing has answered yet: a
+    /// fresh variable, as `instantiate` mints. The callee's own binder would
+    /// read as the caller's of one name and index, a slot the caller forwards.
+    /// A pack keeps its declared form, as `instantiate` keeps it.
+    fn open_slot(&mut self, param: &ast::GenericParam, index: usize) -> TypeId {
+        if param.is_pack {
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .make_type_pack(param.name.clone(), index as u32)
+        } else {
+            self.mint_infer_var_named(&param.name)
+        }
     }
 
     /// Report "cannot infer type parameter" at the call site rather than letting
@@ -3265,13 +3276,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             *type_args = space
                 .iter()
                 .enumerate()
-                .map(|(i, p)| {
-                    self.tysys.type_table.borrow_mut().make_declared_param(
-                        p.name.clone(),
-                        i as u32,
-                        p.is_pack,
-                    )
-                })
+                .map(|(i, p)| self.open_slot(p, i))
                 .collect();
         }
         if type_args.len() != n {
