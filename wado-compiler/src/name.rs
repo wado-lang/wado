@@ -1655,6 +1655,16 @@ pub fn global_name(module_source: &ModuleSource, name: impl fmt::Display) -> Str
     format!("global:{module_source}::{name}")
 }
 
+/// The global holding the one shared object of a payload-less variant case:
+/// `variant` is the variant's WIR type name, `case` the case's discriminant.
+#[must_use]
+pub fn unit_case_global_name(variant: &str, case: i32) -> String {
+    global_name(
+        &ModuleSource::builtin(),
+        format!("{INTERNAL_PREFIX}unit_case{INTERNAL_PREFIX}{variant}{INTERNAL_PREFIX}{case}"),
+    )
+}
+
 /// The loader identity of `import_source` imported from the local module
 /// `from_path`, or from the entry module where `None`, anchored at `entry_dir`.
 #[must_use]
