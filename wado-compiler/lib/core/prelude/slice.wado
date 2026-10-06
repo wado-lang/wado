@@ -73,6 +73,9 @@ pub trait Sequence with () {
 /// A contiguous view into a backing `Array<T>` over the half-open range
 /// `[start, end)`. Holds a reference to the whole array, so creating a slice
 /// never copies elements.
+///
+/// A slice of a `List` is bound by the contract on `List`: once the list
+/// shrinks, the slice must not read past the list's new length.
 #[compiler_item("slice")]
 pub struct Slice<T> {
     repr: &Array<T>,

@@ -1,0 +1,41 @@
+// Test: a list releases the slots it gives up, so a dropped element is not
+// kept alive for the collector. A reference element's slots are filled with
+// null; a reference-free element's are left as they are, at no cost.
+
+use { println, Stdout } from "core:cli";
+
+fn shrink(names: &mut List<String>, counts: &mut List<i32>) {
+    names.truncate(1);
+    counts.truncate(1);
+}
+
+export fn run() with Stdout {
+    let mut names: List<String> = ["a", "b", "c", "d", "e"];
+    let mut counts: List<i32> = [1, 2, 3, 4, 5];
+    shrink(&mut names, &mut counts);
+    names.push("f");
+    counts.push(6);
+    println(`${names:?} ${counts:?}`);
+
+    let mut stack: List<String> = ["x", "y", "z"];
+    let top = stack.pop();
+    let head = stack.remove(0);
+    stack.push("w");
+    println(`${top:?} ${head} ${stack:?}`);
+
+    stack.clear();
+    stack.push("v");
+    println(`${stack:?} ${stack.capacity() >= 3}`);
+}
+
+__DATA__
+{
+    "stdout": "[\"a\", \"f\"] [1, 6]\nOption::Some(\"z\") x [\"y\", \"w\"]\n[\"v\"] true\n",
+    "wir_scope": "wado/run",
+    "wir_expect:O2": [
+        "ref.null none"
+    ],
+    "wir_not_expect:O2": [
+        "builtin::array_fill<i32>"
+    ]
+}

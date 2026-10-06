@@ -15,8 +15,7 @@ use super::access::{
     collect_refcast_aliases, replace_variant_accesses,
 };
 use super::layout::{
-    MAX_PER_CASE_RESULT_FIELDS, VariantLayout, compute_variant_layout, default_value_for_type,
-    pad_variant_fields,
+    MAX_PER_CASE_RESULT_FIELDS, VariantLayout, compute_variant_layout, pad_variant_fields,
 };
 use super::wrapper::unwrap_to_inner_call;
 
@@ -68,7 +67,7 @@ fn default_variant_vector(cand: &SlotFlattenCand) -> Vec<WirInstr> {
     let mut out = Vec::with_capacity(cand.layout.field_types.len());
     out.push(WirInstr::I32Const(disc));
     for ty in &cand.layout.field_types[1..] {
-        out.push(default_value_for_type(ty));
+        out.push(ty.default_value());
     }
     out
 }

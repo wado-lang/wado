@@ -236,6 +236,10 @@ references instead, as
 Each iteration binds it anew, so a closure or a reference taken in one iteration
 keeps that iteration's element.
 
+Iterating a `List` reads the list's own storage, so a body that shrinks the
+list it walks breaks the contract a shrinking list puts on its
+[views](./spec-types.md#slice-semantics).
+
 The binding must match every element, as a `let` pattern must (see
 [Patterns That Cannot Fail](./spec-patterns.md#patterns-that-cannot-fail)). A
 pattern that can fail (`for let Some(x) of xs`, a narrowing type pattern) is a

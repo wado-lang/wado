@@ -59,10 +59,12 @@ impl<K, V> EntryLog<K, V> {
     }
 
     /// Marks the live entry `e` dead, and reports whether the dead now
-    /// outnumber the live enough to `compact`.
+    /// outnumber the live enough to `compact`. Nothing reads a dead entry's
+    /// value again, so it is released; its key stays for a lookup to compare.
     internal fn kill(&mut self, e: i32) -> bool {
         assert self.alive[e];
         self.alive[e] = false;
+        builtin::array_release(&mut self.values, e, 1);
         self.deleted_count += 1;
         self.size -= 1;
         return self.deleted_count > self.size && self.deleted_count > 4;

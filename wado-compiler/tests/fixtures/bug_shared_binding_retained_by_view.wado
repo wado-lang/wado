@@ -1,0 +1,48 @@
+// A binding read out of a list shares its storage only while nothing writes
+// the list. A view or an iterator taken of the binding keeps reading that
+// storage after the binding's last use, so a write to the list while the view
+// is alive must not show through it: the binding keeps its own copy.
+
+#[inline("never")]
+fn keep_view(out: &mut List<Slice<String>>, src: &mut List<String>) {
+    let snapshot = *src;
+    out.push(snapshot[0..<2]);
+    src[1] = "Y";
+}
+
+test "an iterator over a shared binding outlives a write to its source" {
+    let mut b: List<String> = ["a", builtin::black_box("b")];
+    let s = b;
+    let mut it = s.into_iter();
+    b[1] = "Y";
+    assert it.collect() == ["a", "b"] as List<String>;
+}
+
+test "a slice of a shared binding outlives a write to its source" {
+    let mut b: List<String> = ["a", builtin::black_box("b")];
+    let s = b;
+    let view = s[0..<2];
+    b[1] = "Y";
+    assert view[1] == "b";
+}
+
+test "a for loop over a shared binding outlives a write to its source" {
+    let mut b: List<String> = ["a", builtin::black_box("b")];
+    let s = b;
+    let mut seen: List<String> = [];
+    for let x of s {
+        b[1] = "Y";
+        seen.push(x);
+    }
+    assert seen == ["a", "b"] as List<String>;
+}
+
+test "a view that leaves the frame outlives a write to its source" {
+    let mut src: List<String> = ["a", builtin::black_box("b")];
+    let mut out: List<Slice<String>> = [];
+    keep_view(&mut out, &mut src);
+    assert out[0][1] == "b";
+}
+
+__DATA__
+{"test": {}}

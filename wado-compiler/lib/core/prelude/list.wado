@@ -39,6 +39,13 @@ use {
 use { panic } from "core:rt";
 use { AsByteSlice, FromLeBytes } from "core:prelude/bytes.wado";
 
+/// A growable sequence.
+///
+/// Contract: shrinking (`truncate`, `clear`, `pop`, `remove`) may release the
+/// slots past the new length, so the collector can reclaim what they held. A
+/// slice or an iterator taken before the shrink, a `for` loop's included, must
+/// not read those slots: what it reads is unspecified, some value of `T` or a
+/// trap.
 #[compiler_item("list")]
 pub struct List<T> {
     repr: Array<T>,
@@ -134,6 +141,10 @@ impl<T> List<T> {
         self.used = used + 1;
     }
 
+    /// Removes and returns the last element, or null when empty.
+    // Keeps its slot: binding the element to release the slot after costs a
+    // deep copy of it, since a returned `let` reads as owned rather than as a
+    // projection of `self`.
     pub fn pop(&mut self) -> Option<T> {
         if self.used == 0 {
             return null;
@@ -169,13 +180,14 @@ impl<T> List<T> {
     }
 
     /// Removes and returns the element at the given index, shifting all elements after it to the left.
-    /// Panics if `index >= len()`.
+    /// Panics if `index >= len()`. Releases the last slot, under the contract on `List`.
     pub fn remove(&mut self, index: i32) -> T {
         assert 0 <= index < self.used, "index out of bounds";
         let value = self.repr[index];
         // Shift elements left
         builtin::array_copy(&mut self.repr, index, &self.repr, index + 1, self.used - 1 - index);
         self.used -= 1;
+        builtin::array_release(&mut self.repr, self.used, 1);
         return value;
     }
 
@@ -189,14 +201,21 @@ impl<T> List<T> {
         self.repr[b] = tmp;
     }
 
+    /// Shortens the list to `len` elements; a longer `len` changes nothing.
+    /// Panics if `len` is negative. Releases the dropped slots, under the
+    /// contract on `List`.
     pub fn truncate(&mut self, len: i32) {
+        assert len >= 0, "negative length";
         if len < self.used {
+            builtin::array_release(&mut self.repr, len, self.used - len);
             self.used = len;
         }
     }
 
-    /// Removes all elements.
+    /// Removes all elements, keeping the capacity. Releases every slot, under the
+    /// contract on `List`.
     pub fn clear(&mut self) {
+        builtin::array_release(&mut self.repr, 0, self.used);
         self.used = 0;
     }
 

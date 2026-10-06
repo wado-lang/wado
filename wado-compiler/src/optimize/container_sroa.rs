@@ -548,6 +548,7 @@ fn is_storage_builtin(builtin: CtfeBuiltin) -> bool {
         | CtfeBuiltin::ArraySet
         | CtfeBuiltin::ArrayCopy
         | CtfeBuiltin::ArrayClonePrefix
+        | CtfeBuiltin::ArrayRelease
         | CtfeBuiltin::ColdPath
         | CtfeBuiltin::Select => true,
         CtfeBuiltin::I32AsChar

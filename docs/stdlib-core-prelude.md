@@ -4427,6 +4427,9 @@ A contiguous view into a backing `Array<T>` over the half-open range
 `[start, end)`. Holds a reference to the whole array, so creating a slice
 never copies elements.
 
+A slice of a `List` is bound by the contract on `List`: once the list
+shrinks, the slice must not read past the list's new length.
+
 _Fields are private._
 
 #### `pub fn len(&self) -> i32`
@@ -5377,6 +5380,14 @@ If `count` is negative, replaces all occurrences.
 
 ### `pub struct List<T>`
 
+A growable sequence.
+
+Contract: shrinking (`truncate`, `clear`, `pop`, `remove`) may release the
+slots past the new length, so the collector can reclaim what they held. A
+slice or an iterator taken before the shrink, a `for` loop's included, must
+not read those slots: what it reads is unspecified, some value of `T` or a
+trap.
+
 _Fields are private._
 
 #### `pub fn with_capacity(capacity: i32) -> List<T>`
@@ -5434,7 +5445,7 @@ Panics if `index > len()`.
 #### `pub fn remove(&mut self, index: i32) -> T`
 
 Removes and returns the element at the given index, shifting all elements after it to the left.
-Panics if `index >= len()`.
+Panics if `index >= len()`. Releases the last slot, under the contract on `List`.
 
 #### `pub fn swap(&mut self, a: i32, b: i32)`
 
@@ -5443,9 +5454,14 @@ Panics if either index is out of bounds.
 
 #### `pub fn truncate(&mut self, len: i32)`
 
+Shortens the list to `len` elements; a longer `len` changes nothing.
+Panics if `len` is negative. Releases the dropped slots, under the
+contract on `List`.
+
 #### `pub fn clear(&mut self)`
 
-Removes all elements.
+Removes all elements, keeping the capacity. Releases every slot, under the
+contract on `List`.
 
 #### `pub fn reserve(&mut self, additional: i32)`
 
