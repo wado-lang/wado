@@ -167,7 +167,11 @@ paid on a benchmark `fts` never touched.
   so a benchmark allocates through half a heap rather than climbing to one. A
   raw `wasmtime` invocation starts at zero and doubles its way up to the working
   set, paying a full trace at every rung — and there the ranking of two
-  compilers flips with the heap size rather than with the code.
+  compilers flips with the heap size rather than with the code. Even a fixed
+  size is one sample: a change that allocates less moves where the collections
+  land, and gale-gen read 4% slower at its 512m and faster at five other sizes.
+  On an allocation-heavy row, sweep `--gc-heap-initial` and compare geometric
+  means (`dead-ends.md`).
 - **`with_capacity` zero-fills.** `List::with_capacity(n)` is an
   `array.new_default`, so an over-sized arena pays for every slot it never uses —
   once badly enough to turn a 2× faster build into a 4× slower one. Growing from

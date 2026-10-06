@@ -2367,10 +2367,16 @@ fn lower_alt_scan_element(
     // Callers walk every position of one alt, so joining the suffix here only
     // where there is one keeps that walk from copying the alt per position.
     let [elem_follow_arg, continuation] = if outer_suffix.is_empty() {
-        [compute_follow_arg(ctx, alt_elements, i), elements_from(alt_elements, i + 1)];
+        [
+            compute_follow_arg(ctx, alt_elements, i),
+            elements_from(alt_elements, i + 1),
+        ];
     } else {
         let follow_elements = follow_elements_of(alt_elements, outer_suffix);
-        [compute_follow_arg(ctx, &follow_elements, i), elements_from(&follow_elements, i + 1)];
+        [
+            compute_follow_arg(ctx, &follow_elements, i),
+            elements_from(&follow_elements, i + 1),
+        ];
     };
     let elem_gate = compute_gate_caller_follow(ctx, alt_elements, i) && enclosing_at_tail;
     let elem_follow_exact = ctx.call_site_follow_is_exact(alt_elements, i);
