@@ -128,7 +128,8 @@ canonical builtin suspends only where the Canonical ABI blocks: `waitable-set.wa
 and the cancel builtins, which Wado lowers synchronously. The copy builtins are
 lowered with `async`, and hand `BLOCKED` back rather than suspend. A core Wasm
 asset imports nothing but its memory, so it cannot suspend. A Component Model
-import may.
+import may, and so may a builtin that calls one, such as
+`call_indirect_stdout_write_via_stream`.
 
 The name is the Component Model's own word for a task that stops until an event
 resumes it. A positive fact keeps the rule that what the attribute leaves out is
