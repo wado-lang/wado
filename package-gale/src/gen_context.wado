@@ -145,11 +145,12 @@ pub struct GenContext {
     /// the same input grammar always produces the same helper names.
     kind_set_registry: HashMap<String, KindSetEntry>,
     /// Only a `LeftRecursive` rule carries a `min_prec` parameter.
-    lr_rule_snakes: List<String>,
+    /// A map for `contains_key_str`, which `HashSet` lacks, as is the next.
+    lr_rule_snakes: HashMap<String, ()>,
     /// Rules whose functions carry the FOLLOW slots, by snake name. Set once
     /// from `rule_reads_follow` when lowering is done; the same question
     /// answers both the declaration and every call site.
-    follow_rule_snakes: List<String>,
+    follow_rule_snakes: HashMap<String, ()>,
     /// Per rule index: the rule runs a caller-FOLLOW gate or a probe, so it
     /// reads the slots itself. `caller_follow_gate_seen`'s question, asked per
     /// rule; the seeds of the fixpoint `lower` closes.
@@ -412,8 +413,8 @@ impl GenContext {
             open_end_cache: none_bool_cache(rule_count),
             single_alt_owner,
             kind_set_registry: HashMap::with_seed(GALE_SEED),
-            lr_rule_snakes: [],
-            follow_rule_snakes: [],
+            lr_rule_snakes: HashMap::<String, ()>::with_seed(GALE_SEED),
+            follow_rule_snakes: HashMap::<String, ()>::with_seed(GALE_SEED),
             rule_reads_follow: false_flags(rule_count),
             rule_body_predicts: false_flags(rule_count),
             rule_asks_simulator: false_flags(rule_count),
@@ -1068,16 +1069,14 @@ impl GenContext {
 
     /// Must run before any body emit: a call site may target a later rule.
     pub fn set_lr_rule_snakes(&mut self, names: &List<String>) {
-        self.lr_rule_snakes = *names;
+        self.lr_rule_snakes.clear();
+        for let name of names {
+            self.lr_rule_snakes[*name] = ();
+        }
     }
 
     pub fn rule_takes_min_prec_arg<S: AsStrSlice>(&self, snake: S) -> bool {
-        for let n of &self.lr_rule_snakes {
-            if *n == snake.as_str_slice() {
-                return true;
-            }
-        }
-        return false;
+        return self.lr_rule_snakes.contains_key_str(snake);
     }
 
     /// Record that the rule being lowered reads the continuation it was called
@@ -1111,21 +1110,16 @@ impl GenContext {
     }
 
     pub fn set_follow_rule_snakes(&mut self, names: &List<String>) {
-        self.follow_rule_snakes = *names;
+        self.follow_rule_snakes.clear();
+        for let name of names {
+            self.follow_rule_snakes[*name] = ();
+        }
     }
 
     /// Whether `snake`'s functions carry the FOLLOW slots. Asked at the
     /// declaration and at every call site, so the two cannot disagree.
     pub fn rule_reads_follow<S: AsStrSlice>(&self, snake: S) -> bool {
-        if !self.caller_follow_gate_seen {
-            return false;
-        }
-        for let n of &self.follow_rule_snakes {
-            if *n == snake.as_str_slice() {
-                return true;
-            }
-        }
-        return false;
+        return self.caller_follow_gate_seen && self.follow_rule_snakes.contains_key_str(snake);
     }
 
     /// Store the per-rule ATN loop-entry decision numbers (after `build_atn`).
