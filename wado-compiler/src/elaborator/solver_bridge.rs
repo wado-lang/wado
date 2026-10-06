@@ -989,8 +989,8 @@ impl SolverBridge {
                 .map(|(_, def)| *def);
             for trait_ in eq_ord.iter().copied().chain(carried) {
                 let trait_ = lowering.trait_decl(trait_);
-                // The prelude writes many of these, at any trait arguments, and
-                // what it writes stands for the primitive's.
+                // A prelude impl of the trait on the primitive, at any trait
+                // arguments, already states it.
                 let written = program
                     .impls
                     .values()
