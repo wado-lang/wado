@@ -1134,7 +1134,6 @@ impl SolverBridge {
                 head,
                 TypeDef {
                     newtype_base: Some(base),
-                    ..TypeDef::default()
                 },
             );
             stated.push(head);
@@ -1534,11 +1533,11 @@ impl SolverBridge {
         scope: &TypeLookup,
         type_id: TypeId,
         asked: &FqTraitName,
-    ) -> Option<Option<Vec<OwedBody>>> {
+    ) -> Option<Verdict> {
         let q = self.question(tysys, ctx, scope, type_id, asked)?;
         let Some(held) = holds_with_args(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args)
         else {
-            return Some(None);
+            return Some(Verdict::Fails);
         };
         let owed = owed(&self.program, &q.env, q.module, held.requests);
         let table = tysys.type_table.borrow();
@@ -1588,7 +1587,7 @@ impl SolverBridge {
                 }
             })
             .collect();
-        Some(Some(bodies))
+        Some(Verdict::Holds(bodies))
     }
 
     /// Each anonymous shape `id` is built over, with its lowering: what a
@@ -1841,6 +1840,13 @@ fn param_index(names: &[String]) -> impl Fn(&str, u32) -> Option<u32> + '_ {
             .position(|n| n == name)
             .map(|p| u32::try_from(p).expect("fewer than 2^32 params"))
     }
+}
+
+/// The solver's answer to a question the lowering states.
+pub(super) enum Verdict {
+    Fails,
+    /// Holds, owing these bodies.
+    Holds(Vec<OwedBody>),
 }
 
 /// A body an answer owes, keyed as synthesis keys the request for it.

@@ -21,6 +21,7 @@ use super::scope::{
     BinderInScope, BoundSelf, ElaboratedBound, FamilySite, Scope, ScopedBound, TraitCheckFrame,
     trait_params_from_impl,
 };
+use super::solver_bridge::Verdict;
 use super::trait_env::{ImplMethodHeader, InheritedBound, ViaClause};
 use super::type_resolution::ParamSpace;
 use super::types::{
@@ -731,16 +732,18 @@ impl TypeSystem {
         // The answer is the solver's wherever the lowering states the
         // question, and so are the bodies it owes (WEP 2026-09-01).
         if let Some(bridge) = self.solver.as_ref()
-            && let Some(answer) = bridge
+            && let Some(verdict) = bridge
                 .borrow()
                 .answer_owing(self, ctx, scope, type_id, trait_)
         {
-            let holds = answer.is_some();
+            let Verdict::Holds(owed) = verdict else {
+                return false;
+            };
             let mut table = self.type_table.borrow_mut();
-            for body in answer.into_iter().flatten() {
+            for body in owed {
                 table.record_bound_driven_synth_request(&body.head, &body.module, &body.trait_);
             }
-            return holds;
+            return true;
         }
         let resolved = self.type_table.borrow().get(type_id).clone();
         Self::asking(ctx, type_id, decl, wanted, || {
