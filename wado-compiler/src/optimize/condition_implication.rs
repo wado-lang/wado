@@ -1122,14 +1122,14 @@ fn is_reference(engine: &Engine, local: u32) -> bool {
 }
 
 /// Whether anything under `node` may change what one of `roots` holds for the
-/// code after it. A block that panics never hands control on, so its writes
-/// do not count.
+/// code after it. A block that [`panics_before_any_exit`] never hands control
+/// on, so its writes do not count.
 fn modifies_any_root(engine: &Engine, node: NodeRef, roots: &[u32]) -> bool {
     let body = &*engine.body;
     let mut diverging: hashmap::IndexSet<ExprId> = hashmap::IndexSet::default();
     body.for_each_live_node_under(node, |n| {
         if let NodeRef::Block(b) = n
-            && is_panic_block(engine, b)
+            && panics_before_any_exit(engine, b)
         {
             body.for_each_live_node_under(n, |m| {
                 if let NodeRef::Expr(e) = m {
@@ -1150,6 +1150,33 @@ fn modifies_any_root(engine: &Engine, node: NodeRef, roots: &[u32]) -> bool {
         hit.then_some(())
     })
     .is_some()
+}
+
+/// Whether `block` reaches a top-level panic with no `return`, `break` or
+/// `continue` before it, which could leave the block first.
+fn panics_before_any_exit(engine: &Engine, block: BlockId) -> bool {
+    let body = &*engine.body;
+    for &s in &body.blocks[block].stmts {
+        if let StmtKind::Expr(op) = &body.stmts[s].kind
+            && op.as_expr().is_some_and(|e| is_panic_call(engine, e))
+        {
+            return true;
+        }
+        let jumps = body
+            .find_in_live_node_under(NodeRef::Stmt(s), |n| match n {
+                NodeRef::Stmt(t) => matches!(
+                    body.stmts[t].kind,
+                    StmtKind::Return { .. } | StmtKind::Break { .. } | StmtKind::Continue
+                )
+                .then_some(()),
+                NodeRef::Block(_) | NodeRef::Expr(_) | NodeRef::Pat(_) => None,
+            })
+            .is_some();
+        if jumps {
+            return false;
+        }
+    }
+    false
 }
 
 /// Structural loop-guard BCE (value_of-free, mirrors the `licm` migration off
