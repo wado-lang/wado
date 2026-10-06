@@ -256,6 +256,23 @@ pub(crate) fn bail_with<H: compiler_host::CompilerHost>(
     Bail
 }
 
+/// The `-f` flags for `package`, whose target world must already be set: the
+/// test world checks contracts by default.
+fn parse_codegen_flags<H: compiler_host::CompilerHost>(
+    flags: &[String],
+    opt_level: OptLevel,
+    package: &Package,
+    logger: &Logger<'_, H>,
+) -> Result<CodegenFlags, Bail> {
+    CodegenFlags::parse(flags, opt_level, package.is_test_world()).map_err(|flag| {
+        bail_with(
+            logger,
+            Code::UnsupportedFeature,
+            CodegenFlags::unknown_flag_message(&flag),
+        )
+    })
+}
+
 /// Compilation failure with metadata from the successfully-parsed AST.
 ///
 /// Internal `Bail` carries no data (errors are already emitted to the host).
@@ -1692,16 +1709,7 @@ fn compile_after_load<H: CompilerHost>(
     package.test_name_filters = options.test_name_filters;
     package.wasm_assets = wasm_assets;
     package.codegen_flags =
-        match codegen_flags::CodegenFlags::parse(&options.codegen_flags, options.opt_level) {
-            Ok(flags) => flags,
-            Err(flag) => {
-                return Err(bail_with(
-                    logger,
-                    Code::UnsupportedFeature,
-                    codegen_flags::CodegenFlags::unknown_flag_message(&flag),
-                ));
-            }
-        };
+        parse_codegen_flags(&options.codegen_flags, options.opt_level, &package, logger)?;
 
     select_allocator(&mut package, options.allocator, logger)?;
 
@@ -2218,16 +2226,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             }
             package.wasm_assets.clone_from(&wasm_assets);
             package.codegen_flags =
-                match codegen_flags::CodegenFlags::parse(codegen_flags, opt_level) {
-                    Ok(flags) => flags,
-                    Err(flag) => {
-                        return Err(bail_with(
-                            &logger,
-                            Code::UnsupportedFeature,
-                            codegen_flags::CodegenFlags::unknown_flag_message(&flag),
-                        ));
-                    }
-                };
+                parse_codegen_flags(codegen_flags, opt_level, &package, &logger)?;
 
             // Validate target world (test world is synthetic, not in registry)
             if !package.is_test_world()

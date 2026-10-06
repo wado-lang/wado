@@ -442,6 +442,9 @@ impl char {
     /// (0..=0xD7FF or 0xE000..=0x10FFFF). Passing any other value is a
     /// contract violation, and the behavior is unconstrained.
     pub fn from_u32_unchecked(value: u32) -> char {
+        if builtin::contract_checks() {
+            assert value < 0xD800 || 0xE000 <= value <= 0x10FFFF, "not a Unicode scalar value";
+        }
         return builtin::i32_as_char(value as i32);
     }
 

@@ -99,6 +99,9 @@ impl<T> Slice<T> {
     /// anchor for `FieldSchema::lookup`, as `len` is for byte length.
     #[compiler_item("byte_slice_get_unchecked")]
     pub fn get_unchecked(&self, index: i32) -> T {
+        if builtin::contract_checks() {
+            assert 0 <= index < self.end - self.start, "index out of bounds";
+        }
         return builtin::array_get_value(self.repr, self.start + index);
     }
 
@@ -168,6 +171,9 @@ impl<T> Sequence for Slice<T> {
     }
 
     fn get_unchecked(&self, index: i32) -> T {
+        if builtin::contract_checks() {
+            assert 0 <= index < self.end - self.start, "index out of bounds";
+        }
         return builtin::array_get_value(self.repr, self.start + index);
     }
 }
