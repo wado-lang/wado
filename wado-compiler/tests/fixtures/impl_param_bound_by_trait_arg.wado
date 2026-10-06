@@ -1,0 +1,44 @@
+#![TODO]
+// An impl parameter the target leaves free is determined by the trait argument
+// a use asks for (spec-traits.md § Impl Type Parameters Must Be Determined):
+// `impl<T> Tr<T> for X` answers `X: Tr<i64>` with `T = i64`, and a bound on
+// `T` asks about that argument. Neither the solver nor monomorphization binds
+// a parameter from the trait's arguments yet.
+use { println, Stdout } from "core:cli";
+
+trait Conv<A> with () {}
+
+impl Conv<i32> for i64 {}
+
+trait Tr<T> with () {
+    fn tr(&self) -> i32 {
+        return 1;
+    }
+}
+
+trait Bounded<T> with () {
+    fn b(&self) -> i32 {
+        return 2;
+    }
+}
+
+struct X {}
+
+impl<T> Tr<T> for X {}
+
+impl<T: Conv<i32>> Bounded<T> for X {}
+
+fn use_tr<A: Tr<i64>>(a: A) -> i32 {
+    return a.tr();
+}
+
+fn use_bounded<A: Bounded<i64>>(a: A) -> i32 {
+    return a.b();
+}
+
+export fn run() with Stdout {
+    println(`${use_tr(X {})} ${use_bounded(X {})}`);
+}
+
+__DATA__
+{"stdout": "1 2\n"}

@@ -627,6 +627,15 @@ effect binder declares nothing, so `fn() with E` and `fn() with F` are one type
 there, and so is an effect name that reached nothing. What it admits is a bound
 naming one binder's function type answered by an impl naming another's.
 
+### A parameter only the trait's arguments name is never bound
+
+The specification determines an impl's parameters from the receiver and the
+trait's arguments, but only the target binds one. `impl<T> Tr<T> for X` answers
+no `X: Tr<i64>`: the solver leaves `T` unbound, so the written argument never
+matches, and monomorphization names no instance for it either
+(`impl_param_bound_by_trait_arg.wado`). A program relying on it is rejected,
+never miscompiled.
+
 ### A ref blanket never dispatches
 
 The order ranks `impl<T: Bound> Tr for &T` as the third candidate list, and
