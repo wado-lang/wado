@@ -8,7 +8,8 @@
 use { Stdout, Stderr } from "core:cli";
 use { ErrorCode } from "wasi:cli";
 use { Log, Event, Level } from "core:log";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
+use { GALE_SEED } from "../../src/hash_seed.wado";
 
 /// What a program printed and logged while this console was installed.
 pub struct Console {
@@ -17,9 +18,9 @@ pub struct Console {
     /// Each event as `<level>: <message>`.
     pub events: List<String> = [],
     /// The readable end of every stream the host created here, by its writable end.
-    readers: TreeMap<i32, i32> = TreeMap::<i32, i32>::new(),
+    readers: HashMap<i32, i32> = HashMap::<i32, i32>::with_seed(GALE_SEED),
     /// Where each captured stream's bytes go (`true` for stderr), by its readable end.
-    to_stderr: TreeMap<i32, bool> = TreeMap::<i32, bool>::new(),
+    to_stderr: HashMap<i32, bool> = HashMap::<i32, bool>::with_seed(GALE_SEED),
 }
 
 impl Console {

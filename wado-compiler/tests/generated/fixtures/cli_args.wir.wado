@@ -120,10 +120,10 @@ global global:core:prelude/array.wado::$const_obj_56: ref Array<u8> = array.new_
 global global:core:prelude/format.wado::$const_obj_62: ref Array<u8> = array.new_fixed<u8>(92, 117, 123);
 global global:core:prelude/traits.wado::$const_obj_63: ref Array<u8> = array.new_fixed<u8>(41);
 global global:core:prelude/traits.wado::$const_obj_64: ref Array<u8> = array.new_fixed<u8>(40);
-global global:core:prelude/traits.wado::$const_obj_68: ref Array<u8> = array.new_fixed<u8>(78, 111, 110, 101);
+global global:core:prelude/traits.wado::$const_obj_68: ref Array<u8> = array.new_fixed<u8>(83, 111, 109, 101);
 global global:core:prelude/traits.wado::$const_obj_69: ref Array<u8> = array.new_fixed<u8>(58, 58);
 global global:core:prelude/traits.wado::$const_obj_70: ref Array<u8> = array.new_fixed<u8>(79, 112, 116, 105, 111, 110);
-global global:core:prelude/traits.wado::$const_obj_71: ref Array<u8> = array.new_fixed<u8>(83, 111, 109, 101);
+global global:core:prelude/traits.wado::$const_obj_71: ref Array<u8> = array.new_fixed<u8>(78, 111, 110, 101);
 
 fn "cli_args.wado/run"() with Stdout, Environment {
     let $local_0: ref "core:prelude/string.wado//String";
@@ -803,7 +803,7 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.
     let $load_3: ref Array<u8>;
     let new_used_22: i32;
     let start_23: i32;
-    if ref.is_null(self) == 0 {
+    if ref.is_null(self) {
         if @unlikely(local.tee new_used_22(f.used + 6) > builtin::array_len(f.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used_22);
@@ -825,12 +825,8 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.
         start_23 = f.used;
         f.used = new_used_22;
         builtin::array_copy<u8>(f.repr, start_23, global:core:prelude/traits.wado::$const_obj_71, 0, 4);
-        if @unlikely(ref.is_null(self) != 0) {
-            unreachable;
-        }
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<core:prelude/string.wado/String>$spec0$scalar"(ref.as_non_null(self), f);
     }
-    if ref.is_null(self) {
+    if ref.is_null(self) == 0 {
         if @unlikely(local.tee start_23(f.used + 6) > builtin::array_len(f.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, start_23);
@@ -852,6 +848,10 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.
         new_used_22 = f.used;
         f.used = start_23;
         builtin::array_copy<u8>(f.repr, new_used_22, global:core:prelude/traits.wado::$const_obj_68, 0, 4);
+        if @unlikely((ref.is_null(self) == 0) != 1) {
+            unreachable;
+        }
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<core:prelude/string.wado/String>$spec0$scalar"(ref.as_non_null(self), f);
     }
 }
 

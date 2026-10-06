@@ -33,19 +33,28 @@ pub(crate) fn block_tail_call(
     op: Operand,
     prefix: &mut Vec<StmtId>,
 ) -> Option<(FuncId, TypeId, ExprId)> {
-    let e = op.as_expr()?;
-    if let Some(block) = body.unbroken_block(e) {
-        let (&last, lead) = body.blocks[block].stmts.split_last()?;
-        let StmtKind::Expr(inner) = &body.stmts[last].kind else {
-            return None;
-        };
-        prefix.extend_from_slice(lead);
-        return block_tail_call(body, *inner, prefix);
-    }
+    let e = block_tail(body, op, prefix).as_expr()?;
     match &body.exprs[e].kind {
         ExprKind::Call { func_id, .. } => Some((*func_id, body.exprs[e].type_id, e)),
         _ => None,
     }
+}
+
+/// The value `op` produces once every unbroken block around it has run its
+/// leading statements, which are appended to `prefix`. `op` itself where it
+/// is no such block.
+pub(crate) fn block_tail(body: &Body, op: Operand, prefix: &mut Vec<StmtId>) -> Operand {
+    let Some(block) = op.as_expr().and_then(|e| body.unbroken_block(e)) else {
+        return op;
+    };
+    let Some((&last, lead)) = body.blocks[block].stmts.split_last() else {
+        return op;
+    };
+    let StmtKind::Expr(inner) = &body.stmts[last].kind else {
+        return op;
+    };
+    prefix.extend_from_slice(lead);
+    block_tail(body, *inner, prefix)
 }
 
 /// Walk the argument expressions of a (Method)Call so tracked-local escapes in

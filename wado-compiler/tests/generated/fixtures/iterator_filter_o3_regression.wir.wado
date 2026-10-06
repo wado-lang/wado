@@ -199,7 +199,7 @@ fn "iterator_filter_o3_regression.wado/run"() {
             let $mv$$local_3_46$0: i32;
             let $mv$$local_3_46$1: i32;
             multivalue_bind [$mv$$local_3_46$0, $mv$$local_3_46$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>^core:prelude/traits.wado/Iterator::next"(self_39);
-            if $mv$$local_3_46$0 == 0 {
+            if $mv$$local_3_46$0 == 1 {
                 if @unlikely(local.tee used_95(result_44.used) >= builtin::array_len(result_44.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_44);
@@ -311,7 +311,7 @@ condition: evens[1] == 4
     b9: block {
         l10: loop {
             multivalue_bind [used_95, $mv$$local_3_46$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>>^core:prelude/traits.wado/Iterator::next"(self_64);
-            if used_95 == 0 {
+            if used_95 == 1 {
                 if @unlikely(local.tee $mv$$local_3_46$0(result_44.used) >= builtin::array_len(result_44.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_44);
@@ -1398,15 +1398,15 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/tr
             let $mv$$match_2$0: i32;
             let $mv$$match_2$1: i32;
             multivalue_bind [$mv$$match_2$0, $mv$$match_2$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>^core:prelude/traits.wado/Iterator::next"($licm_inner_3);
-            if $mv$$match_2$0 == 0 {
+            if $mv$$match_2$0 == 1 {
                 if block -> bool {
                     let $indirect_call_1: ref "canonical//CanonicalClosure_0";
                     call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($licm_pred_4)).env, $mv$$match_2$1);
                 } {
-                    return 0, $mv$$match_2$1;
+                    return 1, $mv$$match_2$1;
                 }
             } else {
-                return 1, 0;
+                return 0, 0;
             }
             continue l193;
         };
@@ -1429,7 +1429,7 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/sl
         l198: loop {
             if $hfs_index_10 >= $licm_end_8 {
                 $licm_inner_6.index = $hfs_index_10;
-                return 1, 0;
+                return 0, 0;
             }
             item_4 = builtin::array_get_value<i32>($licm_repr_9, $hfs_index_10);
             $hfs_index_10 = $hfs_index_10 + 1;
@@ -1438,7 +1438,7 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/sl
                 call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($licm_pred_7)).env, item_4);
             } {
                 $licm_inner_6.index = $hfs_index_10;
-                return 0, item_4;
+                return 1, item_4;
             }
             continue l198;
         };

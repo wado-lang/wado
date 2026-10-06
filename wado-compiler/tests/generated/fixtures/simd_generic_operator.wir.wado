@@ -34,8 +34,8 @@ struct core:prelude/slice.wado//SliceValueIter<core:simd/i32x4> {  // TypeId(9)
 }
 
 variant core:prelude/types.wado//Option<v128> {  // TypeId(10)
-    Some(v128),
     None,
+    Some(v128),
 }
 
 struct core:prelude/types.wado//Option<v128>::Some {  // TypeId(11)
@@ -230,7 +230,7 @@ fn "simd_generic_operator.wado/run"() with Stdout {
     self_67 = struct.new "core:prelude/slice.wado//SliceValueIter<simd_generic_operator.wado/Meters>" { repr: local.tee $sroa_ms_repr_169(array.new_fixed<i32>(1, 2, 3)), index: 0, end: 3 };
     let $mv$$vr_38$1: i32;
     multivalue_bind [$v1_1, $mv$$vr_38$1] = "simd_generic_operator.wado/core:prelude/slice.wado/SliceValueIter<simd_generic_operator.wado/Meters>^core:prelude/traits.wado/Iterator::reduce$$Closure_1"(self_67);
-    if @unlikely(local.tee $mv$$vr_38$1((if $v1_1 == 0 -> bool {
+    if @unlikely(local.tee $mv$$vr_38$1((if $v1_1 == 1 -> bool {
         $mv$$vr_38$1 == 6;
     } else {
         0;
@@ -240,7 +240,7 @@ fn "simd_generic_operator.wado/run"() with Stdout {
         unreachable;
     }
     multivalue_bind [$mv$$vr_38$1, $v1_1] = "simd_generic_operator.wado/core:prelude/slice.wado/SliceValueIter<simd_generic_operator.wado/Meters>^core:prelude/traits.wado/Iterator::reduce$$Closure_2"(local.tee self_67(struct.new "core:prelude/slice.wado//SliceValueIter<simd_generic_operator.wado/Meters>" { repr: $sroa_ms_repr_169, index: 0, end: 3 }));
-    if @unlikely(local.tee $v1_1((if $mv$$vr_38$1 == 0 -> bool {
+    if @unlikely(local.tee $v1_1((if $mv$$vr_38$1 == 1 -> bool {
         $v1_1 == 6;
     } else {
         0;
@@ -250,7 +250,7 @@ fn "simd_generic_operator.wado/run"() with Stdout {
         unreachable;
     }
     multivalue_bind [$v1_1, $mv$$vr_38$1] = "simd_generic_operator.wado/core:prelude/slice.wado/SliceValueIter<simd_generic_operator.wado/Meters>^core:prelude/traits.wado/Iterator::max_by$$Closure_3"(local.tee self_67(struct.new "core:prelude/slice.wado//SliceValueIter<simd_generic_operator.wado/Meters>" { repr: $sroa_ms_repr_169, index: 0, end: 3 }));
-    if @unlikely(local.tee $mv$$vr_38$1((if $v1_1 == 0 -> bool {
+    if @unlikely(local.tee $mv$$vr_38$1((if $v1_1 == 1 -> bool {
         $mv$$vr_38$1 == 3;
     } else {
         0;
@@ -1091,9 +1091,9 @@ fn "core:prelude/traits.wado/core:simd/i32x4^core:prelude/traits.wado/Sum::sum_i
                     continue l132;
                 };
             };
-            break $inline_core_prelude_slice_wado_SliceValueIter_core_simd_i32x4__core_prelude_traits_wado_Iterator__reduce__Closure_0_0: struct.new "core:prelude/types.wado//Option<v128>::Some" { discriminant: 0, payload_0: item_9 };
+            break $inline_core_prelude_slice_wado_SliceValueIter_core_simd_i32x4__core_prelude_traits_wado_Iterator__reduce__Closure_0_0: struct.new "core:prelude/types.wado//Option<v128>::Some" { discriminant: 1, payload_0: item_9 };
         };
-        break $inline_core_prelude_slice_wado_SliceValueIter_core_simd_i32x4__core_prelude_traits_wado_Iterator__reduce__Closure_0_0: struct.new "core:prelude/types.wado//Option<v128>" { 1 };
+        break $inline_core_prelude_slice_wado_SliceValueIter_core_simd_i32x4__core_prelude_traits_wado_Iterator__reduce__Closure_0_0: struct.new "core:prelude/types.wado//Option<v128>" { 0 };
     };
 }
 
@@ -1120,9 +1120,9 @@ fn "simd_generic_operator.wado/core:prelude/slice.wado/SliceValueIter<simd_gener
                 continue l134;
             };
         };
-        return 0, item_7;
+        return 1, item_7;
     };
-    return 1, 0;
+    return 0, 0;
 }
 
 fn "simd_generic_operator.wado/core:prelude/slice.wado/SliceValueIter<simd_generic_operator.wado/Meters>^core:prelude/traits.wado/Iterator::reduce$$Closure_2"(self) {
@@ -1148,9 +1148,9 @@ fn "simd_generic_operator.wado/core:prelude/slice.wado/SliceValueIter<simd_gener
                 continue l137;
             };
         };
-        return 0, item_7;
+        return 1, item_7;
     };
-    return 1, 0;
+    return 0, 0;
 }
 
 fn "simd_generic_operator.wado/core:prelude/slice.wado/SliceValueIter<simd_generic_operator.wado/Meters>^core:prelude/traits.wado/Iterator::max_by$$Closure_3"(self) {
@@ -1186,9 +1186,9 @@ fn "simd_generic_operator.wado/core:prelude/slice.wado/SliceValueIter<simd_gener
                 continue l140;
             };
         };
-        return 0, item_7;
+        return 1, item_7;
     };
-    return 1, 0;
+    return 0, 0;
 }
 
 fn "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$scalar"(self, f) {

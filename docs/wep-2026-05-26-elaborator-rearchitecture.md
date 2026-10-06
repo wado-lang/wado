@@ -312,7 +312,7 @@ Every convergence below was forced by a defect where two of them disagreed:
   [`wep-2026-08-12-declaration-identity.md`](./wep-2026-08-12-declaration-identity.md)
   owns the identity model.
 - Which declarations `Type::method` can name — `qualified_method_decl_ids` for
-  the declarations, `qualified_method_sig` for the signature. The spelling names
+  the declarations, `qualified_method_sig_keyed` for the signature. The spelling names
   a receiver-less method, and an instance one whose receiver the call passes as
   its first argument. One index holds both kinds, an `ImplMethodEntry` each, and
   `has_self` is the field a receiver-less lookup filters on. A lookup that stops

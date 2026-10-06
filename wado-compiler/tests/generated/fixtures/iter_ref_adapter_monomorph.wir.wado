@@ -246,7 +246,7 @@ fn "iter_ref_adapter_monomorph.wado/$test_0_map_over_a__list_reference_iterator"
             let $mv$$local_3_16$0: i32;
             let $mv$$local_3_16$1: i32;
             multivalue_bind [$mv$$local_3_16$0, $mv$$local_3_16$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceRefIter<i32>,i32>^core:prelude/traits.wado/Iterator::next"(self_8);
-            if $mv$$local_3_16$0 == 0 {
+            if $mv$$local_3_16$0 == 1 {
                 if @unlikely(local.tee used(xs.used) >= builtin::array_len(xs.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(xs);
@@ -323,7 +323,7 @@ fn "iter_ref_adapter_monomorph.wado/$test_1_filter_over_a__list_reference_iterat
             let $mv$$local_3_18$0: i32;
             let $mv$$local_3_18$1: i32;
             multivalue_bind [$mv$$local_3_18$0, $mv$$local_3_18$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceRefIter<i32>>,i32>^core:prelude/traits.wado/Iterator::next"(self_8);
-            if $mv$$local_3_18$0 == 0 {
+            if $mv$$local_3_18$0 == 1 {
                 if @unlikely(local.tee used(xs.used) >= builtin::array_len(xs.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(xs);
@@ -2043,13 +2043,13 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/trait
         unreachable;
     })) == 0 {
         ref_val = ref.as_non_null($match_2);
-        return 0, block -> i32 {
+        return 1, block -> i32 {
             let $indirect_call_2: ref "canonical//CanonicalClosure_0";
             call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"(self.f)).env, ref_val);
         };
     } else {
     }
-    return 1, 0;
+    return 0, 0;
 }
 
 fn "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceRefIter<i32>,i32>^core:prelude/traits.wado/Iterator::next"(self) {
@@ -2060,12 +2060,12 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice
         break_if $fused_$inline_core_prelude_slice_wado_SliceRefIter_i32__core_prelude_traits_wado_Iterator__next_0 local.tee $load_1(local.tee $load_0(self.inner).index) >= $load_0.end;
         ref_val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>($load_0.repr, $load_1) };
         $load_0.index = $load_1 + 1;
-        return 0, block -> i32 {
+        return 1, block -> i32 {
             let $indirect_call_1: ref "canonical//CanonicalClosure_0";
             call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(self.f)).env, ref_val);
         };
     };
-    return 1, 0;
+    return 0, 0;
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {

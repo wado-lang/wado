@@ -32,8 +32,8 @@ struct core:prelude/format.wado//Formatter {  // TypeId(5)
 }
 
 variant core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput> {  // TypeId(6)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>::Some {  // TypeId(7)
@@ -42,8 +42,8 @@ struct core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOut
 }
 
 variant core:prelude/types.wado//Option<wasi:cli/terminal_input.wado/TerminalInput> {  // TypeId(8)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<wasi:cli/terminal_input.wado/TerminalInput>::Some {  // TypeId(9)
@@ -156,12 +156,12 @@ global global:core:prelude/traits.wado::$const_obj_26: ref Array<u8> = array.new
 global global:core:prelude/traits.wado::$const_obj_27: ref Array<u8> = array.new_fixed<u8>(40);
 global global:core:prelude/traits.wado::$const_obj_29: ref Array<u8> = array.new_fixed<u8>(32, 32);
 global global:core:prelude/traits.wado::$const_obj_30: ref Array<u8> = array.new_fixed<u8>(44);
-global global:core:prelude/traits.wado::$const_obj_46: ref Array<u8> = array.new_fixed<u8>(84, 101, 114, 109, 105, 110, 97, 108, 79, 117, 116, 112, 117, 116, 35, 48, 120);
+global global:core:prelude/traits.wado::$const_obj_37: ref Array<u8> = array.new_fixed<u8>(84, 101, 114, 109, 105, 110, 97, 108, 79, 117, 116, 112, 117, 116, 35, 48, 120);
 global global:core:prelude/primitive.wado::$const_obj_57: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-global global:core:prelude/traits.wado::$const_obj_60: ref Array<u8> = array.new_fixed<u8>(78, 111, 110, 101);
+global global:core:prelude/traits.wado::$const_obj_60: ref Array<u8> = array.new_fixed<u8>(83, 111, 109, 101);
 global global:core:prelude/traits.wado::$const_obj_61: ref Array<u8> = array.new_fixed<u8>(58, 58);
 global global:core:prelude/traits.wado::$const_obj_62: ref Array<u8> = array.new_fixed<u8>(79, 112, 116, 105, 111, 110);
-global global:core:prelude/traits.wado::$const_obj_63: ref Array<u8> = array.new_fixed<u8>(83, 111, 109, 101);
+global global:core:prelude/traits.wado::$const_obj_63: ref Array<u8> = array.new_fixed<u8>(78, 111, 110, 101);
 
 fn "wasi_cli_terminal.wado/run"() with Stdout, TerminalStdin, TerminalStdout, TerminalStderr {
     let stdin_terminal: ref "core:prelude/types.wado//Option<wasi:cli/terminal_input.wado/TerminalInput>";
@@ -171,21 +171,21 @@ fn "wasi_cli_terminal.wado/run"() with Stdout, TerminalStdin, TerminalStdout, Te
     let $local_7: ref "core:prelude/format.wado//Formatter";
     let packed: i64;
     let tx_25: i32;
-    if @unlikely(local.tee $cond_1(local.tee stdin_terminal("wasi_cli_terminal.wado/$cm_binding__TerminalStdin_get_terminal_stdin"()).discriminant == 1) == 0) {
+    if @unlikely(local.tee $cond_1(local.tee stdin_terminal("wasi_cli_terminal.wado/$cm_binding__TerminalStdin_get_terminal_stdin"()).discriminant == 0) == 0) {
         cold_path;
         "core:rt/panic"($cond_1 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_6("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(168)), 50); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $cond_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $cond_1 + 20, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 117, 110), used: 3 }, 3); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $cond_1 + 23, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 116, 32), used: 4 }, 4); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $cond_1 + 27, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wasi_cli_terminal.wado"), used: 22 }, 22); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $cond_1 + 49, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1); $local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar"(10, $local_7); $cond_1 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_6, 91); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $cond_1, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }, 2); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $cond_1 + 2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("stdin terminal should be None"), used: 29 }, 29); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $cond_1 + 31, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: stdin_terminal matches { None }
 "), used: 44 }, 44); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $cond_1 + 75, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("stdin_terminal: "), used: 16 }, 16); $local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6); "core:prelude/traits.wado/core:prelude/types.wado/Option<wasi:cli/terminal_input.wado/TerminalInput>^core:prelude/traits.wado/Inspect::inspect$scalar"(stdin_terminal, $local_7); let $mv_arg_2: ref "core:prelude/string.wado//String"; $mv_arg_2 = global:wasi_cli_terminal.wado::$const_obj_8; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6, $mv_arg_2.repr, $mv_arg_2.used); $local_6);
         unreachable;
     }
-    if @unlikely(local.tee $cond_1(local.tee stdout_terminal("wasi_cli_terminal.wado/$cm_binding__TerminalStdout_get_terminal_stdout"()).discriminant == 1) == 0) {
+    if @unlikely(local.tee $cond_1(local.tee stdout_terminal("wasi_cli_terminal.wado/$cm_binding__TerminalStdout_get_terminal_stdout"()).discriminant == 0) == 0) {
         cold_path;
         "core:rt/panic"($cond_1 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_6("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(170)), 50); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $cond_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $cond_1 + 20, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 117, 110), used: 3 }, 3); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $cond_1 + 23, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 116, 32), used: 4 }, 4); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $cond_1 + 27, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wasi_cli_terminal.wado"), used: 22 }, 22); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $cond_1 + 49, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1); $local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar"(13, $local_7); $cond_1 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_6, 94); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $cond_1, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }, 2); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $cond_1 + 2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("stdout terminal should be None"), used: 30 }, 30); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $cond_1 + 32, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: stdout_terminal matches { None }
 "), used: 45 }, 45); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $cond_1 + 77, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("stdout_terminal: "), used: 17 }, 17); $local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6); "core:prelude/traits.wado/core:prelude/types.wado/Option<wasi:cli/terminal_output.wado/TerminalOutput>^core:prelude/traits.wado/Inspect::inspect$scalar"(stdout_terminal, $local_7); $mv_arg_2 = global:wasi_cli_terminal.wado::$const_obj_8; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6, $mv_arg_2.repr, $mv_arg_2.used); $local_6);
         unreachable;
     }
-    if @unlikely(local.tee $cond_1(local.tee stdout_terminal("wasi_cli_terminal.wado/$cm_binding__TerminalStderr_get_terminal_stderr"()).discriminant == 1) == 0) {
+    if @unlikely(local.tee $cond_1(local.tee stdout_terminal("wasi_cli_terminal.wado/$cm_binding__TerminalStderr_get_terminal_stderr"()).discriminant == 0) == 0) {
         cold_path;
         "core:rt/panic"($cond_1 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_6("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(170)), 50); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $cond_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $cond_1 + 20, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 117, 110), used: 3 }, 3); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $cond_1 + 23, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 116, 32), used: 4 }, 4); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $cond_1 + 27, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wasi_cli_terminal.wado"), used: 22 }, 22); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $cond_1 + 49, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1); $local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar"(16, $local_7); $cond_1 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_6, 94); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $cond_1, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }, 2); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $cond_1 + 2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("stderr terminal should be None"), used: 30 }, 30); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_6.repr, $cond_1 + 32, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: stderr_terminal matches { None }
@@ -210,9 +210,9 @@ fn "wasi_cli_terminal.wado/$cm_binding__TerminalStdin_get_terminal_stdin"() with
     let $option_result: ref "core:prelude/types.wado//Option<wasi:cli/terminal_input.wado/TerminalInput>";
     "wasi/wasi:cli/TerminalStdin::get_terminal_stdin"(local.tee $outptr("mem/realloc"(0, 0, 4, 8)));
     $disc = builtin::load_u8($outptr);
-    $option_result = struct.new "core:prelude/types.wado//Option<wasi:cli/terminal_input.wado/TerminalInput>" { 1 };
+    $option_result = struct.new "core:prelude/types.wado//Option<wasi:cli/terminal_input.wado/TerminalInput>" { 0 };
     if $disc != 0 {
-        $option_result = struct.new "core:prelude/types.wado//Option<wasi:cli/terminal_input.wado/TerminalInput>::Some" { discriminant: 0, payload_0: builtin::load_i32($outptr + 4) };
+        $option_result = struct.new "core:prelude/types.wado//Option<wasi:cli/terminal_input.wado/TerminalInput>::Some" { discriminant: 1, payload_0: builtin::load_i32($outptr + 4) };
     }
     drop("mem/realloc"($outptr, 8, 4, 0));
     return $option_result;
@@ -224,9 +224,9 @@ fn "wasi_cli_terminal.wado/$cm_binding__TerminalStdout_get_terminal_stdout"() wi
     let $option_result: ref "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>";
     "wasi/wasi:cli/TerminalStdout::get_terminal_stdout"(local.tee $outptr("mem/realloc"(0, 0, 4, 8)));
     $disc = builtin::load_u8($outptr);
-    $option_result = struct.new "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>" { 1 };
+    $option_result = struct.new "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>" { 0 };
     if $disc != 0 {
-        $option_result = struct.new "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>::Some" { discriminant: 0, payload_0: builtin::load_i32($outptr + 4) };
+        $option_result = struct.new "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>::Some" { discriminant: 1, payload_0: builtin::load_i32($outptr + 4) };
     }
     drop("mem/realloc"($outptr, 8, 4, 0));
     return $option_result;
@@ -238,9 +238,9 @@ fn "wasi_cli_terminal.wado/$cm_binding__TerminalStderr_get_terminal_stderr"() wi
     let $option_result: ref "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>";
     "wasi/wasi:cli/TerminalStderr::get_terminal_stderr"(local.tee $outptr("mem/realloc"(0, 0, 4, 8)));
     $disc = builtin::load_u8($outptr);
-    $option_result = struct.new "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>" { 1 };
+    $option_result = struct.new "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>" { 0 };
     if $disc != 0 {
-        $option_result = struct.new "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>::Some" { discriminant: 0, payload_0: builtin::load_i32($outptr + 4) };
+        $option_result = struct.new "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>::Some" { discriminant: 1, payload_0: builtin::load_i32($outptr + 4) };
     }
     drop("mem/realloc"($outptr, 8, 4, 0));
     return $option_result;
@@ -620,7 +620,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<wa
         }
         new_used_16 = self_4.used;
         self_4.used = start_17;
-        builtin::array_copy<u8>(self_4.repr, new_used_16, global:core:prelude/traits.wado::$const_obj_46, 0, 17);
+        builtin::array_copy<u8>(self_4.repr, new_used_16, global:core:prelude/traits.wado::$const_obj_37, 0, 17);
         val_i64_63 = builtin::i64_extend_i32_u(payload);
         new_used_16 = $inline_count_digits_u64_base_25: block -> i32 {
             if val_i64_63 == 0_i64 {
@@ -687,7 +687,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<wa
     }
     new_used_16 = self_4.used;
     self_4.used = start_17;
-    builtin::array_copy<u8>(self_4.repr, new_used_16, global:core:prelude/traits.wado::$const_obj_46, 0, 17);
+    builtin::array_copy<u8>(self_4.repr, new_used_16, global:core:prelude/traits.wado::$const_obj_37, 0, 17);
     val_i64_63 = builtin::i64_extend_i32_u(payload);
     payload = $inline_count_digits_u64_base_65: block -> i32 {
         if val_i64_63 == 0_i64 {
@@ -1116,10 +1116,6 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<wasi:cli/terminal_ou
         start_23 = self_10.used;
         self_10.used = new_used_22;
         builtin::array_copy<u8>(self_10.repr, start_23, global:core:prelude/traits.wado::$const_obj_63, 0, 4);
-        if @unlikely(self.discriminant != 0) {
-            unreachable;
-        }
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<wasi:cli/terminal_output.wado/TerminalOutput>"(ref.cast "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>::Some"(self).payload_0, f);
     }
     if self.discriminant == 1 {
         if @unlikely(local.tee start_23(local.tee self_10(f.buf).used + 6) > builtin::array_len(self_10.repr)) {
@@ -1143,6 +1139,10 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<wasi:cli/terminal_ou
         new_used_22 = self_10.used;
         self_10.used = start_23;
         builtin::array_copy<u8>(self_10.repr, new_used_22, global:core:prelude/traits.wado::$const_obj_60, 0, 4);
+        if @unlikely(self.discriminant != 1) {
+            unreachable;
+        }
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<wasi:cli/terminal_output.wado/TerminalOutput>"(ref.cast "core:prelude/types.wado//Option<wasi:cli/terminal_output.wado/TerminalOutput>::Some"(self).payload_0, f);
     }
 }
 
@@ -1172,10 +1172,6 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<wasi:cli/terminal_in
         start_23 = self_10.used;
         self_10.used = new_used_22;
         builtin::array_copy<u8>(self_10.repr, start_23, global:core:prelude/traits.wado::$const_obj_63, 0, 4);
-        if @unlikely(self.discriminant != 0) {
-            unreachable;
-        }
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<wasi:cli/terminal_input.wado/TerminalInput>"(ref.cast "core:prelude/types.wado//Option<wasi:cli/terminal_input.wado/TerminalInput>::Some"(self).payload_0, f);
     }
     if self.discriminant == 1 {
         if @unlikely(local.tee start_23(local.tee self_10(f.buf).used + 6) > builtin::array_len(self_10.repr)) {
@@ -1199,6 +1195,10 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<wasi:cli/terminal_in
         new_used_22 = self_10.used;
         self_10.used = start_23;
         builtin::array_copy<u8>(self_10.repr, new_used_22, global:core:prelude/traits.wado::$const_obj_60, 0, 4);
+        if @unlikely(self.discriminant != 1) {
+            unreachable;
+        }
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<wasi:cli/terminal_input.wado/TerminalInput>"(ref.cast "core:prelude/types.wado//Option<wasi:cli/terminal_input.wado/TerminalInput>::Some"(self).payload_0, f);
     }
 }
 

@@ -506,17 +506,52 @@ that are left.
 This borrows a list that is already a root, so it adds nothing to the live set
 — unlike sharing its _elements_, which cost 3× ([`dead-ends.md`](../.claude/skills/wado-performance/dead-ends.md)).
 
-Open levers on `benchmark/gale_gen`, read off a 2026-09-30 profile taken after
-the recovery sync sets started going to the registry as ids:
+#### Work the generator repeated or copied (2026-10-06, landed)
+
+Release-host profiles of `benchmark/gale_gen` found seven levers:
+
+- `quoted_char` asked ICU three times per char past ASCII, by run-time name and
+  across the component boundary. The `Z`/`M`/`C` ranges are now read once and
+  binary-searched.
+- `canonical_ids` sorted every interned kind set with a closure comparator. It
+  now sets each id's rank bit and reads the bits back in order.
+- `lexer_alts_can_collide` computed every arm's second chars before testing a
+  pair. It now reads them only for arms whose first chars overlap.
+- `lower_alt_scan_element` deep-copied the alt once per position it lowered.
+- `try_expand_opaque` and `repeat_entry_alts` copied elements and alternative
+  lists they only inspect. They borrow them now.
+- The kind, sync and follow-mask registries formatted id lists into string
+  keys. The id list is the key now.
+- `rule_takes_min_prec_arg` and `rule_reads_follow` scanned a list of names.
+
+Generated Rust, SQLite, css3 and TypeScript parsers are byte-identical. The
+whole set against `origin/main`, ms/iter, by GC heap size:
+
+| heap | main   | branch |
+| ---- | ------ | ------ |
+| 256m | 109.05 | 92.42  |
+| 384m | 104.94 | 89.83  |
+| 512m | 104.99 | 92.00  |
+| 640m | 102.62 | 87.22  |
+| 768m | 100.77 | 85.81  |
+| 1g   | 101.49 | 85.06  |
+
+The geometric mean goes from 103.94 to 88.68 ms/iter (+17.2%). gale-gen's
+ranking can flip with the heap size, so a single size does not decide a change
+here. The reason, and two levers judged on one size only, are in
+[`dead-ends.md`](../.claude/skills/wado-performance/dead-ends.md).
+
+Open levers on `benchmark/gale_gen`:
 
 - [ ] **Kind sets and FOLLOW masks still arrive as names.** `kind_check_str`
-  and `intern_follow_mask` get `TK_*` names from the lowered IR, so each
-  name is looked up in a string-keyed `TreeMap` again (~4.5%). The
-  rule-name maps behind `first_of_rule_at` and `rule_is_nullable_at` cost
-  about as much again. Fixing this means threading ids through `lower` and
-  prediction.
-- [ ] **`lexer_alts_can_collide` recomputes second chars per alternative**
-  (~2.5%), through `is_spliced_token_ref` on each spliced token reference.
+  and `intern_follow_mask` get `TK_*` names from the lowered IR, so
+  `names_to_ids` interns each name again through a string-keyed map. Fixing
+  this means threading ids through `lower` and prediction.
+- [ ] **The rule-name maps behind the SCC-memoised analyses** (`first_of_rule_at`,
+  `rule_is_nullable_at` and the rest) hash the rule name on every visit. A
+  stamped rule index measured flat at 512m only; sweep it before deciding.
+- [ ] **`second_char_arms` tests every member's ranges at every cut point**,
+  and formats each span's pattern before knowing whether its arm survives.
 
 ## Tried and didn't pan out
 

@@ -290,6 +290,10 @@ The elements, in insertion order.
 
 The elements, in insertion order.
 
+#### `pub fn contains_str<S: AsStrSlice>(&self, value: S) -> bool`
+
+Returns true if some element spells the same text as `value`.
+
 #### `impl IntoIterator for TreeSet<T>`
 
 ##### `fn into_iter(&self) -> MapKeysValueIter<T, ()>`
@@ -495,6 +499,10 @@ The elements, in insertion order.
 #### `pub fn iter_value(&self) -> MapKeysValueIter<T, ()>`
 
 The elements, in insertion order.
+
+#### `pub fn contains_str<S: AsStrSlice>(&self, value: S) -> bool`
+
+Returns true if some element spells the same text as `value`.
 
 #### `impl Inspect for HashSet<T>`
 

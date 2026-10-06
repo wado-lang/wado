@@ -9,6 +9,18 @@ test "empty set" {
     assert !s.contains(1);
 }
 
+test "contains_str finds a String element by a view of its text" {
+    let mut s = TreeSet::<String>::new();
+    s.insert("alpha");
+    s.insert("beta");
+    let text = "xbetax";
+    assert s.contains_str(text.as_str_slice().slice(1, 5));
+    assert s.contains_str("alpha");
+    assert !s.contains_str("gamma");
+    s.remove("beta");
+    assert !s.contains_str("beta");
+}
+
 test "insert single element" {
     let mut s: TreeSet<i32> = TreeSet::new();
     let inserted = s.insert(42);

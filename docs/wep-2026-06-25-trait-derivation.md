@@ -39,8 +39,16 @@ The split had two costs:
 `Eq`, `Ord`, `Default`, `Serialize` and `Deserialize` are derived structurally
 where something needs them. `T: Eq` holds when every field or case of `T`
 satisfies `Eq`. `Default` asks instead that every field carries a default
-expression. A failure reports a reason chain from the bound to the offending
-member ([Diagnostic Reason Chains](./wep-2026-06-02-diagnostic-reason-chains.md)).
+expression, so only a struct derives it: an enum, a flags type or a variant has
+no field to read a default from, and no case is canonically the default one. A
+failure reports a reason chain from the bound to the offending member
+([Diagnostic Reason Chains](./wep-2026-06-02-diagnostic-reason-chains.md)).
+
+A variant derives `Ord` as it derives `Eq`. Two cases order as they are
+declared, and two values of one case order by their payloads. That is the order
+a plain `enum` already has, extended by the payload, and it is Rust's
+`#[derive(PartialOrd)]`. Without it, a variant could not be sorted or used as
+a `TreeMap` key without a hand-written `cmp`.
 
 These traits are not total. A `fn`-typed field blocks `Eq`, `Ord` and serde,
 and a field without a default blocks `Default`. So `T: Eq` is a real
@@ -59,9 +67,9 @@ A fieldless struct satisfies `Default` vacuously, since it has exactly one
 value. That is what lets a marker type stand as a type parameter's default:
 `fn info<T: Serialize = NoFields>(msg: String, fields: T = T::default())`.
 
-A plain `enum` and a `flags` type have no members, so both satisfy every
-structural obligation outright. `Eq` and `Ord` compare the discriminant and the
-bitmask. A struct or variant carrying one therefore keeps its own derivation.
+A plain `enum` and a `flags` type have no members, so both satisfy `Eq`, `Ord`
+and serde outright. `Eq` and `Ord` compare the discriminant and the bitmask. A
+struct or variant carrying one therefore keeps its own derivation.
 
 A generic declaration derives once, as a template that monomorphization
 instantiates per concrete type. A generic struct derives no `Default`, because a

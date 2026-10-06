@@ -199,8 +199,8 @@ struct type_pattern_narrowing_holds_target.wado//$Dispatch_Dom {  // TypeId(5)
 array Array<fn()->()> (mut ref struct);  // TypeId(6)
 
 variant core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element> {  // TypeId(7)
-    Some(u64),
     None,
+    Some(u64),
 }
 
 struct core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>::Some {  // TypeId(8)
@@ -513,9 +513,9 @@ fn "type_pattern_narrowing_holds_target.wado/$cm_binding__Document_get_element_b
     self_10 = "mem/realloc"(0, 0, 8, 16);
     "wasi/wado-lang:web/Document::get_element_by_id"(builtin::f64_reinterpret_i64(self), builtin::i32_wrap_i64($element_id_packed), builtin::i32_wrap_i64($element_id_packed >> 32_i64), self_10);
     ptr_9 = builtin::load_u8(self_10);
-    $option_result = struct.new "core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>" { 1 };
+    $option_result = struct.new "core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>" { 0 };
     if ptr_9 != 0 {
-        $option_result = struct.new "core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>::Some" { discriminant: 0, payload_0: builtin::load_i64(self_10 + 8) };
+        $option_result = struct.new "core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>::Some" { discriminant: 1, payload_0: builtin::load_i64(self_10 + 8) };
     }
     drop("mem/realloc"(self_10, 16, 8, 0));
     return $option_result;

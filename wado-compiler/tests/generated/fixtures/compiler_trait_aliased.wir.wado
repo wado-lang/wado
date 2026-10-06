@@ -110,10 +110,10 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:compiler_trait_aliased.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
 global global:compiler_trait_aliased.wado::$const_obj_1: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98), used: 2 };
-global global:compiler_trait_aliased.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(78, 111, 110, 101);
+global global:compiler_trait_aliased.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(83, 111, 109, 101);
 global global:compiler_trait_aliased.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(58, 58);
 global global:compiler_trait_aliased.wado::$const_obj_4: ref Array<u8> = array.new_fixed<u8>(79, 112, 116, 105, 111, 110);
-global global:compiler_trait_aliased.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(83, 111, 109, 101);
+global global:compiler_trait_aliased.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(78, 111, 110, 101);
 global global:compiler_trait_aliased.wado::$const_obj_8: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 101, 110, 100), used: 4 };
 global global:core:prelude/traits.wado::$const_obj_196: ref Array<u8> = array.new_fixed<u8>(32, 125);
 global global:core:prelude/traits.wado::$const_obj_197: ref Array<u8> = array.new_fixed<u8>(58, 32);
@@ -147,7 +147,7 @@ fn "compiler_trait_aliased.wado/run"() with Stdout {
     "core:rt/write_string_to_stream"(tx_16, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_15);
     $mv_arg_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    if ref.is_null(ref.null none) == 0 {
+    if ref.is_null(ref.null none) {
         if @unlikely(local.tee rx_15(0 + 6) > builtin::array_len($mv_arg_2.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, rx_15);
@@ -169,12 +169,8 @@ fn "compiler_trait_aliased.wado/run"() with Stdout {
         tx_16 = $mv_arg_2.used;
         $mv_arg_2.used = rx_15;
         builtin::array_copy<u8>($mv_arg_2.repr, tx_16, global:compiler_trait_aliased.wado::$const_obj_5, 0, 4);
-        if @unlikely(ref.is_null(ref.null none) != 0) {
-            unreachable;
-        }
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<[core:prelude/string.wado/String,i32]>$spec0$scalar"(ref.as_non_null(ref.null none), $mv_arg_2);
     }
-    if ref.is_null(ref.null none) {
+    if ref.is_null(ref.null none) == 0 {
         if @unlikely(local.tee tx_16($mv_arg_2.used + 6) > builtin::array_len($mv_arg_2.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, tx_16);
@@ -196,6 +192,10 @@ fn "compiler_trait_aliased.wado/run"() with Stdout {
         rx_15 = $mv_arg_2.used;
         $mv_arg_2.used = tx_16;
         builtin::array_copy<u8>($mv_arg_2.repr, rx_15, global:compiler_trait_aliased.wado::$const_obj_2, 0, 4);
+        if @unlikely((ref.is_null(ref.null none) == 0) != 1) {
+            unreachable;
+        }
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<[core:prelude/string.wado/String,i32]>$spec0$scalar"(ref.as_non_null(ref.null none), $mv_arg_2);
     }
     rx_15 = builtin::i32_wrap_i64(local.tee packed_14("wasi/stream-new"()));
     tx_16 = builtin::i32_wrap_i64(packed_14 >> 32_i64);

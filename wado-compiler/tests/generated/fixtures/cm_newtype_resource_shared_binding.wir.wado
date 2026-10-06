@@ -169,8 +169,8 @@ struct tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<cor
 }
 
 variant core:prelude/types.wado//Option<u64> {  // TypeId(26)
-    Some(u64),
     None,
+    Some(u64),
 }
 
 struct core:prelude/types.wado//Option<u64>::Some {  // TypeId(27)
@@ -179,8 +179,8 @@ struct core:prelude/types.wado//Option<u64>::Some {  // TypeId(27)
 }
 
 variant core:prelude/types.wado//Option<u8> {  // TypeId(28)
-    Some(u8),
     None,
+    Some(u8),
 }
 
 struct core:prelude/types.wado//Option<u8>::Some {  // TypeId(29)
@@ -189,8 +189,8 @@ struct core:prelude/types.wado//Option<u8>::Some {  // TypeId(29)
 }
 
 variant core:prelude/types.wado//Option<u16> {  // TypeId(30)
-    Some(u16),
     None,
+    Some(u16),
 }
 
 struct core:prelude/types.wado//Option<u16>::Some {  // TypeId(31)
@@ -199,8 +199,8 @@ struct core:prelude/types.wado//Option<u16>::Some {  // TypeId(31)
 }
 
 variant core:prelude/types.wado//Option<u32> {  // TypeId(32)
-    Some(u32),
     None,
+    Some(u32),
 }
 
 struct core:prelude/types.wado//Option<u32>::Some {  // TypeId(33)
@@ -209,8 +209,8 @@ struct core:prelude/types.wado//Option<u32>::Some {  // TypeId(33)
 }
 
 variant core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>> {  // TypeId(34)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some {  // TypeId(35)
@@ -219,8 +219,8 @@ struct core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some
 }
 
 variant core:prelude/types.wado//Option<wasi:http/types.wado/Fields> {  // TypeId(36)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some {  // TypeId(37)
@@ -424,11 +424,11 @@ condition: !has_marker
     }
     has_marker = builtin::i32_wrap_i64(local.tee packed("wasi/future-new"()));
     $fuse_at_182 = builtin::i32_wrap_i64(packed >> 32_i64);
-    has_marker = "cm_newtype_resource_shared_binding.wado/$cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, has_marker).0;
+    has_marker = "cm_newtype_resource_shared_binding.wado/$cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 0 }, has_marker).0;
     headers = 0;
     headers = has_marker;
     "wasi/task-return:handle"(0, headers, 0, 0_i64, 0, 0, 0, 0);
-    "cm_newtype_resource_shared_binding.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"($fuse_at_182, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some" { discriminant: 0, payload_0: trailers } });
+    "cm_newtype_resource_shared_binding.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"($fuse_at_182, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some" { discriminant: 1, payload_0: trailers } });
     "wasi/resource-drop:wasi/http/types.wado#request"(request);
 }
 
@@ -1055,7 +1055,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
             $sroa_slot_156 = 0;
             $inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_9: block {
                 if start_20 >= $mv$content$used {
-                    $sroa_slot_156 = 1;
+                    $sroa_slot_156 = 0;
                     break $inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_9;
                 }
                 $sroa_slot_196 = 0;
@@ -1082,11 +1082,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
                     break $inline_decode_char_at_0;
                 };
                 start_20 = start_20 + $sroa_slot_196;
-                $sroa_slot_156 = 0;
+                $sroa_slot_156 = 1;
                 break $inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_9;
             };
             let $match_scrut_0: i32;
-            if local.tee $match_scrut_0($sroa_slot_156) == 0 {
+            if local.tee $match_scrut_0($sroa_slot_156) == 1 {
                 new_used_19 = new_used_19 + 1;
             } else {
                 break b127;

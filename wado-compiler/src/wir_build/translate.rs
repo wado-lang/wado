@@ -23,7 +23,7 @@ use crate::nir_arena::{
     ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
 use crate::nir_value_graph::{OpaqueSource, ValueId};
-use crate::optimize::multi_value_return::block_tail_call;
+use crate::optimize::multi_value_return::{block_tail, block_tail_call};
 use crate::optimize::sroa_variant_return::settled_locals;
 use crate::token::Span;
 use crate::wir::{
@@ -990,11 +990,6 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
     }
 }
 
-/// `Option`'s `None` case index. Its declaration is a compiler item, so the
-/// index is fixed; both the expression translator and a global's slot build
-/// `None` from it.
-pub(super) const OPTION_NONE_CASE: u32 = 1;
-
 /// Tracks a Wasm block scope in the label stack for computing br depths.
 pub(super) struct LabelEntry {
     /// Label name from TIR (for labeled blocks).
@@ -1227,21 +1222,26 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// One argument as N values, taken off a multi-value call's results or a
-    /// literal's own initialisers. Anything else spills once and reads it back.
+    /// literal's own initialisers — also where an inlined block ends in one,
+    /// after its leading statements. Anything else spills once and reads it
+    /// back.
     fn split_argument(
         &mut self,
         op: Operand,
         fields: &[(String, TypeId)],
     ) -> (Vec<WirInstr>, Vec<WirInstr>) {
-        if let Some(expr) = op.as_expr() {
+        let mut lead: Vec<StmtId> = Vec::new();
+        if let Some(expr) = block_tail(self.body, op, &mut lead).as_expr() {
             match &self.body.exprs[expr].kind {
                 ExprKind::Call { func_id, .. }
                     if self
                         .multi_value_result_fields(*func_id)
                         .is_some_and(|got| self.abi_fields_agree(got, fields)) =>
                 {
+                    let mut instrs = self.translate_stmts(&lead);
                     let call = self.take_multi_value_results(|t| t.translate_expr(expr));
-                    let (instrs, bound) = self.bind_multi_value_results_to_temps(call, fields);
+                    let (bind, bound) = self.bind_multi_value_results_to_temps(call, fields);
+                    instrs.extend(bind);
                     return (instrs, local_reads(&bound));
                 }
                 ExprKind::StructLiteral {
@@ -1252,7 +1252,10 @@ impl FunctionTranslator<'_, '_> {
                         .all(|(n, _)| written.iter().any(|f| f.name == *n)) =>
                 {
                     let written = written.clone();
-                    return self.split_struct_literal(&written, fields);
+                    let mut instrs = self.translate_stmts(&lead);
+                    let (split, reads) = self.split_struct_literal(&written, fields);
+                    instrs.extend(split);
+                    return (instrs, reads);
                 }
                 _ => {}
             }
@@ -2434,13 +2437,11 @@ impl FunctionTranslator<'_, '_> {
                         !matches!(self.type_table.get(inner), ResolvedType::Unknown),
                         "[WIR] promoted Null with unresolved Option inner type"
                     );
-                    self.translate_variant_construct(
-                        type_id,
-                        OPTION_NONE_CASE,
-                        "None",
-                        None,
-                        type_id,
-                    )
+                    let (_, _, none_name, none_index) = self
+                        .type_table
+                        .compiler_variant_case(CompilerItem::OptionNone);
+                    let none_name = none_name.to_string();
+                    self.translate_variant_construct(type_id, none_index, &none_name, None, type_id)
                 } else {
                     WirInstr::RefNull {
                         heap_type: WirAbstractHeapType::None,

@@ -1490,8 +1490,9 @@ A derived `Eq` or `Ord` compares by the type's shape:
   declaration order.
 - An enum compares its case. `Ord` follows declaration order.
 - A flags type compares its raw bits.
-- Two values of a variant are equal when they are the same case and their
-  payloads, if any, are equal.
+- A variant compares its case first, then the payloads of one case. `Ord`
+  puts an earlier case in declaration order before a later one, whatever their
+  payloads.
 
 When a derived impl exists, which instantiations of a generic type it covers,
 and how a written impl overrides it are stated in

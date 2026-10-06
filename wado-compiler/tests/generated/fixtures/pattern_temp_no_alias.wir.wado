@@ -631,18 +631,18 @@ fn "pattern_temp_no_alias.wado/$test_18_an_arm_binding_keeps_its_copy_past_a_wri
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_7: i32;
     let v_14: ref null "core:prelude//List<i32>";
-    let $vc_payload_0: ref "core:prelude//List<i32>";
+    let $vc_payload_1: ref "core:prelude//List<i32>";
     let ys: ref "core:prelude//List<i32>";
     let $sroa_s_held_23: ref null "core:prelude//List<i32>";
     $sroa_s_held_23 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 };
     if @likely(ref.is_null(local.tee $sroa_s_held_23($inline_pattern_temp_no_alias_wado_Slot__take_after_call_1: block -> ref null "core:prelude//List<i32>" {
-        if ref.is_null(local.tee v_14((if ref.is_null(local.tee v_14($sroa_s_held_23)) == 0 -> ref null "core:prelude//List<i32>" {
-            $vc_payload_0 = ref.as_non_null(v_14);
-            struct.new "core:prelude//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = $vc_payload_0.repr; $load_1 = $vc_payload_0.used; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_1)), 0, $array_clone_src_1, 0, $load_1); $array_clone_dst_2, used: $load_1 };
-        } else {
+        if ref.is_null(local.tee v_14((if ref.is_null(local.tee v_14($sroa_s_held_23)) -> ref null "core:prelude//List<i32>" {
             v_14;
+        } else {
+            $vc_payload_1 = ref.as_non_null(v_14);
+            struct.new "core:prelude//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = $vc_payload_1.repr; $load_1 = $vc_payload_1.used; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_1)), 0, $array_clone_src_1, 0, $load_1); $array_clone_dst_2, used: $load_1 };
         }))) == 0 {
-            $vc_payload_0 = ref.as_non_null(v_14);
+            $vc_payload_1 = ref.as_non_null(v_14);
             if ref.is_null(local.tee v_14($sroa_s_held_23)) == 0 {
                 if @unlikely(local.tee $load_1(local.tee ys(ref.as_non_null(v_14)).used) >= builtin::array_len(ys.repr)) {
                     cold_path;
@@ -653,12 +653,12 @@ fn "pattern_temp_no_alias.wado/$test_18_an_arm_binding_keeps_its_copy_past_a_wri
             } else {
             }
             $sroa_s_held_23 = ref.null none;
-            break $inline_pattern_temp_no_alias_wado_Slot__take_after_call_1: $vc_payload_0;
+            break $inline_pattern_temp_no_alias_wado_Slot__take_after_call_1: $vc_payload_1;
         } else {
         }
         break $inline_pattern_temp_no_alias_wado_Slot__take_after_call_1: ref.null none;
     })) == 0) {
-        if @unlikely(local.tee $load_1(local.tee $vc_payload_0(ref.as_non_null($sroa_s_held_23)).used) != 1) {
+        if @unlikely(local.tee $load_1(local.tee $vc_payload_1(ref.as_non_null($sroa_s_held_23)).used) != 1) {
             cold_path;
             $fuse_at_7 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_4("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(147)), 122);
             "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_4.repr, $fuse_at_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -674,7 +674,7 @@ condition: xs.len() == 1
 "), used: 26 }, 26);
             "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_4.repr, $fuse_at_7 + 26, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120, 115, 58, 32), used: 4 }, 4);
             $local_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_4);
-            "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect"($vc_payload_0, $local_5);
+            "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect"($vc_payload_1, $local_5);
             $fuse_at_7 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_4, 11);
             "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_4.repr, $fuse_at_7, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
             "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_4.repr, $fuse_at_7 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("xs.len(): "), used: 10 }, 10);

@@ -1126,10 +1126,9 @@ Each prelude trait follows one policy for when an impl exists:
 | written   | an impl is written, `T` is a plain `enum`, or `T` is a newtype whose base has one | `Display`                                          |
 | explicit  | an impl is written                                                                | every user-defined trait                           |
 
-Two exceptions narrow the on-demand row. `Default` asks that every field carry a
-default expression, not that every member satisfy `Default`
-([Auto-Derivation](./spec-standard-traits.md#auto-derivation)). A `variant`
-derives `Eq` but never `Ord`.
+One exception narrows the on-demand row. `Default` asks that every field carry a
+default expression, not that every member satisfy `Default`, so only a struct
+derives it ([Auto-Derivation](./spec-standard-traits.md#auto-derivation)).
 
 `Eq` and `Ord` on one type come from one source. A type with a written `Ord`
 and no written `Eq` gets its `Eq` from `cmp`, not from its members:
@@ -1161,7 +1160,7 @@ bound; for `Default`, a `T: Default` bound or a `T::default()` call; for serde,
 a bound. A [marker](#compiler-synthesized-impl) needs one too.
 
 A `fn`-typed member blocks `Eq`, `Ord`, and serde. A plain `enum` and a `flags`
-type have no members, so they satisfy every structural obligation.
+type have no members, so they satisfy those three outright.
 [Auto-derived Traits](./spec-types.md#auto-derived-traits) says what each
 derived `Eq` and `Ord` compares.
 

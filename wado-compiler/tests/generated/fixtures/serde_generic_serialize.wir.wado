@@ -43,8 +43,8 @@ struct core:json//JsonSerializer {  // TypeId(8)
 }
 
 variant core:prelude/types.wado//Option<char> {  // TypeId(9)
-    Some(char),
     None,
+    Some(char),
 }
 
 struct core:prelude/types.wado//Option<char>::Some {  // TypeId(10)
@@ -248,7 +248,7 @@ fn "serde_generic_serialize.wado/$test_0_bound_only_generic_struct_serialize__no
     let $mv$r$0: i32;
     let $mv$r$1: ref null "core:prelude/string.wado//String";
     let $mv$r$2: ref null "core:serde//SerializeError";
-    multivalue_bind [$mv$r$0, $mv$r$1, $mv$r$2] = "core:json/core/json/to_string<serde_generic_serialize.wado/Wrapper<i32>>$scalar"(7, struct.new "core:prelude/types.wado//Option<char>" { 1 });
+    multivalue_bind [$mv$r$0, $mv$r$1, $mv$r$2] = "core:json/core/json/to_string<serde_generic_serialize.wado/Wrapper<i32>>$scalar"(7, struct.new "core:prelude/types.wado//Option<char>" { 0 });
     if @likely($mv$r$0 == 0) {
         s = ref.as_non_null($mv$r$1);
         if @unlikely(local.tee i($inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
@@ -314,10 +314,10 @@ fn "serde_generic_serialize.wado/$test_1_two_instantiations_of_the_same_generic"
     let $mv$ra$0: i32;
     let $mv$ra$1: ref null "core:prelude/string.wado//String";
     let $mv$ra$2: ref null "core:serde//SerializeError";
-    multivalue_bind [$mv$ra$0, $mv$ra$1, $mv$ra$2] = "core:json/core/json/to_string<serde_generic_serialize.wado/Wrapper<core:prelude/string.wado/String>>$scalar"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 }, struct.new "core:prelude/types.wado//Option<char>" { 1 });
+    multivalue_bind [$mv$ra$0, $mv$ra$1, $mv$ra$2] = "core:json/core/json/to_string<serde_generic_serialize.wado/Wrapper<core:prelude/string.wado/String>>$scalar"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 }, struct.new "core:prelude/types.wado//Option<char>" { 0 });
     let $mv$rb$0: i32;
     let $mv$rb$1: ref null "core:prelude/string.wado//String";
-    multivalue_bind [$mv$rb$0, $mv$rb$1, $mv$ra$2] = "core:json/core/json/to_string<serde_generic_serialize.wado/Wrapper<bool>>$scalar"(1, struct.new "core:prelude/types.wado//Option<char>" { 1 });
+    multivalue_bind [$mv$rb$0, $mv$rb$1, $mv$ra$2] = "core:json/core/json/to_string<serde_generic_serialize.wado/Wrapper<bool>>$scalar"(1, struct.new "core:prelude/types.wado//Option<char>" { 0 });
     if @likely($mv$ra$0 == 0) {
         sa = ref.as_non_null($mv$ra$1);
         if @unlikely(local.tee i_29($inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
@@ -436,7 +436,7 @@ fn "serde_generic_serialize.wado/$test_2_nested_generic_instantiation"() {
     let $mv$r$0: i32;
     let $mv$r$1: ref null "core:prelude/string.wado//String";
     let $mv$r$2: ref null "core:serde//SerializeError";
-    multivalue_bind [$mv$r$0, $mv$r$1, $mv$r$2] = "core:json/core/json/to_string<serde_generic_serialize.wado/Wrapper<serde_generic_serialize.wado/Wrapper<i32>>>$scalar"(struct.new "serde_generic_serialize.wado//Wrapper<i32>" { value: 1 }, struct.new "core:prelude/types.wado//Option<char>" { 1 });
+    multivalue_bind [$mv$r$0, $mv$r$1, $mv$r$2] = "core:json/core/json/to_string<serde_generic_serialize.wado/Wrapper<serde_generic_serialize.wado/Wrapper<i32>>>$scalar"(struct.new "serde_generic_serialize.wado//Wrapper<i32>" { value: 1 }, struct.new "core:prelude/types.wado//Option<char>" { 0 });
     if @likely($mv$r$0 == 0) {
         s = ref.as_non_null($mv$r$1);
         if @unlikely(local.tee i($inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
@@ -502,7 +502,7 @@ fn "serde_generic_serialize.wado/$test_3_multi_param_generic_struct"() {
     let $mv$r$0: i32;
     let $mv$r$1: ref null "core:prelude/string.wado//String";
     let $mv$r$2: ref null "core:serde//SerializeError";
-    multivalue_bind [$mv$r$0, $mv$r$1, $mv$r$2] = "core:json/core/json/to_string<serde_generic_serialize.wado/Pair<i32,core:prelude/string.wado/String>>$spec0$scalar"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, struct.new "core:prelude/types.wado//Option<char>" { 1 });
+    multivalue_bind [$mv$r$0, $mv$r$1, $mv$r$2] = "core:json/core/json/to_string<serde_generic_serialize.wado/Pair<i32,core:prelude/string.wado/String>>$spec0$scalar"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, struct.new "core:prelude/types.wado//Option<char>" { 0 });
     if @likely($mv$r$0 == 0) {
         s = ref.as_non_null($mv$r$1);
         if @unlikely(local.tee i($inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
@@ -572,10 +572,10 @@ fn "serde_generic_serialize.wado/$test_4_generic_variant_serialize_via_explicit_
     let $mv$rm$0: i32;
     let $mv$rm$1: ref null "core:prelude/string.wado//String";
     let $mv$rm$2: ref null "core:serde//SerializeError";
-    multivalue_bind [$mv$rm$0, $mv$rm$1, $mv$rm$2] = "core:json/core/json/to_string<serde_generic_serialize.wado/Maybe<i32>>$scalar"($sroa_m_value_40, struct.new "core:prelude/types.wado//Option<char>" { 1 });
+    multivalue_bind [$mv$rm$0, $mv$rm$1, $mv$rm$2] = "core:json/core/json/to_string<serde_generic_serialize.wado/Maybe<i32>>$scalar"($sroa_m_value_40, struct.new "core:prelude/types.wado//Option<char>" { 0 });
     let $mv$rn$0: i32;
     let $mv$rn$1: ref null "core:prelude/string.wado//String";
-    multivalue_bind [$mv$rn$0, $mv$rn$1, $mv$rm$2] = "core:json/core/json/to_string<serde_generic_serialize.wado/Maybe<i32>>$scalar"($sroa_n_value_41, struct.new "core:prelude/types.wado//Option<char>" { 1 });
+    multivalue_bind [$mv$rn$0, $mv$rn$1, $mv$rm$2] = "core:json/core/json/to_string<serde_generic_serialize.wado/Maybe<i32>>$scalar"($sroa_n_value_41, struct.new "core:prelude/types.wado//Option<char>" { 0 });
     if @likely($mv$rm$0 == 0) {
         s_4 = ref.as_non_null($mv$rm$1);
         if @unlikely(local.tee i_29($inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {

@@ -24,7 +24,7 @@ use super::sig::{DeclSig, MethodSig, Param};
 use super::static_call::StaticQuery;
 use super::trait_env;
 use super::trait_env::ImplTargetKey;
-use super::trait_query::SelfBinding;
+use super::trait_query::{DerivedAt, SelfBinding};
 use super::types::{FunctionContext, TypeError, VarRef, newtype_member_owner};
 use super::tysys::TypeSystem;
 use super::util;
@@ -1867,30 +1867,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name,
                     );
 
-                    // The receiver's arguments come first: the declaration
-                    // numbers its own slots 0.. and the method's after them, so
-                    // one flat list substitutes by index (as the two-segment
-                    // spelling does).
-                    let mut combined_type_args = impl_type_args_inferred.clone();
-                    combined_type_args.extend_from_slice(&method_type_args);
-                    let mut return_type = resolved.return_type();
-                    if !combined_type_args.is_empty() {
-                        return_type = self
-                            .tysys
-                            .substitute_type_params(return_type, &combined_type_args);
-                    }
+                    let return_type = self.fill_static_method_slots(
+                        method_ref.method_id,
+                        &method_type_args,
+                        resolved.return_type(),
+                    );
 
                     let template = self.tysys.static_template(&method_ref, &receiver);
-                    let monomorph_info = if combined_type_args.is_empty() {
-                        None
-                    } else {
-                        Some(MonomorphInfo {
-                            generic_name: final_mangled.clone(),
-                            impl_type_args: impl_type_args_inferred.clone(),
-                            method_type_args: method_type_args.clone(),
-                            is_blanket: false,
-                        })
-                    };
+                    let monomorph_info =
+                        if impl_type_args_inferred.is_empty() && method_type_args.is_empty() {
+                            None
+                        } else {
+                            Some(MonomorphInfo {
+                                generic_name: final_mangled.clone(),
+                                impl_type_args: impl_type_args_inferred.clone(),
+                                method_type_args: method_type_args.clone(),
+                                is_blanket: false,
+                            })
+                        };
 
                     // From the same resolution the identity and the return type
                     // came from: a second lookup here answers with no list, and
@@ -2388,6 +2382,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(sig) = self.unique_qualified_method_sig(prefix, suffix) {
                 return Some(CalleeSignature::of(&sig.decl));
             }
+            let key = self.impl_target(prefix);
+            if let Some(sig) = self.derived_method_signature(&key, suffix) {
+                return Some(sig);
+            }
 
             // Builtin functions resolve through the `core:builtin` module,
             // slots and all: a generic builtin takes its type parameter from
@@ -2426,6 +2424,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             ..CalleeSignature::of(&sig.decl)
                         });
                     }
+                    if let Some(sig) = self.derived_method_signature(&ns_key, method_name) {
+                        return Some(sig);
+                    }
                 }
             }
             return None;
@@ -2435,6 +2436,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // spelling, and a default expression's callee scope.
         let sig = callee_site.and_then(|site| self.tysys.free_function_sig_at(site))?;
         Some(CalleeSignature::of(&sig.decl))
+    }
+
+    /// The signature of a derived `eq` / `cmp` on a type that declares no
+    /// method of the name, as its qualified spelling calls it: `(&Self, &Self)`,
+    /// with a generic type's own parameters as the slots, so the receiver
+    /// argument settles the other's type.
+    fn derived_method_signature(
+        &mut self,
+        key: &ImplTargetKey,
+        method_name: &str,
+    ) -> Option<CalleeSignature> {
+        let (_, _, return_type) = self.tysys.auto_derive_by_method(method_name)?;
+        if self
+            .qualified_method_decl_ids(key, method_name)
+            .next()
+            .is_some()
+        {
+            return None;
+        }
+        let def = key.decl()?;
+        let receiver = self.declared_self_type(def)?;
+        let receiver_ref = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .intern(ResolvedType::Ref(receiver));
+        Some(CalleeSignature {
+            param_types: vec![receiver_ref, receiver_ref],
+            slots: self
+                .type_lookup()
+                .declared_type_param_ids(def)
+                .unwrap_or_default()
+                .to_vec(),
+            return_type: Some(return_type),
+        })
     }
 
     /// [`Self::apply_param_defaults`] against the callee's own declaration, for
@@ -3152,6 +3188,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // their slots names a declaration the arguments may not even select.
         let Some(sig) = self.static_call_sig(prefix, suffix, receiver_key, SigChoice::Unique, &[])
         else {
+            self.report_uninferred_derived_type_args(
+                prefix,
+                suffix,
+                impl_type_args,
+                span,
+                receiver_key,
+            );
             return;
         };
         let (declaring_slots, method_slots) = (sig.declaring_type_params(), sig.own_type_params());
@@ -3194,6 +3237,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &names,
             &format!("`{prefix}::{suffix}`"),
             &turbofish,
+            span,
+        ));
+    }
+
+    /// [`Self::report_uninferred_static_method_type_args`] for a derived method,
+    /// whose slots are its type's own parameters.
+    fn report_uninferred_derived_type_args(
+        &mut self,
+        prefix: &str,
+        suffix: &str,
+        impl_type_args: &[TypeId],
+        span: token::Span,
+        receiver_key: Option<&ImplTargetKey>,
+    ) {
+        let key = self.static_receiver_key(prefix, receiver_key);
+        let Some(sig) = self.derived_method_signature(&key, suffix) else {
+            return;
+        };
+        let scope_params = self.scope_type_param_ids();
+        let names: Vec<String> = sig
+            .slots
+            .iter()
+            .filter(|&&slot| {
+                impl_type_args
+                    .get(self.declared_slot(slot) as usize)
+                    .is_none_or(|&t| self.slot_unanswered(t, &scope_params))
+            })
+            .map(|&slot| self.tysys.type_id_to_string(slot))
+            .collect();
+        if names.is_empty() {
+            return;
+        }
+        let _ = self.emit(TypeError::cannot_infer(
+            &names,
+            &format!("`{prefix}::{suffix}`"),
+            &format!("`{prefix}::<...>::{suffix}()`"),
             span,
         ));
     }
@@ -3659,6 +3738,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         !receiver_args.is_empty() && sig(receiver_args).is_none() && sig(&[]).is_some()
     }
 
+    /// Whether the declaration `struct_name` names derives `method_name`, but
+    /// its instance at `receiver_args` withholds the derivation. An instance
+    /// the call left uninferred is not one: that is reported as such.
+    pub(super) fn derived_for_no_instance(
+        &mut self,
+        struct_name: &str,
+        method_name: &str,
+        receiver_key: Option<&ImplTargetKey>,
+        receiver_args: &[TypeId],
+    ) -> bool {
+        let scope_params = self.scope_type_param_ids();
+        if receiver_args.is_empty()
+            || receiver_args
+                .iter()
+                .any(|&arg| self.slot_unanswered(arg, &scope_params))
+        {
+            return false;
+        }
+        let key = self.static_receiver_key(struct_name, receiver_key);
+        let Some(declared) = key.decl().and_then(|def| self.declared_self_type(def)) else {
+            return false;
+        };
+        self.try_auto_derived_method_match(method_name, declared, DerivedAt::Declaration)
+            .is_some()
+    }
+
     /// The receiver's arguments a bare `Type::method(..)` call must produce,
     /// read off `expected` where it is an instance of `Type`; empty otherwise.
     fn expected_receiver_args(
@@ -3674,10 +3779,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Vec::new();
         };
         let expected_key = ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
-        let receiver = receiver_key
-            .cloned()
-            .unwrap_or_else(|| self.impl_target(type_name));
-        if expected_key != receiver {
+        if expected_key != self.static_receiver_key(type_name, receiver_key) {
             return Vec::new();
         }
         self.tysys
@@ -3752,13 +3854,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &expected_args,
             )
             .or_else(|| {
-                let key = receiver_key
-                    .cloned()
-                    .unwrap_or_else(|| self.impl_target(struct_name));
+                let key = self.static_receiver_key(struct_name, receiver_key);
                 self.tysys.inherited_default_method_sig(&key, method_name)
             })
         else {
-            return (vec![], vec![]);
+            let key = self.static_receiver_key(struct_name, receiver_key);
+            return (self.derived_impl_args(&key, method_name, args), vec![]);
         };
         if sig.decl.type_params.is_empty() {
             return (vec![], vec![]);
@@ -3798,6 +3899,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.declaring_slot_values(&sig, &inferred[..split]),
             inferred[split..].to_vec(),
         )
+    }
+
+    /// The impl level of a derived method called by type path, solved from the
+    /// arguments against [`Self::derived_method_signature`]; empty where they
+    /// leave a slot open.
+    fn derived_impl_args(
+        &mut self,
+        key: &ImplTargetKey,
+        method_name: &str,
+        args: &[TypeId],
+    ) -> Vec<TypeId> {
+        let Some(sig) = self.derived_method_signature(key, method_name) else {
+            return Vec::new();
+        };
+        let mut infer = InferCtx::new(&self.tysys.type_table, sig.slots.clone());
+        for (&param_type, &arg) in sig.param_types.iter().zip(args) {
+            infer.add(param_type, arg);
+        }
+        let (inferred, bindings) = infer.solve_with_bindings();
+        if sig.slots.iter().all(|slot| bindings.contains_key(slot)) {
+            inferred
+        } else {
+            Vec::new()
+        }
     }
 
     /// The slot a declared type parameter's `TypeId` holds.
@@ -3893,7 +4018,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.impl_method_entries(receiver, method_name).next()
     }
 
-    /// [`Self::qualified_method_sig`] where the name resolves to exactly one
+    /// [`Self::qualified_method_sig_keyed`] where the name resolves to exactly one
     /// declaration. An overloaded name (several `From` impls on one target)
     /// answers `None`: the call site chooses among the candidates by argument,
     /// so committing to the first indexed one would decide the overload here.
@@ -3947,21 +4072,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The canonical signature `struct_name::method_name` names, receiver-less
-    /// or instance: the spelling admits both, and a call site instantiates its
-    /// slots from whichever it names. Callers hold a name split out of a mangled
-    /// spelling, so there is no reference site to take.
-    pub(super) fn qualified_method_sig(
-        &self,
-        struct_name: &str,
-        method_name: &str,
-    ) -> Option<MethodSig> {
-        self.qualified_method_sig_keyed(&self.impl_target(struct_name), method_name)
-    }
-
-    /// [`Self::qualified_method_sig`] for a caller that already resolved its
-    /// receiver. Deriving a second key from the bare name answers from another
-    /// vantage than the one the call resolved at.
+    /// The canonical signature `method_name` names on the resolved `receiver`,
+    /// receiver-less or instance: the spelling admits both, and a call site
+    /// instantiates its slots from whichever it names. Deriving a second key
+    /// from the bare name answers from another vantage than the one the call
+    /// resolved at.
     pub(super) fn qualified_method_sig_keyed(
         &self,
         key: &ImplTargetKey,
