@@ -169,7 +169,7 @@ paid on a benchmark `fts` never touched.
   set, paying a full trace at every rung — and there the ranking of two
   compilers flips with the heap size rather than with the code. Even a fixed
   size is one sample: a change that allocates less moves where the collections
-  land, and gale-gen read 4% slower at its 512m and faster at five other sizes.
+  land, and gale-gen read 4% slower at 512m and faster at five other sizes.
   On an allocation-heavy row, sweep `--gc-heap-initial` and compare geometric
   means (`dead-ends.md`).
 - **`with_capacity` zero-fills.** `List::with_capacity(n)` is an

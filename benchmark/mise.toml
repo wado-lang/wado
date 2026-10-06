@@ -335,7 +335,10 @@ echo "=== ANTLR4 (generate, same RustLexer.g4 + RustParser.g4) ==="
 node gale_gen/antlr4_gen.mjs
 
 echo "=== Wado (Gale generator, Rust grammar) ==="
-wado run -O2 $WADO_BENCH_FLAGS $(gc_heap_flags gale_gen) gale_gen/gale_gen.wado
+wado run -O2 $WADO_BENCH_FLAGS gale_gen/gale_gen.wado
+
+echo "=== Wado (Gale generator, Rust grammar, 1 GiB heap) ==="
+wado run -O2 $WADO_BENCH_FLAGS $GALE_GEN_BIG_HEAP gale_gen/gale_gen.wado
 """
 
 [tasks.http-routing]
@@ -395,6 +398,12 @@ for f in $FILES; do
     echo "[${name%.wado}] \\$ wado run -O2 $f"
     echo "=== Wado ==="
     wado run -O2 $WADO_BENCH_FLAGS $(gc_heap_flags "$f") "$f"
+    case "$f" in
+        *gale_gen*)
+            echo "=== Wado (1 GiB heap) ==="
+            wado run -O2 $WADO_BENCH_FLAGS $GALE_GEN_BIG_HEAP "$f"
+            ;;
+    esac
 done
 """
 

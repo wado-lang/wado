@@ -17,8 +17,8 @@ const WADO = resolve('./target/release/wado');
 
 type BenchResult = { name: string; unit: string; value: number };
 
-function runBench(src: string, optLevel: string): string {
-  return execFileSync(WADO, ['run', optLevel, src], { encoding: 'utf8', cwd: 'benchmark' });
+function runBench(src: string, optLevel: string, flags: string[] = []): string {
+  return execFileSync(WADO, ['run', optLevel, ...flags, src], { encoding: 'utf8', cwd: 'benchmark' });
 }
 
 function escapeRegExp(s: string): string {
@@ -87,6 +87,8 @@ for (const opt of OPT_LEVELS) {
   push(`sqlite_parse (${label})`, runBench('sqlite_parse/sqlite_parse.wado', opt));
   push(`syntax_highlight (${label})`, runBench('syntax_highlight/syntax_highlight.wado', opt));
   push(`gale_gen (${label})`, runBench('gale_gen/gale_gen.wado', opt));
+  // The row `GALE_GEN_BIG_HEAP` in `benchmark/wado.sh` adds.
+  push(`gale_gen/1g-heap (${label})`, runBench('gale_gen/gale_gen.wado', opt, ['--gc-heap-initial', '1g']));
 }
 
 process.stdout.write(JSON.stringify(benchmarks, null, 2) + '\n');
