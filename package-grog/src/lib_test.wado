@@ -56,3 +56,14 @@ test "a map entry whose key the type does not hold is an unknown field" {
     assert back.m.len() == 0;
     assert encode(&back) == input;
 }
+
+test "a map entry's repeated key is read as its last" {
+    // m (1) = { key (1) = 9, key (1) = 1, value (2) = 5 }
+    let held = decode::<Keyed, ByteList>(b"\x0a\x06\x08\x09\x08\x01\x10\x05").unwrap();
+    assert held.m.len() == 1 && held.m[Closed::One] == 5;
+    // m (1) = { key (1) = 1, key (1) = 9, value (2) = 5 }
+    let input: ByteList = b"\x0a\x06\x08\x01\x08\x09\x10\x05";
+    let dropped = decode::<Keyed, ByteList>(input).unwrap();
+    assert dropped.m.len() == 0;
+    assert encode(&dropped) == input;
+}

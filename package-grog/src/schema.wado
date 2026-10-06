@@ -66,13 +66,23 @@ pub fn scalar_type(name: &String) -> Option<ScalarType> {
     };
 }
 
+impl ScalarType {
+    /// Any scalar but a float or `bytes`, as protobuf's language guide allows.
+    pub fn is_map_key(&self) -> bool {
+        return match self {
+            Double | Float | Bytes => false,
+            Int32 | Int64 | UInt32 | UInt64 | SInt32 | SInt64 | Fixed32 | Fixed64 | SFixed32 | SFixed64 | Bool | Str => true,
+        };
+    }
+}
+
 /// What a field holds. A named type is a message or an enum, resolved only
 /// once every declaration in the file is known.
 pub variant FieldType {
     Scalar(ScalarType),
     Named(String),
-    /// `map<K, V>`: the key's type as written, and the value's type.
-    Map([String, FieldType]),
+    /// `map<K, V>`: the key's type, and the value's.
+    Map([ScalarType, FieldType]),
     /// A `group`, whose body is the nested message named here.
     Group(String),
 }

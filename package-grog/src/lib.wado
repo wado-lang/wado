@@ -77,7 +77,7 @@ pub trait Message with () {
     fn unknown_fields(&mut self) -> &mut ByteList;
 }
 
-/// An enum type Grog generated. Two values are equal when their numbers are.
+/// An enum type Grog generated. Two values compare as their numbers do.
 pub trait Enumeration: Eq with () {
     fn number(&self) -> i32;
 
@@ -229,7 +229,9 @@ fn packed_len<T: Scalar>(values: &List<T::Value>) -> i64 {
 /// The first pass of an encode: every length-prefixed message's length, in the
 /// order `Writer` meets them.
 pub struct Sizer {
-    sizes: List<i64>,
+    /// Each fits in `i32` whenever `write` reads it: none exceeds the total,
+    /// which `encode` checks first.
+    sizes: List<i32>,
 }
 
 impl Sizer {
@@ -270,7 +272,7 @@ impl Sizer {
     pub fn message<M: Message>(&mut self, number: i32, m: &M) -> i64 {
         let slot = self.reserve();
         let n = m.size(self);
-        self.sizes[slot] = n;
+        self.sizes[slot] = n as i32;
         return delimited_len(number, n);
     }
 
@@ -327,7 +329,7 @@ impl Sizer {
         for let [k, v] of map.entries() {
             let slot = self.reserve();
             let entry = self.scalar::<KS>(1, k) + self.message(2, v);
-            self.sizes[slot] = entry;
+            self.sizes[slot] = entry as i32;
             n += delimited_len(number, entry);
         }
         return n;
@@ -337,7 +339,7 @@ impl Sizer {
 /// The second pass of an encode, which writes what `Sizer` measured.
 pub struct Writer {
     buf: ByteList,
-    sizes: List<i64>,
+    sizes: List<i32>,
     next: i32,
 }
 
@@ -375,7 +377,7 @@ impl Writer {
     fn take_size(&mut self) -> i64 {
         let n = self.sizes[self.next];
         self.next += 1;
-        return n;
+        return n as i64;
     }
 
     pub fn scalar<T: Scalar>(&mut self, number: i32, v: &T::Value) {
@@ -760,59 +762,107 @@ impl Reader {
         &mut self,
         map: &mut TreeMap<K, V>,
     ) -> Result<bool, DecodeError> {
-        return self.entry::<KS, K, V>(map, VS::zero(), VS::wire_type(), |r, v| {
-            let Some(taken) = VS::take(r)? else {
-                return Result::Ok(false);
-            };
-            *v = taken;
-            return Result::Ok(true);
-        });
+        return self.entry::<KS, K, ScalarEntry<VS>>(map);
     }
 
     pub fn message_map<KS: Scalar<Value = K>, K: Ord, M: Message + Default>(
         &mut self,
         map: &mut TreeMap<K, M>,
     ) -> Result<bool, DecodeError> {
-        return self.entry::<KS, K, M>(map, M::default(), WireType::Len, |r, m| {
-            r.merge_nested(m)?;
-            return Result::Ok(true);
-        });
+        return self.entry::<KS, K, MessageEntry<M>>(map);
     }
 
-    /// A map entry into `map`: the key numbered 1, and the value numbered 2,
-    /// starting from `value` and read by `take_value` where it arrives as
-    /// `value_wire_type`. `take_value` answers whether the type holds it.
-    fn entry<KS: Scalar<Value = K>, K: Ord, V>(
+    /// A map entry into `map`: the key numbered 1 and the value numbered 2.
+    /// As in any message, the last of a repeated field is the one read.
+    fn entry<KS: Scalar<Value = K>, K: Ord, E: EntryValue>(
         &mut self,
-        map: &mut TreeMap<K, V>,
-        value: V,
-        value_wire_type: WireType,
-        take_value: fn(&mut Reader, &mut V) -> Result<bool, DecodeError>,
+        map: &mut TreeMap<K, E::Value>,
     ) -> Result<bool, DecodeError> {
         if self.wire_type != WireType::Len {
             return Result::Ok(false);
         }
         let outer = self.open()?;
         let mut key = KS::zero();
-        let mut value = value;
-        let mut held = true;
+        let mut value = E::fresh();
+        let mut key_held = true;
+        let mut value_held = true;
         while self.next_field(0)? {
             if self.number == 1 && self.wire_type == KS::wire_type() {
                 match KS::take(self)? {
-                    Some(k) => key = k,
-                    None => held = false,
+                    Some(k) => {
+                        key = k;
+                        key_held = true;
+                    },
+                    None => key_held = false,
                 }
-            } else if self.number == 2 && self.wire_type == value_wire_type {
-                held = take_value(self, &mut value)? && held;
+            } else if self.number == 2 && self.wire_type == E::wire_type() {
+                value_held = E::read(self, &mut value)?;
             } else {
                 self.skip_value()?;
             }
         }
         self.close(outer);
-        if !held {
+        if !key_held || !value_held {
             return Result::Ok(false);
         }
         map[key] = value;
+        return Result::Ok(true);
+    }
+}
+
+/// How a map entry's value is read: as a scalar, or as a message.
+trait EntryValue with () {
+    type Value;
+
+    fn wire_type() -> WireType;
+
+    /// The value an entry holds before its value field is read.
+    fn fresh() -> Self::Value;
+
+    /// Read the value field into `v`, answering whether the type holds what
+    /// was read.
+    fn read(r: &mut Reader, v: &mut Self::Value) -> Result<bool, DecodeError>;
+}
+
+struct ScalarEntry<T> {
+}
+
+impl<T: Scalar> EntryValue for ScalarEntry<T> {
+    type Value = T::Value;
+
+    fn wire_type() -> WireType {
+        return T::wire_type();
+    }
+
+    fn fresh() -> T::Value {
+        return T::zero();
+    }
+
+    fn read(r: &mut Reader, v: &mut T::Value) -> Result<bool, DecodeError> {
+        let Some(taken) = T::take(r)? else {
+            return Result::Ok(false);
+        };
+        *v = taken;
+        return Result::Ok(true);
+    }
+}
+
+struct MessageEntry<M> {
+}
+
+impl<M: Message + Default> EntryValue for MessageEntry<M> {
+    type Value = M;
+
+    fn wire_type() -> WireType {
+        return WireType::Len;
+    }
+
+    fn fresh() -> M {
+        return M::default();
+    }
+
+    fn read(r: &mut Reader, v: &mut M) -> Result<bool, DecodeError> {
+        r.merge_nested(v)?;
         return Result::Ok(true);
     }
 }

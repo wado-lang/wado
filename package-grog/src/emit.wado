@@ -5,18 +5,7 @@ use { TreeMap, TreeSet } from "core:collections";
 use { apply_case } from "core:serde";
 use { CodeWriter, EnumSpec, FieldSpec, StructSpec, VariantSpec, Vis, is_keyword, is_reserved } from "lib:wadopoet";
 use { FIELD_NUMBER_MAX } from "./lib.wado";
-use {
-    EnumDecl,
-    Features,
-    Field,
-    FieldType,
-    Label,
-    MessageDecl,
-    ProtoFile,
-    ScalarType,
-    Syntax,
-    scalar_type,
-} from "./schema.wado";
+use { EnumDecl, Features, Field, FieldType, Label, MessageDecl, ProtoFile, ScalarType, Syntax } from "./schema.wado";
 
 pub variant EmitError {
     /// The schema breaks a rule of its own, or names what the file does not declare.
@@ -84,8 +73,8 @@ pub fn emit(file: &ProtoFile, runtime: String) -> Result<String, EmitError> {
 
 variant Kind {
     Message,
-    /// An enum, and the case an unset field of it reads as.
-    Enum(String),
+    /// An enum: the case an unset field of it reads as, and whether it is closed.
+    Enum([String, bool]),
 }
 
 /// A declaration's Wado name.
@@ -162,13 +151,12 @@ impl EnumPlan {
         w.line(`return ${self.name}::${self.cases[0].name};`);
         w.end();
         w.end();
-        if self.unrecognized matches { Some(_) } {
-            self.write_order(w);
-        }
+        self.write_order(w);
     }
 
-    /// An open enum compares as its number, so the undeclared case holding a
-    /// declared number is that number's case, as it is on the wire.
+    /// An enum compares as its number, open or closed. So an open enum's
+    /// undeclared case holding a declared number is that number's case, as it
+    /// is on the wire.
     fn write_order(&self, w: &mut CodeWriter) {
         w.blank();
         w.begin(`impl Eq for ${self.name}`);
@@ -186,7 +174,7 @@ impl EnumPlan {
 }
 
 /// A method `Sizer`, `Writer` and `Reader` share the name of, which the
-/// generated code calls.
+/// generated code calls: each case is that name, PascalCased.
 enum Call {
     Scalar,
     Implicit,
@@ -203,24 +191,8 @@ enum Call {
     MessageMap,
 }
 
-impl Display for Call {
-    fn fmt(&self, f: &mut Formatter) {
-        f.write_str(match self {
-            Scalar => "scalar",
-            Implicit => "implicit",
-            Optional => "optional",
-            Repeated => "repeated",
-            Packed => "packed",
-            Message => "message",
-            OptionalMessage => "optional_message",
-            Messages => "messages",
-            Group => "group",
-            OptionalGroup => "optional_group",
-            Groups => "groups",
-            Map => "map",
-            MessageMap => "message_map",
-        });
-    }
+fn method(call: Call) -> String {
+    return apply_case(CaseStyle::Snake, &`${call}`);
 }
 
 /// How a field's value is written, and what the generated code reads it with.
@@ -280,10 +252,10 @@ impl MessagePlan {
     fn calls(&self, w: &mut CodeWriter, call: String) {
         for let slot of &self.slots {
             match slot {
-                Field([field, a]) => w.line(`${call}${a.put}${a.types}(${a.number}, &self.${field});`),
+                Field([field, a]) => w.line(`${call}${method(a.put)}${a.types}(${a.number}, &self.${field});`),
                 Member([field, sum, m]) => {
                     w.begin(`if let Some(${sum}::${m.case}(v)) = &self.${field}`);
-                    w.line(`${call}${m.put}${m.types}(${m.number}, v);`);
+                    w.line(`${call}${method(m.put)}${m.types}(${m.number}, v);`);
                     w.end();
                 },
             }
@@ -319,8 +291,8 @@ impl MessagePlan {
                 match slot {
                     Field([field, a]) => {
                         match &a.take {
-                            Into(method) => {
-                                w.line(`${a.number} => return r.${method}${a.types}(&mut self.${field}),`);
+                            Into(call) => {
+                                w.line(`${a.number} => return r.${method(*call)}${a.types}(&mut self.${field}),`);
                             },
                             Stored(value) => write_stored_merge(w, a.number, &a.types, field, value),
                         }
@@ -361,10 +333,10 @@ fn write_member_merge(w: &mut CodeWriter, field: &String, sum: &String, m: &Memb
     };
     w.begin(`${m.number} =>`);
     w.begin(`if let Some(${sum}::${m.case}(held)) = &mut self.${field}`);
-    w.line(`return r.${m.put}(held);`);
+    w.line(`return r.${method(m.put)}(held);`);
     w.end();
     w.line(`let mut v = ${fresh};`);
-    w.begin(`if !r.${m.put}(&mut v)?`);
+    w.begin(`if !r.${method(m.put)}(&mut v)?`);
     w.line("return Result::Ok(false);");
     w.end();
     w.line(`self.${field} = Option::Some(${sum}::${m.case}(v));`);
@@ -382,6 +354,8 @@ struct ScalarPlan {
     wado: String,
     runtime: String,
     zero: String,
+    /// A closed enum, which protobuf refuses as an implicit field.
+    closed_enum: bool = false,
 }
 
 /// A field type as Wado spells it and as the runtime reads it.
@@ -391,12 +365,12 @@ variant Resolved {
     Message([String, bool]),
 }
 
-/// A `oneof` being planned: its field, its variant, and its members so far.
+/// A `oneof` being planned: its field, its variant, and its members so far,
+/// keyed by case.
 struct OneofPlan {
     field: String,
     sum: String,
-    members: List<Member>,
-    cases: TreeSet<String>,
+    members: TreeMap<String, Member>,
 }
 
 struct Emitter {
@@ -467,16 +441,22 @@ impl Emitter {
                 },
             }
         }
+        let open = self.enum_is_open(decl);
         let mut unrecognized: Option<String> = null;
-        if self.enum_is_open(decl) {
+        if open {
+            if decl.values[0].number != 0 {
+                return Result::Err(EmitError::Invalid(
+                    `${decl.line}: ${decl.path.join(".")}: an open enum's first value must be 0`,
+                ));
+            }
             let mut other = "Unrecognized";
             while named_by.contains_key_str(&other) {
                 other.push_str("_");
             }
             unrecognized = Option::Some(other);
         }
-        // Protobuf defaults an enum to its first value, which proto3 and open enums require to be 0.
-        self.names[self.full_name(&decl.path)] = Named { name, kind: Kind::Enum(`${name}::${cases[0].name}`) };
+        // An unset field reads as the first value.
+        self.names[self.full_name(&decl.path)] = Named { name, kind: Kind::Enum([`${name}::${cases[0].name}`, !open]) };
         return Result::Ok(EnumPlan { name, cases, aliases, unrecognized });
     }
 
@@ -494,7 +474,7 @@ impl Emitter {
         let mut slots: List<Slot> = [];
         let mut field_names = TreeSet::<String>::new();
         field_names.insert(UNKNOWN_FIELDS);
-        // Each oneof in the order its first member appears, and where each sits by its Wado name.
+        // Each oneof in the order its first member appears, and where each sits by its protobuf name.
         let mut oneofs: List<OneofPlan> = [];
         let mut oneof_at = TreeMap::<String, i32>::new();
         let mut numbered = TreeMap::<i32, String>::new();
@@ -512,22 +492,25 @@ impl Emitter {
             }
             numbered[n] = field.name;
             if let Some(oneof) = &field.oneof {
-                let wado_name = field_name_of(oneof);
-                let at = match oneof_at.get_str(&wado_name) {
+                let at = match oneof_at.get_str(oneof) {
                     Some(at) => at,
                     None => {
-                        claim_field_name(oneof, &mut field_names, decl, field)?;
+                        let wado_name = claim_field_name(oneof, &mut field_names, decl, field)?;
                         let sum = self.take(`${name}${pascal(oneof)}`, `${decl.path.join(".")}.${oneof}`, field.line)?;
                         let mut out = FieldSpec::new_pub(&wado_name, &`Option<${sum}>`);
                         out.default = Option::Some("null");
                         spec.add_field_spec(out);
-                        oneof_at[wado_name] = oneofs.len();
-                        oneofs.push(OneofPlan { field: wado_name, sum, members: [], cases: TreeSet::new() });
+                        oneof_at[*oneof] = oneofs.len();
+                        oneofs.push(OneofPlan { field: wado_name, sum, members: TreeMap::new() });
                         oneofs.len() - 1;
                     },
                 };
-                let member = self.plan_member(decl, field, &mut oneofs[at].cases)?;
-                oneofs[at].members.push(member);
+                let member = self.plan_member(decl, field)?;
+                if !oneofs[at].members.try_insert(member.case, member) {
+                    return Result::Err(EmitError::Invalid(
+                        `${field.line}: ${decl.path.join(".")} has two oneof members named ${member.case} in Wado`,
+                    ));
+                }
                 continue;
             }
             let wado_name = claim_field_name(&field.name, &mut field_names, decl, field)?;
@@ -543,9 +526,9 @@ impl Emitter {
         let mut variants: List<VariantSpec> = [];
         for let oneof of oneofs {
             let mut v = VariantSpec::new(&oneof.sum, Vis::Pub);
-            for let m of oneof.members {
+            for let [_, m] of oneof.members.entries() {
                 v.add_case_with_payload(&m.case, &m.payload);
-                slots.push(Slot::Member([oneof.field, oneof.sum, m]));
+                slots.push(Slot::Member([oneof.field, oneof.sum, *m]));
             }
             variants.push(v);
         }
@@ -577,6 +560,9 @@ impl Emitter {
         return match resolved {
             Scalar(s) => {
                 match self.presence(decl, field) {
+                    Implicit && s.closed_enum => Result::Err(EmitError::Invalid(
+                        `${field.line}: ${field.name}: a closed enum field cannot have implicit presence`,
+                    )),
                     Implicit => Result::Ok([
                         s.wado,
                         s.zero,
@@ -589,6 +575,12 @@ impl Emitter {
                 }
             },
             Message([wado, group]) => {
+                // Only the field's own setting: one inherited from the file passes a message field by.
+                if field.features.field_presence matches { Some(p) && p == "IMPLICIT" } {
+                    return Result::Err(EmitError::Invalid(
+                        `${field.line}: ${field.name}: a message field cannot have implicit presence`,
+                    ));
+                }
                 let put = if group { Call::OptionalGroup } else { Call::OptionalMessage };
                 Result::Ok([`Option<${wado}>`, "null", access(n, put, Take::Into(put), "")]);
             },
@@ -600,15 +592,10 @@ impl Emitter {
         &mut self,
         decl: &MessageDecl,
         field: &Field,
-        key: &String,
+        key: &ScalarType,
         value: &FieldType,
     ) -> Result<[String, String, Access], EmitError> {
-        let k = match scalar_type(key) {
-            Some(t) && is_map_key(t) => scalar(t),
-            _ => {
-                return Result::Err(EmitError::Invalid(`${field.line}: ${field.name}: a map key cannot be ${key}`));
-            },
-        };
+        let k = scalar(*key);
         self.uses_map = true;
         let [wado, put, types] = match self.resolve_type(decl, field, value)? {
             Scalar(v) => [v.wado, Call::Map, `::<${k.runtime}, ${v.runtime}, ${k.wado}, ${v.wado}>`],
@@ -620,13 +607,8 @@ impl Emitter {
     }
 
     /// A `oneof` member: its case, and how its value sits on the wire.
-    fn plan_member(&self, decl: &MessageDecl, field: &Field, cases: &mut TreeSet<String>) -> Result<Member, EmitError> {
+    fn plan_member(&self, decl: &MessageDecl, field: &Field) -> Result<Member, EmitError> {
         let case = case_name(&field.name, &"");
-        if !cases.insert(case) {
-            return Result::Err(EmitError::Invalid(
-                `${field.line}: ${decl.path.join(".")} has two oneof members named ${case} in Wado`,
-            ));
-        }
         return match self.resolve_type(decl, field, &field.type_)? {
             Scalar(s) => Result::Ok(Member {
                 case,
@@ -665,10 +647,11 @@ impl Emitter {
                         named.name,
                         ty matches { Group(_) } || self.delimited(decl, field),
                     ])),
-                    Enum(first) => Result::Ok(Resolved::Scalar(ScalarPlan {
+                    Enum([first, closed]) => Result::Ok(Resolved::Scalar(ScalarPlan {
                         wado: named.name,
                         runtime: `${RUNTIME}::Enum<${named.name}>`,
                         zero: first,
+                        closed_enum: closed,
                     })),
                 };
             },
@@ -814,14 +797,6 @@ fn scalar(t: ScalarType) -> ScalarPlan {
         Bytes => ["ByteList", "b\"\""],
     };
     return ScalarPlan { wado, runtime: `${RUNTIME}::${t}`, zero };
-}
-
-/// Any scalar but a float or `bytes`, as protobuf's language guide allows.
-fn is_map_key(t: ScalarType) -> bool {
-    return match t {
-        Double | Float | Bytes => false,
-        Int32 | Int64 | UInt32 | UInt64 | SInt32 | SInt64 | Fixed32 | Fixed64 | SFixed32 | SFixed64 | Bool | Str => true,
-    };
 }
 
 /// An enum value's case name: its enum's prefix dropped, the rest PascalCased.

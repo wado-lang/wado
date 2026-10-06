@@ -44,9 +44,6 @@ Closed work belongs in commit history.
 
 ## Schemas `protoc` refuses and Grog accepts
 
-- [ ] **An open enum's first value need not be 0.** Where it is not, an unset
-  implicit field reads as that first value, and the field is left off the
-  wire while it holds it. Another implementation reads that absent field as 0.
 - [ ] **A label need not fit the syntax:** `required` in proto3, `optional` or
   `required` in an edition, and a proto2 field outside a `oneof` with no
   label are all accepted.
@@ -54,8 +51,6 @@ Closed work belongs in commit history.
   `option allow_alias = true`.**
 - [ ] **A field may take a number or name its message's `reserved` statements
   list.**
-- [ ] **An edition feature need not fit its field:** `IMPLICIT` presence on a
-  message field, and a closed enum in an implicit field, are accepted.
 - [ ] **A dotted relative name resolves past the scope `protoc` stops at.**
   `protoc` resolves `A.B` inside the scope where it finds `A`, and refuses
   it when `B` is missing there. Grog tries the next scope out, so it can

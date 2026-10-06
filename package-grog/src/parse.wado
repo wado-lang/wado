@@ -187,14 +187,19 @@ impl Reader {
 
     fn read_map_field(&self, node: i32) -> Result<Field, String> {
         let types = self.nodes_of(node, protobuf::RK_TYPE_REF);
+        let name = self.text(self.child(node, protobuf::RK_IDENT));
+        let key_text = self.text(types[0]);
+        let key = match scalar_type(&key_text) {
+            Some(t) && t.is_map_key() => t,
+            _ => {
+                return Result::Err(`${self.line(node)}: ${name}: a map key cannot be ${key_text}`);
+            },
+        };
         return Result::Ok(Field {
-            name: self.text(self.child(node, protobuf::RK_IDENT)),
+            name,
             number: self.field_number(node)?,
             label: Label::Repeated,
-            type_: FieldType::Map([
-                self.text(types[0]),
-                type_of(self.text(types[1])),
-            ]),
+            type_: FieldType::Map([key, type_of(self.text(types[1]))]),
             features: self.field_features(node),
             line: self.line(node),
         });
