@@ -164,6 +164,7 @@ pub(super) fn build_copy_bindings(engine: &Engine) -> Binds {
     });
     let mut walk = BindWalk {
         engine,
+        reassigned,
         tick: 0,
         last_write: hashmap::IndexMap::default(),
         last_aliased: 0,
@@ -174,7 +175,7 @@ pub(super) fn build_copy_bindings(engine: &Engine) -> Binds {
     walk.node(NodeRef::Block(body.root));
     walk.pending
         .into_iter()
-        .filter(|(t, _)| !walk.stale.contains(t) && !reassigned.contains(t))
+        .filter(|(t, _)| !walk.stale.contains(t))
         .map(|(t, p)| (t, p.value))
         .collect()
 }
@@ -193,6 +194,9 @@ struct PendingBind {
 /// a write to something it depends on.
 struct BindWalk<'e, 'a> {
     engine: &'e Engine<'a>,
+    /// Locals assigned after their `let`: never a bind, so a read of one stands
+    /// for the local alone and passes on no dependency of its initializer.
+    reassigned: hashmap::IndexSet<u32>,
     tick: u64,
     last_write: hashmap::IndexMap<u32, u64>,
     last_aliased: u64,
@@ -256,6 +260,9 @@ impl BindWalk<'_, '_> {
     }
 
     fn bind(&mut self, t: u32, value: Operand) {
+        if self.reassigned.contains(&t) {
+            return;
+        }
         let body = &*self.engine.body;
         if self.pending.contains_key(&t) || operand_reads_global(body, value) {
             self.stale.insert(t);
@@ -1114,19 +1121,35 @@ fn is_reference(engine: &Engine, local: u32) -> bool {
     })
 }
 
-/// Whether anything under `node` may change what one of `roots` holds.
+/// Whether anything under `node` may change what one of `roots` holds for the
+/// code after it. A block that panics never hands control on, so its writes
+/// do not count.
 fn modifies_any_root(engine: &Engine, node: NodeRef, roots: &[u32]) -> bool {
-    engine
-        .body
-        .find_in_live_node_under(node, |n| {
-            let NodeRef::Expr(e) = n else { return None };
-            let mut hit = false;
-            for_each_write(engine, e, &mut |w| {
-                hit |= roots.iter().any(|&r| write_hits(engine, w, r));
+    let body = &*engine.body;
+    let mut diverging: hashmap::IndexSet<ExprId> = hashmap::IndexSet::default();
+    body.for_each_live_node_under(node, |n| {
+        if let NodeRef::Block(b) = n
+            && is_panic_block(engine, b)
+        {
+            body.for_each_live_node_under(n, |m| {
+                if let NodeRef::Expr(e) = m {
+                    diverging.insert(e);
+                }
             });
-            hit.then_some(())
-        })
-        .is_some()
+        }
+    });
+    body.find_in_live_node_under(node, |n| {
+        let NodeRef::Expr(e) = n else { return None };
+        if diverging.contains(&e) {
+            return None;
+        }
+        let mut hit = false;
+        for_each_write(engine, e, &mut |w| {
+            hit |= roots.iter().any(|&r| write_hits(engine, w, r));
+        });
+        hit.then_some(())
+    })
+    .is_some()
 }
 
 /// Structural loop-guard BCE (value_of-free, mirrors the `licm` migration off
