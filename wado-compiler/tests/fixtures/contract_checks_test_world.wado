@@ -95,6 +95,19 @@ test "List::get_unchecked past the length" {
 }
 
 #[expect_trap]
+test "AsStrSlice::get_byte_unchecked on a String past the length" {
+    let mut s = String::with_capacity(16);
+    s.push_str("abc");
+    let _ = AsStrSlice::get_byte_unchecked(&s, builtin::black_box(3));
+}
+
+#[expect_trap]
+test "Sequence::get_unchecked on a Slice past the view" {
+    let list: List<i32> = [1, 2, 3, 4];
+    let _ = Sequence::get_unchecked(&list.as_slice().slice(0, 2), builtin::black_box(2));
+}
+
+#[expect_trap]
 test "Slice::get_unchecked past the view" {
     let list: List<i32> = [1, 2, 3, 4];
     let _ = list.as_slice().slice(0, 2).get_unchecked(builtin::black_box(2));

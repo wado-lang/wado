@@ -1258,7 +1258,11 @@ mod tests {
         );
         assert_eq!(plan.regions.len(), 1);
         assert_eq!(plan.lines, vec![(2, 0), (3, 0)]);
-        assert!(sites.iter().all(|&(site, _, _)| site == ProbeSite::BlockStart));
+        assert!(
+            sites
+                .iter()
+                .all(|&(site, _, _)| site == ProbeSite::BlockStart)
+        );
     }
 
     #[test]

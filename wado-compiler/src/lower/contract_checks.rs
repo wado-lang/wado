@@ -5,7 +5,6 @@
 //! it, and a disabled check must cost nothing.
 
 use crate::flat_package::FlatPackage;
-use crate::module_source::ModuleSource;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind};
 use crate::tir_visitor::TirMutVisitor;
 
@@ -20,8 +19,7 @@ struct ContractChecksLowering {
 }
 
 fn is_contract_checks_call(expr: &TirExpr) -> bool {
-    matches!(&expr.kind, TirExprKind::Call { func, .. }
-        if func.module_source == ModuleSource::builtin() && func.name == "contract_checks")
+    matches!(&expr.kind, TirExprKind::Call { func, .. } if func.is_builtin_named("contract_checks"))
 }
 
 /// The condition of `stmt` when it is `if builtin::contract_checks() { … }`

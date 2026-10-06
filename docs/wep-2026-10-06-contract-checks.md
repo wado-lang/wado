@@ -29,11 +29,11 @@ ignore semantic does not apply.
 `-f contract-checks` turns the checks on, and `-f no-contract-checks` turns
 them off. The default depends on the world and the optimization level:
 
-| Build                                | Default |
-| ------------------------------------ | ------- |
-| the test world (`wado test`)         | on      |
-| any other world at `-O0`             | on      |
-| any other world at `-O1` and above   | off     |
+| Build                              | Default |
+| ---------------------------------- | ------- |
+| the test world (`wado test`)       | on      |
+| any other world at `-O0`           | on      |
+| any other world at `-O1` and above | off     |
 
 The test world defaults on whatever the level, because finding bugs is what it
 is for. It already pays for that with the `debug` allocator.
@@ -50,6 +50,9 @@ if builtin::contract_checks() {
 }
 ```
 
+It is the mechanism, not a stopgap. A contract syntax, once one is designed,
+lowers to it.
+
 Before NIR, the compiler keeps such an `if` where checks are on and deletes it
 outright where they are off, so a disabled check costs nothing at any
 optimization level. Folding the condition to `false` was not enough: the
@@ -61,9 +64,6 @@ call to a helper a disabled check left empty would remain.
 Coverage counts the body as part of the enclosing region, not as a branch: the
 condition is a build constant, so the path that skips the body never runs in a
 test-world build.
-
-It is the mechanism, not a stopgap. A contract syntax, once one is designed,
-lowers to it.
 
 It is `internal` to `core:builtin`, so only the standard library calls it.
 Open to every program, it would be a removable `assert`. Every language that
