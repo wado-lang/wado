@@ -1845,7 +1845,7 @@ use { to_string, to_bytes, from_string, from_bytes, to_bytes_pretty, to_bytes_ca
 
 let bytes = to_bytes(&p);                          // UTF-8 bytes
 let pretty = to_bytes_pretty(&p);                  // indented
-let canon = to_bytes_canonical(&p);                // sorted keys, deterministic
+let canon = to_bytes_canonical(&p);                // RFC 8785 (JCS), for signing
 
 let json = to_string(&Point { x: 1, y: 2 });       // Ok("{\"x\":1,\"y\":2}")
 let p = from_string::<Point>("{\"x\":1,\"y\":2}"); // Ok(Point { x: 1, y: 2 })
