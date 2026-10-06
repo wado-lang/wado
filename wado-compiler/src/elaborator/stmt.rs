@@ -144,8 +144,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Bring a block's local items into scope ahead of its statements: structs, then
-    /// newtypes to a fixpoint (a base may name a later one), then struct fields.
+    /// Bring a block's local items into scope ahead of its statements.
     fn hoist_local_items(&mut self, block: &Block) {
         let items: Vec<&ast::Item> = block
             .stmts
@@ -155,7 +154,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 _ => None,
             })
             .collect();
-        for item in &items {
+        // A local may name one declared after it, or itself, so what the
+        // types owe is asked once every local is stated to the solver.
+        let ((), held) = self.holding_bounds(|this| this.resolve_local_items(&items));
+        if let Some(solver) = &self.tysys.solver {
+            let defs: Vec<DefId> = items
+                .iter()
+                .filter(|item| matches!(item, ast::Item::Struct(_) | ast::Item::Newtype(_)))
+                .map(|item| self.tysys.def_at(item.id()))
+                .collect();
+            solver
+                .borrow_mut()
+                .state_local(&self.tysys, &self.sem.decls.local, &defs);
+        }
+        self.release_bounds(held);
+    }
+
+    /// Structs, then newtypes to a fixpoint (a base may name a later one),
+    /// then struct fields.
+    fn resolve_local_items(&mut self, items: &[&ast::Item]) {
+        for item in items {
             if let ast::Item::Struct(struct_decl) = item {
                 self.declare_local_struct(struct_decl);
             }
@@ -174,18 +192,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 break;
             }
         }
-        for item in &items {
+        for item in items {
             self.resolve_local_item(item);
-        }
-        if let Some(solver) = &self.tysys.solver {
-            let defs: Vec<DefId> = items
-                .iter()
-                .filter(|item| matches!(item, ast::Item::Struct(_) | ast::Item::Newtype(_)))
-                .map(|item| self.tysys.def_at(item.id()))
-                .collect();
-            solver
-                .borrow_mut()
-                .state_local(&self.tysys, &self.sem.decls.local, &defs);
         }
     }
 

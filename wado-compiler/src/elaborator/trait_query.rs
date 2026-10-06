@@ -2167,14 +2167,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.tysys.solver.is_some(),
             "deferred bounds wait for the solver"
         );
-        for pending in std::mem::take(&mut self.sem.decls.pending_bounds) {
-            util::replaced(
-                self,
-                |e| &mut e.annotate_ctx.trait_ctx,
-                pending.frame,
-                |this| this.owe_bounds(pending.bounds),
-            );
-        }
+        let pending = std::mem::take(&mut self.sem.decls.pending_bounds);
+        self.release_bounds(pending);
     }
 
     /// The single enforcement of trait bounds on a generic decl's type args,
@@ -2332,19 +2326,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Ask `bounds` where the frame can answer them: now, once the frame
     /// holding them is complete, or once the solver is built.
     fn owe_bounds(&mut self, bounds: OwedBounds) {
-        if let Some(held) = &mut self.annotate_ctx.held_bounds {
-            held.push(bounds);
-            return;
-        }
         // Any module's impl may answer a bound, so a decl pass leaves its
         // checks to `check_deferred_decl_arg_bounds`, with the frame placing
         // the parameters they name.
-        if self.tysys.solver.is_none() {
-            let frame = self.annotate_ctx.trait_ctx.clone();
-            self.sem
-                .decls
-                .pending_bounds
-                .push(PendingBounds { bounds, frame });
+        let deferred = match &mut self.annotate_ctx.held_bounds {
+            Some(held) => Some(held),
+            None if self.tysys.solver.is_none() => Some(&mut self.sem.decls.pending_bounds),
+            None => None,
+        };
+        if let Some(deferred) = deferred {
+            deferred.push(PendingBounds {
+                bounds,
+                frame: self.annotate_ctx.trait_ctx.clone(),
+            });
             return;
         }
         let OwedBounds { span, owed } = bounds;
@@ -2367,13 +2361,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Run `body` holding the bounds it owes, for a frame whose parameters'
-    /// bounds are added after the types naming them are resolved. Hand them
-    /// to [`Self::release_bounds`] once the frame is complete.
+    /// Run `body` holding the bounds it owes, each with the frame it was owed
+    /// in, until what answers them is in place.
     pub(super) fn holding_bounds<R>(
         &mut self,
         body: impl FnOnce(&mut Self) -> R,
-    ) -> (R, Vec<OwedBounds>) {
+    ) -> (R, Vec<PendingBounds>) {
         let (result, held) = util::replaced(
             self,
             |e| &mut e.annotate_ctx.held_bounds,
@@ -2383,10 +2376,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (result, held.expect("the hold is the one `body` ran under"))
     }
 
-    /// Ask what [`Self::holding_bounds`] held, in the frame now in force.
-    pub(super) fn release_bounds(&mut self, held: Vec<OwedBounds>) {
-        for bounds in held {
-            self.owe_bounds(bounds);
+    /// Ask each of `held` in the frame it was owed in.
+    pub(super) fn release_bounds(&mut self, held: Vec<PendingBounds>) {
+        for pending in held {
+            util::replaced(
+                self,
+                |e| &mut e.annotate_ctx.trait_ctx,
+                pending.frame,
+                |this| this.owe_bounds(pending.bounds),
+            );
+        }
+    }
+
+    /// Ask each of `held` in the frame now in force: one whose parameters'
+    /// bounds were added after the types naming them were resolved.
+    pub(super) fn release_bounds_here(&mut self, held: Vec<PendingBounds>) {
+        for pending in held {
+            self.owe_bounds(pending.bounds);
         }
     }
 

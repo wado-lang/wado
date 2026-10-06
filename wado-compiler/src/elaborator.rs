@@ -252,7 +252,7 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
             let bounds = self.scoped_bounds(param);
             self.add_param_bounds(&param.name, bounds);
         }
-        self.release_bounds(held);
+        self.release_bounds_here(held);
     }
 }
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
