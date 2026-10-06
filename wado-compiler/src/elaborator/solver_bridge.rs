@@ -1650,15 +1650,7 @@ impl SolverBridge {
         data: &DataDecls,
         table: &TypeTable,
         lowering: &Lowering,
-<<<<<<< HEAD
-    ) -> (Vec<Declaration>, Vec<Declaration>, Vec<Declaration>) {
-||||||| 64ee6131f
-    ) -> (Vec<Declaration>, Vec<Declaration>, Vec<Declaration>) {
-        let by_index = |_: &str, index: u32| Some(index);
-=======
     ) -> (Vec<Declaration>, Vec<Declaration>) {
-        let by_index = |_: &str, index: u32| Some(index);
->>>>>>> origin/main
         let lowered = |def: DefId,
                        params: usize,
                        members: &mut dyn Iterator<Item = TypeId>,
