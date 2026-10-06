@@ -1,0 +1,59 @@
+// A variant derives `Ord`: an earlier case is less than a later one, and two
+// values of one case compare by their payloads.
+
+variant Shape {
+    Dot,
+    Line(i32),
+    Label(String),
+    Box([i32, i32]),
+}
+
+variant Tree<T> {
+    Leaf(T),
+    Empty,
+}
+
+impl Ord for Shape;
+
+fn least<T: Ord>(a: T, b: T) -> T {
+    return if a < b { a } else { b };
+}
+
+test "case order decides across cases" {
+    assert Shape::Dot < Shape::Line(0);
+    assert Shape::Line(100) < Shape::Label("");
+    assert Shape::Label("z") < Shape::Box([0, 0]);
+    assert Shape::Box([0, 0]) > Shape::Dot;
+}
+
+test "payloads decide within a case" {
+    assert Shape::Line(1) < Shape::Line(2);
+    assert Shape::Label("b") > Shape::Label("a");
+    assert Shape::Box([1, 9]) < Shape::Box([2, 0]);
+    assert Shape::Dot.cmp(&Shape::Dot) matches { Equal };
+    assert Shape::Line(3).cmp(&Shape::Line(3)) matches { Equal };
+}
+
+test "a bound and sort reach it" {
+    assert least(Shape::Line(5), Shape::Dot) matches { Dot };
+    let mut shapes: List<Shape> = [Shape::Label("a"), Shape::Line(2), Shape::Dot, Shape::Line(1)];
+    shapes.sort();
+    assert shapes == [Shape::Dot, Shape::Line(1), Shape::Line(2), Shape::Label("a")];
+}
+
+test "a generic variant derives where its argument is Ord" {
+    assert Tree::Leaf(1) < Tree::Leaf(2);
+    assert Tree::Leaf(9) < Tree::<i32>::Empty;
+}
+
+test "Option and Result order as Rust's do" {
+    let none: Option<i32> = null;
+    assert none < Some(0);
+    assert Option::Some(1) < Option::Some(2);
+    let ok: Result<i32, i32> = Ok(5);
+    assert ok < Err(0);
+    assert ok < Ok(6);
+    let mut opts: List<Option<i32>> = [Some(2), null, Some(1)];
+    opts.sort();
+    assert opts == [null, Some(1), Some(2)];
+}

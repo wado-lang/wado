@@ -77,9 +77,9 @@ fn "wir_optimize_value_copy_str_bytes_loop.wado/run"() with Stdout {
     let tens: i32;
     let byte_51: u8;
     let $tmpl_buf_88: ref "core:prelude/string.wado//String";
-    let new_used_134: i32;
-    let start_135: i32;
-    let start_176: i32;
+    let new_used_137: i32;
+    let start_138: i32;
+    let start_194: i32;
     byte_sum = 0_i64;
     i_1 = 0;
     $tmpl_buf_88 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
@@ -158,26 +158,26 @@ fn "wir_optimize_value_copy_str_bytes_loop.wado/run"() with Stdout {
                 break $inline_count_digits_u64_12: 20;
             };
             if start_22 {
-                if @unlikely(local.tee new_used_134($tmpl_buf_88.used + 1) > builtin::array_len($load_3)) {
+                if @unlikely(local.tee new_used_137($tmpl_buf_88.used + 1) > builtin::array_len($load_3)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_88, new_used_134);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_88, new_used_137);
                 }
-                start_135 = $tmpl_buf_88.used;
-                $tmpl_buf_88.used = new_used_134;
-                builtin::array_set_u8($tmpl_buf_88.repr, start_135, 45);
+                start_138 = $tmpl_buf_88.used;
+                $tmpl_buf_88.used = new_used_137;
+                builtin::array_set_u8($tmpl_buf_88.repr, start_138, 45);
             } else {
             }
             if @unlikely(local.tee start_22($tmpl_buf_88.used + new_used_21) > builtin::array_len($tmpl_buf_88.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_88, start_22);
             }
-            start_176 = $tmpl_buf_88.used;
+            start_194 = $tmpl_buf_88.used;
             $tmpl_buf_88.used = start_22;
             arr = $tmpl_buf_88.repr;
-            new_used_21 = start_176 + new_used_21;
+            new_used_21 = start_194 + new_used_21;
             b25: block {
                 l26: loop {
-                    break_if b25 (new_used_21 - start_176) < 2;
+                    break_if b25 (new_used_21 - start_194) < 2;
                     q = x /u 100_i64;
                     tens = local.tee pair(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
                     builtin::array_set_u8(arr, new_used_21 - 1, ((48 + pair) - (tens * 10)) & 255);
@@ -187,15 +187,15 @@ fn "wir_optimize_value_copy_str_bytes_loop.wado/run"() with Stdout {
                     continue l26;
                 };
             };
-            if new_used_21 > start_176 {
-                builtin::array_set_u8(arr, start_176, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
+            if new_used_21 > start_194 {
+                builtin::array_set_u8(arr, start_194, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
             }
             arr = $tmpl_buf_88.repr;
-            start_176 = $tmpl_buf_88.used;
+            start_194 = $tmpl_buf_88.used;
             new_used_21 = 0;
             b28: block {
                 l29: loop {
-                    break_if b28 new_used_21 >= start_176;
+                    break_if b28 new_used_21 >= start_194;
                     byte_51 = builtin::array_get_value<u8>(arr, new_used_21);
                     new_used_21 = new_used_21 + 1;
                     byte_sum = byte_sum + builtin::i64_extend_i32_u(byte_51);

@@ -1,0 +1,49 @@
+// An impl's bound naming a family's member reads it at the receiver's
+// binding: under `S = Weigher`, `S::Buf<i32>` is `Weighed<i32>`.
+
+trait Elem with () {}
+
+impl Elem for i32 {}
+
+struct Weighed<E: Elem> {
+    items: List<E>,
+}
+
+trait Store with () {
+    type Buf<E: Elem>;
+}
+
+struct Weigher {}
+
+impl Store for Weigher {
+    type Buf<E: Elem> = Weighed<E>;
+}
+
+trait Has<T> with () {}
+
+struct Probe {}
+
+impl Has<Weighed<i32>> for Probe {}
+
+trait Marker with () {
+    fn mark() -> i32;
+}
+
+struct Pair<S, Q> {
+    s: S,
+    q: Q,
+}
+
+impl<S: Store, Q: Has<S::Buf<i32>>> Marker for Pair<S, Q> {
+    fn mark() -> i32 {
+        return 1;
+    }
+}
+
+fn need<M: Marker>() -> i32 {
+    return M::mark();
+}
+
+test "the family's member is its binding at the arguments" {
+    assert need::<Pair<Weigher, Probe>>() == 1;
+}

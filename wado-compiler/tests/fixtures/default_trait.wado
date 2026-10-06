@@ -27,6 +27,14 @@ test "the marker validates and derives the same impl" {
     assert !c.verbose;
 }
 
+// A newtype has no derivation of its own: the marker asks its representation.
+type Profile = Config;
+impl Default for Profile;
+
+test "a marker on a newtype follows its representation" {
+    assert (Profile::default() as Config).retries == 3;
+}
+
 struct Manual {
     id: i32,
 }

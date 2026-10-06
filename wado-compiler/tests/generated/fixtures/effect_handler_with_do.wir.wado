@@ -131,7 +131,7 @@ fn "effect_handler_with_do.wado/run"() with Stdout {
     let $local_2_9: u64;
     let new_used_26: i32;
     let start_27: i32;
-    let start_126: i32;
+    let start_144: i32;
     clock = struct.new "effect_handler_with_do.wado//FixedClock" { mark: 12345_i64 };
     global:effect_handler_with_do.wado::$effect_MonotonicClock = local.tee $d_MonotonicClock(struct.new "effect_handler_with_do.wado//$Dispatch_MonotonicClock" { outer: local.tee $save_MonotonicClock(global:effect_handler_with_do.wado::$effect_MonotonicClock), op_now: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_with_do.wado//$Closure_0" { $capture_0: clock }, func: ref.func "closure/effect_handler_with_do.wado/$closure_wrapper_0" }, op_get_resolution: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_with_do.wado//$Closure_1" {  }, func: ref.func "closure/effect_handler_with_do.wado/$closure_wrapper_1" }, op_wait_until: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_with_do.wado//$Closure_2" {  }, func: ref.func "closure/effect_handler_with_do.wado/$closure_wrapper_2" }, op_wait_for: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_with_do.wado//$Closure_3" {  }, func: ref.func "closure/effect_handler_with_do.wado/$closure_wrapper_3" } });
     $local_2_9 = $inline__effect_dispatch__MonotonicClock__now_1: block -> u64 {
@@ -161,13 +161,13 @@ fn "effect_handler_with_do.wado/run"() with Stdout {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2_2, new_used_26);
     }
-    start_126 = $local_2_2.used;
+    start_144 = $local_2_2.used;
     $local_2_2.used = new_used_26;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2_2.repr, start_126, $local_2_9, start_27);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_2_2.repr, start_144, $local_2_9, start_27);
     start_27 = builtin::i32_wrap_i64(local.tee $local_2_9("wasi/stream-new"()));
-    start_126 = builtin::i32_wrap_i64($local_2_9 >> 32_i64);
+    start_144 = builtin::i32_wrap_i64($local_2_9 >> 32_i64);
     start_27 = "effect_handler_with_do.wado/$cm_binding__Stdout_write_via_stream"(start_27);
-    "core:rt/write_string_to_stream"(start_126, $local_2_2.repr, $local_2_2.used);
+    "core:rt/write_string_to_stream"(start_144, $local_2_2.repr, $local_2_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_27);
     global:effect_handler_with_do.wado::$effect_MonotonicClock = $save_MonotonicClock;
 }

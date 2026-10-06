@@ -1,0 +1,12 @@
+// A marker asks for the derived impl, so its method is called by name like a
+// written one's.
+
+struct Point { x: i32 }
+
+impl Eq for Point;
+impl Ord for Point;
+
+test {
+    assert Point { x: 1 }.eq(&Point { x: 1 });
+    assert Point { x: 1 }.cmp(&Point { x: 2 }) matches { Less };
+}

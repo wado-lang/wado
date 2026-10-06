@@ -68,3 +68,24 @@ wado compile -Os app.wado                     # a failed assert traps silently
 wado compile -Os -f no-bare-asserts app.wado  # the message is kept
 wado compile -O2 -f bare-asserts app.wado     # silent at -O2 too
 ```
+
+## Contract Checks
+
+A build may check the contracts of the standard library's `_unchecked`
+functions (see [Behavior Classes](./spec-overview.md#behavior-classes)). A
+checking build traps on a call outside the contract, as a failed assertion
+does, message included. A build that does not check evaluates nothing, and the
+compiler does not assume the contract holds: the violation keeps the class the
+function's documentation gives it.
+
+`-f contract-checks` and `-f no-contract-checks` choose. Without either, the
+test world checks at every optimization level, and any other world checks at
+`-O0` only:
+
+```sh
+wado test app.wado                              # checks
+wado test -f no-contract-checks app.wado        # does not
+wado run -O0 app.wado                           # checks
+wado run app.wado                               # does not (-O2)
+wado compile -O2 -f contract-checks app.wado    # checks
+```

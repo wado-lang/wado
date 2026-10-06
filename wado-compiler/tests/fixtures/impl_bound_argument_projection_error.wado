@@ -1,0 +1,54 @@
+// An impl's bound whose argument is a projection is checked as written.
+//
+// `Q: Has<P::Item>` asks `Has<i32>` of `Q` for `Ints`. `Wrong` has only
+// `Has<bool>`, so the pair is not `Shown`. The lowering could not spell
+// `P::Item` and lowered the bound at the trait's defaults, which any `Has`
+// answers, so the pair passed.
+
+trait Src with () {
+    type Item;
+}
+
+trait Has<A> with () {
+    fn h(&self) -> i32;
+}
+
+trait Shown with () {
+    fn shown(&self) -> i32;
+}
+
+struct Ints {}
+
+impl Src for Ints {
+    type Item = i32;
+}
+
+struct Wrong {}
+
+impl Has<bool> for Wrong {
+    fn h(&self) -> i32 {
+        return 0;
+    }
+}
+
+struct Pair<P, Q> {
+    q: Q,
+    p: P,
+}
+
+impl<P: Src, Q: Has<P::Item>> Shown for Pair<P, Q> {
+    fn shown(&self) -> i32 {
+        return self.q.h();
+    }
+}
+
+fn show<T: Shown>(t: &T) -> i32 {
+    return t.shown();
+}
+
+test {
+    assert show(&Pair { q: Wrong {}, p: Ints {} }) == 0;
+}
+
+__DATA__
+{"compile_error": "does not implement trait 'Shown'"}

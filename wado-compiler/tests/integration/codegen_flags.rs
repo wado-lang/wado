@@ -1,7 +1,8 @@
 //! Tests for the `-f <flag>` codegen feature flags plumbed through
 //! [`CompilerOptions::codegen_flags`].
 //!
-//! Covers `branch-hinting`, `bare-asserts`, and `wide-arithmetic`. Each test
+//! Covers `branch-hinting`, `bare-asserts`, `wide-arithmetic`, and
+//! `contract-checks` outside the test world. Each test
 //! asserts on the disassembled WAT (or the run output) so it pins the actual
 //! codegen difference rather than an internal detail.
 
@@ -290,6 +291,62 @@ export fn run() with Stdout {
     let body = &wat[start..];
     let body = &body[..body[1..].find("(func ").map_or(body.len(), |end| end + 1)];
     assert!(!body.contains("struct.new"), "add_sub allocates:\n{body}");
+}
+
+/// A view's `get_byte_unchecked` past its end reads the backing array without
+/// trapping unless the build checks contracts.
+const CONTRACT_SOURCE: &str = r#"
+export fn run() {
+    let view = "abcdef".as_str_slice().slice(0, 3);
+    let _ = view.get_byte_unchecked(builtin::black_box(4));
+}
+"#;
+
+fn run_contract_source(opt_level: OptLevel, codegen_flags: Vec<String>) -> bool {
+    let options = CompilerOptions {
+        opt_level,
+        codegen_flags,
+        ..Default::default()
+    };
+    let wasm = compile_source_with_compiler_options(
+        Path::new("codegen_flags_contract_test.wado"),
+        CONTRACT_SOURCE,
+        options,
+    )
+    .expect("compilation should succeed")
+    .wasm;
+    run_wasm(wasm).expect("run").trapped
+}
+
+#[test]
+fn o0_checks_contracts_by_default() {
+    assert!(run_contract_source(OptLevel::O0, Vec::new()));
+}
+
+#[test]
+fn o1_and_above_skip_contract_checks_by_default() {
+    for opt_level in [OptLevel::O1, OptLevel::O2, OptLevel::O3, OptLevel::Os] {
+        assert!(
+            !run_contract_source(opt_level, Vec::new()),
+            "{opt_level:?} must not check contracts by default"
+        );
+    }
+}
+
+#[test]
+fn contract_checks_flag_enables_them_at_o2() {
+    assert!(run_contract_source(
+        OptLevel::O2,
+        vec!["contract-checks".to_string()]
+    ));
+}
+
+#[test]
+fn no_contract_checks_flag_disables_them_at_o0() {
+    assert!(!run_contract_source(
+        OptLevel::O0,
+        vec!["no-contract-checks".to_string()]
+    ));
 }
 
 #[test]

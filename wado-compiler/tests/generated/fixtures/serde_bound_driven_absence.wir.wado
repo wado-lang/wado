@@ -21,8 +21,8 @@ struct core:json//JsonSerializer {  // TypeId(4)
 }
 
 variant core:prelude/types.wado//Option<char> {  // TypeId(5)
-    Some(char),
     None,
+    Some(char),
 }
 
 struct core:prelude/types.wado//Option<char>::Some {  // TypeId(6)
@@ -71,14 +71,14 @@ import fn mem/realloc from "mem/realloc";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
-global global:core:serde::$const_obj_20: ref Array<u8> = array.new_fixed<u8>(125);
-global global:core:serde::$const_obj_21: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
-global global:core:serde::$const_obj_22: ref Array<u8> = array.new_fixed<u8>(123);
+global global:core:serde::$const_obj_21: ref Array<u8> = array.new_fixed<u8>(125);
+global global:core:serde::$const_obj_22: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
+global global:core:serde::$const_obj_23: ref Array<u8> = array.new_fixed<u8>(123);
 global global:core:json::$const_obj_26: ref Array<u8> = array.new_fixed<u8>(34, 58);
 global global:core:json::$const_obj_28: ref Array<u8> = array.new_fixed<u8>(44, 34);
 
 fn "serde_bound_driven_absence.wado/$cm_export__run"() {
-    drop("core:json/core/json/to_string<serde_bound_driven_absence.wado/UsedForSerialize>$scalar"(1, struct.new "core:prelude/types.wado//Option<char>" { 1 }));
+    drop("core:json/core/json/to_string<serde_bound_driven_absence.wado/UsedForSerialize>$scalar"(1, struct.new "core:prelude/types.wado//Option<char>" { 0 }));
     "wasi/task-return"(0);
 }
 
@@ -240,7 +240,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     let byte: u8;
     let new_used: i32;
-    let start_9: i32;
+    let start_12: i32;
     let repr: ref Array<u8>;
     if c <u 128 {
         byte = c & 255;
@@ -248,9 +248,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used);
         }
-        start_9 = self.used;
+        start_12 = self.used;
         self.used = new_used;
-        builtin::array_set_u8(self.repr, start_9, byte);
+        builtin::array_set_u8(self.repr, start_12, byte);
         return;
     }
     if @unlikely((local.tee byte(self.used) + 4) > builtin::array_len(self.repr)) {
@@ -293,8 +293,8 @@ fn "core:serde/serde_bound_driven_absence.wado/UsedForSerialize^core:serde/Seria
     }
     start_29 = self_18.used;
     self_18.used = new_used_28;
-    builtin::array_copy<u8>(self_18.repr, start_29, global:core:serde::$const_obj_22, 0, 1);
-    "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"(local.tee self_18(s.buf), global:core:serde::$const_obj_21, 0);
+    builtin::array_copy<u8>(self_18.repr, start_29, global:core:serde::$const_obj_23, 0, 1);
+    "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"(local.tee self_18(s.buf), global:core:serde::$const_obj_22, 0);
     start_29 = self < 0;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
     start_29 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar"(self_18, start_29, self);
@@ -305,29 +305,29 @@ fn "core:serde/serde_bound_driven_absence.wado/UsedForSerialize^core:serde/Seria
     }
     start_29 = self_18.used;
     self_18.used = self;
-    builtin::array_copy<u8>(self_18.repr, start_29, global:core:serde::$const_obj_20, 0, 1);
+    builtin::array_copy<u8>(self_18.repr, start_29, global:core:serde::$const_obj_21, 0, 1);
     return ref.null none;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar"(self, is_negative, digit_count) {
-    let start_26: i32;
+    let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
         }
-        start_26 = self.used;
+        start_29 = self.used;
         self.used = is_negative;
-        builtin::array_set_u8(self.repr, start_26, 45);
+        builtin::array_set_u8(self.repr, start_29, 45);
     } else {
     }
     if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
     }
-    start_26 = self.used;
+    start_29 = self.used;
     self.used = digit_count;
-    return start_26;
+    return start_29;
 }
 
 export fn "serde_bound_driven_absence.wado/$cm_export__run" as "run"

@@ -1,0 +1,28 @@
+// A type declaration's bound argument naming no type is reported where it
+// is written; a literal reaching the bound once crashed the compiler asking it.
+trait Conv<X> with () {
+    fn conv(&self) -> i32;
+}
+
+struct A {
+    v: i32,
+}
+
+
+impl Conv<i32> for A {
+    fn conv(&self) -> i32 {
+        return self.v;
+    }
+}
+
+struct Holder<T: Conv<Nope>> {
+    t: T,
+}
+
+test {
+    let h = Holder { t: A { v: 1 } };
+    assert h.t.conv() == 1;
+}
+
+__DATA__
+{"compile_error": ":18:23: analysis error: unknown type 'Nope'"}

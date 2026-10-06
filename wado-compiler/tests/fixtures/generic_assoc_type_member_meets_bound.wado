@@ -1,0 +1,49 @@
+// A member of a family off a rigid base meets the bound its declaration
+// gives the family, so it passes where that bound is asked for.
+
+trait Elem with () {}
+
+impl Elem for i32 {}
+
+trait Len with () {
+    fn len(&self) -> i32;
+}
+
+struct Weighed<E: Elem> {
+    items: List<E>,
+}
+
+impl<E: Elem> Len for Weighed<E> {
+    fn len(&self) -> i32 {
+        return self.items.len();
+    }
+}
+
+trait Store with () {
+    type Buf<E: Elem>: Len;
+
+    fn hold<E: Elem>(&self, items: List<E>) -> Self::Buf<E>;
+}
+
+struct Weigher {}
+
+impl Store for Weigher {
+    type Buf<E: Elem> = Weighed<E>;
+
+    fn hold<E: Elem>(&self, items: List<E>) -> Weighed<E> {
+        return Weighed { items };
+    }
+}
+
+fn count<L: Len>(l: &L) -> i32 {
+    return l.len();
+}
+
+fn measure<S: Store, E: Elem>(s: &S, items: List<E>) -> i32 {
+    let held: S::Buf<E> = s.hold(items);
+    return count(&held);
+}
+
+test "a family's member answers its declared bound" {
+    assert measure(&Weigher {}, [3, 4] as List<i32>) == 2;
+}

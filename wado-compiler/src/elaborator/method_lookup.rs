@@ -2,7 +2,7 @@
 
 use super::scope::{BinderInScope, ScopedBound, trait_params_from_impl};
 use super::trait_env::ImplTargetKey;
-use super::trait_query::SelfBinding;
+use super::trait_query::{DerivedAt, SelfBinding};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -1306,7 +1306,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !turbofish_leaves_slot(&explicit, input.slots.len()) {
             return explicit;
         }
-        let inferred = self.infer_method_type_args(input);
+        let inferred = self.infer_method_type_args(input, &explicit);
         if explicit.is_empty() {
             return inferred;
         }
@@ -1408,10 +1408,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// already-resolved parameter and return types, which must come from a method
     /// lookup so their slots are the ones the caller binds. Deliberately does not
     /// re-resolve the method's AST: a fresh scope would report spurious errors for
-    /// a `Self::Item`. An unbound parameter keeps its `TypeParam` id.
-    pub(super) fn infer_method_type_args(
+    /// a `Self::Item`. An unbound parameter is its variable, blamed at the
+    /// call. A slot `written` names (its turbofish, `UNKNOWN` for `_`) is
+    /// answered from it.
+    fn infer_method_type_args(
         &mut self,
         input: MethodInferenceInput<'_>,
+        written: &[TypeId],
     ) -> Vec<TypeId> {
         let MethodInferenceInput {
             receiver_type,
@@ -1445,9 +1448,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 kind: InstanceKind::Method,
                 name: method_name,
                 span,
-                // The inference pass itself: its caller merges the turbofish in
-                // afterwards, so every slot is open here.
-                type_args: &[],
+                type_args: written,
                 self_binding,
             },
         );
@@ -1767,16 +1768,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // An impl the order names at two levels of the chain is one block.
         let mut seen: IndexSet<Option<DefId>> = IndexSet::default();
         for def in named.iter().filter(|def| seen.insert(**def)) {
-            match def {
+            // A marker writes no method: the derived impl it asks for answers.
+            let written =
+                def.filter(|def| !self.tysys.trait_env.impl_headers[def].is_synthesize_request);
+            match written {
                 Some(def) => found.extend(self.collect_trait_method_matches_from_impl(
-                    &ImplBlockRef(*def),
+                    &ImplBlockRef(def),
                     method_name,
                     receiver_type_args,
                     receiver_type_id,
                 )),
                 None => {
                     if let Some(recv_id) = receiver_type_id {
-                        found.extend(self.try_auto_derived_method_match(method_name, recv_id));
+                        found.extend(self.try_auto_derived_method_match(
+                            method_name,
+                            recv_id,
+                            DerivedAt::Instance,
+                        ));
                     }
                 }
             }

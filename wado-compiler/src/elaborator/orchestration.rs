@@ -1438,7 +1438,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     sem.decls.current_module_globals.clone(),
                 );
             }
-            signatures.inherit_trait_param_defaults(state.tysys.resolutions.defs());
+            let tysys = &state.tysys;
+            signatures.inherit_trait_param_defaults(tysys.resolutions.defs(), &|block, param| {
+                tysys
+                    .trait_env
+                    .in_impl_frame(block, param, &tysys.resolutions)
+            });
             state.tysys.signatures = Rc::new(signatures);
         }
         for (module_source, violation) in inherent_impl_overlaps(
@@ -1852,12 +1857,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 match item {
                     Item::Struct(struct_decl) => {
                         check.type_params = param_names(&struct_decl.type_params);
+                        check.bounds_of(&struct_decl.type_params);
                         for field in &struct_decl.fields {
                             check.visit_type(&field.ty);
                         }
                     }
                     Item::Variant(variant_decl) => {
                         check.type_params = param_names(&variant_decl.type_params);
+                        check.bounds_of(&variant_decl.type_params);
                         for payload in variant_decl.cases.iter().filter_map(|c| c.payload.as_ref())
                         {
                             check.visit_type(payload);
@@ -1865,6 +1872,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     }
                     Item::Newtype(newtype_decl) => {
                         check.type_params = param_names(&newtype_decl.type_params);
+                        check.bounds_of(&newtype_decl.type_params);
                         check.visit_type(&newtype_decl.ty);
                     }
                     Item::Function(func) => {
@@ -1882,6 +1890,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 _ => None,
                             }));
                         }
+                        check.type_params.clone_from(&type_params);
+                        check.bounds_of(&impl_block.type_params);
+                        // The trait's head is left to resolution, as a generic's is.
+                        if let Some(trait_type) = &impl_block.trait_type {
+                            for arg in written_arg_nodes(trait_type) {
+                                check.visit_type(arg);
+                            }
+                        }
                         for method in &impl_block.methods {
                             check.type_params =
                                 [&type_params[..], &param_names(&method.type_params)].concat();
@@ -1893,6 +1909,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         type_params.push("Self");
                         type_params
                             .extend(trait_decl.associated_types.iter().map(|a| a.name.as_str()));
+                        check.type_params.clone_from(&type_params);
+                        check.bounds_of(&trait_decl.type_params);
+                        check.visit_trait_bounds(&trait_decl.supertraits);
+                        for assoc in &trait_decl.associated_types {
+                            check.type_params =
+                                [&type_params[..], &param_names(&assoc.type_params)].concat();
+                            check.bounds_of(&assoc.type_params);
+                            check.visit_trait_bounds(&assoc.bounds);
+                        }
                         for method in &trait_decl.methods {
                             check.type_params =
                                 [&type_params[..], &param_names(&method.type_params)].concat();
@@ -1965,6 +1990,28 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
+    /// The type a struct, resource, variant, enum or flags declaration `def` declares,
+    /// read from the registry entry that holds it; `UNKNOWN` for any other.
+    pub(super) fn nominal_type_of(
+        def: DefId,
+        type_table: &mut TypeTable,
+        lookup: &TypeLookup<'_>,
+    ) -> TypeId {
+        if lookup.struct_fields_of(def).is_some() {
+            type_table.make_struct(StructDef::Decl(def))
+        } else if lookup.resource_type_of(def).is_some() {
+            type_table.make_resource(def)
+        } else if lookup.variant_cases_of(def).is_some() {
+            type_table.make_variant(def)
+        } else if lookup.enum_cases_of(def).is_some() {
+            type_table.make_enum(def)
+        } else if let Some(flags) = lookup.flags_members_of(def) {
+            flags.type_id
+        } else {
+            TypeTable::UNKNOWN
+        }
+    }
+
     /// [`Self::resolve_type_static`] inside a declaration's own type-parameter
     /// list, so the `T` of `struct Node<T>` or `variant Result<T, E>` resolves.
     pub(super) fn resolve_type_static_with_params(
@@ -2005,17 +2052,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 let Some(def) = def else {
                     return TypeTable::UNKNOWN;
                 };
-                if lookup.struct_fields_of(def).is_some() {
-                    type_table.make_struct(StructDef::Decl(def))
-                } else if lookup.resource_type_of(def).is_some() {
-                    type_table.make_resource(def)
-                } else if lookup.variant_cases_of(def).is_some() {
-                    type_table.make_variant(def)
-                } else if lookup.enum_cases_of(def).is_some() {
-                    type_table.make_enum(def)
-                } else {
-                    TypeTable::UNKNOWN
-                }
+                Self::nominal_type_of(def, type_table, lookup)
             }
             Type::Generic(generic) => {
                 let head = lookup.declaration_at(Some(generic.id), &generic.name);
@@ -2624,6 +2661,7 @@ impl<'a, 'l, 'm, H: CompilerHost> TypeNameCheck<'a, 'l, 'm, H> {
     }
 
     fn function(&mut self, func: &ast::Function) {
+        self.bounds_of(&func.type_params);
         for param in &func.params {
             self.visit_type(&param.ty);
         }
@@ -2632,6 +2670,14 @@ impl<'a, 'l, 'm, H: CompilerHost> TypeNameCheck<'a, 'l, 'm, H> {
         }
         if let Some(body) = &func.body {
             self.visit_body(body);
+        }
+    }
+
+    /// The trait references bounding `params`. A default is left to the
+    /// application that fills it, which reports what it names.
+    fn bounds_of(&mut self, params: &[GenericParam]) {
+        for param in params {
+            self.visit_trait_bounds(&param.bounds);
         }
     }
 

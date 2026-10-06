@@ -1,0 +1,35 @@
+// `Self::Item` in an inherent impl's method bound reads the trait impl binding
+// it, so an argument converting from another type does not satisfy it.
+
+trait Iter with () {
+    type Item;
+}
+
+trait Conv<X> with () {}
+
+struct Ints {}
+
+impl Iter for Ints {
+    type Item = i32;
+}
+
+struct E2 {}
+
+impl Conv<i64> for E2 {}
+
+impl Ints {
+    fn take<U: Conv<Self::Item>>(&self, u: &U) -> i32 {
+        return 1;
+    }
+}
+
+export fn run() {
+    let i = Ints {};
+    i.take(&E2 {});
+}
+
+__DATA__
+{
+  "compile_error": ":28:5: analysis error: type 'E2' does not implement trait 'Conv<i32>' required by bound on 'U'",
+  "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
+}

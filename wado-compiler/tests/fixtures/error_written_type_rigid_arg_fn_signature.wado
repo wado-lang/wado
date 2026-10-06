@@ -1,0 +1,20 @@
+// A type a signature writes owes its declaration's bounds at a type parameter
+// too: `Wrap<O>` needs `O: Tag`, which `O` does not declare.
+
+trait Tag with () {}
+
+struct Wrap<T: Tag> {
+    v: T,
+}
+
+fn unwrap<O>(w: Wrap<O>) -> O {
+    return w.v;
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":10:17: analysis error: type 'O' does not implement trait 'Tag' required by bound on 'T'",
+  "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
+}

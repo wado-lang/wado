@@ -71,7 +71,7 @@ fn "opt_hfs_closure_captured_write.wado/run"() with Stdout {
     let step: ref "core:prelude/types.wado//Box<i32>";
     let sum: i32;
     let i_4: i32;
-    let $local_5: ref "core:prelude/string.wado//String";
+    let $local_5_5: ref "core:prelude/string.wado//String";
     let x: i64;
     step = struct.new "core:prelude/types.wado//Box<i32>" { value: black_box(1) };
     sum = 0;
@@ -86,30 +86,30 @@ fn "opt_hfs_closure_captured_write.wado/run"() with Stdout {
             continue l1;
         };
     };
-    $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    $local_5_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $load_1 = sum < 0;
     sum = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(sum); select i64(x < 0_i64, 0_i64 - x, x)));
     if $load_1 {
-        if @unlikely(local.tee $load_1(0 + 1) > builtin::array_len($local_5.repr)) {
+        if @unlikely(local.tee $load_1(0 + 1) > builtin::array_len($local_5_5.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, $load_1);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5_5, $load_1);
         }
-        i_4 = $local_5.used;
-        $local_5.used = $load_1;
-        builtin::array_set_u8($local_5.repr, i_4, 45);
+        i_4 = $local_5_5.used;
+        $local_5_5.used = $load_1;
+        builtin::array_set_u8($local_5_5.repr, i_4, 45);
     } else {
     }
-    if @unlikely(local.tee i_4($local_5.used + sum) > builtin::array_len($local_5.repr)) {
+    if @unlikely(local.tee i_4($local_5_5.used + sum) > builtin::array_len($local_5_5.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, i_4);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5_5, i_4);
     }
-    $load_1 = $local_5.used;
-    $local_5.used = i_4;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_5.repr, $load_1, x, sum);
+    $load_1 = $local_5_5.used;
+    $local_5_5.used = i_4;
+    "core:prelude/primitive.wado/write_decimal_digits"($local_5_5.repr, $load_1, x, sum);
     sum = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     $load_1 = builtin::i32_wrap_i64(x >> 32_i64);
     sum = "opt_hfs_closure_captured_write.wado/$cm_binding__Stdout_write_via_stream"(sum);
-    "core:rt/write_string_to_stream"($load_1, $local_5.repr, $local_5.used);
+    "core:rt/write_string_to_stream"($load_1, $local_5_5.repr, $local_5_5.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(sum);
 }
 

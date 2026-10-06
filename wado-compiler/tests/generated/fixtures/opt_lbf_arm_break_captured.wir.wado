@@ -12,8 +12,8 @@ struct core:prelude/string.wado//String {  // TypeId(2)
 }
 
 variant core:prelude/types.wado//Option<i32> {  // TypeId(3)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(4)
@@ -90,10 +90,10 @@ fn "opt_lbf_arm_break_captured.wado/labels"(n, m) with Stdout {
             outer: block {
                 break_if outer n > m;
                 if n > 0 {
-                    break check: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: n };
+                    break check: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: n };
                 }
             };
-            break check: struct.new "core:prelude/types.wado//Option<i32>" { 1 };
+            break check: struct.new "core:prelude/types.wado//Option<i32>" { 0 };
         })) {
             n = ref.cast "core:prelude/types.wado//Option<i32>::Some"(r).payload_0;
             $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
@@ -150,7 +150,7 @@ fn "opt_lbf_arm_break_captured.wado/loops"(n, m) with Stdout {
     let i_2: i32;
     let r: ref "core:prelude/types.wado//Option<i32>";
     let v: i32;
-    let $local_5: ref "core:prelude/string.wado//String";
+    let $local_5_5: ref "core:prelude/string.wado//String";
     let handle_10: i32;
     let new_used_23: i32;
     let start_24: i32;
@@ -172,10 +172,10 @@ fn "opt_lbf_arm_break_captured.wado/loops"(n, m) with Stdout {
     let tx_63: i32;
     let $licm_arith_88: i32;
     let $licm_arith_92: bool;
-    let new_used_128: i32;
-    let start_129: i32;
-    let new_used_169: i32;
-    let start_170: i32;
+    let new_used_131: i32;
+    let start_132: i32;
+    let new_used_187: i32;
+    let start_188: i32;
     i_2 = 0;
     m = n > m;
     $licm_arith_92 = n > 0;
@@ -188,23 +188,23 @@ fn "opt_lbf_arm_break_captured.wado/loops"(n, m) with Stdout {
                     l10: loop {
                         break_if b9 m;
                         if $licm_arith_92 {
-                            break check: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $licm_arith_88 };
+                            break check: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: $licm_arith_88 };
                         }
                         break b9;
                         continue l10;
                     };
                 };
-                break check: struct.new "core:prelude/types.wado//Option<i32>" { 1 };
+                break check: struct.new "core:prelude/types.wado//Option<i32>" { 0 };
             })) {
                 v = ref.cast "core:prelude/types.wado//Option<i32>::Some"(r).payload_0;
-                $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
-                if @unlikely(local.tee new_used_23(0 + 5) > builtin::array_len($local_5.repr)) {
+                $local_5_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
+                if @unlikely(local.tee new_used_23(0 + 5) > builtin::array_len($local_5_5.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, new_used_23);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5_5, new_used_23);
                 }
-                start_24 = $local_5.used;
-                $local_5.used = new_used_23;
-                builtin::array_copy<u8>(local.tee $load_2($local_5.repr), start_24, global:opt_lbf_arm_break_captured.wado::$const_obj_5, 0, 5);
+                start_24 = $local_5_5.used;
+                $local_5_5.used = new_used_23;
+                builtin::array_copy<u8>(local.tee $load_2($local_5_5.repr), start_24, global:opt_lbf_arm_break_captured.wado::$const_obj_5, 0, 5);
                 is_negative_33 = v < 0;
                 x = builtin::i64_extend_i32_s(v);
                 abs_val = select i64(x < 0_i64, 0_i64 - x, x);
@@ -269,27 +269,27 @@ fn "opt_lbf_arm_break_captured.wado/loops"(n, m) with Stdout {
                     break $inline_count_digits_u64_12: 20;
                 };
                 if is_negative_33 {
-                    if @unlikely(local.tee new_used_128($local_5.used + 1) > builtin::array_len($load_2)) {
+                    if @unlikely(local.tee new_used_131($local_5_5.used + 1) > builtin::array_len($load_2)) {
                         cold_path;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, new_used_128);
+                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5_5, new_used_131);
                     }
-                    start_129 = $local_5.used;
-                    $local_5.used = new_used_128;
-                    builtin::array_set_u8($local_5.repr, start_129, 45);
+                    start_132 = $local_5_5.used;
+                    $local_5_5.used = new_used_131;
+                    builtin::array_set_u8($local_5_5.repr, start_132, 45);
                 } else {
                 }
-                if @unlikely(local.tee new_used_169($local_5.used + digit_count_35) > builtin::array_len($local_5.repr)) {
+                if @unlikely(local.tee new_used_187($local_5_5.used + digit_count_35) > builtin::array_len($local_5_5.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, new_used_169);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5_5, new_used_187);
                 }
-                start_170 = $local_5.used;
-                $local_5.used = new_used_169;
-                arr = $local_5.repr;
-                pos = start_170 + digit_count_35;
+                start_188 = $local_5_5.used;
+                $local_5_5.used = new_used_187;
+                arr = $local_5_5.repr;
+                pos = start_188 + digit_count_35;
                 t = abs_val;
                 b35: block {
                     l36: loop {
-                        break_if b35 (pos - start_170) < 2;
+                        break_if b35 (pos - start_188) < 2;
                         q = t /u 100_i64;
                         tens = local.tee pair(builtin::i32_wrap_i64(t - (q * 100_i64))) / 10;
                         builtin::array_set_u8(arr, pos - 1, ((48 + pair) - (tens * 10)) & 255);
@@ -299,13 +299,13 @@ fn "opt_lbf_arm_break_captured.wado/loops"(n, m) with Stdout {
                         continue l36;
                     };
                 };
-                if pos > start_170 {
-                    builtin::array_set_u8(arr, start_170, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
+                if pos > start_188 {
+                    builtin::array_set_u8(arr, start_188, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
                 }
                 rx_50 = builtin::i32_wrap_i64(local.tee packed_49("wasi/stream-new"()));
                 tx_51 = builtin::i32_wrap_i64(packed_49 >> 32_i64);
                 handle_10 = "opt_lbf_arm_break_captured.wado/$cm_binding__Stdout_write_via_stream"(rx_50);
-                "core:rt/write_string_to_stream"(tx_51, $local_5.repr, $local_5.used);
+                "core:rt/write_string_to_stream"(tx_51, $local_5_5.repr, $local_5_5.used);
                 continue l7: "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_10);
             } else {
             }

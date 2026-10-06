@@ -5672,11 +5672,12 @@ Returns true if the range contains no elements.
 
 ### `pub variant Option<T>`
 
-Optional value - either Some(T) or None
-
-#### `Some(T)`
+Optional value - either None or Some(T). The derived order puts None first,
+as Rust's does.
 
 #### `None`
+
+#### `Some(T)`
 
 ### `pub variant Result<T, E>`
 

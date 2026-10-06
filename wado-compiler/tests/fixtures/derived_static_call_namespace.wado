@@ -1,0 +1,9 @@
+// A derived method reached by type path through a namespace import has the
+// signature it has when the type is imported by name.
+
+use m from "./sub/derived_static_call_namespace_dep.wado";
+
+test {
+    assert m::Tr::cmp(&m::Tr::Leaf(1), &m::Tr::Empty) matches { Less };
+    assert m::Tr::eq(&m::Tr::Leaf(1), &m::Tr::Leaf(1));
+}

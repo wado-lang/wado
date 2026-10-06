@@ -81,7 +81,7 @@ fn "opt_alias_tuple_mut_ref_params.wado/run"() with Stdout {
     let self_10: i32;
     let is_negative_16: bool;
     let x: i64;
-    let start_67: i32;
+    let start_70: i32;
     tt = struct.new "tuple//[i32, i32]" { 0: black_box(0), 1: 0 };
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative_16 = local.tee self_10("opt_alias_tuple_mut_ref_params.wado/t"(tt, tt)) < 0;
@@ -91,17 +91,17 @@ fn "opt_alias_tuple_mut_ref_params.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, is_negative_16);
         }
-        start_67 = $local_1.used;
+        start_70 = $local_1.used;
         $local_1.used = is_negative_16;
-        builtin::array_set_u8($local_1.repr, start_67, 45);
+        builtin::array_set_u8($local_1.repr, start_70, 45);
     } else {
     }
-    if @unlikely(local.tee start_67($local_1.used + self_10) > builtin::array_len($local_1.repr)) {
+    if @unlikely(local.tee start_70($local_1.used + self_10) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_67);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_70);
     }
     is_negative_16 = $local_1.used;
-    $local_1.used = start_67;
+    $local_1.used = start_70;
     "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, is_negative_16, x, self_10);
     self_10 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_16 = builtin::i32_wrap_i64(x >> 32_i64);

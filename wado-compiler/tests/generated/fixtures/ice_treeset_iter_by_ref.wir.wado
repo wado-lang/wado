@@ -239,15 +239,15 @@ fn "ice_treeset_iter_by_ref.wado/run"() {
                 }
                 if local.tee i_53(i_56) >= $licm_count_73 {
                     $sroa_$iter_2_index_71 = i_53;
-                    $sroa_slot_63 = 1;
+                    $sroa_slot_63 = 0;
                     break $inline_core_collections_entries_wado_MapKeysValueIter_i32_____core_prelude_traits_wado_Iterator__next_14;
                 }
                 $sroa_$iter_2_index_71 = i_53 + 1;
-                $sroa_slot_63 = 0;
+                $sroa_slot_63 = 1;
                 drop(builtin::array_get_value<i32>($licm_keys_75, i_53));
                 break $inline_core_collections_entries_wado_MapKeysValueIter_i32_____core_prelude_traits_wado_Iterator__next_14;
             };
-            if $sroa_slot_63 == 0 {
+            if $sroa_slot_63 == 1 {
                 set_str_count = set_str_count + 1;
             } else {
                 break b4;
@@ -1134,24 +1134,24 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<i32,()>:
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
-    let start_26: i32;
+    let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
         }
-        start_26 = self.used;
+        start_29 = self.used;
         self.used = is_negative;
-        builtin::array_set_u8(self.repr, start_26, 45);
+        builtin::array_set_u8(self.repr, start_29, 45);
     } else {
     }
     if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
     }
-    start_26 = self.used;
+    start_29 = self.used;
     self.used = digit_count;
-    return start_26;
+    return start_29;
 }
 
 export fn "ice_treeset_iter_by_ref.wado/$cm_export__run" as "run"

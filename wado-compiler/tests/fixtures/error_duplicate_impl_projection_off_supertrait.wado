@@ -1,0 +1,27 @@
+// Coherence reads a projection in an impl header through the bound's
+// supertraits, as the solver does: `I::Item` under `I: Sub` is `Src`'s, so the
+// two headers are one impl written twice.
+
+trait Src with () {
+    type Item;
+}
+
+trait Sub: Src with () {}
+
+trait Conv<X> with () {}
+
+trait Tr with () {}
+
+struct W<I, T> {
+    i: I,
+    t: T,
+}
+
+impl<I: Sub, T: Conv<I::Item>> Tr for W<I, T> {}
+
+impl<I: Sub, T: Conv<I::Item>> Tr for W<I, T> {}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": ":22:1: analysis error: duplicate impl of `Tr` for `W`: an earlier impl in this file"}

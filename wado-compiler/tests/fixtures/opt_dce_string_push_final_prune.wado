@@ -4,6 +4,7 @@
 // a long literal (22 bytes, above the rewrite's 8-byte ceiling), so the rewrite
 // never fires and `String::push` is unused. DCE must drop it at both levels:
 // retiring unreachable callers also retires their virtual roots at -O0.
+// Contract checks are off: at -O0 their failure messages reach `push`.
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
@@ -15,6 +16,7 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "this is a long literal\n",
+    "codegen_flags": ["no-contract-checks"],
     "wir_not_expect:O0": ["String::push\"(self, c)"],
     "wir_not_expect:O2": ["String::push\"(self, c)"]
 }

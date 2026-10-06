@@ -396,6 +396,9 @@ impl<T> Sequence for List<T> {
     }
 
     fn get_unchecked(&self, index: i32) -> T {
+        if builtin::contract_checks() {
+            assert 0 <= index < self.used, "index out of bounds";
+        }
         return self.repr[index];
     }
 }
