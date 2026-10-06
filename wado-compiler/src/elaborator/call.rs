@@ -24,7 +24,7 @@ use super::sig::{DeclSig, MethodSig, Param};
 use super::static_call::StaticQuery;
 use super::trait_env;
 use super::trait_env::ImplTargetKey;
-use super::trait_query::SelfBinding;
+use super::trait_query::{DerivedAt, SelfBinding};
 use super::types::{FunctionContext, TypeError, VarRef, newtype_member_owner};
 use super::tysys::TypeSystem;
 use super::util;
@@ -2388,7 +2388,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(sig) = self.unique_qualified_method_sig(prefix, suffix) {
                 return Some(CalleeSignature::of(&sig.decl));
             }
-            if let Some(sig) = self.derived_method_signature(prefix, suffix) {
+            let key = self.impl_target(prefix);
+            if let Some(sig) = self.derived_method_signature(&key, suffix) {
                 return Some(sig);
             }
 
@@ -2429,6 +2430,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             ..CalleeSignature::of(&sig.decl)
                         });
                     }
+                    if let Some(sig) = self.derived_method_signature(&ns_key, method_name) {
+                        return Some(sig);
+                    }
                 }
             }
             return None;
@@ -2446,13 +2450,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// argument settles the other's type.
     fn derived_method_signature(
         &mut self,
-        type_name: &str,
+        key: &ImplTargetKey,
         method_name: &str,
     ) -> Option<CalleeSignature> {
         let (_, _, return_type) = self.tysys.auto_derive_by_method(method_name)?;
-        let key = self.impl_target(type_name);
         if self
-            .qualified_method_decl_ids(&key, method_name)
+            .qualified_method_decl_ids(key, method_name)
             .next()
             .is_some()
         {
@@ -3191,6 +3194,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // their slots names a declaration the arguments may not even select.
         let Some(sig) = self.static_call_sig(prefix, suffix, receiver_key, SigChoice::Unique, &[])
         else {
+            self.report_uninferred_derived_type_args(
+                prefix,
+                suffix,
+                impl_type_args,
+                span,
+                receiver_key,
+            );
             return;
         };
         let (declaring_slots, method_slots) = (sig.declaring_type_params(), sig.own_type_params());
@@ -3233,6 +3243,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &names,
             &format!("`{prefix}::{suffix}`"),
             &turbofish,
+            span,
+        ));
+    }
+
+    /// [`Self::report_uninferred_static_method_type_args`] for a derived method,
+    /// whose slots are its type's own parameters.
+    fn report_uninferred_derived_type_args(
+        &mut self,
+        prefix: &str,
+        suffix: &str,
+        impl_type_args: &[TypeId],
+        span: token::Span,
+        receiver_key: Option<&ImplTargetKey>,
+    ) {
+        let key = receiver_key
+            .cloned()
+            .unwrap_or_else(|| self.impl_target(prefix));
+        let Some(sig) = self.derived_method_signature(&key, suffix) else {
+            return;
+        };
+        let scope_params = self.scope_type_param_ids();
+        let names: Vec<String> = sig
+            .slots
+            .iter()
+            .filter(|&&slot| {
+                impl_type_args
+                    .get(self.declared_slot(slot) as usize)
+                    .is_none_or(|&t| self.slot_unanswered(t, &scope_params))
+            })
+            .map(|&slot| self.tysys.type_id_to_string(slot))
+            .collect();
+        if names.is_empty() {
+            return;
+        }
+        let _ = self.emit(TypeError::cannot_infer(
+            &names,
+            &format!("`{prefix}::{suffix}`"),
+            &format!("`{prefix}::<...>::{suffix}()`"),
             span,
         ));
     }
@@ -3698,6 +3746,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         !receiver_args.is_empty() && sig(receiver_args).is_none() && sig(&[]).is_some()
     }
 
+    /// Whether the declaration `struct_name` names derives `method_name`, but
+    /// its instance at `receiver_args` withholds the derivation. An instance
+    /// the call left uninferred is not one: that is reported as such.
+    pub(super) fn derived_for_no_instance(
+        &mut self,
+        struct_name: &str,
+        method_name: &str,
+        receiver_key: Option<&ImplTargetKey>,
+        receiver_args: &[TypeId],
+    ) -> bool {
+        let scope_params = self.scope_type_param_ids();
+        if receiver_args.is_empty()
+            || receiver_args
+                .iter()
+                .any(|&arg| self.slot_unanswered(arg, &scope_params))
+        {
+            return false;
+        }
+        let key = receiver_key
+            .cloned()
+            .unwrap_or_else(|| self.impl_target(struct_name));
+        let Some(declared) = key.decl().and_then(|def| self.declared_self_type(def)) else {
+            return false;
+        };
+        self.try_auto_derived_method_match(method_name, declared, DerivedAt::Declaration)
+            .is_some()
+    }
+
     /// The receiver's arguments a bare `Type::method(..)` call must produce,
     /// read off `expected` where it is an instance of `Type`; empty otherwise.
     fn expected_receiver_args(
@@ -3797,10 +3873,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.tysys.inherited_default_method_sig(&key, method_name)
             })
         else {
-            return (
-                self.derived_impl_args(struct_name, method_name, args),
-                vec![],
-            );
+            let key = receiver_key
+                .cloned()
+                .unwrap_or_else(|| self.impl_target(struct_name));
+            return (self.derived_impl_args(&key, method_name, args), vec![]);
         };
         if sig.decl.type_params.is_empty() {
             return (vec![], vec![]);
@@ -3847,11 +3923,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// leave a slot open.
     fn derived_impl_args(
         &mut self,
-        struct_name: &str,
+        key: &ImplTargetKey,
         method_name: &str,
         args: &[TypeId],
     ) -> Vec<TypeId> {
-        let Some(sig) = self.derived_method_signature(struct_name, method_name) else {
+        let Some(sig) = self.derived_method_signature(key, method_name) else {
             return Vec::new();
         };
         let mut infer = InferCtx::new(&self.tysys.type_table, sig.slots.clone());

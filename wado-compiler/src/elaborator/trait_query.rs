@@ -3473,13 +3473,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.impl_receiver(header, link),
             )
         } else {
-            // A newtype has no derivation of its own: the one its
-            // representation carries answers.
+            // A newtype has no derivation of its own: the one the declaration
+            // it inherits from carries answers, a `flags` type's included.
             let derive_id = self
                 .tysys
                 .type_table
                 .borrow()
-                .representation_head(base_type_id);
+                .reflect_structure_head(base_type_id);
             if !self.tysys.auto_derive_eligible_kind(derive_id) {
                 return None;
             }

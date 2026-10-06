@@ -50,6 +50,7 @@ pub(super) struct OptionCases {
 }
 
 impl OptionCases {
+    /// The cases as the registry names them for `type_table`.
     pub(super) fn of(type_table: &TypeTable) -> Self {
         let case = |item| {
             let (_, _, name, index) = type_table.compiler_variant_case(item);

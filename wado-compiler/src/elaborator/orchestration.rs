@@ -1965,7 +1965,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// The type a struct, resource, variant or enum declaration `def` declares,
+    /// The type a struct, resource, variant, enum or flags declaration `def` declares,
     /// read from the registry entry that holds it; `UNKNOWN` for any other.
     pub(super) fn nominal_type_of(
         def: DefId,
@@ -1980,6 +1980,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             type_table.make_variant(def)
         } else if lookup.enum_cases_of(def).is_some() {
             type_table.make_enum(def)
+        } else if let Some(flags) = lookup.flags_members_of(def) {
+            flags.type_id
         } else {
             TypeTable::UNKNOWN
         }

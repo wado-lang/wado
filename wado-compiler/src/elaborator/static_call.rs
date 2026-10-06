@@ -380,11 +380,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(derived) =
                 self.try_auto_derived_method_match(method_name, receiver_type, at)
         {
-            return StaticLookup::Found(Box::new(self.derived_instance_callee(
-                derived,
-                method_name,
-                receiver_type,
-            )));
+            let mut callee = self.derived_instance_callee(derived, method_name, receiver_type);
+            self.retype_to_newtype(&mut callee, receiver_type);
+            return StaticLookup::Found(Box::new(callee));
         }
 
         // A newtype and a `flags` reach what they wrap: their impls are looked
@@ -392,16 +390,68 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // alias's declaration, since a namespaced `lib::Q::twice()` leaves the
         // caller's frame no `Q` to look one up by; the name answers only where
         // the key reaches no declaration to read.
+        //
+        // One link at a time: the base answers the arguments as it sees them,
+        // its own type where they wrote the newtype, and the answer takes the
+        // newtype back.
         match self.newtype_base_target(&key, receiver_name) {
-            Some((base_key, base_name)) => self.resolve_static_callee(StaticQuery {
-                receiver_key: Some(&base_key),
-                arg_types,
-                receiver_type,
-                receiver_args,
-                required_trait,
-                ..StaticQuery::of(&base_name, method_name)
-            }),
+            Some((base_key, base_name)) => {
+                let (base_type, base_arg_types) = self.at_newtype_base(receiver_type, arg_types);
+                let mut lookup = self.resolve_static_callee(StaticQuery {
+                    receiver_key: Some(&base_key),
+                    arg_types: &base_arg_types,
+                    receiver_type: base_type.or(receiver_type),
+                    receiver_args,
+                    required_trait,
+                    ..StaticQuery::of(&base_name, method_name)
+                });
+                if let (StaticLookup::Found(callee), Some(receiver_type)) =
+                    (&mut lookup, receiver_type)
+                {
+                    self.retype_to_newtype(callee, receiver_type);
+                }
+                lookup
+            }
             None => self.out_of_scope_lookup(receiver_name, &out_of_scope),
+        }
+    }
+
+    /// The base `receiver` wraps, if it is a newtype, and `arg_types` as that
+    /// base reads them: its own type where they wrote the newtype.
+    pub(super) fn at_newtype_base(
+        &self,
+        receiver: Option<TypeId>,
+        arg_types: &[TypeId],
+    ) -> (Option<TypeId>, Vec<TypeId>) {
+        let Some((newtype, base)) = receiver.and_then(|newtype| {
+            let base = self.tysys.type_table.borrow().get_newtype_base(newtype)?;
+            Some((newtype, base))
+        }) else {
+            return (None, arg_types.to_vec());
+        };
+        let at_base = arg_types
+            .iter()
+            .map(|&arg| self.tysys.substitute_newtype_in_type(arg, newtype, base))
+            .collect();
+        (Some(base), at_base)
+    }
+
+    /// `callee` as a newtype inherits it: every base on `receiver`'s chain
+    /// becomes `receiver`, in each parameter and the return type (`spec-types`,
+    /// "Method Signature Substitution"). Any other receiver is left as is.
+    fn retype_to_newtype(&self, callee: &mut StaticCallee, receiver: TypeId) {
+        let mut link = receiver;
+        loop {
+            let Some(base) = self.tysys.type_table.borrow().get_newtype_base(link) else {
+                break;
+            };
+            for param in &mut callee.params.param_types {
+                *param = self.tysys.substitute_newtype_in_type(*param, base, receiver);
+            }
+            callee.return_type = self
+                .tysys
+                .substitute_newtype_in_type(callee.return_type, base, receiver);
+            link = base;
         }
     }
 
