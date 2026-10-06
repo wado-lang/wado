@@ -125,7 +125,7 @@ fn "derived_ord_reaches_blanket_bound.wado/run"() with Stdout {
     self_18 = struct.new "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/Color>" { repr: $sroa_cs_repr_102, index: 0, end: 2 };
     let $mv$$vr_12$1: "derived_ord_reaches_blanket_bound.wado//enum:Color";
     multivalue_bind [$cond_3, $mv$$vr_12$1] = "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/Color>^core:prelude/traits.wado/Iterator::max_by$$Closure_1"(self_18);
-    if @unlikely(local.tee $cond_3($cond_3 == 0) == 0) {
+    if @unlikely(local.tee $cond_3($cond_3 == 1) == 0) {
         cold_path;
         "derived_ord_reaches_blanket_bound.wado/run$cold0"();
         unreachable;
@@ -150,7 +150,7 @@ fn "derived_ord_reaches_blanket_bound.wado/run"() with Stdout {
     builtin::array_copy<u8>($local_10.repr, $mv$$vr_12$1, global:derived_ord_reaches_blanket_bound.wado::$const_obj_3, 0, 1);
     $sroa_$f_buf_126 = $local_10;
     multivalue_bind [$mv$$vr_12$1, $cond_3] = "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/Color>^core:prelude/traits.wado/Iterator::min_by$$Closure_2"(local.tee self_18(struct.new "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/Color>" { repr: $sroa_cs_repr_102, index: 0, end: 2 }));
-    text_34 = (if local.tee $mv$$vr_12$1($mv$$vr_12$1 == 0) -> ref "core:prelude/string.wado//String" {
+    text_34 = (if local.tee $mv$$vr_12$1($mv$$vr_12$1 == 1) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
@@ -356,9 +356,9 @@ fn "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIte
                 continue l26;
             };
         };
-        return 0, item_7;
+        return 1, item_7;
     };
-    return 1, 0;
+    return 0, 0;
 }
 
 fn "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/Color>^core:prelude/traits.wado/Iterator::min_by$$Closure_2"(self) {
@@ -395,9 +395,9 @@ fn "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIte
                 continue l32;
             };
         };
-        return 0, item_8;
+        return 1, item_8;
     };
-    return 1, 0;
+    return 0, 0;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(self, $mv$content$repr, $mv$content$used) {

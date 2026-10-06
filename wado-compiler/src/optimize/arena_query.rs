@@ -349,8 +349,12 @@ pub(super) fn every_return(
 /// `value_copy::is_reference_type`, which answers only for `&T` / `&mut T`.
 pub(super) fn holds_reference(type_table: &TypeTable, ty: TypeId) -> bool {
     !matches!(
-        type_table.get(ty),
-        ResolvedType::Primitive(_) | ResolvedType::Unit | ResolvedType::Never
+        type_table.get(type_table.representation_head(ty)),
+        ResolvedType::Primitive(_)
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Unit
+            | ResolvedType::Never
     )
 }
 

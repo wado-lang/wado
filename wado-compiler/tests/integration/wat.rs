@@ -10,7 +10,7 @@ use wado_compiler::OptLevel;
 /// Compile a fixture file at the given optimization level.
 fn compile_fixture_opt(fixture: &str, opt: OptLevel) -> wado_compiler::CompileResult {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let source_path = PathBuf::from(manifest_dir).join(format!("tests/fixtures/{fixture}"));
+    let source_path = PathBuf::from(manifest_dir).join(format!("fixtures/{fixture}"));
 
     compile_file_with_opts(&source_path, opt).unwrap_or_else(|e| panic!("Compilation failed: {e}"))
 }

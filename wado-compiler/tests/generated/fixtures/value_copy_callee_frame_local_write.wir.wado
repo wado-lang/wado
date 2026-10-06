@@ -87,7 +87,7 @@ fn "value_copy_callee_frame_local_write.wado/run"() with Stdout {
     let self_11: i64;
     let is_negative_18: bool;
     let digit_count_20: i32;
-    let start_69: i32;
+    let start_72: i32;
     builtin::array_set_u8(local.tee bytes(builtin::array_new<u8>(4)), 0, 1);
     builtin::array_set_u8(bytes, 1, 2);
     builtin::array_set_u8(bytes, 2, 3);
@@ -101,17 +101,17 @@ fn "value_copy_callee_frame_local_write.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, is_negative_18);
         }
-        start_69 = $local_2.used;
+        start_72 = $local_2.used;
         $local_2.used = is_negative_18;
-        builtin::array_set_u8($local_2.repr, start_69, 45);
+        builtin::array_set_u8($local_2.repr, start_72, 45);
     } else {
     }
-    if @unlikely(local.tee start_69($local_2.used + digit_count_20) > builtin::array_len($local_2.repr)) {
+    if @unlikely(local.tee start_72($local_2.used + digit_count_20) > builtin::array_len($local_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_69);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_72);
     }
     is_negative_18 = $local_2.used;
-    $local_2.used = start_69;
+    $local_2.used = start_72;
     "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, is_negative_18, self_11, digit_count_20);
     digit_count_20 = builtin::i32_wrap_i64(local.tee self_11("wasi/stream-new"()));
     is_negative_18 = builtin::i32_wrap_i64(self_11 >> 32_i64);

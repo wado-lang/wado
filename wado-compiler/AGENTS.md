@@ -38,7 +38,7 @@ The Wado compiler crate.
   measure what it buys, and delete it when that is nothing.
 - `cargo check --all-targets` while iterating, or a type the crate changes
   breaks the uncompiled unit tests where nothing looks. Run
-  `cargo test -p wado-compiler --test e2e` for anything the language touches: it
+  `cargo test -p wado-compiler-tests --test e2e` for anything the language touches: it
   covers O0 and O2 and leaves the rest to CI, whose `ignored` lines are that
   split and not a gap, so never set `WADO_FULL_TEST` unless asked by name.
   `mise run test` and `mise run test-wado` are the slowest runs there are: run
@@ -103,6 +103,9 @@ into a branchless select only where both arms are duplicable pure leaves.
 
 `.wado` files in `tests/fixtures/`, expectations in a trailing `__DATA__` JSON
 section whose fields are the `serde` structs in `tests/e2e.rs`.
+
+`tests/` is a package of its own, `wado-compiler-tests`; its `Cargo.toml` says
+why. A path in `__DATA__` is relative to the fixture's own directory.
 
 - Run `touch tests/e2e.rs` after adding or removing a fixture, or after changing
   `WADO_FULL_TEST`. `datatest_mini` resolves fixtures at macro-expansion time and

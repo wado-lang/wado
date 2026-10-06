@@ -85,7 +85,7 @@ fn "opt_modref_call_past_global_write.wado/run"() with Stdout {
     let digit_count_19: i32;
     let x: i64;
     let $sroa_r_value_30: i32;
-    let start_69: i32;
+    let start_72: i32;
     global:opt_modref_call_past_global_write.wado::G = 1;
     $sroa_r_value_30 = "opt_modref_call_past_global_write.wado/read_g"();
     global:opt_modref_call_past_global_write.wado::G = 7;
@@ -97,17 +97,17 @@ fn "opt_modref_call_past_global_write.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, is_negative_17);
         }
-        start_69 = $local_2.used;
+        start_72 = $local_2.used;
         $local_2.used = is_negative_17;
-        builtin::array_set_u8($local_2.repr, start_69, 45);
+        builtin::array_set_u8($local_2.repr, start_72, 45);
     } else {
     }
-    if @unlikely(local.tee start_69($local_2.used + digit_count_19) > builtin::array_len($local_2.repr)) {
+    if @unlikely(local.tee start_72($local_2.used + digit_count_19) > builtin::array_len($local_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_69);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_72);
     }
     is_negative_17 = $local_2.used;
-    $local_2.used = start_69;
+    $local_2.used = start_72;
     "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, is_negative_17, x, digit_count_19);
     digit_count_19 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_17 = builtin::i32_wrap_i64(x >> 32_i64);

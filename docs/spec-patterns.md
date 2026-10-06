@@ -286,7 +286,8 @@ before the program runs:
 - Two arms' range patterns must not overlap. The alternatives of one arm's
   or-pattern may.
 - Range patterns count toward [exhaustiveness](#exhaustiveness): `0 => …` and
-  `1..=255 => …` together cover a `u8`.
+  `1..=255 => …` together cover a `u8`. A `char` holds no surrogate, so
+  `'\0'..='\u{D7FF}'` and `'\u{E000}'..='\u{10FFFF}'` together cover it.
 
 Any other constant shows its value only when the match runs. A range bounded by
 one matches where `START <= scrutinee` and `scrutinee < END` (`<=` for `..=`)

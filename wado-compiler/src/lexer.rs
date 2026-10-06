@@ -13,15 +13,20 @@ use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::token;
 use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind};
 
-/// Check if a string is a valid Wado identifier.
-/// Valid identifiers match the pattern `/^[a-zA-Z_][a-zA-Z0-9_]*$/`
+/// Whether `c` may open an identifier: `[a-zA-Z_]`.
+pub fn is_ident_start(c: char) -> bool {
+    c.is_ascii_alphabetic() || c == '_'
+}
+
+/// Whether `c` may follow the first character of an identifier: `[a-zA-Z0-9_]`.
+pub fn is_ident_continue(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '_'
+}
+
+/// Whether `s` is a Wado identifier: `[a-zA-Z_][a-zA-Z0-9_]*`.
 pub fn is_valid_ident(s: &str) -> bool {
     let mut chars = s.chars();
-    match chars.next() {
-        Some(c) if c.is_ascii_alphabetic() || c == '_' => {}
-        _ => return false,
-    }
-    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+    chars.next().is_some_and(is_ident_start) && chars.all(is_ident_continue)
 }
 
 /// Tokenise `source` as its own parse. See module docs for the recovery
@@ -443,7 +448,7 @@ impl<'a> Lexer<'a> {
             'b' if self.peek_second() == Some('\'') => self.lex_byte_char(),
 
             // Identifiers and keywords
-            'a'..='z' | 'A'..='Z' | '_' => self.lex_ident_or_keyword(),
+            c if is_ident_start(c) => self.lex_ident_or_keyword(),
 
             // Numbers
             '0'..='9' => self.lex_number(),
@@ -764,8 +769,7 @@ impl<'a> Lexer<'a> {
 
     fn skip_whitespace_and_comments(&mut self) {
         loop {
-            // Skip whitespace
-            self.advance_while(char::is_whitespace);
+            self.advance_while(|ch| ch.is_ascii_whitespace());
 
             // Check for __DATA__ at the start of a line
             if self.column == 1 && self.check_data_section() {
@@ -936,7 +940,7 @@ impl<'a> Lexer<'a> {
     fn lex_ident_or_keyword(&mut self) -> TokenKind {
         let start = self.pos;
 
-        self.advance_while(|ch| ch.is_alphanumeric() || ch == '_');
+        self.advance_while(is_ident_continue);
 
         let text = &self.input[start..self.pos];
 
@@ -1018,7 +1022,7 @@ impl<'a> Lexer<'a> {
     /// spelled right where the fix is certain.
     fn finish_number(&mut self, start: usize, start_line: usize, start_column: usize) -> TokenKind {
         let digits_end = self.pos;
-        self.advance_while(|ch| ch.is_ascii_alphanumeric() || ch == '_');
+        self.advance_while(is_ident_continue);
         let digits = &self.input[start..digits_end];
         let name = &self.input[digits_end..self.pos];
         if name.is_empty() {

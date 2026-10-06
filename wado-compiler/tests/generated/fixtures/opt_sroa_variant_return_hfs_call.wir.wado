@@ -210,27 +210,27 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
 
 fn "opt_sroa_variant_return_hfs_call.wado/opt_sroa_variant_return_hfs_call.wado/Cursor::scan"(self) {
     let b: i32;
-    let $licm_data_5: ref "core:prelude/string.wado//String";
-    let $licm_used_6: i32;
-    let $licm_repr_7: ref Array<u8>;
-    let $hfs_pos_10: i32;
-    let $hfs_call_11: ref null "opt_sroa_variant_return_hfs_call.wado//Fail";
-    $licm_used_6 = local.tee $licm_data_5(self.data).used;
-    $licm_repr_7 = $licm_data_5.repr;
-    $hfs_pos_10 = self.pos;
+    let $licm_data_11: ref "core:prelude/string.wado//String";
+    let $licm_used_12: i32;
+    let $licm_repr_13: ref Array<u8>;
+    let $hfs_pos_16: i32;
+    let $hfs_call_17: ref null "opt_sroa_variant_return_hfs_call.wado//Fail";
+    $licm_used_12 = local.tee $licm_data_11(self.data).used;
+    $licm_repr_13 = $licm_data_11.repr;
+    $hfs_pos_16 = self.pos;
     block {
         l17: loop {
-            if $hfs_pos_10 >= $licm_used_6 {
-                $hfs_call_11 = ref.as_non_null("opt_sroa_variant_return_hfs_call.wado/fail_at"($hfs_pos_10));
-                self.pos = $hfs_pos_10;
-                return 1, 0, $hfs_call_11;
+            if $hfs_pos_16 >= $licm_used_12 {
+                $hfs_call_17 = ref.as_non_null("opt_sroa_variant_return_hfs_call.wado/fail_at"($hfs_pos_16));
+                self.pos = $hfs_pos_16;
+                return 1, 0, $hfs_call_17;
             }
-            b = builtin::array_get_value<u8>($licm_repr_7, $hfs_pos_10);
-            $hfs_pos_10 = $hfs_pos_10 + 1;
+            b = builtin::array_get_value<u8>($licm_repr_13, $hfs_pos_16);
+            $hfs_pos_16 = $hfs_pos_16 + 1;
             if b == 59 {
-                $hfs_call_11 = ref.null none;
-                self.pos = $hfs_pos_10;
-                return 0, $hfs_pos_10, $hfs_call_11;
+                $hfs_call_17 = ref.null none;
+                self.pos = $hfs_pos_16;
+                return 0, $hfs_pos_16, $hfs_call_17;
             }
             continue l17;
         };

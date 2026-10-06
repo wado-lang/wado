@@ -8,8 +8,8 @@
 //! padding scheme exhaustively — the classic location for SHA bugs.
 
 use crate::common::{
-    TestHttpCtx, WasiState, cli_engine, cli_linker, compile_file,
-    install_rustls_provider_for_tests, limit_store, report_fuel_used, runtime,
+    TestHttpCtx, WasiState, cli_engine, cli_linker, compile_file, install_default_crypto_provider,
+    limit_store, report_fuel_used, runtime,
 };
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
@@ -24,8 +24,7 @@ static DIGEST_COMPONENT: OnceLock<Component> = OnceLock::new();
 
 fn digest_component() -> &'static Component {
     DIGEST_COMPONENT.get_or_init(|| {
-        let path =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sub/digest_driver.wado");
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/sub/digest_driver.wado");
         let result = compile_file(&path)
             .unwrap_or_else(|e| panic!("Failed to compile digest_driver.wado: {e:?}"));
         let engine = cli_engine();
@@ -54,7 +53,7 @@ fn run_component(stdin: &[u8]) -> String {
             .stdout(stdout_pipe)
             .stderr(stderr_pipe)
             .build();
-        install_rustls_provider_for_tests();
+        install_default_crypto_provider();
         let state = WasiState {
             ctx,
             table: wasmtime::component::ResourceTable::new(),

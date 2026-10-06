@@ -196,14 +196,14 @@ design papered over disappears.
 
 ```wado
 pub fn to_bytes<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<ByteSlice, SerializeError>;
-pub fn to_bytes_canonical<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<ByteSlice, SerializeError>;   // sorted keys, RFC 8785-style
+pub fn to_bytes_canonical<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<ByteSlice, SerializeError>;   // RFC 8785 (JCS)
 pub fn to_bytes_pretty<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<ByteSlice, SerializeError>;
 pub fn from_bytes<T: Deserialize, S: AsByteSlice>(input: S, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<T, DeserializeError>;
 ```
 
 The string entries (`to_string`, `to_string_pretty`, `from_string`) stay as
 thin wrappers over these. `core:json` has `to_bytes_canonical`
-(lexicographically sorted keys) for parity with CBOR and for canonical JSON use
+(RFC 8785, the JSON Canonicalization Scheme) for parity with CBOR and for canonical JSON use
 cases. `core:router` reads its input and resolves fields the same way.
 
 #### `core:value` replaces `core:json_value`
@@ -440,7 +440,7 @@ type are complete. The remaining items are lossy CBOR→JSON conversion and CWT.
   The string entries (`from_string`/`to_string`/`to_string_pretty`) are kept
   as thin convenience wrappers rather than removed.
 - [x] `core:value` (replacing `core:json_value`)
-- [x] `to_bytes_canonical` for JSON (sorted keys, RFC 8785-style)
+- [x] `to_bytes_canonical` for JSON (RFC 8785, JCS)
 - [x] serde: `visit_undefined` (default → `visit_null`) so `core:value` can
   realize `Value::Undefined` from CBOR simple value 23 — a gap in the
   original `Visitor` completion, found while implementing the decoder.

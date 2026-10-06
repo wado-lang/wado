@@ -1,0 +1,61 @@
+// An `impl` for a function type answers a method called through a bound, as it
+// answers one called on the value: both look the impl up under the type's own
+// signature.
+
+use { println, Stdout } from "core:cli";
+
+trait Apply with _ {
+    fn apply1(&self) -> i32;
+}
+
+struct Point {
+    x: i32,
+}
+
+impl Apply for fn(i32) -> i32 {
+    fn apply1(&self) -> i32 {
+        return self(1);
+    }
+}
+
+impl Apply for fn(Point) -> i32 {
+    fn apply1(&self) -> i32 {
+        return self(Point { x: 5 });
+    }
+}
+
+impl Apply for fn(i32) -> i32 with Stdout {
+    fn apply1(&self) -> i32 with Stdout {
+        return self(3);
+    }
+}
+
+fn through<T: Apply>(t: &T) -> i32 with _ {
+    return t.apply1();
+}
+
+test "a closure through a bound" {
+    let h = |x: i32| x * 10;
+    assert through(&h) == 10;
+}
+
+test "a fn value through a bound, picked by signature" {
+    let f: fn(i32) -> i32 = |x: i32| x + 1;
+    let g: fn(Point) -> i32 = |p: Point| p.x * 2;
+    assert through(&f) == 2;
+    assert through(&g) == 10;
+}
+
+test "a fn type's effects are part of its signature" {
+    let loud: fn(i32) -> i32 with Stdout = |x: i32| {
+        println(`${x}`);
+        return x * 7;
+    };
+    assert through(&loud) == 21;
+}
+
+__DATA__
+{
+    "test": {},
+    "stdout": "3\n"
+}

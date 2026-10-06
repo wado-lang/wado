@@ -144,8 +144,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Bring a block's local items into scope ahead of its statements: structs, then
-    /// newtypes to a fixpoint (a base may name a later one), then struct fields.
+    /// Bring a block's local items into scope ahead of its statements.
     fn hoist_local_items(&mut self, block: &Block) {
         let items: Vec<&ast::Item> = block
             .stmts
@@ -155,7 +154,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 _ => None,
             })
             .collect();
+        // A local may name one declared after it, or itself, so what the
+        // types owe is asked once every local is stated to the solver.
+        let ((), held) = self.holding_bounds(|this| this.resolve_local_items(&items));
+        if let Some(solver) = &self.tysys.solver {
+            let defs: Vec<DefId> = items
+                .iter()
+                .filter(|item| matches!(item, ast::Item::Struct(_) | ast::Item::Newtype(_)))
+                .map(|item| self.tysys.def_at(item.id()))
+                .collect();
+            solver
+                .borrow_mut()
+                .state_local(&self.tysys, &self.sem.decls.local, &defs);
+        }
+        self.release_bounds(held);
+        // A default is an expression over the whole block's types, so it waits
+        // for every local's fields and for the solver to know them.
         for item in &items {
+            if let ast::Item::Struct(struct_decl) = item {
+                self.resolve_local_field_defaults(struct_decl);
+            }
+        }
+    }
+
+    fn resolve_local_field_defaults(&mut self, struct_decl: &ast::StructDecl) {
+        let def = self.tysys.def_at(struct_decl.id);
+        let field_types: Vec<TypeId> = self.sem.decls.local.struct_fields[&def]
+            .fields
+            .iter()
+            .map(|(_, type_id, _)| *type_id)
+            .collect();
+        self.enter_decl_params_scope(&struct_decl.type_params)
+            .resolve_field_defaults(struct_decl, &field_types);
+    }
+
+    /// Structs, then newtypes to a fixpoint (a base may name a later one),
+    /// then struct fields.
+    fn resolve_local_items(&mut self, items: &[&ast::Item]) {
+        for item in items {
             if let ast::Item::Struct(struct_decl) = item {
                 self.declare_local_struct(struct_decl);
             }
@@ -174,18 +210,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 break;
             }
         }
-        for item in &items {
+        for item in items {
             self.resolve_local_item(item);
-        }
-        if let Some(solver) = &self.tysys.solver {
-            let defs: Vec<DefId> = items
-                .iter()
-                .filter(|item| matches!(item, ast::Item::Struct(_) | ast::Item::Newtype(_)))
-                .map(|item| self.tysys.def_at(item.id()))
-                .collect();
-            solver
-                .borrow_mut()
-                .state_local(&self.tysys, &self.sem.decls.local, &defs);
         }
     }
 
@@ -307,17 +333,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn resolve_local_struct(&mut self, struct_decl: &ast::StructDecl) {
-        let mut scope = self.enter_inherited_type_param_scope();
-        scope.annotate_ctx.trait_ctx.type_params.clear();
-        scope.register_generic_params(&struct_decl.type_params, 0);
-
-        let mut field_ctx =
-            FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
+        let mut scope = self.enter_decl_params_scope(&struct_decl.type_params);
         let fields: Vec<_> = struct_decl
             .fields
             .iter()
             .map(|field| {
-                let type_id = scope.resolve_struct_field(field, &mut field_ctx);
+                let type_id = scope.resolve_struct_field(field);
                 (field.name.clone(), type_id, field.visibility)
             })
             .collect();

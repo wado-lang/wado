@@ -1,0 +1,32 @@
+// Two variadic impls of one trait are told apart by their bounds, as two head
+// impls are: each call takes the one whose bounds its tuple meets.
+
+trait Tag with () {
+    fn tag(&self) -> String;
+}
+
+trait Small {}
+trait Flag {}
+impl Small for i32 {}
+impl Flag for bool {}
+
+impl<..T: Small> Tag for [..T] { fn tag(&self) -> String { return "small"; } }
+impl<..T: Flag> Tag for [..T] { fn tag(&self) -> String { return "flag"; } }
+
+test {
+    assert [1, 2].tag() == "small" && [true, false].tag() == "flag";
+}
+
+struct Wrap<T> { value: T }
+
+impl<T: Small> Tag for Wrap<T> { fn tag(&self) -> String { return "small"; } }
+impl<T: Flag> Tag for Wrap<T> { fn tag(&self) -> String { return "flag"; } }
+
+fn via<X: Tag>(x: X) -> String {
+    return x.tag();
+}
+
+test "an instance of a generic body selects by the same bounds" {
+    assert via([1, 2]) == "small" && via([true, false]) == "flag";
+    assert via(Wrap { value: 1 }) == "small" && via(Wrap { value: true }) == "flag";
+}

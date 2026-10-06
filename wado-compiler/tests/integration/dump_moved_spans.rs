@@ -3,7 +3,7 @@
 //! `Package::moved_local_spans`, so every last use lowered as a
 //! defensive `$value_copy$` the real compilation never emits.
 
-use crate::common::{InMemoryHost, block_on};
+use crate::common::{block_on, in_memory_host};
 use wado_compiler::{OptLevel, dump_with_host_and_world};
 
 const SOURCE: &str = r#"
@@ -20,7 +20,7 @@ export fn run() {
 
 #[test]
 fn dump_applies_last_use_moves() {
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let dump = block_on(dump_with_host_and_world(
         SOURCE,
         &host,

@@ -1,0 +1,20 @@
+// A callee's defaulted parameter takes its default even inside a caller that
+// declares a parameter of the same name at the same index: nothing forwards
+// the caller's `T` here, so `make()` is `make::<i64>()`.
+use { println, Stdout } from "core:cli";
+
+fn make<T: Default = i64>() -> T {
+    return T::default();
+}
+
+fn g<T: Default>(t: T) -> String {
+    let v = make();
+    return `${v:?}`;
+}
+
+export fn run() with Stdout {
+    println(g("x"));
+}
+
+__DATA__
+{"stdout": "0\n"}

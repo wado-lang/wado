@@ -147,8 +147,8 @@ struct tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<cor
 }
 
 variant core:prelude/types.wado//Option<u64> {  // TypeId(22)
-    Some(u64),
     None,
+    Some(u64),
 }
 
 struct core:prelude/types.wado//Option<u64>::Some {  // TypeId(23)
@@ -157,8 +157,8 @@ struct core:prelude/types.wado//Option<u64>::Some {  // TypeId(23)
 }
 
 variant core:prelude/types.wado//Option<u8> {  // TypeId(24)
-    Some(u8),
     None,
+    Some(u8),
 }
 
 struct core:prelude/types.wado//Option<u8>::Some {  // TypeId(25)
@@ -167,8 +167,8 @@ struct core:prelude/types.wado//Option<u8>::Some {  // TypeId(25)
 }
 
 variant core:prelude/types.wado//Option<u16> {  // TypeId(26)
-    Some(u16),
     None,
+    Some(u16),
 }
 
 struct core:prelude/types.wado//Option<u16>::Some {  // TypeId(27)
@@ -177,8 +177,8 @@ struct core:prelude/types.wado//Option<u16>::Some {  // TypeId(27)
 }
 
 variant core:prelude/types.wado//Option<u32> {  // TypeId(28)
-    Some(u32),
     None,
+    Some(u32),
 }
 
 struct core:prelude/types.wado//Option<u32>::Some {  // TypeId(29)
@@ -187,8 +187,8 @@ struct core:prelude/types.wado//Option<u32>::Some {  // TypeId(29)
 }
 
 variant core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>> {  // TypeId(30)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some {  // TypeId(31)
@@ -197,8 +197,8 @@ struct core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some
 }
 
 variant core:prelude/types.wado//Option<wasi:http/types.wado/Fields> {  // TypeId(32)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some {  // TypeId(33)
@@ -269,7 +269,7 @@ import fn wasi/task-return:handle from "wasi/task-return:handle";
 import fn wasi/resource-drop:wasi/http/types.wado#request from "wasi/resource-drop:wasi/http/types.wado#request";
 import fn wasi/future-write from "wasi/future-write";
 
-global global:cm_waitable_set_poll.wado::$const_obj_0: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>" = struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } };
+global global:cm_waitable_set_poll.wado::$const_obj_0: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>" = struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 0 } };
 
 fn "cm_waitable_set_poll.wado/$cm_binding__Fields_new"() with Fields {
     return "wasi/wasi:http/Fields::new"();
@@ -315,7 +315,7 @@ fn "cm_waitable_set_poll.wado/$cm_task_entry__handle"(request) with WaitableSet 
         drop("mem/realloc"(out_ptr, 8, 4, 0));
         out_ptr = builtin::i32_wrap_i64(local.tee packed_362("wasi/future-new"()));
         code = builtin::i32_wrap_i64(packed_362 >> 32_i64);
-        out_ptr = "cm_waitable_set_poll.wado/$cm_binding__Response_new"("cm_waitable_set_poll.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, out_ptr).0;
+        out_ptr = "cm_waitable_set_poll.wado/$cm_binding__Response_new"("cm_waitable_set_poll.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 0 }, out_ptr).0;
         $tv_1_184 = 0;
         $tv_1_184 = out_ptr;
         "wasi/task-return:handle"(0, $tv_1_184, 0, 0_i64, 0, 0, 0, 0);
@@ -325,7 +325,7 @@ fn "cm_waitable_set_poll.wado/$cm_task_entry__handle"(request) with WaitableSet 
     "wasi/waitable-set-drop"(ws_1);
     ws_1 = builtin::i32_wrap_i64(local.tee packed_362("wasi/future-new"()));
     code = builtin::i32_wrap_i64(packed_362 >> 32_i64);
-    ws_1 = "cm_waitable_set_poll.wado/$cm_binding__Response_new"("cm_waitable_set_poll.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, ws_1).0;
+    ws_1 = "cm_waitable_set_poll.wado/$cm_binding__Response_new"("cm_waitable_set_poll.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 0 }, ws_1).0;
     $tv_1_184 = 0;
     $tv_1_184 = ws_1;
     "wasi/task-return:handle"(0, $tv_1_184, 0, 0_i64, 0, 0, 0, 0);

@@ -1,0 +1,19 @@
+// A turbofish naming only `A` leaves `B` open, and the caller's own `B` at
+// the same index does not answer it.
+fn make<A, B: Default>() -> B {
+    return B::default();
+}
+
+fn g<X, B: Default>(x: X, b: B) -> String {
+    let v = make::<i32>();
+    return `${v:?}`;
+}
+
+export fn run() {
+    let s = g(1, "s");
+}
+
+__DATA__
+{
+  "compile_error": ":8:13: analysis error: cannot infer type parameter `B` of function `make`; add a turbofish (`make::<...>()`) or a type annotation"
+}

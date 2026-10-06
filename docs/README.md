@@ -195,6 +195,8 @@
 - [HashMap](./wep-2026-10-01-hash-map.md)
 - [Numeric Literal Suffixes](./wep-2026-10-01-numeric-literal-suffixes.md)
 - [Builtin Storage and Side-Effect Attributes](./wep-2026-10-04-builtin-storage-side-effect.md)
+- [Behavior Classes](./wep-2026-10-05-behavior-classes.md)
+- [Contract Checks](./wep-2026-10-06-contract-checks.md)
 
 ## Standard Library
 
@@ -229,6 +231,7 @@
 
 ## Research
 
+- [Research: Assertions and Contracts in Other Languages](./research-assertions-and-contracts.md)
 - [Research: Callbacks across the Component Model Boundary](./research-cm-boundary-callbacks.md)
 - [Research: Component Model Pain Points](./research-cm-pain-points.md)
 - [Research: Code Generation Approaches](./research-code-generation.md)

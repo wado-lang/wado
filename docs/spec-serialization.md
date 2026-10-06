@@ -212,12 +212,15 @@ test {
 ```
 
 Serializing a `NaN` or an infinite float is an `Err`. Deserializing malformed
-input, a type mismatch, or input with trailing data is an `Err`.
+input, a type mismatch, or input with trailing data is an `Err`. So is a number
+that rounds to infinity in the float type it is read as (`1e400` as `f64`), an
+`Overflow`. One too small for the type reads as a zero of its sign.
 
-`core:json` writes `i64`, `u64`, `i128`, and `u128` as a JSON number while the
-magnitude is at most 2^53 - 1, the largest integer a JavaScript number holds
-exactly, and as a JSON string of decimal digits beyond it. Reading any integer
-type accepts either form.
+`core:json` writes `i64` and `u64` as a JSON number while the magnitude is at
+most 2^53 - 1, the largest integer a JavaScript number holds exactly, and as a
+JSON string of decimal digits beyond it. It writes `i128` and `u128` as such a
+string whatever the value. Reading any number type, integer or float, accepts a
+string holding exactly one number token as well as the bare number.
 
 ## Command-Line Arguments (`core:args`)
 

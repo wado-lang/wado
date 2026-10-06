@@ -10,7 +10,7 @@ use cranelift_entity::{EntityRef, PrimaryMap, entity_impl};
 
 use crate::call_args::CallArgs;
 use crate::canonical::CmCallTarget;
-use crate::const_eval::{MAX_SEQ_ELEMENTS, Value, non_nan_float, truncate_int};
+use crate::const_eval::{MAX_SEQ_ELEMENTS, Value, truncate_int};
 use crate::hashmap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
@@ -19,7 +19,7 @@ use crate::nir::{FuncId, NirBinaryOp, NirLiteralPattern, NirLocal, NirUnaryOp};
 use crate::nir_value_graph::builder::ValueGraphBuild;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
 use crate::primitive::PrimitiveType;
-use crate::tir::TypeId;
+use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
 /// An operand position in the skeleton — an expression's value, after operand
@@ -274,8 +274,19 @@ impl PackedData {
     fn element(&self, bits: u64) -> Option<Value> {
         let prim = self.elem;
         match prim {
-            PrimitiveType::F32 => non_nan_float(f64::from(f32::from_bits(bits as u32)), prim),
-            PrimitiveType::F64 => non_nan_float(f64::from_bits(bits), prim),
+            // A read keeps a NaN's bits exactly, and widening an f32 NaN to the
+            // f64 a `Value` holds may quiet it.
+            PrimitiveType::F32 => {
+                let value = f32::from_bits(bits as u32);
+                (!value.is_nan()).then(|| Value::Float {
+                    value: f64::from(value),
+                    prim,
+                })
+            }
+            PrimitiveType::F64 => Some(Value::Float {
+                value: f64::from_bits(bits),
+                prim,
+            }),
             _ => Some(Value::Int {
                 value: truncate_int(bits, prim),
                 prim,
@@ -537,6 +548,17 @@ pub enum StmtKind {
         pattern: PatId,
         value: Operand,
     },
+}
+
+impl StmtKind {
+    /// Whether the statement transfers control away: `return`, `break` or
+    /// `continue`.
+    pub fn is_jump(&self) -> bool {
+        matches!(
+            self,
+            StmtKind::Return { .. } | StmtKind::Break { .. } | StmtKind::Continue
+        )
+    }
 }
 
 /// Pattern kinds. Leaf payloads (`NirLiteralPattern`, range bounds) are
@@ -1867,6 +1889,35 @@ impl Body {
         match self.block_exits(e)?.as_slice() {
             [Some(one)] => Some(*one),
             _ => None,
+        }
+    }
+
+    /// Whether some step of the place `e`, its root included, may name storage
+    /// rather than hold a value ([`TypeTable::is_reference_shaped`]): what it
+    /// reaches the frame need not own. Without a type table, and past a step
+    /// that is no place, every step might be.
+    pub fn place_crosses_reference(&self, e: ExprId, types: Option<&TypeTable>) -> bool {
+        let Some(types) = types else {
+            return true;
+        };
+        let mut cur = e;
+        loop {
+            if types.is_reference_shaped(self.exprs[cur].type_id) {
+                return true;
+            }
+            let inner = match &self.exprs[cur].kind {
+                ExprKind::Local { .. } => return false,
+                ExprKind::Unary { expr: inner, .. }
+                | ExprKind::Cast { expr: inner, .. }
+                | ExprKind::FieldAccess { expr: inner, .. }
+                | ExprKind::VariantPayload { expr: inner, .. }
+                | ExprKind::Index { expr: inner, .. } => Some(*inner),
+                _ => self.block_yield(cur),
+            };
+            match inner.and_then(Operand::as_expr) {
+                Some(inner) => cur = inner,
+                None => return true,
+            }
         }
     }
 

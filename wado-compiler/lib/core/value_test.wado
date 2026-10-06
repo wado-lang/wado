@@ -16,7 +16,7 @@ use {
     IgnoredAny,
     Visitor,
 } from "core:serde";
-use { TreeMap } from "core:collections";
+use { HashMap, TreeMap } from "core:collections";
 
 fn obj(entries: List<[String, Value]>) -> TreeMap<String, Value> {
     let mut m: TreeMap<String, Value> = TreeMap::new();
@@ -1130,6 +1130,11 @@ impl<T: Deserialize> Deserialize for ReadLastWins<T> {
 
 test "a TreeMap read under a last-wins policy keeps the last repeated key" {
     let r: Result<ReadLastWins<TreeMap<String, i32>>, DeserializeError> = from_string(`{"a":1,"b":2,"a":3}`);
+    assert r matches { Ok(m) && m.value.len() == 2 && m.value["a"] == 3 };
+}
+
+test "a HashMap read under a last-wins policy keeps the last repeated key" {
+    let r: Result<ReadLastWins<HashMap<String, i32>>, DeserializeError> = from_string(`{"a":1,"b":2,"a":3}`);
     assert r matches { Ok(m) && m.value.len() == 2 && m.value["a"] == 3 };
 }
 

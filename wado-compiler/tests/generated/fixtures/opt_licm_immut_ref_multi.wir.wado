@@ -67,7 +67,7 @@ fn "opt_licm_immut_ref_multi.wado/run"() with Stdout {
     let i_5: i32;
     let $local_6: ref "core:prelude/string.wado//String";
     let x: i64;
-    let start_76: i32;
+    let start_79: i32;
     sum = 0;
     i_5 = 0;
     b0: block {
@@ -86,17 +86,17 @@ fn "opt_licm_immut_ref_multi.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, i_5);
         }
-        start_76 = $local_6.used;
+        start_79 = $local_6.used;
         $local_6.used = i_5;
-        builtin::array_set_u8($local_6.repr, start_76, 45);
+        builtin::array_set_u8($local_6.repr, start_79, 45);
     } else {
     }
-    if @unlikely(local.tee start_76($local_6.used + sum) > builtin::array_len($local_6.repr)) {
+    if @unlikely(local.tee start_79($local_6.used + sum) > builtin::array_len($local_6.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, start_76);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, start_79);
     }
     i_5 = $local_6.used;
-    $local_6.used = start_76;
+    $local_6.used = start_79;
     "core:prelude/primitive.wado/write_decimal_digits"($local_6.repr, i_5, x, sum);
     sum = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     i_5 = builtin::i32_wrap_i64(x >> 32_i64);

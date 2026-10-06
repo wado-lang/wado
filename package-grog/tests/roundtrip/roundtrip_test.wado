@@ -229,6 +229,34 @@ fn nested_lists(depth: i32) -> ByteList {
     return grog::encode(&value);
 }
 
+test "a oneof message member read again merges in place" {
+    // `Value.list_value`, one element each time: copying the held list on
+    // every read would make this quadratic.
+    let k = 50000;
+    let mut input: ByteList = b"";
+    for let _ of 0..<k {
+        input.extend(&b"\x32\x04\x0a\x02\x08\x00");
+    }
+    let back = grog::decode::<pbstruct::Value>(&input).unwrap();
+    let Some(pbstruct::ValueKind::ListValue(list)) = back.kind else {
+        panic("the last member read is the list");
+    };
+    assert list.values.len() == k;
+}
+
+test "an open enum is equal by its number" {
+    assert Status::Unrecognized(1) == Status::Active;
+    assert Status::Unrecognized(7) != Status::Active;
+    assert Status::Unrecognized(-1) < Status::Unspecified && Status::Retired < Status::Unrecognized(3);
+    assert grog::decode::<Account>(&grog::encode(&Account { status: Status::Unrecognized(1) })).unwrap() == Account {
+        status: Status::Active,
+    };
+}
+
+test "an open enum's zero is left off the wire however it is spelled" {
+    assert grog::encode(&Account { status: Status::Unrecognized(0) }).len() == 0;
+}
+
 test "nesting past the depth limit is refused" {
     assert grog::decode::<pbstruct::Value>(&nested_lists(40)) matches { Ok(_) };
     assert grog::decode::<pbstruct::Value>(&nested_lists(60)) matches { Err(_) };

@@ -1,0 +1,21 @@
+// A type a body writes owes its declaration's bounds at the function's
+// parameters: `Wrap<O>` needs `O: Tag`, which `O` does not declare.
+
+trait Tag with () {}
+
+struct Wrap<T: Tag> {
+    v: T,
+}
+
+fn none<O>() -> bool {
+    let w: Option<Wrap<O>> = null;
+    return w.is_none();
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":11:19: analysis error: type 'O' does not implement trait 'Tag' required by bound on 'T'",
+  "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
+}

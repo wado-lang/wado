@@ -1,0 +1,44 @@
+// A block that panics discards its writes only when nothing leaves it before
+// the panic. Here `fix` breaks out of the panicking `if` after moving `i` past
+// the guard's bound, so `xs[i]` must keep its bounds check and panic.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn sum(xs: &List<i32>, jump: bool) -> i32 {
+    let mut i = 0;
+    let mut s = 0;
+    loop {
+        if i >= xs.len() {
+            break;
+        }
+        fix: {
+            if i == 1 {
+                i = i + 10;
+                if jump {
+                    break fix;
+                }
+                panic("unreachable in this test");
+            }
+        }
+        s += xs[i];
+        i += 1;
+    }
+    return s;
+}
+
+export fn run() with Stdout {
+    let mut xs = List::<i32>::with_capacity(64);
+    for let k of 0..<4 {
+        xs.push(builtin::black_box(k));
+    }
+    println(`${sum(&xs, builtin::black_box(true))}`);
+}
+
+__DATA__
+{
+    "stderr_contains": [
+        "index out of bounds"
+    ],
+    "trapped": true
+}

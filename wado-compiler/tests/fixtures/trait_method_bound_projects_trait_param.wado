@@ -1,0 +1,38 @@
+// A trait method's bound projecting off a trait parameter (`X::Item`) has no
+// written form in the impl's frame, so the impl's restated bound (`Conv<i32>`)
+// is what a call through `Bx` checks.
+trait Iter with () {
+    type Item;
+}
+
+trait Conv<X> with () {}
+
+trait Store<X: Iter> with () {
+    fn hold<E: Conv<X::Item>>(&self, e: E) -> i32;
+}
+
+struct Ints {}
+
+impl Iter for Ints {
+    type Item = i32;
+}
+
+struct E1 {}
+
+impl Conv<i32> for E1 {}
+
+struct Bx {}
+
+impl Store<Ints> for Bx {
+    fn hold<E: Conv<i32>>(&self, e: E) -> i32 {
+        return 1;
+    }
+}
+
+export fn run() {
+    let b = Bx {};
+    assert b.hold(E1 {}) == 1;
+}
+
+__DATA__
+{}

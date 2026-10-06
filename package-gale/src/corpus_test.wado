@@ -6,7 +6,7 @@ use { Console } from "../tests/support/console.wado";
 use { scratch } from "../tests/support/scratch.wado";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
-use { GaleMap } from "./gale_map.wado";
+use { HashMap } from "core:collections";
 use { Log } from "core:log";
 
 global SUITE: String = "gale-corpus-test";
@@ -64,7 +64,7 @@ fn baseline_with<S: AsStrSlice>(case: S, text: String) -> String with Preopens {
 }
 
 /// `ratchet`'s exit status on `counts`, and what it printed.
-fn ratchet_run(baseline: &String, counts: GaleMap<String, i32>, update: bool) -> [i32, Console] with (Preopens, Log) {
+fn ratchet_run(baseline: &String, counts: HashMap<String, i32>, update: bool) -> [i32, Console] with (Preopens, Log) {
     let mut console = Console {};
     let status = with &mut console do {
         ratchet(*baseline, &counts, update, NOUN, REMEDY);

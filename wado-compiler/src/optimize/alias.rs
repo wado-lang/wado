@@ -18,6 +18,7 @@ use crate::nir_arena::{
     ArenaCallArg, Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, PatId, StmtKind,
 };
 use crate::nir_package::NirPackage;
+use crate::nir_value_graph::builder::AliasSets;
 use crate::niri::AliasClasses;
 use crate::tir::{ResolvedType, TypeId, TypeKey, TypeTable};
 
@@ -123,7 +124,7 @@ pub(super) fn build_alias_info(
     let mut edges = same_pointee_edges;
     let mut syntactic_mut: IndexSet<u32> = stores_aliased_locals.iter().copied().collect();
     walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
-        collect_aliased_node(body, node, &mut aliased);
+        collect_aliased_node(body, node, type_table, &mut aliased);
         if let Some(r) = extra_aliased(body, node) {
             aliased.insert(r);
         }
@@ -246,9 +247,9 @@ pub(super) fn first_param_types(project: &NirPackage) -> FirstParamTypes {
     map
 }
 
-/// The `aliased`, `untrackable`, and `mut_escaped` local sets the `ValueGraph`
-/// builder needs, as plain `IndexSet`s. Wraps [`build_alias_info`] (for
-/// `aliased` / `untrackable`) with the mutable-escape analysis (`mut_escaped`).
+/// The [`AliasSets`] the `ValueGraph` builder needs. Wraps [`build_alias_info`]
+/// (for `aliased` / `untrackable`) with the mutable-escape analysis
+/// (`mut_escaped`).
 ///
 /// `mut_escaped` ⊆ `aliased` is the subset a call can actually mutate, derived
 /// subtractively: a local is dropped only when its type is transitively free of
@@ -263,7 +264,7 @@ pub(super) fn builder_alias_sets(
     type_table: &TypeTable,
     first_param_types: &FirstParamTypes,
     call_immutability: &CallImmutability,
-) -> (IndexSet<u32>, IndexSet<u32>, IndexSet<u32>) {
+) -> AliasSets {
     // A mutating method call `recv.m(…)` (`&mut self`) aliases `recv` implicitly:
     // the NIR receiver is a bare `Local` with no `&mut recv` node, so
     // `collect_aliased_node` misses it and the value graph would forward `recv`'s
@@ -308,7 +309,11 @@ pub(super) fn builder_alias_sets(
         call_immutability,
         &info.alias_groups,
     );
-    (aliased, info.untrackable.iter().collect(), mut_escaped)
+    AliasSets {
+        aliased,
+        untrackable: info.untrackable.iter().collect(),
+        mut_escaped,
+    }
 }
 
 /// Compute `mut_escaped` subtractively from `aliased`: keep every local that is
@@ -469,7 +474,7 @@ impl<'a> CallImmutability<'a> {
     }
 }
 
-use super::arena_query::storage_root;
+use super::arena_query::{holds_reference, storage_root};
 
 /// The per-call verdicts the value-graph builder reads, from one walk. `pure`
 /// implies `receiver_immutable`.
@@ -1144,12 +1149,16 @@ fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
 /// Augments the seeded `aliased` set with body-visible aliasing markers for a
 /// single arena node. Conservative — false positives only cost missed
 /// optimizations.
-fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
+fn collect_aliased_node(body: &Body, node: NodeRef, type_table: &TypeTable, out: &mut LocalSet) {
     let local = |id: ExprId| -> Option<u32> {
         match &body.exprs[id].kind {
             ExprKind::Local { index, .. } => Some(*index),
             _ => None,
         }
+    };
+    // A copy of a value with no reference in it shares nothing with its source.
+    let shared_local = |id: ExprId| -> Option<u32> {
+        local(id).filter(|_| holds_reference(type_table, body.exprs[id].type_id))
     };
     match node {
         NodeRef::Stmt(s) => match &body.stmts[s].kind {
@@ -1157,7 +1166,7 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             StmtKind::Let {
                 local_index, value, ..
             } => {
-                if let Some(src) = value.as_expr().and_then(local) {
+                if let Some(src) = value.as_expr().and_then(shared_local) {
                     out.insert(*local_index);
                     out.insert(src);
                 }
@@ -1166,7 +1175,7 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             StmtKind::Expr(Operand::Expr(expr)) => {
                 if let ExprKind::Assign { target, value } = &body.exprs[*expr].kind
                     && let Some(dst) = local(*target)
-                    && let Some(src) = value.as_expr().and_then(local)
+                    && let Some(src) = value.as_expr().and_then(shared_local)
                 {
                     out.insert(dst);
                     out.insert(src);

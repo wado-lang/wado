@@ -165,7 +165,7 @@ fn collect_and_validate(
     let type_table = project.type_table.borrow();
     let field_table = build_field_table_index(project);
     let struct_fields = build_struct_fields_index(project);
-    let reachable_writes = transitive_reachable_writes(project);
+    let reachable_writes = transitive_reachable_writes(project, &type_table);
     let global_types = global_type_index(project);
 
     let mut candidates: IndexMap<(FnKey, usize), SroaInfo> = IndexMap::default();
@@ -563,7 +563,10 @@ fn global_place_root(body: &Body, target: ExprId) -> Option<(ModuleSource, Strin
 /// everything its callees may write, so an indirect call anywhere below it makes
 /// it [`Opaque`](ReachableWrites::Opaque). A monotone worklist over the reverse
 /// call graph.
-fn transitive_reachable_writes(project: &NirPackage) -> Vec<ReachableWrites> {
+fn transitive_reachable_writes(
+    project: &NirPackage,
+    type_table: &TypeTable,
+) -> Vec<ReachableWrites> {
     let n = project.functions.len();
     let mut writes: Vec<ReachableWrites> = Vec::with_capacity(n);
     let mut callers: Vec<Vec<usize>> = vec![Vec::new(); n];
@@ -571,8 +574,18 @@ fn transitive_reachable_writes(project: &NirPackage) -> Vec<ReachableWrites> {
         let func = project.functions[i].borrow();
         let mut direct: IndexSet<(ModuleSource, String)> = IndexSet::default();
         let mut indirect = false;
+        // Another task may write any global.
+        if func.body.is_none() && project.builtin_declarations.leaves_for_host(&*func) {
+            direct.extend(
+                project
+                    .globals
+                    .iter()
+                    .map(|g| (g.module_source.clone(), g.name.clone())),
+            );
+        }
         if let Some(body) = func.body.as_ref() {
-            for node in body.exprs.values() {
+            for e in reachable_exprs(body) {
+                let node = &body.exprs[e];
                 match &node.kind {
                     ExprKind::GlobalVarSet {
                         module_source,
@@ -586,7 +599,9 @@ fn transitive_reachable_writes(project: &NirPackage) -> Vec<ReachableWrites> {
                             direct.insert(g);
                         }
                     }
-                    ExprKind::Call { func_id, .. } => {
+                    // A call typed `!` never hands control back, so what it
+                    // writes reaches no snapshot read after it.
+                    ExprKind::Call { func_id, .. } if !type_table.is_never(node.type_id) => {
                         let c = func_id.index();
                         if c < n {
                             callers[c].push(i);

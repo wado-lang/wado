@@ -16,7 +16,8 @@ use { GenContext, is_nullable, sets_overlap } from "./gen_context.wado";
 use { bits_set, bits_test } from "./token_kinds.wado";
 use { sort_group_by_specificity } from "./alt_grouping.wado";
 use { all_alts_are_single_token, dedup_append_arr } from "./gen_util.wado";
-use { GaleSet } from "./gale_map.wado";
+use { HashSet } from "core:collections";
+use { GALE_SEED } from "./hash_seed.wado";
 
 pub variant PredictionNode {
     Leaf(i32),
@@ -406,19 +407,19 @@ fn sll_config_first(c: &SllConfig, ctx: &mut GenContext) -> List<i32> {
 /// matched a single token, so the walk would keep separating alternatives on
 /// lookahead that actually sits inside the body. A single-token body keeps
 /// the cheap skip, which is exact for it.
-fn repeat_entry_alts(rep: &RepeatElement, ctx: &mut GenContext) -> Option<List<Alternative>> {
-    return match rep.element {
+fn repeat_entry_alts(rep: &RepeatElement, ctx: &mut GenContext) -> Option<&List<Alternative>> {
+    return match &rep.element {
         RuleRef(rr) => {
             let mut stv: List<String> = [];
             if ctx.rule_is_single_token(&rr.name, &mut stv) {
                 null;
             } else if let Some(inner_rule) = ctx.find_rule(&rr.name) {
-                Option::Some(inner_rule.alternatives);
+                Option::Some(&inner_rule.alternatives);
             } else {
                 null;
             }
         },
-        Group(g) => if all_alts_are_single_token(&g.alternatives) { null } else { Option::Some(g.alternatives) },
+        Group(g) => if all_alts_are_single_token(&g.alternatives) { null } else { Option::Some(&g.alternatives) },
         TokenRef(_) | Literal(_) | Label(_) | Wildcard(_) | Not(_) | Repeat(_) => null,
     };
 }
@@ -465,7 +466,7 @@ fn walk_repeat(c: &SllConfig, at: i32, token: i32, ctx: &mut GenContext, inline_
     }
     let new_stack = push_return(&c.return_stack, next.elements, next.pos);
     let mut body_results: List<SllConfig> = [];
-    for let alt of &inner_alts {
+    for let alt of inner_alts {
         let mut v: List<String> = [];
         if !ctx.first_ids_of_alt(alt, &mut v).contains(&token) {
             continue;
@@ -883,7 +884,7 @@ fn try_expand_opaque(
         return null;
     }
     // Rule diversity check: only expand when opaque configs reference different rules.
-    let mut rule_refs = GaleSet::<String>::new();
+    let mut rule_refs = HashSet::<String>::with_seed(GALE_SEED);
     for let c of original_configs {
         if !opaque_alts.contains(&c.alt_index) {
             continue;
@@ -891,7 +892,7 @@ fn try_expand_opaque(
         if c.pos < 0 || c.pos >= c.elements.len() {
             continue;
         }
-        if let RuleRef(r) = c.elements[c.pos] {
+        if let RuleRef(r) = &c.elements[c.pos] {
             rule_refs.insert(r.name);
         }
     }
@@ -910,7 +911,7 @@ fn try_expand_opaque(
         if c.pos < 0 || c.pos >= c.elements.len() {
             continue;
         }
-        if let RuleRef(r) = c.elements[c.pos] {
+        if let RuleRef(r) = &c.elements[c.pos] {
             let found_rule = ctx.find_rule(&r.name);
             if let Some(found_rule) = found_rule {
                 if found_rule.alternatives.len() > 8 {

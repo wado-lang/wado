@@ -1,0 +1,29 @@
+// A pack trait's arguments are compared as the run the pack takes.
+//
+// `B<i32, bool>` is not `B<i32>`: the pack takes `[i32, bool]` in one and
+// `[i32]` in the other. Arguments were compared position by position up to
+// the shorter list, so the impl for `B<i32, bool>` answered a bound asking
+// `B<i32>`.
+
+trait B<..Y> with () {
+    fn b(&self) -> i32;
+}
+
+struct P {}
+
+impl B<i32, bool> for P {
+    fn b(&self) -> i32 {
+        return 1;
+    }
+}
+
+fn need<U: B<i32>>(u: &U) -> i32 {
+    return 7;
+}
+
+test {
+    assert need(&P {}) == 7;
+}
+
+__DATA__
+{"compile_error": "type 'P' does not implement trait 'B<i32>' required by bound on 'U'"}

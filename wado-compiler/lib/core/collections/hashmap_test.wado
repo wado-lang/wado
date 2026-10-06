@@ -1,8 +1,13 @@
 use { HashMap, HashSeed, HashSet } from "core:collections";
-
-fn seed() -> HashSeed {
-    return HashSeed::fixed(1, 2);
-}
+use { to_string, from_string } from "core:json";
+use {
+    DeserializeErrorKind,
+    Serialize,
+    Serializer,
+    SerializeError,
+    SerializeErrorKind,
+    TextKeySerializer,
+} from "core:serde";
 
 fn keys_of(map: &HashMap<String, i32>) -> List<String> {
     let mut out: List<String> = [];
@@ -13,7 +18,7 @@ fn keys_of(map: &HashMap<String, i32>) -> List<String> {
 }
 
 test "keys iterate in insertion order" {
-    let mut map = HashMap::<String, i32>::new(seed());
+    let mut map = HashMap::<String, i32>::new();
     for let k of ["zeta", "alpha", "mid", "beta"] as List<String> {
         map[k] = k.len();
     }
@@ -21,7 +26,7 @@ test "keys iterate in insertion order" {
 }
 
 test "overwriting a key keeps its position" {
-    let mut map = HashMap::<String, i32>::new(seed());
+    let mut map = HashMap::<String, i32>::new();
     map["a"] = 1;
     map["b"] = 2;
     map["a"] = 10;
@@ -30,7 +35,7 @@ test "overwriting a key keeps its position" {
 }
 
 test "a removed key re-inserted goes to the end" {
-    let mut map = HashMap::<String, i32>::new(seed());
+    let mut map = HashMap::<String, i32>::new();
     map["a"] = 1;
     map["b"] = 2;
     map["c"] = 3;
@@ -42,7 +47,7 @@ test "a removed key re-inserted goes to the end" {
 }
 
 test "compaction keeps the survivors in order" {
-    let mut map = HashMap::<i32, i32>::new(seed());
+    let mut map = HashMap::<i32, i32>::new();
     for let i of 0..<100 {
         map[i] = i * 2;
     }
@@ -67,7 +72,7 @@ test "compaction keeps the survivors in order" {
 }
 
 test "lookups across growth" {
-    let mut map = HashMap::<String, i32>::new(seed());
+    let mut map = HashMap::<String, i32>::new();
     for let i of 0..<1000 {
         map[`k${i}`] = i;
     }
@@ -83,7 +88,7 @@ test "lookups across growth" {
 }
 
 test "try_insert and get_or_insert keep the first value" {
-    let mut map = HashMap::<String, i32>::new(seed());
+    let mut map = HashMap::<String, i32>::new();
     assert map.try_insert("a", 1);
     assert !map.try_insert("a", 2);
     assert map.get_or_insert("a", 3) == 1;
@@ -92,7 +97,7 @@ test "try_insert and get_or_insert keep the first value" {
 }
 
 test "clear empties the map" {
-    let mut map = HashMap::<String, i32>::new(seed());
+    let mut map = HashMap::<String, i32>::new();
     map["a"] = 1;
     map.clear();
     assert map.is_empty();
@@ -101,7 +106,7 @@ test "clear empties the map" {
 }
 
 test "a copy is independent" {
-    let mut map = HashMap::<String, i32>::new(seed());
+    let mut map = HashMap::<String, i32>::new();
     map["a"] = 1;
     let mut copy = map;
     copy["b"] = 2;
@@ -110,7 +115,7 @@ test "a copy is independent" {
 }
 
 test "text lookups find, miss, and skip a removed key" {
-    let mut map = HashMap::<String, List<i32>>::new(seed());
+    let mut map = HashMap::<String, List<i32>>::new();
     assert map.get_str("a") == null;
     for let i of 0..<20 {
         map[`key${i}`] = [i];
@@ -125,7 +130,7 @@ test "text lookups find, miss, and skip a removed key" {
 }
 
 test "a value is borrowed and mutated in place through its key" {
-    let mut map = HashMap::<String, List<i32>>::new(seed());
+    let mut map = HashMap::<String, List<i32>>::new();
     map["a"] = [];
     map["a"].push(1);
     let r = &map["a"];
@@ -139,24 +144,24 @@ test "a value is borrowed and mutated in place through its key" {
 
 #[expect_trap]
 test "reading a missing key panics" {
-    let map = HashMap::<String, i32>::new(seed());
+    let map = HashMap::<String, i32>::new();
     let _ = map["missing"];
 }
 
 #[expect_trap]
 test "borrowing a missing key panics" {
-    let map = HashMap::<String, List<i32>>::new(seed());
+    let map = HashMap::<String, List<i32>>::new();
     let _ = &map["missing"];
 }
 
 #[expect_trap]
 test "mutating a missing key panics" {
-    let mut map = HashMap::<String, List<i32>>::new(seed());
+    let mut map = HashMap::<String, List<i32>>::new();
     map["missing"].push(1);
 }
 
 test "growth after a removal leaves the dead entry out" {
-    let mut map = HashMap::<i32, i32>::new(seed());
+    let mut map = HashMap::<i32, i32>::new();
     for let i of 0..<6 {
         map[i] = i;
     }
@@ -168,7 +173,7 @@ test "growth after a removal leaves the dead entry out" {
 }
 
 test "keys of every length hash by their bytes" {
-    let mut map = HashMap::<String, i32>::new(seed());
+    let mut map = HashMap::<String, i32>::new();
     let mut key = "";
     for let n of 0..<40 {
         map[key] = n;
@@ -182,41 +187,41 @@ test "keys of every length hash by their bytes" {
 }
 
 test "every integer width, char, bool and List hash as keys" {
-    let mut a = HashMap::<i8, i32>::new(seed());
+    let mut a = HashMap::<i8, i32>::new();
     a[-1] = 1;
     assert a[-1] == 1;
-    let mut b = HashMap::<u8, i32>::new(seed());
+    let mut b = HashMap::<u8, i32>::new();
     b[255] = 1;
     assert b[255] == 1;
-    let mut c = HashMap::<i16, i32>::new(seed());
+    let mut c = HashMap::<i16, i32>::new();
     c[-300] = 1;
     assert c[-300] == 1;
-    let mut d = HashMap::<u16, i32>::new(seed());
+    let mut d = HashMap::<u16, i32>::new();
     d[60000] = 1;
     assert d[60000] == 1;
-    let mut e = HashMap::<u32, i32>::new(seed());
+    let mut e = HashMap::<u32, i32>::new();
     e[4000000000] = 1;
     assert e[4000000000] == 1;
-    let mut f = HashMap::<i64, i32>::new(seed());
+    let mut f = HashMap::<i64, i32>::new();
     f[-5000000000] = 1;
     assert f[-5000000000] == 1;
-    let mut g = HashMap::<u64, i32>::new(seed());
+    let mut g = HashMap::<u64, i32>::new();
     g[u64::MAX] = 1;
     assert g[u64::MAX] == 1;
-    let mut h = HashMap::<char, i32>::new(seed());
+    let mut h = HashMap::<char, i32>::new();
     h['あ'] = 1;
     assert h['あ'] == 1;
-    let mut k = HashMap::<bool, i32>::new(seed());
+    let mut k = HashMap::<bool, i32>::new();
     k[true] = 1;
     assert k[true] == 1 && !k.contains_key(false);
-    let mut l = HashMap::<List<i32>, i32>::new(seed());
+    let mut l = HashMap::<List<i32>, i32>::new();
     l[[1, 2]] = 1;
     assert l[[1, 2]] == 1 && !l.contains_key([2, 1]);
 }
 
 test "maps are equal when they hold equal entries in the same order" {
-    let mut a = HashMap::<String, i32>::new(seed());
-    let mut b = HashMap::<String, i32>::new(HashSeed::fixed(3, 4));
+    let mut a = HashMap::<String, i32>::new();
+    let mut b = HashMap::<String, i32>::with_seed(HashSeed::fixed(3, 4));
     assert a == b;
     a["x"] = 1;
     a["gone"] = 0;
@@ -227,36 +232,36 @@ test "maps are equal when they hold equal entries in the same order" {
     assert a == b;
     b["y"] = 3;
     assert a != b;
-    let mut c = HashMap::<String, i32>::new(seed());
+    let mut c = HashMap::<String, i32>::new();
     c["y"] = 2;
     c["x"] = 1;
     assert a != c;
-    let mut s = HashSet::<i32>::new(seed());
+    let mut s = HashSet::<i32>::new();
     s.insert(1);
-    let mut t = HashSet::<i32>::new(seed());
+    let mut t = HashSet::<i32>::new();
     assert s != t;
     t.insert(1);
     assert s == t;
 }
 
 test "maps order by their entries in insertion order, then by length" {
-    let mut a = HashMap::<i32, i32>::new(seed());
+    let mut a = HashMap::<i32, i32>::new();
     a[1] = 1;
-    let mut b = HashMap::<i32, i32>::new(HashSeed::fixed(3, 4));
+    let mut b = HashMap::<i32, i32>::with_seed(HashSeed::fixed(3, 4));
     b[1] = 1;
     assert a.cmp(&b) == Ordering::Equal;
     b[0] = 0;
     assert a < b;
-    let mut s = HashSet::<i32>::new(seed());
+    let mut s = HashSet::<i32>::new();
     s.insert(2);
-    let mut t = HashSet::<i32>::new(seed());
+    let mut t = HashSet::<i32>::new();
     t.insert(1);
     t.insert(5);
     assert s > t;
 }
 
 test "inspect renders the live entries and no seed" {
-    let mut map = HashMap::<String, i32>::new(seed());
+    let mut map = HashMap::<String, i32>::new();
     assert `${map:?}` == "{}" && `${map:#?}` == "{}";
     map["a"] = 1;
     map["gone"] = 0;
@@ -264,21 +269,102 @@ test "inspect renders the live entries and no seed" {
     assert map.remove("gone");
     assert `${map:?}` == "{\"a\": 1, \"b\": 2}";
     assert `${map:#?}` == "{\n  \"a\": 1,\n  \"b\": 2,\n}";
-    let mut set = HashSet::<i32>::new(seed());
+    let mut set = HashSet::<i32>::new();
     set.insert(3);
     set.insert(1);
     assert `${set:?}` == "{3, 1}";
     assert `${set:#?}` == "{\n  3,\n  1,\n}";
 }
 
-test "a random seed builds a working map" {
-    let mut map = HashMap::<String, i32>::new(HashSeed::random());
+test "a map under a fixed seed finds what it holds" {
+    let mut map = HashMap::<String, i32>::with_seed(HashSeed::fixed(1, 2));
     map["a"] = 1;
     assert map["a"] == 1;
+    let mut set = HashSet::<String>::with_seed(HashSeed::fixed(1, 2));
+    assert set.insert("a") && set.contains("a");
+}
+
+test "a map round-trips through a JSON object in insertion order, and no seed" {
+    let mut map = HashMap::<String, i32>::with_seed(HashSeed::fixed(3, 4));
+    map["zeta"] = 1;
+    map["alpha"] = 2;
+    let json = to_string(&map).unwrap();
+    assert json == `{"zeta":1,"alpha":2}`;
+    let back: HashMap<String, i32> = from_string(&json).unwrap();
+    assert back == map;
+    assert from_string::<HashMap<String, i32>>(`{"a":1,"a":2}`) matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
+}
+
+test "a set round-trips through a JSON array in insertion order" {
+    let mut set = HashSet::<i32>::with_seed(HashSeed::fixed(3, 4));
+    set.insert(3);
+    set.insert(1);
+    let json = to_string(&set).unwrap();
+    assert json == "[3,1]";
+    let back: HashSet<i32> = from_string(&json).unwrap();
+    assert back == set;
+    assert from_string::<HashSet<i32>>("[1,1]") matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
+}
+
+/// A key or element no format can write.
+struct Unwritable {
+    n: i32,
+}
+
+impl Hash for Unwritable {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        self.n.hash(h);
+    }
+}
+
+impl Serialize for Unwritable {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return Result::Err(SerializeError::unsupported_value("unwritable"));
+    }
+}
+
+fn refused<T: Serialize>(value: &T) -> bool {
+    return to_string(value) matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
+}
+
+test "a map or a set passes on what its entries and its shape fail with" {
+    let mut keys = HashMap::<Unwritable, i32>::new();
+    keys[Unwritable { n: 1 }] = 1;
+    assert refused(&keys);
+    let mut values = HashMap::<String, f64>::new();
+    values["nan"] = f64::NAN;
+    assert refused(&values);
+    let mut set = HashSet::<Unwritable>::new();
+    set.insert(Unwritable { n: 1 });
+    assert refused(&set);
+    let mut out = String::new();
+    assert HashMap::<String, i32>::new().serialize(&mut TextKeySerializer { out: &mut out }) matches { Err };
+    assert HashSet::<i32>::new().serialize(&mut TextKeySerializer { out: &mut out }) matches { Err };
+
+    assert from_string::<HashMap<String, i32>>("[]") matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+    assert from_string::<HashMap<i32, i32>>(`{"x":1}`) matches { Err };
+    assert from_string::<HashMap<String, i32>>(`{"a":"x"}`) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+    assert from_string::<HashSet<i32>>("{}") matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+    assert from_string::<HashSet<i32>>(`["x"]`) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+}
+
+test "a map literal and a list literal coerce in source order" {
+    let map: HashMap<String, i32> = { b: 2, a: 1 };
+    assert keys_of(&map) == ["b", "a"] && map["b"] == 2;
+    let spread: HashMap<String, i32> = { ..map, c: 4, b: 3 };
+    assert keys_of(&spread) == ["b", "a", "c"] && spread["b"] == 3;
+    let set = [3, 1, 3] as HashSet<i32>;
+    assert set.iter_value().collect() == [3, 1];
+}
+
+test "the default map and set are empty" {
+    let map = HashMap::<String, i32>::default();
+    let set = HashSet::<i32>::default();
+    assert map.is_empty() && set.is_empty();
 }
 
 test "tuple keys" {
-    let mut map = HashMap::<[i32, String], i32>::new(seed());
+    let mut map = HashMap::<[i32, String], i32>::new();
     map[[1, "x"]] = 1;
     map[[2, "x"]] = 2;
     assert map[[1, "x"]] == 1;

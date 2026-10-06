@@ -73,7 +73,7 @@ fn "value_copy_elide_qmark.wado/run"() with Stdout {
     let is_negative_22: bool;
     let x: i64;
     let $sroa_slot_44: i32;
-    let start_92: i32;
+    let start_95: i32;
     $sroa_slot_44 = 0;
     $sroa_slot_44 = local.tee $qm_v(struct.new "value_copy_elide_qmark.wado//Pair" { a: 10, b: 20 }).a + $qm_v.b;
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
@@ -84,17 +84,17 @@ fn "value_copy_elide_qmark.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, is_negative_22);
         }
-        start_92 = $local_1.used;
+        start_95 = $local_1.used;
         $local_1.used = is_negative_22;
-        builtin::array_set_u8($local_1.repr, start_92, 45);
+        builtin::array_set_u8($local_1.repr, start_95, 45);
     } else {
     }
-    if @unlikely(local.tee start_92($local_1.used + $sroa_slot_44) > builtin::array_len($local_1.repr)) {
+    if @unlikely(local.tee start_95($local_1.used + $sroa_slot_44) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_92);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_95);
     }
     is_negative_22 = $local_1.used;
-    $local_1.used = start_92;
+    $local_1.used = start_95;
     "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, is_negative_22, x, $sroa_slot_44);
     $sroa_slot_44 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_22 = builtin::i32_wrap_i64(x >> 32_i64);

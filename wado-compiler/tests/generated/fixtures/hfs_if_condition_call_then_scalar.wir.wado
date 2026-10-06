@@ -79,50 +79,50 @@ fn "hfs_if_condition_call_then_scalar.wado/run"() with Stdout {
     let i_1: i32;
     let $local_2: ref "core:prelude/string.wado//String";
     let x: i64;
-    let start_68: i32;
-    let $hfs_v_351: i32;
+    let start_71: i32;
+    let $hfs_v_451: i32;
     b = struct.new "hfs_if_condition_call_then_scalar.wado//Buf" { v: 0, pad: 0 };
     i_1 = 0;
-    $hfs_v_351 = 0;
+    $hfs_v_451 = 0;
     b0: block {
         l1: loop {
             break_if b0 i_1 >= 4;
-            b.v = $hfs_v_351;
+            b.v = $hfs_v_451;
             if "hfs_if_condition_call_then_scalar.wado/probe"(b) > 0 {
-                $hfs_v_351 = local.tee $hfs_v_351(b.v) + 1;
+                $hfs_v_451 = local.tee $hfs_v_451(b.v) + 1;
             } else {
-                $hfs_v_351 = b.v;
+                $hfs_v_451 = b.v;
             }
             i_1 = i_1 + 1;
-            b.v = $hfs_v_351;
+            b.v = $hfs_v_451;
             continue l1;
         };
     };
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    i_1 = local.tee $hfs_v_351(b.v) < 0;
-    $hfs_v_351 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s($hfs_v_351); select i64(x < 0_i64, 0_i64 - x, x)));
+    i_1 = local.tee $hfs_v_451(b.v) < 0;
+    $hfs_v_451 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s($hfs_v_451); select i64(x < 0_i64, 0_i64 - x, x)));
     if i_1 {
         if @unlikely(local.tee i_1(0 + 1) > builtin::array_len($local_2.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, i_1);
         }
-        start_68 = $local_2.used;
+        start_71 = $local_2.used;
         $local_2.used = i_1;
-        builtin::array_set_u8($local_2.repr, start_68, 45);
+        builtin::array_set_u8($local_2.repr, start_71, 45);
     } else {
     }
-    if @unlikely(local.tee start_68($local_2.used + $hfs_v_351) > builtin::array_len($local_2.repr)) {
+    if @unlikely(local.tee start_71($local_2.used + $hfs_v_451) > builtin::array_len($local_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_68);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_71);
     }
     i_1 = $local_2.used;
-    $local_2.used = start_68;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, i_1, x, $hfs_v_351);
-    $hfs_v_351 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
+    $local_2.used = start_71;
+    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, i_1, x, $hfs_v_451);
+    $hfs_v_451 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     i_1 = builtin::i32_wrap_i64(x >> 32_i64);
-    $hfs_v_351 = "hfs_if_condition_call_then_scalar.wado/$cm_binding__Stdout_write_via_stream"($hfs_v_351);
+    $hfs_v_451 = "hfs_if_condition_call_then_scalar.wado/$cm_binding__Stdout_write_via_stream"($hfs_v_451);
     "core:rt/write_string_to_stream"(i_1, $local_2.repr, $local_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($hfs_v_351);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($hfs_v_451);
 }
 
 fn "hfs_if_condition_call_then_scalar.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

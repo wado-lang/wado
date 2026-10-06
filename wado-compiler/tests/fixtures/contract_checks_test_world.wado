@@ -1,0 +1,137 @@
+// The test world checks contracts, so an `_unchecked` call outside its
+// contract traps instead of reading past a view or minting a bad value.
+
+fn view() -> StrSlice {
+    return "héllo wörld".as_str_slice().slice(0, 5);
+}
+
+test "calls inside their contracts run as before" {
+    assert view().get_byte_unchecked(0) == b'h';
+    assert view().slice_unchecked(1, 3) == "é";
+    assert view().char_at_byte_unchecked(1) == 'é';
+    assert char::from_u32_unchecked(0x41) == 'A';
+    let list: List<i32> = [1, 2, 3];
+    assert list.as_slice().get_unchecked(2) == 3;
+    let mut s = "héllo";
+    s.truncate_unchecked(3);
+    assert s == "hé";
+}
+
+#[expect_trap]
+test "StrSlice::get_byte_unchecked past the view" {
+    let _ = view().get_byte_unchecked(builtin::black_box(5));
+}
+
+#[expect_trap]
+test "StrSlice::slice_unchecked past the view" {
+    let _ = view().slice_unchecked(0, builtin::black_box(6));
+}
+
+#[expect_trap]
+test "StrSlice::slice_unchecked off a character boundary" {
+    let _ = view().slice_unchecked(0, builtin::black_box(2));
+}
+
+#[expect_trap]
+test "StrSlice::char_at_byte_unchecked off a character boundary" {
+    let _ = view().char_at_byte_unchecked(builtin::black_box(2));
+}
+
+#[expect_trap]
+test "String::get_byte_unchecked past the length" {
+    let mut s = String::with_capacity(16);
+    s.push_str("abc");
+    let _ = s.get_byte_unchecked(builtin::black_box(3));
+}
+
+#[expect_trap]
+test "String::set_byte_unchecked past the length" {
+    let mut s = String::with_capacity(16);
+    s.push_str("abc");
+    s.set_byte_unchecked(builtin::black_box(3), b'd');
+}
+
+#[expect_trap]
+test "String::push_ascii_unchecked with a non-ASCII byte" {
+    let mut s = "abc";
+    s.push_ascii_unchecked(builtin::black_box(0xC3));
+}
+
+#[expect_trap]
+test "String::truncate_unchecked off a character boundary" {
+    let mut s = "héllo";
+    s.truncate_unchecked(builtin::black_box(2));
+}
+
+#[expect_trap]
+test "String::insert_unchecked off a character boundary" {
+    let mut s = "héllo";
+    s.insert_unchecked(builtin::black_box(2), 'x');
+}
+
+#[expect_trap]
+test "String::insert_str_unchecked off a character boundary" {
+    let mut s = "héllo";
+    s.insert_str_unchecked(builtin::black_box(2), "x");
+}
+
+#[expect_trap]
+test "String::push_str_range_unchecked with the end before the start" {
+    let mut s = "";
+    s.push_str_range_unchecked("abcd", 3, builtin::black_box(1));
+}
+
+#[expect_trap]
+test "String::substr_bytes_unchecked off a character boundary" {
+    let _ = "héllo".substr_bytes_unchecked(0, builtin::black_box(2));
+}
+
+#[expect_trap]
+test "ByteList::get_byte_unchecked past the length" {
+    let mut bytes = ByteList::with_capacity(16);
+    bytes.push(1);
+    let _ = bytes.get_byte_unchecked(builtin::black_box(1));
+}
+
+#[expect_trap]
+test "String::remove_unchecked at the length" {
+    let mut s = String::with_capacity(16);
+    s.push_str("abc");
+    let _ = s.remove_unchecked(builtin::black_box(3));
+}
+
+#[expect_trap]
+test "char::from_u32_unchecked on a surrogate" {
+    let _ = char::from_u32_unchecked(builtin::black_box(0xD800));
+}
+
+#[expect_trap]
+test "List::get_unchecked past the length" {
+    let mut list: List<i32> = List::with_capacity(16);
+    list.push(1);
+    let _ = Sequence::get_unchecked(&list, builtin::black_box(1));
+}
+
+#[expect_trap]
+test "AsStrSlice::get_byte_unchecked on a String past the length" {
+    let mut s = String::with_capacity(16);
+    s.push_str("abc");
+    let _ = AsStrSlice::get_byte_unchecked(&s, builtin::black_box(3));
+}
+
+#[expect_trap]
+test "Sequence::get_unchecked on a Slice past the view" {
+    let list: List<i32> = [1, 2, 3, 4];
+    let _ = Sequence::get_unchecked(&list.as_slice().slice(0, 2), builtin::black_box(2));
+}
+
+#[expect_trap]
+test "Slice::get_unchecked past the view" {
+    let list: List<i32> = [1, 2, 3, 4];
+    let _ = list.as_slice().slice(0, 2).get_unchecked(builtin::black_box(2));
+}
+
+__DATA__
+{
+    "test": {}
+}

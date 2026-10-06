@@ -1,0 +1,21 @@
+// An impl header's trait argument naming no type is reported where it is
+// written.
+trait Conv<X> with () {
+    fn conv(&self) -> i32;
+}
+
+struct A {
+    v: i32,
+}
+
+
+impl Conv<Nope> for A {
+    fn conv(&self) -> i32 {
+        return self.v;
+    }
+}
+
+test {}
+
+__DATA__
+{"compile_error": ":12:11: analysis error: unknown type 'Nope'"}

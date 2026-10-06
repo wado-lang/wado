@@ -1,0 +1,23 @@
+// A field whose type resolves to nothing reports once, even where a bound
+// derives a trait over the fields.
+//
+// `same(&s, &s)` derives `Eq` for `S`, which asks `Eq` of each field. The
+// first field's type is `unknown`, which no lowering states, and the question
+// panicked on top of the diagnostic.
+
+struct S {
+    n: Nope,
+    m: i32,
+}
+
+fn same<T: Eq>(a: &T, b: &T) -> bool {
+    return a == b;
+}
+
+test {
+    let s = S { n: 1, m: 2 };
+    assert same(&s, &s);
+}
+
+__DATA__
+{"compile_error": "unknown type 'Nope'"}

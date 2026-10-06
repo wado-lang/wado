@@ -5,7 +5,8 @@ use { HighlightRule, TokenSelector } from "./highlight_query.wado";
 use { GenContext } from "./gen_context.wado";
 use { DiagnosticKind, DiagnosticOwner } from "./gir.wado";
 use { rule_kind_const } from "./gen_util.wado";
-use { GaleMap } from "./gale_map.wado";
+use { HashMap } from "core:collections";
+use { GALE_SEED } from "./hash_seed.wado";
 
 /// `highlight`: the query compiled into the `HIGHLIGHT_MAPPING` global, then
 /// `highlight_walk` over the CST with `hl_cover_unvisited` for what the tree
@@ -78,8 +79,8 @@ fn highlight_entry(ctx: &GenContext) -> FnSpec {
 /// Token kind resolution built once per grammar: token kind ids are the index
 /// into `token_slot_order`, so a name / literal maps directly to its kind.
 struct KindIndex {
-    by_name: GaleMap<String, i32>,
-    by_literal: GaleMap<String, i32>,
+    by_name: HashMap<String, i32>,
+    by_literal: HashMap<String, i32>,
 }
 
 /// `(rule (TOKEN) @capture)`: `order` is the position in the query of the rule
@@ -101,14 +102,14 @@ struct ResolvedRuleCapture {
 
 /// The query resolved against the grammar, each tier last-wins.
 struct ResolvedQuery {
-    default_by_kind: GaleMap<i32, String>,
+    default_by_kind: HashMap<i32, String>,
     overrides: List<ResolvedOverride>,
     rule_captures: List<ResolvedRuleCapture>,
 }
 
 fn build_kind_index(lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>, slots: &List<TokenSlot>) -> KindIndex {
-    let mut by_name = GaleMap::<String, i32>::new();
-    let mut by_literal = GaleMap::<String, i32>::new();
+    let mut by_name = HashMap::<String, i32>::with_seed(GALE_SEED);
+    let mut by_literal = HashMap::<String, i32>::with_seed(GALE_SEED);
     for let mut i = 0; i < slots.len(); i += 1 {
         match &slots[i] {
             Rule(ri) => by_name[lexer_rules[*ri].name] = i,
@@ -274,7 +275,7 @@ fn resolve_query(
     ctx: &mut GenContext,
 ) -> ResolvedQuery {
     let mut resolved = ResolvedQuery {
-        default_by_kind: GaleMap::<i32, String>::new(),
+        default_by_kind: HashMap::<i32, String>::with_seed(GALE_SEED),
         overrides: [],
         rule_captures: [],
     };
@@ -381,7 +382,7 @@ fn gen_highlight_mapping(
     let idx = build_kind_index(lexer_rules, lit_tokens, &slots);
     let resolved = resolve_query(parser_rules, &idx, query, ctx);
     let vocabulary = resolved.vocabulary();
-    let mut capture_ids = GaleMap::<String, i32>::new();
+    let mut capture_ids = HashMap::<String, i32>::with_seed(GALE_SEED);
     let mut classes: List<String> = [];
     for let mut i = 0; i < vocabulary.len(); i += 1 {
         capture_ids[vocabulary[i]] = i;

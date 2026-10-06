@@ -1,0 +1,62 @@
+// A projection a trait method's signature writes owes the family's parameter
+// bounds, as one a function's signature writes does: `Self::Buf<T>` needs
+// `T: Elem`, which `hold` never asks for. Reported at the declaration, not where
+// `measure` reaches `Weighed<String>`.
+
+trait Elem with () {
+    fn weight(&self) -> i32;
+}
+
+impl Elem for i32 {
+    fn weight(&self) -> i32 {
+        return *self;
+    }
+}
+
+trait Len with () {
+    fn total(&self) -> i32;
+}
+
+struct Weighed<E> {
+    items: List<E>,
+}
+
+impl<E: Elem> Len for Weighed<E> {
+    fn total(&self) -> i32 {
+        let mut sum = 0;
+        for let item of self.items {
+            sum += item.weight();
+        }
+        return sum;
+    }
+}
+
+trait Store with () {
+    type Buf<E: Elem>: Len;
+
+    fn hold<T>(&self, items: List<T>) -> Self::Buf<T>;
+}
+
+struct Weigher {}
+
+impl Store for Weigher {
+    type Buf<E: Elem> = Weighed<E>;
+
+    fn hold<T>(&self, items: List<T>) -> Weighed<T> {
+        return Weighed { items };
+    }
+}
+
+fn measure<S: Store>(s: &S) -> i32 {
+    return s.hold(["a", "bc"] as List<String>).total();
+}
+
+export fn run() {
+    measure(&Weigher {});
+}
+
+__DATA__
+{
+  "compile_error": ":37:52: analysis error: type 'T' does not implement trait 'Elem' required by bound on 'E'",
+  "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
+}

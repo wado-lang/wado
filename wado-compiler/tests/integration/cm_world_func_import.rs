@@ -21,7 +21,7 @@ export fn go(source: String) -> String {
 "#;
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures/world_func_consumer.wado"
+        "/fixtures/world_func_consumer.wado"
     );
     let options = CompilerOptions {
         opt_level: OptLevel::O2,
@@ -81,7 +81,7 @@ export fn go(source: String) -> String {
 "#;
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures/world_func_mw_consumer.wado"
+        "/fixtures/world_func_mw_consumer.wado"
     );
     let options = CompilerOptions {
         opt_level: OptLevel::O2,

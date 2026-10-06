@@ -15,7 +15,8 @@ runs the component on a wasmtime host that serves `wasi:webgpu`.
   to have both: the arguments after the input file go to the guest unparsed,
   `--dir` and `--no-dir` grant what they grant there, `--log-level` takes the
   same values and reaches the compile too, and the engine takes the same
-  collector and Cranelift level. A divergence is a defect, not a variant.
+  collector, initial GC heap and Cranelift level. A divergence is a defect, not
+  a variant.
 - It compiles nothing itself. `WADO` names the binary that dispatched the
   subcommand ([External Subcommands](../docs/wep-2026-09-19-external-subcommands.md)),
   and the tests set it the same way, so the tests and a real invocation reach

@@ -8,12 +8,12 @@
 //! only through a positional format (`core:args`), so they are verified here
 //! against the monomorphized TIR rather than at runtime.
 
-use crate::common::{InMemoryHost, block_on};
+use crate::common::{block_on, in_memory_host};
 use wado_compiler::{OptLevel, dump_with_host_and_world};
 
 /// Monomorphized TIR text for `source`.
 fn monomorphized_tir(source: &str) -> String {
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let dump = block_on(dump_with_host_and_world(
         source,
         &host,

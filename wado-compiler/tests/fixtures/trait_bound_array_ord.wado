@@ -1,7 +1,7 @@
 // Test that List<T> comparison requires T: Ord
 
 variant NoOrd {
-    A(i32),
+    A(fn() -> i32),
     B,
 }
 
@@ -10,9 +10,9 @@ struct Foo {
 }
 
 export fn run() {
-    let a: List<Foo> = [Foo { x: NoOrd::A(1) }];
-    let b: List<Foo> = [Foo { x: NoOrd::A(2) }];
-    // Foo does not implement Ord (NoOrd variant field), so < on List<Foo> should fail
+    let a: List<Foo> = [Foo { x: NoOrd::A(|| 1) }];
+    let b: List<Foo> = [Foo { x: NoOrd::A(|| 2) }];
+    // Foo does not implement Ord (NoOrd's `fn` payload has none), so < on List<Foo> should fail
     assert a < b;
 }
 

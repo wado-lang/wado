@@ -199,8 +199,8 @@ struct type_pattern_narrowing_holds_target.wado//$Dispatch_Dom {  // TypeId(5)
 array Array<fn()->()> (mut ref struct);  // TypeId(6)
 
 variant core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element> {  // TypeId(7)
-    Some(u64),
     None,
+    Some(u64),
 }
 
 struct core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>::Some {  // TypeId(8)
@@ -513,9 +513,9 @@ fn "type_pattern_narrowing_holds_target.wado/$cm_binding__Document_get_element_b
     self_10 = "mem/realloc"(0, 0, 8, 16);
     "wasi/wado-lang:web/Document::get_element_by_id"(builtin::f64_reinterpret_i64(self), builtin::i32_wrap_i64($element_id_packed), builtin::i32_wrap_i64($element_id_packed >> 32_i64), self_10);
     ptr_9 = builtin::load_u8(self_10);
-    $option_result = struct.new "core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>" { 1 };
+    $option_result = struct.new "core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>" { 0 };
     if ptr_9 != 0 {
-        $option_result = struct.new "core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>::Some" { discriminant: 0, payload_0: builtin::load_i64(self_10 + 8) };
+        $option_result = struct.new "core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>::Some" { discriminant: 1, payload_0: builtin::load_i64(self_10 + 8) };
     }
     drop("mem/realloc"(self_10, 16, 8, 0));
     return $option_result;
@@ -924,24 +924,24 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
-    let start_26: i32;
+    let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
         }
-        start_26 = self.used;
+        start_29 = self.used;
         self.used = is_negative;
-        builtin::array_set_u8(self.repr, start_26, 45);
+        builtin::array_set_u8(self.repr, start_29, 45);
     } else {
     }
     if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
     }
-    start_26 = self.used;
+    start_29 = self.used;
     self.used = digit_count;
-    return start_26;
+    return start_29;
 }
 
 export fn "type_pattern_narrowing_holds_target.wado/$cm_export__run" as "run"

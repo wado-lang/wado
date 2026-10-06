@@ -160,8 +160,8 @@ struct tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<cor
 }
 
 variant core:prelude/types.wado//Option<u64> {  // TypeId(24)
-    Some(u64),
     None,
+    Some(u64),
 }
 
 struct core:prelude/types.wado//Option<u64>::Some {  // TypeId(25)
@@ -170,8 +170,8 @@ struct core:prelude/types.wado//Option<u64>::Some {  // TypeId(25)
 }
 
 variant core:prelude/types.wado//Option<u8> {  // TypeId(26)
-    Some(u8),
     None,
+    Some(u8),
 }
 
 struct core:prelude/types.wado//Option<u8>::Some {  // TypeId(27)
@@ -180,8 +180,8 @@ struct core:prelude/types.wado//Option<u8>::Some {  // TypeId(27)
 }
 
 variant core:prelude/types.wado//Option<u16> {  // TypeId(28)
-    Some(u16),
     None,
+    Some(u16),
 }
 
 struct core:prelude/types.wado//Option<u16>::Some {  // TypeId(29)
@@ -190,8 +190,8 @@ struct core:prelude/types.wado//Option<u16>::Some {  // TypeId(29)
 }
 
 variant core:prelude/types.wado//Option<u32> {  // TypeId(30)
-    Some(u32),
     None,
+    Some(u32),
 }
 
 struct core:prelude/types.wado//Option<u32>::Some {  // TypeId(31)
@@ -200,8 +200,8 @@ struct core:prelude/types.wado//Option<u32>::Some {  // TypeId(31)
 }
 
 variant core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>> {  // TypeId(32)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some {  // TypeId(33)
@@ -210,8 +210,8 @@ struct core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some
 }
 
 variant core:prelude/types.wado//Option<wasi:http/types.wado/Fields> {  // TypeId(34)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some {  // TypeId(35)
@@ -292,7 +292,7 @@ import fn wasi/task-return:handle from "wasi/task-return:handle";
 import fn wasi/resource-drop:wasi/http/types.wado#request from "wasi/resource-drop:wasi/http/types.wado#request";
 import fn wasi/future-write from "wasi/future-write";
 
-global global:http_loop_fresh_resource.wado::$const_obj_2: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>" = struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } };
+global global:http_loop_fresh_resource.wado::$const_obj_2: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>" = struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 0 } };
 global global:http_loop_fresh_resource.wado::$const_obj_3: ref "core:prelude//List<u8>" = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(120), used: 1 };
 global global:http_loop_fresh_resource.wado::$const_obj_4: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
 
@@ -319,9 +319,9 @@ fn "http_loop_fresh_resource.wado/$cm_binding__Fields_append"(self, name, value)
     };
     $name_packed = builtin::i64_extend_i32_u(ptr_15) | (builtin::i64_extend_i32_s(self_16) << 32_i64);
     self_16 = value.used;
+    bytes_14 = value.repr;
     ptr_15 = "mem/realloc"(0, 0, 1, self_16);
     i_22 = 0;
-    bytes_14 = value.repr;
     b2: block {
         l3: loop {
             break_if b2 i_22 >= self_16;
@@ -410,7 +410,7 @@ fn "http_loop_fresh_resource.wado/$cm_task_entry__handle"(request) {
     };
     i = builtin::i32_wrap_i64(local.tee packed("wasi/future-new"()));
     scratch = builtin::i32_wrap_i64(packed >> 32_i64);
-    i = "http_loop_fresh_resource.wado/$cm_binding__Response_new"("http_loop_fresh_resource.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, i).0;
+    i = "http_loop_fresh_resource.wado/$cm_binding__Response_new"("http_loop_fresh_resource.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 0 }, i).0;
     $tv_1 = 0;
     $tv_1 = i;
     "wasi/task-return:handle"(0, $tv_1, 0, 0_i64, 0, 0, 0, 0);

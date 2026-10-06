@@ -12,7 +12,7 @@ use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
-use crate::tir::TypeTable;
+use crate::tir::{ObjectTypes, TypeKey, TypeTable};
 
 use super::{HeapVersion, OpaqueSource, ValueId, ValueKind, ValuePool};
 use crate::nir_value_graph::value_kind_to_const;
@@ -37,6 +37,21 @@ struct HeapState {
     /// *alongside* `per_local`, never in place of it — `per_local` still carries
     /// the bumps aimed at one local.
     escaped_version: HeapVersion,
+    /// The generation of storage behind a reference, per type of the object
+    /// holding the field: a call writes it through an argument or a global,
+    /// whether or not it takes the reference. A type with no entry is at
+    /// `reference_any`.
+    reference_any: HeapVersion,
+    reference_by_type: IndexMap<TypeKey, HeapVersion>,
+}
+
+/// Whose storage a field read reaches: the frame's own, or a reference's
+/// pointee, under the key of the object type holding the field (`None` when
+/// the type is unknown).
+#[derive(Clone, Copy)]
+enum Holder {
+    Frame,
+    Foreign(Option<TypeKey>),
 }
 
 impl HeapState {
@@ -48,6 +63,8 @@ impl HeapState {
             field_global: IndexMap::default(),
             default_version: HeapVersion::INITIAL,
             escaped_version: HeapVersion::INITIAL,
+            reference_any: HeapVersion::INITIAL,
+            reference_by_type: IndexMap::default(),
         }
     }
 
@@ -57,16 +74,40 @@ impl HeapState {
         v
     }
 
+    /// The generation of storage behind a reference to a `key` object, or to
+    /// an object of any type.
+    fn reference_version(&self, key: Option<TypeKey>) -> HeapVersion {
+        match key {
+            Some(k) => self
+                .reference_by_type
+                .get(&k)
+                .copied()
+                .unwrap_or(self.reference_any),
+            None => self
+                .reference_by_type
+                .values()
+                .fold(self.reference_any, |acc, &v| acc.max(v)),
+        }
+    }
+
     /// The effective version a read of `root.field` sees: the max of every
     /// generation that could have invalidated it. With no known `root`, that is
     /// every generation that could have touched `field` under any root.
-    fn version_of(&self, root: Option<u32>, field: u32, root_escaped: bool) -> HeapVersion {
+    fn version_of(
+        &self,
+        root: Option<u32>,
+        field: u32,
+        root_escaped: bool,
+        holder: Holder,
+    ) -> HeapVersion {
         let mut v = self.default_version;
         if let Some(&fg) = self.field_global.get(&field) {
             v = v.max(fg);
         }
         let Some(r) = root else {
-            v = v.max(self.escaped_version);
+            v = v
+                .max(self.escaped_version)
+                .max(self.reference_version(None));
             v = self.per_local.values().fold(v, |acc, &pl| acc.max(pl));
             return self
                 .per_slot
@@ -76,6 +117,9 @@ impl HeapState {
         };
         if root_escaped {
             v = v.max(self.escaped_version);
+        }
+        if let Holder::Foreign(key) = holder {
+            v = v.max(self.reference_version(key));
         }
         if let Some(&pl) = self.per_local.get(&r) {
             v = v.max(pl);
@@ -90,6 +134,27 @@ impl HeapState {
     fn bump_escaped(&mut self) {
         let v = self.fresh();
         self.escaped_version = v;
+    }
+
+    /// Invalidate the storage behind every reference to a `written` object;
+    /// `None` names every type.
+    fn bump_references(&mut self, written: Option<&ObjectTypes>) {
+        match written {
+            Some(types) if !types.is_any() => {
+                if types.is_empty() {
+                    return;
+                }
+                let v = self.fresh();
+                for k in types.keys() {
+                    self.reference_by_type.insert(k, v);
+                }
+            }
+            _ => {
+                let v = self.fresh();
+                self.reference_any = v;
+                self.reference_by_type.clear();
+            }
+        }
     }
 
     fn bump_slot(&mut self, root: u32, field: u32) {
@@ -113,6 +178,8 @@ impl HeapState {
         self.per_local.clear();
         self.field_global.clear();
         self.escaped_version = HeapVersion::INITIAL;
+        self.reference_any = HeapVersion::INITIAL;
+        self.reference_by_type.clear();
         self.default_version = v;
     }
 
@@ -126,6 +193,8 @@ impl HeapState {
             field_global: self.field_global.clone(),
             default_version: self.default_version,
             escaped_version: self.escaped_version,
+            reference_any: self.reference_any,
+            reference_by_type: self.reference_by_type.clone(),
         }
     }
 
@@ -135,6 +204,8 @@ impl HeapState {
         self.field_global = snap.field_global;
         self.default_version = snap.default_version;
         self.escaped_version = snap.escaped_version;
+        self.reference_any = snap.reference_any;
+        self.reference_by_type = snap.reference_by_type;
     }
 
     /// Seed a fresh `HeapState` (as in [`build_scoped`]) with a snapshot taken at
@@ -149,13 +220,17 @@ impl HeapState {
         self.field_global.clone_from(&snap.field_global);
         self.default_version = snap.default_version;
         self.escaped_version = snap.escaped_version;
+        self.reference_any = snap.reference_any;
+        self.reference_by_type.clone_from(&snap.reference_by_type);
         let max = snap
             .per_slot
             .values()
             .chain(snap.per_local.values())
             .chain(snap.field_global.values())
+            .chain(snap.reference_by_type.values())
             .chain(std::iter::once(&snap.default_version))
             .chain(std::iter::once(&snap.escaped_version))
+            .chain(std::iter::once(&snap.reference_any))
             .copied()
             .max()
             .unwrap_or(HeapVersion::INITIAL);
@@ -170,6 +245,8 @@ pub(crate) struct HeapSnapshot {
     field_global: IndexMap<u32, HeapVersion>,
     default_version: HeapVersion,
     escaped_version: HeapVersion,
+    reference_any: HeapVersion,
+    reference_by_type: IndexMap<TypeKey, HeapVersion>,
 }
 
 /// A snapshot of *all* flow-sensitive builder state at a program point:
@@ -209,17 +286,25 @@ pub struct ValueGraphBuild {
     pub loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
 }
 
+/// The per-function local sets that bound how far a heap write reaches.
+/// Empty sets claim no aliasing, sound only for a body without any.
+#[derive(Default)]
+pub struct AliasSets {
+    /// Locals another handle may reach; their field writes invalidate coarsely.
+    pub aliased: IndexSet<u32>,
+    /// `stores`-aliased locals, whose fields are never seeded.
+    pub untrackable: IndexSet<u32>,
+    /// The subset of `aliased` a call may mutate.
+    pub mut_escaped: IndexSet<u32>,
+}
+
 /// Build the `ValueGraph` for one function body. Each parameter in
 /// `param_locals` seeds a fresh `Opaque` up front, which is what makes them
-/// visible in the loop-entry snapshots taken before any in-loop read. An
-/// `aliased` local invalidates through the coarse generations, `untrackable`
-/// ones are never seeded, and `mut_escaped` narrows `aliased` to real mutation.
+/// visible in the loop-entry snapshots taken before any in-loop read.
 pub fn build(
     body: &mut Body,
     param_locals: &[u32],
-    aliased: &IndexSet<u32>,
-    untrackable: &IndexSet<u32>,
-    mut_escaped: &IndexSet<u32>,
+    alias: &AliasSets,
     calls: CallFacts<'_>,
     type_table: Option<&TypeTable>,
 ) -> ValueGraphBuild {
@@ -229,12 +314,13 @@ pub fn build(
     // stable across builds (it only grows), the prerequisite for build-once.
     let seed = std::mem::take(&mut body.values);
     let (pool, loop_entry_values) = {
-        let mut b = Builder::new(&*body, aliased, untrackable, mut_escaped, type_table, seed);
+        let mut b = Builder::new(&*body, alias, type_table, seed);
         b.pure_calls.clone_from(calls.pure);
         b.pure_builtin_callees.clone_from(calls.pure_builtin);
         b.receiver_immutable_calls
             .clone_from(calls.receiver_immutable);
         b.ctfe_builtins.clone_from(calls.ctfe_builtins);
+        b.call_writes.clone_from(calls.writes);
         b.seed_params(param_locals);
         b.walk_block(body.root);
         (b.pool, b.loop_entry_values)
@@ -255,9 +341,7 @@ pub(crate) fn build_scoped(
     skip: usize,
     param_locals: &[u32],
     seed: &IndexMap<u32, ValueId>,
-    aliased: &IndexSet<u32>,
-    untrackable: &IndexSet<u32>,
-    mut_escaped: &IndexSet<u32>,
+    alias: &AliasSets,
     type_table: Option<&TypeTable>,
     calls: CallFacts<'_>,
     scratch: &mut ValuePool,
@@ -270,9 +354,7 @@ pub(crate) fn build_scoped(
         skip,
         param_locals,
         seed,
-        aliased,
-        untrackable,
-        mut_escaped,
+        alias,
         type_table,
         calls,
         scratch,
@@ -304,16 +386,14 @@ pub(crate) fn walk_scoped(
     skip: usize,
     param_locals: &[u32],
     seed: &IndexMap<u32, ValueId>,
-    aliased: &IndexSet<u32>,
-    untrackable: &IndexSet<u32>,
-    mut_escaped: &IndexSet<u32>,
+    alias: &AliasSets,
     type_table: Option<&TypeTable>,
     calls: CallFacts<'_>,
     scratch: &mut ValuePool,
     heap_seed: Option<&HeapSnapshot>,
 ) -> ScopedWalk {
     let pool = std::mem::take(scratch);
-    let mut b = Builder::new(body, aliased, untrackable, mut_escaped, type_table, pool);
+    let mut b = Builder::new(body, alias, type_table, pool);
     b.seed_params(param_locals);
     // The same per-call verdicts the whole-body build gets. Withholding them
     // does not merely forgo a forward: a call the walk cannot call pure bumps
@@ -324,6 +404,7 @@ pub(crate) fn walk_scoped(
     b.receiver_immutable_calls
         .clone_from(calls.receiver_immutable);
     b.ctfe_builtins.clone_from(calls.ctfe_builtins);
+    b.call_writes.clone_from(calls.writes);
     b.current_value.extend(seed.iter().map(|(&l, &v)| (l, v)));
     // Seed the heap with the caller's version state at the call site so a
     // spliced field read carries the version a fresh whole-function build
@@ -471,6 +552,11 @@ struct Builder<'a> {
     /// Locals a call may mutate (mutable escape). Only these are bumped by
     /// [`Builder::bump_call_effects`]. See [`build`].
     mut_escaped: IndexSet<u32>,
+    /// Receivers bound to a struct literal, or a borrow of one (`&S { … }`):
+    /// an object the frame just built, which nothing outside it reaches unless
+    /// it escapes, and escaping marks it `untrackable` or `mut_escaped` as for
+    /// any other local.
+    owned_pointees: IndexSet<ValueId>,
     /// `local → pointee local` for `let r = &v` references, so `r.f` forwards
     /// from `v`'s field slot (reference look-through). Cleared when `r` or the
     /// pointee is reassigned ([`Builder::update_ref_target`]). This is
@@ -515,7 +601,7 @@ struct Builder<'a> {
     /// still sees it.
     stmt_entry_version: IndexMap<StmtId, HeapVersion>,
     /// `ExprId` indices of calls that mutate no caller local. See
-    /// [`BuildConfig::pure_calls`].
+    /// [`CallFacts::pure`].
     pure_calls: IndexSet<ExprId>,
     /// Callees that write no tracked `(root, field)` slot: an intrinsic below
     /// the field layer, a value-copy helper, or a bodied function that never
@@ -524,14 +610,14 @@ struct Builder<'a> {
     /// Calls whose callee cannot write through the receiver, so a loop does not
     /// borrow it. Empty is conservative.
     receiver_immutable_calls: IndexSet<ExprId>,
+    /// See [`CallFacts::writes`]. Empty is conservative.
+    call_writes: IndexMap<ExprId, ObjectTypes>,
 }
 
 impl<'a> Builder<'a> {
     fn new(
         body: &'a Body,
-        aliased: &IndexSet<u32>,
-        untrackable: &IndexSet<u32>,
-        mut_escaped: &IndexSet<u32>,
+        alias: &AliasSets,
         type_table: Option<&'a TypeTable>,
         pool: ValuePool,
     ) -> Self {
@@ -549,14 +635,15 @@ impl<'a> Builder<'a> {
                 static NEXT: AtomicU32 = AtomicU32::new(0);
                 NEXT.fetch_add(1, Ordering::Relaxed)
             },
-            aliased: aliased.clone(),
-            untrackable: untrackable.clone(),
-            mut_escaped: mut_escaped.clone(),
+            aliased: alias.aliased.clone(),
+            untrackable: alias.untrackable.clone(),
+            mut_escaped: alias.mut_escaped.clone(),
             mut_escaped_sorted: {
-                let mut v: Vec<u32> = mut_escaped.iter().copied().collect();
+                let mut v: Vec<u32> = alias.mut_escaped.iter().copied().collect();
                 v.sort_unstable();
                 v
             },
+            owned_pointees: IndexSet::default(),
             ref_targets: IndexMap::default(),
             field_ref_targets: IndexMap::default(),
             assigned_fields: assigned_field_indices(body),
@@ -569,6 +656,7 @@ impl<'a> Builder<'a> {
             pure_calls: IndexSet::default(),
             pure_builtin_callees: IndexSet::default(),
             receiver_immutable_calls: IndexSet::default(),
+            call_writes: IndexMap::default(),
         }
     }
 
@@ -824,26 +912,55 @@ impl<'a> Builder<'a> {
             pure: &self.pure_calls,
             receiver_immutable: &self.receiver_immutable_calls,
             ctfe_builtins: &self.ctfe_builtins,
+            writes: &self.call_writes,
         }
     }
 
-    fn heap_version_of(&self, root: Option<u32>, field: u32) -> HeapVersion {
+    fn heap_version_of(&self, root: Option<u32>, field: u32, holder: Holder) -> HeapVersion {
         let escaped = root.is_some_and(|r| self.mut_escaped.contains(&r));
-        self.heap_state.version_of(root, field, escaped)
+        self.heap_state.version_of(root, field, escaped, holder)
     }
 
-    /// Invalidate the locals a call may mutate. One proven to mutate nothing
-    /// ([`BuildConfig::pure_calls`]) bumps only the `untrackable` locals any call
-    /// can reach; otherwise every `mut_escaped` local is bumped — not just this
-    /// call's arguments, since a mutable reference that escaped earlier may have
-    /// been retained.
+    /// Whose storage holds the fields of the object `recv_expr` (valued `recv`)
+    /// evaluates to: a reference's pointee unless the frame built it.
+    fn holder_of(&self, recv_expr: ExprId, recv: Option<ValueId>) -> Holder {
+        if self
+            .body
+            .place_crosses_reference(recv_expr, self.type_table)
+            && recv.is_none_or(|v| !self.owned_pointees.contains(&v))
+        {
+            let ty = self.body.exprs[recv_expr].type_id;
+            Holder::Foreign(self.type_table.and_then(|tt| tt.heap_object_key(ty)))
+        } else {
+            Holder::Frame
+        }
+    }
+
+    /// What a call mutating no caller local still reaches of the frame: the
+    /// `untrackable` locals.
+    fn bump_pure_call_reach(&mut self) {
+        for i in 0..self.mut_escaped_sorted.len() {
+            let l = self.mut_escaped_sorted[i];
+            if self.untrackable.contains(&l) {
+                self.heap_state.bump_local(l);
+            }
+        }
+    }
+
+    /// Invalidate the locals a call may mutate, and the storage behind a
+    /// reference it may write ([`CallFacts::writes`]). One proven to mutate no
+    /// local ([`CallFacts::pure`]) bumps only what
+    /// [`Builder::bump_pure_call_reach`] names; otherwise every `mut_escaped`
+    /// local is bumped — not just this call's arguments, since a mutable
+    /// reference that escaped earlier may have been retained.
     fn bump_call_effects(&mut self, call: ExprId) {
         // A sequence builtin reaches an array's elements, never a struct field:
         // `array_set` writes into the object `repr` names and leaves `repr` and
         // `used` alone. Since the versions here guard struct-field reads only,
-        // it invalidates none of them.
+        // it invalidates none of them. An effect-free callee writes no field.
         if let ExprKind::Call { func_id, .. } = &self.body.exprs[call].kind
-            && self.ctfe_builtins.contains_key(func_id)
+            && (self.ctfe_builtins.contains_key(func_id)
+                || is_builtin_pure_call(&self.pure_builtin_callees, *func_id))
         {
             return;
         }
@@ -852,18 +969,19 @@ impl<'a> Builder<'a> {
         // opaque `ValueId`s and heap versions are handed out in visit order, so
         // this keeps the value graph a deterministic function of the program
         // regardless of how the alias sets were built (#1440). A pure call
-        // reaches only the `untrackable` locals, too few for the set-wide
-        // version, so those keep their `per_local` bump.
-        if !pure {
+        // reaches too few locals for the set-wide version, so those keep their
+        // `per_local` bump.
+        if pure {
+            self.bump_pure_call_reach();
+        } else {
             self.heap_state.bump_escaped();
         }
+        let written = self.call_writes.get(&call);
+        self.heap_state.bump_references(written);
         for i in 0..self.mut_escaped_sorted.len() {
             let l = self.mut_escaped_sorted[i];
-            if pure {
-                if !self.untrackable.contains(&l) {
-                    continue;
-                }
-                self.heap_state.bump_local(l);
+            if pure && !self.untrackable.contains(&l) {
+                continue;
             }
             // A local bound to an aggregate literal keeps its value across the
             // call: the local *is* the storage, so a callee writing through a
@@ -1096,8 +1214,9 @@ impl<'a> Builder<'a> {
                 // those reads.
                 let target_kind = self.body.exprs[target].kind.clone();
                 // Capture the field place's root local, receiver `ValueId`,
-                // and whether it is a bare `Local` — so the post-bump version
-                // can be seeded for store→load forwarding.
+                // whether it is a bare `Local`, and whose storage it reaches —
+                // so the post-bump version can be seeded for store→load
+                // forwarding.
                 let field_place = match &target_kind {
                     ExprKind::Local { .. } => None,
                     // An assign target is an lvalue, so its receiver is a place
@@ -1113,11 +1232,12 @@ impl<'a> Builder<'a> {
                         // read that looks through the borrow finds nothing.
                         if let Some((pointee_vn, pointee)) = self.reference_lookthrough(recv_e) {
                             self.walk_operand(*recv);
-                            Some((Some(pointee), Some(pointee_vn), true))
+                            Some((Some(pointee), Some(pointee_vn), true, Holder::Frame))
                         } else {
                             let root = self.receiver_root(recv_e);
                             let recv_v = self.walk_operand(*recv);
-                            Some((root, recv_v, bare_local))
+                            let holder = self.holder_of(recv_e, recv_v);
+                            Some((root, recv_v, bare_local, holder))
                         }
                     }
                     _ => {
@@ -1140,7 +1260,7 @@ impl<'a> Builder<'a> {
                         }
                     }
                     ExprKind::FieldAccess { field_index, .. } => {
-                        let (root, recv_v, bare_local) = field_place.expect("field target");
+                        let (root, recv_v, bare_local, holder) = field_place.expect("field target");
                         // A non-aliased bare-`Local` root takes the precise
                         // per-slot bump — a write to `a.f` leaves every other
                         // object's `f` untouched. An aliased root, or a deeper
@@ -1160,7 +1280,7 @@ impl<'a> Builder<'a> {
                             && bare_local
                             && !self.untrackable.contains(&r)
                         {
-                            let ver = self.heap_version_of(Some(r), field_index);
+                            let ver = self.heap_version_of(Some(r), field_index, holder);
                             self.field_store.insert((rv, field_index, ver), v);
                         }
                     }
@@ -1282,11 +1402,18 @@ impl<'a> Builder<'a> {
                 // A promoted `Operand::Value` receiver has no skeleton place: no
                 // reference target and no receiver root local.
                 let inner_e = inner.as_expr();
-                let (recv, root) = match inner_e.and_then(|ie| self.reference_lookthrough(ie)) {
-                    Some((pointee_vn, pointee)) => (pointee_vn, Some(pointee)),
-                    None => (walked, inner_e.and_then(|ie| self.receiver_root(ie))),
+                let (recv, root, holder) = match inner_e
+                    .and_then(|ie| self.reference_lookthrough(ie))
+                {
+                    Some((pointee_vn, pointee)) => (pointee_vn, Some(pointee), Holder::Frame),
+                    None => (
+                        walked,
+                        inner_e.and_then(|ie| self.receiver_root(ie)),
+                        inner_e
+                            .map_or(Holder::Foreign(None), |ie| self.holder_of(ie, Some(walked))),
+                    ),
                 };
-                let heap_ver = self.heap_version_of(root, field_index);
+                let heap_ver = self.heap_version_of(root, field_index, holder);
                 // Store→load forwarding: a value stored to this exact
                 // `(receiver, field, version)` is the value this read sees.
                 if let Some(&stored) = self.field_store.get(&(recv, field_index, heap_ver)) {
@@ -1432,7 +1559,7 @@ impl<'a> Builder<'a> {
                 // same field constants.
                 ExprKind::Local { index, .. } => {
                     let src = *index;
-                    self.copy_local_field_slots(src, root, recv);
+                    self.copy_local_field_slots(producer, src, root, recv);
                     return;
                 }
                 ExprKind::LabeledBlock { .. } => {
@@ -1452,6 +1579,7 @@ impl<'a> Builder<'a> {
         let ExprKind::StructLiteral { fields, .. } = &self.body.exprs[producer].kind else {
             return;
         };
+        self.owned_pointees.insert(recv);
         // Clone out the (field_index, value-expr) pairs to release the body
         // borrow before mutating `field_store`.
         let pairs: Vec<(u32, Operand)> = fields.iter().map(|f| (f.field_index, f.value)).collect();
@@ -1478,7 +1606,7 @@ impl<'a> Builder<'a> {
                 self.field_ref_targets.insert((recv, field_index), pointee);
             }
             if let Some(fv) = self.walked_value(field_value) {
-                let ver = self.heap_version_of(Some(root), field_index);
+                let ver = self.heap_version_of(Some(root), field_index, Holder::Frame);
                 self.field_store.insert((recv, field_index, ver), fv);
                 seeded += 1;
             }
@@ -1505,7 +1633,13 @@ impl<'a> Builder<'a> {
     /// the stale copy becomes unreachable (the seeding monotonicity argument).
     /// `untrackable` (`stores`-aliased) locals, which can't be versioned, are
     /// excluded.
-    fn copy_local_field_slots(&mut self, src: u32, dst_root: u32, dst_recv: ValueId) {
+    fn copy_local_field_slots(
+        &mut self,
+        src_expr: ExprId,
+        src: u32,
+        dst_root: u32,
+        dst_recv: ValueId,
+    ) {
         if src == dst_root
             || self.untrackable.contains(&src)
             || self.untrackable.contains(&dst_root)
@@ -1520,18 +1654,21 @@ impl<'a> Builder<'a> {
         let Some(&src_recv) = self.current_value.get(&src) else {
             return;
         };
+        // `dst` holds a copy of what `src` holds, so the same storage holds
+        // its fields.
+        let holder = self.holder_of(src_expr, Some(src_recv));
         // Collect the live (field, value) pairs first to release the borrow on
         // `field_store` before inserting.
         let live: Vec<(u32, ValueId)> = self
             .field_store
             .iter()
             .filter_map(|(&(recv, field, ver), &stored)| {
-                (recv == src_recv && ver == self.heap_version_of(Some(src), field))
+                (recv == src_recv && ver == self.heap_version_of(Some(src), field, holder))
                     .then_some((field, stored))
             })
             .collect();
         for (field, stored) in live {
-            let dst_ver = self.heap_version_of(Some(dst_root), field);
+            let dst_ver = self.heap_version_of(Some(dst_root), field, holder);
             self.field_store.insert((dst_recv, field, dst_ver), stored);
         }
     }
@@ -1791,14 +1928,21 @@ impl<'a> Builder<'a> {
         };
         // An arm that bumped it may have written the set, so the merge takes a
         // fresh version no pre-branch read can match.
-        let escaped_changed = live
-            .iter()
-            .any(|a| a.escaped_version != pre.escaped_version);
-        let new_escaped = if escaped_changed {
-            self.heap_state.fresh()
-        } else {
-            pre.escaped_version
+        let mut join_generation = |version: fn(&HeapSnapshot) -> HeapVersion| {
+            if live.iter().any(|a| version(a) != version(pre)) {
+                self.heap_state.fresh()
+            } else {
+                version(pre)
+            }
         };
+        let new_escaped = join_generation(|h| h.escaped_version);
+        let new_reference_any = join_generation(|h| h.reference_any);
+        let new_reference_by_type = self.join_overlay(
+            new_reference_any,
+            &pre.reference_by_type,
+            pre.reference_any,
+            live.iter().map(|a| (&a.reference_by_type, a.reference_any)),
+        );
         let new_per_slot = self.join_overlay(
             new_default,
             &pre.per_slot,
@@ -1822,6 +1966,8 @@ impl<'a> Builder<'a> {
         self.heap_state.field_global = new_field_global;
         self.heap_state.default_version = new_default;
         self.heap_state.escaped_version = new_escaped;
+        self.heap_state.reference_any = new_reference_any;
+        self.heap_state.reference_by_type = new_reference_by_type;
     }
 
     /// Join one overlay map across the live arms. A key keeps its pre version
@@ -2037,15 +2183,9 @@ impl<'a> Builder<'a> {
         if eff.has_external_writes {
             self.heap_state.bump_escaped();
         } else if eff.has_pure_calls {
-            // A pure call still reaches the `untrackable` locals; bump those
-            // alone, as `bump_call_effects` does for one call.
-            for i in 0..self.mut_escaped_sorted.len() {
-                let l = self.mut_escaped_sorted[i];
-                if self.untrackable.contains(&l) {
-                    self.heap_state.bump_local(l);
-                }
-            }
+            self.bump_pure_call_reach();
         }
+        self.heap_state.bump_references(Some(&eff.reference_writes));
     }
 
     /// After a flow-opaque construct (`LabeledBlock` with potential breaks),
@@ -2107,6 +2247,9 @@ pub struct CallFacts<'a> {
     /// Which sequence builtin each callee id is, so `array_len` over an array
     /// the walk saw allocated folds to the length it was given.
     pub ctfe_builtins: &'a CtfeBuiltinMap,
+    /// The object types each call may write that the caller can reach. A call
+    /// with no entry may write any.
+    pub writes: &'a IndexMap<ExprId, ObjectTypes>,
 }
 
 /// A loop body's heap-write effects, used to invalidate exactly the fields a
@@ -2122,9 +2265,27 @@ struct LoopHeapEffects {
     /// An impure call, indirect or CM call, or opaque-target store that may
     /// mutate aliased state.
     has_external_writes: bool,
-    /// A pure call, which still reaches the `untrackable` locals. Kept apart so
-    /// a loop of pure calls skips the set-wide bump.
+    /// A pure call, which still reaches what [`Builder::bump_pure_call_reach`]
+    /// names. Kept apart so a loop of pure calls skips the set-wide bump.
     has_pure_calls: bool,
+    /// The object types a store or call may write behind a reference.
+    reference_writes: ObjectTypes,
+}
+
+impl LoopHeapEffects {
+    /// A store to a place no local names, or a call nothing is known of.
+    fn write_anywhere(&mut self) {
+        self.has_external_writes = true;
+        self.reference_writes.set_any();
+    }
+
+    /// A call writing `written` behind a reference; `None` is every type.
+    fn call_writes(&mut self, written: Option<&ObjectTypes>) {
+        match written {
+            Some(types) => self.reference_writes.union(types),
+            None => self.reference_writes.set_any(),
+        }
+    }
 }
 
 /// True when `func_id` is a builtin / monomorphized-builtin intrinsic that
@@ -2195,11 +2356,11 @@ fn record_loop_heap_write(
                     eff.written_fields.insert((*index, *field_index));
                 }
                 // `(*p).f`, `a.b.f` — opaque receiver; aliased state may move.
-                _ => eff.has_external_writes = true,
+                _ => eff.write_anywhere(),
             },
             // `arr[i] = …` writes an array element, not a tracked field; deref
             // / other lvalues are opaque. Treat both as external.
-            _ => eff.has_external_writes = true,
+            _ => eff.write_anywhere(),
         },
         ExprKind::Unary {
             op: NirUnaryOp::MutRef,
@@ -2220,10 +2381,10 @@ fn record_loop_heap_write(
                     Some(root) => {
                         eff.mut_borrowed.insert(root);
                     }
-                    None => eff.has_external_writes = true,
+                    None => eff.write_anywhere(),
                 },
             },
-            _ => eff.has_external_writes = true,
+            _ => eff.write_anywhere(),
         },
         ExprKind::Call { func_id, args, .. } => {
             // A receiver is borrowed unless the callee cannot write through it.
@@ -2246,11 +2407,10 @@ fn record_loop_heap_write(
                 } else {
                     eff.has_external_writes = true;
                 }
+                eff.call_writes(facts.writes.get(&e));
             }
         }
-        ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => {
-            eff.has_external_writes = true;
-        }
+        ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => eff.write_anywhere(),
         _ => {}
     }
 }
@@ -2406,19 +2566,49 @@ mod tests {
     #[test]
     fn unknown_root_read_sees_every_bump_of_its_field() {
         let mut heap = HeapState::new();
-        let bumps: [fn(&mut HeapState); 3] = [
-            |h| h.bump_slot(3, 0),
-            |h| h.bump_local(5),
-            HeapState::bump_escaped,
+        let key = TypeTable::new().type_key(TypeTable::I32);
+        let bumps: [&dyn Fn(&mut HeapState); 5] = [
+            &|h| h.bump_slot(3, 0),
+            &|h| h.bump_local(5),
+            &HeapState::bump_escaped,
+            &|h| h.bump_references(None),
+            &|h| h.bump_references(Some(&ObjectTypes::one(key))),
         ];
         for bump in bumps {
-            let before = heap.version_of(None, 0, false);
+            let before = heap.version_of(None, 0, false, Holder::Frame);
             bump(&mut heap);
-            assert_ne!(heap.version_of(None, 0, false), before);
+            assert_ne!(heap.version_of(None, 0, false, Holder::Frame), before);
         }
-        let before = heap.version_of(None, 0, false);
+        let before = heap.version_of(None, 0, false, Holder::Frame);
         heap.bump_slot(3, 1);
-        assert_eq!(heap.version_of(None, 0, false), before);
+        assert_eq!(heap.version_of(None, 0, false, Holder::Frame), before);
+    }
+
+    /// A call writing behind a reference moves a read through one to an object
+    /// of a type it writes, and no other read.
+    #[test]
+    fn a_reference_bump_reaches_only_reads_of_the_written_type() {
+        let types = TypeTable::new();
+        let (written, other) = (
+            types.type_key(TypeTable::I32),
+            types.type_key(TypeTable::I64),
+        );
+        let mut heap = HeapState::new();
+        let read = |heap: &HeapState, holder| heap.version_of(Some(0), 0, false, holder);
+        let before = [
+            read(&heap, Holder::Foreign(Some(written))),
+            read(&heap, Holder::Foreign(Some(other))),
+            read(&heap, Holder::Foreign(None)),
+            read(&heap, Holder::Frame),
+        ];
+        heap.bump_references(Some(&ObjectTypes::one(written)));
+        assert_ne!(read(&heap, Holder::Foreign(Some(written))), before[0]);
+        assert_eq!(read(&heap, Holder::Foreign(Some(other))), before[1]);
+        assert_ne!(read(&heap, Holder::Foreign(None)), before[2]);
+        assert_eq!(read(&heap, Holder::Frame), before[3]);
+        let other_before = read(&heap, Holder::Foreign(Some(other)));
+        heap.bump_references(None);
+        assert_ne!(read(&heap, Holder::Foreign(Some(other))), other_before);
     }
 
     /// `f(); a + b`, where locals `a` (0) and `b` (1) are both mutably escaped:
@@ -2491,6 +2681,7 @@ mod tests {
         pure: IndexSet<ExprId>,
         immutable: IndexSet<ExprId>,
         ctfe_builtins: CtfeBuiltinMap,
+        writes: IndexMap<ExprId, ObjectTypes>,
     }
 
     impl TestFacts {
@@ -2514,6 +2705,7 @@ mod tests {
                 pure: &self.pure,
                 receiver_immutable: &self.immutable,
                 ctfe_builtins: &self.ctfe_builtins,
+                writes: &self.writes,
             }
         }
     }
@@ -2612,8 +2804,8 @@ mod tests {
         assert!(eff.has_external_writes);
     }
 
-    /// A pure call sets no external write, and still reaches the `untrackable`
-    /// locals.
+    /// A pure call sets no external write, and still reaches what
+    /// [`Builder::bump_pure_call_reach`] names.
     #[test]
     fn pure_call_in_a_loop_writes_no_escaped_state() {
         let mut body = Body::empty();
@@ -2627,32 +2819,33 @@ mod tests {
         );
         assert!(
             eff.has_pure_calls,
-            "it still reaches the untrackable locals no argument list names"
+            "it still reaches the locals no argument list names"
         );
     }
 
     #[test]
     fn cse_independent_of_mut_escaped_iteration_order() {
         use IndexSet;
-        let empty = IndexSet::default();
         let no_calls = IndexSet::default();
         let no_callees = IndexSet::default();
         let no_builtin_map = CtfeBuiltinMap::default();
-        let escaped = |order: [u32; 2]| order.into_iter().collect::<IndexSet<u32>>();
+        let escaped = |order: [u32; 2]| AliasSets {
+            mut_escaped: order.into_iter().collect(),
+            ..AliasSets::default()
+        };
 
-        let build_with = |mut_escaped: &IndexSet<u32>| {
+        let build_with = |alias: &AliasSets| {
             let mut body = call_then_add_body();
             build(
                 &mut body,
                 &[],
-                &empty,
-                &empty,
-                mut_escaped,
+                alias,
                 CallFacts {
                     pure_builtin: &no_callees,
                     pure: &no_calls,
                     receiver_immutable: &no_calls,
                     ctfe_builtins: &no_builtin_map,
+                    writes: &IndexMap::default(),
                 },
                 None,
             );

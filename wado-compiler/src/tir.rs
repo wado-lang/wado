@@ -328,6 +328,107 @@ impl PartialOrd for TypeKey {
     }
 }
 
+/// A set of heap object types, keyed by [`TypeTable::heap_object_key`]; `any`
+/// stands for every type.
+#[derive(Clone, Default, PartialEq, Eq, Debug)]
+pub struct ObjectTypes {
+    any: bool,
+    keys: IndexSet<TypeKey>,
+}
+
+impl ObjectTypes {
+    /// The set of every type.
+    pub fn everything() -> Self {
+        Self {
+            any: true,
+            keys: IndexSet::default(),
+        }
+    }
+
+    /// The set of `key` alone.
+    pub fn one(key: TypeKey) -> Self {
+        Self {
+            any: false,
+            keys: std::iter::once(key).collect(),
+        }
+    }
+
+    /// Whether the set is every type.
+    pub fn is_any(&self) -> bool {
+        self.any
+    }
+
+    /// The keys of a set that is not [`Self::is_any`].
+    pub fn keys(&self) -> impl Iterator<Item = TypeKey> + '_ {
+        assert!(!self.any, "an `any` set has no key list");
+        self.keys.iter().copied()
+    }
+
+    /// Whether `key` is in the set.
+    pub fn contains(&self, key: TypeKey) -> bool {
+        self.any || self.keys.contains(&key)
+    }
+
+    /// Whether the set has no type.
+    pub fn is_empty(&self) -> bool {
+        !self.any && self.keys.is_empty()
+    }
+
+    /// Add `key`.
+    pub fn insert(&mut self, key: TypeKey) {
+        if !self.any {
+            self.keys.insert(key);
+        }
+    }
+
+    /// Make the set every type.
+    pub fn set_any(&mut self) {
+        self.any = true;
+        self.keys.clear();
+    }
+
+    /// `self ∪= other`.
+    pub fn union(&mut self, other: &ObjectTypes) {
+        if other.any {
+            self.set_any();
+        } else if !self.any {
+            self.keys.extend(other.keys.iter().copied());
+        }
+    }
+
+    /// Whether `self ∩ other` is non-empty.
+    pub fn meets(&self, other: &ObjectTypes) -> bool {
+        match (self.any, other.any) {
+            (true, true) => true,
+            (true, false) => !other.keys.is_empty(),
+            (false, true) => !self.keys.is_empty(),
+            (false, false) => self.keys.iter().any(|k| other.keys.contains(k)),
+        }
+    }
+
+    /// `self ∪= a ∩ b`.
+    pub fn union_meet(&mut self, a: &ObjectTypes, b: &ObjectTypes) {
+        match (a.any, b.any) {
+            (true, true) => {
+                self.set_any();
+            }
+            (true, false) => {
+                self.union(b);
+            }
+            (false, true) => {
+                self.union(a);
+            }
+            (false, false) => {
+                for &k in &a.keys {
+                    if b.keys.contains(&k) {
+                        self.insert(k);
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Identity of an inference variable — see [`ResolvedType::InferVar`].
 ///
 /// Minted per module by the elaborator, so two uses of the same polymorphic
@@ -1273,6 +1374,54 @@ impl TypeTable {
                 .and_then(|ty| self.intern_map.get(ty).copied())
                 .unwrap_or(resolved),
         )
+    }
+
+    /// `ty` without its references and newtypes: the object a handle names.
+    #[must_use]
+    pub fn strip_handles(&self, mut ty: TypeId) -> TypeId {
+        loop {
+            if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = self.get(ty) {
+                ty = *inner;
+            } else if let ResolvedType::Newtype { .. } = self.get(ty) {
+                ty = self.representation_head(ty);
+            } else {
+                return ty;
+            }
+        }
+    }
+
+    /// The heap object a value of `ty` is, or reaches first through its
+    /// references: the key an access to one of its fields is made under.
+    #[must_use]
+    pub fn heap_object_key(&self, ty: TypeId) -> Option<TypeKey> {
+        let ty = self.strip_handles(ty);
+        match self.get(ty) {
+            ResolvedType::Struct { .. }
+            | ResolvedType::BuiltinArray(_)
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Function { .. }
+            | ResolvedType::Reactive(_) => Some(self.type_key(ty)),
+            ResolvedType::GenericInstance { .. } => {
+                Some(self.type_key(self.monomorphized_or_self(ty)))
+            }
+            ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Never
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::GenericResource { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::TypeParam { .. }
+            | ResolvedType::AssocParam { .. }
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::AssocTypeProjection { .. }
+            | ResolvedType::Unknown
+            | ResolvedType::Error => None,
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_) | ResolvedType::Newtype { .. } => {
+                unreachable!("strip_handles removes every reference and newtype")
+            }
+            ResolvedType::InferVar(var) => panic!("{var} reached heap-effect analysis"),
+        }
     }
 
     /// Whether `a` and `b` name one list of types, position by position.
@@ -4980,10 +5129,15 @@ impl TypeTable {
     /// Whether `id` is a `TypePack` or a tuple whose elements transitively
     /// contain one.
     pub fn contains_type_pack(&self, id: TypeId) -> bool {
+        self.any_type_pack(id, &|_| true)
+    }
+
+    /// Whether `id` is, or is a tuple spreading, a pack `pred` holds of.
+    pub fn any_type_pack(&self, id: TypeId, pred: &impl Fn(TypeId) -> bool) -> bool {
         match self.get(id) {
-            ResolvedType::TypePack { .. } => true,
+            ResolvedType::TypePack { .. } => pred(id),
             ResolvedType::GenericInstance { def, type_args } if self.is_tuple_def(*def) => {
-                type_args.iter().any(|e| self.contains_type_pack(*e))
+                type_args.iter().any(|e| self.any_type_pack(*e, pred))
             }
             _ => false,
         }
@@ -5297,25 +5451,14 @@ impl TypeTable {
                 effects,
             } => {
                 let param_names: Vec<String> = params.iter().map(|p| type_name(*p)).collect();
-                let keyword = if *is_mut { "fn mut" } else { "fn" };
                 let effect_names: Vec<String> =
                     effects.iter().map(|e| e.display_name(qualified)).collect();
-                let clause = match effect_names.as_slice() {
-                    [] => String::new(),
-                    [one] => format!(" with {one}"),
-                    many => format!(" with ({})", many.join(", ")),
-                };
-                // A function-typed return is parenthesized, or a `with` after it
-                // would not say which of the two function types carries it.
-                let return_name = type_name(*return_type);
-                let return_name = match self.get(*return_type) {
-                    ResolvedType::Function { .. } => format!("({return_name})"),
-                    _ => return_name,
-                };
-                format!(
-                    "{}({}) -> {return_name}{clause}",
-                    keyword,
-                    param_names.join(", ")
+                name::display_fn_type(
+                    *is_mut,
+                    &param_names,
+                    &type_name(*return_type),
+                    matches!(self.get(*return_type), ResolvedType::Function { .. }),
+                    &effect_names,
                 )
             }
             ResolvedType::Ref(inner) => format!("&{}", type_name(*inner)),
@@ -5624,28 +5767,12 @@ impl TypeTable {
         }
     }
 
-    /// A `fn(..)` type's spelling. Shared by [`Self::mangle_type_name`] and
-    /// [`Self::fn_receiver_name`], so a stub's name and a call site's are one.
-    fn fn_type_name_info(
+    /// A `fn(..)` type's name, each component named by `name_of`.
+    fn fq_fn_name(
         &self,
-        is_mut: bool,
-        params: &[TypeId],
-        return_type: TypeId,
-        effects: &[EffectRef],
-    ) -> TypeNameInfo {
-        let with_clause: Vec<String> = effects.iter().map(name::mangle_effect_ref).collect();
-        TypeNameInfo::Function {
-            is_mut,
-            params: params.iter().map(|p| self.mangle_type_name(*p)).collect(),
-            return_type: self.mangle_type_name(return_type),
-            return_is_function: matches!(self.get(return_type), ResolvedType::Function { .. }),
-            with_clause,
-        }
-    }
-
-    /// The receiver a `fn(..)` value dispatches through: its own name.
-    #[must_use]
-    pub fn fn_receiver_name(&self, resolved: &ResolvedType) -> FqTypeName {
+        resolved: &ResolvedType,
+        name_of: impl Fn(TypeId) -> FqTypeName,
+    ) -> FqTypeName {
         let ResolvedType::Function {
             is_mut,
             params,
@@ -5653,10 +5780,20 @@ impl TypeTable {
             effects,
         } = resolved
         else {
-            panic!("fn_receiver_name expects a function type");
+            panic!("fq_fn_name expects a function type");
         };
-        let info = self.fn_type_name_info(*is_mut, params, *return_type, effects);
-        FqTypeName::builtin(&format_type_name(info))
+        FqTypeName::function(
+            *is_mut,
+            params.iter().map(|&p| name_of(p)).collect(),
+            name_of(*return_type),
+            effects.clone(),
+        )
+    }
+
+    /// The receiver a `fn(..)` value dispatches through: its own name.
+    #[must_use]
+    pub fn fn_receiver_name(&self, resolved: &ResolvedType) -> FqTypeName {
+        self.fq_fn_name(resolved, |t| self.fq_type_name(t))
     }
 
     /// The declaration a type's head names, with any arguments dropped. Read
@@ -5680,8 +5817,8 @@ impl TypeTable {
             ResolvedType::BuiltinArray(_) => FqTypeName::builtin(Self::ARRAY_TYPE_NAME),
             ResolvedType::Unit => FqTypeName::builtin(UNIT_TYPE_NAME),
             ResolvedType::Function { .. } => self.fn_receiver_name(self.get(id)),
-            // Tuples, primitives and function types are builtin shapes: no
-            // module declares them and every mangler spells them bare.
+            // Tuples and primitives are builtin shapes: no module declares
+            // them and every mangler spells them bare.
             _ => FqTypeName::builtin(&self.base_type_name(id)),
         }
     }
@@ -5800,6 +5937,9 @@ impl TypeTable {
                 trait_args.as_ref().map(|given| args_of(given)),
             )
             .with_args(args_of(args)),
+            resolved @ ResolvedType::Function { .. } => {
+                self.fq_fn_name(resolved, |t| self.fq_type_name_spelled(t, unboxed))
+            }
             // Shapes that name no declaration — packs, `Unknown`. They carry no
             // module, so the rendered spelling is already their whole identity.
             _ => FqTypeName::builtin(&self.mangle_type_name(id)),
@@ -5851,12 +5991,11 @@ impl TypeTable {
                     args,
                 }
             }
-            ResolvedType::Function {
-                is_mut,
-                params,
-                return_type,
-                effects,
-            } => self.fn_type_name_info(*is_mut, params, *return_type, effects),
+            // One spelling with the receiver's, so a stub's name and a call
+            // site's are one.
+            resolved @ ResolvedType::Function { .. } => {
+                TypeNameInfo::Named(self.fn_receiver_name(resolved).to_mangled())
+            }
             ResolvedType::BuiltinArray(elem) => {
                 TypeNameInfo::BuiltinArray(self.mangle_type_name(*elem))
             }
@@ -8403,6 +8542,14 @@ impl DeclarationTable<BuiltinDeclaration> {
     /// than from the fixpoint.
     pub fn declares<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {
         self.get(call.into()).is_some_and(|d| d.returns.is_some())
+    }
+
+    /// Whether a call to the body-less `call` may leave for the host, where
+    /// another task may run: nothing declares it, or it declares
+    /// `#[side_effect(opaque)]`.
+    pub fn leaves_for_host<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {
+        self.get(call.into())
+            .is_none_or(|d| matches!(d.facts.side_effect, SideEffect::Opaque))
     }
 
     /// Whether the call leaves the argument *object* at `pos` where the caller

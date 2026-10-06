@@ -65,64 +65,64 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "param_spec_caller_rewrites_field.wado/emit"(opt, out) {
     let i: i32;
-    let new_used_8: i32;
-    let start_9: i32;
-    let new_used_22: i32;
-    let start_23: i32;
-    let new_used_36: i32;
-    let start_37: i32;
-    let $licm_repeat_59: i32;
-    let $licm_mode_60: i32;
-    let $licm_arith_61: bool;
-    let $hfs_used_63: i32;
+    let new_used_11: i32;
+    let start_12: i32;
+    let new_used_34: i32;
+    let start_35: i32;
+    let new_used_57: i32;
+    let start_58: i32;
+    let $licm_repeat_95: i32;
+    let $licm_mode_96: i32;
+    let $licm_arith_97: bool;
+    let $hfs_used_99: i32;
     i = 0;
-    $licm_repeat_59 = opt.repeat;
-    $licm_arith_61 = local.tee $licm_mode_60(opt.mode) == 1;
-    $licm_mode_60 = $licm_mode_60 == 2;
-    $hfs_used_63 = out.used;
+    $licm_repeat_95 = opt.repeat;
+    $licm_arith_97 = local.tee $licm_mode_96(opt.mode) == 1;
+    $licm_mode_96 = $licm_mode_96 == 2;
+    $hfs_used_99 = out.used;
     b0: block {
         l1: loop {
-            break_if b0 i >= $licm_repeat_59;
-            if $licm_arith_61 {
-                if @unlikely(local.tee new_used_8($hfs_used_63 + 1) > builtin::array_len(out.repr)) {
+            break_if b0 i >= $licm_repeat_95;
+            if $licm_arith_97 {
+                if @unlikely(local.tee new_used_11($hfs_used_99 + 1) > builtin::array_len(out.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_8);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_11);
                 } else {
                 }
-                start_9 = local.tee $hfs_used_63(out.used);
-                $hfs_used_63 = new_used_8;
-                builtin::array_set_u8(out.repr, start_9, 97);
-            } else if $licm_mode_60 {
-                if @unlikely(local.tee new_used_22($hfs_used_63 + 1) > builtin::array_len(out.repr)) {
+                start_12 = local.tee $hfs_used_99(out.used);
+                $hfs_used_99 = new_used_11;
+                builtin::array_set_u8(out.repr, start_12, 97);
+            } else if $licm_mode_96 {
+                if @unlikely(local.tee new_used_34($hfs_used_99 + 1) > builtin::array_len(out.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_22);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_34);
                 } else {
                 }
-                start_23 = local.tee $hfs_used_63(out.used);
-                $hfs_used_63 = new_used_22;
-                builtin::array_set_u8(out.repr, start_23, 98);
+                start_35 = local.tee $hfs_used_99(out.used);
+                $hfs_used_99 = new_used_34;
+                builtin::array_set_u8(out.repr, start_35, 98);
             } else {
-                if @unlikely(local.tee new_used_36($hfs_used_63 + 1) > builtin::array_len(out.repr)) {
+                if @unlikely(local.tee new_used_57($hfs_used_99 + 1) > builtin::array_len(out.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_36);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_57);
                 } else {
                 }
-                start_37 = local.tee $hfs_used_63(out.used);
-                $hfs_used_63 = new_used_36;
-                builtin::array_set_u8(out.repr, start_37, 63);
+                start_58 = local.tee $hfs_used_99(out.used);
+                $hfs_used_99 = new_used_57;
+                builtin::array_set_u8(out.repr, start_58, 63);
             }
             i = i + 1;
-            out.used = $hfs_used_63;
+            out.used = $hfs_used_99;
             continue l1;
         };
     };
-    if @unlikely(local.tee start_37(out.used + 1) > builtin::array_len(out.repr)) {
+    if @unlikely(local.tee start_58(out.used + 1) > builtin::array_len(out.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, start_37);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, start_58);
     }
-    new_used_36 = out.used;
-    out.used = start_37;
-    builtin::array_set_u8(out.repr, new_used_36, 47);
+    new_used_57 = out.used;
+    out.used = start_58;
+    builtin::array_set_u8(out.repr, new_used_57, 47);
 }
 
 fn "param_spec_caller_rewrites_field.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

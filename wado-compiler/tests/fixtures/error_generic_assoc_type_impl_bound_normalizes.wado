@@ -1,0 +1,57 @@
+// An impl's bound naming a family's member reads it at the receiver's
+// binding: `S::Buf<i32>` is `Weighed<i32>`, which `Probe` does not have.
+
+trait Elem with () {}
+
+impl Elem for i32 {}
+
+impl Elem for i64 {}
+
+struct Weighed<E: Elem> {
+    items: List<E>,
+}
+
+trait Store with () {
+    type Buf<E: Elem>;
+}
+
+struct Weigher {}
+
+impl Store for Weigher {
+    type Buf<E: Elem> = Weighed<E>;
+}
+
+trait Has<T> with () {}
+
+struct Probe {}
+
+impl Has<Weighed<i64>> for Probe {}
+
+trait Marker with () {
+    fn mark() -> i32;
+}
+
+struct Pair<S, Q> {
+    s: S,
+    q: Q,
+}
+
+impl<S: Store, Q: Has<S::Buf<i32>>> Marker for Pair<S, Q> {
+    fn mark() -> i32 {
+        return 1;
+    }
+}
+
+fn need<M: Marker>() -> i32 {
+    return M::mark();
+}
+
+export fn run() {
+    need::<Pair<Weigher, Probe>>();
+}
+
+__DATA__
+{
+  "compile_error": ":50:5: analysis error: type 'Pair<Weigher, Probe>' does not implement trait 'Marker' required by bound on 'M'",
+  "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
+}

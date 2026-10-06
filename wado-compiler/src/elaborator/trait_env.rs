@@ -20,7 +20,7 @@ use crate::name;
 use crate::resolve::{Resolution, Resolutions, head_site};
 use crate::tir::{TemplateId, TypeId, TypeTable};
 use crate::token::Span;
-use crate::unparse::unparse_type_into;
+use crate::unparse::{unparse_generic_params_into, unparse_type_into};
 
 /// Namespace-import alias (`use ns from "…"`) → the namespace's module.
 /// Drives `ns::Type` resolution (issue #1415).
@@ -112,9 +112,15 @@ pub(crate) enum ImplTargetKey {
     /// impl out of the bucket of a type that happens to share the parameter's
     /// name. The module is the impl's own — the parameter is scoped to it.
     TypeParam(ModuleSource, String),
-    /// A builtin shape: a primitive, `Array`, the tuple family, a function type.
+    /// A builtin shape: a primitive, `Array`, the tuple family.
     /// Every mangler spells it bare, so a definition and a lookup agree on it.
     Builtin(String),
+    /// A function type: its whole signature, `mut` and effects included, the
+    /// name `TypeTable::impl_receiver_key` reads off a function value.
+    Function {
+        name: name::FqTypeName,
+        display: String,
+    },
 }
 
 impl ImplTargetKey {
@@ -160,6 +166,7 @@ impl ImplTargetKey {
             }
             ImplTargetKey::Ref(kind) => name::Receiver::Ref(*kind),
             ImplTargetKey::Builtin(name) => name::Receiver::Type(name::FqTypeName::builtin(name)),
+            ImplTargetKey::Function { name, .. } => name::Receiver::Type(name.clone()),
         }
     }
 
@@ -169,7 +176,7 @@ impl ImplTargetKey {
             ImplTargetKey::Undeclared(_, name)
             | ImplTargetKey::TypeParam(_, name)
             | ImplTargetKey::Builtin(name) => Some(name),
-            ImplTargetKey::Ref(_) => None,
+            ImplTargetKey::Ref(_) | ImplTargetKey::Function { .. } => None,
         }
     }
 
@@ -180,7 +187,8 @@ impl ImplTargetKey {
             ImplTargetKey::Decl(def) => defs.name(*def),
             ImplTargetKey::Undeclared(_, name)
             | ImplTargetKey::TypeParam(_, name)
-            | ImplTargetKey::Builtin(name) => name,
+            | ImplTargetKey::Builtin(name)
+            | ImplTargetKey::Function { display: name, .. } => name,
             ImplTargetKey::Ref(kind) => kind.prefix(),
         }
     }
@@ -192,7 +200,8 @@ impl ImplTargetKey {
             ImplTargetKey::Decl(_)
             | ImplTargetKey::Undeclared(..)
             | ImplTargetKey::TypeParam(..)
-            | ImplTargetKey::Builtin(_) => None,
+            | ImplTargetKey::Builtin(_)
+            | ImplTargetKey::Function { .. } => None,
         }
     }
 }
@@ -1184,42 +1193,41 @@ impl TraitEnv {
         let trait_impl_modules = index_impl_modules(&impl_headers, defs, false);
         let concrete_trait_impl_modules = index_impl_modules(&impl_headers, defs, true);
 
-        violations.extend(check_impl_coherence(&impl_headers, resolutions));
-        violations.extend(check_variadic_impl_overlap(defs, &impl_headers));
-
+        let variadic_targets = check_variadic_impl_targets(&impl_headers);
         let (supertrait_closures, cycles) =
             build_supertrait_closures(defs, &trait_decl_headers, &resolve_trait);
-        violations.extend(cycles);
-        violations.extend(check_bounds_name_traits(modules, &resolve_trait));
+        let unnamed_traits = check_bounds_name_traits(modules, &resolve_trait);
 
-        (
-            Arc::new(Self {
-                by_receiver: index_by_receiver(&impl_index, &impl_headers, defs),
-                all_by_receiver: index_by_receiver(&all_impl_index, &impl_headers, defs),
-                impl_index,
-                all_impl_index,
-                defs: resolutions.defs().clone(),
-                blanket_param_sources: blanket_param_sources(
-                    &impl_headers,
-                    &blanket_impls,
-                    resolutions,
-                ),
-                impl_headers,
-                trait_decl_headers,
-                supertrait_closures,
-                function_type_params,
-                module_namespace_imports,
-                space_modules,
-                blanket_impls,
-                impl_method_index,
-                resource_static_method_index,
-                trait_impl_modules,
-                concrete_trait_impl_modules,
-                synthesised: None,
-                solver: None,
-            }),
-            violations,
-        )
+        let env = Arc::new(Self {
+            by_receiver: index_by_receiver(&impl_index, &impl_headers, defs),
+            all_by_receiver: index_by_receiver(&all_impl_index, &impl_headers, defs),
+            impl_index,
+            all_impl_index,
+            defs: resolutions.defs().clone(),
+            blanket_param_sources: blanket_param_sources(
+                &impl_headers,
+                &blanket_impls,
+                resolutions,
+            ),
+            impl_headers,
+            trait_decl_headers,
+            supertrait_closures,
+            function_type_params,
+            module_namespace_imports,
+            space_modules,
+            blanket_impls,
+            impl_method_index,
+            resource_static_method_index,
+            trait_impl_modules,
+            concrete_trait_impl_modules,
+            synthesised: None,
+            solver: None,
+        });
+        violations.extend(check_impl_coherence(&env, resolutions));
+        violations.extend(variadic_targets);
+        violations.extend(cycles);
+        violations.extend(unnamed_traits);
+        (env, violations)
     }
 
     /// The module `space` was parsed from, or `None` for a synthesized node,
@@ -1249,7 +1257,7 @@ impl TraitEnv {
     ///
     /// Written in `key`'s own parameter space, so a caller reading an argument
     /// resolves it through [`InheritedBound::via`] rather than here.
-    fn supertrait_closure(&self, key: &DefId) -> &[InheritedBound] {
+    pub(super) fn supertrait_closure(&self, key: &DefId) -> &[InheritedBound] {
         self.supertrait_closures.get(key).map_or(&[], Vec::as_slice)
     }
 
@@ -1359,30 +1367,56 @@ impl TraitEnv {
         fq.with_args(args)
     }
 
-    /// The trait's declared default at `index` where it names a type. `None`
-    /// for a `= Self` default, which says whatever target is answering rather
-    /// than a type of its own.
-    pub(super) fn named_default_arg(
-        &self,
-        trait_: DefId,
-        index: usize,
-    ) -> Option<&name::FqTypeName> {
-        match self
-            .trait_decl_headers
-            .get(&trait_)?
-            .default_args
-            .get(index)?
-        {
-            Some(DefaultArg::Named(name)) => Some(name),
-            Some(DefaultArg::SelfTarget) | None => None,
-        }
-    }
-
     /// The type parameters `trait_` declares, empty for one that declares none
     /// and for a name reaching no declaration.
     pub(super) fn trait_decl_params(&self, trait_: DefId) -> &[ast::GenericParam] {
         self.decl_header_of(&trait_)
             .map_or(&[], |header| header.type_params.as_slice())
+    }
+
+    /// `param`, written in the frame of the trait `impl_def` implements, read in
+    /// the impl's: each of the trait's parameters it names becomes what the
+    /// impl's header writes for it. Matched by the binder a name reaches, so a
+    /// method parameter shadowing one is left alone. A parameter the header
+    /// leaves to its default, or a pack, which takes a run of arguments no
+    /// one name stands for, stays as written. `None` where `param` projects
+    /// off one of the trait's parameters (`X::Item`): a written type cannot
+    /// say that in the impl's frame.
+    pub(super) fn in_impl_frame(
+        &self,
+        impl_def: DefId,
+        param: &ast::GenericParam,
+        resolutions: &Resolutions,
+    ) -> Option<ast::GenericParam> {
+        let Some(header) = self.impl_headers.get(&impl_def) else {
+            return Some(param.clone());
+        };
+        let Some(trait_) = header.trait_def() else {
+            return Some(param.clone());
+        };
+        let declared = self.trait_type_params(trait_);
+        if declared.iter().any(|p| p.is_pack) {
+            return Some(param.clone());
+        }
+        let projects_off_declared = param.any_type(&mut |ty| {
+            matches!(ty, ast::Type::NamespacedGeneric(ns)
+                if matches!(resolutions.walked(ns.id),
+                    Some(Resolution::Projection(base)) if declared.iter().any(|p| p.id == base)))
+        });
+        if projects_off_declared {
+            return None;
+        }
+        let written = header.trait_ty().map_or(&[][..], written_arg_nodes);
+        Some(param.substituted(&|named| {
+            match resolutions.walked(named.id)? {
+                Resolution::Binder(binder) => declared
+                    .iter()
+                    .position(|p| p.id == binder)
+                    .and_then(|i| written.get(i))
+                    .cloned(),
+                Resolution::Def(_) | Resolution::Projection(_) | Resolution::Unresolved => None,
+            }
+        }))
     }
 
     /// The parameters of `trait_` a reference to it gives a type argument, in
@@ -1793,16 +1827,6 @@ impl TraitEnv {
             .map(|inherited| inherited.decl)
     }
 
-    /// `key`'s parameters and its closure as declared, both in `key`'s own
-    /// parameter space. A reader re-spells them at its own arguments with
-    /// [`TypeSystem::supertrait_names`].
-    pub(super) fn supertrait_closure_declared(
-        &self,
-        key: &DefId,
-    ) -> (&[ast::GenericParam], &[InheritedBound]) {
-        (self.trait_decl_params(*key), self.supertrait_closure(key))
-    }
-
     /// `key` or the supertrait of it declaring `assoc_name`, making
     /// `<T as key>::assoc_name` mean the trait that declared it.
     pub(super) fn trait_declaring_assoc_type(
@@ -1824,18 +1848,50 @@ impl TraitEnv {
         assoc_name: &str,
         resolutions: &Resolutions,
     ) -> Option<DefId> {
-        let decls = || {
-            bounds
-                .iter()
-                .filter_map(|bound| resolutions.bound_decl(bound.borrow()))
-        };
-        decls()
+        let decls: Vec<DefId> = bounds
+            .iter()
+            .filter_map(|bound| resolutions.bound_decl(bound.borrow()))
+            .collect();
+        self.trait_among_declaring_assoc_type(&decls, assoc_name)
+    }
+
+    /// Which of `decls`, or of their supertraits, declares `assoc_name`.
+    pub(super) fn trait_among_declaring_assoc_type(
+        &self,
+        decls: &[DefId],
+        assoc_name: &str,
+    ) -> Option<DefId> {
+        decls
+            .iter()
+            .copied()
             .find(|decl| self.declares_assoc_type(decl, assoc_name))
             // Searched after every direct bound, so a trait redeclaring the
             // name still wins for itself.
             .or_else(|| {
-                decls().find_map(|decl| self.supertrait_declaring_assoc_type(&decl, assoc_name))
+                decls
+                    .iter()
+                    .find_map(|decl| self.supertrait_declaring_assoc_type(decl, assoc_name))
             })
+    }
+
+    /// The trait of the one impl on `target` binding `assoc_name`: what
+    /// `Self::assoc_name` reads where the trait in hand declares none, as the
+    /// elaborator reads it.
+    pub(super) fn impl_trait_binding_assoc(
+        &self,
+        target: &ImplTargetKey,
+        assoc_name: &str,
+    ) -> Option<DefId> {
+        let mut binding = self.all_impl_index.get(target)?.iter().filter_map(|key| {
+            let header = &self.impl_headers[key];
+            header
+                .associated_types
+                .iter()
+                .any(|b| b.name == assoc_name)
+                .then_some(header)
+        });
+        let only = binding.next()?;
+        binding.next().is_none().then(|| only.trait_def())?
     }
 
     /// Produce a new `TraitEnv` carrying the synthesis-layer impls — every
@@ -1884,14 +1940,22 @@ pub(crate) enum ImplReceiver<'a> {
 
 /// The impl header's target, from the site the header wrote.
 ///
-/// A site behind no declaration — a tuple, a function type, a name that
-/// reaches nothing — is keyed to the impl's own module. Nothing else claims
-/// it, and coherence for exactly those is decided per module.
+/// A function type is keyed by its signature. Any other site behind no
+/// declaration — a tuple, a name that reaches nothing — is keyed to the impl's
+/// own module. Nothing else claims it, and coherence for exactly those is
+/// decided per module.
 fn impl_target_key_at(
     ty: &ast::Type,
     module_source: &ModuleSource,
     resolutions: &Resolutions,
 ) -> ImplTargetKey {
+    if let ast::Type::Function(_) = ty {
+        let name = written_type_arg(ty, resolutions);
+        return ImplTargetKey::Function {
+            display: name.to_display(),
+            name,
+        };
+    }
     sited_impl_target_key(ty, module_source, resolutions)
         .unwrap_or_else(|| ImplTargetKey::of_undeclared(module_source, &get_type_name_static(ty)))
 }
@@ -2002,6 +2066,7 @@ fn classify_position(
                 | ImplTargetKey::TypeParam(..)
                 | ImplTargetKey::Builtin(_)
                 | ImplTargetKey::Undeclared(..) => PositionKind::ForeignType,
+                ImplTargetKey::Function { .. } => unreachable!("a name is no `fn(..)` signature"),
             }
         }
         // Tuples are local if the current crate owns them (via `pub type [..T];`)
@@ -2282,131 +2347,29 @@ fn report_supertrait_cycle(
     ));
 }
 
-enum VariadicTarget {
-    /// The bare `[..T]`, the only shape the compiler implements.
-    PackOnly,
-    /// A pack beside other elements (`[i32, ..T]`) or under a reference.
-    Unsupported,
-}
-
-/// Classify an impl target that spreads a type pack; `None` when it spreads
-/// none. Only a tuple can carry one.
-fn variadic_target(ty: &ast::Type) -> Option<VariadicTarget> {
+/// Whether an impl target spreads a type pack anywhere but as the whole of a
+/// tuple (`[..T]`). Only a tuple can carry one.
+fn is_unsupported_variadic_target(ty: &ast::Type) -> bool {
     match ty {
-        ast::Type::Tuple(elems) => {
-            if !elems
-                .iter()
-                .any(|e| matches!(e, ast::Type::TypePackSpread(..)))
-            {
-                return None;
-            }
-            Some(if elems.len() == 1 {
-                VariadicTarget::PackOnly
-            } else {
-                VariadicTarget::Unsupported
-            })
-        }
+        ast::Type::Tuple(elems) => elems.len() > 1 && spreads_pack(ty),
         // A pack under a reference never reaches the impl's type-param scope,
         // so type resolution would report the declared pack as unknown.
-        ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
-            variadic_target(inner).map(|_| VariadicTarget::Unsupported)
-        }
-        _ => None,
-    }
-}
-
-/// Whether two impl-written types can denote the same type. An impl's own type
-/// parameter is a wildcard. An undecidable pair unifies: for a coherence rule,
-/// reporting is the sound direction.
-fn types_can_unify(
-    a: &ast::Type,
-    a_params: &IndexSet<&str>,
-    b: &ast::Type,
-    b_params: &IndexSet<&str>,
-) -> bool {
-    let is_wildcard = |ty: &ast::Type, params: &IndexSet<&str>| match ty {
-        ast::Type::Named(named) => params.contains(named.name.as_str()),
+        ast::Type::Reference(inner) | ast::Type::MutReference(inner) => spreads_pack(inner),
         _ => false,
-    };
-    if is_wildcard(a, a_params) || is_wildcard(b, b_params) {
-        return true;
-    }
-    let unify_all = |xs: &[ast::Type], ys: &[ast::Type]| {
-        xs.len() == ys.len()
-            && xs
-                .iter()
-                .zip(ys)
-                .all(|(x, y)| types_can_unify(x, a_params, y, b_params))
-    };
-    match (a, b) {
-        (ast::Type::Named(x), ast::Type::Named(y)) => x.name == y.name,
-        (ast::Type::Generic(x), ast::Type::Generic(y)) => {
-            x.name == y.name && unify_all(&x.args, &y.args)
-        }
-        (ast::Type::Tuple(xs), ast::Type::Tuple(ys)) => unify_all(xs, ys),
-        (ast::Type::Reference(x), ast::Type::Reference(y))
-        | (ast::Type::MutReference(x), ast::Type::MutReference(y)) => {
-            types_can_unify(x, a_params, y, b_params)
-        }
-        // Decidable shapes that did not pair up above have different heads.
-        (
-            ast::Type::Named(_)
-            | ast::Type::Generic(_)
-            | ast::Type::Tuple(_)
-            | ast::Type::Reference(_)
-            | ast::Type::MutReference(_),
-            ast::Type::Named(_)
-            | ast::Type::Generic(_)
-            | ast::Type::Tuple(_)
-            | ast::Type::Reference(_)
-            | ast::Type::MutReference(_),
-        ) => false,
-        // Projections, function types, nested packs and placeholders are not
-        // decidable here.
-        (
-            ast::Type::NamespacedGeneric(_)
-            | ast::Type::Function(_)
-            | ast::Type::TypePackSpread(..)
-            | ast::Type::Infer(_)
-            | ast::Type::Error(_),
-            _,
-        )
-        | (
-            _,
-            ast::Type::NamespacedGeneric(_)
-            | ast::Type::Function(_)
-            | ast::Type::TypePackSpread(..)
-            | ast::Type::Infer(_)
-            | ast::Type::Error(_),
-        ) => true,
     }
 }
 
-struct VariadicImpl<'a> {
-    module_source: &'a ModuleSource,
-    span: Span,
-    trait_name: String,
-    trait_args: &'a [ast::Type],
-    params: IndexSet<&'a str>,
-}
-
-impl VariadicImpl<'_> {
-    /// Whether the two accept a common tuple. Both targets are the bare
-    /// `[..T]`, so only the trait's own arguments can hold them apart:
-    /// `Conv<i32>` and `Conv<String>` implement different things.
-    fn overlaps(&self, other: &Self) -> bool {
-        self.trait_args.len() == other.trait_args.len()
-            && self
-                .trait_args
-                .iter()
-                .zip(other.trait_args)
-                .all(|(a, b)| types_can_unify(a, &self.params, b, &other.params))
+/// Whether `ty` is a tuple spreading a type pack.
+fn spreads_pack(ty: &ast::Type) -> bool {
+    match ty {
+        ast::Type::Tuple(elems) => elems
+            .iter()
+            .any(|e| matches!(e, ast::Type::TypePackSpread(..))),
+        ast::Type::Reference(inner) | ast::Type::MutReference(inner) => spreads_pack(inner),
+        _ => false,
     }
 }
 
-/// The coherence checks the solver owns, given spans and names by the headers
-/// they came from. Only a user-local impl is reported: a stdlib pair the check
-/// would name is not something a program can fix.
 /// How a finding names the impl at `conflict`, reported at `here`.
 fn conflicting_impl_location(conflict: &ModuleSource, here: &ModuleSource) -> String {
     if conflict == here {
@@ -2416,15 +2379,25 @@ fn conflicting_impl_location(conflict: &ModuleSource, here: &ModuleSource) -> St
     }
 }
 
+/// The coherence checks the solver owns, given spans and names by the headers
+/// they came from. Only a user-local impl is reported: a stdlib pair the check
+/// would name is not something a program can fix.
 fn check_impl_coherence(
-    impl_headers: &IndexMap<DefId, ImplHeader>,
+    env: &TraitEnv,
     resolutions: &Resolutions,
 ) -> Vec<(ModuleSource, TypeError)> {
     use super::solver_bridge::{Lowering, lower_impls};
     use crate::trait_solver::{CoherenceError, ImplId, Program, coherence_errors};
-    let mut lowering = Lowering::default();
+    let mut lowering = Lowering::over(resolutions);
+    lowering.intern_assocs(&env.trait_decl_headers);
     let mut program = Program::default();
-    let sources = lower_impls(&mut lowering, &mut program, impl_headers, resolutions);
+    let sources = lower_impls(
+        &mut lowering,
+        &mut program,
+        &env.impl_headers,
+        env,
+        resolutions,
+    );
     let header_of = |id: ImplId| -> &ImplHeader { sources[id.0 as usize] };
     let trait_name = |header: &ImplHeader| {
         header
@@ -2437,13 +2410,20 @@ fn check_impl_coherence(
         let (reported, error) = match error {
             CoherenceError::DuplicateImpl { first, second } => {
                 let (first, second) = (header_of(first), header_of(second));
+                // The program's own copy is the one it can fix, whichever
+                // loaded first.
+                let (kept, reported) =
+                    if is_user_local(&second.module) || !is_user_local(&first.module) {
+                        (first, second)
+                    } else {
+                        (second, first)
+                    };
                 (
-                    second,
+                    reported,
                     TypeError::DuplicateTraitImpl {
-                        trait_name: trait_name(second),
-                        self_type_name: get_type_name_static(&second.ty),
-                        conflicting_impl: conflicting_impl_location(&first.module, &second.module),
-                        span: second.span,
+                        header: header_as_written(reported),
+                        conflicting_impl: conflicting_impl_location(&kept.module, &reported.module),
+                        span: reported.span,
                     },
                 )
             }
@@ -2466,85 +2446,26 @@ fn check_impl_coherence(
     violations
 }
 
-/// Coherence Rule 2 (WEP 2026-03-14 §5): two variadic impls of one trait accept
-/// the same tuples, and a pack's bounds resolve only at monomorphization, so
-/// nothing separates them at selection — reject the later one where it is
-/// written. Grouping is by trait *declaration*, so two modules may each keep
-/// their own. The same walk refuses a target the compiler cannot implement.
-fn check_variadic_impl_overlap(
-    defs: &DefTable,
+/// The variadic trait impls whose target the compiler cannot implement: a pack
+/// beside other elements (`[i32, ..T]`) or under a reference. Only the bare
+/// `[..T]` is implemented.
+fn check_variadic_impl_targets(
     impl_headers: &IndexMap<DefId, ImplHeader>,
 ) -> Vec<(ModuleSource, TypeError)> {
-    let mut violations = Vec::new();
-    let mut groups: IndexMap<DefId, Vec<VariadicImpl<'_>>> = IndexMap::default();
-
-    for header in impl_headers.values() {
-        if !header.is_trait_impl() {
-            continue;
-        }
-        let Some(target) = variadic_target(&header.ty) else {
-            continue;
-        };
-        if let VariadicTarget::Unsupported = target {
-            if is_user_local(&header.module) {
-                violations.push((
-                    header.module.clone(),
-                    TypeError::UnsupportedVariadicImplTarget { span: header.span },
-                ));
-            }
-            continue;
-        }
-        let Some(trait_) = header.trait_def() else {
-            continue;
-        };
-        groups.entry(trait_).or_default().push(VariadicImpl {
-            module_source: &header.module,
-            span: header.span,
-            trait_name: defs.name(trait_).to_string(),
-            trait_args: match header.trait_ty() {
-                Some(ast::Type::Generic(generic)) => &generic.args,
-                _ => &[],
-            },
-            params: header.type_params.iter().map(|p| p.name.as_str()).collect(),
-        });
-    }
-
-    for impls in groups.values_mut() {
-        // A stdlib impl holds its ground; among user impls the earlier one in
-        // (file, position) order does. The module map's order is load order,
-        // which is neither source order nor stable across entry points.
-        impls.sort_by_key(|i| {
+    impl_headers
+        .values()
+        .filter(|header| {
+            header.is_trait_impl()
+                && is_user_local(&header.module)
+                && is_unsupported_variadic_target(&header.ty)
+        })
+        .map(|header| {
             (
-                is_user_local(i.module_source),
-                i.module_source.to_string(),
-                i.span.start,
+                header.module.clone(),
+                TypeError::UnsupportedVariadicImplTarget { span: header.span },
             )
-        });
-        let mut held: Vec<&VariadicImpl<'_>> = Vec::new();
-        for candidate in impls.iter() {
-            let Some(conflict) = held.iter().find(|h| h.overlaps(candidate)) else {
-                held.push(candidate);
-                continue;
-            };
-            if !is_user_local(candidate.module_source) {
-                continue;
-            }
-            violations.push((
-                candidate.module_source.clone(),
-                TypeError::OverlappingVariadicImpls {
-                    trait_name: candidate.trait_name.clone(),
-                    self_type_name: "[..]".to_string(),
-                    conflicting_impl: conflicting_impl_location(
-                        conflict.module_source,
-                        candidate.module_source,
-                    ),
-                    span: candidate.span,
-                },
-            ));
-        }
-    }
-
-    violations
+        })
+        .collect()
 }
 
 /// The methods an inherent impl defines again for a receiver an earlier
@@ -2825,8 +2746,9 @@ pub(super) fn args_at_impl_target(
 
 /// One written type argument as the identity it names.
 ///
-/// A name that reaches no declaration keeps its spelling — there is no identity
-/// to hold, and [`name::TypeHead::Builtin`] is the case that says so.
+/// A name that reaches no declaration keeps its spelling as
+/// [`name::TypeHead::Unresolved`], and so does a function type whose `with`
+/// clause names an effect that reaches none.
 pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> name::FqTypeName {
     let nested = |args: &[ast::Type]| -> Vec<name::FqTypeName> {
         args.iter()
@@ -2842,30 +2764,20 @@ pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> nam
         }
         ast::Type::Tuple(elems) => name::FqTypeName::tuple(nested(elems)),
         ast::Type::TypePackSpread(name, _) => name::FqTypeName::pack_spread(name),
-        // Spelled by the whole shape, matching the resolved form: the two
-        // sides of a lookup have to render one type one way.
         ast::Type::Function(ft) => {
-            let params: Vec<String> = ft
-                .params
-                .iter()
-                .map(|param| written_type_arg(param, resolutions).to_mangled())
-                .collect();
-            let with_clause: Vec<String> = ft
-                .effects
-                .iter()
-                .map(|effect| {
-                    resolutions
-                        .effect_at(effect.id, &effect.name)
-                        .map_or_else(|| effect.name.clone(), |e| name::mangle_effect_ref(&e))
-                })
-                .collect();
-            name::FqTypeName::builtin(&name::mangle_fn_type(
+            let mut with_clause = Vec::new();
+            for effect in &ft.effects {
+                match resolutions.effect_at(effect.id, &effect.name) {
+                    Some(resolved) => with_clause.push(resolved),
+                    None => return name::FqTypeName::unresolved(&effect.name),
+                }
+            }
+            name::FqTypeName::function(
                 ft.is_mut,
-                &params,
-                &written_type_arg(&ft.return_type, resolutions).to_mangled(),
-                matches!(ft.return_type, ast::Type::Function(_)),
-                &with_clause,
-            ))
+                nested(&ft.params),
+                written_type_arg(&ft.return_type, resolutions),
+                with_clause,
+            )
         }
         _ => {
             let head = match head_site(ty).map(|site| resolutions.get(site)) {
@@ -2884,8 +2796,11 @@ pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> nam
                 // trait declaring the member is part of that name
                 // (WEP-2026-08-12). A site that must know resolves it at its own
                 // arguments rather than reading this spelling.
-                Some(Resolution::Projection(_) | Resolution::Unresolved) | None => {
+                Some(Resolution::Projection(_)) | None => {
                     name::FqTypeName::builtin(&get_type_name_static(ty))
+                }
+                Some(Resolution::Unresolved) => {
+                    name::FqTypeName::unresolved(&get_type_name_static(ty))
                 }
             };
             match ty {
@@ -2922,6 +2837,20 @@ pub(super) fn receiver_as_written(header: &ImplHeader) -> String {
     }
 }
 
+/// The header as written, bounds and all (`impl<..T: Small> Tag for [..T]`):
+/// what tells apart two impls a diagnostic names on one target.
+pub(super) fn header_as_written(header: &ImplHeader) -> String {
+    let mut out = "impl".to_string();
+    unparse_generic_params_into(&header.type_params, &mut out);
+    out.push(' ');
+    if let Some(trait_ty) = header.trait_ty() {
+        out.push_str(&written_type_source(trait_ty));
+        out.push_str(" for ");
+    }
+    out.push_str(&written_type_source(&header.ty));
+    out
+}
+
 /// The written form of `ty`, for a diagnostic saying what the programmer
 /// wrote (WEP 2026-08-12 §9).
 ///
@@ -2939,14 +2868,19 @@ pub(super) fn written_type_source(ty: &ast::Type) -> String {
         ast::Type::NamespacedGeneric(ns) => {
             format!("{}::{}<{}>", ns.namespace, ns.name, list(&ns.args))
         }
-        ast::Type::Function(ft) => {
-            let m = if ft.is_mut { " mut" } else { "" };
-            format!(
-                "fn{m}({}) -> {}",
-                list(&ft.params),
-                written_type_source(&ft.return_type)
-            )
-        }
+        ast::Type::Function(ft) => name::display_fn_type(
+            ft.is_mut,
+            &ft.params
+                .iter()
+                .map(written_type_source)
+                .collect::<Vec<_>>(),
+            &written_type_source(&ft.return_type),
+            matches!(ft.return_type, ast::Type::Function(_)),
+            &ft.effects
+                .iter()
+                .map(|e| e.name.clone())
+                .collect::<Vec<_>>(),
+        ),
         ast::Type::Tuple(elems) => format!("[{}]", list(elems)),
         ast::Type::Reference(inner) => format!("&{}", written_type_source(inner)),
         ast::Type::MutReference(inner) => format!("&mut {}", written_type_source(inner)),

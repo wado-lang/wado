@@ -63,6 +63,10 @@ This is distinct from:
 
 ## Decision
 
+[WEP: HashMap](./wep-2026-10-01-hash-map.md) holds the `HashMap` design. Its
+`new()` does not ask the host for a seed on each call. It reads one global,
+`DEFAULT_HASH_SEED`, whose initializer carries `#[benign(InsecureSeed)]`.
+
 ### Both Maps Preserve Insertion Order
 
 Wado provides two map types. Both iterate in **insertion order**; they differ only in the lookup backing and the trait bound on keys. The type name reflects the lookup data structure, not the iteration semantics:
@@ -87,17 +91,15 @@ impl TreeMap {
 }
 
 /// Insertion-order map. Keys indexed by a hash table. K: Hash + Eq.
-/// Seeds a SipHash key for Hash DoS resistance; the seed is unobservable
-/// through the interface (see "The #[benign(...)] Attribute" below).
+/// Hashes under a host-supplied seed for Hash DoS resistance; the seed is
+/// unobservable through the interface (see "The #[benign(...)] Attribute" below).
 pub struct HashMap<K, V> {
     // hash table of key -> index, plus a dense Vec<(K, V)> for iteration
 }
 
 impl HashMap {
-    #[benign(InsecureSeed)]
     pub fn new<K, V>() -> HashMap<K, V> {
-        let seed = get_insecure_seed();  // consulted once per HashMap instance
-        return HashMap { seed, ... };
+        return HashMap::with_seed(DEFAULT_HASH_SEED);  // read, never asked for
     }
     pub fn insert(&mut self, key: K, value: V) { ... }
     pub fn get(&self, key: &K) -> Option<&V> { ... }
@@ -109,7 +111,7 @@ Both types store key-value pairs in a dense array and iterate that array, so **i
 
 ### Why Insertion Order Matters for the Effect System
 
-`HashMap` still needs a random seed for Hash DoS resistance (a per-instance SipHash key). The seed changes which keys collide internally, but because **iteration order is insertion-order — independent of the hash seed** — the randomness is _not observable_ through the public interface (iteration order, lookup results). This is the classical notion of observational purity (Gifford & Lucassen 1986; Naumann 2007): an internal effect that cannot be observed through the interface need not appear in the externally visible effect signature.
+`HashMap` still needs a random seed for Hash DoS resistance. The seed changes which keys collide internally, but because **iteration order is insertion-order — independent of the hash seed** — the randomness is _not observable_ through the public interface (iteration order, lookup results). This is the classical notion of observational purity (Gifford & Lucassen 1986; Naumann 2007): an internal effect that cannot be observed through the interface need not appear in the externally visible effect signature.
 
 Contrast with an _unordered_ hash map (e.g. Rust's `std::HashMap`), whose iteration order is arbitrary and seed-dependent. There the randomness _is_ observable, and an effect-free interface would silently leak nondeterminism into iteration order — a documented cause of non-reproducible builds. Wado deliberately does not provide an unordered map, so this class of leak cannot arise.
 
@@ -125,19 +127,14 @@ Whether the seed effect can be elided depends precisely on whether iteration ord
 
 ### The `#[benign(...)]` Attribute
 
-`HashMap::new` consults `InsecureSeed`, yet its callers do not declare `with InsecureSeed`. This is expressed with the `#[benign(...)]` attribute:
+The default seed comes from `InsecureSeed`, yet no caller of `HashMap::new` declares `with InsecureSeed`. This is expressed with the `#[benign(...)]` attribute on the global that holds the seed:
 
 ```wado
-impl HashMap {
-    #[benign(InsecureSeed)]
-    pub fn new<K, V>() -> HashMap<K, V> {
-        let seed = get_insecure_seed();
-        return HashMap { seed, ... };
-    }
-}
+#[benign(InsecureSeed)]
+global DEFAULT_HASH_SEED: HashSeed = host_seed();   // host_seed() is `with InsecureSeed`
 ```
 
-`#[benign(E)]` declares that the function performs effect `E`, but that the effect is _observationally pure_ — unobservable through the function's interface — and therefore is **not propagated** into the caller's effect signature. The caller needs no `with InsecureSeed`.
+`#[benign(E)]` declares that a function, or a global's initializer, performs effect `E`, but that the effect is _observationally pure_ — unobservable through the function's interface or the global's value — and therefore is **not propagated** into any caller's effect signature. The caller needs no `with InsecureSeed`.
 
 #### `#[benign]` requires the world import
 
@@ -216,7 +213,7 @@ let tree: TreeMap<String, i32> = {"a": 1, "b": 2};
 let hash: HashMap<String, i32> = {"a": 1, "b": 2};  // no effect on the enclosing function
 ```
 
-Because `HashMap::new` is `#[benign(InsecureSeed)]`, the coercion does not impose any `with` effect on the enclosing function. The only requirement is that the world imports `InsecureSeed`.
+Because `DEFAULT_HASH_SEED` is `#[benign(InsecureSeed)]`, the coercion does not impose any `with` effect on the enclosing function. The only requirement is that the world imports `InsecureSeed`.
 
 ## Consequences
 
@@ -259,8 +256,8 @@ Because `HashMap::new` is `#[benign(InsecureSeed)]`, the coercion does not impos
 
 - [x] `InsecureSeed` declared in `lib/wasi/random/insecure_seed.wado`.
 - [x] `TreeMap` implemented in `core:collections` (insertion-order, tree-indexed).
-- [ ] `#[benign(E)]` attribute: parsing, effect-check integration (suppress propagation while still requiring the world import), and diagnostics.
-- [ ] `HashMap`: insertion-order, hash-indexed, `SipHash 1-3`, and a `Hash` / `Eq` trait pair, with `#[benign(InsecureSeed)]` on `new`.
+- [x] `#[benign(E)]` attribute: parsing, effect-check integration (suppress propagation while still requiring the world import), and diagnostics.
+- [x] `HashMap`, insertion-order and hash-indexed. [WEP: HashMap](./wep-2026-10-01-hash-map.md) carries its design and the work left.
 
 ## Relationship with wasi-keyvalue
 
@@ -366,8 +363,7 @@ Both provide O(log n) guarantees. B-Tree may have better practical performance d
 ### HashMap Implementation
 
 - Store key -> index entries in a hash table and key-value pairs in a dense array, so iteration is insertion-order (the property that makes the seed unobservable). This mirrors `indexmap::IndexMap`.
-- Use SipHash-1-3 for the hash function (fast and DoS-resistant).
-- Call `get_insecure_seed()` once during `HashMap::new()` and store the seed in the structure.
+- The hash function and the seed's single host call are [WEP: HashMap](./wep-2026-10-01-hash-map.md)'s.
 - Iteration order must never depend on the seed; reviewers rely on this invariant to justify `#[benign(InsecureSeed)]`.
 
 ### `#[benign]` in the effect checker

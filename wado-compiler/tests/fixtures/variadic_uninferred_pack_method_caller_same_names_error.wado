@@ -1,0 +1,23 @@
+//! A pack the arguments leave unsettled is reported even where the caller
+//! declares packs of the same names, which the method's own intern to: a
+//! forward is the caller's pack spread into a tuple, never the method's own
+//! pack answering for itself.
+
+struct Joiner {}
+
+impl Joiner {
+    fn join<..A, ..B>(&self, f: fn([..A, ..B]) -> i32) -> i32 {
+        return 0;
+    }
+}
+
+fn caller<..A, ..B>(j: &Joiner, x: [..A], y: [..B]) -> i32 {
+    return j.join(|t: [i32, bool]| 7);
+}
+
+test "the packs the caller also names are still not inferred" {
+    assert caller(&Joiner {}, [1], [true]) == 0;
+}
+
+__DATA__
+{"compile_error": "'Joiner::join' declares the type parameters 'A', 'B', which are not inferred from the arguments here"}

@@ -1,0 +1,16 @@
+// `#[benign(E)]` on a global admits `E` in its initializer. The initializer
+// performs `Stdout` and has run before the test reads the global.
+
+use { println, Stdout } from "core:cli";
+
+fn announce() -> i32 with Stdout {
+    println("initialized");
+    return 7;
+}
+
+#[benign(Stdout)]
+global SEVEN: i32 = announce();
+
+test {
+    assert SEVEN == 7;
+}

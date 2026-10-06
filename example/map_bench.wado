@@ -63,7 +63,7 @@ impl<K: Ord> BenchMap<K> for TreeMap<K, i32> {
 
 impl<K: Hash> BenchMap<K> for HashMap<K, i32> {
     fn empty() -> HashMap<K, i32> {
-        return HashMap::new(HashSeed::fixed(1, 2));
+        return HashMap::with_seed(HashSeed::fixed(1, 2));
     }
 
     fn put(&mut self, key: K, value: i32) {

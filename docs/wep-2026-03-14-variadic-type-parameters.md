@@ -110,16 +110,24 @@ impl Eq for [i32, i32] { ... }        // concrete — wins over ↓
 impl<..T: Eq> Eq for [..T] { ... }    // variadic — fallback
 ```
 
-**Rule 2 — Variadic overlap is forbidden**: Two variadic impls for the same trait and same
-head type are a compile error at definition time:
+**Rule 2 — Bounds separate variadic impls as they separate head impls**: two variadic
+impls of one trait at different bounds are both kept. A tuple takes the one whose bounds
+it meets, and a tuple meeting both is an ambiguity reported at the call. Only the same
+impl written twice is rejected where it is written:
 
 ```wado
-impl<..T: Eq>  Eq for [..T] { ... }   // OK
-impl<..T: Ord> Eq for [..T] { ... }   // ERROR: overlapping variadic impls
+impl<..T: Eq>  Tag for [..T] { ... }  // OK
+impl<..T: Ord> Tag for [..T] { ... }  // OK; `[1, 2].tag()` meets both and reports
+impl<..T: Eq>  Tag for [..T] { ... }  // ERROR: duplicate impl
 ```
 
+Rule 2 first rejected the second impl at definition time, whatever its bounds, because
+a pack's bounds were then checked only at monomorphization. Selection now reads them
+([Eligibility](./spec-traits.md#eligibility)), so a variadic impl follows the same rule
+as `impl<T: Eq> Tag for Box_<T>` beside `impl<T: Ord> Tag for Box_<T>`.
+
 These two rules together mirror the priority model used in WEP-2026-02-10 for tuple
-enumeration and keep the coherence model simple without a full trait solver overhaul.
+enumeration.
 
 Rule 1 needs no priority table. A concrete tuple impl is a concrete _instantiation_
 impl — the same shape as `impl Tag for List<u8>` — so it defines the very function a

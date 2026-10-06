@@ -294,10 +294,11 @@ ANTLR4-compatible generator, so the head-to-head comparison is against
 algorithm family, both emitting a parser. Throughput is grammar bytes processed
 per second (higher is better).
 
-| Implementation  |  Throughput |    ms/iter | vs best |
-| --------------- | ----------: | ---------: | ------- |
-| Java (ANTLR4)   | 974.52 KB/s |  43.257 ms | 1.00x   |
-| **Wado** (Gale) | 405.19 KB/s | 104.036 ms | 2.41x   |
+| Implementation                   |  Throughput |   ms/iter | vs best |
+| -------------------------------- | ----------: | --------: | ------- |
+| Java (ANTLR4)                    | 974.52 KB/s | 43.257 ms | 1.00x   |
+| **Wado** (Gale, 1 GiB heap)      | 491.42 KB/s | 85.782 ms | 1.98x   |
+| **Wado** (Gale, 256 MiB default) | 452.59 KB/s | 93.141 ms | 2.15x   |
 
 Both rows run in-process and warm, emitting a parser and no listeners: Gale a
 Wado recursive-descent one from memory, ANTLR4 Java onto disk.
@@ -389,9 +390,15 @@ changes it. The copying collector splits that into two semi-spaces, so a
 program allocates through half of it between collections. A larger heap trades
 resident memory for fewer of them.
 
-Two rows measure faster with a larger heap. microgpt holds a whole autograd
-graph live and gale_gen its grammar tables, so both pay for every collection.
-They run at 512 MiB, which `gc_heap_flags` in `wado.sh` sets.
+Two benchmarks measure faster with a larger heap. microgpt holds a whole
+autograd graph live, so it pays for every collection. It runs at 512 MiB, which
+`gc_heap_flags` in `wado.sh` sets.
+
+gale_gen allocates enough that its time depends on where its collections land,
+and its ranking against another build can flip between two nearby heap sizes.
+It runs at the default and again at 1 GiB (`GALE_GEN_BIG_HEAP`), as two rows:
+the default is what a program gets, and 1 GiB shows the time once collections
+are rare.
 
 Every other row takes the default. At 512 MiB json-catalog, zlib and
 sqlite-parse are all slower and the rest are flat, and `wado serve` measures

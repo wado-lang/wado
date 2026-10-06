@@ -63,8 +63,10 @@ impl Error for DecodeError {
 /// A message type Grog generated.
 pub trait Message with () {
     /// The encoded length of the fields, recording each length-prefixed
-    /// message's own in `s` for `write` to read back.
-    fn size(&self, s: &mut Sizer) -> i32;
+    /// message's own in `s` for `write` to read back. It is counted in `i64`
+    /// so a message past what an encoding can hold is told apart from one
+    /// whose length wrapped.
+    fn size(&self, s: &mut Sizer) -> i64;
 
     fn write(&self, w: &mut Writer);
 
@@ -75,15 +77,17 @@ pub trait Message with () {
     fn unknown_fields(&mut self) -> &mut ByteList;
 }
 
-/// An enum type Grog generated.
-pub trait Enumeration with () {
+/// An enum type Grog generated. Two values compare as their numbers do.
+pub trait Enumeration: Eq with () {
     fn number(&self) -> i32;
 
     /// `None` for a number a closed enum does not declare. An open enum
     /// holds every number, so it always answers.
     fn from_number(number: i32) -> Option<Self>;
 
-    /// The value an unset field reads as: the enum's first.
+    /// The value an unset field reads as, and the zero an implicit field
+    /// leaves off the wire: the enum's first, which protobuf requires an open
+    /// enum to number 0.
     fn first() -> Self;
 }
 
@@ -102,7 +106,7 @@ pub trait Scalar with () {
     }
 
     /// The bytes `put` writes.
-    fn len(v: &Self::Value) -> i32;
+    fn len(v: &Self::Value) -> i64;
 
     fn put(w: &mut Writer, v: &Self::Value);
 
@@ -111,12 +115,17 @@ pub trait Scalar with () {
 }
 
 /// The whole encoding of `message`.
+/// Panics on a message of 2 GiB or more, which the specification's
+/// "Encoded Proto Size Limitations" rules out.
 pub fn encode<M: Message>(message: &M) -> ByteList {
     let mut s = Sizer { sizes: [] };
     let n = message.size(&mut s);
-    let mut w = Writer { buf: List::<u8>::with_capacity(n) as ByteList, sizes: s.sizes, next: 0 };
+    if n > i32::MAX as i64 {
+        panic(`a message of ${n} bytes is past the 2 GiB an encoding holds`);
+    }
+    let mut w = Writer { buf: List::<u8>::with_capacity(n as i32) as ByteList, sizes: s.sizes, next: 0 };
     message.write(&mut w);
-    assert w.buf.len() == n;
+    assert w.buf.len() as i64 == n;
     assert w.next == w.sizes.len();
     return w.buf;
 }
@@ -167,9 +176,9 @@ fn merge_fields<M: Message>(message: &mut M, r: &mut Reader, group: i32) -> Resu
     return Result::Ok(());
 }
 
-fn varint_len(value: u64) -> i32 {
+fn varint_len(value: u64) -> i64 {
     let mut rest = value;
-    let mut len = 1;
+    let mut len: i64 = 1;
     while rest >= 128 {
         rest >>= 7;
         len += 1;
@@ -177,27 +186,40 @@ fn varint_len(value: u64) -> i32 {
     return len;
 }
 
-fn tag_len(number: i32) -> i32 {
+fn push_varint(buf: &mut ByteList, value: u64) {
+    let mut rest = value;
+    while rest >= 128 {
+        buf.push((rest & 0x7f | 0x80) as u8);
+        rest >>= 7;
+    }
+    buf.push(rest as u8);
+}
+
+fn tag_of(number: i32, wire_type: WireType) -> u64 {
+    return number as u64 << 3 | bits_of(wire_type);
+}
+
+fn tag_len(number: i32) -> i64 {
     return varint_len(number as u64 << 3);
 }
 
 /// A `payload`-byte body behind its length prefix.
-fn prefixed_len(payload: i32) -> i32 {
+fn prefixed_len(payload: i64) -> i64 {
     return varint_len(payload as u64) + payload;
 }
 
 /// A length-prefixed record of a `payload`-byte body, tag included.
-fn delimited_len(number: i32, payload: i32) -> i32 {
+fn delimited_len(number: i32, payload: i64) -> i64 {
     return tag_len(number) + prefixed_len(payload);
 }
 
 /// A scalar map entry's body: the key numbered 1 and the value 2, both written.
-fn entry_len<KS: Scalar, VS: Scalar>(k: &KS::Value, v: &VS::Value) -> i32 {
+fn entry_len<KS: Scalar, VS: Scalar>(k: &KS::Value, v: &VS::Value) -> i64 {
     return tag_len(1) + KS::len(k) + tag_len(2) + VS::len(v);
 }
 
-fn packed_len<T: Scalar>(values: &List<T::Value>) -> i32 {
-    let mut n = 0;
+fn packed_len<T: Scalar>(values: &List<T::Value>) -> i64 {
+    let mut n: i64 = 0;
     for let v of values {
         n += T::len(v);
     }
@@ -207,6 +229,8 @@ fn packed_len<T: Scalar>(values: &List<T::Value>) -> i32 {
 /// The first pass of an encode: every length-prefixed message's length, in the
 /// order `Writer` meets them.
 pub struct Sizer {
+    /// Each fits in `i32` whenever `write` reads it: none exceeds the total,
+    /// which `encode` checks first.
     sizes: List<i32>,
 }
 
@@ -216,70 +240,70 @@ impl Sizer {
         return self.sizes.len() - 1;
     }
 
-    pub fn scalar<T: Scalar>(&mut self, number: i32, v: &T::Value) -> i32 {
+    pub fn scalar<T: Scalar>(&mut self, number: i32, v: &T::Value) -> i64 {
         return tag_len(number) + T::len(v);
     }
 
-    pub fn implicit<T: Scalar>(&mut self, number: i32, v: &T::Value) -> i32 {
+    pub fn implicit<T: Scalar>(&mut self, number: i32, v: &T::Value) -> i64 {
         if T::is_zero(v) {
             return 0;
         }
         return self.scalar::<T>(number, v);
     }
 
-    pub fn optional<T: Scalar>(&mut self, number: i32, v: &Option<T::Value>) -> i32 {
+    pub fn optional<T: Scalar>(&mut self, number: i32, v: &Option<T::Value>) -> i64 {
         if let Some(value) = v {
             return self.scalar::<T>(number, value);
         }
         return 0;
     }
 
-    pub fn repeated<T: Scalar>(&mut self, number: i32, values: &List<T::Value>) -> i32 {
-        return values.len() * tag_len(number) + packed_len::<T>(values);
+    pub fn repeated<T: Scalar>(&mut self, number: i32, values: &List<T::Value>) -> i64 {
+        return values.len() as i64 * tag_len(number) + packed_len::<T>(values);
     }
 
-    pub fn packed<T: Scalar>(&mut self, number: i32, values: &List<T::Value>) -> i32 {
+    pub fn packed<T: Scalar>(&mut self, number: i32, values: &List<T::Value>) -> i64 {
         if values.is_empty() {
             return 0;
         }
         return delimited_len(number, packed_len::<T>(values));
     }
 
-    pub fn message<M: Message>(&mut self, number: i32, m: &M) -> i32 {
+    pub fn message<M: Message>(&mut self, number: i32, m: &M) -> i64 {
         let slot = self.reserve();
         let n = m.size(self);
-        self.sizes[slot] = n;
+        self.sizes[slot] = n as i32;
         return delimited_len(number, n);
     }
 
-    pub fn optional_message<M: Message>(&mut self, number: i32, m: &Option<M>) -> i32 {
+    pub fn optional_message<M: Message>(&mut self, number: i32, m: &Option<M>) -> i64 {
         if let Some(present) = m {
             return self.message(number, present);
         }
         return 0;
     }
 
-    pub fn messages<M: Message>(&mut self, number: i32, ms: &List<M>) -> i32 {
-        let mut n = 0;
+    pub fn messages<M: Message>(&mut self, number: i32, ms: &List<M>) -> i64 {
+        let mut n: i64 = 0;
         for let m of ms {
             n += self.message(number, m);
         }
         return n;
     }
 
-    pub fn group<M: Message>(&mut self, number: i32, m: &M) -> i32 {
+    pub fn group<M: Message>(&mut self, number: i32, m: &M) -> i64 {
         return 2 * tag_len(number) + m.size(self);
     }
 
-    pub fn optional_group<M: Message>(&mut self, number: i32, m: &Option<M>) -> i32 {
+    pub fn optional_group<M: Message>(&mut self, number: i32, m: &Option<M>) -> i64 {
         if let Some(present) = m {
             return self.group(number, present);
         }
         return 0;
     }
 
-    pub fn groups<M: Message>(&mut self, number: i32, ms: &List<M>) -> i32 {
-        let mut n = 0;
+    pub fn groups<M: Message>(&mut self, number: i32, ms: &List<M>) -> i64 {
+        let mut n: i64 = 0;
         for let m of ms {
             n += self.group(number, m);
         }
@@ -292,20 +316,20 @@ impl Sizer {
         &mut self,
         number: i32,
         map: &TreeMap<K, V>,
-    ) -> i32 {
-        let mut n = 0;
+    ) -> i64 {
+        let mut n: i64 = 0;
         for let [k, v] of map.entries() {
             n += delimited_len(number, entry_len::<KS, VS>(k, v));
         }
         return n;
     }
 
-    pub fn message_map<KS: Scalar<Value = K>, K: Ord, M: Message>(&mut self, number: i32, map: &TreeMap<K, M>) -> i32 {
-        let mut n = 0;
+    pub fn message_map<KS: Scalar<Value = K>, K: Ord, M: Message>(&mut self, number: i32, map: &TreeMap<K, M>) -> i64 {
+        let mut n: i64 = 0;
         for let [k, v] of map.entries() {
             let slot = self.reserve();
             let entry = self.scalar::<KS>(1, k) + self.message(2, v);
-            self.sizes[slot] = entry;
+            self.sizes[slot] = entry as i32;
             n += delimited_len(number, entry);
         }
         return n;
@@ -321,12 +345,7 @@ pub struct Writer {
 
 impl Writer {
     fn varint(&mut self, value: u64) {
-        let mut rest = value;
-        while rest >= 128 {
-            self.buf.push((rest & 0x7f | 0x80) as u8);
-            rest >>= 7;
-        }
-        self.buf.push(rest as u8);
+        push_varint(&mut self.buf, value);
     }
 
     fn fixed32(&mut self, value: u32) {
@@ -347,18 +366,18 @@ impl Writer {
     }
 
     fn tag(&mut self, number: i32, wire_type: WireType) {
-        self.varint(number as u64 << 3 | bits_of(wire_type));
+        self.varint(tag_of(number, wire_type));
     }
 
-    fn len_header(&mut self, number: i32, n: i32) {
+    fn len_header(&mut self, number: i32, n: i64) {
         self.tag(number, WireType::Len);
         self.varint(n as u64);
     }
 
-    fn take_size(&mut self) -> i32 {
+    fn take_size(&mut self) -> i64 {
         let n = self.sizes[self.next];
         self.next += 1;
-        return n;
+        return n as i64;
     }
 
     pub fn scalar<T: Scalar>(&mut self, number: i32, v: &T::Value) {
@@ -650,9 +669,7 @@ impl Reader {
     /// A packed element the type does not hold, kept as the unpacked field it
     /// would have been.
     fn keep_unpacked(&mut self, element: WireType, start: i32) {
-        let mut w = Writer { buf: [], sizes: [], next: 0 };
-        w.tag(self.number, element);
-        self.stray.extend(&w.buf);
+        push_varint(&mut self.stray, tag_of(self.number, element));
         self.stray.extend_from_slice(self.input.slice(start, self.pos) as Slice<u8>);
     }
 
@@ -739,60 +756,113 @@ impl Reader {
         self.end = outer;
     }
 
-    /// One entry of a `map<K, V>` field. An entry whose value a closed enum
-    /// does not hold is kept whole as an unknown field.
+    /// One entry of a `map<K, V>` field. An entry whose key or value a closed
+    /// enum does not hold is kept whole as an unknown field.
     pub fn map<KS: Scalar<Value = K>, VS: Scalar<Value = V>, K: Ord, V>(
         &mut self,
         map: &mut TreeMap<K, V>,
     ) -> Result<bool, DecodeError> {
-        if self.wire_type != WireType::Len {
-            return Result::Ok(false);
-        }
-        let outer = self.open()?;
-        let mut key = KS::zero();
-        let mut value = VS::zero();
-        let mut held = true;
-        while self.next_field(0)? {
-            if self.number == 1 && self.wire_type == KS::wire_type() {
-                key = KS::take(self)?.unwrap();
-            } else if self.number == 2 && self.wire_type == VS::wire_type() {
-                match VS::take(self)? {
-                    Some(v) => value = v,
-                    None => held = false,
-                }
-            } else {
-                self.skip_value()?;
-            }
-        }
-        self.close(outer);
-        if !held {
-            return Result::Ok(false);
-        }
-        map[key] = value;
-        return Result::Ok(true);
+        return self.entry::<KS, K, ScalarEntry<VS>>(map);
     }
 
     pub fn message_map<KS: Scalar<Value = K>, K: Ord, M: Message + Default>(
         &mut self,
         map: &mut TreeMap<K, M>,
     ) -> Result<bool, DecodeError> {
+        return self.entry::<KS, K, MessageEntry<M>>(map);
+    }
+
+    /// A map entry into `map`: the key numbered 1 and the value numbered 2.
+    /// As in any message, the last of a repeated field is the one read.
+    fn entry<KS: Scalar<Value = K>, K: Ord, E: EntryValue>(
+        &mut self,
+        map: &mut TreeMap<K, E::Value>,
+    ) -> Result<bool, DecodeError> {
         if self.wire_type != WireType::Len {
             return Result::Ok(false);
         }
         let outer = self.open()?;
         let mut key = KS::zero();
-        let mut value = M::default();
+        let mut value = E::fresh();
+        let mut key_held = true;
+        let mut value_held = true;
         while self.next_field(0)? {
             if self.number == 1 && self.wire_type == KS::wire_type() {
-                key = KS::take(self)?.unwrap();
-            } else if self.number == 2 && self.wire_type == WireType::Len {
-                self.merge_nested(&mut value)?;
+                match KS::take(self)? {
+                    Some(k) => {
+                        key = k;
+                        key_held = true;
+                    },
+                    None => key_held = false,
+                }
+            } else if self.number == 2 && self.wire_type == E::wire_type() {
+                value_held = E::read(self, &mut value)?;
             } else {
                 self.skip_value()?;
             }
         }
         self.close(outer);
+        if !key_held || !value_held {
+            return Result::Ok(false);
+        }
         map[key] = value;
+        return Result::Ok(true);
+    }
+}
+
+/// How a map entry's value is read: as a scalar, or as a message.
+trait EntryValue with () {
+    type Value;
+
+    fn wire_type() -> WireType;
+
+    /// The value an entry holds before its value field is read.
+    fn fresh() -> Self::Value;
+
+    /// Read the value field into `v`, answering whether the type holds what
+    /// was read.
+    fn read(r: &mut Reader, v: &mut Self::Value) -> Result<bool, DecodeError>;
+}
+
+struct ScalarEntry<T> {
+}
+
+impl<T: Scalar> EntryValue for ScalarEntry<T> {
+    type Value = T::Value;
+
+    fn wire_type() -> WireType {
+        return T::wire_type();
+    }
+
+    fn fresh() -> T::Value {
+        return T::zero();
+    }
+
+    fn read(r: &mut Reader, v: &mut T::Value) -> Result<bool, DecodeError> {
+        let Some(taken) = T::take(r)? else {
+            return Result::Ok(false);
+        };
+        *v = taken;
+        return Result::Ok(true);
+    }
+}
+
+struct MessageEntry<M> {
+}
+
+impl<M: Message + Default> EntryValue for MessageEntry<M> {
+    type Value = M;
+
+    fn wire_type() -> WireType {
+        return WireType::Len;
+    }
+
+    fn fresh() -> M {
+        return M::default();
+    }
+
+    fn read(r: &mut Reader, v: &mut M) -> Result<bool, DecodeError> {
+        r.merge_nested(v)?;
         return Result::Ok(true);
     }
 }
@@ -811,7 +881,7 @@ impl Scalar for Int32 {
         return 0;
     }
 
-    fn len(v: &i32) -> i32 {
+    fn len(v: &i32) -> i64 {
         return varint_len(*v as i64 as u64);
     }
 
@@ -838,7 +908,7 @@ impl Scalar for Int64 {
         return 0;
     }
 
-    fn len(v: &i64) -> i32 {
+    fn len(v: &i64) -> i64 {
         return varint_len(*v as u64);
     }
 
@@ -865,7 +935,7 @@ impl Scalar for UInt32 {
         return 0;
     }
 
-    fn len(v: &u32) -> i32 {
+    fn len(v: &u32) -> i64 {
         return varint_len(*v as u64);
     }
 
@@ -892,7 +962,7 @@ impl Scalar for UInt64 {
         return 0;
     }
 
-    fn len(v: &u64) -> i32 {
+    fn len(v: &u64) -> i64 {
         return varint_len(*v);
     }
 
@@ -936,7 +1006,7 @@ impl Scalar for SInt32 {
         return 0;
     }
 
-    fn len(v: &i32) -> i32 {
+    fn len(v: &i32) -> i64 {
         return varint_len(zigzag_32(*v));
     }
 
@@ -963,7 +1033,7 @@ impl Scalar for SInt64 {
         return 0;
     }
 
-    fn len(v: &i64) -> i32 {
+    fn len(v: &i64) -> i64 {
         return varint_len(zigzag_64(*v));
     }
 
@@ -990,7 +1060,7 @@ impl Scalar for Fixed32 {
         return 0;
     }
 
-    fn len(v: &u32) -> i32 {
+    fn len(v: &u32) -> i64 {
         return 4;
     }
 
@@ -1017,7 +1087,7 @@ impl Scalar for Fixed64 {
         return 0;
     }
 
-    fn len(v: &u64) -> i32 {
+    fn len(v: &u64) -> i64 {
         return 8;
     }
 
@@ -1044,7 +1114,7 @@ impl Scalar for SFixed32 {
         return 0;
     }
 
-    fn len(v: &i32) -> i32 {
+    fn len(v: &i32) -> i64 {
         return 4;
     }
 
@@ -1071,7 +1141,7 @@ impl Scalar for SFixed64 {
         return 0;
     }
 
-    fn len(v: &i64) -> i32 {
+    fn len(v: &i64) -> i64 {
         return 8;
     }
 
@@ -1098,7 +1168,7 @@ impl Scalar for Bool {
         return false;
     }
 
-    fn len(v: &bool) -> i32 {
+    fn len(v: &bool) -> i64 {
         return 1;
     }
 
@@ -1130,7 +1200,7 @@ impl Scalar for Float {
         return v.to_bits() == 0;
     }
 
-    fn len(v: &f32) -> i32 {
+    fn len(v: &f32) -> i64 {
         return 4;
     }
 
@@ -1161,7 +1231,7 @@ impl Scalar for Double {
         return v.to_bits() == 0;
     }
 
-    fn len(v: &f64) -> i32 {
+    fn len(v: &f64) -> i64 {
         return 8;
     }
 
@@ -1189,8 +1259,8 @@ impl Scalar for Str {
         return "";
     }
 
-    fn len(v: &String) -> i32 {
-        return prefixed_len(v.len());
+    fn len(v: &String) -> i64 {
+        return prefixed_len(v.len() as i64);
     }
 
     fn put(w: &mut Writer, v: &String) {
@@ -1220,8 +1290,8 @@ impl Scalar for Bytes {
         return b"";
     }
 
-    fn len(v: &ByteList) -> i32 {
-        return prefixed_len(v.len());
+    fn len(v: &ByteList) -> i64 {
+        return prefixed_len(v.len() as i64);
     }
 
     fn put(w: &mut Writer, v: &ByteList) {
@@ -1248,11 +1318,7 @@ impl<E: Enumeration> Scalar for Enum<E> {
         return E::first();
     }
 
-    fn is_zero(v: &E) -> bool {
-        return v.number() == 0;
-    }
-
-    fn len(v: &E) -> i32 {
+    fn len(v: &E) -> i64 {
         return Int32::len(&v.number());
     }
 
