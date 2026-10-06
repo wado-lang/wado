@@ -975,7 +975,9 @@ fn safepoint_calls(project: &NirPackage, descriptors: &[FunctionRef]) -> Vec<boo
         .map(|callee| {
             let declarations = &project.builtin_declarations;
             declarations.leaves_for_host(callee)
-                || declarations.get(callee).is_some_and(|d| d.allocates())
+                || declarations
+                    .get(callee)
+                    .is_some_and(super::super::tir::BuiltinDeclaration::allocates)
         })
         .collect()
 }
