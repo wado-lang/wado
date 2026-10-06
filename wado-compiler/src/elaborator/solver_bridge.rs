@@ -12,8 +12,8 @@ use crate::tir::{AnonStructId, ResolvedType, TypeId, TypeTable};
 use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
     ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, Selection, SolverType,
-    TraitDeclId, TypeDeclId, TypeDef, applies, bound_candidates, candidates, comparison_row, derive,
-    holds_with_args, owed, pair_comparisons, rank,
+    TraitDeclId, TypeDeclId, TypeDef, applies, bound_candidates, candidates, comparison_row,
+    derive, holds_with_args, owed, pair_comparisons, rank,
 };
 
 use super::trait_env::{BlanketReceiver, ImplHeader, ImplTargetKey, written_arg_nodes};

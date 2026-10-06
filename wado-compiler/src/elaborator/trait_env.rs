@@ -19,9 +19,8 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner, PackageId};
 use crate::name;
 use crate::resolve::{Resolution, Resolutions, head_site};
 use crate::tir::{TemplateId, TypeId, TypeTable};
-use crate::unparse::unparse_generic_params_into;
 use crate::token::Span;
-use crate::unparse::unparse_type_into;
+use crate::unparse::{unparse_generic_params_into, unparse_type_into};
 
 /// Namespace-import alias (`use ns from "…"`) → the namespace's module.
 /// Drives `ns::Type` resolution (issue #1415).

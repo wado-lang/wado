@@ -2185,7 +2185,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Report a tie the order left among one trait's impls
     /// (`docs/wep-2026-09-01-trait-resolution.md`), naming value blankets by
-    /// their bounds and every other impl, a variadic one included, by its target.
+    /// their bounds and every other impl, a variadic one included, by its header.
     pub(super) fn report_tied_impls(
         &mut self,
         tied: &[Option<DefId>],

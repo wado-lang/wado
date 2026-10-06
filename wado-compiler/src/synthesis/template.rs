@@ -1095,8 +1095,8 @@ pub(crate) fn answering_link(
     let key = tt.impl_receiver_key(receiver);
     let solver = trait_env.solver();
     // Two blocks on one target are told apart by their bounds, as the call
-    // site told them apart. Where the lowering cannot say the
-    // instance (a closure environment), the target match alone decides.
+    // site told them apart. Where the lowering cannot say the instance (a
+    // closure environment), the target match alone decides.
     if let Some(template) =
         trait_env.answering_template(&key, Some(trait_), trait_name.args(), method, |block| {
             tt.impl_reaches_instance(block, receiver)
