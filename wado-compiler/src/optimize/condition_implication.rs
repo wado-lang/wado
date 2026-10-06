@@ -1164,11 +1164,7 @@ fn panics_before_any_exit(engine: &Engine, block: BlockId) -> bool {
         }
         let jumps = body
             .find_in_live_node_under(NodeRef::Stmt(s), |n| match n {
-                NodeRef::Stmt(t) => matches!(
-                    body.stmts[t].kind,
-                    StmtKind::Return { .. } | StmtKind::Break { .. } | StmtKind::Continue
-                )
-                .then_some(()),
+                NodeRef::Stmt(t) => body.stmts[t].kind.is_jump().then_some(()),
                 NodeRef::Block(_) | NodeRef::Expr(_) | NodeRef::Pat(_) => None,
             })
             .is_some();

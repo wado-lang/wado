@@ -550,6 +550,17 @@ pub enum StmtKind {
     },
 }
 
+impl StmtKind {
+    /// Whether the statement transfers control away: `return`, `break` or
+    /// `continue`.
+    pub fn is_jump(&self) -> bool {
+        matches!(
+            self,
+            StmtKind::Return { .. } | StmtKind::Break { .. } | StmtKind::Continue
+        )
+    }
+}
+
 /// Pattern kinds. Leaf payloads (`NirLiteralPattern`, range bounds) are
 /// stored inline; nested patterns and the `ConstantValue` expression are ids.
 #[derive(Debug, Clone)]

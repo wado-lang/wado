@@ -271,10 +271,7 @@ fn is_tail_break_only_labeled_block(body: &Body, stmt: StmtId, mode: PruneMode) 
 }
 
 fn ends_with_terminator_stmt(body: &Body, stmts: &[StmtId]) -> bool {
-    matches!(
-        stmts.last().map(|&s| &body.stmts[s].kind),
-        Some(StmtKind::Break { .. } | StmtKind::Continue | StmtKind::Return { .. })
-    )
+    stmts.last().is_some_and(|&s| body.stmts[s].kind.is_jump())
 }
 
 fn unused_label_flattenable(
@@ -355,13 +352,10 @@ fn const_if_branch(body: &Body, stmt: StmtId) -> Option<ConstIf> {
 /// emptying it prevents re-parenting the (now shared) statement ids back to it.
 fn eliminate_dead_stmts(engine: &mut Engine, block: BlockId, mode: PruneMode) -> bool {
     let stmts = engine.body.blocks[block].stmts.clone();
-    let has_dead_after_terminator = stmts.iter().enumerate().any(|(i, &s)| {
-        i + 1 < stmts.len()
-            && matches!(
-                &engine.body.stmts[s].kind,
-                StmtKind::Break { .. } | StmtKind::Continue | StmtKind::Return { .. }
-            )
-    });
+    let has_dead_after_terminator = stmts
+        .iter()
+        .enumerate()
+        .any(|(i, &s)| i + 1 < stmts.len() && engine.body.stmts[s].kind.is_jump());
     let has_const_if = stmts
         .iter()
         .any(|&s| const_if_branch(engine.body, s).is_some());
@@ -454,10 +448,7 @@ fn eliminate_dead_stmts(engine: &mut Engine, block: BlockId, mode: PruneMode) ->
             }
             continue;
         }
-        if matches!(
-            &engine.body.stmts[stmt].kind,
-            StmtKind::Break { .. } | StmtKind::Continue | StmtKind::Return { .. }
-        ) {
+        if engine.body.stmts[stmt].kind.is_jump() {
             terminated = true;
         }
         new_stmts.push(stmt);
