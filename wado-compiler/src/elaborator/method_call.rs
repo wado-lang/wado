@@ -2430,9 +2430,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// A qualified method's own type parameters — the slots past the declaring
-    /// block's, split where its signature says they split. The block's are the
-    /// resolution's to fill, so only these are left for a call site.
     /// A static call's `return_type` with the method's own parameters filled
     /// by `method_type_args`. The resolution read it at the receiver's
     /// arguments, so the declaring block's slots are already filled; filling
@@ -3196,8 +3193,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
         // The receiver a newtype dispatches to, and the arguments this site
         // resolves it with — inferred at the call, since the receiver is
-        // spelled as a bare name. `impl_type_args` is what the site substitutes
-        // with afterwards, so the resolution reading them says the same thing.
+        // spelled as a bare name. The resolution reads the signature at
+        // `impl_type_args`, which is the only place they are substituted.
         let receiver_type = newtype_dispatch.as_ref().map(|(_, base, _)| *base);
         let Ok(resolution) = self.static_trait_ref(
             StaticQuery {

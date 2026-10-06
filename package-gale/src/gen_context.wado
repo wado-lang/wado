@@ -1451,11 +1451,12 @@ impl GenContext {
 
     /// Install the canonical token-kind table (production path). Ids then match
     /// the resolved `Element::kind_id`, and `name_of` reproduces the emitted
-    /// `TK_*` names. Clears `kind_rank`: its length-based staleness check
-    /// cannot see a same-length table swap.
+    /// `TK_*` names. Clears `kind_rank` and its inverse: the length-based
+    /// staleness check cannot see a same-length table swap.
     pub fn set_token_kinds(&mut self, kinds: TokenKinds) {
         self.token_kinds = kinds;
         self.kind_rank = [];
+        self.kind_by_rank = [];
     }
 
     /// The `TK_*` names by kind id, the order a vocabulary table is built in.
