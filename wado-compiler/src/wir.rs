@@ -837,8 +837,25 @@ impl WirType {
             Self::F32 => WirInstr::F32Const(0.0),
             Self::F64 => WirInstr::F64Const(0.0),
             Self::V128 => WirInstr::V128Const(0),
-            Self::Ref { .. } | Self::AbstractRef { .. } => WirInstr::RefNull {
+            // A concrete function reference is only ever a closure struct's
+            // `func` field, which nothing defaults.
+            Self::Ref { .. } => WirInstr::RefNull {
                 heap_type: WirAbstractHeapType::None,
+            },
+            Self::AbstractRef { heap_type, .. } => WirInstr::RefNull {
+                heap_type: match heap_type {
+                    WirAbstractHeapType::Func | WirAbstractHeapType::NoFunc => {
+                        WirAbstractHeapType::NoFunc
+                    }
+                    WirAbstractHeapType::Any
+                    | WirAbstractHeapType::Eq
+                    | WirAbstractHeapType::Struct
+                    | WirAbstractHeapType::Array
+                    | WirAbstractHeapType::None => WirAbstractHeapType::None,
+                    WirAbstractHeapType::Extern => {
+                        panic!("[WIR] WIR has no `noextern` to default an externref")
+                    }
+                },
             },
             Self::Unit => panic!("[WIR] the unit type has no Wasm value to default"),
         }

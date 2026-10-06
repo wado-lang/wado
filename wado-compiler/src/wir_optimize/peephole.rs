@@ -345,7 +345,7 @@ pub(super) fn run_peephole(instrs: &mut [WirInstr], null: &Nullability, _types: 
         changed |= rewrite_everywhere(instrs, &mut try_fold_rotate);
         changed |= rewrite_everywhere(instrs, &mut try_fold_vector_const);
         changed |= rewrite_everywhere(instrs, &mut try_fold_sign_extension);
-        changed |= rewrite_everywhere(instrs, &mut try_fill_one_as_set);
+        changed |= rewrite_everywhere(instrs, &mut |instr| try_fold_short_fill(instr, null));
         changed |= rewrite_everywhere(instrs, &mut |instr| try_simplify_ref_op(instr, null));
         changed |= rewrite_everywhere(instrs, &mut |instr| {
             try_relax_gc_operands(instr, null.locals())
@@ -397,10 +397,16 @@ fn rewrite_everywhere(
     driver.changed
 }
 
-/// `array.fill(a, i, v, 1)` → `array.set(a, i, v)`. Both trap exactly when
-/// `i >= len(a)` and evaluate their operands in the same order, but wasmtime
-/// compiles a fill to a bulk operation and a loop around the store.
-fn try_fill_one_as_set(instr: &mut WirInstr) -> bool {
+/// A fill of a constant length short enough to need no loop. wasmtime compiles
+/// `array.fill` to a bulk operation and a loop around the store whatever the
+/// length.
+///
+/// - `array.fill(a, 0, v, 0)` on a non-null `a` cannot trap, so it is dropped
+///   with its operands where they are side-effect free.
+/// - `array.fill(a, i, v, 1)` → `array.set(a, i, v)`. Both trap exactly when
+///   `a` is null or `i >= len(a)`, and evaluate their operands in the same
+///   order.
+fn try_fold_short_fill(instr: &mut WirInstr, null: &Nullability) -> bool {
     let WirInstr::ArrayFill {
         type_id,
         array,
@@ -411,6 +417,15 @@ fn try_fill_one_as_set(instr: &mut WirInstr) -> bool {
     else {
         return false;
     };
+    if matches!(len.as_ref(), WirInstr::I32Const(0))
+        && matches!(offset.as_ref(), WirInstr::I32Const(0))
+        && null.is_nonnull(array)
+        && is_side_effect_free(array)
+        && is_side_effect_free(value)
+    {
+        *instr = WirInstr::Nop;
+        return true;
+    }
     if !matches!(len.as_ref(), WirInstr::I32Const(1)) {
         return false;
     }
@@ -1570,11 +1585,11 @@ mod tests {
         }
     }
 
-    fn fill(len: WirInstr) -> WirInstr {
+    fn fill(nullable: bool, offset: WirInstr, len: WirInstr) -> WirInstr {
         WirInstr::ArrayFill {
             type_id: tid(1),
-            array: Box::new(local_get("a", ref_ty(1, false))),
-            offset: Box::new(local_get("i", WirType::I32)),
+            array: Box::new(local_get("a", ref_ty(1, nullable))),
+            offset: Box::new(offset),
             value: Box::new(WirInstr::RefNull {
                 heap_type: WirAbstractHeapType::None,
             }),
@@ -1582,10 +1597,14 @@ mod tests {
         }
     }
 
+    fn fold_short_fill(instr: &mut WirInstr) -> bool {
+        try_fold_short_fill(instr, &Nullability::new(&WirLocals::default()))
+    }
+
     #[test]
     fn one_element_fill_becomes_a_set() {
-        let mut instr = fill(WirInstr::I32Const(1));
-        assert!(try_fill_one_as_set(&mut instr));
+        let mut instr = fill(true, local_get("i", WirType::I32), WirInstr::I32Const(1));
+        assert!(fold_short_fill(&mut instr));
         let WirInstr::ArraySet { index, value, .. } = &instr else {
             panic!("expected ArraySet, got {instr:?}");
         };
@@ -1594,10 +1613,21 @@ mod tests {
     }
 
     #[test]
-    fn longer_or_unknown_fill_stays() {
-        for len in [WirInstr::I32Const(2), local_get("n", WirType::I32)] {
-            let mut instr = fill(len);
-            assert!(!try_fill_one_as_set(&mut instr));
+    fn empty_fill_of_a_non_null_array_at_zero_is_dropped() {
+        let mut instr = fill(false, WirInstr::I32Const(0), WirInstr::I32Const(0));
+        assert!(fold_short_fill(&mut instr));
+        assert_matches!(instr, WirInstr::Nop);
+    }
+
+    #[test]
+    fn a_fill_that_may_trap_or_loop_stays() {
+        for mut instr in [
+            fill(true, WirInstr::I32Const(0), WirInstr::I32Const(0)),
+            fill(false, WirInstr::I32Const(3), WirInstr::I32Const(0)),
+            fill(false, WirInstr::I32Const(0), WirInstr::I32Const(2)),
+            fill(false, WirInstr::I32Const(0), local_get("n", WirType::I32)),
+        ] {
+            assert!(!fold_short_fill(&mut instr));
             assert_matches!(instr, WirInstr::ArrayFill { .. });
         }
     }

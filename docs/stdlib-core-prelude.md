@@ -5384,8 +5384,9 @@ A growable sequence.
 
 Contract: shrinking (`truncate`, `clear`, `pop`, `remove`) releases the
 slots past the new length, so the collector can reclaim what they held. A
-slice or an iterator taken before the shrink must not read those slots:
-what it reads is unspecified, the element the slot held or a trap.
+slice or an iterator taken before the shrink, a `for` loop's included, must
+not read those slots: what it reads is unspecified, some value of `T` or a
+trap.
 
 _Fields are private._
 

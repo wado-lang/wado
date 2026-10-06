@@ -539,7 +539,8 @@ A source `List` that shrinks (`truncate`, `clear`, `pop`, `remove`) releases
 the slots past its new length, so the collector can reclaim what they held.
 Reading a released slot through a view, or through an iterator over the list,
 is a [contract violation](./spec-overview.md#behavior-classes). The result is
-unspecified: the element the slot held, or a trap.
+unspecified: some value of the element type, or a trap. That value need not be
+the one the slot held; an `Option` element may read as `None`.
 
 A slice compares, orders, displays, and inspects by its elements, not by the
 buffer it refers to.

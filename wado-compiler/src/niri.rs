@@ -82,8 +82,8 @@ pub enum CtfeBuiltin {
     ArraySet,
     ArrayCopy,
     ArrayClonePrefix,
-    /// `array_release`: reading a released slot is unspecified, the element it
-    /// held among the outcomes, so the interpreter leaves the elements in place.
+    /// `array_release`: reading a released slot yields an unspecified value of
+    /// its type, so the interpreter may leave the elements in place.
     ArrayRelease,
     ColdPath,
     Select,
