@@ -1809,9 +1809,9 @@ impl StrSlice {
                 pos += from_len;
                 replacements += 1;
             } else {
-                let dst = result.internal_reserve_uninit(1);
-                result.set_byte_unchecked(dst, self.get_byte_unchecked(pos));
-                pos += 1;
+                let char_len = utf8_seq_len(self.get_byte_unchecked(pos));
+                result.push_str(self.slice_unchecked(pos, pos + char_len));
+                pos += char_len;
             }
         }
         if pos < len {
