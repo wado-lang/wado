@@ -1744,7 +1744,7 @@ test "a Value read reports a missing or malformed token" {
 }
 
 test "JsonDeserializer reads a token stream by hand" {
-    let text = ` [-2147483648, 18446744073709551615, -9223372036854775808, -1.5e+3, {"k": [true]}]`;
+    let text = ` [-2147483648, 18446744073709551615, -9223372036854775808, -1.5e+3, 0.1, {"k": [true]}]`;
     let mut de = JsonDeserializer { input: text.as_bytes(), pos: 0 };
     assert de.peek() == b' ';
     assert de.peek_after_whitespace() == b'[';
@@ -1757,9 +1757,15 @@ test "JsonDeserializer reads a token stream by hand" {
     assert de.expect_char(b',') matches { Ok };
     assert de.parse_f64_direct() == Result::Ok(-1500.0);
     assert de.expect_char(b',') matches { Ok };
+    assert de.parse_f32_direct() == Result::Ok(0.1_f32);
+    assert de.expect_char(b',') matches { Ok };
     assert de.skip_value(0) matches { Ok };
     assert de.expect_char(b']') matches { Ok };
     assert de.peek() == -1;
+
+    let mut huge = JsonDeserializer { input: "1e400".as_bytes(), pos: 0 };
+    assert huge.parse_f64_direct() matches { Err(_) };
+    assert huge.parse_f32_direct() matches { Err(_) };
 }
 
 test "an integer part is a lone zero or starts with a nonzero digit" {
