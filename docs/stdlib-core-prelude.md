@@ -4427,6 +4427,10 @@ A contiguous view into a backing `Array<T>` over the half-open range
 `[start, end)`. Holds a reference to the whole array, so creating a slice
 never copies elements.
 
+Contract: a slice of a `List` must not be read past the list's length once
+the list shrinks. Shrinking releases those slots, and reading one is
+unspecified: the element it held, or a trap.
+
 _Fields are private._
 
 #### `pub fn len(&self) -> i32`
@@ -5377,6 +5381,13 @@ If `count` is negative, replaces all occurrences.
 
 ### `pub struct List<T>`
 
+A growable sequence.
+
+Contract: shrinking (`truncate`, `clear`, `pop`, `remove`) releases the
+slots past the new length, so the collector can reclaim what they held. A
+slice or an iterator taken before the shrink must not read those slots:
+what it reads is unspecified, the element the slot held or a trap.
+
 _Fields are private._
 
 #### `pub fn with_capacity(capacity: i32) -> List<T>`
@@ -5417,6 +5428,9 @@ store, so an under-reserved call traps rather than corrupting memory.
 
 #### `pub fn pop(&mut self) -> Option<T>`
 
+Removes and returns the last element, or null when empty. Releases its
+slot, under the contract on `List`.
+
 #### `pub fn to_array(&self) -> Array<T>`
 
 Copy the live `0..<len()` elements into a fresh fixed `Array<T>` of exactly
@@ -5434,7 +5448,7 @@ Panics if `index > len()`.
 #### `pub fn remove(&mut self, index: i32) -> T`
 
 Removes and returns the element at the given index, shifting all elements after it to the left.
-Panics if `index >= len()`.
+Panics if `index >= len()`. Releases the last slot, under the contract on `List`.
 
 #### `pub fn swap(&mut self, a: i32, b: i32)`
 
@@ -5443,9 +5457,14 @@ Panics if either index is out of bounds.
 
 #### `pub fn truncate(&mut self, len: i32)`
 
+Shortens the list to `len` elements; a longer `len` changes nothing.
+Panics if `len` is negative. Releases the dropped slots, under the
+contract on `List`.
+
 #### `pub fn clear(&mut self)`
 
-Removes all elements.
+Removes all elements, keeping the capacity. Releases every slot, under the
+contract on `List`.
 
 #### `pub fn reserve(&mut self, additional: i32)`
 
