@@ -1,0 +1,88 @@
+// An impl's bound naming a projection reads it at the receiver's binding when
+// the receiver mentions the caller's own parameters: the impl's binding and a
+// family's arguments fill separate parameter spaces, so `U` stays `U`.
+
+trait Src with () {
+    type Item;
+}
+
+trait Is<X> with () {}
+
+trait Tr with () {
+    fn tr() -> i32;
+}
+
+struct Wrap<X> {
+    x: X,
+}
+
+impl<X> Src for Wrap<X> {
+    type Item = X;
+}
+
+impl<X> Is<Wrap<X>> for Wrap<X> {}
+
+struct Two<S, M> {
+    s: S,
+    m: M,
+}
+
+impl<S: Src, M: Is<Wrap<S::Item>>> Tr for Two<S, M> {
+    fn tr() -> i32 {
+        return 1;
+    }
+}
+
+trait Elem with () {}
+
+impl Elem for i32 {}
+
+struct Duo<A, B> {
+    a: A,
+    b: B,
+}
+
+trait Store with () {
+    type Buf<E: Elem>;
+}
+
+impl<X> Store for Wrap<X> {
+    type Buf<E: Elem> = Duo<X, E>;
+}
+
+struct Probe<U> {
+    u: U,
+}
+
+impl<U> Is<Duo<U, i32>> for Probe<U> {}
+
+struct Held<S, Q> {
+    s: S,
+    q: Q,
+}
+
+impl<S: Store, Q: Is<S::Buf<i32>>> Tr for Held<S, Q> {
+    fn tr() -> i32 {
+        return 2;
+    }
+}
+
+fn need<T: Tr>() -> i32 {
+    return T::tr();
+}
+
+fn plain<U>() -> i32 {
+    return need::<Two<Wrap<U>, Wrap<U>>>();
+}
+
+fn family<U>() -> i32 {
+    return need::<Held<Wrap<U>, Probe<U>>>();
+}
+
+test {
+    assert plain::<String>() == 1;
+    assert family::<String>() == 2;
+}
+
+__DATA__
+{"test": {}}

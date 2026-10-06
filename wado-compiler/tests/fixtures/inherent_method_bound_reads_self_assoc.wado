@@ -1,0 +1,37 @@
+// An inherent impl's method bound may read `Self::Item`, which the one trait
+// impl on the same type binding `Item` answers, in the solver as in the
+// elaborator.
+
+trait Iter with () {
+    type Item;
+}
+
+trait Conv<X> with () {}
+
+struct Ints {}
+
+impl Iter for Ints {
+    type Item = i32;
+}
+
+struct E1 {}
+
+impl Conv<i32> for E1 {}
+
+fn need<T: Conv<i32>>(t: &T) -> i32 {
+    return 1;
+}
+
+impl Ints {
+    fn take<U: Conv<Self::Item>>(&self, u: &U) -> i32 {
+        return need(u);
+    }
+}
+
+test {
+    let i = Ints {};
+    assert i.take(&E1 {}) == 1;
+}
+
+__DATA__
+{"test": {}}

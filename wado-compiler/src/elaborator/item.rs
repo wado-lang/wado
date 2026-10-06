@@ -1602,14 +1602,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// One field's declared type, with what the declaration cannot mean
-    /// reported and its default expression resolved against that type. A local
-    /// struct resolves its fields through here too, so a default coerces the
-    /// same way wherever the struct is written.
-    pub(super) fn resolve_struct_field(
-        &mut self,
-        field: &ast::StructField,
-        field_ctx: &mut FunctionContext,
-    ) -> TypeId {
+    /// reported.
+    pub(super) fn resolve_struct_field(&mut self, field: &ast::StructField) -> TypeId {
         let type_id = self.resolve_type(&field.ty);
         self.reject_written_annotation(&field.ty);
         if let Some(serde_default) = field
@@ -1622,24 +1616,37 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 span: serde_default.span,
             });
         }
-        if let Some(default_ast) = &field.default {
-            let resolved = self.resolve_expr(default_ast, field_ctx, Some(type_id));
-            self.typecheck(resolved, type_id, default_ast.span());
-        }
         type_id
     }
 
-    pub(super) fn resolve_struct(&mut self, struct_decl: &ast::StructDecl) {
-        let mut scope = self.enter_decl_params_scope(&struct_decl.type_params);
-
+    /// Each field's default expression, resolved against its declared type in
+    /// `field_types`. A local struct resolves its defaults through here too,
+    /// so a default coerces the same way wherever the struct is written.
+    pub(super) fn resolve_field_defaults(
+        &mut self,
+        struct_decl: &ast::StructDecl,
+        field_types: &[TypeId],
+    ) {
         // A field default is standalone — no self, no sibling fields in
         // scope — and must be pure; `effect_check` enforces that.
         let mut field_ctx =
             FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
-        let mut struct_field_types: Vec<TypeId> = Vec::with_capacity(struct_decl.fields.len());
-        for field in &struct_decl.fields {
-            struct_field_types.push(scope.resolve_struct_field(field, &mut field_ctx));
+        for (field, &type_id) in struct_decl.fields.iter().zip(field_types) {
+            if let Some(default_ast) = &field.default {
+                let resolved = self.resolve_expr(default_ast, &mut field_ctx, Some(type_id));
+                self.typecheck(resolved, type_id, default_ast.span());
+            }
         }
+    }
+
+    pub(super) fn resolve_struct(&mut self, struct_decl: &ast::StructDecl) {
+        let mut scope = self.enter_decl_params_scope(&struct_decl.type_params);
+        let struct_field_types: Vec<TypeId> = struct_decl
+            .fields
+            .iter()
+            .map(|field| scope.resolve_struct_field(field))
+            .collect();
+        scope.resolve_field_defaults(struct_decl, &struct_field_types);
 
         let type_params = scope.data_type_params(&struct_decl.type_params);
         drop(scope);

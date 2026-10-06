@@ -19,7 +19,7 @@ use crate::trait_solver::{
 };
 
 use super::trait_env::{
-    BlanketReceiver, ImplHeader, ImplTargetKey, TraitDeclHeader, written_arg_nodes,
+    BlanketReceiver, ImplHeader, ImplTargetKey, TraitDeclHeader, TraitEnv, written_arg_nodes,
 };
 use super::trait_query::{OnBoundTrait, primitive_has_operator};
 use super::tysys::TypeSystem;
@@ -96,25 +96,14 @@ struct Written<'a> {
     self_type: Option<&'a SolverType>,
 }
 
-/// A trait's parameters that take an argument position: a bound's arguments
-/// leave its effect parameter out.
-fn arg_params(tysys: &TypeSystem, trait_: DefId) -> Vec<GenericParam> {
-    tysys
-        .trait_env
-        .trait_type_params(trait_)
-        .into_iter()
-        .cloned()
-        .collect()
-}
-
 /// The trait among the bounds `params` puts on `base` that declares `assoc`.
-fn declaring_among(
+fn declaring_among<'p>(
     tysys: &TypeSystem,
-    params: &[GenericParam],
+    params: impl IntoIterator<Item = &'p GenericParam>,
     base: &str,
     assoc: &str,
 ) -> Option<DefId> {
-    let param = params.iter().find(|p| p.name == base)?;
+    let param = params.into_iter().find(|p| p.name == base)?;
     tysys
         .trait_env
         .bound_declaring_assoc_type(&param.bounds, assoc, &tysys.resolutions)
@@ -131,9 +120,11 @@ enum ParamKind {
 
 impl ParamKind {
     /// What `name` is among `params`.
-    fn of(params: &[GenericParam], name: &str) -> Option<Self> {
-        let at = params.iter().position(|p| p.name == name)?;
-        let declared = &params[at];
+    fn of<'p>(params: impl IntoIterator<Item = &'p GenericParam>, name: &str) -> Option<Self> {
+        let (at, declared) = params
+            .into_iter()
+            .enumerate()
+            .find(|(_, p)| p.name == name)?;
         let index = u32::try_from(at).expect("fewer than 2^32 params");
         let signature = (!declared.is_pack)
             .then(|| declared.bounds.iter().find_map(|b| b.fn_signature.as_ref()))
@@ -764,45 +755,24 @@ impl Lowering {
 
 /// Lower the impl headers into the program, and hand back the header each
 /// [`ImplId`](crate::trait_solver::ImplId) stands for. A header the lowering
-/// cannot express is dropped, never approximated. `declaring` picks, among
-/// some traits, the one declaring an associated type, which is what a
-/// projection in a header reads.
+/// cannot express is dropped, never approximated. A projection in a header
+/// reads the trait `env` says declares it.
 pub(super) fn lower_impls<'a>(
     lowering: &mut Lowering,
     program: &mut Program,
     impl_headers: impl IntoIterator<Item = (&'a DefId, &'a ImplHeader)>,
+    env: &TraitEnv,
     resolutions: &Resolutions,
-    declaring: &dyn Fn(&[DefId], &str) -> Option<DefId>,
 ) -> Vec<&'a ImplHeader> {
-    let impl_headers: Vec<(&DefId, &ImplHeader)> = impl_headers.into_iter().collect();
-    // `Self::Item` where the implemented trait declares no `Item` reads the
-    // one impl on the same target that binds it, as the elaborator does.
-    let mut binders: IndexMap<(&ImplTargetKey, &str), Vec<DefId>> = IndexMap::default();
-    for (_, header) in &impl_headers {
-        let Some(trait_) = header.trait_def() else {
-            continue;
-        };
-        for binding in &header.associated_types {
-            binders
-                .entry((&header.target, binding.name.as_str()))
-                .or_default()
-                .push(trait_);
-        }
-    }
-    let bound_on_target = |header: &ImplHeader, assoc: &str| match binders
-        .get(&(&header.target, assoc))
-        .map(Vec::as_slice)
-    {
-        Some(&[only]) => Some(only),
-        _ => None,
-    };
     let mut sources: Vec<&ImplHeader> = Vec::new();
-    for &(&def, header) in &impl_headers {
+    for (&def, header) in impl_headers {
         let param = |name: &str| ParamKind::of(&header.type_params, name);
         let declaring_here = |base: &str, assoc: &str| {
             if base == "Self" {
                 let implemented: Vec<DefId> = header.trait_def().into_iter().collect();
-                return declaring(&implemented, assoc).or_else(|| bound_on_target(header, assoc));
+                return env
+                    .trait_among_declaring_assoc_type(&implemented, assoc)
+                    .or_else(|| env.impl_trait_binding_assoc(&header.target, assoc));
             }
             let traits: Vec<DefId> = header
                 .type_params
@@ -810,7 +780,7 @@ pub(super) fn lower_impls<'a>(
                 .filter(|p| p.name == base)
                 .flat_map(|p| p.bounds.iter().filter_map(|b| resolutions.bound_decl(b)))
                 .collect();
-            declaring(&traits, assoc)
+            env.trait_among_declaring_assoc_type(&traits, assoc)
         };
         let mut space = Written {
             resolutions,
@@ -1057,12 +1027,8 @@ impl SolverBridge {
                 .impl_headers
                 .iter()
                 .filter(|(def, _)| !derivation_sources.contains_key(*def)),
+            &tysys.trait_env,
             &tysys.resolutions,
-            &|traits, assoc| {
-                tysys
-                    .trait_env
-                    .trait_among_declaring_assoc_type(traits, assoc)
-            },
         );
         Self::state_primitive_impls(tysys, &mut lowering, &mut program);
         Self::state_traits(tysys, &mut lowering, &mut program);
@@ -1329,12 +1295,12 @@ impl SolverBridge {
     fn state_traits(tysys: &TypeSystem, lowering: &mut Lowering, program: &mut Program) {
         for (trait_, closure) in tysys.trait_env.supertrait_closures_in_own_space() {
             let id = lowering.trait_decl(*trait_);
-            let own = arg_params(tysys, *trait_);
-            let place = |name: &str| ParamKind::of(&own, name);
+            let own = tysys.trait_env.trait_type_params(*trait_);
+            let place = |name: &str| ParamKind::of(own.iter().copied(), name);
             let space = Written {
                 resolutions: &tysys.resolutions,
                 param: &place,
-                declaring: &|base, assoc| declaring_among(tysys, &own, base, assoc),
+                declaring: &|base, assoc| declaring_among(tysys, own.iter().copied(), base, assoc),
                 self_type: None,
             };
             // An edge whose arguments the lowering cannot say states nothing:
@@ -1374,7 +1340,7 @@ impl SolverBridge {
             self_type: None,
         };
         for (&trait_, header) in &tysys.trait_env.trait_decl_headers {
-            let own = arg_params(tysys, trait_);
+            let own = tysys.trait_env.trait_type_params(trait_);
             let defaults: Vec<Option<ArgDefault>> = own
                 .iter()
                 .map(|p| {
@@ -1475,11 +1441,13 @@ impl SolverBridge {
             }
         }
         for (&def, info) in &data.generic_newtypes {
-            let param = |name: &str| ParamKind::of(&info.type_params, name);
+            let param = |name: &str| ParamKind::of(info.type_params.iter(), name);
             let space = Written {
                 resolutions: &tysys.resolutions,
                 param: &param,
-                declaring: &|base, assoc| declaring_among(tysys, &info.type_params, base, assoc),
+                declaring: &|base, assoc| {
+                    declaring_among(tysys, info.type_params.iter(), base, assoc)
+                },
                 self_type: None,
             };
             if let Ok(base) = lowering.ast_type(&info.base_type_ast, &space) {
@@ -1781,8 +1749,15 @@ impl SolverBridge {
         let param = |name: &str| place(name).map(ParamKind::Type);
         let declaring = |base: &str, assoc: &str| {
             if base == "Self" {
-                let trait_ = ctx.trait_ctx.self_trait?;
-                return tysys.trait_env.trait_declaring_assoc_type(&trait_, assoc);
+                return ctx
+                    .trait_ctx
+                    .self_trait
+                    .and_then(|trait_| tysys.trait_env.trait_declaring_assoc_type(&trait_, assoc))
+                    .or_else(|| {
+                        let def = table.nominal_def(ctx.trait_ctx.self_type?)?;
+                        let target = ImplTargetKey::of_decl(tysys.resolutions.defs(), def);
+                        tysys.trait_env.impl_trait_binding_assoc(&target, assoc)
+                    });
             }
             let bounds = ctx.trait_ctx.type_param_bounds.get(base)?;
             tysys

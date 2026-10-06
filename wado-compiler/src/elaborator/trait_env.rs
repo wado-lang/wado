@@ -1184,46 +1184,41 @@ impl TraitEnv {
         let trait_impl_modules = index_impl_modules(&impl_headers, defs, false);
         let concrete_trait_impl_modules = index_impl_modules(&impl_headers, defs, true);
 
-        violations.extend(check_impl_coherence(
-            &impl_headers,
-            &trait_decl_headers,
-            resolutions,
-        ));
-        violations.extend(check_variadic_impl_overlap(defs, &impl_headers));
-
+        let variadic_overlaps = check_variadic_impl_overlap(defs, &impl_headers);
         let (supertrait_closures, cycles) =
             build_supertrait_closures(defs, &trait_decl_headers, &resolve_trait);
-        violations.extend(cycles);
-        violations.extend(check_bounds_name_traits(modules, &resolve_trait));
+        let unnamed_traits = check_bounds_name_traits(modules, &resolve_trait);
 
-        (
-            Arc::new(Self {
-                by_receiver: index_by_receiver(&impl_index, &impl_headers, defs),
-                all_by_receiver: index_by_receiver(&all_impl_index, &impl_headers, defs),
-                impl_index,
-                all_impl_index,
-                defs: resolutions.defs().clone(),
-                blanket_param_sources: blanket_param_sources(
-                    &impl_headers,
-                    &blanket_impls,
-                    resolutions,
-                ),
-                impl_headers,
-                trait_decl_headers,
-                supertrait_closures,
-                function_type_params,
-                module_namespace_imports,
-                space_modules,
-                blanket_impls,
-                impl_method_index,
-                resource_static_method_index,
-                trait_impl_modules,
-                concrete_trait_impl_modules,
-                synthesised: None,
-                solver: None,
-            }),
-            violations,
-        )
+        let env = Arc::new(Self {
+            by_receiver: index_by_receiver(&impl_index, &impl_headers, defs),
+            all_by_receiver: index_by_receiver(&all_impl_index, &impl_headers, defs),
+            impl_index,
+            all_impl_index,
+            defs: resolutions.defs().clone(),
+            blanket_param_sources: blanket_param_sources(
+                &impl_headers,
+                &blanket_impls,
+                resolutions,
+            ),
+            impl_headers,
+            trait_decl_headers,
+            supertrait_closures,
+            function_type_params,
+            module_namespace_imports,
+            space_modules,
+            blanket_impls,
+            impl_method_index,
+            resource_static_method_index,
+            trait_impl_modules,
+            concrete_trait_impl_modules,
+            synthesised: None,
+            solver: None,
+        });
+        violations.extend(check_impl_coherence(&env, resolutions));
+        violations.extend(variadic_overlaps);
+        violations.extend(cycles);
+        violations.extend(unnamed_traits);
+        (env, violations)
     }
 
     /// The module `space` was parsed from, or `None` for a synthesized node,
@@ -1870,6 +1865,26 @@ impl TraitEnv {
             })
     }
 
+    /// The trait of the one impl on `target` binding `assoc_name`: what
+    /// `Self::assoc_name` reads where the trait in hand declares none, as the
+    /// elaborator reads it.
+    pub(super) fn impl_trait_binding_assoc(
+        &self,
+        target: &ImplTargetKey,
+        assoc_name: &str,
+    ) -> Option<DefId> {
+        let mut binding = self.all_impl_index.get(target)?.iter().filter_map(|key| {
+            let header = &self.impl_headers[key];
+            header
+                .associated_types
+                .iter()
+                .any(|b| b.name == assoc_name)
+                .then_some(header)
+        });
+        let only = binding.next()?;
+        binding.next().is_none().then(|| only.trait_def())?
+    }
+
     /// Produce a new `TraitEnv` carrying the synthesis-layer impls — every
     /// `(type_name, trait_name) -> ModuleSource` found in TIR once synthesis has
     /// added its auto-derived impls. Called once per pipeline run; calling again
@@ -2449,30 +2464,20 @@ fn conflicting_impl_location(conflict: &ModuleSource, here: &ModuleSource) -> St
 }
 
 fn check_impl_coherence(
-    impl_headers: &IndexMap<DefId, ImplHeader>,
-    trait_decl_headers: &IndexMap<DefId, TraitDeclHeader>,
+    env: &TraitEnv,
     resolutions: &Resolutions,
 ) -> Vec<(ModuleSource, TypeError)> {
     use super::solver_bridge::{Lowering, lower_impls};
     use crate::trait_solver::{CoherenceError, ImplId, Program, coherence_errors};
     let mut lowering = Lowering::over(resolutions);
-    lowering.intern_assocs(trait_decl_headers);
+    lowering.intern_assocs(&env.trait_decl_headers);
     let mut program = Program::default();
-    // Supertrait closures are built after this check, so a projection reads
-    // only a trait its own bounds name.
-    let declaring = |traits: &[DefId], assoc: &str| {
-        traits.iter().copied().find(|t| {
-            trait_decl_headers
-                .get(t)
-                .is_some_and(|header| header.assoc_types.iter().any(|a| a.name == assoc))
-        })
-    };
     let sources = lower_impls(
         &mut lowering,
         &mut program,
-        impl_headers,
+        &env.impl_headers,
+        env,
         resolutions,
-        &declaring,
     );
     let header_of = |id: ImplId| -> &ImplHeader { sources[id.0 as usize] };
     let trait_name = |header: &ImplHeader| {

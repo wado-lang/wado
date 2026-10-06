@@ -11,9 +11,40 @@ use crate::hashmap::IndexSet;
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct Holds {
     pub requests: Vec<DerivationRequest>,
-    /// The associated types the answering impl binds, at the receiver; empty
-    /// where no impl answered.
-    pub assoc: Vec<(AssocId, SolverType)>,
+    /// The associated types the answering impl binds; empty where no impl
+    /// answered.
+    assoc: Vec<(AssocId, Member)>,
+}
+
+impl Holds {
+    /// What the answering impl binds `assoc` to at the receiver, a family's
+    /// member at `args`. `None` where it names an impl parameter the match
+    /// left unbound.
+    fn assoc_at(&self, assoc: AssocId, args: &[SolverType]) -> Option<SolverType> {
+        let (_, member) = self.assoc.iter().find(|(a, _)| *a == assoc)?;
+        member.at(args)
+    }
+}
+
+/// An associated type as one impl binds it, in that impl's parameter space,
+/// with what the match bound each parameter to. A family's own parameters
+/// follow the impl's, and stay open for each projection's arguments: they
+/// share no space with the receiver's parameters the match bound.
+#[derive(Clone, PartialEq, Eq, Debug)]
+struct Member {
+    binding: SolverType,
+    matched: Vec<Option<SolverType>>,
+}
+
+impl Member {
+    fn at(&self, args: &[SolverType]) -> Option<SolverType> {
+        let own = self.matched.len();
+        self.binding
+            .map_params(&|i| match (i as usize).checked_sub(own) {
+                None => self.matched[i as usize].clone(),
+                Some(j) => args.get(j).cloned(),
+            })
+    }
 }
 
 /// Whether `ty` satisfies `trait_`, asked from `scope`. `None` is "does not
@@ -164,12 +195,19 @@ impl Query<'_> {
             return Some(Holds::default());
         }
         // A pack's bound holds of each element, so an element in a variadic
-        // body answers from the pack's slot.
+        // body answers from the pack's slot. A bound reads a projection the
+        // program answers as what it binds: `U: Conv<Self::Item>` in
+        // `impl Ints` is `U: Conv<i32>`.
+        let env = self.env;
         if let SolverType::Param(index) | SolverType::Pack(index) = ty
-            && let Some(bounds) = self.env.param_bounds.get(*index as usize)
-            && bounds
-                .iter()
-                .any(|bound| bound_answers(program, ty, bound, trait_, args))
+            && let Some(bounds) = env.param_bounds.get(*index as usize)
+            && bounds.iter().any(|bound| {
+                let bound = ParamBound {
+                    args: bound.args.iter().map(|arg| self.normalized(arg)).collect(),
+                    ..bound.clone()
+                };
+                bound_answers(program, ty, &bound, trait_, args)
+            })
         {
             return Some(Holds::default());
         }
@@ -318,8 +356,8 @@ impl Query<'_> {
                         let Some(expected) = self.at_bindings(&pin.ty, &bindings) else {
                             continue;
                         };
-                        let actual = answer.assoc.iter().find(|(assoc, _)| *assoc == pin.assoc);
-                        if actual.is_some_and(|(_, actual)| *actual != expected) {
+                        let actual = answer.assoc_at(pin.assoc, &[]);
+                        if actual.is_some_and(|actual| self.normalized(&actual) != expected) {
                             return None;
                         }
                     }
@@ -327,20 +365,21 @@ impl Query<'_> {
                 }
             }
         }
-        // A family's own parameters stay open, at their positions in the
-        // family, for each projection's arguments to fill.
-        let own = u32::try_from(def.params.len()).expect("fewer than 2^32 params");
-        let at_impl = |i: u32| match i.checked_sub(own) {
-            None => bindings[i as usize].as_ref().map(Binding::as_type),
-            Some(j) => Some(SolverType::Param(j)),
-        };
+        let matched: Vec<Option<SolverType>> = bindings
+            .iter()
+            .map(|binding| binding.as_ref().map(Binding::as_type))
+            .collect();
         let assoc = program
             .assoc_bindings
             .get(&id)
             .into_iter()
             .flatten()
-            .filter_map(|(assoc, binding)| {
-                Some((*assoc, self.normalized(&binding.map_params(&at_impl)?)))
+            .map(|(assoc, binding)| {
+                let member = Member {
+                    binding: binding.clone(),
+                    matched: matched.clone(),
+                };
+                (*assoc, member)
             })
             .collect();
         Some(Answer {
@@ -378,11 +417,9 @@ impl Query<'_> {
             } => {
                 let base = self.normalized(base);
                 let args: Vec<SolverType> = args.iter().map(|a| self.normalized(a)).collect();
-                let bound = self
+                let member = self
                     .holds(&base, *trait_, &[])
-                    .and_then(|held| held.assoc.into_iter().find(|(a, _)| a == assoc));
-                let member =
-                    bound.and_then(|(_, ty)| ty.map_params(&|j| args.get(j as usize).cloned()));
+                    .and_then(|held| held.assoc_at(*assoc, &args));
                 match member {
                     Some(ty) => self.normalized(&ty),
                     None => SolverType::Projection {
@@ -1591,11 +1628,9 @@ mod tests {
         );
         // The answer reports what the impl binds, at the receiver.
         assert_eq!(
-            holds(&p, &Env::default(), &decl(CM), MUL, HERE),
-            Some(Holds {
-                assoc: vec![(OUTPUT, decl(AREA))],
-                ..Holds::default()
-            })
+            holds(&p, &Env::default(), &decl(CM), MUL, HERE)
+                .and_then(|held| held.assoc_at(OUTPUT, &[])),
+            Some(decl(AREA))
         );
     }
 

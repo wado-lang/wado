@@ -1,0 +1,37 @@
+// A body-local struct's field default may name a local declared after it: the
+// default is resolved once every local's fields are known and stated to the
+// solver.
+
+fn need<T: Eq>() -> i32 {
+    return 1;
+}
+
+fn bounded() -> i32 {
+    struct A {
+        n: i32 = need::<B>(),
+    }
+    struct B {
+        x: i32,
+    }
+    let a = A {};
+    return a.n;
+}
+
+fn compared() -> bool {
+    struct A {
+        same: bool = B { x: 1 } == B { x: 1 },
+    }
+    struct B {
+        x: i32,
+    }
+    let a = A {};
+    return a.same;
+}
+
+test {
+    assert bounded() == 1;
+    assert compared();
+}
+
+__DATA__
+{"test": {}}

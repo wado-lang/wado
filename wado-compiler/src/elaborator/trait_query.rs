@@ -2150,6 +2150,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_args: &[TypeId],
         span: Span,
     ) {
+        let bounded = self
+            .type_lookup()
+            .declared_generic_params(def)
+            .is_some_and(|params| {
+                params
+                    .iter()
+                    .any(|p| p.bounds.iter().any(ast::TraitBound::names_a_trait))
+            });
+        if !bounded {
+            return;
+        }
         self.owe_bounds(OwedBounds {
             span,
             owed: Owed::DeclArgs {
