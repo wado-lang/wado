@@ -1408,8 +1408,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// already-resolved parameter and return types, which must come from a method
     /// lookup so their slots are the ones the caller binds. Deliberately does not
     /// re-resolve the method's AST: a fresh scope would report spurious errors for
-    /// a `Self::Item`. An unbound parameter keeps its `TypeParam` id. A slot
-    /// `written` names (its turbofish, `UNKNOWN` for `_`) is answered from it.
+    /// a `Self::Item`. An unbound parameter is its variable, blamed at the
+    /// call. A slot `written` names (its turbofish, `UNKNOWN` for `_`) is
+    /// answered from it.
     fn infer_method_type_args(
         &mut self,
         input: MethodInferenceInput<'_>,

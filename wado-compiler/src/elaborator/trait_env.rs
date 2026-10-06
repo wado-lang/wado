@@ -1403,13 +1403,15 @@ impl TraitEnv {
             return None;
         }
         let written = header.trait_ty().map_or(&[][..], written_arg_nodes);
-        Some(param.substituted(&|named| match resolutions.walked(named.id)? {
-            Resolution::Binder(binder) => declared
-                .iter()
-                .position(|p| p.id == binder)
-                .and_then(|i| written.get(i))
-                .cloned(),
-            Resolution::Def(_) | Resolution::Projection(_) | Resolution::Unresolved => None,
+        Some(param.substituted(&|named| {
+            match resolutions.walked(named.id)? {
+                Resolution::Binder(binder) => declared
+                    .iter()
+                    .position(|p| p.id == binder)
+                    .and_then(|i| written.get(i))
+                    .cloned(),
+                Resolution::Def(_) | Resolution::Projection(_) | Resolution::Unresolved => None,
+            }
         }))
     }
 

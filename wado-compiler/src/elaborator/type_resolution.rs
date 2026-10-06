@@ -1086,11 +1086,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                     let at_decl = e.param_space_of(decl, &written);
                     let args: Vec<TypeId> = at_decl.iter().map(|(_, id)| *id).collect();
-                    let closure = e
-                        .tysys
-                        .trait_env
-                        .supertrait_closure(&decl)
-                        .to_vec();
+                    let closure = e.tysys.trait_env.supertrait_closure(&decl).to_vec();
                     out.push((bound, at_decl));
                     for inherited in closure {
                         let space = e.inherited_space(decl, &args, &inherited.via);

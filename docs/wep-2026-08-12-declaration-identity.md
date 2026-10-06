@@ -975,9 +975,12 @@ declaration, and a scope places it by the name alone. Two items' parameters with
 the same name and position are one `TypeId`. What it admits is a question about
 one declaration's parameter answered under another's bounds.
 
-One way in is closed. A callee's binder that inference cannot settle is reported
-once, and its slot becomes the error type, so it never reaches the caller's
-scope as the caller's parameter of that name.
+Two ways in are closed, both a callee's binder reaching the caller's scope as
+the caller's parameter of that name. A call's slot nothing has answered yet is a
+fresh inference variable, never the callee's binder, so a default fills it and
+an unanswered one is reported
+(`generic_call_default_beside_caller_binder.wado`). A binder inference cannot
+settle is reported once, and its slot becomes the error type.
 
 ## Known gap: a CM operation is bound by its spelling
 
