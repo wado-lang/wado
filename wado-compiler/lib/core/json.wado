@@ -2414,7 +2414,7 @@ impl DeserializeVariant for JsonVariantAccess {
     }
 
     fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
-        return T::deserialize(&mut self.de);
+        return T::deserialize(self.de);
     }
 
     fn is_unit(&mut self) -> Result<bool, DeserializeError> {

@@ -1562,8 +1562,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The name whose storage the place `expr` writes: `x`, `x.f`, `x[i]`,
-    /// `*x`, and any nesting of those. `None` past a reference step.
     /// What `ty` is represented by, so a newtype over a reference reads as the
     /// reference it is.
     fn reference_head(&self, ty: TypeId) -> ResolvedType {
@@ -1571,6 +1569,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         table.get(table.representation_head(ty)).clone()
     }
 
+    /// The name whose storage the place `expr` writes: `x`, `x.f`, `x[i]`,
+    /// `*x`, and any nesting of those. `None` past a reference step.
     fn place_root<'e>(&self, expr: &'e ast::Expr) -> Option<&'e str> {
         if let Some(ty) = self.sem.types.expression_types.get(&expr.id()).copied()
             && matches!(

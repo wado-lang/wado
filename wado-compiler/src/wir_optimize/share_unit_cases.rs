@@ -10,7 +10,9 @@
 
 use crate::hashmap::IndexMap;
 use crate::name::unit_case_global_name;
-use crate::wir::{WirGlobal, WirInstr, WirMeta, WirName, WirPackage, WirType, WirTypeDef, WirTypeId};
+use crate::wir::{
+    WirGlobal, WirInstr, WirMeta, WirName, WirPackage, WirType, WirTypeDef, WirTypeId,
+};
 use crate::wir_visitor::WirMutVisitor;
 
 pub(super) fn share_unit_cases(module: &mut WirPackage) {
@@ -23,8 +25,7 @@ pub(super) fn share_unit_cases(module: &mut WirPackage) {
             sharer.visit_body(body);
         }
     }
-    let shared = sharer.shared;
-    for ((type_id, case), name) in shared {
+    for ((type_id, case), name) in sharer.shared {
         module.globals.push(WirGlobal {
             name: WirName { fq: name },
             ty: WirType::non_null_ref(type_id.clone()),
