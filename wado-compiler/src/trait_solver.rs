@@ -10,10 +10,10 @@ mod rank;
 #[cfg(test)]
 mod testing;
 
-pub use candidates::{Candidates, bound_candidates, candidates};
+pub use candidates::{Candidates, applies, bound_candidates, candidates};
 pub use coherence::{CoherenceError, coherence_errors};
 pub use derive::{derive, pair_comparisons};
-pub use holds::{Holds, applies, comparison_row, holds, holds_with_args, owed};
+pub use holds::{Holds, comparison_row, holds, holds_with_args, owed};
 pub use program::{
     ArgDefault, AssocId, Declaration, DerivationRequest, Env, Fact, ImplDef, ImplId, ImplOrigin,
     MethodId, ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, SolverType,

@@ -471,13 +471,6 @@ pub(super) fn impl_applies(
     )
 }
 
-/// Whether impl `id` applies to `ty`, its bounds included: what an instance of
-/// a generic body selects by once its parameters are settled.
-#[must_use]
-pub fn applies(program: &Program, env: &Env, scope: ModuleId, id: ImplId, ty: &SolverType) -> bool {
-    impl_applies(program, env, scope, id, &program.impls[&id], ty).is_some()
-}
-
 /// What a target parameter matched: a pack takes every element past the
 /// tuple's fixed prefix, and its bound holds of each.
 #[derive(Clone, PartialEq, Eq, Debug)]
