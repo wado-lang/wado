@@ -1874,18 +1874,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
 
                     let template = self.tysys.static_template(&method_ref, &receiver);
-                    let monomorph_info = if impl_type_args_inferred.is_empty()
-                        && method_type_args.is_empty()
-                    {
-                        None
-                    } else {
-                        Some(MonomorphInfo {
-                            generic_name: final_mangled.clone(),
-                            impl_type_args: impl_type_args_inferred.clone(),
-                            method_type_args: method_type_args.clone(),
-                            is_blanket: false,
-                        })
-                    };
+                    let monomorph_info =
+                        if impl_type_args_inferred.is_empty() && method_type_args.is_empty() {
+                            None
+                        } else {
+                            Some(MonomorphInfo {
+                                generic_name: final_mangled.clone(),
+                                impl_type_args: impl_type_args_inferred.clone(),
+                                method_type_args: method_type_args.clone(),
+                                is_blanket: false,
+                            })
+                        };
 
                     // From the same resolution the identity and the return type
                     // came from: a second lookup here answers with no list, and
