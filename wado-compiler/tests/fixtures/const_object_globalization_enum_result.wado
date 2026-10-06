@@ -1,0 +1,18 @@
+// A constant call returning an `enum` is a scalar, not a reference: hoisting
+// `Option<String>`'s derived `cmp(null, null)` into a global guarded by
+// `ref.is_null` produced an invalid module at -O1 and -O2.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let none: Option<String> = null;
+    println(`${none.cmp(&none):?}`);
+    let mut l: List<Option<String>> = [Some("b"), null];
+    l.sort();
+    println(`${l:?}`);
+}
+
+__DATA__
+{
+    "stdout": "Ordering::Equal\n[Option::None, Option::Some(\"b\")]\n"
+}
