@@ -95,9 +95,9 @@ export(SomeWorld::MyType) struct AliasedRecord { x: i32 }
 ### World Imports and Effect System
 
 A program declares its imports through its effects. No effect is performed
-without a `with` clause naming it, and that clause, where no handler takes the
-effect over, is what tells the compiler to import the effect's interface. No
-separate import declaration exists.
+without a `with` clause naming it. Unless a handler takes the effect over, that
+clause tells the compiler to import the effect's interface. No separate import
+declaration exists.
 
 ```wado
 use { println, Stdout } from "core:cli";
