@@ -3,7 +3,8 @@
 //! the program the tests run.
 
 use indexmap::IndexMap;
-use serde::Deserialize;
+use serde::de::Error as _;
+use serde::{Deserialize, Deserializer};
 use wado_compiler::param_resolution::{ParamInputs, ParamPolicy, ParamPolicyLevel};
 
 use crate::HostStubs;
@@ -36,14 +37,23 @@ pub struct CompileInputs {
     #[serde(default)]
     pub dependencies: IndexMap<String, String>,
     /// Override the `--param-unknown` policy level (`error` / `warn` / `ignore`).
-    #[serde(default)]
-    pub param_unknown: Option<String>,
+    #[serde(default, deserialize_with = "policy_level")]
+    pub param_unknown: Option<ParamPolicyLevel>,
     /// Override the `--param-invalid` policy level (`error` / `warn` / `ignore`).
-    #[serde(default)]
-    pub param_invalid: Option<String>,
+    #[serde(default, deserialize_with = "policy_level")]
+    pub param_invalid: Option<ParamPolicyLevel>,
     /// Override the `--param-missing` policy level (`error` / `warn` / `ignore`).
-    #[serde(default)]
-    pub param_missing: Option<String>,
+    #[serde(default, deserialize_with = "policy_level")]
+    pub param_missing: Option<ParamPolicyLevel>,
+}
+
+/// A level is rejected while `__DATA__` is read, so the reader that knows which
+/// fixture it is reading reports it.
+fn policy_level<'de, D: Deserializer<'de>>(de: D) -> Result<Option<ParamPolicyLevel>, D::Error> {
+    let level = String::deserialize(de)?;
+    ParamPolicyLevel::parse(&level)
+        .map(Some)
+        .ok_or_else(|| D::Error::custom(format!("invalid policy level: {level:?}")))
 }
 
 impl CompileInputs {
@@ -57,22 +67,14 @@ impl CompileInputs {
     }
 
     /// The `#[param]` inputs the compiler resolves against.
-    ///
-    /// # Panics
-    /// If a `param_*` policy names no level.
     #[must_use]
     pub fn param_inputs(&self) -> ParamInputs {
-        let mut policy = ParamPolicy::default();
-        for (field, level, slot) in [
-            ("param_unknown", &self.param_unknown, &mut policy.unknown),
-            ("param_invalid", &self.param_invalid, &mut policy.invalid),
-            ("param_missing", &self.param_missing, &mut policy.missing),
-        ] {
-            if let Some(level) = level {
-                *slot = ParamPolicyLevel::parse(level)
-                    .unwrap_or_else(|| panic!("invalid {field} level: {level:?}"));
-            }
-        }
+        let defaults = ParamPolicy::default();
+        let policy = ParamPolicy {
+            unknown: self.param_unknown.unwrap_or(defaults.unknown),
+            invalid: self.param_invalid.unwrap_or(defaults.invalid),
+            missing: self.param_missing.unwrap_or(defaults.missing),
+        };
         ParamInputs {
             overrides: self.params.clone().into_iter().collect(),
             defaults: self.param_defaults.clone().into_iter().collect(),

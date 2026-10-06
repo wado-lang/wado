@@ -105,8 +105,7 @@ into a branchless select only where both arms are duplicable pure leaves.
 section whose fields are the `serde` structs in `tests/e2e.rs`.
 
 `tests/` is a package of its own, `wado-compiler-tests`; its `Cargo.toml` says
-why. A path in `__DATA__` is relative to `tests/`, where `cargo test` runs the
-binary.
+why. A path in `__DATA__` is relative to the fixture's own directory.
 
 - Run `touch tests/e2e.rs` after adding or removing a fixture, or after changing
   `WADO_FULL_TEST`. `datatest_mini` resolves fixtures at macro-expansion time and

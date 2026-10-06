@@ -191,7 +191,8 @@ struct TestSpec {
 
     /// Preopened directories, each `[template, guest_path]`. Every preopen is a
     /// fresh temp dir (see `prepare_preopened_dirs`). `template` seeds it:
-    /// `""` for empty scratch, or a workspace-relative path to copy in.
+    /// `""` for empty scratch, or a directory to copy in, relative to the
+    /// fixture's own as `dependencies` paths are.
     #[serde(default)]
     preopened_dirs: Vec<[String; 2]>,
 
@@ -1015,7 +1016,8 @@ fn run_with_allocator(
     } else {
         // Default: wasi:cli/command. `_temp_dirs` must outlive the run: dropping
         // a `TempDir` deletes it from disk.
-        let (dirs, _temp_dirs) = prepare_preopened_dirs(&spec.preopened_dirs, test_id);
+        let (dirs, _temp_dirs) =
+            prepare_preopened_dirs(fixture_path, &spec.preopened_dirs, test_id);
         let result = common::run_wasm_with_full_options(
             wasm,
             &dirs,
@@ -1134,13 +1136,18 @@ fn assert_wir_expectations(
 
 /// Back each `preopened_dirs` entry with a fresh temp dir so filesystem tests
 /// stay hermetic across the parallel per-optimization-level runs. An empty
-/// `template` yields empty scratch; otherwise it is copied in as a seed corpus.
-/// Returns the `(host, guest)` pairs plus the owning `TempDir` guards, which the
-/// caller must keep alive until the guest finishes.
+/// `template` yields empty scratch; otherwise the directory it names, relative
+/// to the fixture's own, is copied in as a seed corpus. Returns the
+/// `(host, guest)` pairs plus the owning `TempDir` guards, which the caller
+/// must keep alive until the guest finishes.
 fn prepare_preopened_dirs(
+    fixture_path: &Path,
     specs: &[[String; 2]],
     test_id: &str,
 ) -> (Vec<(String, String)>, Vec<tempfile::TempDir>) {
+    let fixture_dir = fixture_path
+        .parent()
+        .expect("a fixture is a file in a directory");
     let mut dirs = Vec::with_capacity(specs.len());
     let mut temp_dirs = Vec::with_capacity(specs.len());
 
@@ -1149,7 +1156,7 @@ fn prepare_preopened_dirs(
             .unwrap_or_else(|e| panic!("[{test_id}] failed to create temp preopen dir: {e}"));
 
         if !template.is_empty() {
-            copy_dir_recursive(Path::new(template), temp.path()).unwrap_or_else(|e| {
+            copy_dir_recursive(&fixture_dir.join(template), temp.path()).unwrap_or_else(|e| {
                 panic!("[{test_id}] failed to seed preopen dir from {template:?}: {e}")
             });
         }

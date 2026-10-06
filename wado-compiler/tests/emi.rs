@@ -10,7 +10,7 @@
 //! [WEP: Compiler Fuzzing](../../docs/wep-2026-08-19-compiler-fuzzing.md).
 //!
 //! ```sh
-//! cargo test --test emi -- --ignored --nocapture
+//! cargo test -p wado-compiler-tests --test emi -- --ignored --nocapture
 //! ```
 //!
 //! Knobs: `WADO_EMI_JOBS`, `WADO_EMI_FILTER`, `WADO_EMI_ROOTS`,
@@ -1684,7 +1684,7 @@ fn campaign(
 /// Calibrate the corpus: keep the sources an empty guard leaves alone.
 ///
 /// `#[ignore]`d because it compiles and runs the whole corpus several times
-/// over; run it on demand with `cargo test --test emi -- --ignored --nocapture`.
+/// over; run it on demand with `mise run emi-calibrate`.
 #[test]
 #[ignore = "EMI campaign — minutes to hours over the full corpus"]
 fn calibrate_corpus() {
@@ -1885,7 +1885,7 @@ fn describe_sites(source: &str, sites: &[Site]) -> String {
 /// source instead of inferred from a line and column.
 ///
 /// ```sh
-/// WADO_EMI_FILTER=if_expression cargo test --test emi -- --ignored --nocapture dump_mutants
+/// WADO_EMI_FILTER=if_expression cargo test -p wado-compiler-tests --test emi -- --ignored --nocapture dump_mutants
 /// ```
 #[test]
 #[ignore = "inspection aid — writes files, asserts nothing"]

@@ -7,9 +7,7 @@ use wado_compiler::hashmap::{IndexMap, IndexSet};
 use wado_compiler::OptLevel;
 use wado_host::StubHost;
 
-use crate::data_section::{
-    extract_compile_inputs, extract_world_from_data_section, should_skip_file,
-};
+use crate::data_section::{FixtureCompile, read_fixture_compile, should_skip_file};
 use crate::template::Template;
 
 const COMPILER_STACK_SIZE: usize = 16 * 1024 * 1024;
@@ -513,8 +511,10 @@ async fn render_phases(
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
-    let target_world = extract_world_from_data_section(source, default_world);
-    let inputs = extract_compile_inputs(source);
+    let FixtureCompile {
+        world: target_world,
+        inputs,
+    } = read_fixture_compile(source, default_world).unwrap_or_else(|e| panic!("{input_path}: {e}"));
     let params = inputs.param_inputs();
 
     if needs_dump {

@@ -2,10 +2,10 @@
 //! ask its environment, for compiling the e2e fixtures outside `wado`.
 
 use std::path::PathBuf;
-use std::sync::Mutex;
 
 use indexmap::IndexMap;
 use wado_compiler::{CompilerHost, DependencyIndex, Diagnostic, SourceError};
+use wado_lsp::FilesystemCompilerHost;
 
 /// What a [`StubHost`] answers in place of the environment.
 #[derive(Debug, Default, Clone)]
@@ -17,12 +17,11 @@ pub struct HostStubs {
     pub dependencies: IndexMap<String, String>,
 }
 
-/// Loads sources relative to a base directory and collects every diagnostic
-/// without printing it.
+/// A [`FilesystemCompilerHost`] that answers the dependency index and the
+/// environment from [`HostStubs`] rather than from `wado.toml` and the process.
 #[derive(Debug)]
 pub struct StubHost {
-    base_path: PathBuf,
-    diagnostics: Mutex<Vec<Diagnostic>>,
+    filesystem: FilesystemCompilerHost,
     stubs: HostStubs,
 }
 
@@ -31,10 +30,8 @@ impl StubHost {
     #[must_use]
     pub fn new(base_path: PathBuf) -> Self {
         wado_lsp::install_stderr_trace_sink();
-        wado_lsp::host::install_dev_stdlib();
         Self {
-            base_path,
-            diagnostics: Mutex::default(),
+            filesystem: FilesystemCompilerHost::new(base_path),
             stubs: HostStubs::default(),
         }
     }
@@ -48,27 +45,24 @@ impl StubHost {
     }
 
     /// The diagnostics emitted since this host was created.
-    ///
-    /// # Panics
-    /// If a panic poisoned the buffer.
     #[must_use]
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
-        self.diagnostics.lock().unwrap().clone()
+        self.filesystem.diagnostics()
     }
 }
 
 impl CompilerHost for StubHost {
     async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
-        let full_path = self.base_path.join(path);
-        std::fs::read(&full_path).map_err(|e| SourceError::IoError {
-            path: full_path.display().to_string(),
-            message: e.to_string(),
-        })
+        self.filesystem.load_source(path).await
+    }
+
+    async fn source_exists(&self, path: &str) -> bool {
+        self.filesystem.source_exists(path).await
     }
 
     fn emit_diagnostic(&self, diagnostic: Diagnostic) {
         assert_diagnostic_is_attributed(&diagnostic);
-        self.diagnostics.lock().unwrap().push(diagnostic);
+        self.filesystem.collect_diagnostic(diagnostic);
     }
 
     fn env_var(&self, name: &str) -> Option<String> {
