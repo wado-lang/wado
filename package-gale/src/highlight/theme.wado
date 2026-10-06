@@ -6,18 +6,19 @@
 //! The vocabulary is grammar-defined, so the map is open: a class with no color
 //! is simply left unstyled.
 
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
+use { GALE_SEED } from "../hash_seed.wado";
 
 /// A capture-class -> CSS color map. Keys are tree-sitter capture names (dotted
 /// names such as `constant.builtin` are allowed); values are any CSS color.
 pub struct Theme {
-    colors: TreeMap<String, String>,
+    colors: HashMap<String, String>,
 }
 
 impl Theme {
     /// An empty theme. Build one up with `set`, or start from `default_theme`.
     pub fn new() -> Theme {
-        return Theme { colors: TreeMap::new() };
+        return Theme { colors: HashMap::<String, String>::with_seed(GALE_SEED) };
     }
 
     /// Assign `color` to capture class `class`; last write wins.
@@ -75,21 +76,26 @@ pub fn stylesheet(theme: &Theme) -> String {
 /// are harmless, and classes it emits but this theme omits fall back to the
 /// surrounding text color.
 pub fn default_theme() -> Theme {
-    return Theme {
-        colors: {
-            comment: "#8b949e",
-            string: "#a5d6ff",
-            number: "#79c0ff",
-            boolean: "#79c0ff",
-            constant: "#79c0ff",
-            "constant.builtin": "#79c0ff",
-            keyword: "#ff7b72",
-            function: "#d2a8ff",
-            type: "#ffa657",
-            variable: "#c9d1d9",
-            property: "#79c0ff",
-            operator: "#ff7b72",
-            punctuation: "#c9d1d9",
-        },
-    };
+    let mut theme = Theme::new();
+    for let [class, color] of DEFAULT_COLORS {
+        theme.set(class, color);
+    }
+    return theme;
 }
+
+/// `default_theme`'s colors, in the order its stylesheet lists them.
+global DEFAULT_COLORS: List<[String, String]> = [
+    ["comment", "#8b949e"],
+    ["string", "#a5d6ff"],
+    ["number", "#79c0ff"],
+    ["boolean", "#79c0ff"],
+    ["constant", "#79c0ff"],
+    ["constant.builtin", "#79c0ff"],
+    ["keyword", "#ff7b72"],
+    ["function", "#d2a8ff"],
+    ["type", "#ffa657"],
+    ["variable", "#c9d1d9"],
+    ["property", "#79c0ff"],
+    ["operator", "#ff7b72"],
+    ["punctuation", "#c9d1d9"],
+];

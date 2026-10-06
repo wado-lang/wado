@@ -1,7 +1,7 @@
-use { HashSet, HashSeed } from "core:collections";
+use { HashSet } from "core:collections";
 
 test "a set iterates in insertion order" {
-    let mut set = HashSet::<String>::new(HashSeed::fixed(1, 2));
+    let mut set = HashSet::<String>::new();
     assert set.insert("c");
     assert set.insert("a");
     assert !set.insert("c");
@@ -19,8 +19,20 @@ test "a set iterates in insertion order" {
     assert set.len() == 3;
 }
 
+test "contains_str finds a String element by a view of its text" {
+    let mut set = HashSet::<String>::new();
+    set.insert("alpha");
+    set.insert("beta");
+    let text = "xbetax";
+    assert set.contains_str(text.as_str_slice().slice(1, 5));
+    assert set.contains_str("alpha");
+    assert !set.contains_str("gamma");
+    set.remove("beta");
+    assert !set.contains_str("beta");
+}
+
 test "clear empties the set" {
-    let mut set = HashSet::<i32>::new(HashSeed::fixed(1, 2));
+    let mut set = HashSet::<i32>::new();
     assert set.insert(1);
     set.clear();
     assert set.is_empty();

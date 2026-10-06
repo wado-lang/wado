@@ -2420,7 +2420,7 @@ impl<'a> Unparser<'a> {
                 }
                 self.output.push_str("{ ");
                 self.comma_sep(fields, |s, field| {
-                    let bare_name = is_bare_field_name(&field.field_name);
+                    let bare_name = is_valid_ident(&field.field_name);
                     s.output.push_str(&format_field_name(&field.field_name));
                     let is_shorthand = bare_name
                         && matches!(&field.pattern, Pattern::Ident { name: n, .. } if n == &field.field_name);
@@ -3393,22 +3393,11 @@ fn needs_parens(expr: &Expr, parent_op: BinaryOp, is_left: bool) -> bool {
     }
 }
 
-/// Returns true if `name` can be emitted as a bare identifier or keyword in a
-/// struct-literal / struct-pattern field position. Otherwise the field name
-/// must be rendered as a quoted string literal (for JSON compatibility).
-fn is_bare_field_name(name: &str) -> bool {
-    let mut chars = name.chars();
-    match chars.next() {
-        Some(c) if c.is_ascii_alphabetic() || c == '_' => {}
-        _ => return false,
-    }
-    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
-}
-
-/// Emit a struct-literal / struct-pattern field name, wrapping it in a string
-/// literal if it is not a valid bare identifier.
+/// Emit a struct-literal / struct-pattern field name. A name spelled as an
+/// identifier, a keyword included, stays bare; any other is quoted, as JSON
+/// compatibility allows.
 fn format_field_name(name: &str) -> String {
-    if is_bare_field_name(name) {
+    if is_valid_ident(name) {
         name.to_string()
     } else {
         quoted(name)
@@ -3906,7 +3895,7 @@ fn unparse_pattern_into(pattern: &Pattern, output: &mut String) {
             }
             output.push_str("{ ");
             comma_sep_into(fields, output, |field, o| {
-                let bare_name = is_bare_field_name(&field.field_name);
+                let bare_name = is_valid_ident(&field.field_name);
                 o.push_str(&format_field_name(&field.field_name));
                 let is_shorthand = bare_name
                     && matches!(&field.pattern, Pattern::Ident { name: n, .. } if n == &field.field_name);

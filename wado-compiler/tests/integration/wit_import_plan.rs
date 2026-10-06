@@ -9,14 +9,14 @@
 use std::collections::BTreeSet;
 
 use crate::common::block_on;
-use crate::common::{FilesystemHost, InMemoryHost};
+use crate::common::{StubHost, in_memory_host};
 use wado_compiler::{
     CompilerOptions, OptLevel, compile_with_host, compile_with_options, dump_with_host_and_world,
 };
 
 /// The plan: `WirPackage::world_surface.imports`, obtained from a dump.
 fn plan_imports(source: &str) -> BTreeSet<String> {
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let dump = block_on(dump_with_host_and_world(
         source,
         &host,
@@ -37,7 +37,7 @@ fn plan_imports(source: &str) -> BTreeSet<String> {
 /// The ground truth: CM interface FQs the compiled component actually imports,
 /// scraped from the printed WAT.
 fn actual_imports(source: &str) -> BTreeSet<String> {
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let result = block_on(compile_with_host(
         source,
         &host,
@@ -68,7 +68,7 @@ fn actual_imports(source: &str) -> BTreeSet<String> {
 }
 
 fn read_corpus(rel: &str) -> String {
-    let path = format!("{}/../{rel}", env!("CARGO_MANIFEST_DIR"));
+    let path = format!("{}/../../{rel}", env!("CARGO_MANIFEST_DIR"));
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {path}: {e}"))
 }
 
@@ -133,7 +133,7 @@ fn plan_matches_component_for_http_service_with_resources() {
     let world = "wasi:http/service";
 
     let plan: BTreeSet<String> = {
-        let host = InMemoryHost::new();
+        let host = in_memory_host(&[]);
         let dump = block_on(dump_with_host_and_world(
             &source,
             &host,
@@ -157,7 +157,7 @@ fn plan_matches_component_for_http_service_with_resources() {
     };
 
     let actual: BTreeSet<String> = {
-        let host = InMemoryHost::new();
+        let host = in_memory_host(&[]);
         let options = CompilerOptions {
             target_world: Some(world.to_string()),
             ..Default::default()
@@ -211,10 +211,10 @@ fn plan_excludes_type_alias_only_clock_types() {
 /// against the filesystem and return `(plan, actual)`: the type-level import
 /// plan and the composed binary's real imports.
 fn component_plan_and_actual(source: &str) -> (BTreeSet<String>, BTreeSet<String>) {
-    let base = std::path::PathBuf::from(format!("{}/tests/fixtures", env!("CARGO_MANIFEST_DIR")));
+    let base = std::path::PathBuf::from(format!("{}/fixtures", env!("CARGO_MANIFEST_DIR")));
 
     let plan: BTreeSet<String> = {
-        let host = FilesystemHost::new(base.clone());
+        let host = StubHost::new(base.clone());
         let dump = block_on(dump_with_host_and_world(
             source,
             &host,
@@ -238,7 +238,7 @@ fn component_plan_and_actual(source: &str) -> (BTreeSet<String>, BTreeSet<String
     };
 
     let actual: BTreeSet<String> = {
-        let host = FilesystemHost::new(base);
+        let host = StubHost::new(base);
         let result = block_on(compile_with_host(
             source,
             &host,

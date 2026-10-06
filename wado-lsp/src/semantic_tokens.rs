@@ -828,13 +828,13 @@ fn calls(tokens: &[Token], index: usize) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::MapHost;
+    use crate::test_support::in_memory_host;
     use crate::text::line_without_terminator;
 
     /// Build a `Semantics` snapshot for `source` so the semantic
     /// classification path can be exercised in unit tests.
     fn sem_of(source: &str) -> Semantics {
-        let host = MapHost::single("/test.wado", source);
+        let host = in_memory_host(&[("/test.wado", source)]);
         futures::executor::block_on(wado_compiler::semantics(source, &host, Some("/test.wado")))
     }
 

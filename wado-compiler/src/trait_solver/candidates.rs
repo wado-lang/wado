@@ -370,7 +370,6 @@ mod tests {
             WRAPPER,
             TypeDef {
                 newtype_base: Some(decl(POINT)),
-                ..TypeDef::default()
             },
         );
         let found = ask(&p, &ref_to(decl(WRAPPER)));
@@ -408,7 +407,6 @@ mod tests {
             WRAPPER,
             TypeDef {
                 newtype_base: Some(decl(POINT)),
-                ..TypeDef::default()
             },
         );
         let found = ask(&p, &decl(WRAPPER));
@@ -454,7 +452,6 @@ mod tests {
             WRAPPER,
             TypeDef {
                 newtype_base: Some(decl(POINT)),
-                ..TypeDef::default()
             },
         );
         assert_eq!(selected(&ask(&p, &decl(WRAPPER))), Some(ImplId(1)));
@@ -476,7 +473,6 @@ mod tests {
             WRAPPER,
             TypeDef {
                 newtype_base: Some(decl(POINT)),
-                ..TypeDef::default()
             },
         );
         let found = ask(&p, &decl(WRAPPER));
@@ -722,7 +718,6 @@ mod tests {
             WRAPPER,
             TypeDef {
                 newtype_base: Some(decl(WRAPPER)),
-                ..TypeDef::default()
             },
         );
         assert_eq!(ask(&p, &decl(WRAPPER)), Candidates::default());

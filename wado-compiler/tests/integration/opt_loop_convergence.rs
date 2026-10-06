@@ -3,7 +3,7 @@
 
 use std::fmt::Write as _;
 
-use crate::common::{InMemoryHost, runtime};
+use crate::common::{in_memory_host, runtime};
 use wado_compiler::{Code, CompilerOptions, LogLevel, OptLevel, Severity};
 
 const SOURCE: &str = r#"
@@ -105,7 +105,7 @@ fn debug_log_of(
     opt_level: OptLevel,
     opt_iterations: Option<u32>,
 ) -> Vec<(Code, String)> {
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let options = CompilerOptions {
         opt_level,
         opt: wado_compiler::OptOverrides {

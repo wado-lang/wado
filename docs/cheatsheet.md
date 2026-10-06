@@ -203,7 +203,10 @@ fn example() {
 
 An initializer cannot perform effects: calling a function that declares one, or
 dispatching an operation, is a compile error. It may install its own handler,
-whose body may then dispatch that handler's operations.
+whose body may then dispatch that handler's operations, and
+`#[benign(E, …)]` on the global admits the effects it lists. Whether an
+initializer runs at all is unspecified; it runs at most once, before the first
+read.
 
 ## Types
 
@@ -519,7 +522,7 @@ variant Maybe<T> {
 }
 
 // Option and Result are defined as variants in core:prelude
-// pub variant Option<T> { Some(T), None }
+// pub variant Option<T> { None, Some(T) }
 // pub variant Result<T, E> { Ok(T), Err(E) }
 
 // Construction
@@ -1801,6 +1804,7 @@ for let [k, v] of map.entries() { println(`${k}=${v}`); }
 let sizes = { small: 1, large: 3 } as TreeMap<String, i32>;
 let set = ["foo", "bar", "baz"] as TreeSet<String>;
 set.contains("foo");          // -> bool; set.insert(x) -> bool
+set.contains_str(view);       // String set: test a view, no copy
 ```
 
 ### core:serde

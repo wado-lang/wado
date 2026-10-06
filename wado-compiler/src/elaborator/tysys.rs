@@ -501,6 +501,7 @@ impl TypeSystem {
             ResolvedType::Struct { .. }
                 | ResolvedType::Variant { .. }
                 | ResolvedType::Enum { .. }
+                | ResolvedType::Flags { .. }
                 | ResolvedType::GenericInstance { .. }
         )
     }

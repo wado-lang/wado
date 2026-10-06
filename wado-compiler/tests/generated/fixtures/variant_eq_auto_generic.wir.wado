@@ -12,8 +12,8 @@ struct core:prelude/string.wado//String {  // TypeId(2)
 }
 
 variant core:prelude/types.wado//Option<i32> {  // TypeId(3)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(4)
@@ -115,12 +115,16 @@ fn "variant_eq_auto_generic.wado/run"() with Stdout {
     $mv_arg_2 = global:variant_eq_auto_generic.wado::$const_obj_1;
     "core:rt/write_string_to_stream"(tx_19, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_18);
-    if let $match_scrut_0: ref "core:prelude/types.wado//Option<i32>"; (if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $match_scrut_0(struct.new "core:prelude/types.wado//Option<i32>" { 1 })) -> bool {
-        rx_18 = ref.cast "core:prelude/types.wado//Option<i32>::Some"($match_scrut_0).payload_0;
-        10 == rx_18;
-    } else {
-        0;
-    }) == 0 {
+    if $inline_core_prelude_types_wado_Option_i32__core_prelude_traits_wado_Eq__eq_scalar_31: block -> bool {
+        let $match_scrut_0: ref "core:prelude/types.wado//Option<i32>";
+        if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $match_scrut_0(struct.new "core:prelude/types.wado//Option<i32>" { 0 })) {
+            rx_18 = ref.cast "core:prelude/types.wado//Option<i32>::Some"($match_scrut_0).payload_0;
+            break $inline_core_prelude_types_wado_Option_i32__core_prelude_traits_wado_Eq__eq_scalar_31: 10 == rx_18;
+        } else {
+            break $inline_core_prelude_types_wado_Option_i32__core_prelude_traits_wado_Eq__eq_scalar_31: 0;
+        }
+        unreachable;
+    } == 0 {
         rx_18 = builtin::i32_wrap_i64(local.tee packed_17("wasi/stream-new"()));
         tx_19 = builtin::i32_wrap_i64(packed_17 >> 32_i64);
         rx_18 = "variant_eq_auto_generic.wado/$cm_binding__Stdout_write_via_stream"(rx_18);

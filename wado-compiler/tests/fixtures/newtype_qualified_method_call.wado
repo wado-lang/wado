@@ -1,0 +1,37 @@
+// A method inherited through a newtype takes the newtype wherever its signature
+// names the base, spelled qualified (`Loc::same(&a, &b)`) as with a dot.
+
+struct Point { x: i32 }
+
+impl Point {
+    fn same(&self, other: &Point) -> bool { return self.x == other.x; }
+}
+
+type Loc = Point;
+type Spot = Loc;
+
+test "a written method" {
+    let a: Loc = { x: 1 };
+    let b: Loc = { x: 1 };
+    assert Loc::same(&a, &b);
+}
+
+test "a derived method" {
+    let a: Loc = { x: 1 };
+    let b: Loc = { x: 2 };
+    assert !Loc::eq(&a, &b);
+    assert Loc::cmp(&a, &b) matches { Less };
+}
+
+type Count = i32;
+
+test "a primitive's trait method" {
+    let a: Count = 1;
+    let b: Count = 2;
+    assert Count::cmp(&a, &b) matches { Less };
+}
+
+test "through a chain of newtypes" {
+    let a: Spot = { x: 3 };
+    assert Spot::same(&a, &a) && Spot::eq(&a, &a);
+}

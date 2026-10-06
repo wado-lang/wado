@@ -14,6 +14,7 @@ use {
     data_type,
     element_of,
     is_binary_elementwise,
+    is_unary_operator,
     trailing_axes,
 } from "./graph.wado";
 use { fill_of } from "./fold.wado";
@@ -103,8 +104,9 @@ impl Error for EmitError {
 }
 
 /// The generated module's source. Every axis the graph mentions becomes a
-/// marker type, so two tensors sharing an axis share one type.
-pub fn emit(graph: &Graph, checked: &Checked) -> Result<String, EmitError> {
+/// marker type, so two tensors sharing an axis share one type. `webgpu` inlines
+/// the WebGPU backend beside `Cpu`.
+pub fn emit(graph: &Graph, checked: &Checked, webgpu: bool = false) -> Result<String, EmitError> {
     let shapes = &checked.shapes;
     if graph.outputs.is_empty() {
         builtin::cold_path();
@@ -136,6 +138,9 @@ pub fn emit(graph: &Graph, checked: &Checked) -> Result<String, EmitError> {
     w.raw(&RUNTIME);
     if loads_weights(graph) {
         w.raw(&CHECKPOINT_RUNTIME);
+    }
+    if webgpu {
+        w.raw(&WEBGPU_RUNTIME);
     }
     w.raw(&GRAPH_BANNER);
 
@@ -304,6 +309,9 @@ global RUNTIME: String = #include_str("./runtime/tensor.wado");
 /// leaves a weight to a checkpoint.
 global CHECKPOINT_RUNTIME: String = #include_str("./runtime/checkpoint.wado");
 
+/// The WebGPU backend, inlined where the `webgpu` option asks.
+global WEBGPU_RUNTIME: String = inlined_webgpu(&#include_str("./runtime/webgpu.wado"));
+
 /// Where the inlined runtime ends and this graph's own code begins. A reader
 /// needs the line, and a test asserting a kernel is absent needs the boundary.
 internal global GRAPH_BANNER: String = `
@@ -317,10 +325,11 @@ fn is_bound(module: &TreeSet<String>, name: &String) -> bool {
 
 /// The names the generated module binds beyond the language's own. The
 /// runtime's are read out of the runtime, so a new kernel cannot be missed, and
-/// the checkpoint reader's are bound whether or not a graph inlines it.
+/// the checkpoint reader's and the WebGPU backend's are bound whether or not a
+/// module inlines them.
 fn module_idents() -> TreeSet<String> {
     let mut reserved = TreeSet::<String>::new();
-    for let source of [&RUNTIME, &CHECKPOINT_RUNTIME] {
+    for let source of [&RUNTIME, &CHECKPOINT_RUNTIME, &WEBGPU_RUNTIME] {
         for let name of declared_in(source) {
             reserved.insert(name);
         }
@@ -329,8 +338,13 @@ fn module_idents() -> TreeSet<String> {
     reserved.insert("Outputs");
     reserved.insert("weights");
     reserved.insert("Weights");
+    reserved.insert("backend");
+    reserved.insert(BACKEND_PARAM);
     return reserved;
 }
+
+/// The type parameter `forward` takes its backend as.
+global BACKEND_PARAM: String = "Bk";
 
 /// Every keyword a Wado declaration can open with. An `impl` is left out: it
 /// declares no name of its own, and its methods are reached through a type.
@@ -346,13 +360,8 @@ global VISIBILITY_PREFIXES: List<String> = ["pub ", "internal "];
 /// the runtime is written in: a declaration or a `use` at column zero.
 fn declared_in(source: &String) -> List<String> {
     let mut names: List<String> = [];
-    for let line of source.lines() {
-        let mut declaration = line.as_str_slice();
-        for let prefix of VISIBILITY_PREFIXES {
-            if let Some(rest) = declaration.strip_prefix(prefix) {
-                declaration = rest;
-            }
-        }
+    for let line of joined_uses(source) {
+        let declaration = unqualified(line.as_str_slice());
         if let Some(clause) = declaration.strip_prefix("use ") {
             names.extend(&imported_names(&clause.to_string()));
             continue;
@@ -379,10 +388,57 @@ test "a use line binds its names, whatever its visibility" {
     assert declared_in(&source) == ["ns", "A", "C", "D"] as List<String>;
 }
 
+/// `line` without the visibility it opens with.
+fn unqualified(line: StrSlice) -> StrSlice {
+    let mut rest = line;
+    for let prefix of VISIBILITY_PREFIXES {
+        if let Some(after) = rest.strip_prefix(prefix) {
+            rest = after;
+        }
+    }
+    return rest;
+}
+
+test "a use the formatter wrapped binds its names as one line does" {
+    let source = "use {\n    A,\n    B as C,\n} from \"b\";\npub use {\n    D,\n} from \"c\";\nfn f() {}\n";
+    assert declared_in(&source) == ["A", "C", "D", "f"] as List<String>;
+}
+
+/// The lines of `source`, each `use` the formatter wrapped joined into one.
+fn joined_uses(source: &String) -> List<String> {
+    let mut lines: List<String> = [];
+    let mut open = "";
+    for let line of source.lines() {
+        if !open.is_empty() {
+            open.push_str(" ");
+            open.push_str(&line.trim().to_string());
+            if line.ends_with(";") {
+                lines.push(open);
+                open = "";
+            }
+        } else if unqualified(line.as_str_slice()).starts_with("use ") && !line.ends_with(";") {
+            open = line.to_string();
+        } else {
+            lines.push(line.to_string());
+        }
+    }
+    assert open.is_empty();
+    return lines;
+}
+
+/// The WebGPU backend as a module inlines it: the tensor runtime it reads is
+/// inlined beside it, so its import of that goes.
+fn inlined_webgpu(source: &String) -> String {
+    let lines: List<String> = joined_uses(source).into_iter().filter(|line| !line.ends_with(
+        "from \"./tensor.wado\";",
+    )).collect();
+    return lines.join("\n");
+}
+
 /// The names a `use` clause binds: its namespace, or each item under its alias.
 fn imported_names(clause: &String) -> List<String> {
     let Some([bound, _]) = clause.split_once(" from ") else {
-        panic(`an inlined runtime's import is one line: use ${clause}`);
+        unreachable();
     };
     let mut names: List<String> = [];
     let mut aliased = false;
@@ -493,12 +549,10 @@ fn checkpoint_payload(e: &Expected) -> String {
     )}], extents: ${e.extents}, elements: ${e.elements}, width: ${e.width} })?`;
 }
 
-/// What each tensor is called inside `forward`. A graph input arrives as a
-/// reference and everything else as a value.
+/// What each tensor is called inside `forward`, each a value the backend holds.
 struct Operands {
     values: TreeMap<String, String>,
-    already_reference: TreeSet<String>,
-    /// A folded float of one element, as the literal a closure folds in.
+    /// A folded float of one element, as the constant an `Expr` folds in.
     scalars: TreeMap<String, String>,
 }
 
@@ -631,19 +685,11 @@ fn symbol_carriers(graph: &Graph, shapes: &TreeMap<String, Shape>) -> List<Carri
 
 impl Operands {
     fn reference(&self, tensor: &String) -> String {
-        let value = self.values.get(*tensor).unwrap();
-        if self.already_reference.contains(*tensor) {
-            return value;
-        }
-        return `&${value}`;
+        return `&${self.value(tensor)}`;
     }
 
     fn value(&self, tensor: &String) -> String {
-        let value = self.values.get(*tensor).unwrap();
-        if self.already_reference.contains(*tensor) {
-            return `*${value}`;
-        }
-        return value;
+        return self.values.get(*tensor).unwrap();
     }
 }
 
@@ -661,32 +707,38 @@ fn emit_forward(
     let shapes = &checked.shapes;
     let mut exprs = Operands {
         values: TreeMap::<String, String>::new(),
-        already_reference: TreeSet::<String>::new(),
         scalars,
     };
     let mut forward = FnSpec::new("forward", Vis::Pub);
+    forward.add_generic(`${BACKEND_PARAM}: Backend`).add_param("backend", `&mut ${BACKEND_PARAM}`);
     let mut widened: List<String> = [];
+    // Each input and weight on the host, as the backend then holds it. The
+    // checks and the symbols read the host's, so the upload comes after them.
+    let mut uploads: List<String> = [];
     for let vi of &graph.inputs {
         let ident = names.get(&vi.name);
         forward.add_param(ident, `&${tensor_type(checked, held, &vi.name)}`);
-        exprs.values[vi.name] = ident;
-        exprs.already_reference.insert(vi.name);
         if converted(checked, held, &vi.name) {
             widened.push(`let ${ident} = widen(${ident});`);
-            exprs.already_reference.remove(vi.name);
+            uploads.push(`let ${ident} = backend.upload(&${ident});`);
+        } else {
+            uploads.push(`let ${ident} = backend.upload(${ident});`);
         }
+        exprs.values[vi.name] = ident;
     }
     for let vi of &graph.initializers {
         let ident = names.get(&vi.name);
-        exprs.values[vi.name] = `weights.${ident}`;
         if converted(checked, held, &vi.name) {
             widened.push(`let ${ident} = widen(&weights.${ident});`);
-            exprs.values[vi.name] = ident;
+            uploads.push(`let ${ident} = backend.upload(&${ident});`);
+        } else {
+            uploads.push(`let ${ident} = backend.upload(&weights.${ident});`);
         }
+        exprs.values[vi.name] = ident;
     }
     let several = graph.outputs.len() > 1;
     let returned_type = if several { "Outputs" } else { tensor_type(checked, held, &graph.outputs[0].name) };
-    forward.add_param("weights", "&Weights").set_return_type(returned_type);
+    forward.add_param("weights", "&Weights").set_return_type(returned_type).add_effect("_");
 
     if several {
         emit_outputs(w, graph, checked, names, held);
@@ -708,23 +760,21 @@ fn emit_forward(
         );
     }
     owed.extend(&owed_checks(checked, &mut symbols)?);
-    for let lines of [symbols.bindings(), owed, body] as List<List<String>> {
+    for let lines of [symbols.bindings(), owed, uploads, body] as List<List<String>> {
         for let line of lines {
             w.line(&line);
         }
     }
-    let returned: List<String> = graph.outputs.into_iter().map(|vi| if converted(checked, held, &vi.name) {
-        `narrow(${exprs.reference(&vi.name)})`;
-    } else {
-        exprs.value(&vi.name);
+    let returned: List<String> = graph.outputs.into_iter().map(|vi| {
+        let downloaded = `backend.download(${exprs.reference(&vi.name)})`;
+        return if converted(checked, held, &vi.name) { `narrow(&${downloaded})` } else { downloaded };
     }).collect();
     if !several {
         w.line(`return ${returned[0]};`);
     } else {
         let mut fields: List<String> = [];
         for let [i, value] of returned.into_iter().enumerate() {
-            let field = names.get(&graph.outputs[i].name);
-            fields.push(if value == field { value } else { `${field}: ${value}` });
+            fields.push(`${names.get(&graph.outputs[i].name)}: ${value}`);
         }
         w.line(`return Outputs { ${fields.join(", ")} };`);
     }
@@ -773,9 +823,6 @@ fn scope_body(
         if is_alias(node, checked) {
             let source = node.inputs[0];
             exprs.values[produced] = exprs.values.get(source).unwrap();
-            if exprs.already_reference.contains(source) {
-                exprs.already_reference.insert(produced);
-            }
             continue;
         }
         if node.op == "If" {
@@ -810,7 +857,9 @@ fn branch_block(
     let [then_scope, else_scope] = checked.branches[node.outputs[0]];
     let outputs: List<String> = node.outputs.into_iter().map(|o| names.get(&o)).collect();
     let bound = if outputs.len() == 1 { outputs[0] } else { `[${outputs.join(", ")}]` };
-    let mut lines: List<String> = [`let ${bound} = if ${exprs.values[node.inputs[0]]}.data[0] {`];
+    // The condition is read on the host, which on a GPU is a synchronization.
+    let condition = `backend.download(${exprs.reference(&node.inputs[0])}).data[0]`;
+    let mut lines: List<String> = [`let ${bound} = if ${condition} {`];
     lines.extend(&indented(branch_lines(node, "then_branch", &then_scope, checked, names, exprs, symbols)?));
     lines.push("} else {");
     lines.extend(&indented(branch_lines(node, "else_branch", &else_scope, checked, names, exprs, symbols)?));
@@ -834,7 +883,6 @@ fn branch_lines(
     let graph = subgraph(node, attr);
     let mut inner = Operands {
         values: exprs.values,
-        already_reference: exprs.already_reference,
         scalars: scalar_literals(branch),
     };
     for let [tensor, _] of exprs.values.entries() {
@@ -846,7 +894,6 @@ fn branch_lines(
         };
         if axis_list(&from) != axis_list(&to) {
             inner.values[*tensor] = relabeled(&around.primitives[*tensor], &from, &to, &exprs.reference(tensor));
-            inner.already_reference.remove(*tensor);
         }
     }
     let literals = literal_tensors(&graph, branch, &inner.scalars);
@@ -868,7 +915,7 @@ fn branch_lines(
 
 /// The tensor `operand` refers to, of axes `from`, as one of axes `to`.
 fn relabeled(element: &String, from: &Shape, to: &Shape, operand: &String) -> String {
-    return `lift::<${*element}, [${axis_list(from)}], [${axis_list(to)}]>(${*operand}, ${to.rank()})`;
+    return `backend.lift::<${*element}, [${axis_list(from)}], [${axis_list(to)}]>(${*operand}, ${to.rank()})`;
 }
 
 fn indented(lines: List<String>) -> List<String> {
@@ -886,7 +933,7 @@ fn emit_outputs(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Na
     outputs.emit(w);
 }
 
-/// Every folded float of one element, as the literal a closure folds in.
+/// Every folded float of one element, as the literal an `Expr` folds in.
 fn scalar_literals(checked: &Checked) -> TreeMap<String, String> {
     let mut scalars = TreeMap::<String, String>::new();
     for let [name, k] of checked.known.entries() {
@@ -907,7 +954,7 @@ struct Literals {
 }
 
 /// The folded tensors something reads as a tensor: all a kernel reads or the
-/// graph returns, save a scalar a closure folds.
+/// graph returns, save a scalar an `Expr` folds.
 fn literal_tensors(graph: &Graph, checked: &Checked, scalars: &TreeMap<String, String>) -> Literals {
     let mut sources = TreeMap::<String, String>::new();
     for let node of &graph.nodes {
@@ -937,7 +984,7 @@ fn literal_tensors(graph: &Graph, checked: &Checked, scalars: &TreeMap<String, S
     return literals;
 }
 
-/// Whether a folded scalar is returned, or read where no closure folds it.
+/// Whether a folded scalar is returned, or read where no `Expr` folds it.
 fn read_as_tensor(graph: &Graph, checked: &Checked, scalars: &TreeMap<String, String>, scalar: &String) -> bool {
     if graph.outputs.position(|vi| vi.name == *scalar) matches { Some(_) } {
         return true;
@@ -984,7 +1031,9 @@ fn literal_tensor(checked: &Checked, tensor: &String, symbols: &mut Symbols) -> 
     };
     let element = checked.primitives.get(*tensor).unwrap();
     return Result::Ok(
-        `Tensor::<${element}, [${axis_list(&shape)}]> { data: ${data}, extents: ${symbols.spell_shape(&shape)?} }`,
+        `backend.upload(&Tensor::<${element}, [${axis_list(&shape)}]> { data: ${data}, extents: ${symbols.spell_shape(
+            &shape,
+        )?} })`,
     );
 }
 
@@ -1114,14 +1163,14 @@ fn node_call(
         let element = checked.primitives.get(node.outputs[0]).unwrap();
         let value = element_literal(&fill_of(node).unwrap().elements);
         return Result::Ok(
-            `filled::<${element}, [${axis_list(&out)}]>(${symbols.spell_shape(&out)?}, ${value})`,
+            `backend.filled::<${element}, [${axis_list(&out)}]>(${symbols.spell_shape(&out)?}, ${value})`,
         );
     }
     if op == "Range" {
         let [start, _, delta] = settled(range_bounds(node, &checked.known));
         let axis = shapes.get(node.outputs[0]).unwrap().axes[0];
         return Result::Ok(
-            `range_i64::<${axis.name}>(${symbols.spell(&start)?}, ${symbols.spell_extent(&axis.extent.poly())?}, ${symbols.spell(
+            `backend.range_i64::<${axis.name}>(${symbols.spell(&start)?}, ${symbols.spell_extent(&axis.extent.poly())?}, ${symbols.spell(
                 &delta,
             )?})`,
         );
@@ -1129,7 +1178,8 @@ fn node_call(
     if op == "Cast" {
         let from = checked.primitives.get(node.inputs[0]).unwrap();
         let to = checked.primitives.get(node.outputs[0]).unwrap();
-        return Result::Ok(`map(${exprs.reference(&node.inputs[0])}, |v| ${cast_body(&from, &to)})`);
+        let axes = axis_list(&shapes.get(node.inputs[0]).unwrap());
+        return Result::Ok(`backend.cast::<${from}, ${to}, [${axes}]>(${exprs.reference(&node.inputs[0])})`);
     }
     if op == "Gather" {
         let data = shapes.get(node.inputs[0]).unwrap();
@@ -1137,14 +1187,14 @@ fn node_call(
         let operand = exprs.reference(&node.inputs[0]);
         let indices = exprs.reference(&node.inputs[1]);
         if axis == 0 {
-            return Result::Ok(`gather_rows(${operand}, ${indices})`);
+            return Result::Ok(`backend.gather_rows(${operand}, ${indices})`);
         }
         let element = checked.primitives.get(node.inputs[0]).unwrap();
         let pre = axis_run(&data, 0, axis);
         let post = axis_run(&data, axis + 1, data.rank());
         let index_axes = axis_list(&shapes.get(node.inputs[1]).unwrap());
         let turbofish = `::<${element}, [${pre}], ${data.axes[axis].name}, [${post}], [${index_axes}]>`;
-        return Result::Ok(`gather${turbofish}(${operand}, ${indices}, ${axis})`);
+        return Result::Ok(`backend.gather${turbofish}(${operand}, ${indices}, ${axis})`);
     }
     if op == "MaxPool" || op == "Conv" {
         return window_call(node, shapes, exprs, symbols);
@@ -1167,12 +1217,12 @@ fn node_call(
             let element = checked.primitives.get(tensor).unwrap();
             operands.push(under_axes_of(&exprs.reference(&tensor), &shape, &out, &element));
         }
-        return Result::Ok(`select(${operands.join(", ")})`);
+        return Result::Ok(`backend.select(${operands.join(", ")})`);
     }
     if op == "Softmax" {
         let lane = settled(softmax_lane(node, shapes.get(node.inputs[0]).unwrap().rank(), opset));
         let kernel = if lane.flattened { "softmax_flattened" } else { "softmax" };
-        return Result::Ok(`${kernel}(${exprs.reference(&node.inputs[0])}, ${lane.axis})`);
+        return Result::Ok(`backend.${kernel}(${exprs.reference(&node.inputs[0])}, ${lane.axis})`);
     }
     if is_reduction(&op) {
         return reduction_call(node, checked, exprs, symbols);
@@ -1190,13 +1240,13 @@ fn node_call(
         let a = exprs.reference(&node.inputs[0]);
         let element = checked.primitives.get(node.inputs[0]).unwrap();
         let to = shapes.get(node.outputs[0]).unwrap();
-        return Result::Ok(`permute::<${element}, [${axis_list(&shape)}], [${axis_list(&to)}]>(${a}, ${perm})`);
+        return Result::Ok(`backend.permute::<${element}, [${axis_list(&shape)}], [${axis_list(&to)}]>(${a}, ${perm})`);
     }
-    let Some(body) = unary_body(&op) else {
+    let Some(body) = unary_expr(&op) else {
         // Stage 0 refuses every operator the kernels lack.
         unreachable();
     };
-    return Result::Ok(`map(${exprs.reference(&node.inputs[0])}, |v| ${body})`);
+    return Result::Ok(`backend.map(${exprs.reference(&node.inputs[0])}, &${body})`);
 }
 
 /// A `Split` as one `slice_axis` per output, each cutting the next run.
@@ -1271,7 +1321,7 @@ fn concat_call(node: &Node, checked: &Checked, exprs: &Operands) -> String {
     for let input of node.inputs[1..<node.inputs.len()].to_list() {
         let right_axis = shapes.get(input).unwrap().axes[axis].name;
         let turbofish = `::<${element}, [${pre}], ${left_axis}, ${right_axis}, ${joined}, [${post}]>`;
-        call = `concat${turbofish}(${left}, ${exprs.reference(&input)}, ${axis})`;
+        call = `backend.concat${turbofish}(${left}, ${exprs.reference(&input)}, ${axis})`;
         left = `&${call}`;
         left_axis = joined;
     }
@@ -1295,7 +1345,7 @@ fn slice_axis_call(
         axis + 1,
         shape.rank(),
     )}]>`;
-    return `slice_axis${turbofish}(${*operand}, ${axis}, ${start}, ${length}, ${step})`;
+    return `backend.slice_axis${turbofish}(${*operand}, ${axis}, ${start}, ${length}, ${step})`;
 }
 
 /// `operand`, whose axes are `node`'s first input's, laid out as `node`'s output.
@@ -1304,7 +1354,9 @@ fn reshaped(node: &Node, checked: &Checked, operand: &String, symbols: &mut Symb
     let from = checked.shapes.get(node.inputs[0]).unwrap();
     let to = checked.shapes.get(node.outputs[0]).unwrap();
     let extents = symbols.spell_shape(&to)?;
-    return Result::Ok(`reshape::<${element}, [${axis_list(&from)}], [${axis_list(&to)}]>(${operand}, ${extents})`);
+    return Result::Ok(
+        `backend.reshape::<${element}, [${axis_list(&from)}], [${axis_list(&to)}]>(${operand}, ${extents})`,
+    );
 }
 
 /// A `ReduceMean` or `ReduceSum`. The kernels keep each reduced axis at
@@ -1314,9 +1366,9 @@ fn reduction_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mu
     let axes = settled(reduced_axes(node, &checked.known, x.rank()));
     let a = exprs.reference(&node.inputs[0]);
     let kept = if node.op == "ReduceMean" {
-        `reduce_mean(${a}, ${axes})`;
+        `backend.reduce_mean(${a}, ${axes})`;
     } else {
-        `reduce(${a}, ${axes}, 0.0, |x, y| x + y)`;
+        `backend.reduce_sum(${a}, ${axes})`;
     };
     if checked.shapes.get(node.outputs[0]).unwrap().rank() == x.rank() {
         return Result::Ok(kept);
@@ -1324,8 +1376,8 @@ fn reduction_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mu
     return reshaped(node, checked, &`&${kept}`, symbols);
 }
 
-/// The literal operand `index` folds into a closure as: a `Gemm` bias, or an
-/// arithmetic operand whose partner is a tensor. The closure maps over the
+/// The literal operand `index` folds into an `Expr` as: a `Gemm` bias, or an
+/// arithmetic operand whose partner is a tensor. The `Expr` maps over the
 /// partner, so the output must carry the partner's axes: a scalar of higher
 /// rank widens it, and an axis of 1 the scalar names apart renames it. `None`
 /// reads it as a tensor.
@@ -1361,20 +1413,21 @@ fn binary_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -
     ];
 }
 
-/// One binary elementwise node. A folded scalar operand folds into the closure,
-/// so no tensor is allocated for it and the other operand is walked once.
+/// One binary elementwise node. A folded scalar operand folds into the
+/// operator, so no tensor is allocated for it and the other operand is walked
+/// once.
 fn binary_node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> Result<String, EmitError> {
     let op = node.op;
     if let Some(literal) = folded_literal(node, 1, &exprs.scalars, shapes) {
-        let body = binary_body(&op, &"v", &literal);
-        return Result::Ok(`map(${exprs.reference(&node.inputs[0])}, |v| ${body})`);
+        let body = binary_expr(&op, &FIRST, &constant_expr(&literal));
+        return Result::Ok(`backend.map(${exprs.reference(&node.inputs[0])}, &${body})`);
     }
     if let Some(literal) = folded_literal(node, 0, &exprs.scalars, shapes) {
-        let body = binary_body(&op, &literal, &"v");
-        return Result::Ok(`map(${exprs.reference(&node.inputs[1])}, |v| ${body})`);
+        let body = binary_expr(&op, &constant_expr(&literal), &FIRST);
+        return Result::Ok(`backend.map(${exprs.reference(&node.inputs[1])}, &${body})`);
     }
     let [a, b, left, right] = binary_call(node, shapes, exprs);
-    let body = binary_body(&op, &"x", &"y");
+    let body = binary_expr(&op, &FIRST, &SECOND);
     let trailing = settled(trailing_axes(node, left.rank(), right.rank()));
     if trailing > 0 {
         return Result::Ok(aligned_call(&a, &b, &left, &right, trailing, &body));
@@ -1401,7 +1454,7 @@ fn window_call(
     let input = exprs.reference(&node.inputs[0]);
     if node.op == "MaxPool" {
         return Result::Ok(
-            `max_pool::<${x.axes[0].name}, ${x.axes[1].name}, [${spatial_axes(&x)}], [${spatial_axes(&y)}]>(${input}, ${geometry})`,
+            `backend.max_pool::<${x.axes[0].name}, ${x.axes[1].name}, [${spatial_axes(&x)}], [${spatial_axes(&y)}]>(${input}, ${geometry})`,
         );
     }
     let w = shapes.get(node.inputs[1]).unwrap();
@@ -1418,9 +1471,9 @@ fn window_call(
     let weight = exprs.reference(&node.inputs[1]);
     if has_bias(node) {
         let bias = exprs.reference(&node.inputs[2]);
-        return Result::Ok(`${biased}${turbofish}(${input}, ${weight}, ${bias}, ${grouping}${geometry})`);
+        return Result::Ok(`backend.${biased}${turbofish}(${input}, ${weight}, ${bias}, ${grouping}${geometry})`);
     }
-    return Result::Ok(`${kernel}${turbofish}(${input}, ${weight}, ${grouping}${geometry})`);
+    return Result::Ok(`backend.${kernel}${turbofish}(${input}, ${weight}, ${grouping}${geometry})`);
 }
 
 /// The axes past a shape's first two, which a window slides over.
@@ -1462,17 +1515,17 @@ fn elementwise_call(a: &String, b: &String, left: &Shape, right: &Shape, out: &S
     if !shared_axes_agree(left, right) {
         let x = under_axes_of(a, left, out, &KERNEL_ELEMENT);
         let y = under_axes_of(b, right, out, &KERNEL_ELEMENT);
-        return `zip(${x}, ${y}, |x, y| ${body})`;
+        return `backend.zip(${x}, ${y}, &${body})`;
     }
     if left.rank() == right.rank() {
-        return `zip(${a}, ${b}, |x, y| ${body})`;
+        return `backend.zip(${a}, ${b}, &${body})`;
     }
     if right.rank() < left.rank() {
         let turbofish = `::<[${axis_run(left, 0, left.rank() - right.rank())}], [${axis_list(right)}]>`;
-        return `zip_suffix${turbofish}(${a}, ${b}, |x, y| ${body})`;
+        return `backend.zip_suffix${turbofish}(${a}, ${b}, &${body})`;
     }
     let turbofish = `::<[${axis_run(right, 0, right.rank() - left.rank())}], [${axis_list(left)}]>`;
-    return `zip_suffix_lhs${turbofish}(${a}, ${b}, |x, y| ${body})`;
+    return `backend.zip_suffix_lhs${turbofish}(${a}, ${b}, &${body})`;
 }
 
 /// The kernel for arithmetic aligning B at the axis of A that `trailing` of A's
@@ -1483,7 +1536,7 @@ fn aligned_call(a: &String, b: &String, left: &Shape, right: &Shape, trailing: i
     let b_read = under_axes_of(b, right, &met, &KERNEL_ELEMENT);
     let after = axis_run(left, left.rank() - trailing, left.rank());
     let turbofish = `::<[${axis_run(left, 0, axis)}], [${axis_list(&met)}], [${after}]>`;
-    return `zip_at${turbofish}(${a}, ${b_read}, ${trailing}, |x, y| ${body})`;
+    return `backend.zip_at${turbofish}(${a}, ${b_read}, ${trailing}, &${body})`;
 }
 
 /// `operand` read under `out`'s axes: itself where they are its own, and
@@ -1496,7 +1549,7 @@ fn under_axes_of(operand: &String, shape: &Shape, out: &Shape, element: &String)
     if own == theirs {
         return *operand;
     }
-    return `&lift::<${element}, [${own}], [${theirs}]>(${operand}, ${out.rank()})`;
+    return `&backend.lift::<${element}, [${own}], [${theirs}]>(${operand}, ${out.rank()})`;
 }
 
 /// `Gemm`'s `alpha * A' * B' + beta * C`, as a matrix product under optional
@@ -1508,22 +1561,24 @@ fn gemm_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> 
     let product_axes = gemm_product(node, shapes);
     let mut product = product_call(&a, &b, &left, &right, &product_axes);
     if alpha != 1.0 {
-        product = `map(&${product}, |v| v * ${float_literal(alpha)})`;
+        product = `backend.map(&${product}, &${scaled_by(&float_literal(alpha))})`;
     }
     if !has_bias(node) {
         return Result::Ok(product);
     }
     if let Some(literal) = folded_literal(node, 2, &exprs.scalars, shapes) {
         let scaled = if beta == 1.0 { literal } else { `${literal} * ${float_literal(beta)}` };
-        return Result::Ok(`map(&${product}, |v| v + ${scaled})`);
+        let plus = binary_expr(&"Add", &FIRST, &constant_expr(&scaled));
+        return Result::Ok(`backend.map(&${product}, &${plus})`);
     }
     let mut bias = exprs.reference(&node.inputs[2]);
     if beta != 1.0 {
-        bias = `&map(${bias}, |v| v * ${float_literal(beta)})`;
+        bias = `&backend.map(${bias}, &${scaled_by(&float_literal(beta))})`;
     }
     let c = shapes.get(node.inputs[2]).unwrap();
     let produced = shapes.get(node.outputs[0]).unwrap();
-    return Result::Ok(elementwise_call(&`&${product}`, &bias, &product_axes, &c, &produced, &"x + y"));
+    let sum = binary_expr(&"Add", &FIRST, &SECOND);
+    return Result::Ok(elementwise_call(&`&${product}`, &bias, &product_axes, &c, &produced, &sum));
 }
 
 /// The axes of `Gemm`'s matrix product, which its bias may rename where they
@@ -1541,7 +1596,7 @@ fn gemm_product(node: &Node, shapes: &TreeMap<String, Shape>) -> Shape {
 fn transposed(operand: &String, shape: &Shape, flag: bool) -> [String, Shape] {
     if flag {
         return [
-            `&transpose2(${operand})`,
+            `&backend.transpose2(${operand})`,
             Shape {
                 axes: [shape.axes[1], shape.axes[0]],
             },
@@ -1558,13 +1613,13 @@ fn transposed(operand: &String, shape: &Shape, flag: bool) -> [String, Shape] {
 fn product_call(a: &String, b: &String, left: &Shape, right: &Shape, out: &Shape) -> String {
     let matrices = left.rank() >= 2 && right.rank() >= 2;
     if matrices && left.rank() > 2 && right.rank() == 2 {
-        return `matmul_shared(${a}, ${b})`;
+        return `backend.matmul_shared(${a}, ${b})`;
     }
     if matrices && left.rank() == right.rank() && batch_axes_agree(left, right) {
-        return `matmul(${a}, ${b})`;
+        return `backend.matmul(${a}, ${b})`;
     }
     let turbofish = `::<[${axis_list(left)}], [${axis_list(right)}], [${axis_list(out)}]>`;
-    return `matmul_broadcast${turbofish}(${a}, ${b})`;
+    return `backend.matmul_broadcast${turbofish}(${a}, ${b})`;
 }
 
 fn is_identity(perm: &List<i32>) -> bool {
@@ -1616,70 +1671,33 @@ fn batch_axes_agree(left: &Shape, right: &Shape) -> bool {
     return true;
 }
 
-/// The expression a binary operator's elements combine through.
-fn binary_body(op: &String, lhs: &String, rhs: &String) -> String {
-    if *op == "Add" {
-        return `${lhs} + ${rhs}`;
-    }
-    if *op == "Sub" {
-        return `${lhs} - ${rhs}`;
-    }
-    if *op == "Mul" {
-        return `${lhs} * ${rhs}`;
-    }
-    if *op == "Div" {
-        return `${lhs} / ${rhs}`;
-    }
-    if *op == "Pow" {
-        return `f32::pow(${lhs}, ${rhs})`;
-    }
+/// An elementwise kernel's first operand, and its second, as an `Expr`.
+global FIRST: String = "operand(0)";
+global SECOND: String = "operand(1)";
+
+/// The `Expr` a binary operator combines `lhs` and `rhs`, each an `Expr`, through.
+fn binary_expr(op: &String, lhs: &String, rhs: &String) -> String {
     // Stage 0 refuses every operator the kernels lack.
-    unreachable();
+    assert is_binary_elementwise(op);
+    return `${lhs}.binary(BinaryOp::${op}, &${rhs})`;
 }
 
-/// One element `v` of primitive `from` as `to`, as ONNX's `Cast` converts it:
-/// a bool is 1 or 0, and anything nonzero is true. The binding the map lands in
-/// states no type, so a literal the body returns states its own.
-fn cast_body(from: &String, to: &String) -> String {
-    if *from == "bool" {
-        return `if v { 1 as ${to} } else { 0 as ${to} }`;
+/// The `Expr` a unary operator maps each element of the first operand through.
+fn unary_expr(op: &String) -> Option<String> {
+    if !is_unary_operator(op) {
+        return null;
     }
-    if *to == "bool" {
-        return if *from == "i64" { "v != 0" } else { "v != 0.0" };
-    }
-    return `v as ${to}`;
+    return Option::Some(`${FIRST}.unary(UnaryOp::${op})`);
 }
 
-/// The expression a unary operator maps each element through, over `v`.
-fn unary_body(op: &String) -> Option<String> {
-    if *op == "Relu" {
-        return Option::Some("f32::ieee754_max(v, 0.0)");
-    }
-    if *op == "Sigmoid" {
-        return Option::Some("sigmoid_f32(v)");
-    }
-    if *op == "Tanh" {
-        return Option::Some("f32::tanh(v)");
-    }
-    if *op == "Erf" {
-        return Option::Some("f32::erf(v)");
-    }
-    if *op == "Exp" {
-        return Option::Some("f32::exp(v)");
-    }
-    if *op == "Log" {
-        return Option::Some("f32::ln(v)");
-    }
-    if *op == "Sqrt" {
-        return Option::Some("f32::sqrt(v)");
-    }
-    if *op == "Neg" {
-        return Option::Some("-v");
-    }
-    if *op == "Abs" {
-        return Option::Some("f32::abs(v)");
-    }
-    return null;
+/// The float literal `literal` as an `Expr`.
+fn constant_expr(literal: &String) -> String {
+    return `constant(${literal})`;
+}
+
+/// The `Expr` multiplying the first operand by the float literal `factor`.
+fn scaled_by(factor: &String) -> String {
+    return binary_expr(&"Mul", &FIRST, &constant_expr(factor));
 }
 
 /// Every axis name the checked graph uses, in first-seen order so the emitted

@@ -18,16 +18,17 @@ use {
     Alternative,
 } from "./ir.wado";
 use { token_slot_order, collect_literal_tokens } from "./lexer_gen.wado";
-use { GaleMap } from "./gale_map.wado";
+use { HashMap } from "core:collections";
+use { GALE_SEED } from "./hash_seed.wado";
 
 /// Bidirectional token-kind table: `id <-> "TK_*" name`. Built once from
 /// `token_slot_order`; the single long-term home for the `TK_*` strings.
 pub struct TokenKinds {
     /// `names[id]` is the `TK_*` name of kind `id`.
     pub names: List<String>,
-    by_name: GaleMap<String, i32>,
+    by_name: HashMap<String, i32>,
     /// A literal's text to the `TK_LIT_*` name the lexer declares for it.
-    lit_names: GaleMap<String, String>,
+    lit_names: HashMap<String, String>,
 }
 
 impl TokenKinds {
@@ -38,8 +39,8 @@ impl TokenKinds {
     pub fn empty() -> TokenKinds {
         return TokenKinds {
             names: [],
-            by_name: GaleMap::<String, i32>::new(),
-            lit_names: GaleMap::<String, String>::new(),
+            by_name: HashMap::<String, i32>::with_seed(GALE_SEED),
+            lit_names: HashMap::<String, String>::with_seed(GALE_SEED),
         };
     }
 
@@ -69,8 +70,8 @@ impl TokenKinds {
         let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
         let slots = token_slot_order(&grammar.lexer_rules, &lit_tokens);
         let mut names: List<String> = [];
-        let mut by_name = GaleMap::<String, i32>::new();
-        let mut lit_names = GaleMap::<String, String>::new();
+        let mut by_name = HashMap::<String, i32>::with_seed(GALE_SEED);
+        let mut lit_names = HashMap::<String, String>::with_seed(GALE_SEED);
         for let lit of &lit_tokens {
             lit_names[lit.text] = lit.const_name;
         }
@@ -176,14 +177,10 @@ pub fn bits_equal(a: &List<u64>, b: &List<u64>) -> bool {
 pub fn bits_ids(bits: &List<u64>) -> List<i32> {
     let mut ids: List<i32> = [];
     for let mut w = 0; w < bits.len(); w += 1 {
-        let word = bits[w];
-        if word == 0_u64 {
-            continue;
-        }
-        for let mut b = 0; b < 64; b += 1 {
-            if word & 1_u64 << b as u64 != 0_u64 {
-                ids.push(w * 64 + b);
-            }
+        let mut word = bits[w];
+        while word != 0_u64 {
+            ids.push(w * 64 + i64::ctz(word as i64) as i32);
+            word &= word - 1_u64;
         }
     }
     return ids;

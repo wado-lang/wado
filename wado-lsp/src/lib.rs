@@ -857,7 +857,7 @@ async fn build_semantics<H: CompilerHost>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::MapHost;
+    use crate::test_support::in_memory_host;
     use futures::executor::block_on;
 
     #[test]
@@ -888,7 +888,7 @@ mod tests {
         // removed.
         let mut engine = Engine::new();
         engine.open_document("file:///t.wado", "fn a() {}".to_string());
-        let host = MapHost::empty();
+        let host = in_memory_host(&[]);
         let _ = block_on(engine.snapshot("file:///t.wado", &host)).expect("snapshot");
         assert!(
             engine
@@ -922,7 +922,7 @@ mod tests {
         let mut engine = Engine::new();
         engine.open_document("file:///foo.wado", "fn a() {}".to_string());
         engine.open_document("file:///bar.wado", "fn b() {}".to_string());
-        let host = MapHost::empty();
+        let host = in_memory_host(&[]);
         let _ = block_on(engine.snapshot("file:///foo.wado", &host)).expect("foo snapshot");
         let _ = block_on(engine.snapshot("file:///bar.wado", &host)).expect("bar snapshot");
         engine.update_document("file:///bar.wado", "fn bb() {}".to_string());
@@ -945,12 +945,12 @@ mod tests {
         // side effects (logging, error counting) would otherwise vanish
         // silently when Engine::snapshot wraps the host.
         let text = "fn f() -> i32 { return \"oops\"; }";
-        let host = MapHost::single("/t.wado", text);
+        let host = in_memory_host(&[("/t.wado", text)]);
         let mut engine = Engine::new();
         engine.open_document("file:///t.wado", text.to_string());
         let _ = block_on(engine.snapshot("file:///t.wado", &host)).expect("snapshot");
         assert!(
-            !host.emitted().is_empty(),
+            !host.diagnostics().is_empty(),
             "inner host should have received forwarded diagnostics",
         );
     }

@@ -426,6 +426,12 @@ The answers differ from IEEE's only when an operand is a NaN. `NaN == NaN` is
 true, `x < NaN` is true for any `x` that is not a NaN, and `NaN < x` stays
 false. `x != x` is always false, so a NaN is tested with `is_nan()`.
 
+The bit pattern of a NaN that an operation produces is
+[host-defined](./spec-overview.md#behavior-classes), and may differ between
+two runs of one operation. The order and `is_nan()` never observe it. Reading
+the bits does: `to_bits` returns them, and `copysign` copies the sign bit from
+its second operand.
+
 Each of the four float types carries IEEE 754's six comparisons as methods.
 They answer as IEEE does, so a NaN operand makes every one false except
 `ieee754_ne`:
@@ -533,7 +539,9 @@ default expression (`f: T = expr`; see
 struct qualifies, since it has exactly one value, so a marker like `NoFields`
 can serve as a type parameter's default. A generic struct derives no `Default`:
 a default expression is checked against the declaration, not against an
-instantiation, so the struct needs a written impl.
+instantiation, so the struct needs a written impl. No other kind of type
+derives one, so an enum, a flags type or a variant has a `Default` only where
+an impl is written.
 [Derivation Policy](./spec-traits.md#derivation-policy) says where the impl is
 derived, and that a written one wins.
 

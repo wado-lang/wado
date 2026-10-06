@@ -735,6 +735,16 @@ impl InMemoryCompilerHost {
         Self::default()
     }
 
+    /// A host serving each `(path, source)` pair; a later pair replaces an
+    /// earlier one at the same path.
+    pub fn with_files(files: &[(&str, &str)]) -> Self {
+        let mut host = Self::new();
+        for (path, source) in files {
+            host.add_source(*path, *source);
+        }
+        host
+    }
+
     /// Add a source file (text)
     pub fn add_source(&mut self, path: impl Into<String>, source: impl Into<String>) {
         self.sources.insert(path.into(), source.into().into_bytes());

@@ -1,0 +1,41 @@
+// What the host sends in (method, path with query, a header, a body) comes back
+// out through the status, a header and the body of the response.
+use { Request, Response, ErrorCode, Headers, Trailers, FieldName, FieldValue } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let method = if request.get_method() matches { Put } { "PUT" } else { "other" };
+    let path = request.get_path_with_query().unwrap_or("/");
+    let tags = request.get_headers().get("x-tag" as FieldName);
+
+    let [done, _done_tx] = Future::<Result<(), ErrorCode>>::new();
+    let [request_body, _request_trailers] = Request::consume_body(request, done);
+    let text = String::from_utf8_lossy(request_body.read_to_end());
+    request_body.drop();
+
+    let headers = Headers::new();
+    assert headers.append("x-tag-echo" as FieldName, tags[0] as FieldValue) matches { Ok(_) };
+    let [body, body_tx] = Stream::<u8>::new();
+    let [trailers, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [response, _sent] = Response::new(headers, Some(body), trailers);
+    assert response.set_status_code(202) matches { Ok(_) };
+    task return Result::<Response, ErrorCode>::Ok(response);
+
+    body_tx.write_all(`${method} ${path} ${text}`.bytes().collect());
+    body_tx.drop();
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{
+    "wasi:http/service": {
+        "request": {
+            "method": "PUT",
+            "path": "/items/7?force=1",
+            "headers": [["x-tag", "blue"]],
+            "body": "payload"
+        },
+        "status": 202,
+        "headers_contain": [["x-tag-echo", "blue"]],
+        "body": "PUT /items/7?force=1 payload"
+    }
+}

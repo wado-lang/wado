@@ -14,8 +14,8 @@ struct core:prelude/string.wado//String {  // TypeId(3)
 }
 
 variant core:prelude/types.wado//Option<i32> {  // TypeId(4)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(5)
@@ -238,9 +238,9 @@ fn "labeled_block.wado/$test_10_a_null_tail_resolves_against_the_block_s_unified
     c_7 = black_box(1);
     if @unlikely(local.tee c_7((if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee v_8($inline_tail_null_0__blk: block -> ref "core:prelude/types.wado//Option<i32>" {
         if c_7 {
-            break $inline_tail_null_0__blk: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 1 };
+            break $inline_tail_null_0__blk: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 1 };
         }
-        struct.new "core:prelude/types.wado//Option<i32>" { 1 };
+        struct.new "core:prelude/types.wado//Option<i32>" { 0 };
     })) -> i32 {
         ref.cast "core:prelude/types.wado//Option<i32>::Some"(v_8).payload_0 == 1;
     } else {
@@ -253,10 +253,10 @@ fn "labeled_block.wado/$test_10_a_null_tail_resolves_against_the_block_s_unified
     c_7 = black_box(0);
     if @unlikely(local.tee c_7(local.tee v_8($inline_tail_null_1__blk: block -> ref "core:prelude/types.wado//Option<i32>" {
         if c_7 {
-            break $inline_tail_null_1__blk: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 1 };
+            break $inline_tail_null_1__blk: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 1 };
         }
-        struct.new "core:prelude/types.wado//Option<i32>" { 1 };
-    }).discriminant == 1) == 0) {
+        struct.new "core:prelude/types.wado//Option<i32>" { 0 };
+    }).discriminant == 0) == 0) {
         cold_path;
         "labeled_block.wado/$test_10_a_null_tail_resolves_against_the_block_s_unified_type$cold0"();
         unreachable;

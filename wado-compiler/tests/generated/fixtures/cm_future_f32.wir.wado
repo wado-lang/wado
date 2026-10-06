@@ -16,8 +16,8 @@ struct core:prelude/string.wado//String {  // TypeId(3)
 array Array<u64> (mut u64);  // TypeId(4)
 
 variant core:prelude/types.wado//Option<f32> {  // TypeId(5)
-    Some(f32),
     None,
+    Some(f32),
 }
 
 struct core:prelude/types.wado//Option<f32>::Some {  // TypeId(6)
@@ -26,8 +26,8 @@ struct core:prelude/types.wado//Option<f32>::Some {  // TypeId(6)
 }
 
 variant core:prelude/types.wado//Option<f64> {  // TypeId(7)
-    Some(f64),
     None,
+    Some(f64),
 }
 
 struct core:prelude/types.wado//Option<f64>::Some {  // TypeId(8)
@@ -227,9 +227,9 @@ fn "cm_future_f32.wado/$cm_future_read_f32"(handle) {
         "wasi/waitable-set-drop"(ws);
         status_2 = status_9;
     }
-    result = struct.new "core:prelude/types.wado//Option<f32>" { 1 };
+    result = struct.new "core:prelude/types.wado//Option<f32>" { 0 };
     if (status_2 & 15) == 0 {
-        result = struct.new "core:prelude/types.wado//Option<f32>::Some" { discriminant: 0, payload_0: builtin::f32_reinterpret_i32(builtin::load_i32(ptr)) };
+        result = struct.new "core:prelude/types.wado//Option<f32>::Some" { discriminant: 1, payload_0: builtin::f32_reinterpret_i32(builtin::load_i32(ptr)) };
     }
     drop("mem/realloc"(ptr, 4, 4, 0));
     return result;
@@ -254,9 +254,9 @@ fn "cm_future_f32.wado/$cm_future_read_f64"(handle) {
         "wasi/waitable-set-drop"(ws);
         status_2 = status_9;
     }
-    result = struct.new "core:prelude/types.wado//Option<f64>" { 1 };
+    result = struct.new "core:prelude/types.wado//Option<f64>" { 0 };
     if (status_2 & 15) == 0 {
-        result = struct.new "core:prelude/types.wado//Option<f64>::Some" { discriminant: 0, payload_0: builtin::f64_reinterpret_i64(builtin::load_i64(ptr)) };
+        result = struct.new "core:prelude/types.wado//Option<f64>::Some" { discriminant: 1, payload_0: builtin::f64_reinterpret_i64(builtin::load_i64(ptr)) };
     }
     drop("mem/realloc"(ptr, 8, 8, 0));
     return result;

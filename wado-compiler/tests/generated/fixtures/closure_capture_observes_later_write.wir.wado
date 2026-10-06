@@ -56,8 +56,8 @@ array Array<i32> (mut i32);  // TypeId(11)
 array Array<fn()->i32> (mut ref struct);  // TypeId(12)
 
 variant core:prelude/types.wado//Option<i32> {  // TypeId(13)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(14)
@@ -268,7 +268,7 @@ condition: call(get_n) == 4
         "closure_capture_observes_later_write.wado/run$cold9"($v1_6);
         unreachable;
     }
-    local.tee o(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>" { value: struct.new "core:prelude/types.wado//Option<i32>" { 1 } }).value = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 1 };
+    local.tee o(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>" { value: struct.new "core:prelude/types.wado//Option<i32>" { 0 } }).value = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 1 };
     if @unlikely(local.tee $v1_6(ref.test "core:prelude/types.wado//Option<i32>::Some"(o.value)) == 0) {
         cold_path;
         "closure_capture_observes_later_write.wado/run$cold8"($v1_6);

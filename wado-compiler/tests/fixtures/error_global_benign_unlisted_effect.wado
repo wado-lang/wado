@@ -1,0 +1,23 @@
+// `#[benign(E)]` on a global admits only the listed effects: the initializer
+// also performs `Stderr`, which the attribute does not name.
+
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+
+fn announce() -> i32 with (Stdout, Stderr) {
+    println("initialized");
+    eprintln("noisy");
+    return 7;
+}
+
+#[benign(Stdout)]
+global SEVEN: i32 = announce();
+
+export fn run() with Stdout {
+    println(`${SEVEN}`);
+}
+
+__DATA__
+{
+    "compile_error": ":13:21: analysis error: global initializer cannot perform effects, but calls effectful function 'announce'",
+    "compile_error_codes": ["EFFECT_NOT_ALLOWED"]
+}

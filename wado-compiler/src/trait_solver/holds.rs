@@ -1111,7 +1111,6 @@ mod tests {
             DURATION,
             TypeDef {
                 newtype_base: Some(decl(I32)),
-                ..TypeDef::default()
             },
         );
         assert_eq!(
@@ -1198,7 +1197,6 @@ mod tests {
             MY_LIST,
             TypeDef {
                 newtype_base: Some(list_of(SolverType::Param(0))),
-                ..TypeDef::default()
             },
         );
         assert_eq!(
@@ -1238,7 +1236,6 @@ mod tests {
             DURATION,
             TypeDef {
                 newtype_base: Some(decl(I32)),
-                ..TypeDef::default()
             },
         );
         // Answered through the marker, so it owes the body; through the base

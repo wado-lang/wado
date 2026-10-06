@@ -111,7 +111,7 @@ fn "opt_multi_value_let_block_receiver.wado/drain"(c, flag) {
             let $mv$$match_4$0: i32;
             let $mv$$match_4$1: i32;
             multivalue_bind [$mv$$match_4$0, $mv$$match_4$1] = "opt_multi_value_let_block_receiver.wado/opt_multi_value_let_block_receiver.wado/Cursor::take"(c);
-            if $mv$$match_4$0 == 0 {
+            if $mv$$match_4$0 == 1 {
                 sum = sum + $mv$$match_4$1;
             } else {
                 break b0;
@@ -580,10 +580,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 fn "opt_multi_value_let_block_receiver.wado/opt_multi_value_let_block_receiver.wado/Cursor::take"(self) {
     let $load_0: i32;
     if local.tee $load_0(self.index) >= self.limit {
-        return 1, 0;
+        return 0, 0;
     }
     self.index = $load_0 + 1;
-    return 0, $load_0;
+    return 1, $load_0;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {

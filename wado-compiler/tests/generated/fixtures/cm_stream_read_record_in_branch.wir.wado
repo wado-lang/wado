@@ -234,11 +234,11 @@ fn "cm_stream_read_record_in_branch.wado/run"() with Stdout, Stderr, Preopens {
                 v_37;
             } else {
                 $vc_payload_7 = ref.cast "wasi:filesystem/types.wado//DescriptorType::Other"(v_37).payload_0;
-                struct.new "wasi:filesystem/types.wado//DescriptorType::Other" { discriminant: 7, payload_0: (if ref.is_null($vc_payload_7) == 0 -> ref null "core:prelude/string.wado//String" {
+                struct.new "wasi:filesystem/types.wado//DescriptorType::Other" { discriminant: 7, payload_0: (if ref.is_null($vc_payload_7) -> ref null "core:prelude/string.wado//String" {
+                    $vc_payload_7;
+                } else {
                     $mv_arg_2 = ref.as_non_null($vc_payload_7);
                     struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_3: ref Array<u8>; $array_clone_src_3 = $mv_arg_2.repr; $load_12 = $mv_arg_2.used; let $array_clone_dst_4: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($load_12)), 0, $array_clone_src_3, 0, $load_12); $array_clone_dst_4, used: $load_12 };
-                } else {
-                    $vc_payload_7;
                 }) };
             }));
             v_39 = v_36.name;

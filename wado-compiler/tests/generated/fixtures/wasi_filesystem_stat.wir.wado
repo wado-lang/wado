@@ -320,7 +320,7 @@ fn "wasi_filesystem_stat.wado/run"() with Stdout, Stderr, Preopens {
     let v_219: ref "wasi:filesystem/types.wado//DescriptorType";
     let $vc_payload_7_220: ref null "core:prelude/string.wado//String";
     let v_223: ref null "wasi:clocks/system_clock.wado//Instant";
-    let $vc_payload_0_224: ref "wasi:clocks/system_clock.wado//Instant";
+    let $vc_payload_1_224: ref "wasi:clocks/system_clock.wado//Instant";
     if local.tee $load_0(local.tee dirs("wasi_filesystem_stat.wado/$cm_binding__Preopens_get_directories"()).used) == 0 {
         rx_18 = builtin::i32_wrap_i64(local.tee packed_17("wasi/stream-new"()));
         tx_19 = builtin::i32_wrap_i64(packed_17 >> 32_i64);
@@ -353,24 +353,24 @@ fn "wasi_filesystem_stat.wado/run"() with Stdout, Stderr, Preopens {
             v_219;
         } else {
             $vc_payload_7_220 = ref.cast "wasi:filesystem/types.wado//DescriptorType::Other"(v_219).payload_0;
-            struct.new "wasi:filesystem/types.wado//DescriptorType::Other" { discriminant: 7, payload_0: (if ref.is_null($vc_payload_7_220) == 0 -> ref null "core:prelude/string.wado//String" {
+            struct.new "wasi:filesystem/types.wado//DescriptorType::Other" { discriminant: 7, payload_0: (if ref.is_null($vc_payload_7_220) -> ref null "core:prelude/string.wado//String" {
+                $vc_payload_7_220;
+            } else {
                 $mv_arg_2 = ref.as_non_null($vc_payload_7_220);
                 struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_3: ref Array<u8>; $array_clone_src_3 = $mv_arg_2.repr; rx_18 = $mv_arg_2.used; let $array_clone_dst_4: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>(rx_18)), 0, $array_clone_src_3, 0, rx_18); $array_clone_dst_4, used: rx_18 };
-            } else {
-                $vc_payload_7_220;
             }) };
-        }), link_count: $vc_payload_0_31.link_count, size: $vc_payload_0_31.size, data_access_timestamp: (if ref.is_null(local.tee v_223($vc_payload_0_31.data_access_timestamp)) == 0 -> ref null "wasi:clocks/system_clock.wado//Instant" {
-            struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: local.tee $vc_payload_0_224(ref.as_non_null(v_223)).seconds, nanoseconds: $vc_payload_0_224.nanoseconds };
-        } else {
+        }), link_count: $vc_payload_0_31.link_count, size: $vc_payload_0_31.size, data_access_timestamp: (if ref.is_null(local.tee v_223($vc_payload_0_31.data_access_timestamp)) -> ref null "wasi:clocks/system_clock.wado//Instant" {
             v_223;
-        }), data_modification_timestamp: (if ref.is_null(local.tee v_223($vc_payload_0_31.data_modification_timestamp)) == 0 -> ref null "wasi:clocks/system_clock.wado//Instant" {
-            struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: local.tee $vc_payload_0_224(ref.as_non_null(v_223)).seconds, nanoseconds: $vc_payload_0_224.nanoseconds };
         } else {
+            struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: local.tee $vc_payload_1_224(ref.as_non_null(v_223)).seconds, nanoseconds: $vc_payload_1_224.nanoseconds };
+        }), data_modification_timestamp: (if ref.is_null(local.tee v_223($vc_payload_0_31.data_modification_timestamp)) -> ref null "wasi:clocks/system_clock.wado//Instant" {
             v_223;
-        }), status_change_timestamp: (if ref.is_null(local.tee v_223($vc_payload_0_31.status_change_timestamp)) == 0 -> ref null "wasi:clocks/system_clock.wado//Instant" {
-            struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: local.tee $vc_payload_0_224(ref.as_non_null(v_223)).seconds, nanoseconds: $vc_payload_0_224.nanoseconds };
         } else {
+            struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: local.tee $vc_payload_1_224(ref.as_non_null(v_223)).seconds, nanoseconds: $vc_payload_1_224.nanoseconds };
+        }), status_change_timestamp: (if ref.is_null(local.tee v_223($vc_payload_0_31.status_change_timestamp)) -> ref null "wasi:clocks/system_clock.wado//Instant" {
             v_223;
+        } else {
+            struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: local.tee $vc_payload_1_224(ref.as_non_null(v_223)).seconds, nanoseconds: $vc_payload_1_224.nanoseconds };
         }) } };
     } else {
         $vc_payload_1_32 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Err"(v_30).payload_0;
@@ -457,23 +457,23 @@ fn "wasi_filesystem_stat.wado/run"() with Stdout, Stderr, Preopens {
                 v_219;
             } else {
                 $vc_payload_7_220 = ref.cast "wasi:filesystem/types.wado//DescriptorType::Other"(v_219).payload_0;
-                struct.new "wasi:filesystem/types.wado//DescriptorType::Other" { discriminant: 7, payload_0: (if ref.is_null($vc_payload_7_220) == 0 -> ref null "core:prelude/string.wado//String" {
-                    struct.new "core:prelude/string.wado//String" { repr: $array_clone_dst_4 = local.tee $mv_arg_2(ref.as_non_null($vc_payload_7_220)).repr; builtin::array_copy<u8>(local.tee $array_clone_src_3(builtin::array_new<u8>(local.tee rx_18($mv_arg_2.used))), 0, $array_clone_dst_4, 0, rx_18); $array_clone_src_3, used: rx_18 };
-                } else {
+                struct.new "wasi:filesystem/types.wado//DescriptorType::Other" { discriminant: 7, payload_0: (if ref.is_null($vc_payload_7_220) -> ref null "core:prelude/string.wado//String" {
                     $vc_payload_7_220;
+                } else {
+                    struct.new "core:prelude/string.wado//String" { repr: $array_clone_dst_4 = local.tee $mv_arg_2(ref.as_non_null($vc_payload_7_220)).repr; builtin::array_copy<u8>(local.tee $array_clone_src_3(builtin::array_new<u8>(local.tee rx_18($mv_arg_2.used))), 0, $array_clone_dst_4, 0, rx_18); $array_clone_src_3, used: rx_18 };
                 }) };
-            }), link_count: $vc_payload_0_31.link_count, size: $vc_payload_0_31.size, data_access_timestamp: (if ref.is_null(local.tee v_223($vc_payload_0_31.data_access_timestamp)) == 0 -> ref null "wasi:clocks/system_clock.wado//Instant" {
-                struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: local.tee $vc_payload_0_224(ref.as_non_null(v_223)).seconds, nanoseconds: $vc_payload_0_224.nanoseconds };
-            } else {
+            }), link_count: $vc_payload_0_31.link_count, size: $vc_payload_0_31.size, data_access_timestamp: (if ref.is_null(local.tee v_223($vc_payload_0_31.data_access_timestamp)) -> ref null "wasi:clocks/system_clock.wado//Instant" {
                 v_223;
-            }), data_modification_timestamp: (if ref.is_null(local.tee v_223($vc_payload_0_31.data_modification_timestamp)) == 0 -> ref null "wasi:clocks/system_clock.wado//Instant" {
-                struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: local.tee $vc_payload_0_224(ref.as_non_null(v_223)).seconds, nanoseconds: $vc_payload_0_224.nanoseconds };
             } else {
+                struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: local.tee $vc_payload_1_224(ref.as_non_null(v_223)).seconds, nanoseconds: $vc_payload_1_224.nanoseconds };
+            }), data_modification_timestamp: (if ref.is_null(local.tee v_223($vc_payload_0_31.data_modification_timestamp)) -> ref null "wasi:clocks/system_clock.wado//Instant" {
                 v_223;
-            }), status_change_timestamp: (if ref.is_null(local.tee v_223($vc_payload_0_31.status_change_timestamp)) == 0 -> ref null "wasi:clocks/system_clock.wado//Instant" {
-                struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: local.tee $vc_payload_0_224(ref.as_non_null(v_223)).seconds, nanoseconds: $vc_payload_0_224.nanoseconds };
             } else {
+                struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: local.tee $vc_payload_1_224(ref.as_non_null(v_223)).seconds, nanoseconds: $vc_payload_1_224.nanoseconds };
+            }), status_change_timestamp: (if ref.is_null(local.tee v_223($vc_payload_0_31.status_change_timestamp)) -> ref null "wasi:clocks/system_clock.wado//Instant" {
                 v_223;
+            } else {
+                struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: local.tee $vc_payload_1_224(ref.as_non_null(v_223)).seconds, nanoseconds: $vc_payload_1_224.nanoseconds };
             }) } };
         } else {
             $vc_payload_1_32 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Err"(v_30).payload_0;
@@ -1103,7 +1103,7 @@ fn "wasi_filesystem_stat.wado/$cm_export__run"() {
 fn "wasi_filesystem_stat.wado/$value_copy$wasi:filesystem/types.wado/ErrorCode"(v) {
     let $load_0: i32;
     let $vc_payload_36: ref null "core:prelude/string.wado//String";
-    let $vc_payload_0: ref "core:prelude/string.wado//String";
+    let $vc_payload_1: ref "core:prelude/string.wado//String";
     return (if local.tee $load_0(v.discriminant) == 0 -> ref "wasi:filesystem/types.wado//ErrorCode" {
         v;
     } else if $load_0 == 1 -> ref "wasi:filesystem/types.wado//ErrorCode" {
@@ -1178,11 +1178,11 @@ fn "wasi_filesystem_stat.wado/$value_copy$wasi:filesystem/types.wado/ErrorCode"(
         v;
     } else {
         $vc_payload_36 = ref.cast "wasi:filesystem/types.wado//ErrorCode::Other"(v).payload_0;
-        struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: (if ref.is_null($vc_payload_36) == 0 -> ref null "core:prelude/string.wado//String" {
-            $vc_payload_0 = ref.as_non_null($vc_payload_36);
-            struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = $vc_payload_0.repr; $load_0 = $vc_payload_0.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_0)), 0, $array_clone_src_1, 0, $load_0); $array_clone_dst_2, used: $load_0 };
-        } else {
+        struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: (if ref.is_null($vc_payload_36) -> ref null "core:prelude/string.wado//String" {
             $vc_payload_36;
+        } else {
+            $vc_payload_1 = ref.as_non_null($vc_payload_36);
+            struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = $vc_payload_1.repr; $load_0 = $vc_payload_1.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_0)), 0, $array_clone_src_1, 0, $load_0); $array_clone_dst_2, used: $load_0 };
         }) };
     });
 }
@@ -1348,7 +1348,7 @@ fn "core:prelude/types.wado/cm_subtask_settled$cold0"($v0) {
     "core:rt/panic"($local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(180), used: 0 }; if @unlikely(local.tee new_used_11(0 + 66) > builtin::array_len($local_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_11);
-    }; start_12 = $local_3.used; $local_3.used = new_used_11; builtin::array_copy<u8>(local.tee $load_2($local_3.repr), start_12, global:core:prelude/types.wado::$const_obj_31, 0, 20); new_used_11 = start_12 + 20; builtin::array_copy<u8>($load_2, new_used_11, global:core:prelude/types.wado::$const_obj_30, 0, 18); new_used_11 = start_12 + 38; builtin::array_copy<u8>($load_2, new_used_11, global:core:prelude/types.wado::$const_obj_29, 0, 4); new_used_11 = start_12 + 42; builtin::array_copy<u8>($load_2, new_used_11, global:core:prelude/types.wado::$const_obj_28, 0, 23); start_12 = start_12 + 65; builtin::array_copy<u8>($load_2, start_12, global:core:prelude/types.wado::$const_obj_27, 0, 1); start_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $sroa_$f_buf_140($local_3), 0, 3); "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_140.repr, start_12, 415_i64, 3); if @unlikely(local.tee start_12($local_3.used + 55) > builtin::array_len($local_3.repr)) {
+    }; start_12 = $local_3.used; $local_3.used = new_used_11; builtin::array_copy<u8>(local.tee $load_2($local_3.repr), start_12, global:core:prelude/types.wado::$const_obj_31, 0, 20); new_used_11 = start_12 + 20; builtin::array_copy<u8>($load_2, new_used_11, global:core:prelude/types.wado::$const_obj_30, 0, 18); new_used_11 = start_12 + 38; builtin::array_copy<u8>($load_2, new_used_11, global:core:prelude/types.wado::$const_obj_29, 0, 4); new_used_11 = start_12 + 42; builtin::array_copy<u8>($load_2, new_used_11, global:core:prelude/types.wado::$const_obj_28, 0, 23); start_12 = start_12 + 65; builtin::array_copy<u8>($load_2, start_12, global:core:prelude/types.wado::$const_obj_27, 0, 1); start_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $sroa_$f_buf_140($local_3), 0, 3); "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_140.repr, start_12, 386_i64, 3); if @unlikely(local.tee start_12($local_3.used + 55) > builtin::array_len($local_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_12);
     }; new_used_11 = $local_3.used; $local_3.used = start_12; builtin::array_copy<u8>(local.tee $load_2($local_3.repr), new_used_11, global:core:prelude/types.wado::$const_obj_26, 0, 43); new_used_11 = new_used_11 + 43; builtin::array_copy<u8>($load_2, new_used_11, global:core:prelude/types.wado::$const_obj_25, 0, 12); $sroa_$f_buf_140 = $local_3; new_used_11 = $v0 < 0; $v0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_71(x_71 = builtin::i64_extend_i32_s($v0); select i64(x_71 < 0_i64, 0_i64 - x_71, x_71))); new_used_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_140, new_used_11, $v0); "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_140.repr, new_used_11, x_71, $v0); if @unlikely(local.tee $v0($local_3.used + 19) > builtin::array_len($local_3.repr)) {

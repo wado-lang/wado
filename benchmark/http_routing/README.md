@@ -120,7 +120,12 @@ Tunables (env vars):
 # CONNECTIONS_PER_WORKER: offered concurrency per worker (default 200)
 # OHA_CORE_COUNT: cores for the load generator (default 4)
 # HEADROOM_CHECK: 1 to verify oha is not the ceiling (default 0)
+# WADO_BIN: the wado binary to serve with (default ../../target/release/wado)
+# SERVERS: the servers to measure (default "wado node bun axum")
 SLICE=10 ROUNDS=3 SHAPES="1 4" mise run -C benchmark http-routing
+
+# A/B of two compilers: the Wado row alone, from each prebuilt binary
+WADO_BIN=/path/to/wado-base SERVERS=wado SHAPES=1 mise run -C benchmark http-routing
 ```
 
 ## Results

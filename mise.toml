@@ -388,7 +388,7 @@ Knobs: WADO_EMI_JOBS, WADO_EMI_FILTER, \
 WADO_EMI_ROOTS (fixtures,stdlib,example), WADO_EMI_LEVELS (O0,O1,O2,Os,O3), \
 WADO_EMI_SHARD (k/n), WADO_EMI_LIMIT, WADO_EMI_OUT.\
 """
-run = "cargo test -p wado-compiler --test emi -- --ignored --nocapture calibrate_corpus"
+run = "cargo test -p wado-compiler-tests --test emi -- --ignored --nocapture calibrate_corpus"
 
 [tasks.emi-mutate]
 description = """\
@@ -399,7 +399,7 @@ Reads target/emi/corpus.txt, so run emi-calibrate \
 first. Writes target/emi/mutation.txt and the reduced mutants under \
 target/emi/findings/.\
 """
-run = "cargo test -p wado-compiler --test emi -- --ignored --nocapture mutate_corpus"
+run = "cargo test -p wado-compiler-tests --test emi -- --ignored --nocapture mutate_corpus"
 
 [tasks.test-format]
 description = """\
@@ -407,7 +407,7 @@ Run formatter invariant tests over the fixtures + stdlib corpus: idempotency, \
 AST round-trip, and no comment drop. The corpus is not reformatted in place \
 (fixtures double as parser tests), but it is the richest edge-case input.\
 """
-run = "cargo test -p wado-compiler --test format"
+run = "cargo test -p wado-compiler-tests --test format"
 
 # Disjoint file sets, so the three run concurrently — except that the other two
 # build the workspace `cargo fmt` is rewriting, so they wait for it. `wait_for`

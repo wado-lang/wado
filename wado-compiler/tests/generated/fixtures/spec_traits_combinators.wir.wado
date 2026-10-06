@@ -201,7 +201,7 @@ fn "spec_traits_combinators.wado/$test_0"() {
             let $mv$$local_3_31$0: i32;
             let $mv$$local_3_31$1: i32;
             multivalue_bind [$mv$$local_3_31$0, $mv$$local_3_31$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32>^core:prelude/traits.wado/Iterator::next"(self_24);
-            if $mv$$local_3_31$0 == 0 {
+            if $mv$$local_3_31$0 == 1 {
                 if @unlikely(local.tee used_116(result_29.used) >= builtin::array_len(result_29.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_29);
@@ -261,7 +261,7 @@ condition: doubled == [2, 4, 6, 8, 10]
     b9: block {
         l10: loop {
             multivalue_bind [used_116, $mv$$local_3_31$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>^core:prelude/traits.wado/Iterator::next"(self_43);
-            if used_116 == 0 {
+            if used_116 == 1 {
                 if @unlikely(local.tee $mv$$local_3_31$0(result_29.used) >= builtin::array_len(result_29.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_29);
@@ -326,19 +326,19 @@ condition: evens == [2, 4]
             $sroa_slot_154 = 0;
             $inline_core_prelude_traits_wado_IterMap_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32___i32__core_prelude_traits_wado_Iterator__next_13: block {
                 multivalue_bind [used_116, $mv$$local_3_31$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>^core:prelude/traits.wado/Iterator::next"(self_43);
-                if used_116 == 0 {
-                    $sroa_slot_153 = 0;
+                if used_116 == 1 {
+                    $sroa_slot_153 = 1;
                     break $inline_core_prelude_traits_wado_IterMap_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32___i32__core_prelude_traits_wado_Iterator__next_13: $sroa_slot_154 = block -> i32 {
                         let $indirect_call_7: ref "canonical//CanonicalClosure_0";
                         call_ref "functype/$canonical_closure_fn_0"($indirect_call_7.func, local.tee $indirect_call_7(ref.cast "canonical//CanonicalClosure_0"($sroa_v_pred_156)).env, $mv$$local_3_31$1);
                     };
                 } else {
                 }
-                $sroa_slot_153 = 1;
+                $sroa_slot_153 = 0;
                 $sroa_slot_154 = 0;
                 break $inline_core_prelude_traits_wado_IterMap_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32___i32__core_prelude_traits_wado_Iterator__next_13;
             };
-            if local.tee $mv$$local_3_31$0($sroa_slot_153) == 0 {
+            if local.tee $mv$$local_3_31$0($sroa_slot_153) == 1 {
                 if @unlikely(local.tee used_148(result_29.used) >= builtin::array_len(result_29.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_29);
@@ -1344,7 +1344,7 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/sl
         l202: loop {
             if $hfs_index_10 >= $licm_end_8 {
                 $licm_inner_6.index = $hfs_index_10;
-                return 1, 0;
+                return 0, 0;
             }
             item_4 = builtin::array_get_value<i32>($licm_repr_9, $hfs_index_10);
             $hfs_index_10 = $hfs_index_10 + 1;
@@ -1353,7 +1353,7 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/sl
                 call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($licm_pred_7)).env, item_4);
             } {
                 $licm_inner_6.index = $hfs_index_10;
-                return 0, item_4;
+                return 1, item_4;
             }
             continue l202;
         };
@@ -1368,12 +1368,12 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice
         break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_0 local.tee $load_1(local.tee $load_0(self.inner).index) >= $load_0.end;
         item_4 = builtin::array_get_value<i32>($load_0.repr, $load_1);
         $load_0.index = $load_1 + 1;
-        return 0, block -> i32 {
+        return 1, block -> i32 {
             let $indirect_call_1: ref "canonical//CanonicalClosure_0";
             call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(self.f)).env, item_4);
         };
     };
-    return 1, 0;
+    return 0, 0;
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {

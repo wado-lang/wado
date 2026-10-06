@@ -12,8 +12,8 @@ struct core:prelude/string.wado//String {  // TypeId(2)
 }
 
 variant core:prelude/types.wado//Option<i32> {  // TypeId(3)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(4)
@@ -90,10 +90,10 @@ fn "opt_lbf_arm_break_captured.wado/labels"(n, m) with Stdout {
             outer: block {
                 break_if outer n > m;
                 if n > 0 {
-                    break check: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: n };
+                    break check: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: n };
                 }
             };
-            break check: struct.new "core:prelude/types.wado//Option<i32>" { 1 };
+            break check: struct.new "core:prelude/types.wado//Option<i32>" { 0 };
         })) {
             n = ref.cast "core:prelude/types.wado//Option<i32>::Some"(r).payload_0;
             $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
@@ -188,13 +188,13 @@ fn "opt_lbf_arm_break_captured.wado/loops"(n, m) with Stdout {
                     l10: loop {
                         break_if b9 m;
                         if $licm_arith_92 {
-                            break check: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $licm_arith_88 };
+                            break check: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: $licm_arith_88 };
                         }
                         break b9;
                         continue l10;
                     };
                 };
-                break check: struct.new "core:prelude/types.wado//Option<i32>" { 1 };
+                break check: struct.new "core:prelude/types.wado//Option<i32>" { 0 };
             })) {
                 v = ref.cast "core:prelude/types.wado//Option<i32>::Some"(r).payload_0;
                 $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };

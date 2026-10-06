@@ -1,7 +1,7 @@
-// A global is reified whether or not anything reads it, so its initializer is
-// a call site the emitted program keeps. Reify must therefore keep what that
-// initializer calls — a free function and an inherent method alike — even
-// though the global itself is dead.
+// A global is reified whether or not anything reads it, and only DCE drops a
+// dead one's initializer. Reify must therefore keep what that initializer
+// calls — a free function and an inherent method alike — even though the
+// global itself is dead.
 use { println, Stdout } from "core:cli";
 
 struct Counter { start: i32 }

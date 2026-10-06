@@ -2,7 +2,7 @@
 //! `use { X } from "<schema>"` clause to the generator's emitted entry
 //! module.
 
-use crate::common::{MapHost, block_on};
+use crate::common::{block_on, in_memory_host};
 use wado_compiler::{
     CompilerHost, LogLevel, Semantics, kiln::InvocationIndex, load, parse, semantics_of,
 };
@@ -49,7 +49,7 @@ export fn run() {
     let generated = r"
 pub fn greet() {}
 ";
-    let host = MapHost::new(&[("build/kiln/test-invocation/sample.wado", generated)]);
+    let host = in_memory_host(&[("build/kiln/test-invocation/sample.wado", generated)]);
 
     let mut idx = InvocationIndex::new();
     idx.insert(
@@ -95,7 +95,7 @@ pub fn greet() { helper(); }
     let helper = r"
 pub fn helper() {}
 ";
-    let host = MapHost::new(&[
+    let host = in_memory_host(&[
         ("build/kiln/test-invocation/sample.wado", generated),
         ("build/kiln/test-invocation/helper.wado", helper),
     ]);
@@ -132,7 +132,7 @@ fn empty_invocation_index_preserves_default_resolution() {
     let entry = r"
 export fn run() {}
 ";
-    let host = MapHost::new(&[]);
+    let host = in_memory_host(&[]);
     let idx = InvocationIndex::new();
     let sem = build_with_invocations(entry, "entry.wado", &host, idx);
     let entry_ms = sem.interner.borrow_mut().entry_point("entry.wado");

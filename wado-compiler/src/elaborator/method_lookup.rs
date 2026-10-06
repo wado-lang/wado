@@ -2,7 +2,7 @@
 
 use super::scope::{BinderInScope, ScopedBound, trait_params_from_impl};
 use super::trait_env::ImplTargetKey;
-use super::trait_query::SelfBinding;
+use super::trait_query::{DerivedAt, SelfBinding};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -1322,19 +1322,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         receiver_type: TypeId,
         own_params: &[ast::GenericParam],
+        slots: &[TypeId],
         type_args: &[TypeId],
         reached: &[String],
         span: Span,
     ) {
-        let open: Vec<String> = own_params
+        let reached_packs: Vec<(&ast::GenericParam, TypeId, TypeId)> = own_params
             .iter()
+            .zip(slots)
             .zip(type_args)
-            .filter(|(p, _)| p.is_pack && reached.contains(&p.name))
-            .filter(|&(_, &arg)| {
-                self.tysys.is_unbound_type_param(arg)
-                    || self.tysys.type_table.borrow().contains_type_pack(arg)
+            .filter(|((p, _), _)| p.is_pack && reached.contains(&p.name))
+            .map(|((p, &slot), &arg)| (p, slot, arg))
+            .collect();
+        if reached_packs.is_empty() {
+            return;
+        }
+        // A pack left answering for itself is unanswered, whatever a caller's
+        // pack of the same name interns to. One spread over the caller's own
+        // (`[..Bs]`) is the caller forwarding it, settled as the caller's.
+        let scope = self.scope_type_param_ids();
+        let open: Vec<String> = reached_packs
+            .into_iter()
+            .filter(|&(_, slot, arg)| {
+                arg == slot
+                    || (self.tysys.is_unbound_type_param(arg) && !scope.contains(&arg))
+                    || self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .any_type_pack(arg, &|pack| !scope.contains(&pack))
             })
-            .map(|(p, _)| p.name.clone())
+            .map(|(p, _, _)| p.name.clone())
             .collect();
         if open.is_empty() {
             return;
@@ -1373,6 +1391,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &method_name,
             receiver_type,
             own_params,
+            slots,
             &type_args,
             &reached,
             span,
@@ -1748,16 +1767,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // An impl the order names at two levels of the chain is one block.
         let mut seen: IndexSet<Option<DefId>> = IndexSet::default();
         for def in named.iter().filter(|def| seen.insert(**def)) {
-            match def {
+            // A marker writes no method: the derived impl it asks for answers.
+            let written =
+                def.filter(|def| !self.tysys.trait_env.impl_headers[def].is_synthesize_request);
+            match written {
                 Some(def) => found.extend(self.collect_trait_method_matches_from_impl(
-                    &ImplBlockRef(*def),
+                    &ImplBlockRef(def),
                     method_name,
                     receiver_type_args,
                     receiver_type_id,
                 )),
                 None => {
                     if let Some(recv_id) = receiver_type_id {
-                        found.extend(self.try_auto_derived_method_match(method_name, recv_id));
+                        found.extend(self.try_auto_derived_method_match(
+                            method_name,
+                            recv_id,
+                            DerivedAt::Instance,
+                        ));
                     }
                 }
             }

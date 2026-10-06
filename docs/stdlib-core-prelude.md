@@ -762,8 +762,9 @@ associated type carries no bound — and stay bounded inherent impls.
 
 #### `fn get_unchecked(&self, index: i32) -> Self::Elem`
 
-The caller must guarantee `0 <= index < len()`. Violating it yields an
-unspecified `Elem` or traps; it is never undefined behaviour.
+The caller must guarantee `0 <= index < len()`. Any other `index` is a
+contract violation, and the result is unspecified: some valid `Elem`,
+or a trap.
 
 #### `fn is_empty(&self) -> bool`
 
@@ -3187,9 +3188,8 @@ Returns null if the value is negative or not a valid Unicode scalar value.
 
 Converts a u32 to a char without validation.
 The caller must ensure the value is a valid Unicode scalar value
-(0..=0xD7FF or 0xE000..=0x10FFFF). Passing an invalid value
-results in an invalid char, which may cause incorrect behavior
-in string operations.
+(0..=0xD7FF or 0xE000..=0x10FFFF). Passing any other value is a
+contract violation, and the behavior is unconstrained.
 
 #### `pub fn to_string(&self) -> String`
 
@@ -4441,8 +4441,9 @@ cannot silently break code generation.
 
 `#[compiler_item("byte_slice_get_unchecked")]`
 
-The caller must guarantee `0 <= index < len()`; an out-of-range `index`
-reads past the view into the backing array or traps. Also the byte-read
+The caller must guarantee `0 <= index < len()`. Any other `index` is a
+contract violation, and the result is unspecified: an element of the
+backing array outside the view, or a trap. Also the byte-read
 anchor for `FieldSchema::lookup`, as `len` is for byte length.
 
 #### `pub fn slice(&self, start: i32, end: i32) -> Slice<T>`
@@ -4659,9 +4660,12 @@ Check if the string is empty
 
 Read the byte at `index` without bounds checks. For safe access use `bytes()`.
 
-# Safety (caller-side preconditions)
+# Contract
 
 - `0 <= index < self.len()`.
+
+Any other `index` is a contract violation, and the result is
+unspecified: a byte of the backing array past `len()`, or a trap.
 
 #### `pub fn set_byte_unchecked(&mut self, index: i32, value: u8)`
 
@@ -4669,10 +4673,12 @@ Read the byte at `index` without bounds checks. For safe access use `bytes()`.
 
 Write the byte at `index` without bounds or UTF-8 checks.
 
-# Safety (caller-side preconditions)
+# Contract
 
 - `0 <= index < self.len()`.
 - The resulting byte sequence must remain valid UTF-8.
+
+Breaking it is a contract violation, and the behavior is unconstrained.
 
 #### `pub fn as_bytes(&self) -> ByteSlice`
 
@@ -4697,19 +4703,23 @@ Append any `AsStrSlice` text to this one.
 Append the bytes of any `AsByteSlice` source (`ByteList`, `ByteArray`,
 `ByteSlice`, or a `String`).
 
-# Safety (caller-side preconditions)
+# Contract
 
 - The resulting byte sequence must remain valid UTF-8.
+
+Breaking it is a contract violation, and the behavior is unconstrained.
 
 #### `pub fn push_str_range_unchecked<S: AsStrSlice>(&mut self, s: S, start: i32, end: i32)`
 
 Append the byte range `[start, end)` of `s` to this string.
 
-# Safety (caller-side preconditions)
+# Contract
 
 - `0 <= start <= end <= s.len()`.
 - `start` and `end` must lie on UTF-8 character boundaries of `s`.
 - The resulting byte sequence must remain valid UTF-8.
+
+Breaking it is a contract violation, and the behavior is unconstrained.
 
 #### `pub fn bytes(&self) -> StrUtf8ByteIter`
 
@@ -4738,11 +4748,13 @@ Assumes `byte_index` is on a character boundary (the string is valid UTF-8).
 
 Decodes the UTF-8 character starting at `byte_index` without bounds checks.
 
-# Safety (caller-side preconditions)
+# Contract
 
 - `byte_index` lies on a UTF-8 character boundary.
 - The full multi-byte sequence (1–4 bytes) starting at `byte_index`
   is in range `[0, self.len())`.
+
+Breaking it is a contract violation, and the behavior is unconstrained.
 
 #### `pub fn push(&mut self, c: char)`
 
@@ -4755,8 +4767,8 @@ Appends a Unicode scalar value (char) to this string.
 `#[compiler_item("string_push_ascii")]`
 
 Appends a single byte, assumed to be a complete one-byte UTF-8 sequence
-(`byte < 0x80`). A larger byte breaks the String's UTF-8 invariant — the
-`_unchecked` contract.
+(`byte < 0x80`). A larger byte breaks the String's UTF-8 invariant: a
+contract violation, and the behavior is unconstrained.
 
 `push` routes its ASCII fast path here, and the optimizer's
 `nir/const_ascii_push` rewrite retargets `push(<const char < 0x80>)`
@@ -4771,10 +4783,12 @@ negative or off a character boundary; round a budget with `floor_char_boundary`.
 
 Truncate without bounds or UTF-8 boundary checks.
 
-# Safety (caller-side preconditions)
+# Contract
 
 - `0 <= byte_len <= self.len()`.
 - `byte_len` lies on a UTF-8 character boundary.
+
+Breaking it is a contract violation, and the behavior is unconstrained.
 
 #### `pub fn truncate_chars(&mut self, char_count: i32)`
 
@@ -4841,10 +4855,12 @@ of bounds or off a character boundary; round a budget with `floor_char_boundary`
 Extract a substring by byte range `[start, end)` without bounds or
 UTF-8 boundary checks.
 
-# Safety (caller-side preconditions)
+# Contract
 
 - `0 <= start <= end <= self.len()`.
 - `start` and `end` lie on UTF-8 character boundaries.
+
+Breaking it is a contract violation, and the behavior is unconstrained.
 
 #### `pub fn contains<S: AsStrSlice>(&self, pat: S) -> bool`
 
@@ -4883,10 +4899,12 @@ Panics if `byte_index` is out of bounds or not on a UTF-8 character boundary.
 
 Inserts a character at `byte_index` without bounds or UTF-8 boundary checks.
 
-# Safety (caller-side preconditions)
+# Contract
 
 - `0 <= byte_index <= self.len()`.
 - `byte_index` lies on a UTF-8 character boundary.
+
+Breaking it is a contract violation, and the behavior is unconstrained.
 
 #### `pub fn insert_str<S: AsStrSlice>(&mut self, byte_index: i32, s: S)`
 
@@ -4897,10 +4915,12 @@ Panics if `byte_index` is out of bounds or not on a UTF-8 character boundary.
 
 Inserts a string at `byte_index` without bounds or UTF-8 boundary checks.
 
-# Safety (caller-side preconditions)
+# Contract
 
 - `0 <= byte_index <= self.len()`.
 - `byte_index` lies on a UTF-8 character boundary.
+
+Breaking it is a contract violation, and the behavior is unconstrained.
 
 #### `pub fn remove(&mut self, byte_index: i32) -> char`
 
@@ -4912,10 +4932,12 @@ Panics if the index is out of bounds or not on a UTF-8 character boundary.
 Removes and returns the character at `byte_index` without bounds or
 UTF-8 boundary checks.
 
-# Safety (caller-side preconditions)
+# Contract
 
 - `0 <= byte_index < self.len()`.
 - `byte_index` lies on a UTF-8 character boundary.
+
+Breaking it is a contract violation, and the behavior is unconstrained.
 
 #### `pub fn repeat(&self, n: i32) -> String`
 
@@ -4966,9 +4988,10 @@ Build a `String` from an iterable of bytes, replacing invalid UTF-8 with U+FFFD.
 
 Build a `String` from an iterable of bytes without UTF-8 validation.
 
-# Safety
+# Contract
 
-The caller must ensure the bytes form valid UTF-8.
+The caller must ensure the bytes form valid UTF-8. Breaking it is a
+contract violation, and the behavior is unconstrained.
 
 #### `pub fn split<S: AsStrSlice>(&self, sep: S) -> StrSplitIter`
 
@@ -5138,9 +5161,12 @@ Length in bytes.
 Read the byte at `index`, counted from the view's start, without bounds
 checks.
 
-# Safety (caller-side preconditions)
+# Contract
 
 - `0 <= index < self.len()`.
+
+Any other `index` is a contract violation, and the result is
+unspecified: a byte of the backing array outside the view, or a trap.
 
 #### `pub fn is_char_boundary(&self, index: i32) -> bool`
 
@@ -5167,10 +5193,12 @@ boundary.
 
 A sub-view without bounds or UTF-8 boundary checks.
 
-# Safety (caller-side preconditions)
+# Contract
 
 - `0 <= start <= end <= self.len()`.
 - `start` and `end` lie on UTF-8 character boundaries.
+
+Breaking it is a contract violation, and the behavior is unconstrained.
 
 #### `pub fn as_bytes(&self) -> ByteSlice`
 
@@ -5285,6 +5313,16 @@ occur. Both parts view this one; `to_string` copies whichever is kept.
 
 #### `pub fn char_at_byte_unchecked(&self, byte_index: i32) -> char`
 
+Decodes the UTF-8 character starting at `byte_index`, counted from the
+view's start, without checks.
+
+# Contract
+
+- `byte_index` lies on a UTF-8 character boundary.
+- The full sequence starting at `byte_index` lies in `[0, self.len())`.
+
+Breaking it is a contract violation, and the behavior is unconstrained.
+
 #### `pub fn to_ascii_lowercase(&self) -> String`
 
 #### `pub fn to_ascii_uppercase(&self) -> String`
@@ -5292,6 +5330,15 @@ occur. Both parts view this one; `to_string` copies whichever is kept.
 #### `pub fn substr_bytes(&self, start: i32, end: i32) -> String`
 
 #### `pub fn substr_bytes_unchecked(&self, start: i32, end: i32) -> String`
+
+Copies out the byte range `[start, end)` of the view without checks.
+
+# Contract
+
+- `0 <= start <= end <= self.len()`.
+- `start` and `end` lie on UTF-8 character boundaries.
+
+Breaking it is a contract violation, and the behavior is unconstrained.
 
 #### `pub fn contains_char(&self, ch: char) -> bool`
 
@@ -5609,11 +5656,12 @@ Returns true if the range contains no elements.
 
 ### `pub variant Option<T>`
 
-Optional value - either Some(T) or None
-
-#### `Some(T)`
+Optional value - either None or Some(T). The derived order puts None first,
+as Rust's does.
 
 #### `None`
+
+#### `Some(T)`
 
 ### `pub variant Result<T, E>`
 

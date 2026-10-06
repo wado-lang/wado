@@ -7,6 +7,7 @@
 use crate::ast::{AstId, TestMetadata};
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::kiln::InvocationIndex;
+use crate::lexer::is_ident_continue;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
 use crate::path::{is_cwd_relative, normalize, relative_path};
 use crate::primitive::PrimitiveType;
@@ -543,13 +544,7 @@ pub fn threaded_block_label(label: &str) -> String {
 pub fn inline_block_label(callee: &str, serial: u32) -> String {
     let callee: String = callee
         .chars()
-        .map(|c| {
-            if c.is_alphanumeric() || c == '_' {
-                c
-            } else {
-                '_'
-            }
-        })
+        .map(|c| if is_ident_continue(c) { c } else { '_' })
         .collect();
     format!("{INTERNAL_PREFIX}inline_{callee}_{serial}")
 }

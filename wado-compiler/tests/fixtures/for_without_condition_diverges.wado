@@ -1,0 +1,27 @@
+//! A C-style `for` whose condition is left out, or always true, runs until a
+//! `break` or a `return` leaves it, as `loop` does. A body that only returns
+//! makes it diverge, so a function ending in one needs no `return` after it.
+
+fn first_past(n: i32) -> i32 {
+    for let mut i = 0; ; i += 1 {
+        if i > n {
+            return i;
+        }
+    }
+}
+
+fn first_even_past(n: i32) -> i32 {
+    for let mut i = n + 1; true; i += 1 {
+        if i % 2 == 0 {
+            return i;
+        }
+    }
+}
+
+test "a for with no condition diverges as loop does" {
+    assert first_past(2) == 3;
+    assert first_even_past(4) == 6;
+}
+
+__DATA__
+{"test": {}}
