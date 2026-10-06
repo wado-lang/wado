@@ -93,10 +93,12 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:param_wide.wado::SMALL_I128: ref "core:prelude/int128.wado//i128" = struct.new "core:prelude/int128.wado//i128" { low: 0_i64, high: 0_i64 };
+global global:param_wide.wado::SMALL_I128: ref "core:prelude/int128.wado//i128" = struct.new "core:prelude/int128.wado//i128" { low: 42_i64, high: 0_i64 };
+global global:param_wide.wado::BIG_U128: ref "core:prelude/int128.wado//u128" = struct.new "core:prelude/int128.wado//u128" { low: -1_i64, high: 65535_i64 };
+global global:param_wide.wado::NEG_I128: ref "core:prelude/int128.wado//i128" = struct.new "core:prelude/int128.wado//i128" { low: 4362896299872285998_i64, high: -6692605943_i64 };
 global global:param_wide.wado::$const_obj_7: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(68, 69, 70, 65, 85, 76, 84, 95, 85, 49, 50, 56, 61, 55), used: 14 };
 global global:param_wide.wado::$const_obj_8: ref Array<u8> = array.new_fixed<u8>(78, 69, 71, 95, 73, 49, 50, 56, 61);
-global global:param_wide.wado::$const_obj_9: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(66, 73, 71, 95, 85, 49, 50, 56, 61, 48), used: 10 };
+global global:param_wide.wado::$const_obj_9: ref Array<u8> = array.new_fixed<u8>(66, 73, 71, 95, 85, 49, 50, 56, 61);
 global global:param_wide.wado::$const_obj_10: ref Array<u8> = array.new_fixed<u8>(83, 77, 65, 76, 76, 95, 73, 49, 50, 56, 61);
 global global:core:prelude/int128.wado::$const_obj_11: ref Array<u8> = array.new_fixed<u8>(10);
 global global:core:prelude/int128.wado::$const_obj_12: ref Array<u8> = array.new_fixed<u8>(100, 110, 58, 32);
@@ -143,12 +145,6 @@ fn "param_wide.wado/run"() with Stdout {
     start_25 = "param_wide.wado/$cm_binding__Stdout_write_via_stream"(start_25);
     "core:rt/write_string_to_stream"(new_used_24, $local_0.repr, $local_0.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_25);
-    start_25 = builtin::i32_wrap_i64(local.tee $load_3("wasi/stream-new"()));
-    new_used_24 = builtin::i32_wrap_i64($load_3 >> 32_i64);
-    start_25 = "param_wide.wado/$cm_binding__Stdout_write_via_stream"(start_25);
-    $local_0 = global:param_wide.wado::$const_obj_9;
-    "core:rt/write_string_to_stream"(new_used_24, $local_0.repr, $local_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_25);
     $local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
     if @unlikely(local.tee start_25(0 + 9) > builtin::array_len($local_0.repr)) {
         cold_path;
@@ -156,26 +152,35 @@ fn "param_wide.wado/run"() with Stdout {
     }
     new_used_24 = $local_0.used;
     $local_0.used = start_25;
-    builtin::array_copy<u8>($local_0.repr, new_used_24, global:param_wide.wado::$const_obj_8, 0, 9);
-    self_28 = global:param_wide.wado::SMALL_I128;
-    "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0$scalar"($inline_core_prelude_int128_wado_i128__abs_u128_42: block -> ref "core:prelude/int128.wado//u128" {
-        if local.tee $load_3(self_28.high) < 0_i64 {
-            multivalue_bind [hi_157, lo_156] = i64.sub128(0_i64, 0_i64, self_28.low, $load_3);
-            break $inline_core_prelude_int128_wado_i128__abs_u128_42: struct.new "core:prelude/int128.wado//u128" { low: hi_157, high: lo_156 };
-        }
-        break $inline_core_prelude_int128_wado_i128__abs_u128_42: struct.new "core:prelude/int128.wado//u128" { low: self_28.low, high: $load_3 };
-    }, $local_0, self_28.high < 0_i64);
+    builtin::array_copy<u8>($local_0.repr, new_used_24, global:param_wide.wado::$const_obj_9, 0, 9);
+    "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0$scalar"(global:param_wide.wado::BIG_U128, $local_0, 0);
     new_used_24 = builtin::i32_wrap_i64(local.tee $load_3("wasi/stream-new"()));
     start_25 = builtin::i32_wrap_i64($load_3 >> 32_i64);
     new_used_24 = "param_wide.wado/$cm_binding__Stdout_write_via_stream"(new_used_24);
     "core:rt/write_string_to_stream"(start_25, $local_0.repr, $local_0.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_24);
-    new_used_24 = builtin::i32_wrap_i64(local.tee $load_3("wasi/stream-new"()));
-    start_25 = builtin::i32_wrap_i64($load_3 >> 32_i64);
-    new_used_24 = "param_wide.wado/$cm_binding__Stdout_write_via_stream"(new_used_24);
+    $local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
+    if @unlikely(local.tee new_used_24(0 + 9) > builtin::array_len($local_0.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, new_used_24);
+    }
+    start_25 = $local_0.used;
+    $local_0.used = new_used_24;
+    builtin::array_copy<u8>($local_0.repr, start_25, global:param_wide.wado::$const_obj_8, 0, 9);
+    self_28 = global:param_wide.wado::NEG_I128;
+    multivalue_bind [$load_3, hi_157] = i64.sub128(0_i64, 0_i64, self_28.low, self_28.high);
+    "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0$scalar"(struct.new "core:prelude/int128.wado//u128" { low: $load_3, high: hi_157 }, $local_0, 1);
+    start_25 = builtin::i32_wrap_i64(local.tee hi_157("wasi/stream-new"()));
+    new_used_24 = builtin::i32_wrap_i64(hi_157 >> 32_i64);
+    start_25 = "param_wide.wado/$cm_binding__Stdout_write_via_stream"(start_25);
+    "core:rt/write_string_to_stream"(new_used_24, $local_0.repr, $local_0.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_25);
+    start_25 = builtin::i32_wrap_i64(local.tee hi_157("wasi/stream-new"()));
+    new_used_24 = builtin::i32_wrap_i64(hi_157 >> 32_i64);
+    start_25 = "param_wide.wado/$cm_binding__Stdout_write_via_stream"(start_25);
     $local_0 = global:param_wide.wado::$const_obj_7;
-    "core:rt/write_string_to_stream"(start_25, $local_0.repr, $local_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_24);
+    "core:rt/write_string_to_stream"(new_used_24, $local_0.repr, $local_0.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_25);
 }
 
 fn "param_wide.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
