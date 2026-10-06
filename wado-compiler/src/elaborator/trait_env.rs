@@ -19,6 +19,7 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner, PackageId};
 use crate::name;
 use crate::resolve::{Resolution, Resolutions, head_site};
 use crate::tir::{TemplateId, TypeId, TypeTable};
+use crate::unparse::unparse_generic_params_into;
 use crate::token::Span;
 use crate::unparse::unparse_type_into;
 
@@ -2338,13 +2339,20 @@ fn check_impl_coherence(
         let (reported, error) = match error {
             CoherenceError::DuplicateImpl { first, second } => {
                 let (first, second) = (header_of(first), header_of(second));
+                // The program's own copy is the one it can fix, whichever
+                // loaded first.
+                let (kept, reported) =
+                    if is_user_local(&second.module) || !is_user_local(&first.module) {
+                        (first, second)
+                    } else {
+                        (second, first)
+                    };
                 (
-                    second,
+                    reported,
                     TypeError::DuplicateTraitImpl {
-                        trait_name: trait_name(second),
-                        self_type_name: written_type_source(&second.ty),
-                        conflicting_impl: conflicting_impl_location(&first.module, &second.module),
-                        span: second.span,
+                        header: header_as_written(reported),
+                        conflicting_impl: conflicting_impl_location(&kept.module, &reported.module),
+                        span: reported.span,
                     },
                 )
             }
@@ -2762,6 +2770,20 @@ pub(super) fn receiver_as_written(header: &ImplHeader) -> String {
     } else {
         format!("{}: {}", receiver.name, bounds.join(" + "))
     }
+}
+
+/// The header as written, bounds and all (`impl<..T: Small> Tag for [..T]`):
+/// what tells apart two impls a diagnostic names on one target.
+pub(super) fn header_as_written(header: &ImplHeader) -> String {
+    let mut out = "impl".to_string();
+    unparse_generic_params_into(&header.type_params, &mut out);
+    out.push(' ');
+    if let Some(trait_ty) = header.trait_ty() {
+        out.push_str(&written_type_source(trait_ty));
+        out.push_str(" for ");
+    }
+    out.push_str(&written_type_source(&header.ty));
+    out
 }
 
 /// The written form of `ty`, for a diagnostic saying what the programmer

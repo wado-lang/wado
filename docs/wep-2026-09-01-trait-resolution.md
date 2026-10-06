@@ -336,12 +336,13 @@ _different_ traits are the two-trait ambiguity above.
 
 Two impls generic over the receiver's head both reach it, and rank 2 puts them
 at one level. Like a blanket, neither can be named at the call, so the answer is
-again an impl written for the receiver:
+again an impl written for the receiver. Each is named by its header, bounds and
+all, since two of them may write one target:
 
 ```text
-ambiguous impls of 'Name' for 'Pair<String, i32>': the ones for 'Pair<T, i32>'
-and 'Pair<A, B>' both reach it, and nothing ranks them;
-write 'impl Name for Pair<String, i32>'
+ambiguous impls of 'Name' for 'Pair<String, i32>':
+'impl<T> Name for Pair<T, i32>' and 'impl<A, B> Name for Pair<A, B>' both reach
+it, and nothing ranks them; write 'impl Name for Pair<String, i32>'
 ```
 
 This too is reported at the use site. The two impls conflict only at a receiver

@@ -42,7 +42,7 @@ pub fn coherence_errors(program: &Program) -> Vec<CoherenceError> {
 
 /// What makes two impls one pair: trait, arguments at defaults, target, and
 /// each parameter's bounds and pins as sets.
-type ImplKey = (
+pub(super) type ImplKey = (
     TraitDeclId,
     Vec<SolverType>,
     SolverType,
@@ -51,7 +51,7 @@ type ImplKey = (
 
 /// An inherent impl and a marker have no key: several inherent impls spread a
 /// type's methods across modules, and a marker asks for a body.
-fn impl_key(program: &Program, def: &ImplDef) -> Option<ImplKey> {
+pub(super) fn impl_key(program: &Program, def: &ImplDef) -> Option<ImplKey> {
     if def.origin == ImplOrigin::Marker {
         return None;
     }

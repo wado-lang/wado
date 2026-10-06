@@ -1,7 +1,8 @@
 // One variadic impl written in two modules is a duplicate, and the error must
 // name both halves: it is reported against whichever impl loses a
 // deterministic (file, position) ordering, and the message says where the impl
-// it collides with lives.
+// it collides with lives. The call answers once rather than tying the copy
+// with itself.
 
 use {} from "./sub/variadic_coherence_other_module.wado";
 use { Tag } from "./sub/variadic_coherence_trait_decl.wado";
@@ -18,4 +19,7 @@ export fn run() {
 }
 
 __DATA__
-{"compile_error": "duplicate impl of `Tag` for `[..T]`: the one in `variadic_coherence_cross_module_duplicate.wado`"}
+{
+    "compile_error": "duplicate impl `impl<..T> Tag for [..T]`: the one in `variadic_coherence_cross_module_duplicate.wado`",
+    "compile_errors_not_contains": ["ambiguous"]
+}

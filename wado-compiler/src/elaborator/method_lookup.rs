@@ -32,7 +32,7 @@ use super::sig::{InstantiatedImplSig, InstantiatedSig, MethodSig, Param};
 use super::static_call::{StaticLookup, StaticQuery};
 use super::synth::{ArgClass, ArgProbe};
 use super::trait_env::{
-    ImplHeader, ImplMethodHeader, TraitEnv, receiver_as_written, written_type_source,
+    ImplHeader, ImplMethodHeader, TraitEnv, header_as_written, receiver_as_written,
 };
 use super::types::{
     ArithmeticTraitInfo, FromArrayInfo, FunctionContext, IndexingTraitInfo, MethodInfo,
@@ -2213,7 +2213,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let _ = self.emit(TypeError::AmbiguousHeadImpls {
                 trait_name: first.trait_head_name().unwrap_or_default().to_string(),
                 receiver,
-                targets: heads.iter().map(|h| written_type_source(&h.ty)).collect(),
+                headers: heads.iter().map(|h| header_as_written(h)).collect(),
                 span,
             });
         }
