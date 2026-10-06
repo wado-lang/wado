@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791310417703,
+  "lastUpdate": 1791318689829,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -64605,6 +64605,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c48b674add397bc26c5bb82657a7191c4a2cd085"
         },
         "date": 1791310417237,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20963,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338481,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cc92b22ae7fb9ea11efd4a964d128bdf19917256",
+          "message": "Merge pull request #2294 from wado-lang/ccr-5117b114-vbqsqr\n\nfeat(traits)!: bounds separate variadic impls; coherence rejects only a written-twice impl",
+          "timestamp": "2026-10-07T05:10:57+09:00",
+          "tree_id": "c85dc247301ff110c081c18533728d8f0c806772",
+          "url": "https://github.com/wado-lang/wado/commit/cc92b22ae7fb9ea11efd4a964d128bdf19917256"
+        },
+        "date": 1791318688884,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
