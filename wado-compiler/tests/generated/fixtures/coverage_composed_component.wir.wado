@@ -104,15 +104,18 @@ fn "coverage_composed_component.wado/$cm_binding__CmCatalog_id_result_ok"(v) wit
 }
 
 fn "coverage_composed_component.wado/$cm_export__$test_0"() {
-    let $v0: bool;
     let self: ref "core:prelude/types.wado//Result<u32,()>";
-    if @unlikely(local.tee $v0((if ref.test "core:prelude/types.wado//Result<u32,()>::Ok"(local.tee self("coverage_composed_component.wado/$cm_binding__CmCatalog_id_result_ok"(struct.new "core:prelude/types.wado//Result<u32,()>::Ok" { discriminant: 0, payload_0: 7 }))) -> bool {
-        ref.cast "core:prelude/types.wado//Result<u32,()>::Ok"(self).payload_0 == 7;
-    } else {
-        0;
-    })) == 0) {
+    let $eq_self_Ok_2: u32;
+    if @unlikely(local.tee $eq_self_Ok_2($inline_core_prelude_types_wado_Result_u32_____core_prelude_traits_wado_Eq__eq_scalar_3: block -> bool {
+        if ref.test "core:prelude/types.wado//Result<u32,()>::Ok"(local.tee self("coverage_composed_component.wado/$cm_binding__CmCatalog_id_result_ok"(struct.new "core:prelude/types.wado//Result<u32,()>::Ok" { discriminant: 0, payload_0: 7 }))) {
+            break $inline_core_prelude_types_wado_Result_u32_____core_prelude_traits_wado_Eq__eq_scalar_3: local.tee $eq_self_Ok_2(ref.cast "core:prelude/types.wado//Result<u32,()>::Ok"(self).payload_0) == 7;
+        } else {
+            break $inline_core_prelude_types_wado_Result_u32_____core_prelude_traits_wado_Eq__eq_scalar_3: 0;
+        }
+        unreachable;
+    }) == 0) {
         cold_path;
-        "coverage_composed_component.wado/$test_0$cold0"($v0);
+        "coverage_composed_component.wado/$test_0$cold0"($eq_self_Ok_2);
         unreachable;
     }
     "wasi/task-return"(0);

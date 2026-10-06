@@ -162,7 +162,7 @@ condition: file.ends_with(\"default_arg_location_call_site.wado\")
     }
     $arg_spill_1 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee repr_51(global:default_arg_location_call_site.wado::$const_obj_9), start: 0, end: 35 };
     multivalue_bind [$v1_3, $fuse_at_18] = ($mv_arg_2 = global:default_arg_location_call_site.wado::$const_obj_6; "core:prelude/string.wado/core:prelude/string.wado/StrSlice::find<core:prelude/string.wado/String>"($arg_spill_1, $mv_arg_2.repr, $mv_arg_2.used));
-    if @unlikely((local.tee $v1_3($v1_3 == 0) == 0) == 0) {
+    if @unlikely((local.tee $v1_3($v1_3 == 1) == 0) == 0) {
         cold_path;
         $fuse_at_18 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $mv_arg_2("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(179)), 119);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($mv_arg_2.repr, $fuse_at_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -233,7 +233,7 @@ condition: file.ends_with(\"default_arg_location_call_site.wado\")
     }
     $arg_spill_1 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee repr_49(global:default_arg_location_call_site.wado::$const_obj_9), start: 0, end: 35 };
     multivalue_bind [$v1_3, $fuse_at_18] = ($mv_arg_2 = global:default_arg_location_call_site.wado::$const_obj_6; "core:prelude/string.wado/core:prelude/string.wado/StrSlice::find<core:prelude/string.wado/String>"($arg_spill_1, $mv_arg_2.repr, $mv_arg_2.used));
-    if @unlikely((local.tee $v1_3($v1_3 == 0) == 0) == 0) {
+    if @unlikely((local.tee $v1_3($v1_3 == 1) == 0) == 0) {
         cold_path;
         $fuse_at_18 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $mv_arg_2("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(179)), 119);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($mv_arg_2.repr, $fuse_at_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -835,7 +835,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
             $sroa_slot_156 = 0;
             $inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_9: block {
                 if start_20 >= $mv$content$used {
-                    $sroa_slot_156 = 1;
+                    $sroa_slot_156 = 0;
                     break $inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_9;
                 }
                 $sroa_slot_196 = 0;
@@ -862,11 +862,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
                     break $inline_decode_char_at_0;
                 };
                 start_20 = start_20 + $sroa_slot_196;
-                $sroa_slot_156 = 0;
+                $sroa_slot_156 = 1;
                 break $inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_9;
             };
             let $match_scrut_0: i32;
-            if local.tee $match_scrut_0($sroa_slot_156) == 0 {
+            if local.tee $match_scrut_0($sroa_slot_156) == 1 {
                 new_used_19 = new_used_19 + 1;
             } else {
                 break b83;
@@ -1348,7 +1348,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::find<core:prelud
     let j: i32;
     let $licm_repr_21: ref Array<u8>;
     if $mv$pat$used == 0 {
-        return 0, 0;
+        return 1, 0;
     }
     limit = (self.end - local.tee $load_1(self.start)) - $mv$pat$used;
     i = 0;
@@ -1371,13 +1371,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::find<core:prelud
                 };
                 break $inline_bytes_match_at_4: 1;
             } {
-                return 0, i;
+                return 1, i;
             }
             i = i + 1;
             continue l170;
         };
     };
-    return 1, 0;
+    return 0, 0;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {

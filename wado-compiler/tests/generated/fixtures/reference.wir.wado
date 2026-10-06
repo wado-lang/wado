@@ -38,8 +38,8 @@ array Array<i32> (mut i32);  // TypeId(9)
 array Array<u64> (mut u64);  // TypeId(10)
 
 variant core:prelude/types.wado//Option<i32> {  // TypeId(11)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(12)
@@ -493,7 +493,7 @@ fn "reference.wado/ref_deref_assign_variant"() with Stdout {
     let rx_10: i32;
     let tx_11: i32;
     if ref.is_null(global:reference.wado::$const_obj_40) {
-        global:reference.wado::$const_obj_40 = "reference.wado/maybe_read$scalar"(struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 42 });
+        global:reference.wado::$const_obj_40 = "reference.wado/maybe_read$scalar"(struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 42 });
     }
     rx_10 = builtin::i32_wrap_i64(local.tee packed_9("wasi/stream-new"()));
     tx_11 = builtin::i32_wrap_i64(packed_9 >> 32_i64);
@@ -503,7 +503,7 @@ fn "reference.wado/ref_deref_assign_variant"() with Stdout {
     "core:rt/write_string_to_stream"(tx_11, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_10);
     if ref.is_null(global:reference.wado::$const_obj_39) {
-        global:reference.wado::$const_obj_39 = "reference.wado/maybe_read$scalar"(struct.new "core:prelude/types.wado//Option<i32>" { 1 });
+        global:reference.wado::$const_obj_39 = "reference.wado/maybe_read$scalar"(struct.new "core:prelude/types.wado//Option<i32>" { 0 });
     }
     rx_10 = builtin::i32_wrap_i64(local.tee packed_9("wasi/stream-new"()));
     tx_11 = builtin::i32_wrap_i64(packed_9 >> 32_i64);
@@ -511,13 +511,13 @@ fn "reference.wado/ref_deref_assign_variant"() with Stdout {
     $mv_arg_2 = global:reference.wado::$const_obj_39;
     "core:rt/write_string_to_stream"(tx_11, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_10);
-    $mv_arg_2 = "reference.wado/maybe_read$scalar"(local.tee c(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>" { value: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 10 } }).value);
+    $mv_arg_2 = "reference.wado/maybe_read$scalar"(local.tee c(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>" { value: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 10 } }).value);
     rx_10 = builtin::i32_wrap_i64(local.tee packed_9("wasi/stream-new"()));
     tx_11 = builtin::i32_wrap_i64(packed_9 >> 32_i64);
     rx_10 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_10);
     "core:rt/write_string_to_stream"(tx_11, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_10);
-    c.value = struct.new "core:prelude/types.wado//Option<i32>" { 1 };
+    c.value = struct.new "core:prelude/types.wado//Option<i32>" { 0 };
     $mv_arg_2 = "reference.wado/maybe_read$scalar"(c.value);
     rx_10 = builtin::i32_wrap_i64(local.tee packed_9("wasi/stream-new"()));
     tx_11 = builtin::i32_wrap_i64(packed_9 >> 32_i64);

@@ -1,5 +1,5 @@
-// A variant derives no `Ord` whether or not it writes `eq`, so the error does
-// not blame the `eq` it writes.
+// A variant writing `eq` derives no `Ord`, as any type writing one, and the
+// error names the `eq` as the cause.
 
 variant Shape {
     Dot,
@@ -23,5 +23,5 @@ test {
 __DATA__
 {
     "compile_error": ":20:13: analysis error: type 'Shape' does not implement trait 'Ord' required by bound on 'T'",
-    "compile_errors_not_contains": ["writes `eq`"]
+    "compile_errors_contains": ["`Shape` writes `eq`, so no `Ord` is derived for it"]
 }

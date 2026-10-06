@@ -43,8 +43,8 @@ array Array<i32> (mut i32);  // TypeId(8)
 array Array<u64> (mut u64);  // TypeId(9)
 
 variant core:prelude/types.wado//Option<i32> {  // TypeId(10)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(11)
@@ -280,7 +280,7 @@ condition: p.length() == 5.0
 fn "spec_testing_declaration.wado/$cm_export__$test_trap_7_panics_on_null_dereference"() {
     drop($inline_core_prelude_types_wado_Option_i32___unwrap_2: block -> i32 {
         let $match_scrut_0: ref "core:prelude/types.wado//Option<i32>";
-        if @likely(ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $match_scrut_0(struct.new "core:prelude/types.wado//Option<i32>" { 1 }))) {
+        if @likely(ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $match_scrut_0(struct.new "core:prelude/types.wado//Option<i32>" { 0 }))) {
             break $inline_core_prelude_types_wado_Option_i32___unwrap_2: ref.cast "core:prelude/types.wado//Option<i32>::Some"($match_scrut_0).payload_0;
         } else {
         }

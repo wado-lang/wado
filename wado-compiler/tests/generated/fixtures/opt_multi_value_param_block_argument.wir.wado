@@ -239,7 +239,7 @@ condition: key_index::<Keys>(&h, builtin::black_box(1), 5) == -1
         unreachable;
     }
     multivalue_bind [$v1_2, $v2_3] = "opt_multi_value_param_block_argument.wado/opt_multi_value_param_block_argument.wado/key_lookup<opt_multi_value_param_block_argument.wado/Keys>"(h, black_box(1));
-    if @unlikely(local.tee $v2_3((if ($v1_2 == 0) & ($v2_3 == 0) -> bool {
+    if @unlikely(local.tee $v2_3((if ($v1_2 == 1) & ($v2_3 == 0) -> bool {
         1;
     } else {
         0;
@@ -308,9 +308,9 @@ fn "opt_multi_value_param_block_argument.wado/opt_multi_value_param_block_argume
     }
     len = select i32(a_26 < len, local.tee a_26(select i32(3 > start, 3, start)), len);
     multivalue_bind [len, start] = (let $mv_field_1: ref Array<u8>; $mv_field_1 = $load_0.repr; start = $load_2 + start; len = $load_2 + len; "opt_multi_value_param_block_argument.wado/opt_multi_value_param_block_argument.wado/Keys^opt_multi_value_param_block_argument.wado/Schema::lookup"($mv_field_1, start, len));
-    return (if len == 0 -> i32 {
+    return (if len == 1 -> i32 {
         start;
-    } else if @likely(len == 1) -> i32 {
+    } else if @likely(len == 0) -> i32 {
         -1;
     } else {
         unreachable;
@@ -335,9 +335,9 @@ fn "opt_multi_value_param_block_argument.wado/opt_multi_value_param_block_argume
     }
     len = select i32(a_26 < len, local.tee a_26(select i32(5 > start, 5, start)), len);
     multivalue_bind [len, start] = (let $mv_field_1: ref Array<u8>; $mv_field_1 = $load_0.repr; start = $load_2 + start; len = $load_2 + len; "opt_multi_value_param_block_argument.wado/opt_multi_value_param_block_argument.wado/Keys^opt_multi_value_param_block_argument.wado/Schema::lookup"($mv_field_1, start, len));
-    return (if len == 0 -> i32 {
+    return (if len == 1 -> i32 {
         start;
-    } else if @likely(len == 1) -> i32 {
+    } else if @likely(len == 0) -> i32 {
         -1;
     } else {
         unreachable;
@@ -1160,9 +1160,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
 
 fn "opt_multi_value_param_block_argument.wado/opt_multi_value_param_block_argument.wado/Keys^opt_multi_value_param_block_argument.wado/Schema::lookup"($mv$key$repr, $mv$key$start, $mv$key$end) {
     if ($mv$key$end - $mv$key$start) == 2 {
-        return 0, 0;
+        return 1, 0;
     }
-    return 1, 0;
+    return 0, 0;
 }
 
 fn "core:prelude/traits.wado/opt_multi_value_param_block_argument.wado/Holder^core:prelude/traits.wado/Inspect::inspect"(self, f) {

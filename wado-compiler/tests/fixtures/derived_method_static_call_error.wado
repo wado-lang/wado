@@ -1,0 +1,33 @@
+// A derived method called by type path checks its arguments as a declared one
+// does: the receiver is the instance the path writes, else the declaration at
+// its own parameters, and an instance withholding the derivation has none.
+
+struct Pair<T> { a: T, b: T }
+
+struct Opaque { v: i32 }
+impl Eq for Opaque { fn eq(&self, other: &Opaque) -> bool { return true; } }
+
+test "the turbofish names the receiver" {
+    let p = Pair { a: 1_i64, b: 2_i64 };
+    assert Pair::<i32>::eq(&p, &p);
+}
+
+test "an argument of another type is a mismatch" {
+    assert Pair::eq(&1, &2);
+}
+
+test "an instance withholding the derivation has no method" {
+    let p = Pair { a: Opaque { v: 1 }, b: Opaque { v: 2 } };
+    assert Pair::cmp(&p, &p) == Ordering::Equal;
+}
+
+variant Tree<T> { Leaf(T), Empty }
+
+test "an argument settling no parameter asks for a turbofish" {
+    assert Tree::eq(&Tree::Empty, &Tree::Empty);
+}
+
+__DATA__
+{
+    "compile_error": ":12:28: analysis error: type mismatch: expected '&Pair<i32>', found '&Pair<i64>'; 12:32: type mismatch: expected '&Pair<i32>', found '&Pair<i64>'; 16:12: cannot infer type parameter `T` of `Pair::eq`; add a turbofish (`Pair::<...>::eq()`) or a type annotation; 16:21: type mismatch: expected '&Pair<T>', found '&i32'; 16:25: type mismatch: expected '&Pair<T>', found '&i32'; 21:12: unknown function 'Pair::cmp'; 27:12: cannot infer type parameter `T` of `Tree::eq`; add a turbofish (`Tree::<...>::eq()`) or a type annotation"
+}

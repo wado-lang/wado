@@ -40,8 +40,8 @@ array Array<u64> (mut u64);  // TypeId(7)
 array Array<f32> (mut f32);  // TypeId(8)
 
 variant core:prelude/types.wado//Option<i64> {  // TypeId(9)
-    Some(i64),
     None,
+    Some(i64),
 }
 
 struct core:prelude/types.wado//Option<i64>::Some {  // TypeId(10)
@@ -184,10 +184,10 @@ global global:core:prelude/traits.wado::$const_obj_230: ref Array<u8> = array.ne
 global global:core:prelude/primitive.wado::$const_obj_231: ref Array<u8> = array.new_fixed<u8>(78, 97, 78);
 global global:core:prelude/primitive.wado::$const_obj_232: ref Array<u8> = array.new_fixed<u8>(46, 48);
 global global:core:prelude/primitive.wado::$const_obj_234: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 46, 48), used: 3 };
-global global:core:prelude/traits.wado::$const_obj_235: ref Array<u8> = array.new_fixed<u8>(78, 111, 110, 101);
+global global:core:prelude/traits.wado::$const_obj_235: ref Array<u8> = array.new_fixed<u8>(83, 111, 109, 101);
 global global:core:prelude/traits.wado::$const_obj_236: ref Array<u8> = array.new_fixed<u8>(58, 58);
 global global:core:prelude/traits.wado::$const_obj_237: ref Array<u8> = array.new_fixed<u8>(79, 112, 116, 105, 111, 110);
-global global:core:prelude/traits.wado::$const_obj_238: ref Array<u8> = array.new_fixed<u8>(83, 111, 109, 101);
+global global:core:prelude/traits.wado::$const_obj_238: ref Array<u8> = array.new_fixed<u8>(78, 111, 110, 101);
 global global:core:prelude/array.wado::$const_obj_241: ref Array<u8> = array.new_fixed<u8>(46, 46, 46);
 global global:core:prelude/array.wado::$const_obj_242: ref Array<u8> = array.new_fixed<u8>(44, 32, 46, 46, 46);
 global global:core:prelude/array.wado::$const_obj_243: ref Array<u8> = array.new_fixed<u8>(44, 32);
@@ -210,7 +210,7 @@ fn "generic_call_closure_return_literal_expected_type.wado/run"() with Stdout {
         let $indirect_call_1: ref "canonical//CanonicalClosure_0";
         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(f_1)).env);
     };
-    checks = struct.new "tuple//[f32, f32, f32, f32, i64, core:prelude/list.wado/List<f32>, i64, u64, core:prelude/types.wado/Option<i64>, u64, f64, i32]" { 0: 1_f32, 1: b, 2: 1.5_f32, 3: 2.5_f32, 4: 4294967297_i64, 5: struct.new "core:prelude//List<f32>" { repr: array.new_fixed<f32>(3.5_f32), used: 1 }, 6: 4294967298_i64, 7: 4294967299_i64, 8: struct.new "core:prelude/types.wado//Option<i64>::Some" { discriminant: 0, payload_0: 4294967300_i64 }, 9: 4294967301_i64, 10: 1.25, 11: 9 };
+    checks = struct.new "tuple//[f32, f32, f32, f32, i64, core:prelude/list.wado/List<f32>, i64, u64, core:prelude/types.wado/Option<i64>, u64, f64, i32]" { 0: 1_f32, 1: b, 2: 1.5_f32, 3: 2.5_f32, 4: 4294967297_i64, 5: struct.new "core:prelude//List<f32>" { repr: array.new_fixed<f32>(3.5_f32), used: 1 }, 6: 4294967298_i64, 7: 4294967299_i64, 8: struct.new "core:prelude/types.wado//Option<i64>::Some" { discriminant: 1, payload_0: 4294967300_i64 }, 9: 4294967301_i64, 10: 1.25, 11: 9 };
     $local_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/tuple.wado/[f32,f32,f32,f32,i64,core:prelude/list.wado/List<f32>,i64,u64,core:prelude/types.wado/Option<i64>,u64,f64,i32]^core:prelude/traits.wado/Inspect::inspect$spec0$scalar"(checks, $local_20);
     rx_50 = builtin::i32_wrap_i64(local.tee packed_49("wasi/stream-new"()));
@@ -1223,10 +1223,6 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<i64>^core:prelude/tr
         start_23 = f.used;
         f.used = new_used_22;
         builtin::array_copy<u8>(f.repr, start_23, global:core:prelude/traits.wado::$const_obj_238, 0, 4);
-        if @unlikely(self.discriminant != 0) {
-            unreachable;
-        }
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i64>$scalar$spec0$scalar"(ref.cast "core:prelude/types.wado//Option<i64>::Some"(self).payload_0, f);
     }
     if self.discriminant == 1 {
         if @unlikely(local.tee start_23(f.used + 6) > builtin::array_len(f.repr)) {
@@ -1250,6 +1246,10 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<i64>^core:prelude/tr
         new_used_22 = f.used;
         f.used = start_23;
         builtin::array_copy<u8>(f.repr, new_used_22, global:core:prelude/traits.wado::$const_obj_235, 0, 4);
+        if @unlikely(self.discriminant != 1) {
+            unreachable;
+        }
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i64>$scalar$spec0$scalar"(ref.cast "core:prelude/types.wado//Option<i64>::Some"(self).payload_0, f);
     }
 }
 

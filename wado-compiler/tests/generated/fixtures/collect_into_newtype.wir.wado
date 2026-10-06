@@ -202,7 +202,7 @@ fn "collect_into_newtype.wado/run"() with Stdout {
     b3: block {
         l4: loop {
             multivalue_bind [rx_41, used_213] = "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,u32>^core:prelude/traits.wado/Iterator::next"(self_79);
-            if rx_41 == 0 {
+            if rx_41 == 1 {
                 if @unlikely(local.tee tx_42(result_84.used) >= builtin::array_len(result_84.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow"(result_84);
@@ -246,15 +246,15 @@ fn "collect_into_newtype.wado/run"() with Stdout {
     tx_42 = 0;
     $inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_67: block {
         if local.tee used_213(it.index) >= 3 {
-            tx_42 = 1;
+            tx_42 = 0;
             break $inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_67;
         }
         drop(builtin::array_get_value<i32>(it.repr, used_213));
         it.index = used_213 + 1;
-        tx_42 = 0;
+        tx_42 = 1;
         break $inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_67;
     };
-    self_150 = (if local.tee tx_42(tx_42 == 1) -> ref "core:prelude/string.wado//String" {
+    self_150 = (if local.tee tx_42(tx_42 == 0) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
@@ -620,12 +620,12 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/strin
         let $mv$$pattern_temp_0$1: i32;
         multivalue_bind [$load_1, $mv$$pattern_temp_0$1] = "core:prelude/string.wado/decode_char_at"($load_0.repr, $load_1);
         local.tee $load_0(self.inner).byte_index = $load_0.byte_index + $mv$$pattern_temp_0$1;
-        return 0, block -> u32 {
+        return 1, block -> u32 {
             let $indirect_call_1: ref "canonical//CanonicalClosure_0";
             call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(self.f)).env, $load_1);
         };
     };
-    return 1, 0;
+    return 0, 0;
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self) {

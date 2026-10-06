@@ -201,8 +201,8 @@ struct core:prelude/slice.wado//SliceValueIter<[core:prelude/string.wado/String,
 }
 
 variant core:prelude/types.wado//Option<char> {  // TypeId(41)
-    Some(char),
     None,
+    Some(char),
 }
 
 struct core:prelude/types.wado//Option<char>::Some {  // TypeId(42)
@@ -565,7 +565,7 @@ condition: v matches { List(items) && items[1] matches { Null } }
     v = struct.new "core:value//Value::Object" { discriminant: 10, payload_0: ref.as_non_null("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:value/Value>^core:prelude/traits.wado/From<Array<[core:prelude/string.wado/String,V]>>::from"(entries)) };
     let $mv$$vr_33$1: ref null "core:prelude/string.wado//String";
     let $mv$$vr_33$2: ref null "core:serde//SerializeError";
-    multivalue_bind [$cond_5, $mv$$vr_33$1, $mv$$vr_33$2] = "core:json/core/json/to_string<core:value/Value>$scalar"(v, struct.new "core:prelude/types.wado//Option<char>" { 1 });
+    multivalue_bind [$cond_5, $mv$$vr_33$1, $mv$$vr_33$2] = "core:json/core/json/to_string<core:value/Value>$scalar"(v, struct.new "core:prelude/types.wado//Option<char>" { 0 });
     if @unlikely(local.tee i((if $cond_5 == 0 -> bool {
         value_52 = ref.as_non_null($mv$$vr_33$1);
         $inline_core_prelude_array_wado_seq_eq_u8__17: block -> bool {

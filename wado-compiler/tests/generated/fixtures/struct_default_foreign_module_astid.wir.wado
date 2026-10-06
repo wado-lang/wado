@@ -27,8 +27,8 @@ struct core:benchmark//Benchmark {  // TypeId(4)
 array Array<u64> (mut u64);  // TypeId(5)
 
 variant core:prelude/types.wado//Option<i32> {  // TypeId(6)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(7)
@@ -37,8 +37,8 @@ struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(7)
 }
 
 variant core:prelude/types.wado//Option<f64> {  // TypeId(8)
-    Some(f64),
     None,
+    Some(f64),
 }
 
 struct core:prelude/types.wado//Option<f64>::Some {  // TypeId(9)
@@ -196,7 +196,7 @@ global global:core:prelude/primitive.wado::$const_obj_114: ref "core:prelude/str
 fn "struct_default_foreign_module_astid.wado/run"() with Stdout, MonotonicClock {
     let b: ref "core:benchmark//Benchmark";
     let count: i32;
-    local.tee b(struct.new "core:benchmark//Benchmark" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("primes"), used: 6 }, iterations: 0, target_ms: 1000, warmup: -1, input_size: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, work_per_iter: struct.new "core:prelude/types.wado//Option<f64>::Some" { discriminant: 0, payload_0: 100 }, unit: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110), used: 1 }, header_printed: 0 }).iterations = 1;
+    local.tee b(struct.new "core:benchmark//Benchmark" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("primes"), used: 6 }, iterations: 0, target_ms: 1000, warmup: -1, input_size: struct.new "core:prelude/types.wado//Option<i32>" { 0 }, work_per_iter: struct.new "core:prelude/types.wado//Option<f64>::Some" { discriminant: 1, payload_0: 100 }, unit: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110), used: 1 }, header_printed: 0 }).iterations = 1;
     if @unlikely(local.tee count("struct_default_foreign_module_astid.wado/core:benchmark/Benchmark::run<i32>$$Closure_0$spec0"(b, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 })) != 25) {
         cold_path;
         "struct_default_foreign_module_astid.wado/run$cold0"(count);

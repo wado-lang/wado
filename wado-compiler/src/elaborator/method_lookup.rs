@@ -2,7 +2,7 @@
 
 use super::scope::{BinderInScope, ScopedBound, trait_params_from_impl};
 use super::trait_env::ImplTargetKey;
-use super::trait_query::SelfBinding;
+use super::trait_query::{DerivedAt, SelfBinding};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -1767,16 +1767,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // An impl the order names at two levels of the chain is one block.
         let mut seen: IndexSet<Option<DefId>> = IndexSet::default();
         for def in named.iter().filter(|def| seen.insert(**def)) {
-            match def {
+            // A marker writes no method: the derived impl it asks for answers.
+            let written =
+                def.filter(|def| !self.tysys.trait_env.impl_headers[def].is_synthesize_request);
+            match written {
                 Some(def) => found.extend(self.collect_trait_method_matches_from_impl(
-                    &ImplBlockRef(*def),
+                    &ImplBlockRef(def),
                     method_name,
                     receiver_type_args,
                     receiver_type_id,
                 )),
                 None => {
                     if let Some(recv_id) = receiver_type_id {
-                        found.extend(self.try_auto_derived_method_match(method_name, recv_id));
+                        found.extend(self.try_auto_derived_method_match(
+                            method_name,
+                            recv_id,
+                            DerivedAt::Instance,
+                        ));
                     }
                 }
             }
