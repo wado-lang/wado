@@ -1,0 +1,22 @@
+// `*&v` of a struct is `v` itself, so the view `push_str` takes scalarizes
+// like any other local and allocates nothing.
+//
+// Regression: the identity rewrite held `*&e` to a reference result, so the
+// `let view = *self` that `AsStrSlice::internal_append_to` inlines to kept a
+// `StrSlice` allocation per `push_str` of a slice.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let s: String = builtin::black_box("abcdef");
+    let a = builtin::black_box(1);
+    let mut out = String::with_capacity(8);
+    out.push_str(s.as_str_slice().slice_unchecked(a, 4));
+    println(out);
+}
+
+__DATA__
+{
+    "stdout": "bcd\n",
+    "wir_not_expect:O2": ["struct.new \"core:prelude/string.wado//StrSlice\""]
+}

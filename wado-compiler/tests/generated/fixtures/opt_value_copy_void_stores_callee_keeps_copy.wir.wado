@@ -124,10 +124,10 @@ fn "opt_value_copy_void_stores_callee_keeps_copy.wado/build"() {
     let value_50: ref "opt_value_copy_void_stores_callee_keeps_copy.wado//Sink";
     let used_51: i32;
     let v_60: ref "core:prelude//List<core:prelude/string.wado/String>";
-    let new_used_104: i32;
-    let start_105: i32;
-    let new_used_145: i32;
-    let start_146: i32;
+    let new_used_107: i32;
+    let start_108: i32;
+    let new_used_163: i32;
+    let start_164: i32;
     out_0 = struct.new "core:prelude//List<opt_value_copy_void_stores_callee_keeps_copy.wado/Item>" { repr: array.new_fixed<ref "opt_value_copy_void_stores_callee_keeps_copy.wado//Item">(), used: 0 };
     sinks = struct.new "core:prelude//List<opt_value_copy_void_stores_callee_keeps_copy.wado/Sink>" { repr: array.new_fixed<ref "opt_value_copy_void_stores_callee_keeps_copy.wado//Sink">(), used: 0 };
     i_2 = 0;
@@ -197,20 +197,20 @@ fn "opt_value_copy_void_stores_callee_keeps_copy.wado/build"() {
                 }
                 break $inline_count_digits_u64_14: 20;
             }; if is_negative_30 {
-                if @unlikely(local.tee new_used_104($local_1.used + 1) > builtin::array_len($load_2)) {
+                if @unlikely(local.tee new_used_107($local_1.used + 1) > builtin::array_len($load_2)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_104);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_107);
                 }
-                start_105 = $local_1.used;
-                $local_1.used = new_used_104;
-                builtin::array_set_u8($local_1.repr, start_105, 45);
+                start_108 = $local_1.used;
+                $local_1.used = new_used_107;
+                builtin::array_set_u8($local_1.repr, start_108, 45);
             } else {
-            }; if @unlikely(local.tee new_used_145($local_1.used + digit_count_32) > builtin::array_len($local_1.repr)) {
+            }; if @unlikely(local.tee new_used_163($local_1.used + digit_count_32) > builtin::array_len($local_1.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_145);
-            }; start_146 = $local_1.used; $local_1.used = new_used_145; arr = $local_1.repr; pos = start_146 + digit_count_32; t = abs_val; b25: block {
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_163);
+            }; start_164 = $local_1.used; $local_1.used = new_used_163; arr = $local_1.repr; pos = start_164 + digit_count_32; t = abs_val; b25: block {
                 l26: loop {
-                    break_if b25 (pos - start_146) < 2;
+                    break_if b25 (pos - start_164) < 2;
                     q = t /u 100_i64;
                     tens = local.tee pair(builtin::i32_wrap_i64(t - (q * 100_i64))) / 10;
                     builtin::array_set_u8(arr, pos - 1, ((48 + pair) - (tens * 10)) & 255);
@@ -219,8 +219,8 @@ fn "opt_value_copy_void_stores_callee_keeps_copy.wado/build"() {
                     t = q;
                     continue l26;
                 };
-            }; if pos > start_146 {
-                builtin::array_set_u8(arr, start_146, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
+            }; if pos > start_164 {
+                builtin::array_set_u8(arr, start_164, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             }; $local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 })), used: builtin::array_len(elements_46) } }) };
             if @unlikely(local.tee used_51(sinks.used) >= builtin::array_len(sinks.repr)) {
                 cold_path;
@@ -460,24 +460,24 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_void_store
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
-    let start_26: i32;
+    let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
         }
-        start_26 = self.used;
+        start_29 = self.used;
         self.used = is_negative;
-        builtin::array_set_u8(self.repr, start_26, 45);
+        builtin::array_set_u8(self.repr, start_29, 45);
     } else {
     }
     if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
     }
-    start_26 = self.used;
+    start_29 = self.used;
     self.used = digit_count;
-    return start_26;
+    return start_29;
 }
 
 export fn "opt_value_copy_void_stores_callee_keeps_copy.wado/$cm_export__run" as "run"

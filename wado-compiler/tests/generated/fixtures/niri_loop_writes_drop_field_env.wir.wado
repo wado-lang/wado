@@ -67,49 +67,49 @@ fn "niri_loop_writes_drop_field_env.wado/run"() with Stdout {
     let $local_2: ref "core:prelude/string.wado//String";
     let packed: i64;
     let $sroa_$f_buf_68: ref "core:prelude/string.wado//String";
-    let new_used_97: i32;
-    let start_98: i32;
+    let new_used_100: i32;
+    let start_101: i32;
     $sroa_$f_buf_68 = local.tee $local_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
-    if @unlikely(local.tee new_used_97(0 + 1) > builtin::array_len($sroa_$f_buf_68.repr)) {
+    if @unlikely(local.tee new_used_100(0 + 1) > builtin::array_len($sroa_$f_buf_68.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_68, new_used_97);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_68, new_used_100);
     }
-    start_98 = $sroa_$f_buf_68.used;
-    $sroa_$f_buf_68.used = new_used_97;
-    builtin::array_set_u8(local.tee $load_2($sroa_$f_buf_68.repr), start_98, 45);
-    if @unlikely(local.tee start_98($sroa_$f_buf_68.used + 1) > builtin::array_len($load_2)) {
+    start_101 = $sroa_$f_buf_68.used;
+    $sroa_$f_buf_68.used = new_used_100;
+    builtin::array_set_u8(local.tee $load_2($sroa_$f_buf_68.repr), start_101, 45);
+    if @unlikely(local.tee start_101($sroa_$f_buf_68.used + 1) > builtin::array_len($load_2)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_68, start_98);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_68, start_101);
     }
-    new_used_97 = $sroa_$f_buf_68.used;
-    $sroa_$f_buf_68.used = start_98;
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_68.repr, new_used_97, 1_i64, 1);
-    if @unlikely(local.tee new_used_97($local_2.used + 1) > builtin::array_len($local_2.repr)) {
+    new_used_100 = $sroa_$f_buf_68.used;
+    $sroa_$f_buf_68.used = start_101;
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_68.repr, new_used_100, 1_i64, 1);
+    if @unlikely(local.tee new_used_100($local_2.used + 1) > builtin::array_len($local_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_97);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_100);
     }
-    start_98 = $local_2.used;
-    $local_2.used = new_used_97;
-    builtin::array_copy<u8>($local_2.repr, start_98, global:niri_loop_writes_drop_field_env.wado::$const_obj_3, 0, 1);
-    if @unlikely(local.tee start_98(local.tee $sroa_$f_buf_68($local_2).used + 1) > builtin::array_len($sroa_$f_buf_68.repr)) {
+    start_101 = $local_2.used;
+    $local_2.used = new_used_100;
+    builtin::array_copy<u8>($local_2.repr, start_101, global:niri_loop_writes_drop_field_env.wado::$const_obj_3, 0, 1);
+    if @unlikely(local.tee start_101(local.tee $sroa_$f_buf_68($local_2).used + 1) > builtin::array_len($sroa_$f_buf_68.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_68, start_98);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_68, start_101);
     }
-    new_used_97 = $sroa_$f_buf_68.used;
-    $sroa_$f_buf_68.used = start_98;
-    builtin::array_set_u8(local.tee $load_2($sroa_$f_buf_68.repr), new_used_97, 45);
-    if @unlikely(local.tee new_used_97($sroa_$f_buf_68.used + 1) > builtin::array_len($load_2)) {
+    new_used_100 = $sroa_$f_buf_68.used;
+    $sroa_$f_buf_68.used = start_101;
+    builtin::array_set_u8(local.tee $load_2($sroa_$f_buf_68.repr), new_used_100, 45);
+    if @unlikely(local.tee new_used_100($sroa_$f_buf_68.used + 1) > builtin::array_len($load_2)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_68, new_used_97);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_68, new_used_100);
     }
-    start_98 = $sroa_$f_buf_68.used;
-    $sroa_$f_buf_68.used = new_used_97;
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_68.repr, start_98, 2_i64, 1);
-    start_98 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    new_used_97 = builtin::i32_wrap_i64(packed >> 32_i64);
-    start_98 = "niri_loop_writes_drop_field_env.wado/$cm_binding__Stdout_write_via_stream"(start_98);
-    "core:rt/write_string_to_stream"(new_used_97, $local_2.repr, $local_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_98);
+    start_101 = $sroa_$f_buf_68.used;
+    $sroa_$f_buf_68.used = new_used_100;
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_68.repr, start_101, 2_i64, 1);
+    start_101 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    new_used_100 = builtin::i32_wrap_i64(packed >> 32_i64);
+    start_101 = "niri_loop_writes_drop_field_env.wado/$cm_binding__Stdout_write_via_stream"(start_101);
+    "core:rt/write_string_to_stream"(new_used_100, $local_2.repr, $local_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_101);
 }
 
 fn "niri_loop_writes_drop_field_env.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

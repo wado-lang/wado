@@ -78,9 +78,9 @@ fn "tmpl_hoist_match_arm_loop.wado/run"() with Stdout {
     let pair: i32;
     let tens: i32;
     let $tmpl_buf_87: ref "core:prelude/string.wado//String";
-    let new_used_137: i32;
-    let start_138: i32;
-    let start_179: i32;
+    let new_used_140: i32;
+    let start_141: i32;
+    let start_197: i32;
     mode = global:tmpl_hoist_match_arm_loop.wado::MODE;
     total = 0;
     if mode == 1 {
@@ -163,26 +163,26 @@ fn "tmpl_hoist_match_arm_loop.wado/run"() with Stdout {
                     break $inline_count_digits_u64_12: 20;
                 };
                 if start_20 {
-                    if @unlikely(local.tee new_used_137($tmpl_buf_87.used + 1) > builtin::array_len($load_3)) {
+                    if @unlikely(local.tee new_used_140($tmpl_buf_87.used + 1) > builtin::array_len($load_3)) {
                         cold_path;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_87, new_used_137);
+                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_87, new_used_140);
                     }
-                    start_138 = $tmpl_buf_87.used;
-                    $tmpl_buf_87.used = new_used_137;
-                    builtin::array_set_u8($tmpl_buf_87.repr, start_138, 45);
+                    start_141 = $tmpl_buf_87.used;
+                    $tmpl_buf_87.used = new_used_140;
+                    builtin::array_set_u8($tmpl_buf_87.repr, start_141, 45);
                 } else {
                 }
                 if @unlikely(local.tee start_20($tmpl_buf_87.used + new_used_19) > builtin::array_len($tmpl_buf_87.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_87, start_20);
                 }
-                start_179 = $tmpl_buf_87.used;
+                start_197 = $tmpl_buf_87.used;
                 $tmpl_buf_87.used = start_20;
                 arr = $tmpl_buf_87.repr;
-                new_used_19 = start_179 + new_used_19;
+                new_used_19 = start_197 + new_used_19;
                 b27: block {
                     l28: loop {
-                        break_if b27 (new_used_19 - start_179) < 2;
+                        break_if b27 (new_used_19 - start_197) < 2;
                         q = x_33 /u 100_i64;
                         tens = local.tee pair(builtin::i32_wrap_i64(x_33 - (q * 100_i64))) / 10;
                         builtin::array_set_u8(arr, new_used_19 - 1, ((48 + pair) - (tens * 10)) & 255);
@@ -192,8 +192,8 @@ fn "tmpl_hoist_match_arm_loop.wado/run"() with Stdout {
                         continue l28;
                     };
                 };
-                if new_used_19 > start_179 {
-                    builtin::array_set_u8(arr, start_179, (48 + builtin::i32_wrap_i64(x_33 %u 10_i64)) & 255);
+                if new_used_19 > start_197 {
+                    builtin::array_set_u8(arr, start_197, (48 + builtin::i32_wrap_i64(x_33 %u 10_i64)) & 255);
                 }
                 total = total + $tmpl_buf_87.used;
                 mode = mode + 1;

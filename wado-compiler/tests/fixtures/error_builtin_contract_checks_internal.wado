@@ -1,0 +1,12 @@
+// Whether a build checks contracts is the standard library's question: a user
+// check that a build can skip would be a removable `assert`.
+export fn run() {
+    if builtin::contract_checks() {
+        assert 1 > 0;
+    }
+}
+
+__DATA__
+{
+  "compile_error": ":4:8: analysis error: symbol 'contract_checks' is `internal` to 'core:builtin'"
+}

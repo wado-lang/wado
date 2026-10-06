@@ -78,7 +78,7 @@ fn "let_else_basic.wado/run"() with Stdout {
     let packed_25: i64;
     let rx_26: i32;
     let tx_27: i32;
-    let start_110: i32;
+    let start_114: i32;
     rx_26 = builtin::i32_wrap_i64(local.tee packed_25("wasi/stream-new"()));
     tx_27 = builtin::i32_wrap_i64(packed_25 >> 32_i64);
     rx_26 = "let_else_basic.wado/$cm_binding__Stdout_write_via_stream"(rx_26);
@@ -103,17 +103,17 @@ fn "let_else_basic.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, tx_27);
         }
-        start_110 = $mv_arg_2.used;
+        start_114 = $mv_arg_2.used;
         $mv_arg_2.used = tx_27;
-        builtin::array_set_u8($mv_arg_2.repr, start_110, 45);
+        builtin::array_set_u8($mv_arg_2.repr, start_114, 45);
     } else {
     }
-    if @unlikely(local.tee start_110($mv_arg_2.used + rx_26) > builtin::array_len($mv_arg_2.repr)) {
+    if @unlikely(local.tee start_114($mv_arg_2.used + rx_26) > builtin::array_len($mv_arg_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, start_110);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, start_114);
     }
     tx_27 = $mv_arg_2.used;
-    $mv_arg_2.used = start_110;
+    $mv_arg_2.used = start_114;
     "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_2.repr, tx_27, packed_25, rx_26);
     rx_26 = builtin::i32_wrap_i64(local.tee packed_25("wasi/stream-new"()));
     tx_27 = builtin::i32_wrap_i64(packed_25 >> 32_i64);

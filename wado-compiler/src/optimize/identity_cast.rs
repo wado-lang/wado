@@ -1,12 +1,11 @@
 //! Identity rewrites. `e as T` is `e` where the two types share one
-//! representation head, and `*&e` is `e` where what it reads is a reference.
+//! representation head, and `*&e` is `e`.
 //! Erasure, monomorphization and inlining leave such wrappers, and each hides
 //! the operand's shape from every rule that matches on one.
 
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{ExprId, ExprKind};
 use crate::nir_engine::{Engine, Rule};
-use crate::tir::ResolvedType;
 
 pub(super) struct IdentityCastRule;
 
@@ -28,9 +27,10 @@ impl Rule for IdentityCastRule {
     }
 }
 
-/// A dereference yielding a reference copies nothing, so `*&e` is `e` itself.
-/// The blanket `impl … for &T` forwarding through `(*self)` leaves one per
-/// inlined call.
+/// `*&e` is `e` itself: a dereference copies nothing, since `plan` already made
+/// every copy explicit. The blanket `impl … for &T` forwarding through
+/// `(*self)` leaves one per inlined call, and a `&self` method returning
+/// `*self` one per inlined value it hands back.
 pub(super) struct IdentityDerefRule;
 
 impl Rule for IdentityDerefRule {
@@ -53,12 +53,6 @@ impl Rule for IdentityDerefRule {
             return false;
         };
         let inner = *inner;
-        let Some(types) = e.value_graph_type_table() else {
-            return false;
-        };
-        matches!(
-            types.get(e.body.exprs[id].type_id),
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-        ) && e.redirect_expr(id, inner)
+        e.redirect_expr(id, inner)
     }
 }

@@ -74,7 +74,7 @@ fn "array_bounds_elim_unsigned_bound_oob.wado/run"() with Stdout {
     let x_12: u64;
     let n_13: i32;
     let is_negative_18: bool;
-    let start_69: i32;
+    let start_72: i32;
     $local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative_18 = local.tee n_13($inline_probe_5: block -> i32 {
         x_12 = black_box(5_i64);
@@ -102,17 +102,17 @@ fn "array_bounds_elim_unsigned_bound_oob.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, is_negative_18);
         }
-        start_69 = $local_0.used;
+        start_72 = $local_0.used;
         $local_0.used = is_negative_18;
-        builtin::array_set_u8($local_0.repr, start_69, 45);
+        builtin::array_set_u8($local_0.repr, start_72, 45);
     } else {
     }
-    if @unlikely(local.tee start_69($local_0.used + n_13) > builtin::array_len($local_0.repr)) {
+    if @unlikely(local.tee start_72($local_0.used + n_13) > builtin::array_len($local_0.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, start_69);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, start_72);
     }
     is_negative_18 = $local_0.used;
-    $local_0.used = start_69;
+    $local_0.used = start_72;
     "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, is_negative_18, x_12, n_13);
     n_13 = builtin::i32_wrap_i64(local.tee x_12("wasi/stream-new"()));
     is_negative_18 = builtin::i32_wrap_i64(x_12 >> 32_i64);

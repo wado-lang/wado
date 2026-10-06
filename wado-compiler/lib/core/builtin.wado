@@ -426,6 +426,14 @@ pub fn black_box<T>(value: T) -> T;
 #[side_effect(none)]
 pub fn is_uninitialized<T>(value: &T) -> bool;
 
+/// Whether this build checks contracts (`-f contract-checks`). It is only
+/// ever the whole condition of an `if builtin::contract_checks() { … }` with
+/// no `else`, which the compiler keeps or deletes before NIR.
+/// `internal`: a check a program could skip would be a removable `assert`.
+#[storage(none)]
+#[side_effect(none)]
+internal fn contract_checks() -> bool;
+
 /// Marks the enclosing code path as cold (rarely executed). `cold_path()` is a
 /// statement placed inside a branch body, so it works anywhere — an `if` /
 /// `if let` / `match` arm, or as the cold fall-through after a guard clause —

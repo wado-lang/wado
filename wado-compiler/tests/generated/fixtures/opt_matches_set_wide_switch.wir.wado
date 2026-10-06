@@ -66,7 +66,7 @@ fn "opt_matches_set_wide_switch.wado/run"() with Stdout {
     let hits: i32;
     let i_1: i32;
     let $local_2: ref "core:prelude/string.wado//String";
-    let start_69: i32;
+    let start_72: i32;
     hits = 0;
     i_1 = 0;
     b0: block {
@@ -98,17 +98,17 @@ fn "opt_matches_set_wide_switch.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, i_1);
         }
-        start_69 = $local_2.used;
+        start_72 = $local_2.used;
         $local_2.used = i_1;
-        builtin::array_set_u8($local_2.repr, start_69, 45);
+        builtin::array_set_u8($local_2.repr, start_72, 45);
     } else {
     }
-    if @unlikely(local.tee start_69($local_2.used + hits) > builtin::array_len($local_2.repr)) {
+    if @unlikely(local.tee start_72($local_2.used + hits) > builtin::array_len($local_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_69);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_72);
     }
     i_1 = $local_2.used;
-    $local_2.used = start_69;
+    $local_2.used = start_72;
     "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, i_1, $switch_offset_0, hits);
     hits = builtin::i32_wrap_i64(local.tee $switch_offset_0("wasi/stream-new"()));
     i_1 = builtin::i32_wrap_i64($switch_offset_0 >> 32_i64);

@@ -114,10 +114,10 @@ fn "cross_destruct_patterns.wado/run"() with Stdout {
     let rx_317: i32;
     let tx_318: i32;
     let $sroa_$f_buf_353: ref "core:prelude/string.wado//String";
-    let new_used_411: i32;
-    let start_412: i32;
-    let new_used_452: i32;
-    let start_453: i32;
+    let new_used_414: i32;
+    let start_415: i32;
+    let new_used_470: i32;
+    let start_471: i32;
     $local_22 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 };
     if @unlikely(local.tee new_used_49(0 + 3) > builtin::array_len($local_22.repr)) {
         cold_path;
@@ -282,27 +282,27 @@ fn "cross_destruct_patterns.wado/run"() with Stdout {
                     break $inline_count_digits_u64_74: 20;
                 };
                 if is_negative_204 {
-                    if @unlikely(local.tee new_used_411(self_72.used + 1) > builtin::array_len($load_47)) {
+                    if @unlikely(local.tee new_used_414(self_72.used + 1) > builtin::array_len($load_47)) {
                         cold_path;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_72, new_used_411);
+                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_72, new_used_414);
                     }
-                    start_412 = self_72.used;
-                    self_72.used = new_used_411;
-                    builtin::array_set_u8(self_72.repr, start_412, 45);
+                    start_415 = self_72.used;
+                    self_72.used = new_used_414;
+                    builtin::array_set_u8(self_72.repr, start_415, 45);
                 } else {
                 }
-                if @unlikely(local.tee new_used_452(self_72.used + digit_count_206) > builtin::array_len(self_72.repr)) {
+                if @unlikely(local.tee new_used_470(self_72.used + digit_count_206) > builtin::array_len(self_72.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_72, new_used_452);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_72, new_used_470);
                 }
-                start_453 = self_72.used;
-                self_72.used = new_used_452;
+                start_471 = self_72.used;
+                self_72.used = new_used_470;
                 arr = self_72.repr;
-                pos = start_453 + digit_count_206;
+                pos = start_471 + digit_count_206;
                 t_215 = abs_val_205;
                 b35: block {
                     l36: loop {
-                        break_if b35 (pos - start_453) < 2;
+                        break_if b35 (pos - start_471) < 2;
                         q = t_215 /u 100_i64;
                         tens = local.tee pair_217(builtin::i32_wrap_i64(t_215 - (q * 100_i64))) / 10;
                         builtin::array_set_u8(arr, pos - 1, ((48 + pair_217) - (tens * 10)) & 255);
@@ -312,8 +312,8 @@ fn "cross_destruct_patterns.wado/run"() with Stdout {
                         continue l36;
                     };
                 };
-                if pos > start_453 {
-                    builtin::array_set_u8(arr, start_453, (48 + builtin::i32_wrap_i64(t_215 %u 10_i64)) & 255);
+                if pos > start_471 {
+                    builtin::array_set_u8(arr, start_471, (48 + builtin::i32_wrap_i64(t_215 %u 10_i64)) & 255);
                 }
                 rx_317 = builtin::i32_wrap_i64(local.tee packed_316("wasi/stream-new"()));
                 tx_318 = builtin::i32_wrap_i64(packed_316 >> 32_i64);

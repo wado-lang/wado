@@ -89,45 +89,45 @@ fn "param_spec_forwarded_chain.wado/$cm_export__run"() {
 }
 
 fn "param_spec_forwarded_chain.wado/outer$spec0"(out, word) {
-    let new_used_7: i32;
-    let start_8: i32;
-    if @unlikely(local.tee new_used_7(out.used + 1) > builtin::array_len(out.repr)) {
+    let new_used_10: i32;
+    let start_11: i32;
+    if @unlikely(local.tee new_used_10(out.used + 1) > builtin::array_len(out.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_7);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_10);
     }
-    start_8 = out.used;
-    out.used = new_used_7;
-    builtin::array_set_u8(out.repr, start_8, 91);
+    start_11 = out.used;
+    out.used = new_used_10;
+    builtin::array_set_u8(out.repr, start_11, 91);
     "param_spec_forwarded_chain.wado/inner$spec0"(out, word);
-    if @unlikely(local.tee start_8(out.used + 1) > builtin::array_len(out.repr)) {
+    if @unlikely(local.tee start_11(out.used + 1) > builtin::array_len(out.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, start_8);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, start_11);
     }
-    new_used_7 = out.used;
-    out.used = start_8;
-    builtin::array_set_u8(out.repr, new_used_7, 93);
+    new_used_10 = out.used;
+    out.used = start_11;
+    builtin::array_set_u8(out.repr, new_used_10, 93);
 }
 
 fn "param_spec_forwarded_chain.wado/inner$spec0"(out, word) {
     let i: i32;
     let b: u8;
-    let new_used_28: i32;
-    let start_29: i32;
-    let $licm_repr_52: ref Array<u8>;
+    let new_used_46: i32;
+    let start_47: i32;
+    let $licm_repr_85: ref Array<u8>;
     i = 0;
-    $licm_repr_52 = word.repr;
+    $licm_repr_85 = word.repr;
     b2: block {
         l3: loop {
             break_if b2 i >= word.used;
-            b = builtin::array_get_value<u8>($licm_repr_52, i);
-            if @unlikely(local.tee new_used_28(out.used + 1) > builtin::array_len(out.repr)) {
+            b = builtin::array_get_value<u8>($licm_repr_85, i);
+            if @unlikely(local.tee new_used_46(out.used + 1) > builtin::array_len(out.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_28);
-                $licm_repr_52 = word.repr;
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_46);
+                $licm_repr_85 = word.repr;
             }
-            start_29 = out.used;
-            out.used = new_used_28;
-            builtin::array_set_u8(out.repr, start_29, b);
+            start_47 = out.used;
+            out.used = new_used_46;
+            builtin::array_set_u8(out.repr, start_47, b);
             i = i + 1;
             continue l3;
         };
