@@ -1,0 +1,44 @@
+// A body-local struct may name a local declared after it, or itself, in a
+// bounded type: the bound is asked once every local is stated to the solver.
+
+struct Wrap<T: Eq> {
+    v: T,
+}
+
+fn later() -> i32 {
+    struct A {
+        w: Wrap<B>,
+    }
+    struct B {
+        x: i32,
+    }
+    let a = A { w: Wrap { v: B { x: 3 } } };
+    return a.w.v.x;
+}
+
+fn recursive() -> i32 {
+    struct Node {
+        n: Option<Wrap<Node>>,
+        x: i32,
+    }
+    let node = Node { n: null, x: 4 };
+    return node.x;
+}
+
+fn aliased() -> i32 {
+    type N = Wrap<C>;
+    struct C {
+        x: i32,
+    }
+    let n = Wrap { v: C { x: 5 } } as N;
+    return n.v.x;
+}
+
+test {
+    assert later() == 3;
+    assert recursive() == 4;
+    assert aliased() == 5;
+}
+
+__DATA__
+{"test": {}}

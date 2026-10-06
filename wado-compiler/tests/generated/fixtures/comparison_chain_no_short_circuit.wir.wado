@@ -67,7 +67,7 @@ global global:comparison_chain_no_short_circuit.wado::$const_obj_0: ref Array<u8
 fn "comparison_chain_no_short_circuit.wado/run"() with Stdout {
     let $m1_2: i32;
     let $m1_5: i32;
-    let $local_7: ref "core:prelude/string.wado//String";
+    let $local_7_7: ref "core:prelude/string.wado//String";
     let text_22: ref "core:prelude/string.wado//String";
     let start_34: i32;
     let packed: i64;
@@ -75,35 +75,35 @@ fn "comparison_chain_no_short_circuit.wado/run"() with Stdout {
     $m1_2 = black_box(-1);
     $m1_2 = (0 <= $m1_2) & ($m1_2 < 10);
     $m1_5 = black_box(5);
-    $sroa_$f_buf_90 = local.tee $local_7(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 });
+    $sroa_$f_buf_90 = local.tee $local_7_7(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 });
     text_22 = (if $m1_2 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
     });
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_90, text_22.repr, text_22.used);
-    if @unlikely(local.tee $m1_2($local_7.used + 1) > builtin::array_len($local_7.repr)) {
+    if @unlikely(local.tee $m1_2($local_7_7.used + 1) > builtin::array_len($local_7_7.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7, $m1_2);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7_7, $m1_2);
     }
-    start_34 = $local_7.used;
-    $local_7.used = $m1_2;
-    builtin::array_copy<u8>($local_7.repr, start_34, global:comparison_chain_no_short_circuit.wado::$const_obj_0, 0, 1);
-    $sroa_$f_buf_90 = $local_7;
+    start_34 = $local_7_7.used;
+    $local_7_7.used = $m1_2;
+    builtin::array_copy<u8>($local_7_7.repr, start_34, global:comparison_chain_no_short_circuit.wado::$const_obj_0, 0, 1);
+    $sroa_$f_buf_90 = $local_7_7;
     text_22 = (if (0 <= $m1_5) & ($m1_5 < 10) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
     });
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_90, text_22.repr, text_22.used);
-    if @unlikely(local.tee $m1_5($local_7.used + 1) > builtin::array_len($local_7.repr)) {
+    if @unlikely(local.tee $m1_5($local_7_7.used + 1) > builtin::array_len($local_7_7.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7, $m1_5);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7_7, $m1_5);
     }
-    start_34 = $local_7.used;
-    $local_7.used = $m1_5;
-    builtin::array_copy<u8>($local_7.repr, start_34, global:comparison_chain_no_short_circuit.wado::$const_obj_0, 0, 1);
-    if @unlikely(local.tee start_34(local.tee $sroa_$f_buf_90($local_7).used + 1) > builtin::array_len($sroa_$f_buf_90.repr)) {
+    start_34 = $local_7_7.used;
+    $local_7_7.used = $m1_5;
+    builtin::array_copy<u8>($local_7_7.repr, start_34, global:comparison_chain_no_short_circuit.wado::$const_obj_0, 0, 1);
+    if @unlikely(local.tee start_34(local.tee $sroa_$f_buf_90($local_7_7).used + 1) > builtin::array_len($sroa_$f_buf_90.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_90, start_34);
     }
@@ -113,7 +113,7 @@ fn "comparison_chain_no_short_circuit.wado/run"() with Stdout {
     $m1_5 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     start_34 = builtin::i32_wrap_i64(packed >> 32_i64);
     $m1_5 = "comparison_chain_no_short_circuit.wado/$cm_binding__Stdout_write_via_stream"($m1_5);
-    "core:rt/write_string_to_stream"(start_34, $local_7.repr, $local_7.used);
+    "core:rt/write_string_to_stream"(start_34, $local_7_7.repr, $local_7_7.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($m1_5);
 }
 

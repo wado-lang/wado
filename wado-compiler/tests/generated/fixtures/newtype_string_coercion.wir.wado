@@ -77,47 +77,50 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:newtype_string_coercion.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111, 32, 119, 111, 114, 108, 100), used: 11 };
 global global:newtype_string_coercion.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(33);
 global global:newtype_string_coercion.wado::$const_obj_4: ref Array<u8> = array.new_fixed<u8>(72, 101, 108, 108, 111, 44, 32);
-global global:newtype_string_coercion.wado::$const_obj_5: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };
+global global:newtype_string_coercion.wado::$const_obj_5: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 108, 105, 99, 101), used: 5 };
+global global:newtype_string_coercion.wado::$const_obj_6: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };
 
 fn "newtype_string_coercion.wado/run"() with Stdout {
-    let name: ref "core:prelude/string.wado//String";
     let $local_1: ref "core:prelude/string.wado//String";
     let $local_2: ref "core:prelude/format.wado//Formatter";
-    let new_used_45: i32;
-    let start_46: i32;
-    let packed_80: i64;
-    name = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 };
+    let new_used_70: i32;
+    let start_71: i32;
+    let packed_105: i64;
     local.tee $local_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }).used = 7;
     builtin::array_copy<u8>($local_1.repr, 0, global:newtype_string_coercion.wado::$const_obj_4, 0, 7);
     $local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_1 };
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__10: block {
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($local_2.buf, name.repr, 5);
+        let $arg_spill_1: ref "core:prelude/string.wado//String";
+        $arg_spill_1 = $local_2.buf;
+        let $mv_arg_2: ref "core:prelude/string.wado//String";
+        $mv_arg_2 = global:newtype_string_coercion.wado::$const_obj_5;
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($arg_spill_1, $mv_arg_2.repr, $mv_arg_2.used);
         break $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__10;
     };
-    if @unlikely(local.tee new_used_45($local_1.used + 1) > builtin::array_len($local_1.repr)) {
+    if @unlikely(local.tee new_used_70($local_1.used + 1) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_45);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_70);
     }
-    start_46 = $local_1.used;
-    $local_1.used = new_used_45;
-    builtin::array_copy<u8>($local_1.repr, start_46, global:newtype_string_coercion.wado::$const_obj_3, 0, 1);
-    start_46 = builtin::i32_wrap_i64(local.tee packed_80("wasi/stream-new"()));
-    new_used_45 = builtin::i32_wrap_i64(packed_80 >> 32_i64);
-    start_46 = "newtype_string_coercion.wado/$cm_binding__Stdout_write_via_stream"(start_46);
-    name = global:newtype_string_coercion.wado::$const_obj_5;
-    "core:rt/write_string_to_stream"(new_used_45, name.repr, name.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_46);
-    start_46 = builtin::i32_wrap_i64(local.tee packed_80("wasi/stream-new"()));
-    new_used_45 = builtin::i32_wrap_i64(packed_80 >> 32_i64);
-    start_46 = "newtype_string_coercion.wado/$cm_binding__Stdout_write_via_stream"(start_46);
-    "core:rt/write_string_to_stream"(new_used_45, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_46);
-    start_46 = builtin::i32_wrap_i64(local.tee packed_80("wasi/stream-new"()));
-    new_used_45 = builtin::i32_wrap_i64(packed_80 >> 32_i64);
-    start_46 = "newtype_string_coercion.wado/$cm_binding__Stdout_write_via_stream"(start_46);
+    start_71 = $local_1.used;
+    $local_1.used = new_used_70;
+    builtin::array_copy<u8>($local_1.repr, start_71, global:newtype_string_coercion.wado::$const_obj_3, 0, 1);
+    start_71 = builtin::i32_wrap_i64(local.tee packed_105("wasi/stream-new"()));
+    new_used_70 = builtin::i32_wrap_i64(packed_105 >> 32_i64);
+    start_71 = "newtype_string_coercion.wado/$cm_binding__Stdout_write_via_stream"(start_71);
+    $mv_arg_2 = global:newtype_string_coercion.wado::$const_obj_6;
+    "core:rt/write_string_to_stream"(new_used_70, $mv_arg_2.repr, $mv_arg_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_71);
+    start_71 = builtin::i32_wrap_i64(local.tee packed_105("wasi/stream-new"()));
+    new_used_70 = builtin::i32_wrap_i64(packed_105 >> 32_i64);
+    start_71 = "newtype_string_coercion.wado/$cm_binding__Stdout_write_via_stream"(start_71);
+    "core:rt/write_string_to_stream"(new_used_70, $local_1.repr, $local_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_71);
+    start_71 = builtin::i32_wrap_i64(local.tee packed_105("wasi/stream-new"()));
+    new_used_70 = builtin::i32_wrap_i64(packed_105 >> 32_i64);
+    start_71 = "newtype_string_coercion.wado/$cm_binding__Stdout_write_via_stream"(start_71);
     $local_1 = global:newtype_string_coercion.wado::$const_obj_2;
-    "core:rt/write_string_to_stream"(new_used_45, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_46);
+    "core:rt/write_string_to_stream"(new_used_70, $local_1.repr, $local_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_71);
 }
 
 fn "newtype_string_coercion.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

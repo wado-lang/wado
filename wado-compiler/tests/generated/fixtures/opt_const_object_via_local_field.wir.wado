@@ -98,7 +98,7 @@ fn "opt_const_object_via_local_field.wado/run"() with Stdout {
     let $local_3: ref "core:prelude/string.wado//String";
     let is_negative_20: bool;
     let x: i64;
-    let start_71: i32;
+    let start_74: i32;
     acc = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     i_1 = 0;
     b1: block {
@@ -117,17 +117,17 @@ fn "opt_const_object_via_local_field.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, is_negative_20);
         }
-        start_71 = $local_3.used;
+        start_74 = $local_3.used;
         $local_3.used = is_negative_20;
-        builtin::array_set_u8($local_3.repr, start_71, 45);
+        builtin::array_set_u8($local_3.repr, start_74, 45);
     } else {
     }
-    if @unlikely(local.tee start_71($local_3.used + i_1) > builtin::array_len($local_3.repr)) {
+    if @unlikely(local.tee start_74($local_3.used + i_1) > builtin::array_len($local_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_71);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_74);
     }
     is_negative_20 = $local_3.used;
-    $local_3.used = start_71;
+    $local_3.used = start_74;
     "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, is_negative_20, x, i_1);
     i_1 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_20 = builtin::i32_wrap_i64(x >> 32_i64);

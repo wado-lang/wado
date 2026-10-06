@@ -1,0 +1,23 @@
+// A local struct's parameters are its own: the enclosing function's `T: Tag`
+// says nothing of the struct's `T`, so its field `Wrap<T>` is unmet.
+
+trait Tag with () {}
+
+struct Wrap<T: Tag> {
+    v: T,
+}
+
+fn outer<T: Tag>(t: T) -> i32 {
+    struct Local<T> {
+        w: Wrap<T>,
+    }
+    return 0;
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":12:12: analysis error: type 'T' does not implement trait 'Tag' required by bound on 'T'",
+  "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
+}

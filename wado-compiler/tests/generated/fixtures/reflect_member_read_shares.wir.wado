@@ -76,7 +76,7 @@ fn "reflect_member_read_shares.wado/run"() with Stdout {
     let x: i64;
     let $sroa_h_xs_57: ref "core:prelude//List<i32>";
     let $sroa_h_ys_58: ref "core:prelude//List<i32>";
-    let start_95: i32;
+    let start_98: i32;
     $sroa_h_xs_57 = black_box(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 });
     $sroa_h_ys_58 = black_box(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(3, 4, 5), used: 3 });
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
@@ -88,17 +88,17 @@ fn "reflect_member_read_shares.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, is_negative_38);
         }
-        start_95 = $local_3.used;
+        start_98 = $local_3.used;
         $local_3.used = is_negative_38;
-        builtin::array_set_u8($local_3.repr, start_95, 45);
+        builtin::array_set_u8($local_3.repr, start_98, 45);
     } else {
     }
-    if @unlikely(local.tee start_95($local_3.used + n_17) > builtin::array_len($local_3.repr)) {
+    if @unlikely(local.tee start_98($local_3.used + n_17) > builtin::array_len($local_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_95);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_98);
     }
     is_negative_38 = $local_3.used;
-    $local_3.used = start_95;
+    $local_3.used = start_98;
     "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, is_negative_38, x, n_17);
     n_17 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_38 = builtin::i32_wrap_i64(x >> 32_i64);

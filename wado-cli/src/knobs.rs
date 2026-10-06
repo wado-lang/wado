@@ -131,7 +131,7 @@ impl CompileKnobOpt {
                 long: None,
                 short: Some('f'),
                 value: Some("<flag>"),
-                desc: "Toggle a codegen feature flag (repeatable; prefix no- to disable):\nbranch-hinting   emit metadata.code.branch_hint entries (default: on)\nbare-asserts     assertion failures trap without a message (default: on at -Os)\nwide-arithmetic  native i64.mul_wide/add128/sub128 (default: on)",
+                desc: "Toggle a codegen feature flag (repeatable; prefix no- to disable):\nbranch-hinting   emit metadata.code.branch_hint entries (default: on)\nbare-asserts     assertion failures trap without a message (default: on at -Os)\nwide-arithmetic  native i64.mul_wide/add128/sub128 (default: on)\ncontract-checks  trap on an _unchecked call outside its contract (default: on in the test world and at -O0)",
             },
             Self::NoCache => OptSpec {
                 long: Some("no-cache"),

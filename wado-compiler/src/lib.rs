@@ -75,11 +75,12 @@ use crate::component_model::{
     CmInterfaceRegistry, bind_type_names, cm_bound_defs, try_for_each_operation_type,
     try_for_each_signed_type, wado_primitive_name_to_cm,
 };
+use crate::coverage::CoverageRequest;
 use crate::defs::DefId;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::name::entry_dir_of;
 use crate::wit_consume::module_host_leaf_imports;
-use crate::world_registry::WorldInfo;
+use crate::world_registry::{TEST_WORLD, WorldInfo};
 pub use stdlib_snapshot::prelude_names;
 pub use stdlib_snapshot::prewarm as prewarm_stdlib_snapshot;
 pub mod niri;
@@ -220,13 +221,13 @@ pub struct CompileResult {
 
 /// Report a compilation error the pipeline has no span for — it names the
 /// offending declaration instead.
-pub(crate) fn report_without_span<H: compiler_host::CompilerHost>(
+pub(crate) fn report_without_span<H: CompilerHost>(
     logger: &Logger<'_, H>,
-    code: compiler_host::Code,
+    code: Code,
     message: String,
 ) {
-    let _ = logger.error(compiler_host::Diagnostic {
-        severity: compiler_host::Severity::Error,
+    let _ = logger.error(Diagnostic {
+        severity: Severity::Error,
         code,
         message,
         span: None,
@@ -247,13 +248,30 @@ fn panic_on_invalid_artifact<H: CompilerHost>(host: &H, invalid: &InvalidArtifac
 }
 
 /// [`report_without_span`], for a caller that stops at the first such error.
-pub(crate) fn bail_with<H: compiler_host::CompilerHost>(
+pub(crate) fn bail_with<H: CompilerHost>(
     logger: &Logger<'_, H>,
-    code: compiler_host::Code,
+    code: Code,
     message: String,
 ) -> Bail {
     report_without_span(logger, code, message);
     Bail
+}
+
+/// The `-f` flags for a build, in the test world or not: the test world checks
+/// contracts by default.
+fn parse_codegen_flags<H: CompilerHost>(
+    flags: &[String],
+    opt_level: OptLevel,
+    test_world: bool,
+    logger: &Logger<'_, H>,
+) -> Result<CodegenFlags, Bail> {
+    CodegenFlags::parse(flags, opt_level, test_world).map_err(|flag| {
+        bail_with(
+            logger,
+            Code::UnsupportedFeature,
+            CodegenFlags::unknown_flag_message(&flag),
+        )
+    })
 }
 
 /// Compilation failure with metadata from the successfully-parsed AST.
@@ -1261,11 +1279,22 @@ fn compile_after_load<H: CompilerHost>(
     // compilation refuses to continue on an incomplete one — the downstream
     // phases assume populated `state` / `tir_modules` — and its diagnostics have
     // already reached the host.
+    let is_test_world = options.target_world.as_deref() == Some(TEST_WORLD);
     assert!(
-        options.coverage.is_none() || options.target_world.as_deref() == Some("test"),
+        options.coverage.is_none() || is_test_world,
         "coverage instruments the test world only"
     );
-    let sem = semantics::semantics_with_logger(load_result, logger, true, options.coverage);
+    let codegen_flags = parse_codegen_flags(
+        &options.codegen_flags,
+        options.opt_level,
+        is_test_world,
+        logger,
+    )?;
+    let coverage = options.coverage.map(|scope| CoverageRequest {
+        scope,
+        contract_checks: codegen_flags.contract_checks,
+    });
+    let sem = semantics::semantics_with_logger(load_result, logger, true, coverage);
     if !sem.is_complete() {
         return Err(Bail);
     }
@@ -1286,7 +1315,6 @@ fn compile_after_load<H: CompilerHost>(
         )
     });
 
-    let is_test_world = options.target_world.as_deref() == Some("test");
     for diag in lint_diagnostics(&sem, options.unused_diagnostics, is_test_world) {
         // A lint carries the severity it words itself at, so one that only
         // remarks is not raised to a warning on the way out.
@@ -1691,17 +1719,7 @@ fn compile_after_load<H: CompilerHost>(
     package.coverage_section = coverage.map(|map| map.encode());
     package.test_name_filters = options.test_name_filters;
     package.wasm_assets = wasm_assets;
-    package.codegen_flags =
-        match codegen_flags::CodegenFlags::parse(&options.codegen_flags, options.opt_level) {
-            Ok(flags) => flags,
-            Err(flag) => {
-                return Err(bail_with(
-                    logger,
-                    Code::UnsupportedFeature,
-                    codegen_flags::CodegenFlags::unknown_flag_message(&flag),
-                ));
-            }
-        };
+    package.codegen_flags = codegen_flags;
 
     select_allocator(&mut package, options.allocator, logger)?;
 
@@ -2217,17 +2235,12 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 package.target_world = world.to_string();
             }
             package.wasm_assets.clone_from(&wasm_assets);
-            package.codegen_flags =
-                match codegen_flags::CodegenFlags::parse(codegen_flags, opt_level) {
-                    Ok(flags) => flags,
-                    Err(flag) => {
-                        return Err(bail_with(
-                            &logger,
-                            Code::UnsupportedFeature,
-                            codegen_flags::CodegenFlags::unknown_flag_message(&flag),
-                        ));
-                    }
-                };
+            package.codegen_flags = parse_codegen_flags(
+                codegen_flags,
+                opt_level,
+                package.is_test_world(),
+                &logger,
+            )?;
 
             // Validate target world (test world is synthetic, not in registry)
             if !package.is_test_world()

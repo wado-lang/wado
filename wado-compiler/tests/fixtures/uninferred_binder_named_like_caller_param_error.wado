@@ -1,0 +1,24 @@
+// A callee's binder inference left unanswered is not the caller's parameter
+// of the same name.
+//
+// `TreeMap::new()` fixes neither `K` nor `V`, and `f` declares its own `K` and
+// `V`. The unanswered slots kept the callee's binders, which the caller's scope
+// placed as its own unbounded `K`, so `.len()`'s `K: Ord` failed and `len`
+// was reported missing beside the real error.
+
+use { TreeMap } from "core:collections";
+
+fn f<K, V>() -> i32 {
+    let m = TreeMap::new();
+    return m.len();
+}
+
+test {
+    assert f::<i32, i32>() == 0;
+}
+
+__DATA__
+{
+    "compile_error": "cannot infer type parameter `K`, `V` of `TreeMap::new`",
+    "compile_errors_not_contains": ["no method"]
+}

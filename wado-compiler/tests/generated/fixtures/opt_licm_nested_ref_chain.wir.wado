@@ -101,7 +101,7 @@ fn "opt_licm_nested_ref_chain.wado/run"() with Stdout {
     let $local_3: ref "core:prelude/string.wado//String";
     let is_negative_18: bool;
     let x: i64;
-    let start_69: i32;
+    let start_72: i32;
     result = "opt_licm_nested_ref_chain.wado/drain"(struct.new "opt_licm_nested_ref_chain.wado//Cursor" { inner: struct.new "opt_licm_nested_ref_chain.wado//Inner" { limit: 5, pos: 0, acc: 0 }, started: 0 });
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative_18 = result < 0;
@@ -111,17 +111,17 @@ fn "opt_licm_nested_ref_chain.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, is_negative_18);
         }
-        start_69 = $local_3.used;
+        start_72 = $local_3.used;
         $local_3.used = is_negative_18;
-        builtin::array_set_u8($local_3.repr, start_69, 45);
+        builtin::array_set_u8($local_3.repr, start_72, 45);
     } else {
     }
-    if @unlikely(local.tee start_69($local_3.used + result) > builtin::array_len($local_3.repr)) {
+    if @unlikely(local.tee start_72($local_3.used + result) > builtin::array_len($local_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_69);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_72);
     }
     is_negative_18 = $local_3.used;
-    $local_3.used = start_69;
+    $local_3.used = start_72;
     "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, is_negative_18, x, result);
     result = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_18 = builtin::i32_wrap_i64(x >> 32_i64);

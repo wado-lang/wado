@@ -13,7 +13,7 @@ use crate::OptLevel;
 /// Unlike a plain `#[derive(Default)]`, the default here is *not* uniformly
 /// `false`: each field's default encodes the compiler's current preferred
 /// codegen strategy. `-f <flag>` forces it on and `-f no-<flag>` forces it
-/// off, so an empty flag set reproduces [`CodegenFlags::default`].
+/// off, so an empty flag set reproduces [`CodegenFlags::for_build`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CodegenFlags {
     /// Emit `metadata.code.branch_hint` entries (the default);
@@ -27,7 +27,7 @@ pub struct CodegenFlags {
     /// power-assert diagnostic. The check and trap always stay; only the
     /// *message* goes, taking with it the `Formatter` / `Inspect` / `String`
     /// stack that even a `list[i]` drags in. Off at `-O0`…`-O3`, **on at `-Os`**
-    /// (see [`CodegenFlags::for_opt_level`]).
+    /// (see [`CodegenFlags::for_build`]).
     pub bare_asserts: bool,
 
     /// Emit native Wasm wide-arithmetic (`i64.mul_wide_u/s`, `i64.add128`,
@@ -35,6 +35,11 @@ pub struct CodegenFlags {
     /// calls their `core:rt` software forms instead (`lower::wide_arith`), for
     /// V8, which lacks the proposal.
     pub wide_arithmetic: bool,
+
+    /// Check the contracts of `_unchecked` functions: `lower::contract_checks`
+    /// keeps each `if builtin::contract_checks()` or deletes it. On in the
+    /// test world and at `-O0`, off otherwise (see [`CodegenFlags::for_build`]).
+    pub contract_checks: bool,
 }
 
 impl Default for CodegenFlags {
@@ -43,20 +48,22 @@ impl Default for CodegenFlags {
             branch_hinting: true,
             bare_asserts: false,
             wide_arithmetic: true,
+            contract_checks: false,
         }
     }
 }
 
 impl CodegenFlags {
-    /// The opt-level-dependent defaults, before any `-f` flag is applied.
+    /// The defaults for a build, before any `-f` flag is applied.
     ///
-    /// Identical to [`CodegenFlags::default`] except `-Os` flips
-    /// [`bare_asserts`](Self::bare_asserts) on: a size-optimized build drops the
-    /// power-assert diagnostic by default (an `-f no-bare-asserts` overrides it).
+    /// Identical to [`CodegenFlags::default`] except that `-Os` turns
+    /// [`bare_asserts`](Self::bare_asserts) on, and the test world or `-O0`
+    /// turns [`contract_checks`](Self::contract_checks) on.
     #[must_use]
-    pub fn for_opt_level(opt_level: OptLevel) -> Self {
+    pub fn for_build(opt_level: OptLevel, test_world: bool) -> Self {
         Self {
             bare_asserts: matches!(opt_level, OptLevel::Os),
+            contract_checks: test_world || matches!(opt_level, OptLevel::O0),
             ..Self::default()
         }
     }
@@ -64,8 +71,12 @@ impl CodegenFlags {
     /// Every flag [`Self::parse`] accepts, in help-text order. The CLI's `-f`
     /// help is tested against it and [`Self::unknown_flag_message`] reads it,
     /// so a new flag cannot be added and left undiscoverable.
-    pub const SUPPORTED: &'static [&'static str] =
-        &["branch-hinting", "bare-asserts", "wide-arithmetic"];
+    pub const SUPPORTED: &'static [&'static str] = &[
+        "branch-hinting",
+        "bare-asserts",
+        "wide-arithmetic",
+        "contract-checks",
+    ];
 
     /// The diagnostic for a flag [`Self::parse`] rejected.
     #[must_use]
@@ -82,19 +93,18 @@ impl CodegenFlags {
     }
 
     /// Parse raw `-f` flag strings into a [`CodegenFlags`], starting from the
-    /// [`for_opt_level`](Self::for_opt_level) defaults and applying each flag in
-    /// order.
+    /// [`for_build`](Self::for_build) defaults and applying each flag in order.
     ///
     /// Flags follow the clang-style convention: `name` enables a flag and
     /// `no-name` disables it, and a later flag wins over an earlier one. An
     /// unrecognized flag yields `Err(flag)`, carrying the offending string so
     /// the caller can surface a diagnostic.
-    pub fn parse<I, S>(flags: I, opt_level: OptLevel) -> Result<Self, String>
+    pub fn parse<I, S>(flags: I, opt_level: OptLevel, test_world: bool) -> Result<Self, String>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        let mut result = Self::for_opt_level(opt_level);
+        let mut result = Self::for_build(opt_level, test_world);
         for flag in flags {
             let flag = flag.as_ref();
             let (name, enabled) = match flag.strip_prefix("no-") {
@@ -105,6 +115,7 @@ impl CodegenFlags {
                 "branch-hinting" => result.branch_hinting = enabled,
                 "bare-asserts" => result.bare_asserts = enabled,
                 "wide-arithmetic" => result.wide_arithmetic = enabled,
+                "contract-checks" => result.contract_checks = enabled,
                 _ => return Err(flag.to_string()),
             }
         }
@@ -117,10 +128,10 @@ mod tests {
     use super::*;
     use crate::OptLevel;
 
-    /// Parse at `-O2` (the level whose opt-level defaults equal
+    /// Parse at `-O2` outside the test world (the build whose defaults equal
     /// [`CodegenFlags::default`]), so these cases isolate flag handling.
     fn parse<'a, I: IntoIterator<Item = &'a str>>(flags: I) -> Result<CodegenFlags, String> {
-        CodegenFlags::parse(flags, OptLevel::O2)
+        CodegenFlags::parse(flags, OptLevel::O2, false)
     }
 
     #[test]
@@ -156,23 +167,48 @@ mod tests {
     fn os_enables_bare_asserts_by_default() {
         // `-Os` flips bare-asserts on without an explicit flag; other levels
         // leave it off.
-        assert!(CodegenFlags::for_opt_level(OptLevel::Os).bare_asserts);
-        assert!(!CodegenFlags::for_opt_level(OptLevel::O2).bare_asserts);
-        assert!(!CodegenFlags::for_opt_level(OptLevel::O0).bare_asserts);
+        assert!(CodegenFlags::for_build(OptLevel::Os, false).bare_asserts);
+        assert!(!CodegenFlags::for_build(OptLevel::O2, false).bare_asserts);
+        assert!(!CodegenFlags::for_build(OptLevel::O0, false).bare_asserts);
         // The opt-level default still folds the branch-hinting on.
-        assert!(CodegenFlags::for_opt_level(OptLevel::Os).branch_hinting);
+        assert!(CodegenFlags::for_build(OptLevel::Os, false).branch_hinting);
     }
 
     #[test]
     fn no_bare_asserts_overrides_the_os_default() {
-        let flags = CodegenFlags::parse(["no-bare-asserts"], OptLevel::Os).unwrap();
+        let flags = CodegenFlags::parse(["no-bare-asserts"], OptLevel::Os, false).unwrap();
         assert!(!flags.bare_asserts);
     }
 
     #[test]
     fn bare_asserts_forces_it_on_below_os() {
-        let flags = CodegenFlags::parse(["bare-asserts"], OptLevel::O2).unwrap();
+        let flags = CodegenFlags::parse(["bare-asserts"], OptLevel::O2, false).unwrap();
         assert!(flags.bare_asserts);
+    }
+
+    #[test]
+    fn contract_checks_default_on_in_the_test_world_and_at_o0() {
+        for opt_level in [
+            OptLevel::O0,
+            OptLevel::O1,
+            OptLevel::O2,
+            OptLevel::O3,
+            OptLevel::Os,
+        ] {
+            assert!(CodegenFlags::for_build(opt_level, true).contract_checks);
+            assert_eq!(
+                CodegenFlags::for_build(opt_level, false).contract_checks,
+                opt_level == OptLevel::O0
+            );
+        }
+    }
+
+    #[test]
+    fn contract_checks_flags_override_the_defaults() {
+        let off = CodegenFlags::parse(["no-contract-checks"], OptLevel::O2, true).unwrap();
+        assert!(!off.contract_checks);
+        let on = CodegenFlags::parse(["contract-checks"], OptLevel::O2, false).unwrap();
+        assert!(on.contract_checks);
     }
 
     #[test]

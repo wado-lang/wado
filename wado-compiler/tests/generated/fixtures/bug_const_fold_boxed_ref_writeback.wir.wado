@@ -81,7 +81,7 @@ fn "bug_const_fold_boxed_ref_writeback.wado/run"() with Stdout {
     let packed_21: i64;
     let rx_22: i32;
     let tx_23: i32;
-    let start_139: i32;
+    let start_143: i32;
     $local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "bug_const_fold_boxed_ref_writeback.wado/bump"(local.tee $boxed_param_0_15(struct.new "core:prelude/types.wado//Box<i32>" { value: 2 }));
     rx_22 = builtin::i32_wrap_i64(local.tee packed_21("wasi/stream-new"()));
@@ -98,17 +98,17 @@ fn "bug_const_fold_boxed_ref_writeback.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, tx_23);
         }
-        start_139 = $local_0.used;
+        start_143 = $local_0.used;
         $local_0.used = tx_23;
-        builtin::array_set_u8($local_0.repr, start_139, 45);
+        builtin::array_set_u8($local_0.repr, start_143, 45);
     } else {
     }
-    if @unlikely(local.tee start_139($local_0.used + rx_22) > builtin::array_len($local_0.repr)) {
+    if @unlikely(local.tee start_143($local_0.used + rx_22) > builtin::array_len($local_0.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, start_139);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, start_143);
     }
     tx_23 = $local_0.used;
-    $local_0.used = start_139;
+    $local_0.used = start_143;
     "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, tx_23, packed_21, rx_22);
     rx_22 = builtin::i32_wrap_i64(local.tee packed_21("wasi/stream-new"()));
     tx_23 = builtin::i32_wrap_i64(packed_21 >> 32_i64);

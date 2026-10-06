@@ -65,22 +65,22 @@ fn "bug_ctfe_discarded_call_traps.wado/$cm_binding__Stdout_write_via_stream"(dat
 fn "bug_ctfe_discarded_call_traps.wado/$cm_export__run"() {
     let $local_0: ref "core:prelude/string.wado//String";
     let packed: i64;
-    let new_used_107: i32;
-    let start_108: i32;
+    let new_used_125: i32;
+    let start_126: i32;
     $local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     drop(10 / 0);
-    if @unlikely(local.tee new_used_107(0 + 1) > builtin::array_len($local_0.repr)) {
+    if @unlikely(local.tee new_used_125(0 + 1) > builtin::array_len($local_0.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, new_used_107);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, new_used_125);
     }
-    start_108 = $local_0.used;
-    $local_0.used = new_used_107;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, start_108, 7_i64, 1);
-    start_108 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    new_used_107 = builtin::i32_wrap_i64(packed >> 32_i64);
-    start_108 = "bug_ctfe_discarded_call_traps.wado/$cm_binding__Stdout_write_via_stream"(start_108);
-    "core:rt/write_string_to_stream"(new_used_107, $local_0.repr, $local_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_108);
+    start_126 = $local_0.used;
+    $local_0.used = new_used_125;
+    "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, start_126, 7_i64, 1);
+    start_126 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    new_used_125 = builtin::i32_wrap_i64(packed >> 32_i64);
+    start_126 = "bug_ctfe_discarded_call_traps.wado/$cm_binding__Stdout_write_via_stream"(start_126);
+    "core:rt/write_string_to_stream"(new_used_125, $local_0.repr, $local_0.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_126);
     "wasi/task-return"(0);
 }
 

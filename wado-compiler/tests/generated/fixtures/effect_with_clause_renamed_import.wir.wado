@@ -120,7 +120,7 @@ fn "effect_with_clause_renamed_import.wado/run"() with Stdout {
     let $local_3: ref "core:prelude//List<u8>";
     let is_negative_24: bool;
     let x: i64;
-    let start_75: i32;
+    let start_78: i32;
     fixed = struct.new "effect_with_clause_renamed_import.wado//FixedRandom" { byte: 1 };
     global:effect_with_clause_renamed_import.wado::$effect_Random = local.tee $d_Random(struct.new "effect_with_clause_renamed_import.wado//$Dispatch_Random" { outer: local.tee $save_Random(global:effect_with_clause_renamed_import.wado::$effect_Random), op_get_random_bytes: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_with_clause_renamed_import.wado//$Closure_0" { $capture_0: fixed }, func: ref.func "closure/effect_with_clause_renamed_import.wado/$closure_wrapper_0" }, op_get_random_u64: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_with_clause_renamed_import.wado//$Closure_1" {  }, func: ref.func "closure/effect_with_clause_renamed_import.wado/$closure_wrapper_1" } });
     $local_1_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
@@ -144,17 +144,17 @@ fn "effect_with_clause_renamed_import.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_1, is_negative_24);
         }
-        start_75 = $local_1_1.used;
+        start_78 = $local_1_1.used;
         $local_1_1.used = is_negative_24;
-        builtin::array_set_u8($local_1_1.repr, start_75, 45);
+        builtin::array_set_u8($local_1_1.repr, start_78, 45);
     } else {
     }
-    if @unlikely(local.tee start_75($local_1_1.used + self_13) > builtin::array_len($local_1_1.repr)) {
+    if @unlikely(local.tee start_78($local_1_1.used + self_13) > builtin::array_len($local_1_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_1, start_75);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_1, start_78);
     }
     is_negative_24 = $local_1_1.used;
-    $local_1_1.used = start_75;
+    $local_1_1.used = start_78;
     "core:prelude/primitive.wado/write_decimal_digits"($local_1_1.repr, is_negative_24, x, self_13);
     self_13 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_24 = builtin::i32_wrap_i64(x >> 32_i64);

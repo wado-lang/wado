@@ -75,7 +75,7 @@ fn "wasm_import_memory_limits.wado/run"() with Stdout {
     let new_used_18: i32;
     let start_19: i32;
     let x: i64;
-    let start_81: i32;
+    let start_84: i32;
     "wasm:./sub/wasm_import_memory_limits.wat/poke"(42);
     $local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
     if @unlikely(local.tee new_used_18(0 + 9) > builtin::array_len($local_0.repr)) {
@@ -92,17 +92,17 @@ fn "wasm_import_memory_limits.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, new_used_18);
         }
-        start_81 = $local_0.used;
+        start_84 = $local_0.used;
         $local_0.used = new_used_18;
-        builtin::array_set_u8($local_0.repr, start_81, 45);
+        builtin::array_set_u8($local_0.repr, start_84, 45);
     } else {
     }
-    if @unlikely(local.tee start_81($local_0.used + start_19) > builtin::array_len($local_0.repr)) {
+    if @unlikely(local.tee start_84($local_0.used + start_19) > builtin::array_len($local_0.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, start_81);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, start_84);
     }
     new_used_18 = $local_0.used;
-    $local_0.used = start_81;
+    $local_0.used = start_84;
     "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, new_used_18, x, start_19);
     start_19 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     new_used_18 = builtin::i32_wrap_i64(x >> 32_i64);

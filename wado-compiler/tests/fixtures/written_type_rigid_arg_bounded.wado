@@ -1,0 +1,41 @@
+// A type written at a type parameter is accepted where the parameter's own
+// bounds meet the declaration's: a signature, an impl header, a field, and a
+// body all name `Wrap<_>` at a parameter bounded by `Tag`.
+
+trait Tag with () {
+    fn tag(&self) -> i32;
+}
+
+impl Tag for i32 {
+    fn tag(&self) -> i32 {
+        return *self;
+    }
+}
+
+trait Shown with () {
+    fn shown(&self) -> i32;
+}
+
+struct Wrap<T: Tag> {
+    v: T,
+}
+
+impl<T: Tag> Shown for Wrap<T> {
+    fn shown(&self) -> i32 {
+        return self.v.tag();
+    }
+}
+
+struct Outer<U: Tag> {
+    w: Wrap<U>,
+}
+
+fn unwrap<O: Tag>(w: Wrap<O>) -> i32 {
+    let inner: Option<Wrap<O>> = Some(w);
+    return inner.unwrap().shown();
+}
+
+test "a bounded parameter meets the declaration's bounds" {
+    let outer = Outer { w: Wrap { v: 7 } };
+    assert unwrap(outer.w) == 7;
+}

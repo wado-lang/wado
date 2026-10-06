@@ -82,29 +82,29 @@ fn "hfs_call_as_match_scrutinee.wado/run"() with Stdout {
     let $local_2: ref "core:prelude/string.wado//String";
     let $match_4: i32;
     let x: i64;
-    let $hfs_v_352: i32;
+    let $hfs_v_452: i32;
     b = struct.new "hfs_call_as_match_scrutinee.wado//Buf" { v: 0, pad: 0 };
     i_1 = 0;
-    $hfs_v_352 = 0;
+    $hfs_v_452 = 0;
     b0: block {
         l1: loop {
             break_if b0 i_1 >= 4;
-            b.v = $hfs_v_352;
+            b.v = $hfs_v_452;
             if local.tee $match_4("hfs_call_as_match_scrutinee.wado/pre_inc5"(b)) == 0 {
-                $hfs_v_352 = local.tee $hfs_v_352(b.v) + 1;
+                $hfs_v_452 = local.tee $hfs_v_452(b.v) + 1;
             } else if $match_4 == 5 {
-                $hfs_v_352 = local.tee $hfs_v_352(b.v) + 1;
+                $hfs_v_452 = local.tee $hfs_v_452(b.v) + 1;
             } else {
-                $hfs_v_352 = b.v;
+                $hfs_v_452 = b.v;
             }
             i_1 = i_1 + 1;
-            b.v = $hfs_v_352;
+            b.v = $hfs_v_452;
             continue l1;
         };
     };
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    i_1 = local.tee $hfs_v_352(b.v) < 0;
-    $hfs_v_352 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s($hfs_v_352); select i64(x < 0_i64, 0_i64 - x, x)));
+    i_1 = local.tee $hfs_v_452(b.v) < 0;
+    $hfs_v_452 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s($hfs_v_452); select i64(x < 0_i64, 0_i64 - x, x)));
     if i_1 {
         if @unlikely(local.tee i_1(0 + 1) > builtin::array_len($local_2.repr)) {
             cold_path;
@@ -115,18 +115,18 @@ fn "hfs_call_as_match_scrutinee.wado/run"() with Stdout {
         builtin::array_set_u8($local_2.repr, $match_4, 45);
     } else {
     }
-    if @unlikely(local.tee $match_4($local_2.used + $hfs_v_352) > builtin::array_len($local_2.repr)) {
+    if @unlikely(local.tee $match_4($local_2.used + $hfs_v_452) > builtin::array_len($local_2.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, $match_4);
     }
     i_1 = $local_2.used;
     $local_2.used = $match_4;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, i_1, x, $hfs_v_352);
-    $hfs_v_352 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
+    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, i_1, x, $hfs_v_452);
+    $hfs_v_452 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     i_1 = builtin::i32_wrap_i64(x >> 32_i64);
-    $hfs_v_352 = "hfs_call_as_match_scrutinee.wado/$cm_binding__Stdout_write_via_stream"($hfs_v_352);
+    $hfs_v_452 = "hfs_call_as_match_scrutinee.wado/$cm_binding__Stdout_write_via_stream"($hfs_v_452);
     "core:rt/write_string_to_stream"(i_1, $local_2.repr, $local_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($hfs_v_352);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($hfs_v_452);
 }
 
 fn "hfs_call_as_match_scrutinee.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

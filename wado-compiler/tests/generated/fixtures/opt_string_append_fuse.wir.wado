@@ -67,9 +67,9 @@ fn "opt_string_append_fuse.wado/run"() with Stdout {
     let $load_0: ref Array<u8>;
     let buf_0: ref "core:prelude/string.wado//String";
     let i: i32;
-    let new_used_63: i32;
-    let start_64: i32;
-    let packed_87: i64;
+    let new_used_84: i32;
+    let start_85: i32;
+    let packed_120: i64;
     local.tee buf_0(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 }).used = 6;
     builtin::array_set_u8(local.tee $load_0(buf_0.repr), 0, 91);
     builtin::array_copy<u8>($load_0, 1, global:opt_string_append_fuse.wado::$const_obj_6, 0, 4);
@@ -83,23 +83,23 @@ fn "opt_string_append_fuse.wado/run"() with Stdout {
     b0: block {
         l1: loop {
             break_if b0 i >= 2;
-            if @unlikely(local.tee new_used_63(buf_0.used + 56) > builtin::array_len(buf_0.repr)) {
+            if @unlikely(local.tee new_used_84(buf_0.used + 56) > builtin::array_len(buf_0.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf_0, new_used_63);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf_0, new_used_84);
             }
-            start_64 = buf_0.used;
-            buf_0.used = new_used_63;
-            builtin::array_set_u8(local.tee $load_0(buf_0.repr), start_64, 60);
-            builtin::array_copy<u8>($load_0, start_64 + 1, global:opt_string_append_fuse.wado::$const_obj_3, 0, 54);
-            builtin::array_set_u8($load_0, start_64 + 55, 62);
+            start_85 = buf_0.used;
+            buf_0.used = new_used_84;
+            builtin::array_set_u8(local.tee $load_0(buf_0.repr), start_85, 60);
+            builtin::array_copy<u8>($load_0, start_85 + 1, global:opt_string_append_fuse.wado::$const_obj_3, 0, 54);
+            builtin::array_set_u8($load_0, start_85 + 55, 62);
             i = i + 1;
             continue l1;
         };
     };
-    i = builtin::i32_wrap_i64(local.tee packed_87("wasi/stream-new"()));
-    start_64 = builtin::i32_wrap_i64(packed_87 >> 32_i64);
+    i = builtin::i32_wrap_i64(local.tee packed_120("wasi/stream-new"()));
+    start_85 = builtin::i32_wrap_i64(packed_120 >> 32_i64);
     i = "opt_string_append_fuse.wado/$cm_binding__Stdout_write_via_stream"(i);
-    "core:rt/write_string_to_stream"(start_64, buf_0.repr, buf_0.used);
+    "core:rt/write_string_to_stream"(start_85, buf_0.repr, buf_0.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(i);
     buf_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98), used: 2 };
     if @unlikely(3 > builtin::array_len(buf_0.repr)) {
@@ -117,10 +117,10 @@ fn "opt_string_append_fuse.wado/run"() with Stdout {
     buf_0.used = 7;
     builtin::array_copy<u8>(local.tee $load_0(buf_0.repr), i, $load_0, 0, 3);
     builtin::array_set_u8($load_0, i + 3, 62);
-    i = builtin::i32_wrap_i64(local.tee packed_87("wasi/stream-new"()));
-    start_64 = builtin::i32_wrap_i64(packed_87 >> 32_i64);
+    i = builtin::i32_wrap_i64(local.tee packed_120("wasi/stream-new"()));
+    start_85 = builtin::i32_wrap_i64(packed_120 >> 32_i64);
     i = "opt_string_append_fuse.wado/$cm_binding__Stdout_write_via_stream"(i);
-    "core:rt/write_string_to_stream"(start_64, buf_0.repr, buf_0.used);
+    "core:rt/write_string_to_stream"(start_85, buf_0.repr, buf_0.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(i);
 }
 

@@ -1,0 +1,18 @@
+// A generic newtype's base owes its declaration's bounds at the newtype's
+// parameters: `Wrap<U>` needs `U: Tag`, which `Wrapped` does not declare.
+
+trait Tag with () {}
+
+struct Wrap<T: Tag> {
+    v: T,
+}
+
+type Wrapped<U> = Wrap<U>;
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":10:19: analysis error: type 'U' does not implement trait 'Tag' required by bound on 'T'",
+  "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
+}
