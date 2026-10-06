@@ -24,7 +24,7 @@
 
 
 use { Request } from "wasi:http";
-use { HashMap } from "core:collections";
+use { HashMap, HashSeed } from "core:collections";
 use {
     Deserialize,
     DeserializeError,
@@ -142,9 +142,15 @@ struct DfaState {
     wildcard_names: List<String>,
 }
 
+/// What the router's maps hash under. Their keys are the routes the program
+/// registers; a request only probes chains registration built, so it cannot
+/// grow one. A fixed seed exposes nothing, and spares every program that routes
+/// the host's seed call.
+global ROUTER_SEED: HashSeed = HashSeed::fixed(0x452821E638D01377, 0xBE5466CF34E90C6C);
+
 fn new_state() -> DfaState {
     return DfaState {
-        literals: HashMap::new(),
+        literals: HashMap::with_seed(ROUTER_SEED),
         param_target: -1,
         param_name: "",
         wildcard_methods: [],
@@ -187,7 +193,7 @@ pub struct Router<H> {
 impl<H> Router<H> {
     pub fn new() -> Router<H> {
         let mut r = Router {
-            static_routes: HashMap::new(),
+            static_routes: HashMap::with_seed(ROUTER_SEED),
             states: [],
             handlers: [],
         };
