@@ -695,11 +695,6 @@ impl String {
     ///
     /// Breaking it is a contract violation, and the behavior is unconstrained.
     pub fn push_str_range_unchecked<S: AsStrSlice>(&mut self, s: S, start: i32, end: i32) {
-        // `core:json` appends an empty run between adjacent escapes, and the
-        // view built below survives `-O2` as an allocation.
-        if end == start {
-            return;
-        }
         self.push_str(s.as_str_slice().slice_unchecked(start, end));
     }
 
