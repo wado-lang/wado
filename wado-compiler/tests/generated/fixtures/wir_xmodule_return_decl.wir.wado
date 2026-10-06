@@ -1942,18 +1942,29 @@ fn "./sub/wir_xmodule_return_parser.wado/./sub/wir_xmodule_return_parser.wado/To
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee i(builtin::array_get_value<i32>(self.ends.repr, i)) - $v1_7), used: 0 };
     $licm_used_33 = local.tee self_22(self.chars).used;
     $licm_repr_34 = self_22.repr;
-    b202: block {
-        l203: loop {
-            break_if b202 $v1_7 >= i;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(s, if @unlikely($v1_7 >= $licm_used_33) {
-                cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($v1_7, $licm_used_33);
-                unreachable;
-            }; builtin::array_get_value<char>($licm_repr_34, $v1_7));
-            $v1_7 = $v1_7 + 1;
-            continue l203;
+    if i <= $licm_used_33 {
+        b203: block {
+            l204: loop {
+                break_if b203 $v1_7 >= i;
+                "core:prelude/string.wado/core:prelude/string.wado/String::push"(s, builtin::array_get_value<char>($licm_repr_34, $v1_7));
+                $v1_7 = $v1_7 + 1;
+                continue l204;
+            };
         };
-    };
+    } else {
+        b205: block {
+            l206: loop {
+                break_if b205 $v1_7 >= i;
+                "core:prelude/string.wado/core:prelude/string.wado/String::push"(s, if @unlikely($v1_7 >= $licm_used_33) {
+                    cold_path;
+                    "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($v1_7, $licm_used_33);
+                    unreachable;
+                }; builtin::array_get_value<char>($licm_repr_34, $v1_7));
+                $v1_7 = $v1_7 + 1;
+                continue l206;
+            };
+        };
+    }
     return s;
 }
 
@@ -2179,8 +2190,8 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits
     let result: ref "core:prelude//List<char>";
     let used: i32;
     result = struct.new "core:prelude//List<char>" { repr: array.new_fixed<char>(), used: 0 };
-    b228: block {
-        l229: loop {
+    b231: block {
+        l232: loop {
             let $mv$$match_3$0: i32;
             let $mv$$match_3$1: char;
             multivalue_bind [$mv$$match_3$0, $mv$$match_3$1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"(iter);
@@ -2192,9 +2203,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits
                 builtin::array_set<char>(result.repr, used, $mv$$match_3$1);
                 result.used = used + 1;
             } else {
-                break b228;
+                break b231;
             }
-            continue l229;
+            continue l232;
         };
     };
     return result;

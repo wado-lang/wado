@@ -125,7 +125,7 @@ impl ModifiedVars {
 
     /// True when a call in the loop may write the object `root` holds.
     fn call_writes_object(&self, ctx: &LicmCtx, body: &Body, root: u32, root_type: TypeId) -> bool {
-        let Some(key) = ctx.heap.effects.object_key(root_type) else {
+        let Some(key) = ctx.type_table.heap_object_key(root_type) else {
             return false;
         };
         self.call_sites
@@ -225,7 +225,7 @@ pub fn apply_licm(
             ..
         } = &mut *func;
         let body = body.as_mut().expect("checked above");
-        let (aliased, untrackable, mut_escaped) = builder_alias_sets(
+        let alias = builder_alias_sets(
             body,
             locals,
             address_taken_locals,
@@ -235,7 +235,7 @@ pub fn apply_licm(
             &call_immutability,
         );
         let mut engine = Engine::new(body, &mut buffers, locals);
-        engine.set_alias_sets(aliased, untrackable, mut_escaped);
+        engine.set_alias_sets(alias);
         engine.set_value_graph_type_table(&type_table);
         engine.set_param_locals(params.iter().map(|p| p.local_index).collect());
         engine.set_panic_callee_ids(&panic_ids);
@@ -660,7 +660,7 @@ fn hoist_reloadable_field_loads(
             .iter()
             .filter_map(|c| {
                 let root_ty = candidate_root_ty(engine, c.local_index, c.type_id);
-                Some((ctx.heap.effects.object_key(root_ty)?, c.local_index))
+                Some((ctx.type_table.heap_object_key(root_ty)?, c.local_index))
             })
             .collect(),
     };
@@ -693,9 +693,8 @@ fn hoist_reloadable_field_loads(
     for candidate in &candidates {
         let local_type_id = candidate_root_ty(engine, candidate.local_index, candidate.type_id);
         let key = ctx
-            .heap
-            .effects
-            .object_key(local_type_id)
+            .type_table
+            .heap_object_key(local_type_id)
             .expect("a candidate's call clobber was found by its object key");
         let new_local_index = ctx.alloc_hoist(
             engine,
