@@ -13,6 +13,10 @@ impl Flag for bool {}
 impl<..T: Small> Tag for [..T] { fn tag(&self) -> String { return "small"; } }
 impl<..T: Flag> Tag for [..T] { fn tag(&self) -> String { return "flag"; } }
 
+test {
+    assert [1, 2].tag() == "small" && [true, false].tag() == "flag";
+}
+
 struct Wrap<T> { value: T }
 
 impl<T: Small> Tag for Wrap<T> { fn tag(&self) -> String { return "small"; } }
@@ -20,10 +24,6 @@ impl<T: Flag> Tag for Wrap<T> { fn tag(&self) -> String { return "flag"; } }
 
 fn via<X: Tag>(x: X) -> String {
     return x.tag();
-}
-
-test {
-    assert [1, 2].tag() == "small" && [true, false].tag() == "flag";
 }
 
 test "an instance of a generic body selects by the same bounds" {
