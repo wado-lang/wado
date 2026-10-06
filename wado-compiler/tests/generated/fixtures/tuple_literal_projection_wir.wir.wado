@@ -74,7 +74,7 @@ fn "tuple_literal_projection_wir.wado/run"() with Stdout {
     let $local_1_1: ref "core:prelude/string.wado//String";
     let is_negative_16: bool;
     let x: i64;
-    let start_97: i32;
+    let start_100: i32;
     n_0 = black_box(3);
     $local_1_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative_16 = local.tee n_0(n_0 * 2) < 0;
@@ -84,17 +84,17 @@ fn "tuple_literal_projection_wir.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_1, is_negative_16);
         }
-        start_97 = $local_1_1.used;
+        start_100 = $local_1_1.used;
         $local_1_1.used = is_negative_16;
-        builtin::array_set_u8($local_1_1.repr, start_97, 45);
+        builtin::array_set_u8($local_1_1.repr, start_100, 45);
     } else {
     }
-    if @unlikely(local.tee start_97($local_1_1.used + n_0) > builtin::array_len($local_1_1.repr)) {
+    if @unlikely(local.tee start_100($local_1_1.used + n_0) > builtin::array_len($local_1_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_1, start_97);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_1, start_100);
     }
     is_negative_16 = $local_1_1.used;
-    $local_1_1.used = start_97;
+    $local_1_1.used = start_100;
     "core:prelude/primitive.wado/write_decimal_digits"($local_1_1.repr, is_negative_16, x, n_0);
     n_0 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_16 = builtin::i32_wrap_i64(x >> 32_i64);

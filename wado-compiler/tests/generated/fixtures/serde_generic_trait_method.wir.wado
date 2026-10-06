@@ -58,12 +58,12 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:serde_generic_trait_method.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(44);
-global global:serde_generic_trait_method.wado::$const_obj_4: ref Array<u8> = array.new_fixed<u8>(52, 50);
+global global:serde_generic_trait_method.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(104, 101, 108, 108, 111);
+global global:serde_generic_trait_method.wado::$const_obj_4: ref Array<u8> = array.new_fixed<u8>(44);
+global global:serde_generic_trait_method.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(52, 50);
 
 fn "serde_generic_trait_method.wado/run"() with Stdout {
     let $load_2: ref Array<u8>;
-    let s: ref "core:prelude/string.wado//String";
     let start_21: i32;
     let packed: i64;
     let tx_63: i32;
@@ -75,22 +75,21 @@ fn "serde_generic_trait_method.wado/run"() with Stdout {
     }
     start_21 = $sroa_buf_data_68.used;
     $sroa_buf_data_68.used = 2;
-    builtin::array_copy<u8>(local.tee $load_2($sroa_buf_data_68.repr), start_21, global:serde_generic_trait_method.wado::$const_obj_4, 0, 2);
+    builtin::array_copy<u8>(local.tee $load_2($sroa_buf_data_68.repr), start_21, global:serde_generic_trait_method.wado::$const_obj_5, 0, 2);
     if @unlikely(3 > builtin::array_len($load_2)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_buf_data_68, 3);
     }
     start_21 = $sroa_buf_data_68.used;
     $sroa_buf_data_68.used = 3;
-    builtin::array_copy<u8>(local.tee $load_2($sroa_buf_data_68.repr), start_21, global:serde_generic_trait_method.wado::$const_obj_3, 0, 1);
-    s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
+    builtin::array_copy<u8>(local.tee $load_2($sroa_buf_data_68.repr), start_21, global:serde_generic_trait_method.wado::$const_obj_4, 0, 1);
     if @unlikely(8 > builtin::array_len($load_2)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_buf_data_68, 8);
     }
     start_21 = $sroa_buf_data_68.used;
     $sroa_buf_data_68.used = 8;
-    builtin::array_copy<u8>($sroa_buf_data_68.repr, start_21, s.repr, 0, 5);
+    builtin::array_copy<u8>($sroa_buf_data_68.repr, start_21, global:serde_generic_trait_method.wado::$const_obj_3, 0, 5);
     start_21 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_63 = builtin::i32_wrap_i64(packed >> 32_i64);
     start_21 = "serde_generic_trait_method.wado/$cm_binding__Stdout_write_via_stream"(start_21);
