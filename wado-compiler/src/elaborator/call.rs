@@ -3797,7 +3797,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.tysys.inherited_default_method_sig(&key, method_name)
             })
         else {
-            return (self.derived_impl_args(struct_name, method_name, args), vec![]);
+            return (
+                self.derived_impl_args(struct_name, method_name, args),
+                vec![],
+            );
         };
         if sig.decl.type_params.is_empty() {
             return (vec![], vec![]);
@@ -3842,7 +3845,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The impl level of a derived method called by type path, solved from the
     /// arguments against [`Self::derived_method_signature`]; empty where they
     /// leave a slot open.
-    fn derived_impl_args(&mut self, struct_name: &str, method_name: &str, args: &[TypeId]) -> Vec<TypeId> {
+    fn derived_impl_args(
+        &mut self,
+        struct_name: &str,
+        method_name: &str,
+        args: &[TypeId],
+    ) -> Vec<TypeId> {
         let Some(sig) = self.derived_method_signature(struct_name, method_name) else {
             return Vec::new();
         };

@@ -1217,14 +1217,10 @@ impl TypeSystem {
     /// Why `type_id` derives no `Default`, which only a non-generic struct
     /// whose every field declares a default does.
     pub(super) fn default_withheld_note(&self, scope: &TypeLookup, type_id: TypeId) -> String {
-        let table = self.type_table.borrow();
-        let def = match table.get(table.representation_head(type_id)) {
-            ResolvedType::Struct { def, .. } => def.decl(),
-            ResolvedType::GenericInstance { def, .. } => Some(*def),
-            _ => None,
-        };
-        drop(table);
-        let Some(info) = def.and_then(|def| scope.struct_fields_of(def)) else {
+        let Some(info) = self
+            .represented_decl(type_id)
+            .and_then(|def| scope.struct_fields_of(def))
+        else {
             return "only a struct derives `Default`; write the impl".to_string();
         };
         if !info.type_param_type_ids.is_empty() {
@@ -1239,17 +1235,17 @@ impl TypeSystem {
         format!("field `{name}` has no default expression")
     }
 
-    /// Whether `type_id` derives `Default`: a newtype has no derivation of its
-    /// own, and the one its representation carries answers.
     fn is_defaultable_struct(&self, scope: &TypeLookup, type_id: TypeId) -> bool {
-        let table = self.type_table.borrow();
-        let def = match table.get(table.representation_head(type_id)) {
-            ResolvedType::Struct { def, .. } => def.decl(),
-            _ => None,
-        };
-        drop(table);
-        def.and_then(|def| self.auto_derive_default_struct_type(scope, def))
+        self.represented_decl(type_id)
+            .and_then(|def| self.auto_derive_default_struct_type(scope, def))
             .is_some()
+    }
+
+    /// The declaration `type_id`'s representation instantiates: a newtype has
+    /// no derivation of its own, and the one its representation carries answers.
+    fn represented_decl(&self, type_id: TypeId) -> Option<DefId> {
+        let table = self.type_table.borrow();
+        table.nominal_def(table.representation_head(type_id))
     }
 
     /// The `Ref` marker's eligibility: whether a value of this type is a Wasm GC
