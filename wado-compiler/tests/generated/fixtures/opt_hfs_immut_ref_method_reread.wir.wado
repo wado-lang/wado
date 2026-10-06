@@ -863,60 +863,52 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
 }
 
 fn "opt_hfs_immut_ref_method_reread.wado/opt_hfs_immut_ref_method_reread.wado/Lexer::read_char_class"(self) {
+    let $load_3: i32;
     let text: ref "core:prelude/string.wado//String";
-    let self_19: ref "core:prelude//List<char>";
     let index_20: i32;
-    let $v1_21: i32;
-    let self_28: ref "core:prelude//List<char>";
     let index_29: i32;
-    let $v1_30: i32;
     let $licm_chars_34: ref "core:prelude//List<char>";
-    let $hfs_pos_39: i32;
+    let $licm_repr_36: ref Array<char>;
+    let $hfs_pos_42: i32;
     self.pos = self.pos + 1;
     local.tee text(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }).used = 1;
     builtin::array_set_u8(text.repr, 0, 91);
-    $licm_chars_34 = self.chars;
-    $hfs_pos_39 = self.pos;
+    $load_3 = local.tee $licm_chars_34(self.chars).used;
+    $licm_repr_36 = $licm_chars_34.repr;
+    $hfs_pos_42 = self.pos;
     block {
         l90: loop {
-            if $hfs_pos_39 >= $licm_chars_34.used {
+            if $hfs_pos_42 >= $load_3 {
+                self.pos = $hfs_pos_42;
                 return text;
             }
-            self_19 = $licm_chars_34;
-            index_20 = $hfs_pos_39;
-            $v1_21 = self_19.used;
-            if @unlikely(index_20 >= $v1_21) {
+            if @unlikely(local.tee index_20($hfs_pos_42) >= $load_3) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_20, $v1_21);
+                self.pos = $hfs_pos_42;
+                "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_20, $load_3);
                 unreachable;
-                $licm_chars_34 = self.chars;
-            } else {
             }
-            index_20 = builtin::array_get_value<char>(self_19.repr, index_20);
-            $hfs_pos_39 = local.tee $hfs_pos_39(self.pos) + 1;
+            index_20 = builtin::array_get_value<char>($licm_repr_36, index_20);
+            $hfs_pos_42 = $hfs_pos_42 + 1;
             if index_20 == 92 {
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(text, index_20);
-                if $hfs_pos_39 < $licm_chars_34.used {
-                    "core:prelude/string.wado/core:prelude/string.wado/String::push"(text, self_28 = $licm_chars_34; index_29 = $hfs_pos_39; $v1_30 = self_28.used; if @unlikely(index_29 >= $v1_30) {
+                if $hfs_pos_42 < $load_3 {
+                    "core:prelude/string.wado/core:prelude/string.wado/String::push"(text, if @unlikely(local.tee index_29($hfs_pos_42) >= $load_3) {
                         cold_path;
-                        self.pos = $hfs_pos_39;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_29, $v1_30);
+                        self.pos = $hfs_pos_42;
+                        "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_29, $load_3);
                         unreachable;
-                        $licm_chars_34 = self.chars;
-                        $hfs_pos_39 = self.pos;
-                    }; builtin::array_get_value<char>(self_28.repr, index_29));
-                    $hfs_pos_39 = $hfs_pos_39 + 1;
+                    }; builtin::array_get_value<char>($licm_repr_36, index_29));
+                    $hfs_pos_42 = $hfs_pos_42 + 1;
                 }
-                self.pos = $hfs_pos_39;
                 continue l90;
             }
             if index_20 == 93 {
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(text, index_20);
-                self.pos = $hfs_pos_39;
+                self.pos = $hfs_pos_42;
                 return text;
             }
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(text, index_20);
-            self.pos = $hfs_pos_39;
             continue l90;
         };
     };

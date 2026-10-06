@@ -417,7 +417,8 @@ global global:core:prelude/list.wado::$const_obj_33: ref Array<u8> = array.new_f
 global global:core:prelude/primitive.wado::$const_obj_37: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "http_fields_from_list.wado/$cm_binding__Fields_from_list"(entries) with Fields {
-    let $load_10: i32;
+    let $load_5: i32;
+    let $load_8: i32;
     let $entries_len: i32;
     let $entries_base: i32;
     let $entries_i: i32;
@@ -429,7 +430,6 @@ fn "http_fields_from_list.wado/$cm_binding__Fields_from_list"(entries) with Fiel
     let $local_18: ref "wasi:http/types.wado//HeaderError";
     let $local_20: ref null "core:prelude/string.wado//String";
     let v_24: ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]";
-    let $v1_27: i32;
     let v_33: ref "core:prelude/string.wado//String";
     let v_34: ref "core:prelude//List<u8>";
     let ptr_38: i32;
@@ -450,62 +450,57 @@ fn "http_fields_from_list.wado/$cm_binding__Fields_from_list"(entries) with Fiel
         l2: loop {
             break_if b1 $entries_i >= $entries_len;
             $entries_addr = $entries_base + ($entries_i * 16);
-            $v1_27 = $licm_used_62;
-            if @unlikely($entries_i >= $v1_27) {
+            if @unlikely($entries_i >= $licm_used_62) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($entries_i, $v1_27);
+                "core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($entries_i, $licm_used_62);
                 unreachable;
-                $licm_used_62 = entries.used;
-                $licm_repr_63 = entries.repr;
             }
             v_33 = local.tee v_24(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">($licm_repr_63, $entries_i)).0;
             let $array_clone_src_3: ref Array<u8>;
             $array_clone_src_3 = v_33.repr;
-            $v1_27 = v_33.used;
+            $load_5 = v_33.used;
             let $array_clone_dst_4: ref Array<u8>;
-            builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($v1_27)), 0, $array_clone_src_3, 0, $v1_27);
+            builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($load_5)), 0, $array_clone_src_3, 0, $load_5);
             $array_clone_src_3 = local.tee v_34(v_24.1).repr;
-            $load_10 = v_34.used;
+            $load_8 = v_34.used;
             let $array_clone_dst_7: ref Array<u8>;
-            builtin::array_copy<u8>(local.tee $array_clone_dst_7(builtin::array_new<u8>($load_10)), 0, $array_clone_src_3, 0, $load_10);
-            ptr_38 = "mem/realloc"(0, 0, 1, $v1_27);
+            builtin::array_copy<u8>(local.tee $array_clone_dst_7(builtin::array_new<u8>($load_8)), 0, $array_clone_src_3, 0, $load_8);
+            ptr_38 = "mem/realloc"(0, 0, 1, $load_5);
             $licm_used_62 = entries.used;
             $licm_repr_63 = entries.repr;
             i_45 = 0;
             b4: block {
                 l5: loop {
-                    break_if b4 i_45 >= $v1_27;
+                    break_if b4 i_45 >= $load_5;
                     builtin::store_u8(ptr_38 + i_45, builtin::array_get_value_u8($array_clone_dst_4, i_45));
                     i_45 = i_45 + 1;
                     continue l5;
                 };
             };
-            $packed = builtin::i64_extend_i32_u(ptr_38) | (builtin::i64_extend_i32_s($v1_27) << 32_i64);
+            $packed = builtin::i64_extend_i32_u(ptr_38) | (builtin::i64_extend_i32_s($load_5) << 32_i64);
             builtin::store_i32($entries_addr, builtin::i32_wrap_i64($packed));
             builtin::store_i32($entries_addr + 4, builtin::i32_wrap_i64($packed >> 32_i64));
-            if @unlikely(($load_10 < 0) | ($load_10 > 2147483647)) {
+            if @unlikely(($load_8 < 0) | ($load_8 > 2147483647)) {
                 cold_path;
                 "core:rt/panic"(local.tee $mv_field_1(array.new_data<u8>("a buffer's length is negative or past what linear memory can address")), 68);
                 unreachable;
-                $licm_used_62 = entries.used;
-                $licm_repr_63 = entries.repr;
             }
-            $v1_27 = "mem/realloc"(0, 0, 1, $load_10);
+            $load_5 = "mem/realloc"(0, 0, 1, $load_8);
             $licm_used_62 = entries.used;
             $licm_repr_63 = entries.repr;
             ptr_38 = 0;
             b7: block {
                 l8: loop {
-                    break_if b7 ptr_38 >= $load_10;
-                    $list_addr = $v1_27 + ptr_38;
+                    break_if b7 ptr_38 >= $load_8;
+                    $list_addr = $load_5 + ptr_38;
                     $list_elem = builtin::array_get_value<u8>($array_clone_dst_7, ptr_38);
                     builtin::store_u8($list_addr, $list_elem);
                     ptr_38 = ptr_38 + 1;
                     continue l8;
                 };
             };
-            builtin::store_i32($entries_addr + 8, $v1_27);
-            builtin::store_i32(($entries_addr + 8) + 4, $load_10);
+            builtin::store_i32($entries_addr + 8, $load_5);
+            builtin::store_i32(($entries_addr + 8) + 4, $load_8);
             $entries_i = $entries_i + 1;
             continue l2;
         };

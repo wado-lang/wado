@@ -828,15 +828,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
 fn "opt_sroa_variant_return_nested_option_scalar.wado/opt_sroa_variant_return_nested_option_scalar.wado/Cursor::step"(self) {
     let $load_0: i32;
     let $load_1: ref "core:prelude//List<i64>";
+    let $load_2: i32;
     let v: i64;
-    let $v1: i32;
-    if local.tee $load_0(self.pos) >= local.tee $load_1(self.data).used {
+    if local.tee $load_0(self.pos) >= local.tee $load_2(local.tee $load_1(self.data).used) {
         return 0, 0, 0_i64, ref.null none;
     }
-    $v1 = $load_1.used;
-    if @unlikely($load_0 >= $v1) {
+    if @unlikely($load_0 >= $load_2) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i64>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($load_0, $v1);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i64>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($load_0, $load_2);
         unreachable;
     }
     if local.tee v(builtin::array_get_value<i64>($load_1.repr, $load_0)) < 0_i64 {

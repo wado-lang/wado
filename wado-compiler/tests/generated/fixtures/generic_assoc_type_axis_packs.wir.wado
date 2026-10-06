@@ -2258,42 +2258,41 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prel
 
 fn "generic_assoc_type_axis_packs.wado/generic_assoc_type_axis_packs.wado/Cpu^generic_assoc_type_axis_packs.wado/Backend::matmul<[],generic_assoc_type_axis_packs.wado/Batch,generic_assoc_type_axis_packs.wado/In,generic_assoc_type_axis_packs.wado/Out>"(self, a, b) {
     let $load_1: ref "core:prelude//List<i32>";
+    let $load_2: i32;
+    let $load_3: ref Array<i32>;
+    let rows: i32;
     let data: ref "core:prelude//List<f32>";
     let sum: f32;
-    let $v1_19: i32;
-    let $v1_27: i32;
     let $v1_35: i32;
-    let self_48: ref "core:prelude//List<f32>";
+    let elements_41: ref Array<f32>;
     let index_49: i32;
-    let $v1_50: i32;
-    let self_54: ref "core:prelude//List<f32>";
     let index_55: i32;
-    let $v1_56: i32;
     let used: i32;
-    let elements_67: ref Array<i32>;
     let $licm_data_74: ref "core:prelude//List<f32>";
     let $licm_data_75: ref "core:prelude//List<f32>";
-    let current_78: i32;
-    let $sroa_$iter_2_start_90: i32;
-    let current_94: i32;
-    let $sroa_$iter_1_start_102: i32;
-    let current_105: i32;
-    let $sroa_$iter_0_start_113: i32;
+    let $licm_used_76: i32;
+    let $licm_used_78: i32;
+    let current_82: i32;
+    let $sroa_$iter_2_start_94: i32;
+    let $licm_repr_97: ref Array<f32>;
+    let current_100: i32;
+    let $sroa_$iter_1_start_108: i32;
+    let current_111: i32;
+    let $sroa_$iter_0_start_119: i32;
     self.calls = self.calls + 1;
-    $v1_19 = local.tee $load_1(a.extents).used;
-    if @unlikely(0 >= $v1_19) {
+    $load_2 = local.tee $load_1(a.extents).used;
+    if @unlikely(0 >= $load_2) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(0, $v1_19);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(0, $load_2);
         unreachable;
     }
-    $v1_19 = builtin::array_get_value<i32>($load_1.repr, 0);
-    $v1_27 = $load_1.used;
-    if @unlikely(1 >= $v1_27) {
+    rows = builtin::array_get_value<i32>(local.tee $load_3($load_1.repr), 0);
+    if @unlikely(1 >= $load_2) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(1, $v1_27);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(1, $load_2);
         unreachable;
     }
-    $v1_27 = builtin::array_get_value<i32>($load_1.repr, 1);
+    $load_2 = builtin::array_get_value<i32>($load_3, 1);
     $v1_35 = local.tee $load_1(b.extents).used;
     if @unlikely(1 >= $v1_35) {
         cold_path;
@@ -2301,87 +2300,87 @@ fn "generic_assoc_type_axis_packs.wado/generic_assoc_type_axis_packs.wado/Cpu^ge
         unreachable;
     }
     $v1_35 = builtin::array_get_value<i32>($load_1.repr, 1);
-    data = struct.new "core:prelude//List<f32>" { repr: array.new_fixed<f32>(), used: 0 };
-    $sroa_$iter_0_start_113 = 0;
+    data = struct.new "core:prelude//List<f32>" { repr: local.tee elements_41(array.new_fixed<f32>()), used: 0 };
+    $sroa_$iter_0_start_119 = 0;
     $licm_data_74 = a.data;
     $licm_data_75 = b.data;
+    elements_41 = $licm_data_74.repr;
+    $licm_repr_97 = $licm_data_75.repr;
     b281: block {
         l282: loop {
             break_if b281 $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_scalar_0: block -> "core:prelude/traits.wado//enum:Ordering" {
-                if $sroa_$iter_0_start_113 < $v1_19 {
+                if $sroa_$iter_0_start_119 < rows {
                     break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_scalar_0: 0;
                 }
-                if $sroa_$iter_0_start_113 > $v1_19 {
+                if $sroa_$iter_0_start_119 > rows {
                     break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_scalar_0: 2;
                 }
                 break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_scalar_0: 1;
             } != 0;
-            current_105 = $sroa_$iter_0_start_113;
+            current_111 = $sroa_$iter_0_start_119;
             $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_scalar_1: block {
-                if current_105 == 2147483647 {
-                    $sroa_$iter_0_start_113 = $v1_19;
+                if current_111 == 2147483647 {
+                    $sroa_$iter_0_start_119 = rows;
                     break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_scalar_1;
                 }
-                $sroa_$iter_0_start_113 = current_105 + 1;
+                $sroa_$iter_0_start_119 = current_111 + 1;
                 break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_scalar_1;
             };
-            $sroa_$iter_1_start_102 = 0;
-            current_105 = current_105 * $v1_27;
+            $sroa_$iter_1_start_108 = 0;
+            current_111 = current_111 * $load_2;
             b286: block {
                 l287: loop {
                     break_if b286 $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_scalar_0: block -> "core:prelude/traits.wado//enum:Ordering" {
-                        if $sroa_$iter_1_start_102 < $v1_35 {
+                        if $sroa_$iter_1_start_108 < $v1_35 {
                             break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_scalar_0: 0;
                         }
-                        if $sroa_$iter_1_start_102 > $v1_35 {
+                        if $sroa_$iter_1_start_108 > $v1_35 {
                             break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_scalar_0: 2;
                         }
                         break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_scalar_0: 1;
                     } != 0;
-                    current_94 = $sroa_$iter_1_start_102;
+                    current_100 = $sroa_$iter_1_start_108;
                     $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_scalar_1: block {
-                        if current_94 == 2147483647 {
-                            $sroa_$iter_1_start_102 = $v1_35;
+                        if current_100 == 2147483647 {
+                            $sroa_$iter_1_start_108 = $v1_35;
                             break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_scalar_1;
                         }
-                        $sroa_$iter_1_start_102 = current_94 + 1;
+                        $sroa_$iter_1_start_108 = current_100 + 1;
                         break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_scalar_1;
                     };
                     sum = 0_f32;
-                    $sroa_$iter_2_start_90 = 0;
+                    $sroa_$iter_2_start_94 = 0;
+                    $licm_used_76 = $licm_data_74.used;
+                    $licm_used_78 = $licm_data_75.used;
                     b291: block {
                         l292: loop {
                             break_if b291 $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_scalar_0: block -> "core:prelude/traits.wado//enum:Ordering" {
-                                if $sroa_$iter_2_start_90 < $v1_27 {
+                                if $sroa_$iter_2_start_94 < $load_2 {
                                     break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_scalar_0: 0;
                                 }
-                                if $sroa_$iter_2_start_90 > $v1_27 {
+                                if $sroa_$iter_2_start_94 > $load_2 {
                                     break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_scalar_0: 2;
                                 }
                                 break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_scalar_0: 1;
                             } != 0;
-                            current_78 = $sroa_$iter_2_start_90;
+                            current_82 = $sroa_$iter_2_start_94;
                             $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_scalar_1: block {
-                                if current_78 == 2147483647 {
-                                    $sroa_$iter_2_start_90 = $v1_27;
+                                if current_82 == 2147483647 {
+                                    $sroa_$iter_2_start_94 = $load_2;
                                     break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_scalar_1;
                                 }
-                                $sroa_$iter_2_start_90 = current_78 + 1;
+                                $sroa_$iter_2_start_94 = current_82 + 1;
                                 break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_scalar_1;
                             };
-                            sum = sum + (self_48 = $licm_data_74; index_49 = current_105 + current_78; $v1_50 = self_48.used; if @unlikely(index_49 >= $v1_50) {
+                            sum = sum + (if @unlikely(local.tee index_49(current_111 + current_82) >= $licm_used_76) {
                                 cold_path;
-                                "core:prelude/list.wado/core:prelude/list.wado/List<f32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_49, $v1_50);
+                                "core:prelude/list.wado/core:prelude/list.wado/List<f32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_49, $licm_used_76);
                                 unreachable;
-                                $licm_data_74 = a.data;
-                                $licm_data_75 = b.data;
-                            }; builtin::array_get_value<f32>(self_48.repr, index_49) * self_54 = $licm_data_75; index_55 = (current_78 * $v1_35) + current_94; $v1_56 = self_54.used; if @unlikely(index_55 >= $v1_56) {
+                            }; builtin::array_get_value<f32>(elements_41, index_49) * if @unlikely(local.tee index_55((current_82 * $v1_35) + current_100) >= $licm_used_78) {
                                 cold_path;
-                                "core:prelude/list.wado/core:prelude/list.wado/List<f32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_55, $v1_56);
+                                "core:prelude/list.wado/core:prelude/list.wado/List<f32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_55, $licm_used_78);
                                 unreachable;
-                                $licm_data_74 = a.data;
-                                $licm_data_75 = b.data;
-                            }; builtin::array_get_value<f32>(self_54.repr, index_55));
+                            }; builtin::array_get_value<f32>($licm_repr_97, index_55));
                             continue l292;
                         };
                     };
@@ -2397,7 +2396,7 @@ fn "generic_assoc_type_axis_packs.wado/generic_assoc_type_axis_packs.wado/Cpu^ge
             continue l282;
         };
     };
-    return struct.new "generic_assoc_type_axis_packs.wado//Host<f32,[generic_assoc_type_axis_packs.wado/Batch,generic_assoc_type_axis_packs.wado/Out]>" { data: data, extents: struct.new "core:prelude//List<i32>" { repr: local.tee elements_67(array.new_fixed<i32>($v1_19, $v1_35)), used: builtin::array_len(elements_67) } };
+    return struct.new "generic_assoc_type_axis_packs.wado//Host<f32,[generic_assoc_type_axis_packs.wado/Batch,generic_assoc_type_axis_packs.wado/Out]>" { data: data, extents: struct.new "core:prelude//List<i32>" { repr: local.tee $load_3(array.new_fixed<i32>(rows, $v1_35)), used: builtin::array_len($load_3) } };
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<f32>::grow"(self) {

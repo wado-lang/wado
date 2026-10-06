@@ -260,10 +260,6 @@ fn "float_order_lowering.wado/$test_0"() {
     let elements: ref Array<f64>;
     let ordered: i32;
     let index_104: i32;
-    let $v1_105: i32;
-    let $v1_111: i32;
-    let $licm_used_22: i32;
-    let $licm_repr_23: ref Array<f64>;
     let current: i32;
     let $sroa_$iter_0_start_37: i32;
     let $sroa_xs_used_135: i32;
@@ -276,8 +272,6 @@ fn "float_order_lowering.wado/$test_0"() {
     $sroa_xs_used_135 = builtin::array_len(local.tee elements(array.new_fixed<f64>(1, 2, $v1_1, 0.5, $v1_1)));
     ordered = 0;
     $sroa_$iter_0_start_37 = 1;
-    $licm_used_22 = $sroa_xs_used_135;
-    $licm_repr_23 = elements;
     b2: block {
         l3: loop {
             break_if b2 $inline_count_ordered_0__$inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_scalar_0: block -> "core:prelude/traits.wado//enum:Ordering" {
@@ -298,37 +292,33 @@ fn "float_order_lowering.wado/$test_0"() {
                 $sroa_$iter_0_start_37 = current + 1;
                 break $inline_count_ordered_0__$inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_scalar_1;
             };
-            ordered = ordered + index_104 = current - 1; $v1_105 = $licm_used_22; if @unlikely(index_104 >= $v1_105) {
+            ordered = ordered + if @unlikely(local.tee index_104(current - 1) >= $sroa_xs_used_135) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<f64>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_104, $v1_105);
+                "core:prelude/list.wado/core:prelude/list.wado/List<f64>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_104, $sroa_xs_used_135);
                 unreachable;
-                $licm_used_22 = $sroa_xs_used_135;
-                $licm_repr_23 = elements;
-            }; $v0_0 = builtin::array_get_value<f64>($licm_repr_23, index_104); let $float_cmp_2: f64; $v1_111 = $licm_used_22; if @unlikely(current >= $v1_111) {
+            }; $v0_0 = builtin::array_get_value<f64>(elements, index_104); let $float_cmp_2: f64; if @unlikely(current >= $sroa_xs_used_135) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<f64>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(current, $v1_111);
+                "core:prelude/list.wado/core:prelude/list.wado/List<f64>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(current, $sroa_xs_used_135);
                 unreachable;
-                $licm_used_22 = $sroa_xs_used_135;
-                $licm_repr_23 = elements;
-            }; $float_cmp_2 = builtin::array_get_value<f64>($licm_repr_23, current); ($v0_0 <= $float_cmp_2) | ($float_cmp_2 != $float_cmp_2);
+            }; $float_cmp_2 = builtin::array_get_value<f64>(elements, current); ($v0_0 <= $float_cmp_2) | ($float_cmp_2 != $float_cmp_2);
             continue l3;
         };
     };
     if @unlikely(ordered != 3) {
         cold_path;
-        $v1_111 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_50("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(167)), 57);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_50.repr, $v1_111, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_50.repr, $v1_111 + 20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("$test_0"), used: 7 }, 7);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_50.repr, $v1_111 + 27, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 116, 32), used: 4 }, 4);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_50.repr, $v1_111 + 31, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("float_order_lowering.wado"), used: 25 }, 25);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_50.repr, $v1_111 + 56, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1);
+        index_104 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_50("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(167)), 57);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_50.repr, index_104, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_50.repr, index_104 + 20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("$test_0"), used: 7 }, 7);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_50.repr, index_104 + 27, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 116, 32), used: 4 }, 4);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_50.repr, index_104 + 31, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("float_order_lowering.wado"), used: 25 }, 25);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_50.repr, index_104 + 56, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1);
         $local_51 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_50);
         "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar"(48, $local_51);
-        $v1_111 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_50, 40);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_50.repr, $v1_111, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        index_104 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_50, 40);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_50.repr, index_104, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: count_ordered(&xs) == 3
 "), used: 36 }, 36);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_50.repr, $v1_111 + 36, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120, 115, 58, 32), used: 4 }, 4);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_50.repr, index_104 + 36, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120, 115, 58, 32), used: 4 }, 4);
         $local_51 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_50);
         "core:prelude/list.wado/core:prelude/list.wado/List<f64>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//List<f64>" { repr: elements, used: $sroa_xs_used_135 }, $local_51);
         $sroa_xs_used_135 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_50, 21);
@@ -344,49 +334,49 @@ condition: count_ordered(&xs) == 3
     }
     ordered = ($v1_1 <= 1) == 0;
     $sroa_xs_used_135 = 0;
-    $v1_111 = 0;
-    $v1_105 = 0;
-    if @unlikely(local.tee index_104((if ordered -> i32 {
-        $v4_12 = $v2_8 = $v1_1; $sroa_xs_used_135 = 1; $v3_10 = $v2_8 < 1; $v1_111 = 1; $v3_10 == 0;
-        $v1_105 = 1;
+    index_104 = 0;
+    $sroa_$iter_0_start_37 = 0;
+    if @unlikely(local.tee current((if ordered -> i32 {
+        $v4_12 = $v2_8 = $v1_1; $sroa_xs_used_135 = 1; $v3_10 = $v2_8 < 1; index_104 = 1; $v3_10 == 0;
+        $sroa_$iter_0_start_37 = 1;
         $v4_12;
     } else {
         0;
     })) == 0) {
         cold_path;
-        "float_order_lowering.wado/$test_0$cold4"($v1_1, ordered, $v2_8, $sroa_xs_used_135, $v3_10, $v1_111, $v4_12, $v1_105);
+        "float_order_lowering.wado/$test_0$cold4"($v1_1, ordered, $v2_8, $sroa_xs_used_135, $v3_10, index_104, $v4_12, $sroa_$iter_0_start_37);
         unreachable;
     }
-    $v1_105 = (local.tee $v2_8(black_box(2)) <= 1) == 0;
+    $sroa_$iter_0_start_37 = (local.tee $v2_8(black_box(2)) <= 1) == 0;
     $v4_12 = 0;
-    $v1_111 = 0;
-    if @unlikely(local.tee $v3_10((if $v1_105 -> i32 {
+    index_104 = 0;
+    if @unlikely(local.tee $v3_10((if $sroa_$iter_0_start_37 -> i32 {
         $v2_20 = black_box(0.5);
         $v4_12 = 1;
         $v3_22 = $v2_20 < 1;
-        $v1_111 = 1;
+        index_104 = 1;
         $v3_22;
     } else {
         0;
     })) == 0) {
         cold_path;
-        "float_order_lowering.wado/$test_0$cold3"($v2_8, $v1_105, $v2_20, $v4_12, $v3_22, $v1_111);
+        "float_order_lowering.wado/$test_0$cold3"($v2_8, $sroa_$iter_0_start_37, $v2_20, $v4_12, $v3_22, index_104);
         unreachable;
     }
-    $v1_111 = (local.tee $v2_20(black_box(1)) <= $v1_1) | ($v1_1 != $v1_1);
+    index_104 = (local.tee $v2_20(black_box(1)) <= $v1_1) | ($v1_1 != $v1_1);
     $v3_22 = 0;
     $v4_12 = 0;
-    $v1_105 = 0;
+    $sroa_$iter_0_start_37 = 0;
     $v3_10 = 0;
-    if @unlikely(local.tee $sroa_xs_used_135((if $v1_111 -> i32 {
-        $v6 = $v3_29 = $v1_1; $v3_22 = 1; $v4_31 = black_box(1); $v4_12 = 1; $v5 = ($v3_29 <= $v4_31) | ($v4_31 != $v4_31); $v1_105 = 1; $v5 == 0;
+    if @unlikely(local.tee $sroa_xs_used_135((if index_104 -> i32 {
+        $v6 = $v3_29 = $v1_1; $v3_22 = 1; $v4_31 = black_box(1); $v4_12 = 1; $v5 = ($v3_29 <= $v4_31) | ($v4_31 != $v4_31); $sroa_$iter_0_start_37 = 1; $v5 == 0;
         $v3_10 = 1;
         $v6;
     } else {
         0;
     })) == 0) {
         cold_path;
-        "float_order_lowering.wado/$test_0$cold2"($v1_1, $v2_20, $v1_111, $v3_29, $v3_22, $v4_31, $v4_12, $v5, $v1_105, $v6, $v3_10);
+        "float_order_lowering.wado/$test_0$cold2"($v1_1, $v2_20, index_104, $v3_29, $v3_22, $v4_31, $v4_12, $v5, $sroa_$iter_0_start_37, $v6, $v3_10);
         unreachable;
     }
     if @unlikely(local.tee $v3_10("float_order_lowering.wado/differs"($v1_1, $v1_1)) == 0) {

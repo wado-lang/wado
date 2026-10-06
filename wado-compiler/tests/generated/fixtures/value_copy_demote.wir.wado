@@ -44,33 +44,31 @@ type "functype//value_copy_demote.wado/$cm_binding__Stdout_write_via_stream" = f
 
 type "functype//value_copy_demote.wado/$cm_export__run" = fn();  // TypeId(17)
 
-type "functype//value_copy_demote.wado/$value_copy$core:prelude/string.wado/String" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(18)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(18)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(19)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(19)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(20)
+type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(20)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(21)
+type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(21)
 
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(22)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(22)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(23)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0" = fn(i32, i32);  // TypeId(23)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0" = fn(i32, i32);  // TypeId(24)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(24)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(25)
+type "functype//value_copy_demote.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::sort_by$$Closure_0" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(25)
 
-type "functype//value_copy_demote.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::sort_by$$Closure_0" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(26)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(26)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(27)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(27)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(28)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(28)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(29)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(29)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(30)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(31)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(30)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -102,51 +100,31 @@ global global:core:prelude/list.wado::$const_obj_18: ref Array<u8> = array.new_f
 global global:core:prelude/list.wado::$const_obj_19: ref Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
 
 fn "value_copy_demote.wado/distinct_count"(tokens) {
-    let $v1_9: i32;
+    let $load_1: i32;
+    let i_3: i32;
     let index_14: i32;
-    let $v1_15: i32;
     let self_19: ref "core:prelude/string.wado//String";
     let other: ref "core:prelude/string.wado//String";
     let $licm_used_21: i32;
     let a: ref Array<u8>;
     let a_end: i32;
     let b: ref Array<u8>;
-    let i_33: i32;
-    "value_copy_demote.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::sort_by$$Closure_0"(local.tee tokens(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: let $array_clone_src_1: ref "Array<core:prelude/string.wado/String>"; $array_clone_src_1 = tokens.repr; let $array_clone_len_3: i32; $array_clone_len_3 = tokens.used; let $array_clone_dst_2: ref "Array<core:prelude/string.wado/String>"; $array_clone_dst_2 = builtin::array_new<ref "core:prelude/string.wado//String">($array_clone_len_3); let $array_clone_i_4: i32; $array_clone_i_4 = 0; let $array_clone_elem_5: ref null "core:prelude/string.wado//String"; $array_clone_deep_prefix: block {
-        l0: loop {
-            break_if $array_clone_deep_prefix $array_clone_i_4 >= $array_clone_len_3;
-            $array_clone_elem_5 = builtin::array_get_value<ref "core:prelude/string.wado//String">($array_clone_src_1, $array_clone_i_4);
-            builtin::array_set<ref "core:prelude/string.wado//String">($array_clone_dst_2, $array_clone_i_4, (if ref.is_null($array_clone_elem_5) -> ref null "core:prelude/string.wado//String" {
-                $array_clone_elem_5;
-            } else {
-                "value_copy_demote.wado/$value_copy$core:prelude/string.wado/String"(ref.as_non_null($array_clone_elem_5));
-            }));
-            $array_clone_i_4 = $array_clone_i_4 + 1;
-            continue l0;
-        };
-    }; $array_clone_dst_2, used: tokens.used }));
-    $array_clone_i_4 = 0;
-    $array_clone_len_3 = 0;
+    let i_34: i32;
+    "value_copy_demote.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::sort_by$$Closure_0"(local.tee tokens(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: let $array_clone_src_1: ref "Array<core:prelude/string.wado/String>"; $array_clone_src_1 = tokens.repr; $load_1 = tokens.used; let $array_clone_dst_2: ref "Array<core:prelude/string.wado/String>"; builtin::array_copy<ref "core:prelude/string.wado//String">(local.tee $array_clone_dst_2(builtin::array_new<ref "core:prelude/string.wado//String">($load_1)), 0, $array_clone_src_1, 0, $load_1); $array_clone_dst_2, used: $load_1 }));
+    $load_1 = 0;
+    i_3 = 0;
     $licm_used_21 = tokens.used;
     $array_clone_dst_2 = tokens.repr;
-    b2: block {
-        l3: loop {
-            break_if b2 $array_clone_len_3 >= $licm_used_21;
-            if (if $array_clone_len_3 == 0 -> i32 {
+    b0: block {
+        l1: loop {
+            break_if b0 i_3 >= $licm_used_21;
+            if (if i_3 == 0 -> i32 {
                 1;
             } else {
-                $v1_9 = $licm_used_21; if @unlikely($array_clone_len_3 >= $v1_9) {
+                self_19 = builtin::array_get_value<ref "core:prelude/string.wado//String">($array_clone_dst_2, i_3); if @unlikely(local.tee index_14(i_3 - 1) >= $licm_used_21) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($array_clone_len_3, $v1_9);
+                    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_14, $licm_used_21);
                     unreachable;
-                    $array_clone_dst_2 = tokens.repr;
-                    $licm_used_21 = tokens.used;
-                }; self_19 = builtin::array_get_value<ref "core:prelude/string.wado//String">($array_clone_dst_2, $array_clone_len_3); index_14 = $array_clone_len_3 - 1; $v1_15 = $licm_used_21; if @unlikely(index_14 >= $v1_15) {
-                    cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_14, $v1_15);
-                    unreachable;
-                    $array_clone_dst_2 = tokens.repr;
-                    $licm_used_21 = tokens.used;
                 }; other = builtin::array_get_value<ref "core:prelude/string.wado//String">($array_clone_dst_2, index_14); $inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
                     a = self_19.repr;
                     a_end = self_19.used;
@@ -154,27 +132,27 @@ fn "value_copy_demote.wado/distinct_count"(tokens) {
                     if a_end != other.used {
                         break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                     }
-                    i_33 = 0;
-                    b9: block {
-                        l10: loop {
-                            break_if b9 i_33 >= a_end;
-                            if builtin::array_get_value<u8>(a, i_33) != builtin::array_get_value<u8>(b, i_33) {
+                    i_34 = 0;
+                    b6: block {
+                        l7: loop {
+                            break_if b6 i_34 >= a_end;
+                            if builtin::array_get_value<u8>(a, i_34) != builtin::array_get_value<u8>(b, i_34) {
                                 break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                             }
-                            i_33 = i_33 + 1;
-                            continue l10;
+                            i_34 = i_34 + 1;
+                            continue l7;
                         };
                     };
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
                 } == 0;
             }) {
-                $array_clone_i_4 = $array_clone_i_4 + 1;
+                $load_1 = $load_1 + 1;
             }
-            $array_clone_len_3 = $array_clone_len_3 + 1;
-            continue l3;
+            i_3 = i_3 + 1;
+            continue l1;
         };
     };
-    return $array_clone_i_4;
+    return $load_1;
 }
 
 fn "value_copy_demote.wado/run"() with Stdout {
@@ -233,27 +211,21 @@ fn "value_copy_demote.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "value_copy_demote.wado/$value_copy$core:prelude/string.wado/String"(v) {
-    let $av_1: i32;
-    $av_1 = v.used;
-    return struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_1)), 0, $array_clone_src_1, 0, $av_1); $array_clone_dst_2, used: $av_1 };
-}
-
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
     let q: u64;
     let pair: i32;
     let tens: i32;
     digit_count = offset + digit_count;
-    b16: block {
-        l17: loop {
-            break_if b16 (digit_count - offset) < 2;
+    b13: block {
+        l14: loop {
+            break_if b13 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
             builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
             digit_count = digit_count - 2;
             val = q;
-            continue l17;
+            continue l14;
         };
     };
     if digit_count > offset {
@@ -356,17 +328,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b40: block {
-        l41: loop {
-            break_if b40 i >= $mv$data$end;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b37: block {
+        l38: loop {
+            break_if b37 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l41;
+            continue l38;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l43: loop {
+        l40: loop {
             ptr_15 = ptr_13 + i;
             count_16 = $mv$data$end - i;
             if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
@@ -396,7 +368,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return count_16;
             }
-            continue l43;
+            continue l40;
         };
     };
 }
@@ -472,19 +444,19 @@ fn "value_copy_demote.wado/core:prelude/list.wado/List<core:prelude/string.wado/
     buf = builtin::array_new<ref "core:prelude/string.wado//String">(n);
     width = 1;
     $licm_repr_46 = self.repr;
-    b54: block {
-        l55: loop {
+    b51: block {
+        l52: loop {
             start = 0;
-            b56: block {
-                l57: loop {
-                    break_if b56 width >= (n - start);
+            b53: block {
+                l54: loop {
+                    break_if b53 width >= (n - start);
                     end = local.tee mid(start + width) + b_14 = n - mid; select i32(width < b_14, width, b_14);
                     i_7 = start;
                     j = mid;
                     k = start;
-                    b58: block {
-                        l59: loop {
-                            break_if b58 k >= end;
+                    b55: block {
+                        l56: loop {
+                            break_if b55 k >= end;
                             if i_7 < mid {
                                 if j < end {
                                     v_15 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_46, i_7);
@@ -502,9 +474,9 @@ fn "value_copy_demote.wado/core:prelude/list.wado/List<core:prelude/string.wado/
                                     if $inline_core_prelude_array_wado_seq_cmp_u8__0: block -> "core:prelude/traits.wado//enum:Ordering" {
                                         min_len = select i32($load_3 < $load_5, $load_3, $load_5);
                                         i_56 = 0;
-                                        b63: block {
-                                            l64: loop {
-                                                break_if b63 i_56 >= min_len;
+                                        b60: block {
+                                            l61: loop {
+                                                break_if b60 i_56 >= min_len;
                                                 x = builtin::array_get_value<u8>($array_clone_dst_2, i_56);
                                                 y = builtin::array_get_value<u8>($array_clone_dst_5, i_56);
                                                 $cse_18 = x <u y;
@@ -532,7 +504,7 @@ fn "value_copy_demote.wado/core:prelude/list.wado/List<core:prelude/string.wado/
                                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 2;
                                                 }
                                                 i_56 = i_56 + 1;
-                                                continue l64;
+                                                continue l61;
                                             };
                                         };
                                         if $load_3 < $load_5 {
@@ -564,17 +536,17 @@ fn "value_copy_demote.wado/core:prelude/list.wado/List<core:prelude/string.wado/
                                 j = j + 1;
                             }
                             k = k + 1;
-                            continue l59;
+                            continue l56;
                         };
                     };
                     builtin::array_copy<ref "core:prelude/string.wado//String">($licm_repr_46, start, buf, start, end - start);
                     start = end;
-                    continue l57;
+                    continue l54;
                 };
             };
-            break_if b54 width >= (n - width);
+            break_if b51 width >= (n - width);
             width = width * 2;
-            continue l55;
+            continue l52;
         };
     };
 }

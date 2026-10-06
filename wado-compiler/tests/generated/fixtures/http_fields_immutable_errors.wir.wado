@@ -737,6 +737,7 @@ fn "http_fields_immutable_errors.wado/$cm_binding__Fields_append"(self, name, va
 }
 
 fn "http_fields_immutable_errors.wado/$cm_binding__Fields_set"(self, name, value) with Fields {
+    let $load_6: i32;
     let $name_packed: i64;
     let $value_addr: i32;
     let $list_base: i32;
@@ -750,7 +751,6 @@ fn "http_fields_immutable_errors.wado/$cm_binding__Fields_set"(self, name, value
     let self_26: i32;
     let i_32: i32;
     let v: ref "core:prelude//List<u8>";
-    let $v1_41: i32;
     let $licm_used_61: i32;
     let $licm_repr_62: ref "Array<core:prelude/list.wado/List<u8>>";
     self_26 = name.used;
@@ -779,34 +779,29 @@ fn "http_fields_immutable_errors.wado/$cm_binding__Fields_set"(self, name, value
         l28: loop {
             break_if b27 i_32 >= self_26;
             $value_addr = ptr_25 + (i_32 * 8);
-            $v1_41 = $licm_used_61;
-            if @unlikely(i_32 >= $v1_41) {
+            if @unlikely(i_32 >= $licm_used_61) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i_32, $v1_41);
+                "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i_32, $licm_used_61);
                 unreachable;
-                $licm_used_61 = value.used;
-                $licm_repr_62 = value.repr;
             }
             v = builtin::array_get_value<ref "core:prelude//List<u8>">($licm_repr_62, i_32);
             let $array_clone_src_3: ref Array<u8>;
             $array_clone_src_3 = v.repr;
-            $v1_41 = v.used;
+            $load_6 = v.used;
             let $array_clone_dst_4: ref Array<u8>;
-            builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($v1_41)), 0, $array_clone_src_3, 0, $v1_41);
-            if @unlikely(($v1_41 < 0) | ($v1_41 > 2147483647)) {
+            builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($load_6)), 0, $array_clone_src_3, 0, $load_6);
+            if @unlikely(($load_6 < 0) | ($load_6 > 2147483647)) {
                 cold_path;
                 "core:rt/panic"(local.tee bytes_24(array.new_data<u8>("a buffer's length is negative or past what linear memory can address")), 68);
                 unreachable;
-                $licm_used_61 = value.used;
-                $licm_repr_62 = value.repr;
             }
-            $list_base = "mem/realloc"(0, 0, 1, $v1_41);
+            $list_base = "mem/realloc"(0, 0, 1, $load_6);
             $licm_used_61 = value.used;
             $licm_repr_62 = value.repr;
             $list_i = 0;
             b31: block {
                 l32: loop {
-                    break_if b31 $list_i >= $v1_41;
+                    break_if b31 $list_i >= $load_6;
                     $list_addr = $list_base + $list_i;
                     $list_elem = builtin::array_get_value<u8>($array_clone_dst_4, $list_i);
                     builtin::store_u8($list_addr, $list_elem);
@@ -815,7 +810,7 @@ fn "http_fields_immutable_errors.wado/$cm_binding__Fields_set"(self, name, value
                 };
             };
             builtin::store_i32($value_addr, $list_base);
-            builtin::store_i32($value_addr + 4, $v1_41);
+            builtin::store_i32($value_addr + 4, $load_6);
             i_32 = i_32 + 1;
             continue l28;
         };
@@ -3481,9 +3476,7 @@ fn "wasi:http/types.wado/wasi:http/types.wado/HeaderError^core:prelude/traits.wa
 
 fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(self, data) {
     let $load_0: i32;
-    let $load_22: i32;
-    let $load_23: ref Array<u8>;
-    let $load_45: i32;
+    let $load_43: i32;
     let offset: i32;
     let end_3: i32;
     let written_4: ref "core:prelude/types.wado//StreamWrite";
@@ -3590,17 +3583,12 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
                     "core:prelude/primitive.wado/i32::clamp$cold0"(0, len_51);
                     unreachable;
                 }
-                s = select i32(a_108 < len_51, local.tee a_108(select i32(offset > 0, offset, 0)), len_51);
-                $load_0 = local.tee $load_22(data.used);
-                $licm_repr_87 = local.tee $load_23(data.repr);
-                if @unlikely(s > len_51) {
+                if @unlikely(local.tee s(select i32(a_108 < len_51, local.tee a_108(select i32(offset > 0, offset, 0)), len_51)) > len_51) {
                     cold_path;
                     "core:prelude/primitive.wado/i32::clamp$cold0"(s, len_51);
                     unreachable;
                 }
                 e = select i32(a_118 < len_51, local.tee a_118(select i32(end_3 > s, end_3, s)), len_51);
-                $load_0 = $load_22;
-                $licm_repr_87 = $load_23;
                 $sroa_self_repr_134 = self_48.repr;
                 len_46 = select i32(a_54 > 0, local.tee a_54(e - s), 0);
                 out = builtin::array_new<u8>(select i32(len_57 > 0, local.tee len_57(e - s), 0));
@@ -3659,8 +3647,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
                 $licm_repr_87 = data.repr;
                 written_43;
             });
-            offset = offset + local.tee $load_45(written_4.count);
-            if ((written_4.result != 0) | ($load_45 <= 0)) | (offset >= $load_0) {
+            offset = offset + local.tee $load_43(written_4.count);
+            if ((written_4.result != 0) | ($load_43 <= 0)) | (offset >= $load_0) {
                 return;
             }
             continue l447;

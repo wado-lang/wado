@@ -1586,80 +1586,77 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str
 }
 
 fn "opt_value_copy_share_past_disjoint_write.wado/opt_value_copy_share_past_disjoint_write.wado/Reader::scan$spec0"(self) {
-    let self_6: ref "core:prelude//List<i32>";
+    let b: i32;
     let index_7: i32;
-    let $v1_8: i32;
-    let $v1_14: i32;
-    let self_21: ref "core:prelude//List<i32>";
     let index_22: i32;
-    let $v1_23: i32;
     let $licm_buf_27: ref "core:prelude//List<i32>";
+    let $licm_used_28: i32;
+    let $licm_repr_29: ref Array<i32>;
     let $licm_repr_34: ref Array<i32>;
-    let $hfs_pos_35: i32;
-    $licm_buf_27 = self.buf;
-    $hfs_pos_35 = self.pos;
+    let $hfs_pos_39: i32;
+    let $hfs_pos_40: i32;
+    $licm_used_28 = local.tee $licm_buf_27(self.buf).used;
+    $licm_repr_29 = $licm_buf_27.repr;
+    $hfs_pos_39 = self.pos;
     b226: block {
         l227: loop {
-            break_if b226 (if $hfs_pos_35 < 3 -> i32 {
-                self_6 = $licm_buf_27; index_7 = $hfs_pos_35; $v1_8 = self_6.used; if @unlikely(index_7 >= $v1_8) {
+            if (if $hfs_pos_39 < 3 -> i32 {
+                if @unlikely(local.tee index_7($hfs_pos_39) >= $licm_used_28) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_7, $v1_8);
+                    self.pos = $hfs_pos_39;
+                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_7, $licm_used_28);
                     unreachable;
-                    $licm_buf_27 = self.buf;
-                } else {
-                }; builtin::array_get_value<i32>(self_6.repr, index_7) == 0;
+                }; builtin::array_get_value<i32>($licm_repr_29, index_7) == 0;
             } else {
                 0;
-            }) == 0;
-            $hfs_pos_35 = local.tee $hfs_pos_35(self.pos) + 1;
-            self.pos = $hfs_pos_35;
+            }) == 0 {
+                self.pos = $hfs_pos_39;
+                break b226;
+            }
+            $hfs_pos_39 = $hfs_pos_39 + 1;
             continue l227;
         };
     };
-    self_6 = self.buf;
-    $v1_8 = self.pos;
-    $licm_buf_27 = self_6;
-    index_7 = self_6.used;
-    $licm_repr_34 = self_6.repr;
-    b230: block {
-        l231: loop {
-            break_if b230 $v1_8 >= 3;
-            $v1_14 = index_7;
-            if @unlikely($v1_8 >= $v1_14) {
+    $licm_buf_27 = self.buf;
+    index_7 = self.pos;
+    $hfs_pos_39 = $licm_buf_27.used;
+    $licm_repr_29 = $licm_buf_27.repr;
+    $licm_used_28 = $licm_buf_27.used;
+    $licm_repr_34 = $licm_buf_27.repr;
+    b231: block {
+        l232: loop {
+            break_if b231 index_7 >= 3;
+            if @unlikely(index_7 >= $hfs_pos_39) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($v1_8, $v1_14);
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_7, $hfs_pos_39);
                 unreachable;
-                index_7 = self_6.used;
-                $licm_repr_34 = self_6.repr;
-                $licm_buf_27 = self.buf;
             }
-            if local.tee $v1_14(builtin::array_get_value<i32>($licm_repr_34, $v1_8)) > 0 {
-                self.pos = $v1_8 + 1;
-                $hfs_pos_35 = self.pos;
-                b234: block {
-                    l235: loop {
-                        break_if b234 (if $hfs_pos_35 < 3 -> i32 {
-                            self_21 = $licm_buf_27; index_22 = $hfs_pos_35; $v1_23 = self_21.used; if @unlikely(index_22 >= $v1_23) {
+            if local.tee b(builtin::array_get_value<i32>($licm_repr_29, index_7)) > 0 {
+                self.pos = index_7 + 1;
+                $hfs_pos_40 = self.pos;
+                b235: block {
+                    l236: loop {
+                        if (if $hfs_pos_40 < 3 -> i32 {
+                            if @unlikely(local.tee index_22($hfs_pos_40) >= $licm_used_28) {
                                 cold_path;
-                                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_22, $v1_23);
+                                self.pos = $hfs_pos_40;
+                                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_22, $licm_used_28);
                                 unreachable;
-                                index_7 = self_6.used;
-                                $licm_repr_34 = self_6.repr;
-                                $licm_buf_27 = self.buf;
-                            } else {
-                            }; builtin::array_get_value<i32>(self_21.repr, index_22) == 0;
+                            }; builtin::array_get_value<i32>($licm_repr_34, index_22) == 0;
                         } else {
                             0;
-                        }) == 0;
-                        $hfs_pos_35 = local.tee $hfs_pos_35(self.pos) + 1;
-                        self.pos = $hfs_pos_35;
-                        continue l235;
+                        }) == 0 {
+                            self.pos = $hfs_pos_40;
+                            break b235;
+                        }
+                        $hfs_pos_40 = $hfs_pos_40 + 1;
+                        continue l236;
                     };
                 };
-                return $v1_14;
+                return b;
             }
-            $v1_8 = $v1_8 + 1;
-            continue l231;
+            index_7 = index_7 + 1;
+            continue l232;
         };
     };
     return -1;

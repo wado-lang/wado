@@ -106,21 +106,19 @@ fn "licm_reloadable_hoist_nonunit.wado/probe"(sink, b, out) {
     let n: i32;
     let i: i32;
     let used: i32;
-    let self_9: ref "core:prelude//List<i32>";
     let $v1: i32;
     n = local.tee $load_0(b.items).used;
     i = 0;
     b0: block {
         l1: loop {
             break_if b0 i >= n;
-            $v1 = local.tee self_9($load_0).used;
+            $v1 = $load_0.used;
             if @unlikely(i >= $v1) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i, $v1);
                 unreachable;
-                $load_0 = b.items;
             }
-            $v1 = builtin::array_get_value<i32>(self_9.repr, i);
+            $v1 = builtin::array_get_value<i32>($load_0.repr, i);
             if @unlikely(local.tee used(out.used) >= builtin::array_len(out.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(out);

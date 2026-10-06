@@ -256,11 +256,11 @@ fn "opt_multi_value_param_block_argument.wado/$cm_export__run"() {
 }
 
 fn "opt_multi_value_param_block_argument.wado/opt_multi_value_param_block_argument.wado/key_lookup<opt_multi_value_param_block_argument.wado/Keys>"(h, start) {
+    let $load_0: ref "core:prelude/slice.wado//Slice<u8>";
     let $load_2: i32;
-    let self: ref "core:prelude/slice.wado//Slice<u8>";
     let len: i32;
     let a_24: i32;
-    len = local.tee self(h.input).end - local.tee $load_2(self.start);
+    len = local.tee $load_0(h.input).end - local.tee $load_2($load_0.start);
     if @unlikely(0 > len) {
         cold_path;
         "core:prelude/primitive.wado/i32::clamp$cold0"(0, len);
@@ -273,7 +273,7 @@ fn "opt_multi_value_param_block_argument.wado/opt_multi_value_param_block_argume
     }
     len = select i32(a_24 < len, local.tee a_24(select i32(3 > start, 3, start)), len);
     let $mv_field_1: ref Array<u8>;
-    $mv_field_1 = self.repr;
+    $mv_field_1 = $load_0.repr;
     start = $load_2 + start;
     len = $load_2 + len;
     return "opt_multi_value_param_block_argument.wado/opt_multi_value_param_block_argument.wado/Keys^opt_multi_value_param_block_argument.wado/Schema::lookup"($mv_field_1, start, len);
@@ -291,19 +291,23 @@ condition: key_lookup::<Keys>(&h, builtin::black_box(1), 3) matches { Some(0) }
 }
 
 fn "opt_multi_value_param_block_argument.wado/opt_multi_value_param_block_argument.wado/key_index<opt_multi_value_param_block_argument.wado/Keys>$spec0"(h, start) {
+    let $load_0: ref "core:prelude/slice.wado//Slice<u8>";
     let $load_2: i32;
-    let self: ref "core:prelude/slice.wado//Slice<u8>";
     let len: i32;
     let a_26: i32;
-    multivalue_bind [len, start] = (len = local.tee self(h.input).end - local.tee $load_2(self.start); if @unlikely(0 > len) {
+    len = local.tee $load_0(h.input).end - local.tee $load_2($load_0.start);
+    if @unlikely(0 > len) {
         cold_path;
         "core:prelude/primitive.wado/i32::clamp$cold0"(0, len);
         unreachable;
-    }; if @unlikely(local.tee start(select i32(start < len, local.tee start(select i32(start > 0, start, 0)), len)) > len) {
+    }
+    if @unlikely(local.tee start(select i32(start < len, local.tee start(select i32(start > 0, start, 0)), len)) > len) {
         cold_path;
         "core:prelude/primitive.wado/i32::clamp$cold0"(start, len);
         unreachable;
-    }; len = select i32(a_26 < len, local.tee a_26(select i32(3 > start, 3, start)), len); let $mv_field_1: ref Array<u8>; $mv_field_1 = self.repr; start = $load_2 + start; len = $load_2 + len; "opt_multi_value_param_block_argument.wado/opt_multi_value_param_block_argument.wado/Keys^opt_multi_value_param_block_argument.wado/Schema::lookup"($mv_field_1, start, len));
+    }
+    len = select i32(a_26 < len, local.tee a_26(select i32(3 > start, 3, start)), len);
+    multivalue_bind [len, start] = (let $mv_field_1: ref Array<u8>; $mv_field_1 = $load_0.repr; start = $load_2 + start; len = $load_2 + len; "opt_multi_value_param_block_argument.wado/opt_multi_value_param_block_argument.wado/Keys^opt_multi_value_param_block_argument.wado/Schema::lookup"($mv_field_1, start, len));
     return (if len == 1 -> i32 {
         start;
     } else if @likely(len == 0) -> i32 {
@@ -314,19 +318,23 @@ fn "opt_multi_value_param_block_argument.wado/opt_multi_value_param_block_argume
 }
 
 fn "opt_multi_value_param_block_argument.wado/opt_multi_value_param_block_argument.wado/key_index<opt_multi_value_param_block_argument.wado/Keys>$spec1"(h, start) {
+    let $load_0: ref "core:prelude/slice.wado//Slice<u8>";
     let $load_2: i32;
-    let self: ref "core:prelude/slice.wado//Slice<u8>";
     let len: i32;
     let a_26: i32;
-    multivalue_bind [len, start] = (len = local.tee self(h.input).end - local.tee $load_2(self.start); if @unlikely(0 > len) {
+    len = local.tee $load_0(h.input).end - local.tee $load_2($load_0.start);
+    if @unlikely(0 > len) {
         cold_path;
         "core:prelude/primitive.wado/i32::clamp$cold0"(0, len);
         unreachable;
-    }; if @unlikely(local.tee start(select i32(start < len, local.tee start(select i32(start > 0, start, 0)), len)) > len) {
+    }
+    if @unlikely(local.tee start(select i32(start < len, local.tee start(select i32(start > 0, start, 0)), len)) > len) {
         cold_path;
         "core:prelude/primitive.wado/i32::clamp$cold0"(start, len);
         unreachable;
-    }; len = select i32(a_26 < len, local.tee a_26(select i32(5 > start, 5, start)), len); let $mv_field_1: ref Array<u8>; $mv_field_1 = self.repr; start = $load_2 + start; len = $load_2 + len; "opt_multi_value_param_block_argument.wado/opt_multi_value_param_block_argument.wado/Keys^opt_multi_value_param_block_argument.wado/Schema::lookup"($mv_field_1, start, len));
+    }
+    len = select i32(a_26 < len, local.tee a_26(select i32(5 > start, 5, start)), len);
+    multivalue_bind [len, start] = (let $mv_field_1: ref Array<u8>; $mv_field_1 = $load_0.repr; start = $load_2 + start; len = $load_2 + len; "opt_multi_value_param_block_argument.wado/opt_multi_value_param_block_argument.wado/Keys^opt_multi_value_param_block_argument.wado/Schema::lookup"($mv_field_1, start, len));
     return (if len == 1 -> i32 {
         start;
     } else if @likely(len == 0) -> i32 {

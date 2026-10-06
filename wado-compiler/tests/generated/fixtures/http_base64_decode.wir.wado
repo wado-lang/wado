@@ -977,27 +977,21 @@ fn "http_base64_decode.wado/$cm_future_write_core:prelude/types.wado/Result<core
 }
 
 fn "core:base64/decode_impl"($mv$input$repr, $mv$input$start, $mv$input$end, table) {
-    let $load_19: ref Array<u8>;
-    let $load_21: ref Array<u8>;
+    let $load_1: i32;
+    let $load_4: ref Array<u8>;
+    let $load_6: ref Array<u8>;
     let end: i32;
     let out: ref "core:prelude//List<u8>";
     let index_19: i32;
-    let $v1_21: i32;
-    let $v2_22: i32;
-    let $v3_23: i32;
-    let $v3_35: i32;
-    let $v2_51: i32;
-    let $v3_52: i32;
-    let $v3_69: i32;
-    let $v3_86: i32;
-    let $licm_end_244: i32;
-    let $licm_start_245: i32;
-    let $licm_repr_246: ref Array<u8>;
-    let $licm_repr_249: ref Array<u8>;
+    let index_42: i32;
+    let index_48: i32;
+    let index_65: i32;
+    let index_82: i32;
+    let $licm_repr_232: ref Array<u8>;
+    let $licm_arith_250: i32;
+    let $licm_arith_251: i32;
     end = $mv$input$end - $mv$input$start;
-    $licm_end_244 = $mv$input$end;
-    $licm_start_245 = $mv$input$start;
-    $licm_repr_246 = $mv$input$repr;
+    $licm_arith_250 = $mv$input$end - $mv$input$start;
     b91: block {
         l92: loop {
             break_if b91 (if end > 0 -> i32 {
@@ -1005,17 +999,11 @@ fn "core:base64/decode_impl"($mv$input$repr, $mv$input$start, $mv$input$end, tab
                     cold_path;
                     "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold1"(index_19);
                     unreachable;
-                    $licm_end_244 = $mv$input$end;
-                    $licm_start_245 = $mv$input$start;
-                    $licm_repr_246 = $mv$input$repr;
-                }; $v1_21 = $licm_end_244; $v2_22 = $licm_start_245; $v3_23 = $v1_21 - $v2_22; if @unlikely(index_19 >= $v3_23) {
+                }; if @unlikely(index_19 >= $licm_arith_250) {
                     cold_path;
-                    "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_19, $v1_21, $v2_22, $v3_23);
+                    "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_19, $mv$input$end, $mv$input$start, $licm_arith_250);
                     unreachable;
-                    $licm_end_244 = $mv$input$end;
-                    $licm_start_245 = $mv$input$start;
-                    $licm_repr_246 = $mv$input$repr;
-                }; builtin::array_get_value<u8>($licm_repr_246, $licm_start_245 + index_19) == 61;
+                }; builtin::array_get_value<u8>($mv$input$repr, $mv$input$start + index_19) == 61;
             } else {
                 0;
             }) == 0;
@@ -1026,301 +1014,233 @@ fn "core:base64/decode_impl"($mv$input$repr, $mv$input$start, $mv$input$end, tab
     if (end % 4) == 1 {
         return ref.null none;
     }
-    $v3_23 = end / 4;
-    $v2_22 = end % 4;
-    $v3_23 = $v3_23 * 3;
-    if $v2_22 == 2 {
-        $v3_23 = $v3_23 + 1;
-    } else if $v2_22 == 3 {
-        $v3_23 = $v3_23 + 2;
+    index_19 = end / 4;
+    $licm_arith_250 = end % 4;
+    index_19 = index_19 * 3;
+    if $licm_arith_250 == 2 {
+        index_19 = index_19 + 1;
+    } else if $licm_arith_250 == 3 {
+        index_19 = index_19 + 2;
     }
-    out = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>($v3_23), used: 0 };
-    $v3_23 = 0;
-    $licm_repr_246 = table.repr;
-    $v1_21 = $mv$input$end;
-    index_19 = $mv$input$start;
-    $licm_repr_249 = $mv$input$repr;
+    out = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(index_19), used: 0 };
+    index_19 = 0;
+    $licm_repr_232 = table.repr;
+    $licm_arith_251 = $mv$input$end - $mv$input$start;
     b99: block {
         l100: loop {
-            break_if b99 ($v3_23 + 3) >= end;
-            if @unlikely($v3_23 < 0) {
+            break_if b99 (index_19 + 3) >= end;
+            if @unlikely(index_19 < 0) {
                 cold_path;
-                "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold1"($v3_23);
+                "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold1"(index_19);
                 unreachable;
-                $v1_21 = $mv$input$end;
-                index_19 = $mv$input$start;
-                $licm_repr_249 = $mv$input$repr;
-                $licm_repr_246 = table.repr;
             }
-            $licm_start_245 = $v1_21;
-            $licm_end_244 = index_19;
-            $v3_35 = $licm_start_245 - $licm_end_244;
-            if @unlikely($v3_23 >= $v3_35) {
+            if @unlikely(index_19 >= $licm_arith_251) {
                 cold_path;
-                "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($v3_23, $licm_start_245, $licm_end_244, $v3_35);
+                "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_19, $mv$input$end, $mv$input$start, $licm_arith_251);
                 unreachable;
-                $v1_21 = $mv$input$end;
-                index_19 = $mv$input$start;
-                $licm_repr_249 = $mv$input$repr;
-                $licm_repr_246 = table.repr;
             }
-            $v3_35 = builtin::array_get_value<u8>($licm_repr_249, index_19 + $v3_23);
-            $licm_end_244 = table.used;
-            if @unlikely($v3_35 >= $licm_end_244) {
+            index_42 = builtin::array_get_value<u8>($mv$input$repr, $mv$input$start + index_19);
+            $load_1 = table.used;
+            if @unlikely(index_42 >= $load_1) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($v3_35, $licm_end_244);
+                "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_42, $load_1);
                 unreachable;
-                $v1_21 = $mv$input$end;
-                index_19 = $mv$input$start;
-                $licm_repr_249 = $mv$input$repr;
-                $licm_repr_246 = table.repr;
             }
-            $v3_35 = builtin::array_get_value<u8>($licm_repr_246, $v3_35);
-            if @unlikely(local.tee $licm_end_244($v3_23 + 1) < 0) {
+            index_42 = builtin::array_get_value<u8>($licm_repr_232, index_42);
+            if @unlikely(local.tee index_48(index_19 + 1) < 0) {
                 cold_path;
-                "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold1"($licm_end_244);
+                "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold1"(index_48);
                 unreachable;
-                $v1_21 = $mv$input$end;
-                index_19 = $mv$input$start;
-                $licm_repr_249 = $mv$input$repr;
-                $licm_repr_246 = table.repr;
             }
-            $licm_start_245 = $v1_21;
-            $v2_51 = index_19;
-            $v3_52 = $licm_start_245 - $v2_51;
-            if @unlikely($licm_end_244 >= $v3_52) {
+            if @unlikely(index_48 >= $licm_arith_251) {
                 cold_path;
-                "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($licm_end_244, $licm_start_245, $v2_51, $v3_52);
+                "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_48, $mv$input$end, $mv$input$start, $licm_arith_251);
                 unreachable;
-                $v1_21 = $mv$input$end;
-                index_19 = $mv$input$start;
-                $licm_repr_249 = $mv$input$repr;
-                $licm_repr_246 = table.repr;
             }
-            $licm_end_244 = builtin::array_get_value<u8>($licm_repr_249, index_19 + $licm_end_244);
-            $v3_52 = table.used;
-            if @unlikely($licm_end_244 >= $v3_52) {
+            if @unlikely(local.tee index_48(builtin::array_get_value<u8>($mv$input$repr, $mv$input$start + index_48)) >= $load_1) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($licm_end_244, $v3_52);
+                "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_48, $load_1);
                 unreachable;
-                $v1_21 = $mv$input$end;
-                index_19 = $mv$input$start;
-                $licm_repr_249 = $mv$input$repr;
-                $licm_repr_246 = table.repr;
             }
-            $licm_end_244 = builtin::array_get_value<u8>($licm_repr_246, $licm_end_244);
-            if @unlikely(local.tee $v3_52($v3_23 + 2) < 0) {
+            index_48 = builtin::array_get_value<u8>($licm_repr_232, index_48);
+            if @unlikely(local.tee index_65(index_19 + 2) < 0) {
                 cold_path;
-                "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold1"($v3_52);
+                "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold1"(index_65);
                 unreachable;
-                $v1_21 = $mv$input$end;
-                index_19 = $mv$input$start;
-                $licm_repr_249 = $mv$input$repr;
-                $licm_repr_246 = table.repr;
             }
-            $v2_51 = $v1_21;
-            $licm_start_245 = index_19;
-            $v3_69 = $v2_51 - $licm_start_245;
-            if @unlikely($v3_52 >= $v3_69) {
+            if @unlikely(index_65 >= $licm_arith_251) {
                 cold_path;
-                "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($v3_52, $v2_51, $licm_start_245, $v3_69);
+                "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_65, $mv$input$end, $mv$input$start, $licm_arith_251);
                 unreachable;
-                $v1_21 = $mv$input$end;
-                index_19 = $mv$input$start;
-                $licm_repr_249 = $mv$input$repr;
-                $licm_repr_246 = table.repr;
             }
-            $v3_52 = builtin::array_get_value<u8>($licm_repr_249, index_19 + $v3_52);
-            $v3_69 = table.used;
-            if @unlikely($v3_52 >= $v3_69) {
+            if @unlikely(local.tee index_65(builtin::array_get_value<u8>($mv$input$repr, $mv$input$start + index_65)) >= $load_1) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($v3_52, $v3_69);
+                "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_65, $load_1);
                 unreachable;
-                $v1_21 = $mv$input$end;
-                index_19 = $mv$input$start;
-                $licm_repr_249 = $mv$input$repr;
-                $licm_repr_246 = table.repr;
             }
-            $v3_52 = builtin::array_get_value<u8>($licm_repr_246, $v3_52);
-            if @unlikely(local.tee $v3_69($v3_23 + 3) < 0) {
+            index_65 = builtin::array_get_value<u8>($licm_repr_232, index_65);
+            if @unlikely(local.tee index_82(index_19 + 3) < 0) {
                 cold_path;
-                "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold1"($v3_69);
+                "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold1"(index_82);
                 unreachable;
-                $v1_21 = $mv$input$end;
-                index_19 = $mv$input$start;
-                $licm_repr_249 = $mv$input$repr;
-                $licm_repr_246 = table.repr;
             }
-            $licm_start_245 = $v1_21;
-            $v2_51 = index_19;
-            $v3_86 = $licm_start_245 - $v2_51;
-            if @unlikely($v3_69 >= $v3_86) {
+            if @unlikely(index_82 >= $licm_arith_251) {
                 cold_path;
-                "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($v3_69, $licm_start_245, $v2_51, $v3_86);
+                "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_82, $mv$input$end, $mv$input$start, $licm_arith_251);
                 unreachable;
-                $v1_21 = $mv$input$end;
-                index_19 = $mv$input$start;
-                $licm_repr_249 = $mv$input$repr;
-                $licm_repr_246 = table.repr;
             }
-            $v3_69 = builtin::array_get_value<u8>($licm_repr_249, index_19 + $v3_69);
-            $v3_86 = table.used;
-            if @unlikely($v3_69 >= $v3_86) {
+            if @unlikely(local.tee index_82(builtin::array_get_value<u8>($mv$input$repr, $mv$input$start + index_82)) >= $load_1) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($v3_69, $v3_86);
+                "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_82, $load_1);
                 unreachable;
-                $v1_21 = $mv$input$end;
-                index_19 = $mv$input$start;
-                $licm_repr_249 = $mv$input$repr;
-                $licm_repr_246 = table.repr;
             }
-            $v3_69 = builtin::array_get_value<u8>($licm_repr_246, $v3_69);
-            if ((($v3_35 >= 254) | ($licm_end_244 >= 254)) | ($v3_52 >= 254)) | ($v3_69 >= 254) {
+            index_82 = builtin::array_get_value<u8>($licm_repr_232, index_82);
+            if (((index_42 >= 254) | (index_48 >= 254)) | (index_65 >= 254)) | (index_82 >= 254) {
                 return ref.null none;
             }
-            $v3_35 = (($v3_35 << 2) | ($licm_end_244 >> 4)) & 255;
-            if @unlikely(local.tee $v3_86(out.used) >= builtin::array_len(out.repr)) {
+            index_42 = ((index_42 << 2) | (index_48 >> 4)) & 255;
+            if @unlikely(local.tee $load_1(out.used) >= builtin::array_len(out.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(out);
             }
-            builtin::array_set_u8(local.tee $load_19(out.repr), $v3_86, $v3_35);
-            out.used = $v3_86 + 1;
-            $licm_end_244 = ((($licm_end_244 & 15) << 4) | ($v3_52 >> 2)) & 255;
-            if @unlikely(local.tee $v3_86(out.used) >= builtin::array_len($load_19)) {
+            builtin::array_set_u8(local.tee $load_4(out.repr), $load_1, index_42);
+            out.used = $load_1 + 1;
+            index_48 = (((index_48 & 15) << 4) | (index_65 >> 2)) & 255;
+            if @unlikely(local.tee $load_1(out.used) >= builtin::array_len($load_4)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(out);
             }
-            builtin::array_set_u8(local.tee $load_21(out.repr), $v3_86, $licm_end_244);
-            out.used = $v3_86 + 1;
-            $v3_69 = ((($v3_52 & 3) << 6) | $v3_69) & 255;
-            if @unlikely(local.tee $v3_52(out.used) >= builtin::array_len($load_21)) {
+            builtin::array_set_u8(local.tee $load_6(out.repr), $load_1, index_48);
+            out.used = $load_1 + 1;
+            index_82 = (((index_65 & 3) << 6) | index_82) & 255;
+            if @unlikely(local.tee index_65(out.used) >= builtin::array_len($load_6)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(out);
             }
-            builtin::array_set_u8(out.repr, $v3_52, $v3_69);
-            out.used = $v3_52 + 1;
-            $v3_23 = $v3_23 + 4;
+            builtin::array_set_u8(out.repr, index_65, index_82);
+            out.used = index_65 + 1;
+            index_19 = index_19 + 4;
             continue l100;
         };
     };
-    if $v2_22 == 2 {
-        if @unlikely($v3_23 < 0) {
+    if $licm_arith_250 == 2 {
+        if @unlikely(index_19 < 0) {
             cold_path;
-            "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold1"($v3_23);
+            "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold1"(index_19);
             unreachable;
         }
-        $v1_21 = $mv$input$end - $mv$input$start;
-        if @unlikely($v3_23 >= $v1_21) {
+        $licm_arith_251 = $mv$input$end - $mv$input$start;
+        if @unlikely(index_19 >= $licm_arith_251) {
             cold_path;
-            "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($v3_23, $mv$input$end, $mv$input$start, $v1_21);
+            "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_19, $mv$input$end, $mv$input$start, $licm_arith_251);
             unreachable;
         }
-        $v1_21 = builtin::array_get_value<u8>($mv$input$repr, $mv$input$start + $v3_23);
-        index_19 = table.used;
-        if @unlikely($v1_21 >= index_19) {
+        $licm_arith_251 = builtin::array_get_value<u8>($mv$input$repr, $mv$input$start + index_19);
+        end = table.used;
+        if @unlikely($licm_arith_251 >= end) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($v1_21, index_19);
+            "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($licm_arith_251, end);
             unreachable;
         }
-        $v1_21 = builtin::array_get_value<u8>(local.tee $load_21(table.repr), $v1_21);
-        if @unlikely(local.tee end($v3_23 + 1) < 0) {
+        $licm_arith_251 = builtin::array_get_value<u8>(local.tee $load_6(table.repr), $licm_arith_251);
+        if @unlikely(local.tee index_65(index_19 + 1) < 0) {
             cold_path;
-            "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold1"(end);
+            "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold1"(index_65);
             unreachable;
         }
-        $v3_52 = $mv$input$end - $mv$input$start;
-        if @unlikely(end >= $v3_52) {
+        index_82 = $mv$input$end - $mv$input$start;
+        if @unlikely(index_65 >= index_82) {
             cold_path;
-            "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(end, $mv$input$end, $mv$input$start, $v3_52);
+            "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_65, $mv$input$end, $mv$input$start, index_82);
             unreachable;
         }
-        if @unlikely(local.tee end(builtin::array_get_value<u8>($mv$input$repr, $mv$input$start + end)) >= index_19) {
+        if @unlikely(local.tee index_65(builtin::array_get_value<u8>($mv$input$repr, $mv$input$start + index_65)) >= end) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(end, index_19);
+            "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_65, end);
             unreachable;
         }
-        end = builtin::array_get_value<u8>($load_21, end);
-        if ($v1_21 >= 254) | (end >= 254) {
+        index_65 = builtin::array_get_value<u8>($load_6, index_65);
+        if ($licm_arith_251 >= 254) | (index_65 >= 254) {
             return ref.null none;
         }
-        end = (($v1_21 << 2) | (end >> 4)) & 255;
-        if @unlikely(local.tee $v1_21(out.used) >= builtin::array_len(out.repr)) {
+        index_65 = (($licm_arith_251 << 2) | (index_65 >> 4)) & 255;
+        if @unlikely(local.tee $licm_arith_251(out.used) >= builtin::array_len(out.repr)) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(out);
         }
-        builtin::array_set_u8(out.repr, $v1_21, end);
-        out.used = $v1_21 + 1;
-    } else if $v2_22 == 3 {
-        if @unlikely($v3_23 < 0) {
+        builtin::array_set_u8(out.repr, $licm_arith_251, index_65);
+        out.used = $licm_arith_251 + 1;
+    } else if $licm_arith_250 == 3 {
+        if @unlikely(index_19 < 0) {
             cold_path;
-            "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold1"($v3_23);
+            "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold1"(index_19);
             unreachable;
         }
-        $v2_22 = $mv$input$end - $mv$input$start;
-        if @unlikely($v3_23 >= $v2_22) {
+        $licm_arith_250 = $mv$input$end - $mv$input$start;
+        if @unlikely(index_19 >= $licm_arith_250) {
             cold_path;
-            "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($v3_23, $mv$input$end, $mv$input$start, $v2_22);
+            "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_19, $mv$input$end, $mv$input$start, $licm_arith_250);
             unreachable;
         }
-        $v2_22 = builtin::array_get_value<u8>($mv$input$repr, $mv$input$start + $v3_23);
-        $v1_21 = table.used;
-        if @unlikely($v2_22 >= $v1_21) {
+        $licm_arith_250 = builtin::array_get_value<u8>($mv$input$repr, $mv$input$start + index_19);
+        $licm_arith_251 = table.used;
+        if @unlikely($licm_arith_250 >= $licm_arith_251) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($v2_22, $v1_21);
+            "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($licm_arith_250, $licm_arith_251);
             unreachable;
         }
-        $v2_22 = builtin::array_get_value<u8>(local.tee $load_21(table.repr), $v2_22);
-        if @unlikely(local.tee end($v3_23 + 1) < 0) {
+        $licm_arith_250 = builtin::array_get_value<u8>(local.tee $load_6(table.repr), $licm_arith_250);
+        if @unlikely(local.tee index_65(index_19 + 1) < 0) {
             cold_path;
-            "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold1"(end);
+            "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold1"(index_65);
             unreachable;
         }
-        index_19 = $mv$input$end - $mv$input$start;
-        if @unlikely(end >= index_19) {
+        end = $mv$input$end - $mv$input$start;
+        if @unlikely(index_65 >= end) {
             cold_path;
-            "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(end, $mv$input$end, $mv$input$start, index_19);
+            "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_65, $mv$input$end, $mv$input$start, end);
             unreachable;
         }
-        if @unlikely(local.tee end(builtin::array_get_value<u8>($mv$input$repr, $mv$input$start + end)) >= $v1_21) {
+        if @unlikely(local.tee index_65(builtin::array_get_value<u8>($mv$input$repr, $mv$input$start + index_65)) >= $licm_arith_251) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(end, $v1_21);
+            "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_65, $licm_arith_251);
             unreachable;
         }
-        end = builtin::array_get_value<u8>($load_21, end);
-        if @unlikely(local.tee $v3_23($v3_23 + 2) < 0) {
+        index_65 = builtin::array_get_value<u8>($load_6, index_65);
+        if @unlikely(local.tee index_19(index_19 + 2) < 0) {
             cold_path;
-            "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold1"($v3_23);
+            "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold1"(index_19);
             unreachable;
         }
-        index_19 = $mv$input$end - $mv$input$start;
-        if @unlikely($v3_23 >= index_19) {
+        end = $mv$input$end - $mv$input$start;
+        if @unlikely(index_19 >= end) {
             cold_path;
-            "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($v3_23, $mv$input$end, $mv$input$start, index_19);
+            "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_19, $mv$input$end, $mv$input$start, end);
             unreachable;
         }
-        if @unlikely(local.tee $v3_23(builtin::array_get_value<u8>($mv$input$repr, $mv$input$start + $v3_23)) >= $v1_21) {
+        if @unlikely(local.tee index_19(builtin::array_get_value<u8>($mv$input$repr, $mv$input$start + index_19)) >= $licm_arith_251) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($v3_23, $v1_21);
+            "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_19, $licm_arith_251);
             unreachable;
         }
-        $v3_23 = builtin::array_get_value<u8>($load_21, $v3_23);
-        if (($v2_22 >= 254) | (end >= 254)) | ($v3_23 >= 254) {
+        index_19 = builtin::array_get_value<u8>($load_6, index_19);
+        if (($licm_arith_250 >= 254) | (index_65 >= 254)) | (index_19 >= 254) {
             return ref.null none;
         }
-        $v2_22 = (($v2_22 << 2) | (end >> 4)) & 255;
-        if @unlikely(local.tee $v1_21(out.used) >= builtin::array_len(out.repr)) {
+        $licm_arith_250 = (($licm_arith_250 << 2) | (index_65 >> 4)) & 255;
+        if @unlikely(local.tee $licm_arith_251(out.used) >= builtin::array_len(out.repr)) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(out);
         }
-        builtin::array_set_u8(local.tee $load_21(out.repr), $v1_21, $v2_22);
-        out.used = $v1_21 + 1;
-        $v3_23 = (((end & 15) << 4) | ($v3_23 >> 2)) & 255;
-        if @unlikely(local.tee end(out.used) >= builtin::array_len($load_21)) {
+        builtin::array_set_u8(local.tee $load_6(out.repr), $licm_arith_251, $licm_arith_250);
+        out.used = $licm_arith_251 + 1;
+        index_19 = (((index_65 & 15) << 4) | (index_19 >> 2)) & 255;
+        if @unlikely(local.tee index_65(out.used) >= builtin::array_len($load_6)) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(out);
         }
-        builtin::array_set_u8(out.repr, end, $v3_23);
-        out.used = end + 1;
+        builtin::array_set_u8(out.repr, index_65, index_19);
+        out.used = index_65 + 1;
     }
     return out;
 }
@@ -3175,9 +3095,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"
 
 fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(self, data) {
     let $load_0: i32;
-    let $load_22: i32;
-    let $load_23: ref Array<u8>;
-    let $load_45: i32;
+    let $load_43: i32;
     let offset: i32;
     let end_3: i32;
     let written_4: ref "core:prelude/types.wado//StreamWrite";
@@ -3284,17 +3202,12 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
                     "core:prelude/primitive.wado/i32::clamp$cold0"(0, len_51);
                     unreachable;
                 }
-                s = select i32(a_108 < len_51, local.tee a_108(select i32(offset > 0, offset, 0)), len_51);
-                $load_0 = local.tee $load_22(data.used);
-                $licm_repr_87 = local.tee $load_23(data.repr);
-                if @unlikely(s > len_51) {
+                if @unlikely(local.tee s(select i32(a_108 < len_51, local.tee a_108(select i32(offset > 0, offset, 0)), len_51)) > len_51) {
                     cold_path;
                     "core:prelude/primitive.wado/i32::clamp$cold0"(s, len_51);
                     unreachable;
                 }
                 e = select i32(a_118 < len_51, local.tee a_118(select i32(end_3 > s, end_3, s)), len_51);
-                $load_0 = $load_22;
-                $licm_repr_87 = $load_23;
                 $sroa_self_repr_134 = self_48.repr;
                 len_46 = select i32(a_54 > 0, local.tee a_54(e - s), 0);
                 out = builtin::array_new<u8>(select i32(len_57 > 0, local.tee len_57(e - s), 0));
@@ -3353,8 +3266,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
                 $licm_repr_87 = data.repr;
                 written_43;
             });
-            offset = offset + local.tee $load_45(written_4.count);
-            if ((written_4.result != 0) | ($load_45 <= 0)) | (offset >= $load_0) {
+            offset = offset + local.tee $load_43(written_4.count);
+            if ((written_4.result != 0) | ($load_43 <= 0)) | (offset >= $load_0) {
                 return;
             }
             continue l421;

@@ -2473,10 +2473,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
 
 fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(self, data) {
     let $load_0: i32;
-    let $load_22: i32;
-    let $load_23: ref Array<u8>;
-    let $load_45: i32;
-    let $load_46: "core:prelude/types.wado//enum:CopyResult";
+    let $load_43: i32;
+    let $load_44: "core:prelude/types.wado//enum:CopyResult";
     let offset: i32;
     let end_3: i32;
     let written_4: ref "core:prelude/types.wado//StreamWrite";
@@ -2583,17 +2581,12 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
                     "core:prelude/primitive.wado/i32::clamp$cold0"(0, len_51);
                     unreachable;
                 }
-                s = select i32(a_108 < len_51, local.tee a_108(select i32(offset > 0, offset, 0)), len_51);
-                $load_0 = local.tee $load_22(data.used);
-                $licm_repr_87 = local.tee $load_23(data.repr);
-                if @unlikely(s > len_51) {
+                if @unlikely(local.tee s(select i32(a_108 < len_51, local.tee a_108(select i32(offset > 0, offset, 0)), len_51)) > len_51) {
                     cold_path;
                     "core:prelude/primitive.wado/i32::clamp$cold0"(s, len_51);
                     unreachable;
                 }
                 e = select i32(a_118 < len_51, local.tee a_118(select i32(end_3 > s, end_3, s)), len_51);
-                $load_0 = $load_22;
-                $licm_repr_87 = $load_23;
                 $sroa_self_repr_134 = self_48.repr;
                 len_46 = select i32(a_54 > 0, local.tee a_54(e - s), 0);
                 out = builtin::array_new<u8>(select i32(len_57 > 0, local.tee len_57(e - s), 0));
@@ -2652,9 +2645,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
                 $licm_repr_87 = data.repr;
                 written_43;
             });
-            offset = offset + local.tee $load_45(written_4.count);
-            if ((local.tee $load_46(written_4.result) != 0) | ($load_45 <= 0)) | (offset >= $load_0) {
-                return $load_46;
+            offset = offset + local.tee $load_43(written_4.count);
+            if ((local.tee $load_44(written_4.result) != 0) | ($load_43 <= 0)) | (offset >= $load_0) {
+                return $load_44;
             }
             continue l492;
         };

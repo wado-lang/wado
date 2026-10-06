@@ -1598,8 +1598,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 
 fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(self, data) {
     let $load_0: i32;
-    let $load_14: ref Array<u8>;
-    let $load_15: i32;
     let offset: i32;
     let end_3: i32;
     let v_6: ref "core:prelude/types.wado//StreamWrite";
@@ -1680,17 +1678,12 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
                         "core:prelude/primitive.wado/i32::clamp$cold0"(0, len_34);
                         unreachable;
                     }
-                    s = select i32(a_68 < len_34, local.tee a_68(select i32(offset > 0, offset, 0)), len_34);
-                    $licm_repr_56 = local.tee $load_14(data.repr);
-                    $load_0 = local.tee $load_15(data.used);
-                    if @unlikely(s > len_34) {
+                    if @unlikely(local.tee s(select i32(a_68 < len_34, local.tee a_68(select i32(offset > 0, offset, 0)), len_34)) > len_34) {
                         cold_path;
                         "core:prelude/primitive.wado/i32::clamp$cold0"(s, len_34);
                         unreachable;
                     }
                     e = select i32(a_78 < len_34, local.tee a_78(select i32(end_3 > s, end_3, s)), len_34);
-                    $licm_repr_56 = $load_14;
-                    $load_0 = $load_15;
                     $sroa_self_repr_84 = self_31.repr;
                     len_29 = select i32(a_37 > 0, local.tee a_37(e - s), 0);
                     out = builtin::array_new<u8>(select i32(len_40 > 0, local.tee len_40(e - s), 0));

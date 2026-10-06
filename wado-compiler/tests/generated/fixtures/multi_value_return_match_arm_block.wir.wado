@@ -839,37 +839,37 @@ fn "core:cbor/core:cbor/CborDeserializer::read_bytes_body"(self, arg, indef) {
 fn "core:cbor/core:cbor/CborDeserializer::append_bytes"(self, out, len) {
     let $load_0: i32;
     let $load_1: ref "core:prelude/slice.wado//Slice<u8>";
-    let $load_5: i32;
+    let $load_2: i32;
+    let $load_3: i32;
     let n: i32;
     let end: i32;
-    let len_9: i32;
     $load_0 = self.pos;
-    if @unlikely(len >u builtin::i64_extend_i32_s((local.tee $load_1(self.input).end - $load_1.start) - $load_0)) {
+    if @unlikely(len >u builtin::i64_extend_i32_s((local.tee $load_2(local.tee $load_1(self.input).end) - local.tee $load_3($load_1.start)) - $load_0)) {
         cold_path;
         return ref.as_non_null("core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s($load_0)));
     }
     n = builtin::i32_wrap_i64(len);
     $inline_core_prelude_list_wado_List_u8___extend_from_slice_0: block {
         end = $load_0 + n;
-        len_9 = $load_1.end - local.tee $load_5($load_1.start);
-        if @unlikely(0 > len_9) {
+        $load_2 = $load_2 - $load_3;
+        if @unlikely(0 > $load_2) {
             cold_path;
-            "core:prelude/primitive.wado/i32::clamp$cold0"(0, len_9);
+            "core:prelude/primitive.wado/i32::clamp$cold0"(0, $load_2);
             unreachable;
         }
-        if @unlikely(local.tee $load_0(select i32($load_0 < len_9, local.tee $load_0(select i32($load_0 > 0, $load_0, 0)), len_9)) > len_9) {
+        if @unlikely(local.tee $load_0(select i32($load_0 < $load_2, local.tee $load_0(select i32($load_0 > 0, $load_0, 0)), $load_2)) > $load_2) {
             cold_path;
-            "core:prelude/primitive.wado/i32::clamp$cold0"($load_0, len_9);
+            "core:prelude/primitive.wado/i32::clamp$cold0"($load_0, $load_2);
             unreachable;
         }
-        len_9 = select i32(end < len_9, local.tee end(select i32(end > $load_0, end, $load_0)), len_9);
-        len_9 = local.tee $load_1(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $load_1.repr, start: $load_5 + $load_0, end: $load_5 + len_9 }).start;
-        break_if $inline_core_prelude_list_wado_List_u8___extend_from_slice_0 local.tee $load_5($load_1.end - len_9) == 0;
-        if @unlikely(local.tee $load_0(out.used + $load_5) > builtin::array_len(out.repr)) {
+        $load_2 = select i32(end < $load_2, local.tee end(select i32(end > $load_0, end, $load_0)), $load_2);
+        $load_2 = local.tee $load_1(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $load_1.repr, start: $load_3 + $load_0, end: $load_3 + $load_2 }).start;
+        break_if $inline_core_prelude_list_wado_List_u8___extend_from_slice_0 local.tee $load_3($load_1.end - $load_2) == 0;
+        if @unlikely(local.tee $load_0(out.used + $load_3) > builtin::array_len(out.repr)) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow_to"(out, $load_0);
         }
-        builtin::array_copy<u8>(out.repr, out.used, $load_1.repr, len_9, $load_5);
+        builtin::array_copy<u8>(out.repr, out.used, $load_1.repr, $load_2, $load_3);
         out.used = $load_0;
     };
     self.pos = self.pos + n;

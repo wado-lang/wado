@@ -446,19 +446,18 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 fn "infer_type_arg_from_assoc_bound.wado/infer_type_arg_from_assoc_bound.wado/Gen<i32>^core:prelude/traits.wado/Iterator::next"(self) {
     let $load_0: i32;
     let $load_1: ref "core:prelude//List<i32>";
-    let $v1: i32;
-    if local.tee $load_0(self.idx) >= local.tee $load_1(self.items).used {
+    let $load_2: i32;
+    if local.tee $load_0(self.idx) >= local.tee $load_2(local.tee $load_1(self.items).used) {
         return struct.new "core:prelude/types.wado//Option<i32>" { 0 };
     }
-    $v1 = $load_1.used;
-    if @unlikely($load_0 >= $v1) {
+    if @unlikely($load_0 >= $load_2) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($load_0, $v1);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($load_0, $load_2);
         unreachable;
     }
-    $v1 = builtin::array_get_value<i32>($load_1.repr, $load_0);
+    $load_2 = builtin::array_get_value<i32>($load_1.repr, $load_0);
     self.idx = $load_0 + 1;
-    return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: $v1 };
+    return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: $load_2 };
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {

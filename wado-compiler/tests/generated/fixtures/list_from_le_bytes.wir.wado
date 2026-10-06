@@ -2470,22 +2470,19 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u16>::from_le_bytes<core:
     let $v6_seen: bool;
     let bits_43: u64;
     let i_44: i32;
-    let $licm_end_62: i32;
-    let $licm_start_63: i32;
-    let $licm_repr_64: ref Array<u8>;
-    let $sroa_view_repr_65: ref Array<u8>;
-    let $sroa_view_start_66: i32;
-    let $sroa_view_end_67: i32;
-    $sroa_view_repr_65 = bytes.repr;
-    $sroa_view_start_66 = bytes.start;
-    if @unlikely(((local.tee $sroa_view_end_67(bytes.end) - $sroa_view_start_66) % 2) != 0) {
+    let $sroa_view_repr_66: ref Array<u8>;
+    let $sroa_view_start_67: i32;
+    let $sroa_view_end_68: i32;
+    $sroa_view_repr_66 = bytes.repr;
+    $sroa_view_start_67 = bytes.start;
+    if @unlikely(((local.tee $sroa_view_end_68(bytes.end) - $sroa_view_start_67) % 2) != 0) {
         cold_path;
         $local_6 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(93);
         let $mv_arg_2: ref "core:prelude/string.wado//String";
         $mv_arg_2 = global:core:prelude/list.wado::$const_obj_46;
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6, $mv_arg_2.repr, $mv_arg_2.used);
         $local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6);
-        "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar"("core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::len"(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $sroa_view_repr_65, start: $sroa_view_start_66, end: $sroa_view_end_67 }), $local_7);
+        "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar"("core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::len"(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $sroa_view_repr_66, start: $sroa_view_start_67, end: $sroa_view_end_68 }), $local_7);
         $mv_arg_2 = global:core:prelude/list.wado::$const_obj_45;
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6, $mv_arg_2.repr, $mv_arg_2.used);
         $local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6);
@@ -2495,17 +2492,15 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u16>::from_le_bytes<core:
         "core:rt/panic"($local_6.repr, $local_6.used);
         unreachable;
     }
-    out = struct.new "core:prelude//List<u16>" { repr: builtin::array_new<u16>(local.tee n(($sroa_view_end_67 - $sroa_view_start_66) / 2)), used: 0 };
+    out = struct.new "core:prelude//List<u16>" { repr: builtin::array_new<u16>(local.tee n(($sroa_view_end_68 - $sroa_view_start_67) / 2)), used: 0 };
     i_5 = 0;
-    $licm_end_62 = $sroa_view_end_67;
-    $licm_start_63 = $sroa_view_start_66;
-    $licm_repr_64 = $sroa_view_repr_65;
+    $sroa_view_end_68 = $sroa_view_end_68 - $sroa_view_start_67;
     b321: block {
         l322: loop {
             break_if b321 i_5 >= n;
             at_17 = i_5 * 2;
             at_17 = builtin::i32_wrap_i64($v1 = 0 <= at_17; $v2_seen = 0; $v3_seen = 0; $v4_seen = 0; $v5_seen = 0; $v6_seen = 0; if @unlikely((if $v1 -> i32 {
-                $v6 = $v2 = at_17; $v2_seen = 1; $v2 <= $v5 = $v3 = $licm_end_62 - $licm_start_63; $v3_seen = 1; $v3 - $v4 = 2; $v4_seen = 1; 2; $v5_seen = 1; $v5;
+                $v6 = $v2 = at_17; $v2_seen = 1; $v2 <= $v5 = $v3 = $sroa_view_end_68; $v3_seen = 1; $v3 - $v4 = 2; $v4_seen = 1; 2; $v5_seen = 1; $v5;
                 $v6_seen = 1;
                 $v6;
             } else {
@@ -2514,13 +2509,10 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u16>::from_le_bytes<core:
                 cold_path;
                 "core:prelude/bytes.wado/le_bits$cold0"(at_17, $v1, $v2, $v2_seen, $v3, $v3_seen, $v4, $v4_seen, $v5, $v5_seen, $v6, $v6_seen);
                 unreachable;
-                $licm_end_62 = $sroa_view_end_67;
-                $licm_start_63 = $sroa_view_start_66;
-                $licm_repr_64 = $sroa_view_repr_65;
             }; bits_43 = 0_i64; i_44 = 1; b325: block {
                 l326: loop {
                     break_if b325 i_44 < 0;
-                    bits_43 = (bits_43 << 8_i64) | builtin::i64_extend_i32_u(builtin::array_get_value<u8>($licm_repr_64, $licm_start_63 + (at_17 + i_44)));
+                    bits_43 = (bits_43 << 8_i64) | builtin::i64_extend_i32_u(builtin::array_get_value<u8>($sroa_view_repr_66, $sroa_view_start_67 + (at_17 + i_44)));
                     i_44 = i_44 - 1;
                     continue l326;
                 };
@@ -2580,12 +2572,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<f32>::from_le_bytes<core:
     let $v6_seen: bool;
     let bits_47: u64;
     let i_48: i32;
-    let $licm_end_66: i32;
-    let $licm_start_67: i32;
-    let $licm_repr_68: ref Array<u8>;
-    let $sroa_view_repr_69: ref Array<u8>;
+    let $sroa_view_repr_70: ref Array<u8>;
     end = bytes.used;
-    $sroa_view_repr_69 = bytes.repr;
+    $sroa_view_repr_70 = bytes.repr;
     if @unlikely((end % 4) != 0) {
         cold_path;
         $local_6 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(93);
@@ -2593,7 +2582,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<f32>::from_le_bytes<core:
         $mv_arg_2 = global:core:prelude/list.wado::$const_obj_46;
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6, $mv_arg_2.repr, $mv_arg_2.used);
         $local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6);
-        "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar"("core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::len"(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $sroa_view_repr_69, start: 0, end: end }), $local_7);
+        "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar"("core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::len"(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $sroa_view_repr_70, start: 0, end: end }), $local_7);
         $mv_arg_2 = global:core:prelude/list.wado::$const_obj_45;
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6, $mv_arg_2.repr, $mv_arg_2.used);
         $local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6);
@@ -2605,15 +2594,12 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<f32>::from_le_bytes<core:
     }
     out = struct.new "core:prelude//List<f32>" { repr: builtin::array_new<f32>(local.tee n(end / 4)), used: 0 };
     i_5 = 0;
-    $licm_end_66 = end;
-    $licm_start_67 = 0;
-    $licm_repr_68 = $sroa_view_repr_69;
     b331: block {
         l332: loop {
             break_if b331 i_5 >= n;
             at_17 = i_5 * 4;
             value_14 = builtin::f32_reinterpret_i32(builtin::i32_wrap_i64($v1 = 0 <= at_17; $v2_seen = 0; $v3_seen = 0; $v4_seen = 0; $v5_seen = 0; $v6_seen = 0; if @unlikely((if $v1 -> i32 {
-                $v6 = $v2 = at_17; $v2_seen = 1; $v2 <= $v5 = $v3 = $licm_end_66 - $licm_start_67; $v3_seen = 1; $v3 - $v4 = 4; $v4_seen = 1; 4; $v5_seen = 1; $v5;
+                $v6 = $v2 = at_17; $v2_seen = 1; $v2 <= $v5 = $v3 = end; $v3_seen = 1; $v3 - $v4 = 4; $v4_seen = 1; 4; $v5_seen = 1; $v5;
                 $v6_seen = 1;
                 $v6;
             } else {
@@ -2622,13 +2608,10 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<f32>::from_le_bytes<core:
                 cold_path;
                 "core:prelude/bytes.wado/le_bits$cold0"(at_17, $v1, $v2, $v2_seen, $v3, $v3_seen, $v4, $v4_seen, $v5, $v5_seen, $v6, $v6_seen);
                 unreachable;
-                $licm_end_66 = end;
-                $licm_start_67 = 0;
-                $licm_repr_68 = $sroa_view_repr_69;
             }; bits_47 = 0_i64; i_48 = 3; b335: block {
                 l336: loop {
                     break_if b335 i_48 < 0;
-                    bits_47 = (bits_47 << 8_i64) | builtin::i64_extend_i32_u(builtin::array_get_value<u8>($licm_repr_68, $licm_start_67 + (at_17 + i_48)));
+                    bits_47 = (bits_47 << 8_i64) | builtin::i64_extend_i32_u(builtin::array_get_value<u8>($sroa_view_repr_70, at_17 + i_48));
                     i_48 = i_48 - 1;
                     continue l336;
                 };
