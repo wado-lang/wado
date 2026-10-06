@@ -1,5 +1,4 @@
 mod bundled_asset;
-mod compiler_host;
 mod data_section;
 mod grammar_corpus;
 mod highlight_corpus;

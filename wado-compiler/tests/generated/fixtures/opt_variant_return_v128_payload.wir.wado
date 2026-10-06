@@ -12,8 +12,8 @@ struct core:prelude/string.wado//String {  // TypeId(2)
 }
 
 variant core:prelude/types.wado//Option<v128> {  // TypeId(3)
-    Some(v128),
     None,
+    Some(v128),
 }
 
 struct core:prelude/types.wado//Option<v128>::Some {  // TypeId(4)
@@ -93,9 +93,9 @@ global global:opt_variant_return_v128_payload.wado::$const_obj_18: ref Array<u8>
 
 fn "opt_variant_return_v128_payload.wado/make"(n) {
     if n < 0 {
-        return struct.new "core:prelude/types.wado//Option<v128>" { 1 };
+        return struct.new "core:prelude/types.wado//Option<v128>" { 0 };
     }
-    return struct.new "core:prelude/types.wado//Option<v128>::Some" { discriminant: 0, payload_0: i32x4.splat(n) };
+    return struct.new "core:prelude/types.wado//Option<v128>::Some" { discriminant: 1, payload_0: i32x4.splat(n) };
 }
 
 fn "opt_variant_return_v128_payload.wado/use_it"(n) {

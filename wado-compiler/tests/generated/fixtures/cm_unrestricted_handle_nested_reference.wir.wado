@@ -41,8 +41,8 @@ struct cm_unrestricted_handle_nested_reference.wado//Pair {  // TypeId(7)
 array Array<u64> (mut u64);  // TypeId(8)
 
 variant core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node> {  // TypeId(9)
-    Some(u64),
     None,
+    Some(u64),
 }
 
 struct core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>::Some {  // TypeId(10)
@@ -230,8 +230,8 @@ fn "cm_unrestricted_handle_nested_reference.wado/run"() with Dom {
     let self: ref "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>";
     let v: u64;
     n = "cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_root"();
-    drop("cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_touch"(struct.new "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>::Some" { discriminant: 0, payload_0: n }));
-    drop("cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_touch_pair"(struct.new "cm_unrestricted_handle_nested_reference.wado//Pair" { a: n, b: struct.new "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>::Some" { discriminant: 0, payload_0: n } }));
+    drop("cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_touch"(struct.new "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>::Some" { discriminant: 1, payload_0: n }));
+    drop("cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_touch_pair"(struct.new "cm_unrestricted_handle_nested_reference.wado//Pair" { a: n, b: struct.new "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>::Some" { discriminant: 1, payload_0: n } }));
     n = "cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_make_pair"().a;
     v = $inline_core_prelude_types_wado_Option__cm_unrestricted_handle_nested_reference_wado_Node___unwrap_1: block -> u64 {
         if @likely(ref.test "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>::Some"(local.tee self("cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_maybe"()))) {
@@ -321,9 +321,9 @@ fn "cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_make_pair"() w
     "wasi/example:demo/Dom::make_pair"(local.tee $outptr("mem/realloc"(0, 0, 8, 24)));
     $lifted_result_1 = builtin::load_i64($outptr);
     $disc = builtin::load_u8($outptr + 4);
-    $option_result = struct.new "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>" { 1 };
+    $option_result = struct.new "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>" { 0 };
     if $disc != 0 {
-        $option_result = struct.new "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>::Some" { discriminant: 0, payload_0: builtin::load_i64(($outptr + 4) + 4) };
+        $option_result = struct.new "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>::Some" { discriminant: 1, payload_0: builtin::load_i64(($outptr + 4) + 4) };
     }
     $struct_result = struct.new "cm_unrestricted_handle_nested_reference.wado//Pair" { a: $lifted_result_1, b: $option_result };
     drop("mem/realloc"($outptr, 24, 8, 0));
@@ -336,9 +336,9 @@ fn "cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_maybe"() with 
     let $option_result: ref "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>";
     "wasi/example:demo/Dom::maybe"(local.tee $outptr("mem/realloc"(0, 0, 4, 8)));
     $disc = builtin::load_u8($outptr);
-    $option_result = struct.new "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>" { 1 };
+    $option_result = struct.new "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>" { 0 };
     if $disc != 0 {
-        $option_result = struct.new "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>::Some" { discriminant: 0, payload_0: builtin::load_i64($outptr + 4) };
+        $option_result = struct.new "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>::Some" { discriminant: 1, payload_0: builtin::load_i64($outptr + 4) };
     }
     drop("mem/realloc"($outptr, 8, 4, 0));
     return $option_result;

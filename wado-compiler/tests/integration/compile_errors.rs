@@ -149,7 +149,7 @@ fn test_orphan_error_attributed_to_user_file() {
 fn test_orphan_error_attributed_to_the_submodule_that_defines_it() {
     // The impl lives in the imported submodule, so the file must be that
     // submodule — never the entry — which pins per-module attribution (#1596).
-    let path = Path::new("tests/fixtures/orphan_xmod_entry.wado");
+    let path = Path::new("fixtures/orphan_xmod_entry.wado");
     let err = compile_file(path).expect_err("expected a compile error");
     match err {
         CompileError::Analyzer {

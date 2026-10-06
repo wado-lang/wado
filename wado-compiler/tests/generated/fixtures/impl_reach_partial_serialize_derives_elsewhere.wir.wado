@@ -39,8 +39,8 @@ struct core:prelude/format.wado//Formatter {  // TypeId(7)
 }
 
 variant core:prelude/types.wado//Option<char> {  // TypeId(8)
-    Some(char),
     None,
+    Some(char),
 }
 
 struct core:prelude/types.wado//Option<char>::Some {  // TypeId(9)
@@ -179,7 +179,7 @@ fn "impl_reach_partial_serialize_derives_elsewhere.wado/$test_0_the_written_impl
     let $mv$self_14$0: i32;
     let $mv$self_14$1: ref null "core:prelude/string.wado//String";
     let $mv$self_14$2: ref null "core:serde//SerializeError";
-    multivalue_bind [$mv$self_14$0, $mv$self_14$1, $mv$self_14$2] = "core:json/core/json/to_string<impl_reach_partial_serialize_derives_elsewhere.wado/Pair<core:prelude/string.wado/String,i32>>$scalar"(1, struct.new "core:prelude/types.wado//Option<char>" { 1 });
+    multivalue_bind [$mv$self_14$0, $mv$self_14$1, $mv$self_14$2] = "core:json/core/json/to_string<impl_reach_partial_serialize_derives_elsewhere.wado/Pair<core:prelude/string.wado/String,i32>>$scalar"(1, struct.new "core:prelude/types.wado//Option<char>" { 0 });
     v_15 = (if @likely($mv$self_14$0 == 0) -> ref "core:prelude/string.wado//String" {
         local.tee v_15(ref.as_non_null($mv$self_14$1));
     } else if $mv$self_14$0 == 1 -> ref "core:prelude/string.wado//String" {
@@ -230,7 +230,7 @@ condition: to_string(&p).unwrap() == \"1\"
         "core:rt/panic"($local_6.repr, $local_6.used);
         unreachable;
     }
-    multivalue_bind [i_26, $mv$self_14$1, $mv$self_14$2] = "core:json/core/json/to_string<impl_reach_partial_serialize_derives_elsewhere.wado/Pair<i32,i64>>$spec0"(struct.new "core:prelude/types.wado//Option<char>" { 1 });
+    multivalue_bind [i_26, $mv$self_14$1, $mv$self_14$2] = "core:json/core/json/to_string<impl_reach_partial_serialize_derives_elsewhere.wado/Pair<i32,i64>>$spec0"(struct.new "core:prelude/types.wado//Option<char>" { 0 });
     $local_6 = (if @likely(i_26 == 0) -> ref "core:prelude/string.wado//String" {
         local.tee $local_6(ref.as_non_null($mv$self_14$1));
     } else if i_26 == 1 -> ref "core:prelude/string.wado//String" {

@@ -135,7 +135,7 @@ impl<'a> QueryContext<'a> {
 #[cfg(test)]
 pub(crate) mod test_ctx {
     use super::QueryContext;
-    use crate::test_support::MapHost;
+    use crate::test_support::in_memory_host;
     use crate::text::PositionEncoding;
 
     /// Path every single-file feature test analyses under.
@@ -150,7 +150,7 @@ pub(crate) mod test_ctx {
         f: impl FnOnce(&QueryContext) -> R,
     ) -> R {
         let uri = format!("file://{PATH}");
-        let host = MapHost::single(PATH, source);
+        let host = in_memory_host(&[(PATH, source)]);
         let sem = wado_compiler::semantics(source, &host, Some(PATH)).await;
         f(&QueryContext::new(&sem, source, &uri, encoding))
     }

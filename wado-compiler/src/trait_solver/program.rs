@@ -302,7 +302,7 @@ pub struct ModuleScope {
 
 /// A type declaration, reduced to what `holds` reads of it at a query. Its
 /// members arrive at `derive` as a [`Declaration`].
-#[derive(Clone, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct TypeDef {
     /// For a newtype, the base it inherits impls from, spelled with the
     /// newtype's own parameters by position.

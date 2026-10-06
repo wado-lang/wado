@@ -775,3 +775,35 @@ Generalizes: an allocation removed once per call is not free against an
 indirection paid on every access inside the function that removes it. Price
 a copy-elision idea against the loop it would run inside, not just the
 allocation it deletes.
+
+## Judging gale-gen at its one benchmark heap size (2026-10-06)
+
+gale-gen ran at `--gc-heap-initial 512m` then, and at that one size a change
+can read as a regression that wins across the sweep. It now reports the
+256 MiB default and 1 GiB as two rows. Two gale changes that only remove copies
+measured 4.1% slower at 512m, and each size reproduced across two sweeps.
+ms/iter, best of two:
+
+| heap    | base  | head  |
+| ------- | ----- | ----- |
+| 256m    | 97.64 | 93.73 |
+| 384m    | 95.06 | 92.41 |
+| 512m    | 87.53 | 91.25 |
+| 640m    | 91.05 | 88.92 |
+| 768m    | 89.81 | 88.23 |
+| 1g      | 88.45 | 89.21 |
+| geomean | 91.52 | 90.60 |
+
+The base reads 87.5 at 512m and 91–98 below it, so 512m is where its
+collections happen to land well. Less allocation moves them, and the head loses
+that alignment. `--collector null` agrees with the sweep: the head is 2.6%
+faster.
+
+Two more were dropped on 512m alone, and are open again for that reason: a
+`rule_id` stamped on `RuleRefElement` so the SCC-memoised analyses skip the
+hashed rule lookup (87.4–87.9 against 86.9–88.8), and a worklist for
+`rule_input_end`'s fixed point (87.0–87.8 against 86.7–87.2).
+
+Generalizes: on a benchmark that allocates heavily, sweep the heap size and
+compare the geometric means. One size is one sample of where the collections
+fall.

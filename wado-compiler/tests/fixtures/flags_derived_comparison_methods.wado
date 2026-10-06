@@ -1,0 +1,25 @@
+// A flags type derives `Eq` and `Ord` over its bitmask, and the derivation
+// answers `eq` and `cmp` by name as an enum's does, with a dot or by type path.
+
+flags Perms { Read, Write }
+
+type Mode = Perms;
+
+test "with a dot" {
+    let r = Perms::Read;
+    let w = Perms::Write;
+    assert r.eq(&r) && !r.eq(&w);
+    assert r.cmp(&w) matches { Less };
+}
+
+test "by type path" {
+    let r = Perms::Read;
+    let rw = Perms::Read | Perms::Write;
+    assert Perms::eq(&rw, &rw);
+    assert Perms::cmp(&rw, &r) matches { Greater };
+}
+
+test "through a newtype" {
+    let m = Perms::Write as Mode;
+    assert m.eq(&m) && Mode::eq(&m, &m);
+}

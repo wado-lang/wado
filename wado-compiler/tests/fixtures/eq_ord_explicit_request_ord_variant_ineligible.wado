@@ -1,17 +1,21 @@
-// Test: variants derive `Eq` only, never `Ord` — an explicit `impl Ord for
-// T;` marker on a variant must be rejected at the marker's own span, not
-// silently accepted and left to fail later at a `<`/`>` use site.
+// Test: an explicit `impl Ord for T;` marker on a variant whose payload has no
+// `Ord` must be rejected at the marker's own span, not silently accepted and
+// left to fail later at a `<`/`>` use site. The rejection is the one error: a
+// missing `Eq` is the same cause.
 variant Shape {
-    Circle(i32),
+    Circle(fn() -> i32),
     Point,
 }
 
 impl Ord for Shape;
 
 export fn run() {
-    let a = Shape::Circle(1);
+    let a = Shape::Point;
     let _ = a;
 }
 
 __DATA__
-{"compile_error": "cannot derive `Ord` for `Shape`: not every field/case implements `Ord`"}
+{
+    "compile_error": "cannot derive `Ord` for `Shape`: not every field/case implements `Ord`",
+    "compile_errors_not_contains": ["supertrait"]
+}

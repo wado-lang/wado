@@ -12,8 +12,8 @@ struct core:prelude/string.wado//String {  // TypeId(2)
 }
 
 variant core:prelude/types.wado//Option<i32> {  // TypeId(3)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(4)
@@ -161,9 +161,9 @@ fn "cm_future_read_cli.wado/$cm_future_read_i32"(handle) {
         "wasi/waitable-set-drop"(ws);
         status_2 = status_9;
     }
-    result = struct.new "core:prelude/types.wado//Option<i32>" { 1 };
+    result = struct.new "core:prelude/types.wado//Option<i32>" { 0 };
     if (status_2 & 15) == 0 {
-        result = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: builtin::load_i32(ptr) };
+        result = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: builtin::load_i32(ptr) };
     }
     drop("mem/realloc"(ptr, 4, 4, 0));
     return result;

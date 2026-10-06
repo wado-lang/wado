@@ -25,7 +25,7 @@ use super::arena_query::{
     block_yields_value, has_break_to, is_local, is_local_operand, promoted_read_count_at,
     single_payload_binding,
 };
-use super::sroa_variant_return::{Pad, zero_pad};
+use super::sroa_variant_return::{OptionCases, Pad, zero_pad};
 
 /// The slot `sroa_variant_return` reserves for the tag in every scalarized
 /// variant return.
@@ -2163,9 +2163,10 @@ fn plan_slot_temp_sroa(
         return None;
     }
 
+    let option = OptionCases::of(type_table);
     let mut slots = Vec::with_capacity(fields.len());
     for ((field_index, type_id), pad) in fields.into_iter().zip(pads) {
-        let zero = materialize_pad(engine, pad, span);
+        let zero = materialize_pad(engine, pad, &option, span);
         let local_index = engine.alloc_minted_local(SROA_SLOT, type_id, /* is_mut */ true);
         slots.push(BoundSlot {
             field_index,
@@ -2449,27 +2450,17 @@ fn scalarize_materialized_exit(
 
 /// The zero operand for a slot's declaring `let`, built through the engine so
 /// its per-node buffers grow with the arena.
-fn materialize_pad(engine: &mut Engine, pad: Pad, span: Span) -> Operand {
+fn materialize_pad(engine: &mut Engine, pad: Pad, option: &OptionCases, span: Span) -> Operand {
     match pad {
         Pad::Int(ty) => engine.const_operand(ValueKind::Int(0, ty), ty),
         Pad::Float(ty) => engine.const_operand(ValueKind::Float(0.0f64.to_bits(), ty), ty),
         Pad::Bool => engine.const_operand(ValueKind::Bool(false), TypeTable::BOOL),
         Pad::Char => engine.const_operand(ValueKind::Char('\0'), TypeTable::CHAR),
-        Pad::NoneOf(option_type) => Operand::Expr(engine.alloc_expr(
-            ExprKind::VariantConstruct {
-                variant_type: option_type,
-                case_index: OPTION_NONE_CASE,
-                case_name: "None".to_string(),
-                payload: None,
-            },
-            option_type,
-            span,
-        )),
+        Pad::NoneOf(option_type) => {
+            Operand::Expr(engine.alloc_expr(option.none_of(option_type), option_type, span))
+        }
     }
 }
-
-/// `Option`'s `None` case index, as declared in `lib/core/prelude/types.wado`.
-const OPTION_NONE_CASE: u32 = 1;
 
 /// Collects every `Local(temp).k` projection as `(node, field_index)`.
 struct SlotAccessCollector {

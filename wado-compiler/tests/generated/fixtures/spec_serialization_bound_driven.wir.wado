@@ -49,8 +49,8 @@ struct spec_serialization_bound_driven.wado//Point {  // TypeId(9)
 }
 
 variant core:prelude/types.wado//Option<char> {  // TypeId(10)
-    Some(char),
     None,
+    Some(char),
 }
 
 struct core:prelude/types.wado//Option<char>::Some {  // TypeId(11)
@@ -213,7 +213,7 @@ fn "spec_serialization_bound_driven.wado/$test_0"() {
     let $mv$json$0: i32;
     let $mv$json$1: ref null "core:prelude/string.wado//String";
     let $mv$json$2: ref null "core:serde//SerializeError";
-    multivalue_bind [$mv$json$0, $mv$json$1, $mv$json$2] = "core:json/core/json/to_string<spec_serialization_bound_driven.wado/Point>"(struct.new "spec_serialization_bound_driven.wado//Point" { x: 1, y: 2 }, struct.new "core:prelude/types.wado//Option<char>" { 1 });
+    multivalue_bind [$mv$json$0, $mv$json$1, $mv$json$2] = "core:json/core/json/to_string<spec_serialization_bound_driven.wado/Point>"(struct.new "spec_serialization_bound_driven.wado//Point" { x: 1, y: 2 }, struct.new "core:prelude/types.wado//Option<char>" { 0 });
     v_23 = (if @likely(ref.test "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Ok"(local.tee self_22((if $mv$json$0 == 0 -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>" {
         struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Ok" { discriminant: 0, payload_0: ref.as_non_null($mv$json$1) };
     } else {
@@ -286,7 +286,7 @@ condition: json.unwrap() == `{\"x\":1,\"y\":2}`
     }
     let $mv$anon$1: ref null "core:prelude/string.wado//String";
     let $mv$anon$2: ref null "core:serde//SerializeError";
-    multivalue_bind [$load_1, $mv$anon$1, $mv$anon$2] = "core:json/core/json/to_string<spec_serialization_bound_driven.wado/$anon_{x:i32,y:i32}>"(struct.new "spec_serialization_bound_driven.wado//$anon_{x:i32,y:i32}" { x: 1, y: 2 }, struct.new "core:prelude/types.wado//Option<char>" { 1 });
+    multivalue_bind [$load_1, $mv$anon$1, $mv$anon$2] = "core:json/core/json/to_string<spec_serialization_bound_driven.wado/$anon_{x:i32,y:i32}>"(struct.new "spec_serialization_bound_driven.wado//$anon_{x:i32,y:i32}" { x: 1, y: 2 }, struct.new "core:prelude/types.wado//Option<char>" { 0 });
     $array_clone_dst_2 = local.tee v_23((if @likely(ref.test "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Ok"(local.tee self_22((if $load_1 == 0 -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>" {
         struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Ok" { discriminant: 0, payload_0: ref.as_non_null($mv$anon$1) };
     } else {

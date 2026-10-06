@@ -16,7 +16,8 @@ use crate::wir::{
 use crate::wir_build::packed_array_is_eager;
 
 use super::context::{PendingFunctionBody, WirContext};
-use super::translate::{OPTION_NONE_CASE, resolve_param_names};
+use super::translate::resolve_param_names;
+use crate::compiler_item::CompilerItem;
 use crate::component_model::{
     CmFunctionInfo, CmInterfaceRegistry, cm_return_needs_outptr, flatten_cm_param_type,
 };
@@ -663,7 +664,7 @@ fn register_globals(ctx: &mut WirContext<'_>) {
         let init_op = slot.expr();
         let init =
             if is_null_operand(init_body, init_op) && type_table.as_option(global.ty).is_some() {
-                option_none(&wir_type)
+                option_none(&wir_type, type_table)
             } else {
                 translate_global_init(
                     init_body,
@@ -769,14 +770,15 @@ fn global_init_value(body: &Body, op: Operand, type_table: &TypeTable) -> Option
 /// Whether it *is* a null reference is `wir_optimize::nullable_ref`'s answer,
 /// which reaches this slot by rewriting it along with the rest; deciding it here
 /// is what let a global disagree with the module around it.
-fn option_none(wir_type: &WirType) -> WirInstr {
+fn option_none(wir_type: &WirType, type_table: &TypeTable) -> WirInstr {
     let WirType::Ref { type_id, .. } = wir_type else {
         panic!("[WIR] an Option-typed global's slot is not a reference: {wir_type:?}");
     };
+    let none_index = type_table.compiler_variant_case(CompilerItem::OptionNone).3;
     WirInstr::StructNew {
         type_id: type_id.clone(),
         fields: vec![WirInstr::I32Const(
-            i32::try_from(OPTION_NONE_CASE).expect("case index fits i32"),
+            i32::try_from(none_index).expect("case index fits i32"),
         )],
     }
 }

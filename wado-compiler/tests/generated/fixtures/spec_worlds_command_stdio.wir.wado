@@ -62,8 +62,8 @@ struct core:prelude/slice.wado//Slice<u8> {  // TypeId(11)
 }
 
 variant core:prelude/types.wado//Option<i32> {  // TypeId(12)
-    Some(i32),
     None,
+    Some(i32),
 }
 
 struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(13)
@@ -339,8 +339,8 @@ fn "spec_worlds_command_stdio.wado/run"() with Stdin, Stdout, Stderr {
     $mv$scalar$valid = "spec_worlds_command_stdio.wado/$cm_binding__Stdout_write_via_stream"($mv$scalar$valid);
     other_len = s.used;
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        slice = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: local.tee elements_14(s.repr), start: 0, end: other_len };
-        "core:rt/cm_stream_write_raw_all_u8"(new_used_113, slice.repr, 0, other_len);
+        elements_14 = s.repr;
+        "core:rt/cm_stream_write_raw_all_u8"(new_used_113, elements_14, 0, other_len);
     });
     "wasi/stream-drop-writable"(new_used_113);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$scalar$valid);
@@ -1190,7 +1190,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at"(byt
         unreachable;
     }
     if prefix >= 0 {
-        return struct.new "core:prelude/string.wado//Utf8Error" { valid_up_to: prefix, error_len: struct.new "core:prelude/types.wado//Option<i32>" { 1 } };
+        return struct.new "core:prelude/string.wado//Utf8Error" { valid_up_to: prefix, error_len: struct.new "core:prelude/types.wado//Option<i32>" { 0 } };
     }
     prefix = -1 - prefix;
     $v1 = local.tee $v2_2("core:prelude/string.wado/core:prelude/string.wado/String::utf8_invalid_len"(bytes, prefix)) >= 1;
@@ -1207,7 +1207,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at"(byt
         "core:prelude/string.wado/core:prelude/string.wado/Utf8Error::invalid$cold0"($v2_2, $v1, $v2_12, $v2_seen, $v3, $v3_seen);
         unreachable;
     }
-    return struct.new "core:prelude/string.wado//Utf8Error" { valid_up_to: prefix, error_len: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: $v2_2 } };
+    return struct.new "core:prelude/string.wado//Utf8Error" { valid_up_to: prefix, error_len: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: $v2_2 } };
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_invalid_len"(bytes, start) {

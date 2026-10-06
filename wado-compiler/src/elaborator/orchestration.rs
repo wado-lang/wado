@@ -1965,6 +1965,28 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
+    /// The type a struct, resource, variant, enum or flags declaration `def` declares,
+    /// read from the registry entry that holds it; `UNKNOWN` for any other.
+    pub(super) fn nominal_type_of(
+        def: DefId,
+        type_table: &mut TypeTable,
+        lookup: &TypeLookup<'_>,
+    ) -> TypeId {
+        if lookup.struct_fields_of(def).is_some() {
+            type_table.make_struct(StructDef::Decl(def))
+        } else if lookup.resource_type_of(def).is_some() {
+            type_table.make_resource(def)
+        } else if lookup.variant_cases_of(def).is_some() {
+            type_table.make_variant(def)
+        } else if lookup.enum_cases_of(def).is_some() {
+            type_table.make_enum(def)
+        } else if let Some(flags) = lookup.flags_members_of(def) {
+            flags.type_id
+        } else {
+            TypeTable::UNKNOWN
+        }
+    }
+
     /// [`Self::resolve_type_static`] inside a declaration's own type-parameter
     /// list, so the `T` of `struct Node<T>` or `variant Result<T, E>` resolves.
     pub(super) fn resolve_type_static_with_params(
@@ -2005,17 +2027,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 let Some(def) = def else {
                     return TypeTable::UNKNOWN;
                 };
-                if lookup.struct_fields_of(def).is_some() {
-                    type_table.make_struct(StructDef::Decl(def))
-                } else if lookup.resource_type_of(def).is_some() {
-                    type_table.make_resource(def)
-                } else if lookup.variant_cases_of(def).is_some() {
-                    type_table.make_variant(def)
-                } else if lookup.enum_cases_of(def).is_some() {
-                    type_table.make_enum(def)
-                } else {
-                    TypeTable::UNKNOWN
-                }
+                Self::nominal_type_of(def, type_table, lookup)
             }
             Type::Generic(generic) => {
                 let head = lookup.declaration_at(Some(generic.id), &generic.name);

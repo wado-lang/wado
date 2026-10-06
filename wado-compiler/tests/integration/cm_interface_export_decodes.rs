@@ -29,7 +29,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 "#;
 
 fn compile(world: &str, source: &str) -> Vec<u8> {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/cm_decode.wado");
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/cm_decode.wado");
     let options = CompilerOptions {
         opt_level: OptLevel::O2,
         target_world: Some(world.to_string()),

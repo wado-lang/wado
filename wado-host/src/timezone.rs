@@ -14,13 +14,13 @@ use anyhow::Result;
 use wasmtime::component::{HasData, Linker};
 use wasmtime_wasi::p3::bindings::clocks::timezone::{self, Host, Instant, LinkOptions};
 
-pub struct WadoTimezone;
+struct WadoTimezone;
 
 impl HasData for WadoTimezone {
     type Data<'a> = TimezoneCtx;
 }
 
-pub struct TimezoneCtx;
+struct TimezoneCtx;
 
 impl Host for TimezoneCtx {
     fn iana_id(&mut self) -> wasmtime::Result<Option<String>> {

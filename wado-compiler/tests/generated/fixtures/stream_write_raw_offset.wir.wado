@@ -128,8 +128,8 @@ fn "stream_write_raw_offset.wado/run"() with Stderr {
             unreachable;
         }
         end_22 = select i32(a_47 < end_22, local.tee a_47(select i32(10 > s, 10, s)), end_22);
-        self_23 = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: self_23.repr, start: s, end: end_22 };
-        "core:rt/cm_stream_write_raw_all_u8"(tx_8, self_23.repr, s, end_22);
+        out = self_23.repr;
+        "core:rt/cm_stream_write_raw_all_u8"(tx_8, out, s, end_22);
     });
     "wasi/stream-drop-writable"(tx_8);
     drop("stream_write_raw_offset.wado/$cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"(rx_7));

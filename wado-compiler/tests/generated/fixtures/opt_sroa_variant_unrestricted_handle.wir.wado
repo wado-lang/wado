@@ -204,9 +204,9 @@ global global:core:prelude/primitive.wado::$const_obj_64: ref "core:prelude/stri
 
 fn "opt_sroa_variant_unrestricted_handle.wado/maybe"(x) {
     if (x <= 0) == 0 {
-        return 0, builtin::i64_reinterpret_f64(x);
+        return 1, builtin::i64_reinterpret_f64(x);
     }
-    return 1, 0_i64;
+    return 0, 0_i64;
 }
 
 fn "opt_sroa_variant_unrestricted_handle.wado/last_positive"(xs) {
@@ -217,7 +217,7 @@ fn "opt_sroa_variant_unrestricted_handle.wado/last_positive"(xs) {
     let $sroa_next_15: u64;
     let $sroa_$iter_0_repr_18: ref Array<f64>;
     let $sroa_$iter_0_index_19: i32;
-    $sroa_found_0_13 = 1;
+    $sroa_found_0_13 = 0;
     $sroa_found_1_14 = 0_i64;
     end = xs.used;
     $sroa_$iter_0_repr_18 = xs.repr;
@@ -229,15 +229,15 @@ fn "opt_sroa_variant_unrestricted_handle.wado/last_positive"(xs) {
             $sroa_$iter_0_index_19 = $sroa_$iter_0_index_19 + 1;
             if (ref_val <= 0) == 0 {
                 $sroa_next_15 = builtin::i64_reinterpret_f64(ref_val);
-                $sroa_found_0_13 = 0;
+                $sroa_found_0_13 = 1;
                 $sroa_found_1_14 = $sroa_next_15;
             }
             continue l2;
         };
     };
-    return (if $sroa_found_0_13 == 0 -> f64 {
+    return (if $sroa_found_0_13 == 1 -> f64 {
         builtin::f64_reinterpret_i64($sroa_found_1_14);
-    } else if @likely($sroa_found_0_13 == 1) -> f64 {
+    } else if @likely($sroa_found_0_13 == 0) -> f64 {
         -1;
     } else {
         unreachable;
@@ -248,7 +248,7 @@ fn "opt_sroa_variant_unrestricted_handle.wado/$test_0_a_returned_handle_round_tr
     let $mv$$vr_7$0: i32;
     let $mv$$vr_7$1: u64;
     multivalue_bind [$mv$$vr_7$0, $mv$$vr_7$1] = "opt_sroa_variant_unrestricted_handle.wado/maybe"(black_box(2.5));
-    if @unlikely(local.tee $mv$$vr_7$0((if $mv$$vr_7$0 == 0 -> bool {
+    if @unlikely(local.tee $mv$$vr_7$0((if $mv$$vr_7$0 == 1 -> bool {
         builtin::f64_reinterpret_i64($mv$$vr_7$1) == 2.5;
     } else {
         0;
@@ -258,7 +258,7 @@ fn "opt_sroa_variant_unrestricted_handle.wado/$test_0_a_returned_handle_round_tr
         unreachable;
     }
     multivalue_bind [$mv$$vr_7$0, $mv$$vr_7$1] = "opt_sroa_variant_unrestricted_handle.wado/maybe"(black_box(-2.5));
-    if @unlikely(local.tee $mv$$vr_7$0($mv$$vr_7$0 == 1) == 0) {
+    if @unlikely(local.tee $mv$$vr_7$0($mv$$vr_7$0 == 0) == 0) {
         cold_path;
         "opt_sroa_variant_unrestricted_handle.wado/$test_0_a_returned_handle_round_trips$cold0"();
         unreachable;

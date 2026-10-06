@@ -621,7 +621,7 @@ fn "parser_synth_id_collision_test.wado/post_process"(raw) {
         };
     }
     multivalue_bind [$mv_end_3, $mv_start_2] = ($mv_arg_8 = global:parser_synth_id_collision_test.wado::$const_obj_23; "core:prelude/string.wado/core:prelude/string.wado/StrSlice::find<core:prelude/string.wado/String>"(self_5, $mv_arg_8.repr, $mv_arg_8.used));
-    if $mv_end_3 == 0 {
+    if $mv_end_3 == 1 {
         $mv_arg_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>((local.tee $mv_end_3(self_5.end) - local.tee $mv_start_2(self_5.start)) + 1), used: 0 };
         $inline_core_prelude_string_wado_String__internal_push_view_11: block {
             break_if $inline_core_prelude_string_wado_String__internal_push_view_11 local.tee $mv_start_2($mv_end_3 - $mv_start_2) == 0;
@@ -1933,7 +1933,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::find<core:prelud
     let j: i32;
     let $licm_repr_21: ref Array<u8>;
     if $mv$pat$used == 0 {
-        return 0, 0;
+        return 1, 0;
     }
     limit = (self.end - local.tee $load_1(self.start)) - $mv$pat$used;
     i = 0;
@@ -1956,13 +1956,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::find<core:prelud
                 };
                 break $inline_bytes_match_at_4: 1;
             } {
-                return 0, i;
+                return 1, i;
             }
             i = i + 1;
             continue l297;
         };
     };
-    return 1, 0;
+    return 0, 0;
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<char>::grow"(self) {

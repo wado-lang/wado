@@ -85,7 +85,7 @@ fn "opt_multi_value_param_arg_order.wado/around"($mv$p$a, $mv$p$b, middle, $mv$t
 }
 
 fn "opt_multi_value_param_arg_order.wado/run"() with Stdout {
-    let $load_9: i32;
+    let $load_7: i32;
     let $local_1_7: ref "core:prelude/string.wado//String";
     let new_used_29: i32;
     let start_30: i32;
@@ -100,16 +100,20 @@ fn "opt_multi_value_param_arg_order.wado/run"() with Stdout {
     };
     $local_1_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
     $av_277 = local.tee v_132(global:opt_multi_value_param_arg_order.wado::LOG).used;
-    v_132 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_2: ref Array<u8>; $array_clone_src_2 = v_132.repr; let $array_clone_dst_3: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($av_277)), 0, $array_clone_src_2, 0, $av_277); $array_clone_dst_3, used: $av_277 };
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_1_7, v_132.repr, $av_277);
+    let $array_clone_src_2: ref Array<u8>;
+    $array_clone_src_2 = v_132.repr;
+    let $array_clone_dst_3: ref Array<u8>;
+    builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($av_277)), 0, $array_clone_src_2, 0, $av_277);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_1_7, $array_clone_dst_3, $av_277);
     $av_277 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_1_7, 0, 1);
     "core:prelude/primitive.wado/write_decimal_digits"($local_1_7.repr, $av_277, 1_i64, 1);
     global:opt_multi_value_param_arg_order.wado::LOG = $local_1_7;
     $av_277 = block -> i32 {
         $local_1_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
         $av_277 = local.tee v_132(global:opt_multi_value_param_arg_order.wado::LOG).used;
-        v_132 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_dst_3 = v_132.repr; builtin::array_copy<u8>(local.tee $array_clone_src_2(builtin::array_new<u8>($av_277)), 0, $array_clone_dst_3, 0, $av_277); $array_clone_src_2, used: $av_277 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_1_7, v_132.repr, $av_277);
+        $array_clone_dst_3 = v_132.repr;
+        builtin::array_copy<u8>(local.tee $array_clone_src_2(builtin::array_new<u8>($av_277)), 0, $array_clone_dst_3, 0, $av_277);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_1_7, $array_clone_src_2, $av_277);
         $av_277 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_1_7, 0, 1);
         "core:prelude/primitive.wado/write_decimal_digits"($local_1_7.repr, $av_277, 2_i64, 1);
         global:opt_multi_value_param_arg_order.wado::LOG = $local_1_7;
@@ -117,23 +121,23 @@ fn "opt_multi_value_param_arg_order.wado/run"() with Stdout {
     };
     $local_1_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     $array_clone_src_2 = local.tee v_132(global:opt_multi_value_param_arg_order.wado::LOG).repr;
-    builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>(local.tee $load_9(v_132.used))), 0, $array_clone_src_2, 0, $load_9);
+    builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>(local.tee $load_7(v_132.used))), 0, $array_clone_src_2, 0, $load_7);
     $inline_core_prelude_string_wado_String__internal_push_string_8: block {
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_8 $load_9 == 0;
-        if @unlikely(local.tee new_used_29(0 + $load_9) > builtin::array_len($local_1_7.repr)) {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_8 $load_7 == 0;
+        if @unlikely(local.tee new_used_29(0 + $load_7) > builtin::array_len($local_1_7.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_7, new_used_29);
         }
         start_30 = $local_1_7.used;
         $local_1_7.used = new_used_29;
-        builtin::array_copy<u8>($local_1_7.repr, start_30, $array_clone_dst_3, 0, $load_9);
+        builtin::array_copy<u8>($local_1_7.repr, start_30, $array_clone_dst_3, 0, $load_7);
     };
-    if @unlikely(local.tee $load_9($local_1_7.used + 1) > builtin::array_len($local_1_7.repr)) {
+    if @unlikely(local.tee $load_7($local_1_7.used + 1) > builtin::array_len($local_1_7.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_7, $load_9);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_7, $load_7);
     }
     start_30 = $local_1_7.used;
-    $local_1_7.used = $load_9;
+    $local_1_7.used = $load_7;
     builtin::array_copy<u8>($local_1_7.repr, start_30, global:opt_multi_value_param_arg_order.wado::$const_obj_3, 0, 1);
     start_30 = $av_277 < 0;
     $av_277 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_56(x_56 = builtin::i64_extend_i32_s($av_277); select i64(x_56 < 0_i64, 0_i64 - x_56, x_56)));
@@ -148,22 +152,25 @@ fn "opt_multi_value_param_arg_order.wado/run"() with Stdout {
     $av_277 = block -> i32 {
         $local_1_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
         $av_277 = local.tee v_132(global:opt_multi_value_param_arg_order.wado::LOG).used;
-        v_132 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_dst_3 = v_132.repr; builtin::array_copy<u8>(local.tee $array_clone_src_2(builtin::array_new<u8>($av_277)), 0, $array_clone_dst_3, 0, $av_277); $array_clone_src_2, used: $av_277 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_1_7, v_132.repr, $av_277);
+        $array_clone_dst_3 = v_132.repr;
+        builtin::array_copy<u8>(local.tee $array_clone_src_2(builtin::array_new<u8>($av_277)), 0, $array_clone_dst_3, 0, $av_277);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_1_7, $array_clone_src_2, $av_277);
         $av_277 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_1_7, 0, 1);
         "core:prelude/primitive.wado/write_decimal_digits"($local_1_7.repr, $av_277, 1_i64, 1);
         global:opt_multi_value_param_arg_order.wado::LOG = $local_1_7;
         $local_1_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
         $av_277 = local.tee v_132(global:opt_multi_value_param_arg_order.wado::LOG).used;
-        v_132 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_2 = v_132.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($av_277)), 0, $array_clone_src_2, 0, $av_277); $array_clone_dst_3, used: $av_277 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_1_7, v_132.repr, $av_277);
+        $array_clone_src_2 = v_132.repr;
+        builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($av_277)), 0, $array_clone_src_2, 0, $av_277);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_1_7, $array_clone_dst_3, $av_277);
         $av_277 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_1_7, 0, 1);
         "core:prelude/primitive.wado/write_decimal_digits"($local_1_7.repr, $av_277, 2_i64, 1);
         global:opt_multi_value_param_arg_order.wado::LOG = $local_1_7;
         $local_1_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
         $av_277 = local.tee v_132(global:opt_multi_value_param_arg_order.wado::LOG).used;
-        v_132 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_dst_3 = v_132.repr; builtin::array_copy<u8>(local.tee $array_clone_src_2(builtin::array_new<u8>($av_277)), 0, $array_clone_dst_3, 0, $av_277); $array_clone_src_2, used: $av_277 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_1_7, v_132.repr, $av_277);
+        $array_clone_dst_3 = v_132.repr;
+        builtin::array_copy<u8>(local.tee $array_clone_src_2(builtin::array_new<u8>($av_277)), 0, $array_clone_dst_3, 0, $av_277);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_1_7, $array_clone_src_2, $av_277);
         $av_277 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_1_7, 0, 1);
         "core:prelude/primitive.wado/write_decimal_digits"($local_1_7.repr, $av_277, 3_i64, 1);
         global:opt_multi_value_param_arg_order.wado::LOG = $local_1_7;
@@ -174,12 +181,12 @@ fn "opt_multi_value_param_arg_order.wado/run"() with Stdout {
     builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>(local.tee start_30(v_132.used))), 0, $array_clone_src_2, 0, start_30);
     $inline_core_prelude_string_wado_String__internal_push_string_33: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_33 start_30 == 0;
-        if @unlikely(local.tee $load_9(0 + start_30) > builtin::array_len($local_1_7.repr)) {
+        if @unlikely(local.tee $load_7(0 + start_30) > builtin::array_len($local_1_7.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_7, $load_9);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_7, $load_7);
         }
         new_used_29 = $local_1_7.used;
-        $local_1_7.used = $load_9;
+        $local_1_7.used = $load_7;
         builtin::array_copy<u8>($local_1_7.repr, new_used_29, $array_clone_dst_3, 0, start_30);
     };
     if @unlikely(local.tee start_30($local_1_7.used + 1) > builtin::array_len($local_1_7.repr)) {

@@ -37,8 +37,8 @@ struct core:prelude/format.wado//Formatter {  // TypeId(6)
 }
 
 variant core:prelude/types.wado//Option<i64> {  // TypeId(7)
-    Some(i64),
     None,
+    Some(i64),
 }
 
 struct core:prelude/types.wado//Option<i64>::Some {  // TypeId(8)
@@ -261,9 +261,9 @@ fn "wasi_clocks_timezone.wado/$cm_binding__Timezone_utc_offset"(when) with Timez
     $outptr = "mem/realloc"(0, 0, 8, 16);
     "wasi/wasi:clocks/Timezone::utc_offset"(when.seconds, when.nanoseconds, $outptr);
     $disc = builtin::load_u8($outptr);
-    $option_result = struct.new "core:prelude/types.wado//Option<i64>" { 1 };
+    $option_result = struct.new "core:prelude/types.wado//Option<i64>" { 0 };
     if $disc != 0 {
-        $option_result = struct.new "core:prelude/types.wado//Option<i64>::Some" { discriminant: 0, payload_0: builtin::load_i64($outptr + 8) };
+        $option_result = struct.new "core:prelude/types.wado//Option<i64>::Some" { discriminant: 1, payload_0: builtin::load_i64($outptr + 8) };
     }
     drop("mem/realloc"($outptr, 16, 8, 0));
     return $option_result;
