@@ -345,6 +345,7 @@ pub(super) fn run_peephole(instrs: &mut [WirInstr], null: &Nullability, _types: 
         changed |= rewrite_everywhere(instrs, &mut try_fold_rotate);
         changed |= rewrite_everywhere(instrs, &mut try_fold_vector_const);
         changed |= rewrite_everywhere(instrs, &mut try_fold_sign_extension);
+        changed |= rewrite_everywhere(instrs, &mut try_fill_one_as_set);
         changed |= rewrite_everywhere(instrs, &mut |instr| try_simplify_ref_op(instr, null));
         changed |= rewrite_everywhere(instrs, &mut |instr| {
             try_relax_gc_operands(instr, null.locals())
@@ -394,6 +395,35 @@ fn rewrite_everywhere(
         driver.visit_instr(instr);
     }
     driver.changed
+}
+
+/// `array.fill(a, i, v, 1)` → `array.set(a, i, v)`. Both trap exactly when
+/// `i >= len(a)` and evaluate their operands in the same order, but wasmtime
+/// compiles a fill to a bulk operation and a loop around the store.
+fn try_fill_one_as_set(instr: &mut WirInstr) -> bool {
+    let WirInstr::ArrayFill { len, .. } = instr else {
+        return false;
+    };
+    if !matches!(len.as_ref(), WirInstr::I32Const(1)) {
+        return false;
+    }
+    let WirInstr::ArrayFill {
+        type_id,
+        array,
+        offset,
+        value,
+        ..
+    } = std::mem::replace(instr, WirInstr::Nop)
+    else {
+        unreachable!("matched as an ArrayFill above");
+    };
+    *instr = WirInstr::ArraySet {
+        type_id,
+        array,
+        index: offset,
+        value,
+    };
+    true
 }
 
 /// Try to evaluate a WIR condition to a boolean constant. Looks through a
@@ -1540,6 +1570,38 @@ mod tests {
         WirType::Ref {
             type_id: tid(index),
             nullable,
+        }
+    }
+
+    fn fill(len: WirInstr) -> WirInstr {
+        WirInstr::ArrayFill {
+            type_id: tid(1),
+            array: Box::new(local_get("a", ref_ty(1, false))),
+            offset: Box::new(local_get("i", WirType::I32)),
+            value: Box::new(WirInstr::RefNull {
+                heap_type: WirAbstractHeapType::None,
+            }),
+            len: Box::new(len),
+        }
+    }
+
+    #[test]
+    fn one_element_fill_becomes_a_set() {
+        let mut instr = fill(WirInstr::I32Const(1));
+        assert!(try_fill_one_as_set(&mut instr));
+        let WirInstr::ArraySet { index, value, .. } = &instr else {
+            panic!("expected ArraySet, got {instr:?}");
+        };
+        assert_matches!(index.as_ref(), WirInstr::LocalGet { name, .. } if name == "i");
+        assert_matches!(value.as_ref(), WirInstr::RefNull { .. });
+    }
+
+    #[test]
+    fn longer_or_unknown_fill_stays() {
+        for len in [WirInstr::I32Const(2), local_get("n", WirType::I32)] {
+            let mut instr = fill(len);
+            assert!(!try_fill_one_as_set(&mut instr));
+            assert_matches!(instr, WirInstr::ArrayFill { .. });
         }
     }
 
