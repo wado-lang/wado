@@ -3220,27 +3220,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let receiver_key = newtype_dispatch.as_ref().map(|(_, base_type_id, _)| {
             self.impl_target_of(*base_type_id, &DeclName::new(&actual_struct_name))
         });
-<<<<<<< HEAD
         // The resolution walks from the newtype to its base itself, so it reads
-        // the arguments at the base and answers in the newtype.
+        // the arguments at the base and answers in the newtype. It reads the
+        // signature at `impl_type_args`, the only place they are substituted.
         let newtype_key = newtype_dispatch
             .as_ref()
             .map(|(newtype, _, _)| self.impl_target_of(*newtype, &DeclName::new(struct_name)));
-        // `impl_type_args` is what the site substitutes with afterwards, so the
-        // resolution reading them says the same thing.
-||||||| a03e903f91
-        // The receiver a newtype dispatches to, and the arguments this site
-        // resolves it with — inferred at the call, since the receiver is
-        // spelled as a bare name. `impl_type_args` is what the site substitutes
-        // with afterwards, so the resolution reading them says the same thing.
-        let receiver_type = newtype_dispatch.as_ref().map(|(_, base, _)| *base);
-=======
-        // The receiver a newtype dispatches to, and the arguments this site
-        // resolves it with — inferred at the call, since the receiver is
-        // spelled as a bare name. The resolution reads the signature at
-        // `impl_type_args`, which is the only place they are substituted.
-        let receiver_type = newtype_dispatch.as_ref().map(|(_, base, _)| *base);
->>>>>>> origin/main
         let Ok(resolution) = self.static_trait_ref(
             StaticQuery {
                 receiver_key: newtype_key.as_ref(),
@@ -3307,7 +3292,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             actual_mangled_name
         };
 
-        let mut return_type =
+        let return_type =
             self.fill_static_method_slots(declaration, method_type_args, resolution.return_type);
 
         let template = self.tysys.static_template(&method_ref, &receiver_fq);
