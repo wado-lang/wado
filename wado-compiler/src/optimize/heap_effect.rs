@@ -505,6 +505,9 @@ impl HeapEffects<'_> {
     /// Every object type `call` may write that its caller can reach: through
     /// an argument, or held elsewhere.
     fn call_writes(&self, body: &Body, call: ExprId) -> ObjectTypes {
+        if !self.returns(body, call) {
+            return ObjectTypes::default();
+        }
         let (target, args) = call_parts(self, body, call);
         let mut out = match target {
             Target::Summary(t) => t.writes.elsewhere.clone(),
@@ -524,6 +527,13 @@ impl HeapEffects<'_> {
             }
         }
         out
+    }
+
+    /// Whether `call` may return. One typed `!` traps or runs forever, since a
+    /// handler resumes its caller rather than unwinding past it, so no code
+    /// after it observes what it writes.
+    fn returns(&self, body: &Body, call: ExprId) -> bool {
+        !self.type_table.is_never(body.exprs[call].type_id)
     }
 
     /// [`Self::call_writes`] of every call `body` reaches.
@@ -1476,14 +1486,21 @@ impl HeapFrame {
     /// Add what `call` does to objects the caller did not allocate.
     fn call_summary(&self, effects: &HeapEffects, body: &Body, call: ExprId, s: &mut Summary) {
         let (target, args) = call_parts(effects, body, call);
+        let mut unobserved = Access::default();
+        let Summary { reads, writes, .. } = s;
+        let writes = if effects.returns(body, call) {
+            writes
+        } else {
+            &mut unobserved
+        };
         match target {
             Target::Summary(t) => {
-                s.reads.elsewhere.union(&t.reads.elsewhere);
-                s.writes.elsewhere.union(&t.writes.elsewhere);
+                reads.elsewhere.union(&t.reads.elsewhere);
+                writes.elsewhere.union(&t.writes.elsewhere);
             }
             Target::Opaque => {
-                s.reads.elsewhere.set_any();
-                s.writes.elsewhere.set_any();
+                reads.elsewhere.set_any();
+                writes.elsewhere.set_any();
             }
             Target::Builtin(_) | Target::BlackBox => {}
         }
@@ -1499,20 +1516,20 @@ impl HeapFrame {
             match target {
                 Target::Summary(t) => {
                     let reach = effects.reach(ty);
-                    s.reads.record_meet(prov, &t.reads.through_args, &reach);
-                    s.writes.record_meet(prov, &t.writes.through_args, &reach);
+                    reads.record_meet(prov, &t.reads.through_args, &reach);
+                    writes.record_meet(prov, &t.writes.through_args, &reach);
                 }
                 Target::Builtin(declaration) => {
                     let touched = builtin_touches(effects, declaration, ty);
-                    s.reads.record(prov, &touched);
+                    reads.record(prov, &touched);
                     if declaration.mut_params.contains(&j) {
-                        s.writes.record(prov, &touched);
+                        writes.record(prov, &touched);
                     }
                 }
                 Target::Opaque | Target::BlackBox => {
                     let reach = effects.reach(ty);
-                    s.reads.record(prov, &reach);
-                    s.writes.record(prov, &reach);
+                    reads.record(prov, &reach);
+                    writes.record(prov, &reach);
                 }
             }
         }
@@ -1629,6 +1646,9 @@ impl HeapFrame {
         local: u32,
         answered: &impl Fn(Operand) -> bool,
     ) -> bool {
+        if effect == Effect::Write && !effects.returns(body, call) {
+            return false;
+        }
         let h = self.local_root(local);
         let h_escapes = h.is_none_or(|r| !self.prov[r as usize].is_fresh());
         let (target, args) = call_parts(effects, body, call);
