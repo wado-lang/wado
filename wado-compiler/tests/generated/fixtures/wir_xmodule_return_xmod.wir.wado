@@ -1945,50 +1945,26 @@ fn "./sub/wir_xmodule_return_parser.wado/./sub/wir_xmodule_return_parser.wado/To
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee i(builtin::array_get_value<i32>(self.ends.repr, i)) - $v1_7), used: 0 };
     $licm_used_33 = local.tee self_22(self.chars).used;
     $licm_repr_34 = self_22.repr;
-<<<<<<< HEAD
     if i <= $licm_used_33 {
-        b187: block {
-            l188: loop {
-                break_if b187 $v1_7 >= i;
+        b204: block {
+            l205: loop {
+                break_if b204 $v1_7 >= i;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(s, builtin::array_get_value<char>($licm_repr_34, $v1_7));
                 $v1_7 = $v1_7 + 1;
-                continue l188;
+                continue l205;
             };
-||||||| 860f3c20d
-    b186: block {
-        l187: loop {
-            break_if b186 $v1_7 >= i;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(s, if @unlikely($v1_7 >= $licm_used_33) {
-                cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($v1_7, $licm_used_33);
-                unreachable;
-            }; builtin::array_get_value<char>($licm_repr_34, $v1_7));
-            $v1_7 = $v1_7 + 1;
-            continue l187;
-=======
-    b203: block {
-        l204: loop {
-            break_if b203 $v1_7 >= i;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(s, if @unlikely($v1_7 >= $licm_used_33) {
-                cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($v1_7, $licm_used_33);
-                unreachable;
-            }; builtin::array_get_value<char>($licm_repr_34, $v1_7));
-            $v1_7 = $v1_7 + 1;
-            continue l204;
->>>>>>> origin/main
         };
     } else {
-        b189: block {
-            l190: loop {
-                break_if b189 $v1_7 >= i;
+        b206: block {
+            l207: loop {
+                break_if b206 $v1_7 >= i;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(s, if @unlikely($v1_7 >= $licm_used_33) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($v1_7, $licm_used_33);
                     unreachable;
                 }; builtin::array_get_value<char>($licm_repr_34, $v1_7));
                 $v1_7 = $v1_7 + 1;
-                continue l190;
+                continue l207;
             };
         };
     }
@@ -2217,27 +2193,8 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits
     let result: ref "core:prelude//List<char>";
     let used: i32;
     result = struct.new "core:prelude//List<char>" { repr: array.new_fixed<char>(), used: 0 };
-<<<<<<< HEAD
-    $licm_used_18 = iter.used;
-    $licm_repr_19 = iter.repr;
-    $hfs_byte_index_45 = iter.byte_index;
-    b207: block {
-        l208: loop {
-            if $hfs_byte_index_45 >= $licm_used_18 {
-                iter.byte_index = $hfs_byte_index_45;
-                break b207;
-||||||| 860f3c20d
-    $licm_used_18 = iter.used;
-    $licm_repr_19 = iter.repr;
-    $hfs_byte_index_45 = iter.byte_index;
-    b204: block {
-        l205: loop {
-            if $hfs_byte_index_45 >= $licm_used_18 {
-                iter.byte_index = $hfs_byte_index_45;
-                break b204;
-=======
-    b229: block {
-        l230: loop {
+    b232: block {
+        l233: loop {
             let $mv$$match_3$0: i32;
             let $mv$$match_3$1: char;
             multivalue_bind [$mv$$match_3$0, $mv$$match_3$1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"(iter);
@@ -2249,88 +2206,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits
                 builtin::array_set<char>(result.repr, used, $mv$$match_3$1);
                 result.used = used + 1;
             } else {
-                break b229;
->>>>>>> origin/main
+                break b232;
             }
-<<<<<<< HEAD
-            $sroa_slot_43 = 0;
-            $sroa_slot_44 = 0;
-            $inline_decode_char_at_0: block {
-                pos = $hfs_byte_index_45;
-                if local.tee b0(builtin::array_get_value<u8>($licm_repr_19, pos)) <u 128 {
-                    $sroa_slot_43 = b0;
-                    $sroa_slot_44 = 1;
-                    break $inline_decode_char_at_0;
-                }
-                if b0 <u 224 {
-                    b1_23 = builtin::array_get_value<u8>($licm_repr_19, pos + 1);
-                    $sroa_slot_43 = ((b0 & 31) << 6) | (b1_23 & 63);
-                    $sroa_slot_44 = 2;
-                    break $inline_decode_char_at_0;
-                }
-                if b0 <u 240 {
-                    b1_24 = builtin::array_get_value<u8>($licm_repr_19, pos + 1);
-                    b2_25 = builtin::array_get_value<u8>($licm_repr_19, pos + 2);
-                    $sroa_slot_43 = (((b0 & 15) << 12) | ((b1_24 & 63) << 6)) | (b2_25 & 63);
-                    $sroa_slot_44 = 3;
-                    break $inline_decode_char_at_0;
-                }
-                b1_26 = builtin::array_get_value<u8>($licm_repr_19, pos + 1);
-                b2_27 = builtin::array_get_value<u8>($licm_repr_19, pos + 2);
-                b3 = builtin::array_get_value<u8>($licm_repr_19, pos + 3);
-                $sroa_slot_43 = ((((b0 & 7) << 18) | ((b1_26 & 63) << 12)) | ((b2_27 & 63) << 6)) | (b3 & 63);
-                $sroa_slot_44 = 4;
-                break $inline_decode_char_at_0;
-            };
-            $hfs_byte_index_45 = $hfs_byte_index_45 + $sroa_slot_44;
-            if @unlikely(local.tee $sroa_slot_44(result.used) >= builtin::array_len(result.repr)) {
-                cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<char>::grow"(result);
-            }
-            builtin::array_set<char>(result.repr, $sroa_slot_44, $sroa_slot_43);
-            result.used = $sroa_slot_44 + 1;
-            continue l208;
-||||||| 860f3c20d
-            $sroa_slot_43 = 0;
-            $sroa_slot_44 = 0;
-            $inline_decode_char_at_0: block {
-                pos = $hfs_byte_index_45;
-                if local.tee b0(builtin::array_get_value<u8>($licm_repr_19, pos)) <u 128 {
-                    $sroa_slot_43 = b0;
-                    $sroa_slot_44 = 1;
-                    break $inline_decode_char_at_0;
-                }
-                if b0 <u 224 {
-                    b1_23 = builtin::array_get_value<u8>($licm_repr_19, pos + 1);
-                    $sroa_slot_43 = ((b0 & 31) << 6) | (b1_23 & 63);
-                    $sroa_slot_44 = 2;
-                    break $inline_decode_char_at_0;
-                }
-                if b0 <u 240 {
-                    b1_24 = builtin::array_get_value<u8>($licm_repr_19, pos + 1);
-                    b2_25 = builtin::array_get_value<u8>($licm_repr_19, pos + 2);
-                    $sroa_slot_43 = (((b0 & 15) << 12) | ((b1_24 & 63) << 6)) | (b2_25 & 63);
-                    $sroa_slot_44 = 3;
-                    break $inline_decode_char_at_0;
-                }
-                b1_26 = builtin::array_get_value<u8>($licm_repr_19, pos + 1);
-                b2_27 = builtin::array_get_value<u8>($licm_repr_19, pos + 2);
-                b3 = builtin::array_get_value<u8>($licm_repr_19, pos + 3);
-                $sroa_slot_43 = ((((b0 & 7) << 18) | ((b1_26 & 63) << 12)) | ((b2_27 & 63) << 6)) | (b3 & 63);
-                $sroa_slot_44 = 4;
-                break $inline_decode_char_at_0;
-            };
-            $hfs_byte_index_45 = $hfs_byte_index_45 + $sroa_slot_44;
-            if @unlikely(local.tee $sroa_slot_44(result.used) >= builtin::array_len(result.repr)) {
-                cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<char>::grow"(result);
-            }
-            builtin::array_set<char>(result.repr, $sroa_slot_44, $sroa_slot_43);
-            result.used = $sroa_slot_44 + 1;
-            continue l205;
-=======
-            continue l230;
->>>>>>> origin/main
+            continue l233;
         };
     };
     return result;
