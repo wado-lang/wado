@@ -1791,15 +1791,14 @@ impl SolverBridge {
     /// Whether a written block applies at `instance`, its bounds included: what
     /// a generic body's instance selects by, every parameter settled. Where the
     /// lowering states nothing about the block or the instance (a closure
-    /// environment), the target match alone decides.
+    /// environment, or a template's own `Self` whose parameters no bound in
+    /// scope here answers), the target match alone decides.
     pub(crate) fn blocks_applying_at<'a>(
         &'a self,
         table: &'a TypeTable,
         instance: TypeId,
     ) -> impl Fn(DefId) -> bool + 'a {
-        let ty = self
-            .lowering
-            .type_id(table, instance, &|_, index| Some(index));
+        let ty = self.lowering.type_id(table, instance, &|_, _| None);
         move |block| {
             table.impl_reaches_instance(block, instance)
                 && self
