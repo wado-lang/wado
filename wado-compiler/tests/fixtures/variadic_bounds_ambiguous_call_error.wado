@@ -1,0 +1,26 @@
+// Two variadic impls of one trait whose bounds a tuple both meets: nothing
+// ranks them, so the call reports, as it does for two head impls.
+
+trait Tag with () {
+    fn tag(&self) -> String;
+}
+
+impl<..T: Inspect> Tag for [..T] {
+    fn tag(&self) -> String {
+        return "a";
+    }
+}
+
+impl<..T: Eq> Tag for [..T] {
+    fn tag(&self) -> String {
+        return "b";
+    }
+}
+
+export fn run() {
+    let pair = [1, 2];
+    assert pair.tag() != "";
+}
+
+__DATA__
+{"compile_error": ":22:12: analysis error: ambiguous impls of 'Tag' for '[i32, i32]': 'impl<..T: Inspect> Tag for [..T]' and 'impl<..T: Eq> Tag for [..T]' both reach it, and nothing ranks them; write 'impl Tag for [i32, i32]'", "compile_error_codes": ["AMBIGUOUS_CANDIDATE"]}

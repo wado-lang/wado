@@ -732,8 +732,8 @@ pub enum TypeError {
     AmbiguousHeadImpls {
         trait_name: String,
         receiver: String,
-        /// Each impl's target as written, in declaration order.
-        targets: Vec<String>,
+        /// Each impl's header as written, in declaration order.
+        headers: Vec<String>,
         span: Span,
     },
 
@@ -1013,24 +1013,12 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// Coherence violation: two variadic impls of the same trait accepting a
-    /// common tuple. They apply at every such arity and bounds do not separate
-    /// them.
-    OverlappingVariadicImpls {
-        trait_name: String,
-        self_type_name: String,
-        /// Where the impl this one collides with lives, named so the other
-        /// half of the pair is not left for the reader to hunt down.
-        conflicting_impl: String,
-        span: Span,
-    },
-
-    /// Coherence violation: two impls of one `(Trait, Type)` pair. No rank
-    /// separates them, so without this the collection order decides which body
-    /// every call runs.
+    /// Coherence violation: one impl written twice, at the same trait arguments,
+    /// target and bounds. No rank separates them, so without this the
+    /// collection order decides which body every call runs.
     DuplicateTraitImpl {
-        trait_name: String,
-        self_type_name: String,
+        /// The header as written, bounds and all.
+        header: String,
         /// Where the impl this one duplicates lives.
         conflicting_impl: String,
         span: Span,
@@ -1976,15 +1964,15 @@ impl TypeError {
             TypeError::AmbiguousHeadImpls {
                 trait_name,
                 receiver,
-                targets,
+                headers,
                 span,
             } => (
                 Code::AmbiguousCandidate,
                 format!(
-                    "ambiguous impls of '{trait_name}' for '{receiver}': the ones for {} both reach it, and nothing ranks them; write 'impl {trait_name} for {receiver}'",
-                    targets
+                    "ambiguous impls of '{trait_name}' for '{receiver}': {} both reach it, and nothing ranks them; write 'impl {trait_name} for {receiver}'",
+                    headers
                         .iter()
-                        .map(|t| format!("'{t}'"))
+                        .map(|h| format!("'{h}'"))
                         .collect::<Vec<_>>()
                         .join(" and "),
                 ),
@@ -2308,27 +2296,14 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::OverlappingVariadicImpls {
-                trait_name,
-                self_type_name,
-                conflicting_impl,
-                span,
-            } => (
-                Code::OrphanRule,
-                format!(
-                    "overlapping variadic impls of `{trait_name}` for `{self_type_name}`: this one and {conflicting_impl} accept the same tuples, and a pack's bounds are only checked at monomorphization, so neither can be selected over the other"
-                ),
-                *span,
-            ),
             TypeError::DuplicateTraitImpl {
-                trait_name,
-                self_type_name,
+                header,
                 conflicting_impl,
                 span,
             } => (
                 Code::OrphanRule,
                 format!(
-                    "duplicate impl of `{trait_name}` for `{self_type_name}`: {conflicting_impl} implements the same pair, and nothing ranks two impls of one pair, so which one every call runs would be decided by the order they were loaded in"
+                    "duplicate impl `{header}`: {conflicting_impl} writes the same trait, target and bounds, and nothing ranks two such impls, so which one every call runs would be decided by the order they were loaded in"
                 ),
                 *span,
             ),

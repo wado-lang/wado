@@ -20,7 +20,7 @@ use crate::name;
 use crate::resolve::{Resolution, Resolutions, head_site};
 use crate::tir::{TemplateId, TypeId, TypeTable};
 use crate::token::Span;
-use crate::unparse::unparse_type_into;
+use crate::unparse::{unparse_generic_params_into, unparse_type_into};
 
 /// Namespace-import alias (`use ns from "…"`) → the namespace's module.
 /// Drives `ns::Type` resolution (issue #1415).
@@ -1193,7 +1193,7 @@ impl TraitEnv {
         let trait_impl_modules = index_impl_modules(&impl_headers, defs, false);
         let concrete_trait_impl_modules = index_impl_modules(&impl_headers, defs, true);
 
-        let variadic_overlaps = check_variadic_impl_overlap(defs, &impl_headers);
+        let variadic_targets = check_variadic_impl_targets(&impl_headers);
         let (supertrait_closures, cycles) =
             build_supertrait_closures(defs, &trait_decl_headers, &resolve_trait);
         let unnamed_traits = check_bounds_name_traits(modules, &resolve_trait);
@@ -1224,7 +1224,7 @@ impl TraitEnv {
             solver: None,
         });
         violations.extend(check_impl_coherence(&env, resolutions));
-        violations.extend(variadic_overlaps);
+        violations.extend(variadic_targets);
         violations.extend(cycles);
         violations.extend(unnamed_traits);
         (env, violations)
@@ -2347,131 +2347,29 @@ fn report_supertrait_cycle(
     ));
 }
 
-enum VariadicTarget {
-    /// The bare `[..T]`, the only shape the compiler implements.
-    PackOnly,
-    /// A pack beside other elements (`[i32, ..T]`) or under a reference.
-    Unsupported,
-}
-
-/// Classify an impl target that spreads a type pack; `None` when it spreads
-/// none. Only a tuple can carry one.
-fn variadic_target(ty: &ast::Type) -> Option<VariadicTarget> {
+/// Whether an impl target spreads a type pack anywhere but as the whole of a
+/// tuple (`[..T]`). Only a tuple can carry one.
+fn is_unsupported_variadic_target(ty: &ast::Type) -> bool {
     match ty {
-        ast::Type::Tuple(elems) => {
-            if !elems
-                .iter()
-                .any(|e| matches!(e, ast::Type::TypePackSpread(..)))
-            {
-                return None;
-            }
-            Some(if elems.len() == 1 {
-                VariadicTarget::PackOnly
-            } else {
-                VariadicTarget::Unsupported
-            })
-        }
+        ast::Type::Tuple(elems) => elems.len() > 1 && spreads_pack(ty),
         // A pack under a reference never reaches the impl's type-param scope,
         // so type resolution would report the declared pack as unknown.
-        ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
-            variadic_target(inner).map(|_| VariadicTarget::Unsupported)
-        }
-        _ => None,
-    }
-}
-
-/// Whether two impl-written types can denote the same type. An impl's own type
-/// parameter is a wildcard. An undecidable pair unifies: for a coherence rule,
-/// reporting is the sound direction.
-fn types_can_unify(
-    a: &ast::Type,
-    a_params: &IndexSet<&str>,
-    b: &ast::Type,
-    b_params: &IndexSet<&str>,
-) -> bool {
-    let is_wildcard = |ty: &ast::Type, params: &IndexSet<&str>| match ty {
-        ast::Type::Named(named) => params.contains(named.name.as_str()),
+        ast::Type::Reference(inner) | ast::Type::MutReference(inner) => spreads_pack(inner),
         _ => false,
-    };
-    if is_wildcard(a, a_params) || is_wildcard(b, b_params) {
-        return true;
-    }
-    let unify_all = |xs: &[ast::Type], ys: &[ast::Type]| {
-        xs.len() == ys.len()
-            && xs
-                .iter()
-                .zip(ys)
-                .all(|(x, y)| types_can_unify(x, a_params, y, b_params))
-    };
-    match (a, b) {
-        (ast::Type::Named(x), ast::Type::Named(y)) => x.name == y.name,
-        (ast::Type::Generic(x), ast::Type::Generic(y)) => {
-            x.name == y.name && unify_all(&x.args, &y.args)
-        }
-        (ast::Type::Tuple(xs), ast::Type::Tuple(ys)) => unify_all(xs, ys),
-        (ast::Type::Reference(x), ast::Type::Reference(y))
-        | (ast::Type::MutReference(x), ast::Type::MutReference(y)) => {
-            types_can_unify(x, a_params, y, b_params)
-        }
-        // Decidable shapes that did not pair up above have different heads.
-        (
-            ast::Type::Named(_)
-            | ast::Type::Generic(_)
-            | ast::Type::Tuple(_)
-            | ast::Type::Reference(_)
-            | ast::Type::MutReference(_),
-            ast::Type::Named(_)
-            | ast::Type::Generic(_)
-            | ast::Type::Tuple(_)
-            | ast::Type::Reference(_)
-            | ast::Type::MutReference(_),
-        ) => false,
-        // Projections, function types, nested packs and placeholders are not
-        // decidable here.
-        (
-            ast::Type::NamespacedGeneric(_)
-            | ast::Type::Function(_)
-            | ast::Type::TypePackSpread(..)
-            | ast::Type::Infer(_)
-            | ast::Type::Error(_),
-            _,
-        )
-        | (
-            _,
-            ast::Type::NamespacedGeneric(_)
-            | ast::Type::Function(_)
-            | ast::Type::TypePackSpread(..)
-            | ast::Type::Infer(_)
-            | ast::Type::Error(_),
-        ) => true,
     }
 }
 
-struct VariadicImpl<'a> {
-    module_source: &'a ModuleSource,
-    span: Span,
-    trait_name: String,
-    trait_args: &'a [ast::Type],
-    params: IndexSet<&'a str>,
-}
-
-impl VariadicImpl<'_> {
-    /// Whether the two accept a common tuple. Both targets are the bare
-    /// `[..T]`, so only the trait's own arguments can hold them apart:
-    /// `Conv<i32>` and `Conv<String>` implement different things.
-    fn overlaps(&self, other: &Self) -> bool {
-        self.trait_args.len() == other.trait_args.len()
-            && self
-                .trait_args
-                .iter()
-                .zip(other.trait_args)
-                .all(|(a, b)| types_can_unify(a, &self.params, b, &other.params))
+/// Whether `ty` is a tuple spreading a type pack.
+fn spreads_pack(ty: &ast::Type) -> bool {
+    match ty {
+        ast::Type::Tuple(elems) => elems
+            .iter()
+            .any(|e| matches!(e, ast::Type::TypePackSpread(..))),
+        ast::Type::Reference(inner) | ast::Type::MutReference(inner) => spreads_pack(inner),
+        _ => false,
     }
 }
 
-/// The coherence checks the solver owns, given spans and names by the headers
-/// they came from. Only a user-local impl is reported: a stdlib pair the check
-/// would name is not something a program can fix.
 /// How a finding names the impl at `conflict`, reported at `here`.
 fn conflicting_impl_location(conflict: &ModuleSource, here: &ModuleSource) -> String {
     if conflict == here {
@@ -2481,6 +2379,9 @@ fn conflicting_impl_location(conflict: &ModuleSource, here: &ModuleSource) -> St
     }
 }
 
+/// The coherence checks the solver owns, given spans and names by the headers
+/// they came from. Only a user-local impl is reported: a stdlib pair the check
+/// would name is not something a program can fix.
 fn check_impl_coherence(
     env: &TraitEnv,
     resolutions: &Resolutions,
@@ -2509,13 +2410,20 @@ fn check_impl_coherence(
         let (reported, error) = match error {
             CoherenceError::DuplicateImpl { first, second } => {
                 let (first, second) = (header_of(first), header_of(second));
+                // The program's own copy is the one it can fix, whichever
+                // loaded first.
+                let (kept, reported) =
+                    if is_user_local(&second.module) || !is_user_local(&first.module) {
+                        (first, second)
+                    } else {
+                        (second, first)
+                    };
                 (
-                    second,
+                    reported,
                     TypeError::DuplicateTraitImpl {
-                        trait_name: trait_name(second),
-                        self_type_name: get_type_name_static(&second.ty),
-                        conflicting_impl: conflicting_impl_location(&first.module, &second.module),
-                        span: second.span,
+                        header: header_as_written(reported),
+                        conflicting_impl: conflicting_impl_location(&kept.module, &reported.module),
+                        span: reported.span,
                     },
                 )
             }
@@ -2538,85 +2446,26 @@ fn check_impl_coherence(
     violations
 }
 
-/// Coherence Rule 2 (WEP 2026-03-14 §5): two variadic impls of one trait accept
-/// the same tuples, and a pack's bounds resolve only at monomorphization, so
-/// nothing separates them at selection — reject the later one where it is
-/// written. Grouping is by trait *declaration*, so two modules may each keep
-/// their own. The same walk refuses a target the compiler cannot implement.
-fn check_variadic_impl_overlap(
-    defs: &DefTable,
+/// The variadic trait impls whose target the compiler cannot implement: a pack
+/// beside other elements (`[i32, ..T]`) or under a reference. Only the bare
+/// `[..T]` is implemented.
+fn check_variadic_impl_targets(
     impl_headers: &IndexMap<DefId, ImplHeader>,
 ) -> Vec<(ModuleSource, TypeError)> {
-    let mut violations = Vec::new();
-    let mut groups: IndexMap<DefId, Vec<VariadicImpl<'_>>> = IndexMap::default();
-
-    for header in impl_headers.values() {
-        if !header.is_trait_impl() {
-            continue;
-        }
-        let Some(target) = variadic_target(&header.ty) else {
-            continue;
-        };
-        if let VariadicTarget::Unsupported = target {
-            if is_user_local(&header.module) {
-                violations.push((
-                    header.module.clone(),
-                    TypeError::UnsupportedVariadicImplTarget { span: header.span },
-                ));
-            }
-            continue;
-        }
-        let Some(trait_) = header.trait_def() else {
-            continue;
-        };
-        groups.entry(trait_).or_default().push(VariadicImpl {
-            module_source: &header.module,
-            span: header.span,
-            trait_name: defs.name(trait_).to_string(),
-            trait_args: match header.trait_ty() {
-                Some(ast::Type::Generic(generic)) => &generic.args,
-                _ => &[],
-            },
-            params: header.type_params.iter().map(|p| p.name.as_str()).collect(),
-        });
-    }
-
-    for impls in groups.values_mut() {
-        // A stdlib impl holds its ground; among user impls the earlier one in
-        // (file, position) order does. The module map's order is load order,
-        // which is neither source order nor stable across entry points.
-        impls.sort_by_key(|i| {
+    impl_headers
+        .values()
+        .filter(|header| {
+            header.is_trait_impl()
+                && is_user_local(&header.module)
+                && is_unsupported_variadic_target(&header.ty)
+        })
+        .map(|header| {
             (
-                is_user_local(i.module_source),
-                i.module_source.to_string(),
-                i.span.start,
+                header.module.clone(),
+                TypeError::UnsupportedVariadicImplTarget { span: header.span },
             )
-        });
-        let mut held: Vec<&VariadicImpl<'_>> = Vec::new();
-        for candidate in impls.iter() {
-            let Some(conflict) = held.iter().find(|h| h.overlaps(candidate)) else {
-                held.push(candidate);
-                continue;
-            };
-            if !is_user_local(candidate.module_source) {
-                continue;
-            }
-            violations.push((
-                candidate.module_source.clone(),
-                TypeError::OverlappingVariadicImpls {
-                    trait_name: candidate.trait_name.clone(),
-                    self_type_name: "[..]".to_string(),
-                    conflicting_impl: conflicting_impl_location(
-                        conflict.module_source,
-                        candidate.module_source,
-                    ),
-                    span: candidate.span,
-                },
-            ));
-        }
-    }
-
-    violations
+        })
+        .collect()
 }
 
 /// The methods an inherent impl defines again for a receiver an earlier
@@ -2986,6 +2835,20 @@ pub(super) fn receiver_as_written(header: &ImplHeader) -> String {
     } else {
         format!("{}: {}", receiver.name, bounds.join(" + "))
     }
+}
+
+/// The header as written, bounds and all (`impl<..T: Small> Tag for [..T]`):
+/// what tells apart two impls a diagnostic names on one target.
+pub(super) fn header_as_written(header: &ImplHeader) -> String {
+    let mut out = "impl".to_string();
+    unparse_generic_params_into(&header.type_params, &mut out);
+    out.push(' ');
+    if let Some(trait_ty) = header.trait_ty() {
+        out.push_str(&written_type_source(trait_ty));
+        out.push_str(" for ");
+    }
+    out.push_str(&written_type_source(&header.ty));
+    out
 }
 
 /// The written form of `ty`, for a diagnostic saying what the programmer

@@ -3,7 +3,7 @@
 //! between them is [`rank`](super::rank).
 
 use super::holds::{answers_args, impl_applies, newtype_base, withheld_at};
-use super::program::{Env, MethodId, ModuleId, Program, SolverType, TraitDeclId};
+use super::program::{Env, ImplId, MethodId, ModuleId, Program, SolverType, TraitDeclId};
 use super::rank::{Candidate, Generality};
 
 /// The candidates at one call site, and what the diagnostic needs where there
@@ -80,6 +80,18 @@ pub fn bound_candidates(
         .collect()
 }
 
+/// Whether impl `id` applies to `ty`, its bounds included: what an instance of
+/// a generic body selects by once its parameters are settled. It reaches `ty`
+/// at any level of the newtype chain a call on `ty` walks, so a `&W` of a
+/// newtype over `List<u8>` reaches `impl<T> IntoIterator for &List<T>`.
+#[must_use]
+pub fn applies(program: &Program, env: &Env, scope: ModuleId, id: ImplId, ty: &SolverType) -> bool {
+    let def = &program.impls[&id];
+    chain(program, ty)
+        .iter()
+        .any(|level| impl_applies(program, env, scope, id, def, level).is_some())
+}
+
 /// The impls whose trait or own body `declares` the method.
 fn collect(
     program: &Program,
@@ -100,6 +112,9 @@ fn collect(
             let Some(trait_) = def.trait_ else {
                 continue;
             };
+            if program.duplicates.contains(&impl_) {
+                continue;
+            }
             let own = program
                 .impl_methods
                 .get(&impl_)
