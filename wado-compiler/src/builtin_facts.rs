@@ -656,7 +656,7 @@ impl Reader<'_, '_> {
             return Some((SideEffect::Opaque, suspend));
         }
         if words.contains("black_box") {
-            return Some((SideEffect::BlackBox, suspend));
+            return Some((SideEffect::BlackBox, false));
         }
 
         let array = |key: &str| arrays.iter().find(|(k, _)| *k == key).map(|(_, v)| *v);

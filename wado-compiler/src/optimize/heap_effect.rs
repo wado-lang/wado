@@ -749,14 +749,14 @@ fn classify_callee(f: &NirFunction, project: &NirPackage) -> Callee {
     if f.body.is_some() {
         return Callee::Body;
     }
-    let declarations = &project.builtin_declarations;
-    match declarations.get(f) {
-        Some(declaration) if matches!(declaration.facts.side_effect, SideEffect::Listed { .. }) => {
-            Callee::Builtin(Box::new(declaration.clone()))
-        }
-        Some(_) | None => Callee::Opaque {
-            suspends: declarations.may_suspend(f),
+    match project.builtin_declarations.get(f) {
+        Some(declaration) => match declaration.facts.side_effect {
+            SideEffect::Listed { .. } => Callee::Builtin(Box::new(declaration.clone())),
+            SideEffect::Opaque | SideEffect::BlackBox => Callee::Opaque {
+                suspends: declaration.facts.suspend,
+            },
         },
+        None => Callee::Opaque { suspends: true },
     }
 }
 

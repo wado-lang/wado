@@ -762,12 +762,12 @@ fn leaf_effect<'a>(
         },
     };
     // Tasks that run meanwhile may read and write any state, and the call
-    // returns only once something resumes it.
+    // returns only once something resumes it. `stores_unseen` answers for the
+    // shared heap.
     if declaration.facts.suspend {
         effect.merge(FnEffect {
             reads_mutable_state: true,
             writes_state: true,
-            writes_shared_heap: true,
             may_diverge: true,
             ..FnEffect::default()
         });

@@ -8416,18 +8416,21 @@ impl BuiltinDeclaration {
     }
 
     /// Whether the call may store where neither its result nor a `&mut`
-    /// argument shows.
+    /// argument shows, itself or through the tasks that run while it suspends.
     pub fn stores_unseen(&self) -> bool {
         self.facts.storage == Storage::Opaque
             || matches!(self.facts.side_effect, SideEffect::Opaque)
+            || self.facts.suspend
     }
 
     /// Whether the call writes nothing itself: it hands back part of an
     /// argument, and its one `&mut` parameter, if any, is the array whose
-    /// element it hands back. A write through the result is its user's.
+    /// element it hands back, and it does not suspend. A write through the
+    /// result is its user's.
     pub fn only_aliases(&self) -> bool {
         matches!(self.returns, Some(ReturnConvention::PartOf(_)))
             && !self.facts.is_opaque()
+            && !self.facts.suspend
             && self
                 .mut_params
                 .iter()

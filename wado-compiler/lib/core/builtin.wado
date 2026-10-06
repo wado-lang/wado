@@ -673,16 +673,18 @@ pub fn task_cancel();
 /// Returns the subtask handle for the async operation.
 /// Internal only: used by core:rt for ambient logging (panic, assert).
 /// Public API should use Stdout::write_via_stream() through the effect system.
+/// It calls the Component Model import, so it may suspend as one does.
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn call_indirect_stdout_write_via_stream(rx: i32) -> i32;
 
 /// Calls stderr's write_via_stream indirectly (ambient, no effect required).
 /// Returns the subtask handle for the async operation.
 /// Internal only: used by core:rt for ambient logging (panic, assert).
 /// Public API should use Stderr::write_via_stream() through the effect system.
+/// It calls the Component Model import, so it may suspend as one does.
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn call_indirect_stderr_write_via_stream(rx: i32) -> i32;
 /// Absolute value of f32
 /// Maps to Wasm f32.abs instruction
