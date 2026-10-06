@@ -310,12 +310,7 @@ pub(super) fn builder_alias_sets(
         &info.alias_groups,
     );
     let references = (0..locals.len() as u32)
-        .filter(|&i| {
-            matches!(
-                type_table.get(locals[i as usize].type_id),
-                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-            )
-        })
+        .filter(|&i| type_table.is_reference_shaped(locals[i as usize].type_id))
         .collect();
     AliasSets {
         aliased,

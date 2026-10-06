@@ -211,7 +211,7 @@ pub struct ValueGraphBuild {
 
 /// The per-function local sets that bound how far a heap write reaches.
 /// Empty sets claim no aliasing, sound only for a body without any.
-#[derive(Default, Clone)]
+#[derive(Default)]
 pub struct AliasSets {
     /// Locals another handle may reach; their field writes invalidate coarsely.
     pub aliased: IndexSet<u32>,
@@ -219,9 +219,9 @@ pub struct AliasSets {
     pub untrackable: IndexSet<u32>,
     /// The subset of `aliased` a call may mutate.
     pub mut_escaped: IndexSet<u32>,
-    /// Reference-typed locals. Their pointee is storage the body does not own,
-    /// which any call may reach through a global, so a call taking no argument
-    /// still writes it.
+    /// Locals that may name storage ([`TypeTable::is_reference_shaped`]). The
+    /// body does not own that storage and any call may reach it through a
+    /// global, so a call taking no argument still writes it.
     pub references: IndexSet<u32>,
 }
 
