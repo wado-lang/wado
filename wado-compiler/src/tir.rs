@@ -8559,6 +8559,14 @@ impl DeclarationTable<BuiltinDeclaration> {
         self.get(call.into()).is_some_and(|d| d.returns.is_some())
     }
 
+    /// Whether a call to the body-less `call` may leave for the host, where
+    /// another task may run: nothing declares it, or it declares
+    /// `#[side_effect(opaque)]`.
+    pub fn leaves_for_host<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {
+        self.get(call.into())
+            .is_none_or(|d| matches!(d.facts.side_effect, SideEffect::Opaque))
+    }
+
     /// Whether the call leaves the argument *object* at `pos` where the caller
     /// put it: it neither writes through it (`&mut`) nor keeps it past the
     /// return. It says nothing about what that object holds — a call keeping

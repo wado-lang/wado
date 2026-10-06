@@ -19,7 +19,6 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use crate::builtin_facts::SideEffect;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::inline_block_label;
 use crate::nir::{FunctionRef, InlineHint, NirFunction, NirLocal, NirUnaryOp};
@@ -974,13 +973,9 @@ fn safepoint_calls(project: &NirPackage, descriptors: &[FunctionRef]) -> Vec<boo
     descriptors
         .iter()
         .map(|callee| {
-            project
-                .builtin_declarations
-                .get(callee)
-                .is_none_or(|declaration| {
-                    matches!(declaration.facts.side_effect, SideEffect::Opaque)
-                        || declaration.allocates()
-                })
+            let declarations = &project.builtin_declarations;
+            declarations.leaves_for_host(callee)
+                || declarations.get(callee).is_some_and(|d| d.allocates())
         })
         .collect()
 }
