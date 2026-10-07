@@ -304,7 +304,18 @@ impl ExportMappings {
     pub fn iter(&self) -> std::slice::Iter<'_, ExportMapping> {
         self.0.iter()
     }
+}
 
+impl<'a> IntoIterator for &'a ExportMappings {
+    type Item = &'a ExportMapping;
+    type IntoIter = std::slice::Iter<'a, ExportMapping>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl ExportMappings {
     /// The export of `world` that `func` provides: the one `export(…)` maps it
     /// to, none when `export(…)` maps it only to other worlds, and otherwise
     /// its own name when it is an `export fn`.
