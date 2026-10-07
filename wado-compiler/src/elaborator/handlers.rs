@@ -404,9 +404,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let _ = self.emit(TypeError::ResumeOutsideHandler { span: resume.span });
         }
 
-        // Resolve the value with the surrounding method's return type as the
-        // expected type so literal coercion (e.g. `resume 0` → `i64`) lines
-        // up with what `return` would have produced.
+        // The operation's return type is the expected type, so a literal
+        // coerces to it (`resume 0` → `i64`).
         let expected = if ctx.in_handler_method {
             Some(ctx.return_type)
         } else {

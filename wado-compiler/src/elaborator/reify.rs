@@ -10312,7 +10312,6 @@ fn tir_block_return_type(body: &TirExpr) -> Option<tir::TypeId> {
             } => in_block(then_branch).or_else(|| else_branch.as_ref().and_then(in_block)),
             TirExprKind::Match { arms, .. } => arms.iter().find_map(|arm| in_expr(&arm.body)),
             TirExprKind::WithHandler { body, .. } => in_block(body),
-            TirExprKind::Resume { value } => Some(value.type_id),
             _ => None,
         }
     }

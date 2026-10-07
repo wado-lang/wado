@@ -323,13 +323,6 @@ fn collect_return_types_in_expr(ctx: CtrlFlowCtx<'_>, expr: &ast::Expr, out: &mu
         }
         ast::Expr::LabeledBlock(lb) => collect_return_types_in_block(ctx, &lb.block, out),
         ast::Expr::WithHandler(wh) => collect_return_types_in_block(ctx, &wh.body, out),
-        // `resume value` lowers to `return value` in the MVP, so a
-        // body whose tail is `resume X` satisfies missing-return as
-        // if it were `return X`. Same `expression_types`-missing
-        // rule as `Stmt::Return` above: yield `None` rather than
-        // synthesising `Unit`, to keep ERROR-recovery diagnostics
-        // free of bogus missing-return reports.
-        ast::Expr::Resume(r) => out.extend(ctx.definite_type_of(&r.value)),
         _ => {}
     }
 }
