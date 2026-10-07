@@ -32,8 +32,8 @@ use crate::tir_visitor::{
 use crate::token::Span;
 
 use crate::synthesis::common::{
-    alloc_local, assign, cast, cm_canonical_call, expr_stmt, i32_const, let_mut_stmt, let_stmt,
-    local_ref, option_none, option_some, synth_span,
+    alloc_local, assign, bool_lit, cast, cm_canonical_call, expr_stmt, i32_const, if_stmt,
+    let_mut_stmt, let_stmt, local_ref, option_none, option_some, panic_call, string_lit, synth_span,
 };
 
 use super::cm_free::{CmShapeContext, FlatSlot, synthesize_free_cm_flat};
@@ -111,12 +111,24 @@ pub(super) fn reduce_task_returns_in_func(
         }
     });
 
+    let delivered = alloc_local(&mut next_local, &mut extra, TypeTable::BOOL);
+    let string_type = type_table
+        .borrow_mut()
+        .make_compiler_struct(CompilerItem::String);
     let mut reducer = TaskReturnReducer {
         result: result.as_ref(),
+        delivered,
+        string_type,
         items: &items,
     };
     reducer.visit_block(&mut body);
 
+    body.stmts.insert(
+        0,
+        let_mut_stmt(TASK_DELIVERED_LOCAL, delivered, TypeTable::BOOL, bool_lit(false)),
+    );
+    func.local_count = next_local;
+    func.locals.extend(extra);
     if let Some(result) = &result {
         let none = option_none(result.slot_type, &items);
         body.stmts.insert(
@@ -124,8 +136,6 @@ pub(super) fn reduce_task_returns_in_func(
             let_mut_stmt(TASK_RESULT_LOCAL, result.slot, result.slot_type, none),
         );
         body.stmts.push(take_task_result(result, &items));
-        func.local_count = next_local;
-        func.locals.extend(extra);
     }
     func.body = Some(body);
 }
@@ -141,6 +151,10 @@ struct ResultSlot {
 
 /// The local a reduced `task return` writes its value into.
 const TASK_RESULT_LOCAL: &str = "$task_result";
+
+/// The local a reduced `task return` sets, so a second one traps as the CM's
+/// `task.return` does.
+const TASK_DELIVERED_LOCAL: &str = "$task_delivered";
 
 /// Split that copy off, leaving the user's own function to keep a lowering its
 /// Wado callers can use. A `FunctionRef` resolves by name, so the rename is
@@ -226,19 +240,49 @@ fn take_task_return_value(stmt: &mut TirStmt) -> Option<TirExpr> {
 
 struct TaskReturnReducer<'a> {
     result: Option<&'a ResultSlot>,
+    delivered: u32,
+    string_type: TypeId,
     items: &'a CompilerItems,
+}
+
+impl TaskReturnReducer<'_> {
+    /// `if $task_delivered { panic(..) } $task_delivered = true; <delivery>`.
+    fn deliver_once(&self, delivery: TirExpr) -> TirStmtKind {
+        let span = synth_span();
+        let delivered = || local_ref(self.delivered, TASK_DELIVERED_LOCAL, TypeTable::BOOL);
+        let message = string_lit(
+            "task return after the result was delivered",
+            self.string_type,
+            span,
+        );
+        let stmts = vec![
+            if_stmt(
+                delivered(),
+                TirBlock::new(vec![expr_stmt(panic_call(message, span))], span),
+                None,
+            ),
+            expr_stmt(assign(delivered(), bool_lit(true))),
+            expr_stmt(delivery),
+        ];
+        TirStmtKind::Expr(TirExpr::new(
+            TirExprKind::Block(TirBlock::new(stmts, span)),
+            TypeTable::UNIT,
+            span,
+        ))
+    }
 }
 
 impl TirOptVisitor for TaskReturnReducer<'_> {
     fn visit_stmt(&mut self, stmt: &mut TirStmt) -> bool {
         if let Some(value) = take_task_return_value(stmt) {
-            stmt.kind = match self.result {
-                Some(result) => TirStmtKind::Expr(assign(
+            let delivery = match self.result {
+                Some(result) => assign(
                     local_ref(result.slot, TASK_RESULT_LOCAL, result.slot_type),
                     option_some(value, result.slot_type, self.items),
-                )),
-                None => TirStmtKind::Expr(value),
+                ),
+                None => value,
             };
+            stmt.kind = self.deliver_once(delivery);
             return true;
         }
         // A bare `return` ends the function carrying what was delivered, which

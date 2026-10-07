@@ -227,7 +227,7 @@ Same pattern as stream close operations.
 - **Constraints**:
   - Only valid inside an `async`-lifted export.
   - Must be called exactly once per task.
-  - Regular `return` is forbidden in async function bodies.
+  - `return expr` and `?` are forbidden in async function bodies.
 
 ### 4.2 subtask.drop
 

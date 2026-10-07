@@ -1,0 +1,14 @@
+// A task delivers its result once: a second `task return` from the CM entry
+// traps.
+
+use { println, Stdout } from "core:cli";
+
+export async fn run() with Stdout {
+    task return ();
+    println("delivered");
+    task return ();
+    println("unreachable");
+}
+
+__DATA__
+{"stdout": "delivered\n", "trapped": true}

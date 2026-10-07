@@ -1404,6 +1404,12 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// `?` in an `export async fn`: it returns its error, which only
+    /// `task return` can deliver.
+    TryInAsync {
+        span: Span,
+    },
+
     /// `task return` outside an `export async fn`.
     TaskReturnOutsideAsync {
         span: Span,
@@ -1787,6 +1793,12 @@ impl TypeError {
             TypeError::ReturnValueInAsync { span } => (
                 Code::InvalidSyntax,
                 "cannot use `return expr` in `export async fn`; use `task return expr` instead"
+                    .to_string(),
+                *span,
+            ),
+            TypeError::TryInAsync { span } => (
+                Code::InvalidSyntax,
+                "cannot use `?` in `export async fn`; deliver the error with `task return` instead"
                     .to_string(),
                 *span,
             ),

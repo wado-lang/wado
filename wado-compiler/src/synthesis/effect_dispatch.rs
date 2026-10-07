@@ -16,7 +16,9 @@ use crate::name::{
     effect_default_impl_name, mangle_generic_name,
 };
 use crate::package::Package;
-use crate::synthesis::common::{alloc_local, alloc_named_local, option_some, ref_expr, synth_span};
+use crate::synthesis::common::{
+    alloc_local, alloc_named_local, option_some, panic_call, ref_expr, synth_span,
+};
 use crate::tir::{
     CallArg, CaptureSource, EffectRef, FunctionKind, FunctionRef, GlobalInit, InlineHint,
     LetStorage, MonomorphInfo, ResolvedType, StructDef, TemplateId, TirBlock, TirCapture,
@@ -842,22 +844,10 @@ fn build_dispatch_wrapper_function(
             string_type_id,
             span,
         );
-        let panic_call = TirExpr::new(
-            TirExprKind::Call {
-                func: Box::new(FunctionRef {
-                    module_source: ModuleSource::rt(),
-                    name: "panic".to_string(),
-                    template: None,
-                    monomorph_info: None,
-                    method_info: None,
-                }),
-                type_args: vec![],
-                args: CallArgs::free(vec![CallArg::new(message, false)]),
-            },
-            TypeTable::NEVER,
+        else_stmts.push(TirStmt::new(
+            TirStmtKind::Expr(panic_call(message, span)),
             span,
-        );
-        else_stmts.push(TirStmt::new(TirStmtKind::Expr(panic_call), span));
+        ));
     }
     let else_block = TirBlock::new(else_stmts, span);
 

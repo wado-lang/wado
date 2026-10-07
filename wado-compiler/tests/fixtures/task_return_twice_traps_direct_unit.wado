@@ -1,0 +1,17 @@
+// A unit result has no value to keep, and still delivers once: a second
+// `task return` traps for a Wado caller too.
+
+use { println, Stdout } from "core:cli";
+
+export async fn deliver() {
+    task return ();
+    task return ();
+}
+
+export fn run() with Stdout {
+    println("start");
+    deliver();
+}
+
+__DATA__
+{"stdout": "start\n", "stderr_contains": ["task return after the result was delivered"], "trapped": true}

@@ -5067,6 +5067,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
+        if ctx.is_async {
+            let _ = self.emit(TypeError::TryInAsync { span: qm.span });
+        }
         // Propagate the `?`-stripped expected type backward to the operand, so a
         // generic call whose `T` is only in the Ok/Some payload infers from an
         // LHS annotation (`let v: U = call()?`) without a turbofish.

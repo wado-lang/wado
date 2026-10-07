@@ -264,7 +264,7 @@ Stream body fixtures are in `wado-compiler/tests/fixtures/stream-http-*.wado`:
 ### Language
 
 - `export async fn` is a new function modifier. It is only meaningful at the CM boundary — Wado's internal model is colorless and needs no async annotation.
-- `task return expr;` is a new statement that is only valid in `export async fn` bodies. Regular `return` is forbidden in `async fn` bodies.
+- `task return expr;` is a new statement that is only valid in `export async fn` bodies. `return expr` and `?` are forbidden in `async fn` bodies.
 - The only current use case for `export async fn` and `task return` is the `wasi:http/service` handler. Future worlds that require CM async exports will use the same mechanism.
 
 ### Compiler

@@ -261,6 +261,25 @@ pub fn if_stmt(condition: TirExpr, then_block: TirBlock, else_block: Option<TirB
     )
 }
 
+/// Create a `panic(message)` call, which prints the message and traps.
+pub fn panic_call(message: TirExpr, span: Span) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Call {
+            func: Box::new(FunctionRef {
+                module_source: ModuleSource::rt(),
+                name: "panic".to_string(),
+                template: None,
+                monomorph_info: None,
+                method_info: None,
+            }),
+            type_args: vec![],
+            args: CallArgs::free(vec![CallArg::new(message, false)]),
+        },
+        TypeTable::NEVER,
+        span,
+    )
+}
+
 /// Create a loop statement.
 pub fn loop_stmt(body: TirBlock) -> TirStmt {
     TirStmt::new(TirStmtKind::Loop { body }, synth_span())
@@ -700,6 +719,11 @@ pub fn ref_expr(expr: TirExpr, ref_type: TypeId, span: Span) -> TirExpr {
         ref_type,
         span,
     )
+}
+
+/// Create a `bool` literal expression.
+pub fn bool_lit(value: bool) -> TirExpr {
+    TirExpr::new(TirExprKind::BoolLiteral(value), TypeTable::BOOL, synth_span())
 }
 
 /// Create a string literal expression.

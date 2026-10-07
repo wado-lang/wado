@@ -1,0 +1,19 @@
+// `?` returns its error, and an `export async fn` delivers with `task return`
+// only: after delivery there is no result left for the error to take.
+
+fn parse(n: i32) -> Result<i32, String> {
+    if n < 0 { return Result::<i32, String>::Err("negative"); }
+    return Result::<i32, String>::Ok(n);
+}
+
+export async fn deliver(n: i32) -> Result<i32, String> {
+    let v = parse(n)?;
+    task return Result::<i32, String>::Ok(v);
+}
+
+export fn run() {
+    let _ = deliver(1);
+}
+
+__DATA__
+{"compile_error": ":10:13: analysis error: cannot use `?` in `export async fn`; deliver the error with `task return` instead"}
