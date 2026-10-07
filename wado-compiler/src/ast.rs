@@ -2408,7 +2408,9 @@ pub struct ExportTarget {
     pub id: AstId,
     /// The namespace in `ns::World::name`.
     pub namespace: Option<String>,
+    /// The world, `World` in `World::name`.
     pub world: String,
+    /// The export of that world, `name` in `World::name`.
     pub name: String,
     pub span: Span,
 }

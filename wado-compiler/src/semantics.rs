@@ -218,18 +218,22 @@ impl Semantics {
             .modules
             .values()
             .flat_map(|module| &module.items)
-            .filter_map(|item| match item {
-                Item::World(world) => Some((world.id, world)),
-                _ => None,
+            .filter_map(|item| {
+                let Item::World(world) = item else {
+                    return None;
+                };
+                Some((world.id, world))
             })
             .collect();
         self.modules
             .get(&self.entry_module_source)
             .into_iter()
             .flat_map(|module| &module.items)
-            .filter_map(|item| match item {
-                Item::Function(func) => Some(func),
-                _ => None,
+            .filter_map(|item| {
+                let Item::Function(func) = item else {
+                    return None;
+                };
+                Some(func)
             })
             .flat_map(|func| {
                 func.export_targets.iter().map(|target| {

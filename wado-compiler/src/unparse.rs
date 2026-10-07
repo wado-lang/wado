@@ -155,16 +155,19 @@ fn function_decl_keyword_into(f: &Function, output: &mut String) {
     }
     output.push_str("export");
     if !f.export_targets.is_empty() {
-        let targets: Vec<String> = f
-            .export_targets
-            .iter()
-            .map(|t| match &t.namespace {
-                Some(ns) => format!("{ns}::{}::{}", t.world, t.name),
-                None => format!("{}::{}", t.world, t.name),
-            })
-            .collect();
         output.push('(');
-        output.push_str(&targets.join(", "));
+        for (i, target) in f.export_targets.iter().enumerate() {
+            if i > 0 {
+                output.push_str(", ");
+            }
+            if let Some(ns) = &target.namespace {
+                output.push_str(ns);
+                output.push_str("::");
+            }
+            output.push_str(&target.world);
+            output.push_str("::");
+            output.push_str(&target.name);
+        }
         output.push(')');
     }
     output.push(' ');
