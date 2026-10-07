@@ -1,0 +1,10 @@
+// An interface not named after its package (`wado:test/math`) is not the
+// component's default interface, so its functions are reached through it alone.
+use { add } from "./sub/wasm_import_cm_math.wat" with { type: "wat" };
+
+test {
+    assert add(2, 40) == 42;
+}
+
+__DATA__
+{"compile_error_codes": ["IMPORT_NOT_FOUND"]}

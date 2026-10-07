@@ -1952,6 +1952,12 @@ impl CmImport {
         format!("{}:{}/{}", self.namespace, self.package, self.interface)
     }
 
+    /// Whether this is its package's default interface, the one named after the
+    /// package (`acme:geo/geo`): what a Wado library exports.
+    pub fn is_package_default(&self) -> bool {
+        self.package.rsplit(':').next() == Some(self.interface.as_str())
+    }
+
     /// Get the full path including the function fragment when present
     /// (e.g., "wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream").
     /// Reconstructs the canonical form parsed by `CmImport::parse`.

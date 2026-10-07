@@ -6,7 +6,7 @@
 //! 3. Name resolution (binding identifiers to their definitions)
 
 use crate::ast::{
-    AstId, AstVisitor, Function, FunctionSite, GenericParam, ImportAttributes, Item, Module,
+    AstId, AstVisitor, CmImport, Function, FunctionSite, GenericParam, ImportAttributes, Item, Module,
     UseDecl, UseItem, Visibility, WorldExport, cm_import_of, for_each_function,
     walk_generic_params, walk_item,
 };
@@ -1002,6 +1002,9 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         module_source: &ModuleSource,
         all_modules: &hashmap::IndexMap<ModuleSource, Module>,
     ) {
+        if module_source.is_wasm_asset() {
+            self.reexport_default_interface(module, module_source);
+        }
         for item in &module.items {
             if let Item::Use(use_decl) = item {
                 // A plain `use` is a file-private import that re-exports nothing.
@@ -1072,6 +1075,29 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    /// A component's default interface is its binding module itself: each
+    /// operation is also a module-level name, as a source library's `export fn`
+    /// is, so the two consume alike.
+    fn reexport_default_interface(&mut self, module: &Module, module_source: &ModuleSource) {
+        for item in &module.items {
+            let Item::Interface(iface) = item else {
+                continue;
+            };
+            if !cm_import_of(&iface.attrs).is_some_and(CmImport::is_package_default) {
+                continue;
+            }
+            for op in &iface.methods {
+                self.symbols.register_reexport(
+                    module_source,
+                    &op.name,
+                    module_source,
+                    &mangle_local_method(&iface.name, &op.name),
+                    iface.visibility,
+                );
             }
         }
     }
