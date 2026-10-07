@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791324826960,
+  "lastUpdate": 1791334691886,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -64752,6 +64752,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 20963,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338620,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "827e44b69da9a23416d6dc9a2c41d12b7c9c3c76",
+          "message": "Merge pull request #2297 from wado-lang/claude/happy-brown-pgls7b\n\nperf(opt): keep field reads across host calls that do not suspend",
+          "timestamp": "2026-10-07T09:36:37+09:00",
+          "tree_id": "0c429ee95c4bb2c95232b53a7ddcc630331a41c3",
+          "url": "https://github.com/wado-lang/wado/commit/827e44b69da9a23416d6dc9a2c41d12b7c9c3c76"
+        },
+        "date": 1791334690913,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20667,
             "unit": "bytes"
           },
           {
