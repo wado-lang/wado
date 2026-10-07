@@ -240,7 +240,7 @@ fn make_async_call_literal(
     lift: TirExpr,
 ) -> TirExpr {
     let not_ended = mut_ref_expr(
-        bool_lit(false),
+        bool_lit(false, synth_span()),
         type_table.borrow_mut().make_mut_ref(TypeTable::BOOL),
         synth_span(),
     );

@@ -1,12 +1,15 @@
 // A copy of an `AsyncCall` names the same call, so it ends with the original:
-// cancelling the copy after the original's `wait` traps.
+// cancelling the copy after the original's `wait` traps, and the message says
+// that is the reason.
 
-#[expect_trap]
-test {
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
     with Fetch => &Canned {} do {
         let call = Fetch::get("/abc");
         let copy = call;
         assert call.wait() == 4;
+        println("waited");
         copy.cancel();             // traps: the call ended at `wait`
     }
 }
@@ -22,3 +25,6 @@ struct Canned {}
 impl Fetch for Canned {
     fn get(&self, url: String) -> i32 { resume url.len(); }
 }
+
+__DATA__
+{"stdout": "waited\n", "stderr_contains": ["AsyncCall used after wait or cancel"], "trapped": true}

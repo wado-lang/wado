@@ -17,7 +17,7 @@ use crate::name::{
 };
 use crate::package::Package;
 use crate::synthesis::common::{
-    alloc_local, alloc_named_local, option_some, panic_call, ref_expr, synth_span,
+    alloc_local, alloc_named_local, option_some, panic_call, ref_expr, synth_span, unreachable_call,
 };
 use crate::tir::{
     CallArg, CaptureSource, EffectRef, FunctionKind, FunctionRef, GlobalInit, InlineHint,
@@ -2308,21 +2308,7 @@ fn build_trap_closure(
         .map(|p| (p.name.clone(), p.type_id))
         .collect();
     let closure_ret = op.return_type;
-    let trap_call = TirExpr::new(
-        TirExprKind::Call {
-            func: Box::new(FunctionRef {
-                module_source: ModuleSource::builtin(),
-                name: "unreachable".to_string(),
-                template: None,
-                monomorph_info: None,
-                method_info: None,
-            }),
-            type_args: vec![],
-            args: CallArgs::free(vec![]),
-        },
-        closure_ret,
-        span,
-    );
+    let trap_call = unreachable_call(closure_ret, span);
     let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
     let func_type = type_table
         .borrow_mut()

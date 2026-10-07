@@ -1,0 +1,15 @@
+// Error: ? on Option inside a function that returns neither Result nor Option.
+// The message names what the function lacks, not a Result it does not return.
+fn inner() -> Option<i32> {
+    return Option::<i32>::Some(1);
+}
+
+fn outer() -> i32 {
+    let x = inner()?;
+    return x;
+}
+
+export fn run() { }
+
+__DATA__
+{"compile_error": "? requires function to return Result or Option", "compile_errors_not_contains": ["in a function returning Result", "type mismatch"]}

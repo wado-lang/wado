@@ -144,14 +144,12 @@ cancelled leaks its subtask handle and result buffer.
 <!-- {"fixture":"async_call_copy_shares_end.wado"} -->
 
 ```wado
-#[expect_trap]
-test {
-    with Fetch => &Canned {} do {
-        let call = Fetch::get("/abc");
-        let copy = call;
-        assert call.wait() == 4;
-        copy.cancel();             // traps: the call ended at `wait`
-    }
+with Fetch => &Canned {} do {
+    let call = Fetch::get("/abc");
+    let copy = call;
+    assert call.wait() == 4;
+    println("waited");
+    copy.cancel();             // traps: the call ended at `wait`
 }
 ```
 

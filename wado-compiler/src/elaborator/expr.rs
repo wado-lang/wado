@@ -5067,57 +5067,47 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
-        if ctx.is_async {
-            let _ = self.emit(TypeError::TryInAsync { span: qm.span });
-        }
         // Propagate the `?`-stripped expected type backward to the operand, so a
         // generic call whose `T` is only in the Ok/Some payload infers from an
         // LHS annotation (`let v: U = call()?`) without a turbofish.
         let operand_expected = self.question_mark_operand_expected(expected_type, ctx.return_type);
         let inner_type = self.resolve_expr(&qm.expr, ctx, operand_expected);
         let tt = self.tysys.type_table.borrow();
-        let type_name = tt.type_name(inner_type);
-
-        // Determine whether the operand is Option<T> or Result<T, E>
-        let is_option = tt.as_option(inner_type).is_some();
-        let is_result = tt.is_result(inner_type);
-        drop(tt);
-
-        if !is_option && !is_result {
-            let _ = self.emit(TypeError::InvalidQuestionMark {
-                message: format!("cannot use ? on type {type_name}"),
-                span: qm.span,
-            });
-            return TypeTable::UNIT;
-        }
-
-        // Check that the enclosing function returns a compatible type
-        let return_type = ctx.return_type;
-        let tt = self.tysys.type_table.borrow();
-        let ret_is_option = tt.as_option(return_type).is_some();
-        let ret_is_result = tt.is_result(return_type);
-        drop(tt);
-
-        if is_option && !ret_is_option {
-            let _ = self.emit(TypeError::InvalidQuestionMark {
-                message: "cannot use ? on Option in a function returning Result".to_string(),
-                span: qm.span,
-            });
-            return TypeTable::UNIT;
-        }
-        if is_result && !ret_is_result {
-            if ret_is_option {
+        // The type `?` evaluates to, also what a rejected `?` still types as so
+        // that one fault is reported once and not again by every use of it.
+        let (is_option, payload) = match (tt.as_option(inner_type), tt.as_result(inner_type)) {
+            (Some(some), _) => (true, some),
+            (None, Some((ok, _))) => (false, ok),
+            (None, None) => {
+                let type_name = tt.type_name(inner_type);
+                drop(tt);
                 let _ = self.emit(TypeError::InvalidQuestionMark {
-                    message: "cannot use ? on Result in a function returning Option".to_string(),
+                    message: format!("cannot use ? on type {type_name}"),
                     span: qm.span,
                 });
-            } else {
-                let _ = self.emit(TypeError::InvalidQuestionMark {
-                    message: "? requires function to return Result or Option".to_string(),
-                    span: qm.span,
-                });
+                return TypeTable::UNIT;
             }
-            return TypeTable::UNIT;
+        };
+        let ret_is_option = tt.as_option(ctx.return_type).is_some();
+        let ret_is_result = tt.is_result(ctx.return_type);
+        drop(tt);
+
+        if ctx.is_async {
+            let _ = self.emit(TypeError::TryInAsync { span: qm.span });
+            return payload;
+        }
+        let mismatch = match (is_option, ret_is_option, ret_is_result) {
+            (true, true, _) | (false, _, true) => None,
+            (true, false, true) => Some("cannot use ? on Option in a function returning Result"),
+            (false, true, false) => Some("cannot use ? on Result in a function returning Option"),
+            (_, false, false) => Some("? requires function to return Result or Option"),
+        };
+        if let Some(message) = mismatch {
+            let _ = self.emit(TypeError::InvalidQuestionMark {
+                message: message.to_string(),
+                span: qm.span,
+            });
+            return payload;
         }
 
         if is_option {

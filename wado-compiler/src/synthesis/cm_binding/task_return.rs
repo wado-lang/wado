@@ -11,7 +11,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::call_args::CallArgs;
 use crate::canonical::CanonicalIntrinsic;
 use crate::name::cm_task_entry_func_name;
 
@@ -23,18 +22,17 @@ use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::package::Package;
 use crate::tir::{
-    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirMatchArm,
+    ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirMatchArm,
     TirModule, TirPattern, TirStmt, TirStmtKind, TypeId, TypeTable,
 };
 use crate::tir_visitor::{
     TirOptVisitor, TirRefVisitor, opt_walk_block, opt_walk_expr, opt_walk_stmt,
 };
-use crate::token::Span;
 
 use crate::synthesis::common::{
     alloc_local, assign, bool_lit, cast, cm_canonical_call, expr_stmt, i32_const, if_stmt,
     let_mut_stmt, let_stmt, local_ref, option_none, option_some, panic_call, string_lit,
-    synth_span,
+    synth_span, unreachable_call,
 };
 
 use super::cm_free::{CmShapeContext, FlatSlot, synthesize_free_cm_flat};
@@ -130,7 +128,7 @@ pub(super) fn reduce_task_returns_in_func(
             TASK_DELIVERED_LOCAL,
             delivered,
             TypeTable::BOOL,
-            bool_lit(false),
+            bool_lit(false, synth_span()),
         ),
     );
     func.local_count = next_local;
@@ -267,7 +265,7 @@ impl TaskReturnReducer<'_> {
                 TirBlock::new(vec![expr_stmt(panic_call(message, span))], span),
                 None,
             ),
-            expr_stmt(assign(delivered(), bool_lit(true))),
+            expr_stmt(assign(delivered(), bool_lit(true, span))),
             expr_stmt(delivery),
         ];
         TirStmtKind::Expr(TirExpr::new(
@@ -408,26 +406,6 @@ const TASK_VALUE_LOCAL: &str = "$task_value";
 
 fn declared_result(return_type: Option<&Type>) -> &Type {
     return_type.expect("a flat slot comes from a declared result")
-}
-
-/// A `builtin::unreachable()` typed as `result_type`, for the arm no delivery
-/// reaches.
-fn unreachable_call(result_type: TypeId, span: Span) -> TirExpr {
-    TirExpr::new(
-        TirExprKind::Call {
-            func: Box::new(FunctionRef {
-                module_source: ModuleSource::builtin(),
-                name: "unreachable".to_string(),
-                template: None,
-                monomorph_info: None,
-                method_info: None,
-            }),
-            type_args: vec![],
-            args: CallArgs::free(vec![]),
-        },
-        result_type,
-        span,
-    )
 }
 
 /// Generate the inline task-return sequence for `task return value`: a `Result`

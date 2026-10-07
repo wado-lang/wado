@@ -453,9 +453,10 @@ pub resource Subtask {
 /// `async func` import.
 ///
 /// `AsyncCall<T>` pairs the raw CM subtask handle with the linear-memory
-/// buffer into which the host writes the async result. Use `wait(self)` to
-/// block until the call returns and take the lifted result; use
-/// `cancel(self)` to abort the in-flight call.
+/// buffer into which the host writes the async result. `wait` blocks until
+/// the call returns and takes the lifted result; `cancel` aborts the
+/// in-flight call. Either one ends the call, for every copy of the value; a
+/// call that neither ends leaks its handle and buffer.
 ///
 /// The subtask begins running the moment the adapter returns, so writes to
 /// stream parameters (e.g. a request body) made after the adapter call and
