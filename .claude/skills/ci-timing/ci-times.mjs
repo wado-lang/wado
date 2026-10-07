@@ -56,14 +56,13 @@ if (opt.run) {
   if (!opt.since) throw new Error("--since, --run or --sha is required");
   // A run listing over a long range comes back incomplete and out of order, so
   // ask one day at a time.
-  const runs = new Map();
+  const runs = [];
   for (let d = new Date(opt.since); d <= new Date(opt.until); d.setUTCDate(d.getUTCDate() + 1)) {
     const day = d.toISOString().slice(0, 10);
-    const page = gh(`${workflowRuns}?branch=${opt.branch}&event=${opt.event}&created=${day}&per_page=100`);
-    for (const run of page.workflow_runs) runs.set(run.id, run);
+    runs.push(...gh(`${workflowRuns}?branch=${opt.branch}&event=${opt.event}&created=${day}&per_page=100`).workflow_runs);
   }
   const stepRe = opt.step && new RegExp(opt.step);
-  for (const run of [...runs.values()].sort((a, b) => a.created_at.localeCompare(b.created_at))) {
+  for (const run of runs.sort((a, b) => a.created_at.localeCompare(b.created_at))) {
     const cols = jobsOf(run.id).map((job) => `${job.name}=${stepRe ? secs(job.steps.find((s) => stepRe.test(s.name))) : "-"}/${secs(job)}`);
     console.log([run.created_at.slice(0, 16), run.conclusion ?? "", run.head_sha.slice(0, 11), cols.join("  "), run.display_title.slice(0, 60)].join("\t"));
   }

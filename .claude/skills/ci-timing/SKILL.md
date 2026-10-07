@@ -15,7 +15,7 @@ Sweep the runs on `main`, one row per run, oldest first:
 
 ```sh
 mise exec -- node .claude/skills/ci-timing/ci-times.mjs \
-  --since 2026-09-01 --job 'E2E\+stdlib' --step 'test-stdlib "' \
+  --since 2026-09-01 --job 'E2E\+stdlib' --step stdlib \
   > scratchpad/ci-times.tsv
 ```
 

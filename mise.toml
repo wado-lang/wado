@@ -284,10 +284,6 @@ fi
 ./scripts/exclusive.sh test-stdlib scripts/dev-bin.sh wado test "-${level}" wado-compiler "$@" "${extra_args[@]}"
 """
 
-# Coverage is counted from source, so no optimization may change it: a pass
-# that moves a probe out of its region, or drops one that could run, shows as a
-# difference from the baseline at that level. Which test ran a region may
-# differ: a test that waits on the host or a clock takes a path its timing picks.
 [tasks.test-stdlib-coverage]
 description = "Run the stdlib tests under coverage at one optimization level (default O2) and fail on any difference from scripts/stdlib-coverage.json"
 run = """
