@@ -394,7 +394,7 @@ pub struct CompilerOptions {
     pub unused_diagnostics: bool,
     /// Library world FQ (`namespace:name/name@version`) for `wado compile
     /// --lib`. When `Some`, the compiler synthesizes a library world from the
-    /// entry module's `export fn`s — one Component Model export per function —
+    /// entry module's `export fn`s, exported in the interface this FQ names,
     /// instead of conforming to a fixed WASI world. Sets `target_world` to this
     /// FQ and bypasses the static world-registry lookup.
     pub lib_world: Option<String>,

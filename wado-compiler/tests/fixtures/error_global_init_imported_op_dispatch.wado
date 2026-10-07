@@ -1,0 +1,16 @@
+// An operation imported by bare name, under an alias here, is still a dispatch:
+// the initializer holds no `Counter`, so it is rejected as `Counter::next` is.
+
+use { Counter::{next as tick} } from "./sub/effect_op_reexport_counter.wado";
+
+global COUNTED: i32 = tick();
+
+test {
+    assert COUNTED == 7;
+}
+
+__DATA__
+{
+    "compile_error": ":6:23: analysis error: global initializer cannot perform effects, but dispatches 'tick', which needs a capability the position does not hold",
+    "compile_error_codes": ["EFFECT_NOT_ALLOWED"]
+}

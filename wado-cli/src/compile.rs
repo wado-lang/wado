@@ -63,7 +63,7 @@ pub struct CompileOptions {
     pub target_world: Option<String>,
     /// Library world FQ (`namespace:name/name@version`) for `--lib`. When set,
     /// the compiler synthesizes a library world from the entry module's
-    /// `export fn`s and exports each one as a Component Model function.
+    /// `export fn`s and exports them in the package's default interface.
     pub lib_world: Option<String>,
     /// The entry came from a manifest (no path argument, or a directory
     /// argument), so the build is the package's declared artifact and carries
