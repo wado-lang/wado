@@ -168,16 +168,35 @@ fn grouped_suffix(base: &str, marker: &str, items: &[String]) -> String {
 
 const DAE_MARKER: &str = "dae";
 
-/// The name of `base` once `dae` has dropped the parameters `dropped`, listed
-/// in declaration order: `f$dae[x, y]`. A dropped parameter changes what every
-/// caller passes, so the reshaped function is no longer the one `base` named.
+/// The name of the function derived from `root` that takes each `narrowed`
+/// parameter's field where `root` took the struct around it, and none of the
+/// `dropped` ones, both in `root`'s declaration order:
+/// `f$sroa[self.used]`, `g$sroa[&mut o.inner.x, p.y]$dae[q]`. The name spells
+/// everything that makes the function one, so two routes to one shape arrive
+/// at one name.
 #[must_use]
-pub fn dae_name(base: &str, dropped: &[&str]) -> String {
-    let items: Vec<String> = dropped.iter().map(ToString::to_string).collect();
-    grouped_suffix(base, DAE_MARKER, &items)
+pub fn reshaped_name(root: &str, narrowed: &[NarrowedParam<'_>], dropped: &[&str]) -> String {
+    let mut name = root.to_string();
+    if !narrowed.is_empty() {
+        let items: Vec<String> = narrowed
+            .iter()
+            .map(|n| {
+                let borrow = if n.mutable { "&mut " } else { "" };
+                let mut path = vec![n.param];
+                path.extend(&n.fields);
+                format!("{borrow}{}", path.join("."))
+            })
+            .collect();
+        name = grouped_suffix(&name, "sroa", &items);
+    }
+    if !dropped.is_empty() {
+        let items: Vec<String> = dropped.iter().map(ToString::to_string).collect();
+        name = grouped_suffix(&name, DAE_MARKER, &items);
+    }
+    name
 }
 
-/// `name` as it was before [`dae_name`] reshaped it last, or `name` itself:
+/// `name` without the parameters [`reshaped_name`] lists dropped, or `name` itself:
 /// only a `$dae[…]` group ending the name is peeled.
 #[must_use]
 pub fn before_dae(name: &str) -> &str {
@@ -196,6 +215,16 @@ pub fn retired_name(name: &str, serial: usize) -> String {
     grouped_suffix(name, "retired", &[serial.to_string()])
 }
 
+/// A parameter as [`reshaped_name`] lists it: its name, and where another
+/// parameter shares that name (`_`), its position as well: `_#1`.
+#[must_use]
+pub fn param_label(name: &str, shared_at: Option<usize>) -> String {
+    match shared_at {
+        Some(position) => format!("{name}#{position}"),
+        None => name.to_string(),
+    }
+}
+
 /// One parameter `sroa_param` narrowed to a field: the parameter, the fields
 /// it was projected through, outermost first, and whether it holds the last
 /// one as `&mut`.
@@ -203,25 +232,6 @@ pub struct NarrowedParam<'a> {
     pub param: &'a str,
     pub fields: Vec<&'a str>,
     pub mutable: bool,
-}
-
-/// The name of `sroa_param`'s clone of `original` that takes each `narrowed`
-/// parameter's field where the original took the struct around it, the
-/// parameters in declaration order: `f$sroa[self.used]`,
-/// `g$sroa[&mut o.inner.x, p.y]`. The name spells everything that makes the
-/// clone one, so two runs arriving at the same clone arrive at the same name.
-#[must_use]
-pub fn sroa_param_name(original: &str, narrowed: &[NarrowedParam<'_>]) -> String {
-    let items: Vec<String> = narrowed
-        .iter()
-        .map(|n| {
-            let borrow = if n.mutable { "&mut " } else { "" };
-            let mut path = vec![n.param];
-            path.extend(&n.fields);
-            format!("{borrow}{}", path.join("."))
-        })
-        .collect();
-    grouped_suffix(original, "sroa", &items)
 }
 
 /// The WIR local holding one field of an aggregate the multi-value ABI took
@@ -2412,12 +2422,21 @@ mod tests {
     }
 
     #[test]
-    fn before_dae_peels_only_a_dae_suffix() {
-        assert_eq!(before_dae(&dae_name("$call", &["self"])), "$call");
+    fn before_dae_peels_only_the_dropped_parameters() {
+        let x = NarrowedParam {
+            param: "self",
+            fields: vec!["x"],
+            mutable: false,
+        };
+        assert_eq!(
+            before_dae(&reshaped_name("$call", &[], &["self", "x"])),
+            "$call"
+        );
         assert_eq!(before_dae("$call"), "$call");
-        let reshaped_then_cloned = format!("{}$sroa[self.x]", dae_name("$call", &["self"]));
-        assert_eq!(before_dae(&reshaped_then_cloned), reshaped_then_cloned);
-        assert_eq!(before_dae(&dae_name("$call", &["self", "x"])), "$call");
+        assert_eq!(
+            before_dae(&reshaped_name("$call", &[x], &["y"])),
+            "$call$sroa[self.x]"
+        );
     }
 
     #[test]

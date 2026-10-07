@@ -19,7 +19,9 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader::{DEFAULT_PAGE_SIZE_LOG2, WasmAsset};
 use crate::lower::plan::value_copy::ValueCopyHelpers;
 use crate::module_source::ModuleSource;
-use crate::name::{FunctionId, LocalMethodName, retired_name};
+use crate::name::{
+    FunctionId, LocalMethodName, NarrowedParam, param_label, reshaped_name, retired_name,
+};
 use crate::nir::{
     ClosureFunctor, FuncId, FunctionRef, NirEnum, NirFlags, NirFunction, NirGlobal, NirImport,
     NirStruct, NirTest, NirVariantDecl,
@@ -53,27 +55,18 @@ pub struct NirPackage {
     /// Which `$value_copy$` helper copies each type — the one join, so a
     /// consumer holding a `TypeId` asks here rather than re-deriving the key.
     pub value_copy_helpers: ValueCopyHelpers<FuncId>,
-    /// Functions `optimize/sroa_param` minted, each mapped to the original it
-    /// derives from, through however many clones of clones. A clone may gain
-    /// callers in a later round, so its current call sites are not its whole
-    /// contract. Identity, not a name test — see the declaration-identity WEP.
-    pub sroa_param_clones: IndexMap<FuncId, FuncId>,
-    /// Each function `optimize/dae` has reshaped, as it stood before the first
-    /// parameter was dropped, so its name lists every dropped parameter in
-    /// declaration order however many rounds dropped them.
-    pub dae_reshaped: IndexMap<FuncId, DaeBase>,
+    /// Functions `optimize/sroa_param` minted. A clone may gain callers in a
+    /// later round, so its current call sites are not its whole contract.
+    /// Identity, not a name test — see the declaration-identity WEP.
+    pub sroa_param_clones: IndexSet<FuncId>,
+    /// How each function `sroa_param` minted or `dae` reshaped stands against
+    /// the root it derives from. Its name is rendered from this alone, so two
+    /// routes to one shape arrive at one name. A function absent here is its
+    /// own root, every parameter kept.
+    pub reshapes: IndexMap<FuncId, Reshape>,
     /// Every function renamed in place, in order, so a cache keyed by store
     /// position can refresh what went stale. Append-only.
     pub renamed: Vec<FuncId>,
-    /// For each of those clones, which of its locals holds a scalarized field,
-    /// and the fields it was projected through, outermost first: the last names
-    /// the field the local is now, and a clone of a clone carries its source's
-    /// chains on. Durable because the fact is: a later run of the pass
-    /// rewriting calls *inside* a clone must know its param already holds the
-    /// field, or it projects the wrapper's field onto it a second time; and it
-    /// must not unwrap a struct the chain already holds, which a struct
-    /// reaching itself through its one field never ends.
-    pub sroa_param_clone_fields: IndexMap<FuncId, IndexMap<u32, Vec<SroaParamProjection>>>,
     /// All struct declarations (each carries its own `module_source`)
     pub structs: Vec<NirStruct>,
     /// All enum declarations (each carries its own `module_source`)
@@ -161,15 +154,111 @@ pub struct NirPackage {
     pub trait_env: std::sync::Arc<TraitEnv>,
 }
 
-/// A function `optimize/dae` reshaped, as it was declared to it.
+/// How a function's parameters stand against those of its root: the function
+/// it derives from that neither `sroa_param` minted nor `dae` reshaped.
 #[derive(Debug, Clone)]
-pub struct DaeBase {
-    pub name: String,
-    pub method_name: Option<String>,
-    /// Every parameter name, in declaration order.
-    pub params: Vec<String>,
-    /// The ones dropped so far.
-    pub dropped: IndexSet<String>,
+pub struct Reshape {
+    /// The root's name and method name.
+    pub root_name: String,
+    pub root_method_name: Option<String>,
+    /// Every root parameter by name, in declaration order.
+    pub params: Vec<(String, ParamShape)>,
+    /// For each parameter the function takes now, its position among the
+    /// root's. A name is no key: two parameters may share one (`_`).
+    pub current: Vec<usize>,
+}
+
+/// What became of one root parameter.
+#[derive(Debug, Clone)]
+pub enum ParamShape {
+    Kept,
+    /// Taken as a field instead, projected through each step, outermost first.
+    Narrowed(Vec<SroaParamProjection>),
+    Dropped,
+}
+
+impl Reshape {
+    /// `func` as its own root: every parameter kept.
+    pub fn root(func: &NirFunction) -> Self {
+        Self {
+            root_name: func.name.clone(),
+            root_method_name: func.method_info.as_ref().map(|m| m.method_name.clone()),
+            params: func
+                .params
+                .iter()
+                .map(|p| (p.name.clone(), ParamShape::Kept))
+                .collect(),
+            current: (0..func.params.len()).collect(),
+        }
+    }
+
+    /// The shape of the parameter the function takes at `position` now.
+    pub fn shape(&self, position: usize) -> &ParamShape {
+        &self.params[self.current[position]].1
+    }
+
+    pub fn shape_mut(&mut self, position: usize) -> &mut ParamShape {
+        &mut self.params[self.current[position]].1
+    }
+
+    /// Drop the parameters the function takes now at the positions `dead`
+    /// marks.
+    pub fn drop_params(&mut self, dead: &[bool]) {
+        assert_eq!(dead.len(), self.current.len(), "one verdict per parameter");
+        for (&root, _) in self.current.iter().zip(dead).filter(|(_, d)| **d) {
+            self.params[root].1 = ParamShape::Dropped;
+        }
+        let mut position = 0;
+        self.current.retain(|_| {
+            let kept = !dead[position];
+            position += 1;
+            kept
+        });
+    }
+
+    /// The name and method name this shape gives a function.
+    pub fn names(&self) -> (String, Option<String>) {
+        let labels: Vec<String> = self
+            .params
+            .iter()
+            .enumerate()
+            .map(|(position, (name, _))| {
+                let shared = self
+                    .params
+                    .iter()
+                    .filter(|(other, _)| other == name)
+                    .count()
+                    > 1;
+                param_label(name, shared.then_some(position))
+            })
+            .collect();
+        let narrowed: Vec<NarrowedParam<'_>> = self
+            .params
+            .iter()
+            .zip(&labels)
+            .filter_map(|((_, shape), label)| match shape {
+                ParamShape::Narrowed(path) => Some(NarrowedParam {
+                    param: label,
+                    fields: path.iter().map(|p| p.field_name.as_str()).collect(),
+                    mutable: path.last().expect("a narrowing projects a field").mutable,
+                }),
+                ParamShape::Kept | ParamShape::Dropped => None,
+            })
+            .collect();
+        let dropped: Vec<&str> = self
+            .params
+            .iter()
+            .zip(&labels)
+            .filter(|((_, shape), _)| matches!(shape, ParamShape::Dropped))
+            .map(|(_, label)| label.as_str())
+            .collect();
+        (
+            reshaped_name(&self.root_name, &narrowed, &dropped),
+            self.root_method_name
+                .as_deref()
+                .map(|m| reshaped_name(m, &narrowed, &dropped)),
+        )
+    }
 }
 
 /// One field `optimize/sroa_param` projected a parameter through.
@@ -177,8 +266,9 @@ pub struct DaeBase {
 pub struct SroaParamProjection {
     /// The struct, as `(name, module_source)`.
     pub struct_key: (String, ModuleSource),
-    /// The field's declaration index in it.
+    /// The field's declaration index and name in it.
     pub field_index: u32,
+    pub field_name: String,
     /// Whether the parameter holds the field as `&mut` rather than by value.
     pub mutable: bool,
 }
@@ -329,72 +419,87 @@ impl NirPackage {
         FuncId::new(next)
     }
 
-    /// Give function `id` a new name, and a method its new method name, moving
-    /// the entries keyed by its name along with it. A call names its callee by
-    /// `FuncId`, so calls need no rewrite. Where another function already holds
-    /// the name, nothing changes and that function is returned: a name states
-    /// what a function is, so the two are one.
-    pub fn rename_function(
+    /// Give each function its new name, and a method its new method name,
+    /// moving the entries keyed by its name along with it. A call names its
+    /// callee by `FuncId`, so calls need no rewrite. Every old name is given up
+    /// first, so one of these may take a name another gives up. A function
+    /// whose new name another already holds is that function, reached by
+    /// another route: it takes a retired name instead, and the map returned
+    /// sends it to the holder, whose callers its own should become.
+    pub fn rename_functions(
         &mut self,
-        id: FuncId,
-        name: String,
-        method_name: Option<String>,
-    ) -> Option<FuncId> {
+        renames: Vec<(FuncId, String, Option<String>)>,
+    ) -> IndexMap<FuncId, FuncId> {
         use cranelift_entity::EntityRef;
-        let mut func = self.functions[id.index()].borrow_mut();
-        let old = FunctionRef::from_resolved(&func, func.module_source.clone());
-        let mut renamed = old.clone();
-        renamed.name = name;
-        match (&mut renamed.method_info, method_name) {
+        let vacated: Vec<(ModuleSource, String)> = renames
+            .iter()
+            .map(|(id, _, _)| {
+                let func = self.functions[id.index()].borrow();
+                let key =
+                    FunctionRef::from_resolved(&func, func.module_source.clone()).function_id();
+                assert_eq!(
+                    self.func_index.swap_remove(&key),
+                    Some(*id),
+                    "a function is indexed by its name"
+                );
+                (func.module_source.clone(), func.name.clone())
+            })
+            .collect();
+        let mut merged = IndexMap::default();
+        for ((id, name, method_name), old_strings) in renames.into_iter().zip(vacated) {
+            let named = self.named(id, name, method_name);
+            let named = match self.func_index.get(&named.function_id()) {
+                Some(&holder) => {
+                    merged.insert(id, holder);
+                    let retired = retired_name(&named.name, id.index());
+                    let retired_method = named
+                        .method_info
+                        .as_ref()
+                        .map(|m| retired_name(&m.method_name, id.index()));
+                    self.named(id, retired, retired_method)
+                }
+                None => named,
+            };
+            assert!(
+                self.func_index.insert(named.function_id(), id).is_none(),
+                "a retired name is unique by the position it carries"
+            );
+            let mut func = self.functions[id.index()].borrow_mut();
+            func.name = named.name;
+            if let (Some(info), Some(method)) = (&mut func.method_info, named.method_info) {
+                info.method_name = method.method_name;
+            }
+            let new_strings = (func.module_source.clone(), func.name.clone());
+            drop(func);
+            if let Some(strings) = self.function_strings.swap_remove(&old_strings) {
+                self.function_strings.insert(new_strings, strings);
+            }
+            self.renamed.push(id);
+        }
+        merged
+    }
+
+    /// Function `id`'s descriptor under `name` and `method_name`.
+    fn named(&self, id: FuncId, name: String, method_name: Option<String>) -> FunctionRef {
+        use cranelift_entity::EntityRef;
+        let func = self.functions[id.index()].borrow();
+        let mut named = FunctionRef::from_resolved(&func, func.module_source.clone());
+        named.name = name;
+        match (&mut named.method_info, method_name) {
             (Some(info), Some(method)) => info.method_name = method,
             (None, None) => {}
             _ => unreachable!("a method is renamed with its method name, and only a method"),
         }
-        let new_key = renamed.function_id();
-        if let Some(&holder) = self.func_index.get(&new_key) {
-            assert_ne!(holder, id, "a rename changes the name");
-            return Some(holder);
-        }
-        let old_key = old.function_id();
-        let old_strings_key = (func.module_source.clone(), func.name.clone());
-        func.name = renamed.name;
-        if let (Some(info), Some(method)) = (&mut func.method_info, renamed.method_info) {
-            info.method_name = method.method_name;
-        }
-        let new_strings_key = (func.module_source.clone(), func.name.clone());
-        drop(func);
-        assert_eq!(
-            self.func_index.shift_remove(&old_key),
-            Some(id),
-            "a function is indexed by its name"
-        );
-        self.func_index.insert(new_key, id);
-        if let Some(strings) = self.function_strings.shift_remove(&old_strings_key) {
-            self.function_strings.insert(new_strings_key, strings);
-        }
-        self.renamed.push(id);
-        None
+        named
     }
 
-    /// Retire function `id`, whose callers now call another: it is dead, and
-    /// gives up its name, which a function minted later may take.
+    /// Retire function `id`, which `rename_functions` merged into another
+    /// whose callers its own now are: it is dead, and nothing walks its body.
     pub fn retire_function(&mut self, id: FuncId) {
         use cranelift_entity::EntityRef;
-        let (name, method_name) = {
-            let mut func = self.functions[id.index()].borrow_mut();
-            func.is_dead = true;
-            (
-                retired_name(&func.name, id.index()),
-                func.method_info
-                    .as_ref()
-                    .map(|m| retired_name(&m.method_name, id.index())),
-            )
-        };
-        assert_eq!(
-            self.rename_function(id, name, method_name),
-            None,
-            "a retired name is unique by the id it carries"
-        );
+        let mut func = self.functions[id.index()].borrow_mut();
+        func.is_dead = true;
+        func.body = None;
     }
 
     /// Check if the project targets the synthetic test world.
@@ -479,5 +584,56 @@ impl NirPackage {
         self.used_wasi_functions
             .iter()
             .any(|f| f.starts_with(&prefix))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ParamShape, Reshape, SroaParamProjection};
+    use crate::module_source::ModuleSource;
+
+    fn reshape(params: &[&str]) -> Reshape {
+        Reshape {
+            root_name: "f".to_string(),
+            root_method_name: None,
+            params: params
+                .iter()
+                .map(|p| (p.to_string(), ParamShape::Kept))
+                .collect(),
+            current: (0..params.len()).collect(),
+        }
+    }
+
+    fn narrow(r: &mut Reshape, position: usize, field: &str) {
+        let projection = SroaParamProjection {
+            struct_key: ("S".to_string(), ModuleSource::builtin()),
+            field_index: 0,
+            field_name: field.to_string(),
+            mutable: false,
+        };
+        *r.shape_mut(position) = ParamShape::Narrowed(vec![projection]);
+    }
+
+    #[test]
+    fn a_drop_finds_its_parameter_by_position_not_by_name() {
+        let mut r = reshape(&["_", "a", "_"]);
+        r.drop_params(&[false, false, true]);
+        assert_eq!(r.names().0, "f$dae[_#2]");
+        narrow(&mut r, 1, "x");
+        assert_eq!(r.names().0, "f$sroa[a.x]$dae[_#2]");
+    }
+
+    #[test]
+    fn two_routes_to_one_shape_give_one_name() {
+        let mut narrowed_first = reshape(&["a", "b"]);
+        narrow(&mut narrowed_first, 0, "x");
+        narrowed_first.drop_params(&[false, true]);
+
+        let mut dropped_first = reshape(&["a", "b"]);
+        dropped_first.drop_params(&[false, true]);
+        narrow(&mut dropped_first, 0, "x");
+
+        assert_eq!(narrowed_first.names(), dropped_first.names());
+        assert_eq!(narrowed_first.names().0, "f$sroa[a.x]$dae[b]");
     }
 }

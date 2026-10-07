@@ -970,7 +970,7 @@ pub(super) fn specialize_const_params(
     let cached: Vec<_> = state
         .clones
         .values()
-        .chain(project.sroa_param_clones.keys())
+        .chain(project.sroa_param_clones.iter())
         .copied()
         .collect();
     let mut reachable = reachable_function_positions(project, descriptors, cached);
@@ -1089,7 +1089,7 @@ fn propagate_scalar_constants(
         if !is_dae_sroa_eligible(&func, false)
             || func.compiler_item.is_some()
             || state.is_clone(id)
-            || project.sroa_param_clones.contains_key(&id)
+            || project.sroa_param_clones.contains(&id)
         {
             continue;
         }

@@ -9,10 +9,9 @@ use cranelift_entity::EntityRef;
 use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::dae_name;
 use crate::nir::{FunctionKind, NirFunction};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, PatKind, StmtKind};
-use crate::nir_package::{DaeBase, NirPackage};
+use crate::nir_package::{NirPackage, Reshape};
 
 use super::arena_query;
 use super::gate::{FunctionGate, GatedPass};
@@ -283,45 +282,48 @@ fn validate_call(
 /// adding or removing an edge.
 fn apply_dae(project: &mut NirPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) -> Vec<usize> {
     let mut touched: IndexSet<usize> = IndexSet::default();
-    // Phase 3a: shrink the parameter list of every confirmed callee, then
-    // renumber locals so `params[k].local_index == k` continues to hold.
-    let mut reshaped: Vec<(FuncId, Vec<String>)> = Vec::new();
-    let mut merged: IndexMap<FuncId, FuncId> = IndexMap::default();
+    // Phase 3a: record each confirmed callee's new shape, then shrink its
+    // parameter list and renumber locals so `params[k].local_index == k`
+    // continues to hold.
     for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
         if let Some(id) = func.id
             && let Some(dead) = confirmed.get(&id)
         {
-            note_reshape(&mut project.dae_reshaped, id, &func, dead);
-            let dropped = func
-                .params
-                .iter()
-                .zip(dead)
-                .filter(|(_, d)| **d)
-                .map(|(p, _)| p.name.clone())
-                .collect();
-            reshaped.push((id, dropped));
+            project
+                .reshapes
+                .entry(id)
+                .or_insert_with(|| Reshape::root(&func))
+                .drop_params(dead);
             shrink_params_and_renumber(&mut func, dead);
             touched.insert(i);
         }
     }
-    for (id, dropped) in reshaped {
-        let base = project.dae_reshaped.get_mut(&id).expect("noted above");
-        base.dropped.extend(dropped);
-        let in_order: Vec<&str> = base
-            .params
-            .iter()
-            .filter(|p| base.dropped.contains(*p))
-            .map(String::as_str)
-            .collect();
-        let name = dae_name(&base.name, &in_order);
-        let method_name = base.method_name.as_deref().map(|m| dae_name(m, &in_order));
-        if let Some(holder) = project.rename_function(id, name, method_name) {
-            merged.insert(id, holder);
+
+    // Phase 3b: rewrite every call site.
+    for (i, func_rc) in project.functions.iter().enumerate() {
+        let mut func = func_rc.borrow_mut();
+        if let Some(body) = func.body.as_mut()
+            && rewrite_calls_in_body(body, confirmed)
+        {
+            touched.insert(i);
         }
     }
-    // Reshaped into a function that already stands, reached by another route:
-    // its callers call that one.
+    for global in &mut project.globals {
+        rewrite_calls_in_body(global.init.slot_expr_mut().body_mut(), confirmed);
+    }
+
+    // Phase 3c: name each reshaped callee for its shape. One reshaped into a
+    // function that already stands, reached by another route, is that
+    // function: its callers, whose arguments 3b already dropped, call it.
+    let renames = confirmed
+        .keys()
+        .map(|&id| {
+            let (name, method_name) = project.reshapes[&id].names();
+            (id, name, method_name)
+        })
+        .collect();
+    let merged = project.rename_functions(renames);
     if !merged.is_empty() {
         for (&id, &holder) in &merged {
             assert_same_params(project, id, holder);
@@ -339,19 +341,6 @@ fn apply_dae(project: &mut NirPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) -
         for &id in merged.keys() {
             project.retire_function(id);
         }
-    }
-
-    // Phase 3b: rewrite every call site.
-    for (i, func_rc) in project.functions.iter().enumerate() {
-        let mut func = func_rc.borrow_mut();
-        if let Some(body) = func.body.as_mut()
-            && rewrite_calls_in_body(body, confirmed)
-        {
-            touched.insert(i);
-        }
-    }
-    for global in &mut project.globals {
-        rewrite_calls_in_body(global.init.slot_expr_mut().body_mut(), confirmed);
     }
     touched.into_iter().collect()
 }
@@ -393,22 +382,6 @@ fn assert_same_params(project: &NirPackage, a: FuncId, b: FuncId) {
         fa.name,
         fb.name
     );
-}
-
-/// Record `func` as it stands before its first reshape; a later one keeps that.
-fn note_reshape(
-    reshaped: &mut IndexMap<FuncId, DaeBase>,
-    id: FuncId,
-    func: &NirFunction,
-    dead: &[bool],
-) {
-    assert_eq!(dead.len(), func.params.len(), "one verdict per parameter");
-    reshaped.entry(id).or_insert_with(|| DaeBase {
-        name: func.name.clone(),
-        method_name: func.method_info.as_ref().map(|m| m.method_name.clone()),
-        params: func.params.iter().map(|p| p.name.clone()).collect(),
-        dropped: IndexSet::default(),
-    });
 }
 
 /// Rewrite every call of a confirmed function in `body`: drop the dead-position

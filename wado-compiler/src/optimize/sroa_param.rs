@@ -25,7 +25,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, ExprNode, NodeRef, Operand};
-use crate::nir_package::{NirPackage, SroaParamProjection};
+use crate::nir_package::{NirPackage, ParamShape, Reshape, SroaParamProjection};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -34,7 +34,6 @@ use cranelift_entity::EntityRef;
 use super::arena_query::{is_local_operand, is_pure_operand, place_root_local};
 use super::gate::{FunctionGate, GatedPass};
 use crate::ast::Visibility;
-use crate::name::{NarrowedParam, sroa_param_name};
 use crate::nir::FuncId;
 use crate::nir_visitor::reachable_exprs;
 use crate::optimize::dae::is_dae_sroa_eligible;
@@ -175,7 +174,7 @@ fn collect_and_validate(
         if !is_eligible(&func) {
             continue;
         }
-        let unwrapped = project.sroa_param_clone_fields.get(&key);
+        let reshape = project.reshapes.get(&key);
         // A receiver is fair game like any parameter, a trait method's included:
         // the original function survives this pass for the calls it cannot
         // retarget — see `mint_scalarized_clones`.
@@ -195,10 +194,10 @@ fn collect_and_validate(
             };
             // A struct this position was already unwrapped from reaches itself
             // through its one field, and unwrapping it again would never end.
-            if unwrapped
-                .and_then(|chains| chains.get(&param.local_index))
-                .is_some_and(|chain| chain.iter().any(|p| p.struct_key == info.struct_key))
-            {
+            if reshape.is_some_and(|r| {
+                matches!(r.shape(pi), ParamShape::Narrowed(path)
+                    if path.iter().any(|p| p.struct_key == info.struct_key))
+            }) {
                 continue;
             }
             info.form = func.body.as_ref().map_or(FieldForm::Value, |body| {
@@ -895,52 +894,41 @@ fn mint_scalarized_clones(
         by_fn.entry(*key).or_default().push(*pi);
     }
 
-    let field_table = build_field_table_index(project);
     let mut clones: IndexMap<FnKey, FnKey> = IndexMap::default();
     let mut next_id = project.next_func_id().index();
     for (key, positions) in &by_fn {
         let mut clone = project.functions[key.index()].borrow().clone();
         let origin = (clone.module_source.clone(), clone.name.clone());
-        let original = project.sroa_param_clones.get(key).copied().unwrap_or(*key);
-        let mut chains = project
-            .sroa_param_clone_fields
+        let mut reshape = project
+            .reshapes
             .get(key)
             .cloned()
-            .unwrap_or_default();
+            .unwrap_or_else(|| Reshape::root(&clone));
         for pi in positions {
             let info = &candidates[&(*key, *pi)];
-            chains
-                .entry(clone.params[*pi].local_index)
-                .or_default()
-                .push(SroaParamProjection {
-                    struct_key: info.struct_key.clone(),
-                    field_index: info.field_index,
-                    mutable: info.form == FieldForm::Mutable,
-                });
+            let projection = SroaParamProjection {
+                struct_key: info.struct_key.clone(),
+                field_index: info.field_index,
+                field_name: info.field_name.clone(),
+                mutable: info.form == FieldForm::Mutable,
+            };
+            let shape = reshape.shape_mut(*pi);
+            match shape {
+                ParamShape::Kept => *shape = ParamShape::Narrowed(vec![projection]),
+                ParamShape::Narrowed(path) => path.push(projection),
+                ParamShape::Dropped => unreachable!("a dropped parameter is no candidate"),
+            }
         }
-        let (original_name, original_method) = {
-            let f = project.functions[original.index()].borrow();
-            (
-                f.name.clone(),
-                f.method_info.as_ref().map(|m| m.method_name.clone()),
-            )
-        };
-        let (name, method_name) = {
-            let narrowed = narrowed_params(&clone, &chains, &field_table);
-            (
-                sroa_param_name(&original_name, &narrowed),
-                original_method.map(|m| sroa_param_name(&m, &narrowed)),
-            )
-        };
+        let (name, method_name) = reshape.names();
         clone.name.clone_from(&name);
         if let (Some(info), Some(method)) = (&mut clone.method_info, method_name) {
             info.method_name = method;
         }
-        // The name spells the clone's identity, and this pass runs once per
-        // fixpoint iteration and reaches one clone by more than one chain of
-        // clones, so the one this run wants may already stand under it. A
-        // function reshaped since is renamed for it (`dae_name`), so whatever
-        // stands under the name takes what the name says.
+        // The name spells the clone's shape against its root, and this pass
+        // runs once per fixpoint iteration and reaches one shape by more than
+        // one route, so the clone this run wants may already stand under it.
+        // A function `dae` reshapes since is renamed for its new shape, so
+        // whatever stands under the name takes what the name says.
         let func_key =
             FunctionRef::from_resolved(&clone, clone.module_source.clone()).function_id();
         if let Some(&existing) = project.func_index.get(&func_key) {
@@ -989,8 +977,8 @@ fn mint_scalarized_clones(
         }
 
         project.func_index.insert(func_key, id);
-        project.sroa_param_clones.insert(id, original);
-        project.sroa_param_clone_fields.insert(id, chains);
+        project.sroa_param_clones.insert(id);
+        project.reshapes.insert(id, reshape);
         copy_function_strings(project, &origin, (clone.module_source.clone(), name));
         clones.insert(*key, id);
         // Pushed now, so a later source in this run reaching the same clone
@@ -1029,35 +1017,6 @@ fn takes_wanted_params(
                     .map_or(from.type_id, |info| info.scalar_type_id);
                 types.type_key(param.type_id) == types.type_key(wanted)
             })
-}
-
-/// Each parameter of `clone` its `chains` narrow, in declaration order, with
-/// the names of the fields it was projected through.
-fn narrowed_params<'a>(
-    clone: &'a NirFunction,
-    chains: &'a IndexMap<u32, Vec<SroaParamProjection>>,
-    field_table: &'a FieldTableIndex,
-) -> Vec<NarrowedParam<'a>> {
-    clone
-        .params
-        .iter()
-        .filter_map(|param| {
-            let chain = chains.get(&param.local_index)?;
-            let last = chain.last().expect("a chain records one field at least");
-            Some(NarrowedParam {
-                param: &param.name,
-                fields: chain
-                    .iter()
-                    .map(|p| {
-                        field_table[&p.struct_key][p.field_index as usize]
-                            .0
-                            .as_str()
-                    })
-                    .collect(),
-                mutable: last.mutable,
-            })
-        })
-        .collect()
 }
 
 /// Give the clone its own entry in `function_strings`, which is name-keyed: DCE
@@ -1202,7 +1161,6 @@ fn rewrite_call_sites(
     }
 
     let type_table_rc = project.type_table.clone();
-    let clone_fields = project.sroa_param_clone_fields.clone();
     for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
         let Some(key) = func.id else { continue };
@@ -1211,15 +1169,24 @@ fn rewrite_call_sites(
         // through. Read from the package, not from this run's `clones`: a clone
         // minted on an earlier fixpoint iteration is still a clone, and losing
         // that fact projects the wrapper's field onto it a second time.
-        let scalar_param_struct: IndexMap<u32, (String, ModuleSource)> = clone_fields
+        let scalar_param_struct: IndexMap<u32, (String, ModuleSource)> = project
+            .reshapes
             .get(&key)
-            .into_iter()
-            .flatten()
-            .map(|(local, chain)| {
-                let held = chain.last().expect("a chain records one field at least");
-                (*local, held.struct_key.clone())
+            .map(|reshape| {
+                func.params
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(position, param)| match reshape.shape(position) {
+                        ParamShape::Narrowed(path) => {
+                            let held = path.last().expect("a narrowing projects a field");
+                            Some((param.local_index, held.struct_key.clone()))
+                        }
+                        ParamShape::Kept => None,
+                        ParamShape::Dropped => unreachable!("a dropped parameter is gone"),
+                    })
+                    .collect()
             })
-            .collect();
+            .unwrap_or_default();
         if let Some(body) = func.body.as_mut() {
             let root = body.root;
             let type_table = type_table_rc.borrow();
