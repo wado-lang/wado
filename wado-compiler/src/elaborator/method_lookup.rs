@@ -1523,10 +1523,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(place) = receiver_ast {
             self.record_mut_borrow(place, ctx);
         }
-        let immutable = match self.reference_head(receiver) {
-            ResolvedType::Ref(_) => true,
-            ResolvedType::MutRef(_) => false,
-            _ => receiver_ast.is_some_and(|e| self.place_roots_at_immutable_ref(e)),
+        let immutable = match self.reference_mutability(receiver) {
+            Some(mutable) => !mutable,
+            None => receiver_ast.is_some_and(|e| self.place_roots_at_immutable_ref(e)),
         };
         if immutable {
             let _ = self.emit(TypeError::CannotMutate {
@@ -1564,21 +1563,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// What `ty` is represented by, so a newtype over a reference reads as the
-    /// reference it is.
-    fn reference_head(&self, ty: TypeId) -> ResolvedType {
+    /// Whether `ty` is a mutable reference, read through a newtype over one:
+    /// `None` for a type that is no reference at all.
+    fn reference_mutability(&self, ty: TypeId) -> Option<bool> {
         let table = self.tysys.type_table.borrow();
-        table.get(table.representation_head(ty)).clone()
+        match table.get(table.representation_head(ty)) {
+            ResolvedType::Ref(_) => Some(false),
+            ResolvedType::MutRef(_) => Some(true),
+            _ => None,
+        }
     }
 
     /// The name whose storage the place `expr` writes: `x`, `x.f`, `x[i]`,
     /// `*x`, and any nesting of those. `None` past a reference step.
     fn place_root<'e>(&self, expr: &'e ast::Expr) -> Option<&'e str> {
         if let Some(ty) = self.sem.types.expression_types.get(&expr.id()).copied()
-            && matches!(
-                self.reference_head(ty),
-                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-            )
+            && self.reference_mutability(ty).is_some()
         {
             return None;
         }
@@ -1633,10 +1633,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(inner_type) = self.sem.types.expression_types.get(&inner.id()).copied() else {
             return false;
         };
-        match self.reference_head(inner_type) {
-            ResolvedType::Ref(_) => true,
-            ResolvedType::MutRef(_) => false,
-            _ => self.place_roots_at_immutable_ref(inner),
+        match self.reference_mutability(inner_type) {
+            Some(mutable) => !mutable,
+            None => self.place_roots_at_immutable_ref(inner),
         }
     }
 

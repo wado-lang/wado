@@ -115,23 +115,25 @@ impl Rule for AggregateForwardRule {
     /// which the `Let` would otherwise leave naming a local it no longer binds.
     fn apply_block(&self, engine: &mut Engine, id: BlockId) -> bool {
         let stmts = engine.body.blocks[id].stmts.clone();
-        let found = stmts.windows(2).enumerate().find_map(|(at, pair)| {
-            let (local, source) = binding(engine.body, pair[0])?;
-            let forward = consumer(engine.body, pair[1], local, source)?;
-            (engine.local_reads(local).len() == 1
+        for (at, pair) in stmts.windows(2).enumerate() {
+            let Some((local, source)) = binding(engine.body, pair[0]) else {
+                continue;
+            };
+            let Some((read, forwarded)) = consumer(engine.body, pair[1], local, source) else {
+                continue;
+            };
+            let sole_reader = engine.local_reads(local).len() == 1
                 && engine.local_has_one_version(local)
-                && engine.promoted_read_count(local) == 0)
-                .then_some((at, forward))
-        });
-        let Some((at, (read, forwarded))) = found else {
-            return false;
-        };
-        if !forward(engine, read, forwarded) {
-            return false;
+                && engine.promoted_read_count(local) == 0;
+            // A declined forward leaves the body untouched, so a later window
+            // may still take.
+            if sole_reader && forward(engine, read, forwarded) {
+                let mut kept = stmts;
+                kept.remove(at);
+                engine.set_block_stmts(id, kept);
+                return true;
+            }
         }
-        let mut kept = stmts;
-        kept.remove(at);
-        engine.set_block_stmts(id, kept);
-        true
+        false
     }
 }
