@@ -909,11 +909,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // but when called on Location, it should expect &Location)
                 // Only set if not already set (for chained newtypes like C -> B -> A -> Point,
                 // we want to keep the innermost base type where the method is defined)
-                // The owner is where the lookup found the method, so a base
-                // that is a reference names the type behind it.
                 if method_info.owner == MethodOwner::Receiver {
-                    method_info.owner =
-                        MethodOwner::InheritedFrom(self.tysys.get_base_type(base_type_id));
+                    let referent = self.tysys.get_base_type(base_type_id);
+                    method_info.owner = if referent == base_type_id {
+                        MethodOwner::InheritedFrom(base_type_id)
+                    } else {
+                        MethodOwner::Referent(referent)
+                    };
                 }
                 return Some(method_info);
             }

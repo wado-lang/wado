@@ -5,6 +5,9 @@
 // not exist, and the compiler panicked. And the binding holding the newtype
 // was taken for the place the method writes, so an immutable one was refused
 // although the write lands behind the reference, as it does for `&mut T`.
+// Nor does such a method re-type to the newtype, as one inherited from a value
+// base does: `add` still takes `&Counter`, and `snapshot` returns a `Counter`,
+// a copy, not a second handle onto `c`.
 
 use { println, Stdout } from "core:cli";
 
@@ -16,6 +19,15 @@ impl Counter {
     fn bump(&mut self) -> i32 {
         self.n += 1;
         return self.n;
+    }
+
+    fn add(&mut self, other: &Counter) -> i32 {
+        self.n += other.n;
+        return self.n;
+    }
+
+    fn snapshot(&self) -> Counter {
+        return *self;
     }
 }
 
@@ -31,10 +43,14 @@ export fn run() with Stdout {
     let first = h.bump();
     let mut held = &mut c as Handle;
     let both = twice(&mut held);
-    println(`${first} ${both} ${c.n}`);
+    let d = Counter { n: 10 };
+    let summed = held.add(&d);
+    let mut copy = held.snapshot();
+    copy.n = 100;
+    println(`${first} ${both} ${summed} ${c.n} ${copy.n}`);
 }
 
 __DATA__
 {
-    "stdout": "1 5 3\n"
+    "stdout": "1 5 13 13 100\n"
 }
