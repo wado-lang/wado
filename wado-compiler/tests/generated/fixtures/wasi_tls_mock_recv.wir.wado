@@ -151,7 +151,7 @@ type "functype//core:prelude/array.wado/core/prelude/array.wado/write_seq_inspec
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(50)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:prelude/string.wado//Utf8Error"];  // TypeId(51)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice$sroa[return]" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:prelude/string.wado//Utf8Error"];  // TypeId(51)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> i32;  // TypeId(52)
 
@@ -321,7 +321,7 @@ fn "wasi_tls_mock_recv.wado/run"() with Stdout, Connector, Error {
     };
     let $mv$$match_18$1: ref null "core:prelude/string.wado//String";
     let $mv$$match_18$2: ref null "core:prelude/string.wado//Utf8Error";
-    multivalue_bind [start_50, $mv$$match_18$1, $mv$$match_18$2] = "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice"(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $mv$chunk$items.repr, start: 0, end: $mv$chunk$items.used });
+    multivalue_bind [start_50, $mv$$match_18$1, $mv$$match_18$2] = "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice$sroa[return]"(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $mv$chunk$items.repr, start: 0, end: $mv$chunk$items.used });
     if @likely(start_50 == 0) {
         $local_12 = ref.as_non_null($mv$$match_18$1);
         tx_21 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
@@ -945,7 +945,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice"(bytes) {
+fn "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice$sroa[return]"(bytes) {
     let $load_0: i32;
     let $load_1: i32;
     let prefix: i32;

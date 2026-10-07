@@ -36,7 +36,7 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//spec_lexical_globals.wado/$cm_export__$test_0" = fn();  // TypeId(13)
 
-type "functype//spec_lexical_globals.wado/$test_0$cold0$dae[$v1, $v2_seen, $v3_seen]" = fn(i32, bool, bool, i32, bool, bool, bool);  // TypeId(14)
+type "functype//spec_lexical_globals.wado/$test_0$cold0$dae[$v1,$v2_seen,$v3_seen]" = fn(i32, bool, bool, i32, bool, bool, bool);  // TypeId(14)
 
 type "functype//core:prelude/fpfmt.wado/unpack64" = fn(f64) -> [u64, i32];  // TypeId(15)
 
@@ -60,7 +60,7 @@ type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32
 
 type "functype//core:prelude/primitive.wado/char::from_u32_unchecked$cold0" = fn(u32, bool, u32, bool, bool, bool);  // TypeId(25)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$cold0$dae[self, value]" = fn(i32, i32);  // TypeId(26)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$cold0$dae[self,value]" = fn(i32, i32);  // TypeId(26)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked$cold0$dae[self]" = fn(u8);  // TypeId(27)
 
@@ -170,13 +170,13 @@ fn "spec_lexical_globals.wado/$cm_export__$test_0"() {
         0;
     }) == 0) {
         cold_path;
-        "spec_lexical_globals.wado/$test_0$cold0$dae[$v1, $v2_seen, $v3_seen]"($v2, $v3, $v3, $v5, $v5_seen, $v6, $v6_seen);
+        "spec_lexical_globals.wado/$test_0$cold0$dae[$v1,$v2_seen,$v3_seen]"($v2, $v3, $v3, $v5, $v5_seen, $v6, $v6_seen);
         unreachable;
     }
     "wasi/task-return"(0);
 }
 
-fn "spec_lexical_globals.wado/$test_0$cold0$dae[$v1, $v2_seen, $v3_seen]"($v2, $v3, $v4, $v5, $v5_seen, $v6, $v6_seen) {
+fn "spec_lexical_globals.wado/$test_0$cold0$dae[$v1,$v2_seen,$v3_seen]"($v2, $v3, $v4, $v5, $v5_seen, $v6, $v6_seen) {
     let $load_6: ref Array<u8>;
     let $local_15: ref "core:prelude/string.wado//String";
     let $local_17: ref "core:prelude/string.wado//String";
@@ -1042,7 +1042,7 @@ fn "core:prelude/primitive.wado/char::from_u32_unchecked$cold0"(value, $v1, $v2,
     unreachable;
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$cold0$dae[self, value]"(index, $v1) {
+fn "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$cold0$dae[self,value]"(index, $v1) {
     let $load_2: ref Array<u8>;
     let $local_7: ref "core:prelude/string.wado//String";
     let new_used_14: i32;
@@ -1280,7 +1280,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked
     $v1 = self.used;
     if @unlikely(((0 <= index) & (index < $v1)) == 0) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$cold0$dae[self, value]"(index, $v1);
+        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$cold0$dae[self,value]"(index, $v1);
         unreachable;
     }
     builtin::array_set_u8(self.repr, index, value);

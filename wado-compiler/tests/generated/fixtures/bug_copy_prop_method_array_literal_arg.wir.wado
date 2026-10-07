@@ -103,7 +103,7 @@ type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct
 
 type "functype//core:prelude/types.wado/core/prelude/types.wado/unwrap_failed<bug_copy_prop_method_array_literal_arg.wado/Err>$sroa[value.msg]" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(32)
 
-type "functype//bug_copy_prop_method_array_literal_arg.wado/bug_copy_prop_method_array_literal_arg.wado/State::match_set" = fn(ref "bug_copy_prop_method_array_literal_arg.wado//State", ref "core:prelude//List<i32>") -> [i32, ref null "bug_copy_prop_method_array_literal_arg.wado//Token", ref null "bug_copy_prop_method_array_literal_arg.wado//Err"];  // TypeId(33)
+type "functype//bug_copy_prop_method_array_literal_arg.wado/bug_copy_prop_method_array_literal_arg.wado/State::match_set$sroa[return]" = fn(ref "bug_copy_prop_method_array_literal_arg.wado//State", ref "core:prelude//List<i32>") -> [i32, ref null "bug_copy_prop_method_array_literal_arg.wado//Token", ref null "bug_copy_prop_method_array_literal_arg.wado//Err"];  // TypeId(33)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(34)
 
@@ -127,7 +127,7 @@ type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display
 
 type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(44)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(45)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(45)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(46)
 
@@ -198,7 +198,7 @@ fn "bug_copy_prop_method_array_literal_arg.wado/run"() {
         let $mv$$vr_4$0: i32;
         let $mv$$vr_4$1: ref null "bug_copy_prop_method_array_literal_arg.wado//Token";
         let $mv$$vr_4$2: ref null "bug_copy_prop_method_array_literal_arg.wado//Err";
-        multivalue_bind [$mv$$vr_4$0, $mv$$vr_4$1, $mv$$vr_4$2] = "bug_copy_prop_method_array_literal_arg.wado/bug_copy_prop_method_array_literal_arg.wado/State::match_set"(s_1, global:bug_copy_prop_method_array_literal_arg.wado::$const_obj_5);
+        multivalue_bind [$mv$$vr_4$0, $mv$$vr_4$1, $mv$$vr_4$2] = "bug_copy_prop_method_array_literal_arg.wado/bug_copy_prop_method_array_literal_arg.wado/State::match_set$sroa[return]"(s_1, global:bug_copy_prop_method_array_literal_arg.wado::$const_obj_5);
         $qm_v = (if $mv$$vr_4$0 == 0 -> ref "bug_copy_prop_method_array_literal_arg.wado//Token" {
             local.tee $qm_v(ref.as_non_null($mv$$vr_4$1));
         } else if @unlikely($mv$$vr_4$0 == 1) -> ref "bug_copy_prop_method_array_literal_arg.wado//Token" {
@@ -218,8 +218,8 @@ fn "bug_copy_prop_method_array_literal_arg.wado/run"() {
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_8, $mv_arg_2.repr, $mv_arg_2.used);
         $mv$$vr_4$0 = "core:prelude/string.wado/core:prelude/string.wado/String::len$sroa[self.used]"($qm_e.msg.used);
         $fuse_at_16 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_8, 1 + $mv$$vr_4$0);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_8.repr, $fuse_at_16, $qm_e.msg, $mv$$vr_4$0);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_8.repr, $fuse_at_16 + $mv$$vr_4$0, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(41), used: 1 }, 1);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_8.repr, $fuse_at_16, $qm_e.msg, $mv$$vr_4$0);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_8.repr, $fuse_at_16 + $mv$$vr_4$0, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(41), used: 1 }, 1);
         "core:rt/panic"($local_8.repr, $local_8.used);
         unreachable;
     } else {
@@ -227,11 +227,11 @@ fn "bug_copy_prop_method_array_literal_arg.wado/run"() {
     if @unlikely(local.tee $mv$$vr_4$0(s_1.pos) != 1) {
         cold_path;
         $fuse_at_16 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_8("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(138)), 71);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_8.repr, $fuse_at_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_8.repr, $fuse_at_16 + 20, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 117, 110), used: 3 }, 3);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_8.repr, $fuse_at_16 + 23, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 116, 32), used: 4 }, 4);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_8.repr, $fuse_at_16 + 27, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bug_copy_prop_method_array_literal_arg.wado"), used: 43 }, 43);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_8.repr, $fuse_at_16 + 70, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_8.repr, $fuse_at_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_8.repr, $fuse_at_16 + 20, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 117, 110), used: 3 }, 3);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_8.repr, $fuse_at_16 + 23, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 116, 32), used: 4 }, 4);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_8.repr, $fuse_at_16 + 27, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bug_copy_prop_method_array_literal_arg.wado"), used: 43 }, 43);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_8.repr, $fuse_at_16 + 70, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1);
         $local_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8);
         "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$sroa[self.value]"(68, $local_12);
         $mv_arg_2 = global:bug_copy_prop_method_array_literal_arg.wado::$const_obj_3;
@@ -244,10 +244,10 @@ fn "bug_copy_prop_method_array_literal_arg.wado/run"() {
         "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$sroa[self.value]"(s_1.pos, $local_10);
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_8, $mv_arg_2.repr, $mv_arg_2.used);
         $fuse_at_16 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_8, 30);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_8.repr, $fuse_at_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_8.repr, $fuse_at_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: s.pos == 1
 "), used: 23 }, 23);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_8.repr, $fuse_at_16 + 23, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("s.pos: "), used: 7 }, 7);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_8.repr, $fuse_at_16 + 23, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("s.pos: "), used: 7 }, 7);
         $local_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8);
         "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"($mv$$vr_4$0, $local_12);
         $mv_arg_2 = global:bug_copy_prop_method_array_literal_arg.wado::$const_obj_1;
@@ -952,15 +952,15 @@ fn "core:prelude/types.wado/core/prelude/types.wado/unwrap_failed<bug_copy_prop_
     $local_2 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(34);
     $fuse_len_4 = "core:prelude/string.wado/core:prelude/string.wado/String::len$sroa[self.used]"(msg.used);
     $fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_2, 2 + $fuse_len_4);
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_2.repr, $fuse_at_5, msg, $fuse_len_4);
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_2.repr, $fuse_at_5 + $fuse_len_4, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }, 2);
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_2.repr, $fuse_at_5, msg, $fuse_len_4);
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_2.repr, $fuse_at_5 + $fuse_len_4, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }, 2);
     $local_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_2);
     "core:prelude/traits.wado/bug_copy_prop_method_array_literal_arg.wado/Err^core:prelude/traits.wado/Inspect::inspect$sroa[self.msg]"(value, $local_3);
     "core:rt/panic"($local_2.repr, $local_2.used);
     unreachable;
 }
 
-fn "bug_copy_prop_method_array_literal_arg.wado/bug_copy_prop_method_array_literal_arg.wado/State::match_set"(self, included) {
+fn "bug_copy_prop_method_array_literal_arg.wado/bug_copy_prop_method_array_literal_arg.wado/State::match_set$sroa[return]"(self, included) {
     let $load_0: i32;
     let $load_1: ref "core:prelude//List<bug_copy_prop_method_array_literal_arg.wado/Token>";
     let $load_6: i32;
@@ -1464,7 +1464,7 @@ fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect$sr
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $mv_arg_3(f.buf).repr, is_negative, x, self);
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"(self, offset, s, n) {
+fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"(self, offset, s, n) {
     builtin::array_copy<u8>(self, offset, s.repr, 0, n);
 }
 

@@ -422,7 +422,7 @@ type "functype//core:prelude/array.wado/core/prelude/array.wado/write_seq_inspec
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(100)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:prelude/string.wado//Utf8Error"];  // TypeId(101)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice$sroa[return]" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:prelude/string.wado//Utf8Error"];  // TypeId(101)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> i32;  // TypeId(102)
 
@@ -430,7 +430,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_e
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len" = fn(ref "core:prelude/slice.wado//Slice<u8>", i32, i32) -> i32;  // TypeId(104)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all" = fn(i32, ref "core:prelude//List<u8>");  // TypeId(105)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$dae[return]" = fn(i32, ref "core:prelude//List<u8>");  // TypeId(105)
 
 type "functype//core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(106)
 
@@ -1148,7 +1148,7 @@ fn "http_client_send_body_read.wado/$cm_task_entry__handle"(request) with Client
     };
     let $mv$$vr_198$1: ref null "core:prelude/string.wado//String";
     let $mv$$vr_198$2: ref null "core:prelude/string.wado//Utf8Error";
-    multivalue_bind [new_used_279, $mv$$vr_198$1, $mv$$vr_198$2] = "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice"(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $mv$chunk$items.repr, start: 0, end: $mv$chunk$items.used });
+    multivalue_bind [new_used_279, $mv$$vr_198$1, $mv$$vr_198$2] = "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice$sroa[return]"(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $mv$chunk$items.repr, start: 0, end: $mv$chunk$items.used });
     $mv_arg_1 = (if @likely(new_used_279 == 0) -> ref "core:prelude/string.wado//String" {
         local.tee $mv_arg_1(ref.as_non_null($mv$$vr_198$1));
     } else if new_used_279 == 1 -> ref "core:prelude/string.wado//String" {
@@ -1184,7 +1184,7 @@ fn "http_client_send_body_read.wado/$cm_task_entry__handle"(request) with Client
     used = 0;
     used = rx_200;
     "wasi/task-return:handle"(0, used, 0, 0_i64, 0, 0, 0, 0);
-    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(tx_201, "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: result_210.repr, used: result_210.used, index: 0 }));
+    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$dae[return]"(tx_201, "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: result_210.repr, used: result_210.used, index: 0 }));
     "wasi/stream-drop-writable"(tx_201);
     "http_client_send_body_read.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(new_used_279, global:http_client_send_body_read.wado::$const_obj_10);
     "wasi/resource-drop:wasi/http/types.wado#request"(request);
@@ -2430,7 +2430,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice"(bytes) {
+fn "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice$sroa[return]"(bytes) {
     let $load_0: i32;
     let $load_1: i32;
     let prefix: i32;
@@ -2656,7 +2656,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"
     return 0;
 }
 
-fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(self, data) {
+fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$dae[return]"(self, data) {
     let $load_0: i32;
     let $load_43: i32;
     let offset: i32;

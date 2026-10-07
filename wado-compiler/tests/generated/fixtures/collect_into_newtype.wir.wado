@@ -91,7 +91,7 @@ type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  //
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(30)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$dae[self, index]" = fn(i32);  // TypeId(31)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$dae[self,index]" = fn(i32);  // TypeId(31)
 
 type "functype//core:prelude/bytes.wado/core:prelude/bytes.wado/ByteList::to_hex" = fn(ref "core:prelude//List<u8>") -> ref "core:prelude/string.wado//String";  // TypeId(32)
 
@@ -101,7 +101,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prel
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow" = fn(ref "core:prelude//List<u32>");  // TypeId(35)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,u32>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,u32>") -> [i32, u32];  // TypeId(36)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,u32>^core:prelude/traits.wado/Iterator::next$sroa[return]" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,u32>") -> [i32, u32];  // TypeId(36)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(37)
 
@@ -201,7 +201,7 @@ fn "collect_into_newtype.wado/run"() with Stdout {
     result_84 = struct.new "core:prelude//List<u32>" { repr: array.new_fixed<u32>(), used: 0 };
     b3: block {
         l4: loop {
-            multivalue_bind [rx_41, used_213] = "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,u32>^core:prelude/traits.wado/Iterator::next"(self_79);
+            multivalue_bind [rx_41, used_213] = "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,u32>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_79);
             if rx_41 == 1 {
                 if @unlikely(local.tee tx_42(result_84.used) >= builtin::array_len(result_84.repr)) {
                     cold_path;
@@ -219,7 +219,7 @@ fn "collect_into_newtype.wado/run"() with Stdout {
     used_213 = result_84.used;
     if @unlikely(0 >= used_213) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<u32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$dae[self, index]"(used_213);
+        "core:prelude/list.wado/core:prelude/list.wado/List<u32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$dae[self,index]"(used_213);
         unreachable;
     }
     used_213 = "core:prelude/primitive.wado/count_digits_u64"(local.tee packed_40(builtin::i64_extend_i32_u(builtin::array_get_value<u32>(result_84.repr, 0))));
@@ -244,15 +244,15 @@ fn "collect_into_newtype.wado/run"() with Stdout {
     builtin::array_copy<u8>($mv_arg_2.repr, tx_42, global:collect_into_newtype.wado::$const_obj_0, 0, 1);
     $sroa_$f_buf_556 = $mv_arg_2;
     tx_42 = 0;
-    $inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_67: block {
+    $inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_sroa_return__67: block {
         if local.tee used_213(it.index) >= 3 {
             tx_42 = 0;
-            break $inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_67;
+            break $inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_sroa_return__67;
         }
         drop(builtin::array_get_value<i32>(it.repr, used_213));
         it.index = used_213 + 1;
         tx_42 = 1;
-        break $inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_67;
+        break $inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_sroa_return__67;
     };
     self_150 = (if local.tee tx_42(tx_42 == 0) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
@@ -472,7 +472,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<u32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$dae[self, index]"($v1) {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<u32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$dae[self,index]"($v1) {
     let $load_2: ref Array<u8>;
     let $local_4: ref "core:prelude/string.wado//String";
     let new_used_11: i32;
@@ -612,11 +612,11 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow"(self) {
     self.repr = new_repr;
 }
 
-fn "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,u32>^core:prelude/traits.wado/Iterator::next"(self) {
+fn "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,u32>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self) {
     let $load_0: ref "core:prelude/string.wado//StrCharIter";
     let $load_1: i32;
-    $fused_$inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_0: block {
-        break_if $fused_$inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_0 local.tee $load_1(local.tee $load_0(self.inner).byte_index) >= $load_0.used;
+    $fused_$inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_sroa_return__0: block {
+        break_if $fused_$inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_sroa_return__0 local.tee $load_1(local.tee $load_0(self.inner).byte_index) >= $load_0.used;
         let $mv$$pattern_temp_0$1: i32;
         multivalue_bind [$load_1, $mv$$pattern_temp_0$1] = "core:prelude/string.wado/decode_char_at"($load_0.repr, $load_1);
         local.tee $load_0(self.inner).byte_index = $load_0.byte_index + $mv$$pattern_temp_0$1;

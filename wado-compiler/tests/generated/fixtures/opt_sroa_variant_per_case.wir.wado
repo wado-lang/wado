@@ -43,11 +43,11 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(11)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//opt_sroa_variant_per_case.wado/divide" = fn(i32, i32) -> [i32, i32, ref null "core:prelude/string.wado//String"];  // TypeId(13)
+type "functype//opt_sroa_variant_per_case.wado/divide$sroa[return]" = fn(i32, i32) -> [i32, i32, ref null "core:prelude/string.wado//String"];  // TypeId(13)
 
 type "functype//opt_sroa_variant_per_case.wado/try_divide" = fn(i32, i32) -> i32;  // TypeId(14)
 
-type "functype//opt_sroa_variant_per_case.wado/make_payload" = fn(i32) -> [i32, ref null "opt_sroa_variant_per_case.wado//Payload", ref null "core:prelude/string.wado//String"];  // TypeId(15)
+type "functype//opt_sroa_variant_per_case.wado/make_payload$sroa[return]" = fn(i32) -> [i32, ref null "opt_sroa_variant_per_case.wado//Payload", ref null "core:prelude/string.wado//String"];  // TypeId(15)
 
 type "functype//opt_sroa_variant_per_case.wado/use_payload" = fn(i32) -> i32;  // TypeId(16)
 
@@ -95,7 +95,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(38)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(39)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(39)
 
 type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(40)
 
@@ -155,7 +155,7 @@ global global:opt_sroa_variant_per_case.wado::$const_obj_68: ref Array<u8> = arr
 global mut global:opt_sroa_variant_per_case.wado::$const_obj_71: ref null Array<u8> = ref.null none;
 global global:core:prelude/primitive.wado::$const_obj_80: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
-fn "opt_sroa_variant_per_case.wado/divide"(a, b) {
+fn "opt_sroa_variant_per_case.wado/divide$sroa[return]"(a, b) {
     if b == 0 {
         return 1, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("division by zero"), used: 16 };
     }
@@ -164,7 +164,7 @@ fn "opt_sroa_variant_per_case.wado/divide"(a, b) {
 
 fn "opt_sroa_variant_per_case.wado/try_divide"(a, b) {
     let $mv$result$2: ref null "core:prelude/string.wado//String";
-    multivalue_bind [b, a, $mv$result$2] = "opt_sroa_variant_per_case.wado/divide"(a, b);
+    multivalue_bind [b, a, $mv$result$2] = "opt_sroa_variant_per_case.wado/divide$sroa[return]"(a, b);
     if b == 0 {
         return a;
     } else {
@@ -172,7 +172,7 @@ fn "opt_sroa_variant_per_case.wado/try_divide"(a, b) {
     return -1;
 }
 
-fn "opt_sroa_variant_per_case.wado/make_payload"(x) {
+fn "opt_sroa_variant_per_case.wado/make_payload$sroa[return]"(x) {
     if x < 0 {
         return 1, ref.null none, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("negative"), used: 8 };
     }
@@ -182,7 +182,7 @@ fn "opt_sroa_variant_per_case.wado/make_payload"(x) {
 fn "opt_sroa_variant_per_case.wado/use_payload"(x) {
     let $mv$result$1: ref null "opt_sroa_variant_per_case.wado//Payload";
     let $mv$result$2: ref null "core:prelude/string.wado//String";
-    multivalue_bind [x, $mv$result$1, $mv$result$2] = "opt_sroa_variant_per_case.wado/make_payload"(x);
+    multivalue_bind [x, $mv$result$1, $mv$result$2] = "opt_sroa_variant_per_case.wado/make_payload$sroa[return]"(x);
     if x == 0 {
         return $mv$result$1.value;
     } else {
@@ -193,7 +193,7 @@ fn "opt_sroa_variant_per_case.wado/use_payload"(x) {
 fn "opt_sroa_variant_per_case.wado/use_err_branch"(x) {
     let $mv$result$1: ref null "opt_sroa_variant_per_case.wado//Payload";
     let $mv$result$2: ref null "core:prelude/string.wado//String";
-    multivalue_bind [x, $mv$result$1, $mv$result$2] = "opt_sroa_variant_per_case.wado/make_payload"(x);
+    multivalue_bind [x, $mv$result$1, $mv$result$2] = "opt_sroa_variant_per_case.wado/make_payload$sroa[return]"(x);
     if x == 1 {
         return ref.as_non_null($mv$result$2);
     } else {
@@ -263,23 +263,23 @@ fn "opt_sroa_variant_per_case.wado/run"() {
     }) == 0) {
         cold_path;
         $v2_2 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_39("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(236)), 58);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_39.repr, $v2_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_39.repr, $v2_2 + 20, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 117, 110), used: 3 }, 3);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_39.repr, $v2_2 + 23, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 116, 32), used: 4 }, 4);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_39.repr, $v2_2 + 27, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("opt_sroa_variant_per_case.wado"), used: 30 }, 30);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_39.repr, $v2_2 + 57, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_39.repr, $v2_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_39.repr, $v2_2 + 20, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 117, 110), used: 3 }, 3);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_39.repr, $v2_2 + 23, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 116, 32), used: 4 }, 4);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_39.repr, $v2_2 + 27, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("opt_sroa_variant_per_case.wado"), used: 30 }, 30);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_39.repr, $v2_2 + 57, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1);
         $local_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_39);
         "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$sroa[self.value]"(74, $local_40);
         $v2_2 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_39, 89);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_39.repr, $v2_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_39.repr, $v2_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: use_err_branch(builtin::black_box(-1)) == \"negative\"
 "), used: 65 }, 65);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_39.repr, $v2_2 + 65, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("builtin::black_box(-1): "), used: 24 }, 24);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_39.repr, $v2_2 + 65, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("builtin::black_box(-1): "), used: 24 }, 24);
         $local_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_39);
         "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"($v1_1, $local_40);
         $v1_1 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_39, 41);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_39.repr, $v1_1, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_39.repr, $v1_1 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("use_err_branch(builtin::black_box(-1)): "), used: 40 }, 40);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_39.repr, $v1_1, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_39.repr, $v1_1 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("use_err_branch(builtin::black_box(-1)): "), used: 40 }, 40);
         $local_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_39);
         "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"($v1_22, $local_40);
         $v1_22 = global:opt_sroa_variant_per_case.wado::$const_obj_5;
@@ -310,23 +310,23 @@ condition: use_err_branch(builtin::black_box(-1)) == \"negative\"
     }) == 0) {
         cold_path;
         $v2_2 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $v1_22("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(227)), 58);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($v1_22.repr, $v2_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($v1_22.repr, $v2_2 + 20, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 117, 110), used: 3 }, 3);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($v1_22.repr, $v2_2 + 23, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 116, 32), used: 4 }, 4);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($v1_22.repr, $v2_2 + 27, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("opt_sroa_variant_per_case.wado"), used: 30 }, 30);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($v1_22.repr, $v2_2 + 57, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($v1_22.repr, $v2_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($v1_22.repr, $v2_2 + 20, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 117, 110), used: 3 }, 3);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($v1_22.repr, $v2_2 + 23, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 116, 32), used: 4 }, 4);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($v1_22.repr, $v2_2 + 27, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("opt_sroa_variant_per_case.wado"), used: 30 }, 30);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($v1_22.repr, $v2_2 + 57, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1);
         $local_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($v1_22);
         "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$sroa[self.value]"(75, $local_40);
         $v2_2 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($v1_22, 81);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($v1_22.repr, $v2_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($v1_22.repr, $v2_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: use_err_branch(builtin::black_box(5)) == \"ok\"
 "), used: 58 }, 58);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($v1_22.repr, $v2_2 + 58, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("builtin::black_box(5): "), used: 23 }, 23);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($v1_22.repr, $v2_2 + 58, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("builtin::black_box(5): "), used: 23 }, 23);
         $local_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($v1_22);
         "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"($v1_1, $local_40);
         $v1_1 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($v1_22, 40);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($v1_22.repr, $v1_1, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($v1_22.repr, $v1_1 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("use_err_branch(builtin::black_box(5)): "), used: 39 }, 39);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($v1_22.repr, $v1_1, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($v1_22.repr, $v1_1 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("use_err_branch(builtin::black_box(5)): "), used: 39 }, 39);
         $local_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($v1_22);
         "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"($local_39, $local_40);
         $local_39 = global:opt_sroa_variant_per_case.wado::$const_obj_5;
@@ -1600,7 +1600,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prel
     };
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"(self, offset, s, n) {
+fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"(self, offset, s, n) {
     builtin::array_copy<u8>(self, offset, s.repr, 0, n);
 }
 

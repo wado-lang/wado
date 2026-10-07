@@ -49,9 +49,9 @@ type "functype//trait_bound_assoc_type_ambiguous.wado/$cm_binding__Stdout_write_
 
 type "functype//trait_bound_assoc_type_ambiguous.wado/$cm_export__run" = fn();  // TypeId(16)
 
-type "functype//core:prelude/intparse.wado/split_plus" = fn(ref "core:prelude/string.wado//StrSlice") -> [i32, ref null "core:prelude/string.wado//StrSlice", "core:prelude/intparse.wado//enum:IntErrorKind"];  // TypeId(17)
+type "functype//core:prelude/intparse.wado/split_plus$sroa[return]" = fn(ref "core:prelude/string.wado//StrSlice") -> [i32, ref null "core:prelude/string.wado//StrSlice", "core:prelude/intparse.wado//enum:IntErrorKind"];  // TypeId(17)
 
-type "functype//core:prelude/intparse.wado/parse_u64_radix$dae[radix, max]" = fn(ref "core:prelude/string.wado//StrSlice") -> [i32, u64, ref null "core:prelude/intparse.wado//ParseIntError"];  // TypeId(18)
+type "functype//core:prelude/intparse.wado/parse_u64_radix$sroa[return]$dae[radix,max]" = fn(ref "core:prelude/string.wado//StrSlice") -> [i32, u64, ref null "core:prelude/intparse.wado//ParseIntError"];  // TypeId(18)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(19)
 
@@ -98,7 +98,7 @@ fn "trait_bound_assoc_type_ambiguous.wado/run"() with Stdout {
     let $mv$$vr_2$0: i32;
     let $mv$$vr_2$1: u64;
     let $mv$$vr_2$2: ref null "core:prelude/intparse.wado//ParseIntError";
-    multivalue_bind [$mv$$vr_2$0, $mv$$vr_2$1, $mv$$vr_2$2] = "core:prelude/intparse.wado/parse_u64_radix$dae[radix, max]"(s_7);
+    multivalue_bind [$mv$$vr_2$0, $mv$$vr_2$1, $mv$$vr_2$2] = "core:prelude/intparse.wado/parse_u64_radix$sroa[return]$dae[radix,max]"(s_7);
     if local.tee $mv$$vr_2$0(local.tee r((if $mv$$vr_2$0 == 0 -> ref "tuple//[i32, u64, i32]" {
         struct.new "tuple//[i32, u64, i32]" { 0: 0, 1: $mv$$vr_2$1, 2: 0 };
     } else if @likely($mv$$vr_2$0 == 1) -> ref "tuple//[i32, u64, i32]" {
@@ -135,7 +135,7 @@ fn "trait_bound_assoc_type_ambiguous.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "core:prelude/intparse.wado/split_plus"(s) {
+fn "core:prelude/intparse.wado/split_plus$sroa[return]"(s) {
     let $load_0: i32;
     let $load_1: i32;
     let $load_2: ref Array<u8>;
@@ -153,7 +153,7 @@ fn "core:prelude/intparse.wado/split_plus"(s) {
     return 0, struct.new "core:prelude/string.wado//StrSlice" { repr: $load_2, start: $load_0, end: $load_1 }, 0;
 }
 
-fn "core:prelude/intparse.wado/parse_u64_radix$dae[radix, max]"(s) {
+fn "core:prelude/intparse.wado/parse_u64_radix$sroa[return]$dae[radix,max]"(s) {
     let $load_1: i32;
     let len: i32;
     let acc: u64;
@@ -166,7 +166,7 @@ fn "core:prelude/intparse.wado/parse_u64_radix$dae[radix, max]"(s) {
     let $mv$$vr_8$0: i32;
     let $mv$$vr_8$1: ref null "core:prelude/string.wado//StrSlice";
     let $mv$$vr_8$2: "core:prelude/intparse.wado//enum:IntErrorKind";
-    multivalue_bind [$mv$$vr_8$0, $mv$$vr_8$1, $mv$$vr_8$2] = "core:prelude/intparse.wado/split_plus"(s);
+    multivalue_bind [$mv$$vr_8$0, $mv$$vr_8$1, $mv$$vr_8$2] = "core:prelude/intparse.wado/split_plus$sroa[return]"(s);
     s = (if $mv$$vr_8$0 == 0 -> ref "core:prelude/string.wado//StrSlice" {
         local.tee s(ref.as_non_null($mv$$vr_8$1));
     } else if @likely($mv$$vr_8$0 == 1) -> ref "core:prelude/string.wado//StrSlice" {
@@ -177,12 +177,12 @@ fn "core:prelude/intparse.wado/parse_u64_radix$dae[radix, max]"(s) {
     $mv$$vr_8$2 = 0;
     $sroa_slot_40 = 0_i64;
     $mv$$vr_8$0 = 0;
-    $inline_parse_u64_digits_spec0_0: block {
+    $inline_parse_u64_digits_sroa_return__spec0_0: block {
         if local.tee len(s.end - local.tee $load_1(s.start)) == 0 {
             $mv$$vr_8$2 = 1;
             $sroa_slot_40 = 0_i64;
             $mv$$vr_8$0 = 0;
-            break $inline_parse_u64_digits_spec0_0;
+            break $inline_parse_u64_digits_sroa_return__spec0_0;
         }
         acc = 0_i64;
         i = 0;
@@ -190,22 +190,22 @@ fn "core:prelude/intparse.wado/parse_u64_radix$dae[radix, max]"(s) {
         b9: block {
             l10: loop {
                 break_if b9 i >= len;
-                if (local.tee d($inline_parse_u64_digits_spec0_0__$inline_digit_value_1: block -> i32 {
+                if (local.tee d($inline_parse_u64_digits_sroa_return__spec0_0__$inline_digit_value_1: block -> i32 {
                     if (local.tee b(builtin::array_get_value<u8>($licm_repr_23, $load_1 + i)) >= 48) & (b <= 57) {
-                        break $inline_parse_u64_digits_spec0_0__$inline_digit_value_1: b - 48;
+                        break $inline_parse_u64_digits_sroa_return__spec0_0__$inline_digit_value_1: b - 48;
                     }
                     if (b >= 97) & (b <= 122) {
-                        break $inline_parse_u64_digits_spec0_0__$inline_digit_value_1: (b - 97) + 10;
+                        break $inline_parse_u64_digits_sroa_return__spec0_0__$inline_digit_value_1: (b - 97) + 10;
                     }
                     if (b >= 65) & (b <= 90) {
-                        break $inline_parse_u64_digits_spec0_0__$inline_digit_value_1: (b - 65) + 10;
+                        break $inline_parse_u64_digits_sroa_return__spec0_0__$inline_digit_value_1: (b - 65) + 10;
                     }
-                    break $inline_parse_u64_digits_spec0_0__$inline_digit_value_1: -1;
+                    break $inline_parse_u64_digits_sroa_return__spec0_0__$inline_digit_value_1: -1;
                 }) < 0) | (d >= 10) {
                     $mv$$vr_8$2 = 1;
                     $sroa_slot_40 = 0_i64;
                     $mv$$vr_8$0 = 1;
-                    break $inline_parse_u64_digits_spec0_0;
+                    break $inline_parse_u64_digits_sroa_return__spec0_0;
                 }
                 d64 = builtin::i64_extend_i32_s(d);
                 if (if acc >u 1844674407370955161_i64 -> i32 {
@@ -216,7 +216,7 @@ fn "core:prelude/intparse.wado/parse_u64_radix$dae[radix, max]"(s) {
                     $mv$$vr_8$2 = 1;
                     $sroa_slot_40 = 0_i64;
                     $mv$$vr_8$0 = 2;
-                    break $inline_parse_u64_digits_spec0_0;
+                    break $inline_parse_u64_digits_sroa_return__spec0_0;
                 }
                 acc = (acc * 10_i64) + d64;
                 i = i + 1;
@@ -226,7 +226,7 @@ fn "core:prelude/intparse.wado/parse_u64_radix$dae[radix, max]"(s) {
         $mv$$vr_8$2 = 0;
         $sroa_slot_40 = acc;
         $mv$$vr_8$0 = 0;
-        break $inline_parse_u64_digits_spec0_0;
+        break $inline_parse_u64_digits_sroa_return__spec0_0;
     };
     if $mv$$vr_8$2 == 0 {
         if $sroa_slot_40 >u -1_i64 {

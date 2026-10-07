@@ -25,9 +25,9 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//opt_variant_return_mutual_tail.wado/even_step" = fn(i32) -> [i32, i32, ref null "core:prelude/string.wado//String"];  // TypeId(10)
+type "functype//opt_variant_return_mutual_tail.wado/even_step$sroa[return]" = fn(i32) -> [i32, i32, ref null "core:prelude/string.wado//String"];  // TypeId(10)
 
-type "functype//opt_variant_return_mutual_tail.wado/odd_step" = fn(i32) -> [i32, i32, ref null "core:prelude/string.wado//String"];  // TypeId(11)
+type "functype//opt_variant_return_mutual_tail.wado/odd_step$sroa[return]" = fn(i32) -> [i32, i32, ref null "core:prelude/string.wado//String"];  // TypeId(11)
 
 type "functype//opt_variant_return_mutual_tail.wado/is_even" = fn(i32) -> i32;  // TypeId(12)
 
@@ -90,27 +90,27 @@ global global:opt_variant_return_mutual_tail.wado::$const_obj_25: ref Array<u8> 
 global global:opt_variant_return_mutual_tail.wado::$const_obj_27: ref Array<u8> = array.new_fixed<u8>(98, 117, 105, 108, 116, 105, 110, 58, 58, 98, 108, 97, 99, 107, 95, 98, 111, 120, 40, 52, 41, 58, 32);
 global global:opt_variant_return_mutual_tail.wado::$const_obj_28: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 105, 115, 95, 101, 118, 101, 110, 40, 98, 117, 105, 108, 116, 105, 110, 58, 58, 98, 108, 97, 99, 107, 95, 98, 111, 120, 40, 52, 41, 41, 32, 61, 61, 32, 49, 10);
 
-fn "opt_variant_return_mutual_tail.wado/even_step"(n) {
+fn "opt_variant_return_mutual_tail.wado/even_step$sroa[return]"(n) {
     if n < 0 {
         return 1, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 101, 103), used: 3 };
     }
     if n == 0 {
         return 0, 1, ref.null none;
     }
-    return "opt_variant_return_mutual_tail.wado/odd_step"(n - 1);
+    return "opt_variant_return_mutual_tail.wado/odd_step$sroa[return]"(n - 1);
 }
 
-fn "opt_variant_return_mutual_tail.wado/odd_step"(n) {
+fn "opt_variant_return_mutual_tail.wado/odd_step$sroa[return]"(n) {
     if n == 0 {
         return 0, 0, ref.null none;
     }
-    return "opt_variant_return_mutual_tail.wado/even_step"(n - 1);
+    return "opt_variant_return_mutual_tail.wado/even_step$sroa[return]"(n - 1);
 }
 
 fn "opt_variant_return_mutual_tail.wado/is_even"(n) {
     let $mv$r$1: i32;
     let $mv$r$2: ref null "core:prelude/string.wado//String";
-    multivalue_bind [n, $mv$r$1, $mv$r$2] = "opt_variant_return_mutual_tail.wado/even_step"(n);
+    multivalue_bind [n, $mv$r$1, $mv$r$2] = "opt_variant_return_mutual_tail.wado/even_step$sroa[return]"(n);
     if n == 0 {
         return $mv$r$1;
     } else {

@@ -29,7 +29,7 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
 
-type "functype//opt_sroa_variant_return_temp_elide.wado/step" = fn(ref "opt_sroa_variant_return_temp_elide.wado//Counter", i32) -> [i32, i32, ref null "core:prelude/string.wado//String"];  // TypeId(11)
+type "functype//opt_sroa_variant_return_temp_elide.wado/step$sroa[return]" = fn(ref "opt_sroa_variant_return_temp_elide.wado//Counter", i32) -> [i32, i32, ref null "core:prelude/string.wado//String"];  // TypeId(11)
 
 type "functype//opt_sroa_variant_return_temp_elide.wado/drive" = fn(ref "opt_sroa_variant_return_temp_elide.wado//Counter") -> i32;  // TypeId(12)
 
@@ -88,7 +88,7 @@ global global:opt_sroa_variant_return_temp_elide.wado::$const_obj_13: ref Array<
 global global:opt_sroa_variant_return_temp_elide.wado::$const_obj_14: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 100, 114, 105, 118, 101, 40, 38, 109, 117, 116, 32, 99, 41, 32, 61, 61, 32, 49, 10);
 global global:opt_sroa_variant_return_temp_elide.wado::$const_obj_22: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 100, 114, 105, 118, 101, 40, 38, 109, 117, 116, 32, 99, 41, 32, 61, 61, 32, 48, 10);
 
-fn "opt_sroa_variant_return_temp_elide.wado/step"(c, n) {
+fn "opt_sroa_variant_return_temp_elide.wado/step$sroa[return]"(c, n) {
     let was: i32;
     was = c.n;
     if n == 0 {
@@ -107,7 +107,7 @@ fn "opt_sroa_variant_return_temp_elide.wado/drive"(c) {
     let $mv$result$0: i32;
     let $mv$result$1: i32;
     let $mv$result$2: ref null "core:prelude/string.wado//String";
-    multivalue_bind [$mv$result$0, $mv$result$1, $mv$result$2] = "opt_sroa_variant_return_temp_elide.wado/step"(c, black_box(1));
+    multivalue_bind [$mv$result$0, $mv$result$1, $mv$result$2] = "opt_sroa_variant_return_temp_elide.wado/step$sroa[return]"(c, black_box(1));
     if $mv$result$0 == 0 {
         return $mv$result$1;
     } else {

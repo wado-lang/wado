@@ -36,7 +36,7 @@ type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//slot_temp_sroa.wado/find" = fn(ref "core:prelude//List<i32>", i32) -> i32;  // TypeId(13)
 
-type "functype//slot_temp_sroa.wado/outer" = fn(ref "core:prelude//List<i32>", i32) -> [i32, i32, ref null "core:prelude/string.wado//String"];  // TypeId(14)
+type "functype//slot_temp_sroa.wado/outer$sroa[return]" = fn(ref "core:prelude//List<i32>", i32) -> [i32, i32, ref null "core:prelude/string.wado//String"];  // TypeId(14)
 
 type "functype//slot_temp_sroa.wado/run" = fn();  // TypeId(15)
 
@@ -44,7 +44,7 @@ type "functype//slot_temp_sroa.wado/$cm_binding__Stdout_write_via_stream" = fn(i
 
 type "functype//slot_temp_sroa.wado/$cm_export__run" = fn();  // TypeId(17)
 
-type "functype//slot_temp_sroa.wado/outer$spec0$dae[k]" = fn(ref "core:prelude//List<i32>") -> [i32, i32, ref null "core:prelude/string.wado//String"];  // TypeId(18)
+type "functype//slot_temp_sroa.wado/outer$sroa[return]$spec0$dae[k]" = fn(ref "core:prelude//List<i32>") -> [i32, i32, ref null "core:prelude/string.wado//String"];  // TypeId(18)
 
 type "functype//slot_temp_sroa.wado/find$spec0$dae[k]" = fn(ref "core:prelude//List<i32>") -> i32;  // TypeId(19)
 
@@ -118,7 +118,7 @@ fn "slot_temp_sroa.wado/find"(m, k) {
     return -1;
 }
 
-fn "slot_temp_sroa.wado/outer"(m, k) {
+fn "slot_temp_sroa.wado/outer$sroa[return]"(m, k) {
     let $qm_e: ref "core:prelude/string.wado//String";
     let $v1: i32;
     let $sroa_slot_15: i32;
@@ -127,12 +127,12 @@ fn "slot_temp_sroa.wado/outer"(m, k) {
     $sroa_slot_15 = 0;
     $sroa_slot_16 = 0;
     $sroa_slot_17 = ref.null none;
-    $inline_inner_0: block {
+    $inline_inner_sroa_return__0: block {
         if local.tee k("slot_temp_sroa.wado/find"(m, k)) < 0 {
             $sroa_slot_15 = 1;
             $sroa_slot_16 = 0;
             $sroa_slot_17 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 112, 101), used: 4 };
-            break $inline_inner_0;
+            break $inline_inner_sroa_return__0;
         }
         $sroa_slot_15 = 0;
         $v1 = m.used;
@@ -143,7 +143,7 @@ fn "slot_temp_sroa.wado/outer"(m, k) {
         }
         $sroa_slot_16 = builtin::array_get_value<i32>(m.repr, k);
         $sroa_slot_17 = ref.null none;
-        break $inline_inner_0;
+        break $inline_inner_sroa_return__0;
     };
     $sroa_slot_15 = (if $sroa_slot_15 == 0 -> i32 {
         $sroa_slot_16;
@@ -173,7 +173,7 @@ fn "slot_temp_sroa.wado/run"() with Stdout {
             let $mv$$match_7$0: i32;
             let $mv$$match_7$1: i32;
             let $mv$$match_7$2: ref null "core:prelude/string.wado//String";
-            multivalue_bind [$mv$$match_7$0, $mv$$match_7$1, $mv$$match_7$2] = "slot_temp_sroa.wado/outer"(m, 10 * (j + 1));
+            multivalue_bind [$mv$$match_7$0, $mv$$match_7$1, $mv$$match_7$2] = "slot_temp_sroa.wado/outer$sroa[return]"(m, 10 * (j + 1));
             if $mv$$match_7$0 == 0 {
                 total = total + $mv$$match_7$1;
             } else {
@@ -182,7 +182,7 @@ fn "slot_temp_sroa.wado/run"() with Stdout {
             continue l8;
         };
     };
-    multivalue_bind [$mv$$match_7$1, $mv$$match_7$0, $mv$$match_7$2] = "slot_temp_sroa.wado/outer$spec0$dae[k]"(m);
+    multivalue_bind [$mv$$match_7$1, $mv$$match_7$0, $mv$$match_7$2] = "slot_temp_sroa.wado/outer$sroa[return]$spec0$dae[k]"(m);
     if $mv$$match_7$1 == 1 {
         e = ref.as_non_null($mv$$match_7$2);
         total = total + e.used;
@@ -209,7 +209,7 @@ fn "slot_temp_sroa.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "slot_temp_sroa.wado/outer$spec0$dae[k]"(m) {
+fn "slot_temp_sroa.wado/outer$sroa[return]$spec0$dae[k]"(m) {
     let $qm_e: ref "core:prelude/string.wado//String";
     let i: i32;
     let $v1: i32;
@@ -219,12 +219,12 @@ fn "slot_temp_sroa.wado/outer$spec0$dae[k]"(m) {
     $sroa_slot_15 = 0;
     $sroa_slot_16 = 0;
     $sroa_slot_17 = ref.null none;
-    $inline_inner_0: block {
+    $inline_inner_sroa_return__0: block {
         if local.tee i("slot_temp_sroa.wado/find$spec0$dae[k]"(m)) < 0 {
             $sroa_slot_15 = 1;
             $sroa_slot_16 = 0;
             $sroa_slot_17 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 112, 101), used: 4 };
-            break $inline_inner_0;
+            break $inline_inner_sroa_return__0;
         }
         $sroa_slot_15 = 0;
         $v1 = m.used;
@@ -235,7 +235,7 @@ fn "slot_temp_sroa.wado/outer$spec0$dae[k]"(m) {
         }
         $sroa_slot_16 = builtin::array_get_value<i32>(m.repr, i);
         $sroa_slot_17 = ref.null none;
-        break $inline_inner_0;
+        break $inline_inner_sroa_return__0;
     };
     $sroa_slot_15 = (if $sroa_slot_15 == 0 -> i32 {
         $sroa_slot_16;

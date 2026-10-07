@@ -128,7 +128,7 @@ pub fn display_function_name(name: &str) -> String {
 }
 
 /// The name a diagnostic shows for a function: `String::grow` for
-/// `core:prelude/string.wado/String::grow$sroa[&mut self.repr]`. A clone's suffix names no
+/// `core:prelude/string.wado/String::grow$sroa[&mut(self.repr)]`. A clone's suffix names no
 /// function an author wrote, and the span already carries the module path.
 ///
 /// An effect default spells its interface with the same separator and is left
@@ -160,11 +160,11 @@ pub fn param_spec_name(original: &str, ordinal: usize) -> String {
     format!("{original}$spec{ordinal}")
 }
 
-/// `{base}{marker}[a, b]`: a transformation's suffix, its arguments grouped so
+/// `{base}{marker}[a,b]`: a transformation's suffix, its arguments grouped so
 /// that no identifier inside can be read as the next suffix.
 fn grouped_suffix(base: &str, marker: &str, items: &[String]) -> String {
     assert!(!items.is_empty(), "a suffix groups one item at least");
-    format!("{base}{INTERNAL_PREFIX}{marker}[{}]", items.join(", "))
+    format!("{base}{INTERNAL_PREFIX}{marker}[{}]", items.join(","))
 }
 
 const DAE_MARKER: &str = "dae";
@@ -172,10 +172,11 @@ const DAE_MARKER: &str = "dae";
 /// The name of the function derived from `root` that takes each `narrowed`
 /// parameter's field where `root` took the struct around it, none of the
 /// `dropped` ones, both in `root`'s declaration order, and returns as `ret`
-/// says: `f$sroa[self.used]`, `g$sroa[&mut o.inner.x, &p.y]$dae[q, return]`.
+/// says: `f$sroa[self.used]`, `g$sroa[&mut(o.inner.x),&p.y]$dae[q,return]`.
 /// The name spells everything that makes the function one, so two routes to
 /// one shape arrive at one name. `return` is a keyword, so no parameter is
-/// named that.
+/// named that, and `&mut` groups its path so that a parameter whose name
+/// starts with `mut` reads as one.
 #[must_use]
 pub fn reshaped_name(
     root: &str,
@@ -187,14 +188,14 @@ pub fn reshaped_name(
     let mut sroa: Vec<String> = narrowed
         .iter()
         .map(|n| {
-            let borrow = match n.form {
-                FieldForm::Value => "",
-                FieldForm::Shared => "&",
-                FieldForm::Mutable => "&mut ",
-            };
             let mut path = vec![n.param];
             path.extend(&n.fields);
-            format!("{borrow}{}", path.join("."))
+            let path = path.join(".");
+            match n.form {
+                FieldForm::Value => path,
+                FieldForm::Shared => format!("&{path}"),
+                FieldForm::Mutable => format!("&mut({path})"),
+            }
         })
         .collect();
     let mut dae: Vec<String> = dropped.iter().map(ToString::to_string).collect();
@@ -2477,7 +2478,7 @@ mod tests {
     #[test]
     fn diagnostic_name_drops_a_clone_suffix_but_keeps_a_minted_name() {
         assert_eq!(
-            diagnostic_function_name("core:prelude/string.wado/String::grow$sroa[&mut self.repr]"),
+            diagnostic_function_name("core:prelude/string.wado/String::grow$sroa[&mut(self.repr)]"),
             "String::grow"
         );
         assert_eq!(diagnostic_function_name("main.wado/run"), "run");

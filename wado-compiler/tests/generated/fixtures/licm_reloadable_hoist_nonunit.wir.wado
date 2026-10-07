@@ -60,7 +60,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:pre
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(24)
 
-type "functype//licm_reloadable_hoist_nonunit.wado/licm_reloadable_hoist_nonunit.wado/Bag::swap_out" = fn(ref "licm_reloadable_hoist_nonunit.wado//Bag");  // TypeId(25)
+type "functype//licm_reloadable_hoist_nonunit.wado/licm_reloadable_hoist_nonunit.wado/Bag::swap_out$dae[return]" = fn(ref "licm_reloadable_hoist_nonunit.wado//Bag");  // TypeId(25)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(26)
 
@@ -126,7 +126,7 @@ fn "licm_reloadable_hoist_nonunit.wado/probe"(sink, b, out) {
             builtin::array_set<i32>(out.repr, used, $v1);
             out.used = used + 1;
             if i == 0 {
-                "licm_reloadable_hoist_nonunit.wado/licm_reloadable_hoist_nonunit.wado/Bag::swap_out"(sink);
+                "licm_reloadable_hoist_nonunit.wado/licm_reloadable_hoist_nonunit.wado/Bag::swap_out$dae[return]"(sink);
                 $load_0 = b.items;
             }
             i = i + 1;
@@ -499,7 +499,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "licm_reloadable_hoist_nonunit.wado/licm_reloadable_hoist_nonunit.wado/Bag::swap_out"(self) {
+fn "licm_reloadable_hoist_nonunit.wado/licm_reloadable_hoist_nonunit.wado/Bag::swap_out$dae[return]"(self) {
     self.items = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(7, 7, 7), used: 3 };
     return;
 }

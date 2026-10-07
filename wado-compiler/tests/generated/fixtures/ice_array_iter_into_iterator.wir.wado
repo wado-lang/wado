@@ -86,7 +86,7 @@ type "functype//core:prelude/array.wado/core/prelude/array.wado/write_seq_inspec
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(28)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:prelude/string.wado//Utf8Error"];  // TypeId(29)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice$sroa[return]" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:prelude/string.wado//Utf8Error"];  // TypeId(29)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> i32;  // TypeId(30)
 
@@ -151,7 +151,7 @@ fn "ice_array_iter_into_iterator.wado/run"() with Stdout {
     let $mv$$match_2$0: i32;
     let $mv$$match_2$1: ref null "core:prelude/string.wado//String";
     let $mv$$match_2$2: ref null "core:prelude/string.wado//Utf8Error";
-    multivalue_bind [$mv$$match_2$0, $mv$$match_2$1, $mv$$match_2$2] = "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice"(global:ice_array_iter_into_iterator.wado::$const_obj_8);
+    multivalue_bind [$mv$$match_2$0, $mv$$match_2$1, $mv$$match_2$2] = "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice$sroa[return]"(global:ice_array_iter_into_iterator.wado::$const_obj_8);
     if $mv$$match_2$0 == 0 {
         s = ref.as_non_null($mv$$match_2$1);
         $mv$$match_2$0 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
@@ -623,7 +623,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice"(bytes) {
+fn "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice$sroa[return]"(bytes) {
     let $load_0: i32;
     let $load_1: i32;
     let prefix: i32;

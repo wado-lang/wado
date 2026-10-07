@@ -25,9 +25,9 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//opt_sroa_variant_return_if_descent.wado/leaf" = fn(i32) -> [i32, i32, ref null "core:prelude/string.wado//String"];  // TypeId(10)
+type "functype//opt_sroa_variant_return_if_descent.wado/leaf$sroa[return]" = fn(i32) -> [i32, i32, ref null "core:prelude/string.wado//String"];  // TypeId(10)
 
-type "functype//opt_sroa_variant_return_if_descent.wado/dispatch" = fn(bool, i32) -> [i32, i32, ref null "core:prelude/string.wado//String"];  // TypeId(11)
+type "functype//opt_sroa_variant_return_if_descent.wado/dispatch$sroa[return]" = fn(bool, i32) -> [i32, i32, ref null "core:prelude/string.wado//String"];  // TypeId(11)
 
 type "functype//opt_sroa_variant_return_if_descent.wado/run_all" = fn() -> i32;  // TypeId(12)
 
@@ -77,18 +77,18 @@ global global:opt_sroa_variant_return_if_descent.wado::$const_obj_9: ref Array<u
 global global:opt_sroa_variant_return_if_descent.wado::$const_obj_10: ref Array<u8> = array.new_fixed<u8>(114, 117, 110);
 global global:opt_sroa_variant_return_if_descent.wado::$const_obj_11: ref Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
 
-fn "opt_sroa_variant_return_if_descent.wado/leaf"(x) {
+fn "opt_sroa_variant_return_if_descent.wado/leaf$sroa[return]"(x) {
     if x < 0 {
         return 1, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("negative"), used: 8 };
     }
     return 0, x + 1, ref.null none;
 }
 
-fn "opt_sroa_variant_return_if_descent.wado/dispatch"(use_leaf, x) {
+fn "opt_sroa_variant_return_if_descent.wado/dispatch$sroa[return]"(use_leaf, x) {
     let e: ref "core:prelude/string.wado//String";
     if use_leaf {
         let $mv$$local_4$2: ref null "core:prelude/string.wado//String";
-        multivalue_bind [x, use_leaf, $mv$$local_4$2] = "opt_sroa_variant_return_if_descent.wado/leaf"(x);
+        multivalue_bind [x, use_leaf, $mv$$local_4$2] = "opt_sroa_variant_return_if_descent.wado/leaf$sroa[return]"(x);
         if x == 0 {
             return 0, use_leaf * 10, ref.null none;
         } else if @likely(x == 1) {
@@ -106,7 +106,7 @@ fn "opt_sroa_variant_return_if_descent.wado/run_all"() {
     let $mv$$vr_6$0: i32;
     let $mv$$vr_6$1: i32;
     let $mv$$vr_6$2: ref null "core:prelude/string.wado//String";
-    multivalue_bind [$mv$$vr_6$0, $mv$$vr_6$1, $mv$$vr_6$2] = "opt_sroa_variant_return_if_descent.wado/dispatch"(black_box(1), black_box(5));
+    multivalue_bind [$mv$$vr_6$0, $mv$$vr_6$1, $mv$$vr_6$2] = "opt_sroa_variant_return_if_descent.wado/dispatch$sroa[return]"(black_box(1), black_box(5));
     $mv$$vr_6$0 = (if $mv$$vr_6$0 == 0 -> i32 {
         $mv$$vr_6$1;
     } else if @likely($mv$$vr_6$0 == 1) -> i32 {
@@ -115,7 +115,7 @@ fn "opt_sroa_variant_return_if_descent.wado/run_all"() {
         unreachable;
     });
     let $mv$$vr_7$1: i32;
-    multivalue_bind [$mv$$vr_6$1, $mv$$vr_7$1, $mv$$vr_6$2] = "opt_sroa_variant_return_if_descent.wado/dispatch"(black_box(0), black_box(0));
+    multivalue_bind [$mv$$vr_6$1, $mv$$vr_7$1, $mv$$vr_6$2] = "opt_sroa_variant_return_if_descent.wado/dispatch$sroa[return]"(black_box(0), black_box(0));
     $mv$$vr_6$1 = (if $mv$$vr_6$1 == 0 -> i32 {
         $mv$$vr_7$1;
     } else if @likely($mv$$vr_6$1 == 1) -> i32 {
@@ -124,7 +124,7 @@ fn "opt_sroa_variant_return_if_descent.wado/run_all"() {
         unreachable;
     });
     let $mv$$vr_8$1: i32;
-    multivalue_bind [$mv$$vr_7$1, $mv$$vr_8$1, $mv$$vr_6$2] = "opt_sroa_variant_return_if_descent.wado/dispatch"(black_box(1), black_box(-1));
+    multivalue_bind [$mv$$vr_7$1, $mv$$vr_8$1, $mv$$vr_6$2] = "opt_sroa_variant_return_if_descent.wado/dispatch$sroa[return]"(black_box(1), black_box(-1));
     $mv$$vr_7$1 = (if $mv$$vr_7$1 == 0 -> i32 {
         $mv$$vr_8$1;
     } else if @likely($mv$$vr_7$1 == 1) -> i32 {

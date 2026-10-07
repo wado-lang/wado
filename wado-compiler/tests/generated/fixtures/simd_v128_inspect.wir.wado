@@ -41,7 +41,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//core:simd/core:simd/u8x16^core:prelude/traits.wado/From<Array<i32>>::from" = fn(ref Array<i32>) -> v128;  // TypeId(17)
 
-type "functype//core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$sroa[self.value, f.buf]" = fn(v128, ref "core:prelude/string.wado//String");  // TypeId(18)
+type "functype//core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn(v128, ref "core:prelude/string.wado//String");  // TypeId(18)
 
 type "functype//core:prelude/traits.wado/simd_v128_inspect.wado/Wrap^core:prelude/traits.wado/Inspect::inspect$sroa[self.bytes]$spec0$sroa[f.buf]" = fn(v128, ref "core:prelude/string.wado//String");  // TypeId(19)
 
@@ -85,7 +85,7 @@ fn "simd_v128_inspect.wado/run"() with Stdout {
     let packed_48: i64;
     v = "core:simd/core:simd/u8x16^core:prelude/traits.wado/From<Array<i32>>::from"(global:simd_v128_inspect.wado::$const_obj_6);
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$sroa[self.value, f.buf]"(v, $local_2);
+    "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(v, $local_2);
     if @unlikely(local.tee new_used_28($local_2.used + 4) > builtin::array_len($local_2.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_28);
@@ -285,7 +285,7 @@ fn "core:simd/core:simd/u8x16^core:prelude/traits.wado/From<Array<i32>>::from"(l
     });
 }
 
-fn "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$sroa[self.value, f.buf]"(self, f) {
+fn "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {
     let byte_3: u8;
     let new_used_18: i32;
     let start_19: i32;
@@ -497,7 +497,7 @@ fn "core:prelude/traits.wado/simd_v128_inspect.wado/Wrap^core:prelude/traits.wad
     new_used_21 = f.used;
     f.used = start_22;
     builtin::array_copy<u8>(f.repr, new_used_21, global:core:prelude/traits.wado::$const_obj_58, 0, 2);
-    "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$sroa[self.value, f.buf]"(self, f);
+    "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f);
     if @unlikely(local.tee new_used_21(f.used + 4) > builtin::array_len(f.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used_21);

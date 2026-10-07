@@ -25,7 +25,7 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//bug_equal_arms_delete_trap.wado/equal_arms_over_trapping_division$dae[n, d]" = fn() -> i32;  // TypeId(10)
+type "functype//bug_equal_arms_delete_trap.wado/equal_arms_over_trapping_division$dae[n,d]" = fn() -> i32;  // TypeId(10)
 
 type "functype//bug_equal_arms_delete_trap.wado/run" = fn();  // TypeId(11)
 
@@ -66,7 +66,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:bug_equal_arms_delete_trap.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(53), used: 1 };
 
-fn "bug_equal_arms_delete_trap.wado/equal_arms_over_trapping_division$dae[n, d]"() {
+fn "bug_equal_arms_delete_trap.wado/equal_arms_over_trapping_division$dae[n,d]"() {
     if (1 / 0) == 0 {
         return 5;
     } else {
@@ -93,7 +93,7 @@ fn "bug_equal_arms_delete_trap.wado/run"() with Stdout {
     "core:rt/write_string_to_stream$dae[add_newline]"(tx_27, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_26);
     $mv_arg_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    tx_27 = local.tee rx_26("bug_equal_arms_delete_trap.wado/equal_arms_over_trapping_division$dae[n, d]"()) < 0;
+    tx_27 = local.tee rx_26("bug_equal_arms_delete_trap.wado/equal_arms_over_trapping_division$dae[n,d]"()) < 0;
     rx_26 = "core:prelude/primitive.wado/count_digits_u64"(local.tee packed_25(packed_25 = builtin::i64_extend_i32_s(rx_26); select i64(packed_25 < 0_i64, 0_i64 - packed_25, packed_25)));
     if tx_27 {
         if @unlikely(local.tee tx_27(0 + 1) > builtin::array_len($mv_arg_2.repr)) {

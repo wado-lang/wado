@@ -81,13 +81,13 @@ type "functype//core:serde/core/serde/apply_case<core:prelude/string.wado/String
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::get_byte_unchecked$cold0$dae[self]" = fn(i32, i32);  // TypeId(29)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$cold0$dae[self, value]" = fn(i32, i32);  // TypeId(30)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$cold0$dae[self,value]" = fn(i32, i32);  // TypeId(30)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked$cold0$dae[self]" = fn(u8);  // TypeId(31)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice_unchecked$cold0$dae[self]" = fn(i32, i32, bool, i32, bool, bool, bool, bool, i32, bool, bool, bool);  // TypeId(32)
 
-type "functype//core:json/core/json/to_string<reflect_wire_name_policy_local.wado/Local@5>$sroa[value.user_id]" = fn(i32, ref "core:prelude/types.wado//Option<char>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(33)
+type "functype//core:json/core/json/to_string<reflect_wire_name_policy_local.wado/Local@5>$sroa[value.user_id,return]" = fn(i32, ref "core:prelude/types.wado//Option<char>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(33)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked" = fn(ref "core:prelude/string.wado//String", i32, u8);  // TypeId(34)
 
@@ -103,7 +103,7 @@ type "functype//core:json/core:json/JsonStructSerializer^core:serde/SerializeStr
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(40)
 
-type "functype//core:serde/reflect_wire_name_policy_local.wado/Local@5^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.user_id, s.buf]" = fn(i32, ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(41)
+type "functype//core:serde/reflect_wire_name_policy_local.wado/Local@5^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.user_id,s.buf]" = fn(i32, ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(41)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(42)
 
@@ -182,7 +182,7 @@ fn "reflect_wire_name_policy_local.wado/$test_0_a_local_struct_s_name_policy_rea
     let $mv$$vr_11$0: i32;
     let $mv$$vr_11$1: ref null "core:prelude/string.wado//String";
     let $mv$$vr_11$2: ref null "core:serde//SerializeError";
-    multivalue_bind [$mv$$vr_11$0, $mv$$vr_11$1, $mv$$vr_11$2] = "core:json/core/json/to_string<reflect_wire_name_policy_local.wado/Local@5>$sroa[value.user_id]"(1, global:core:builtin::$unit_case$core:prelude/types.wado//Option<char>$0);
+    multivalue_bind [$mv$$vr_11$0, $mv$$vr_11$1, $mv$$vr_11$2] = "core:json/core/json/to_string<reflect_wire_name_policy_local.wado/Local@5>$sroa[value.user_id,return]"(1, global:core:builtin::$unit_case$core:prelude/types.wado//Option<char>$0);
     if @unlikely(local.tee i((if $mv$$vr_11$0 == 0 -> bool {
         t = ref.as_non_null($mv$$vr_11$1);
         $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
@@ -855,7 +855,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::get_byte_unchecked
     unreachable;
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$cold0$dae[self, value]"(index, $v1) {
+fn "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$cold0$dae[self,value]"(index, $v1) {
     let $load_2: ref Array<u8>;
     let $local_7: ref "core:prelude/string.wado//String";
     let new_used_14: i32;
@@ -1153,12 +1153,12 @@ condition: start <= end && self.is_char_boundary(start) && self.is_char_boundary
     unreachable;
 }
 
-fn "core:json/core/json/to_string<reflect_wire_name_policy_local.wado/Local@5>$sroa[value.user_id]"(value, trailing_char) {
+fn "core:json/core/json/to_string<reflect_wire_name_policy_local.wado/Local@5>$sroa[value.user_id,return]"(value, trailing_char) {
     let buf: ref "core:prelude/string.wado//String";
     let $qm_e: ref "core:serde//SerializeError";
     let $match_7: ref null "core:serde//SerializeError";
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
-    if @likely(ref.is_null(local.tee $match_7("core:serde/reflect_wire_name_policy_local.wado/Local@5^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.user_id, s.buf]"(value, buf)))) {
+    if @likely(ref.is_null(local.tee $match_7("core:serde/reflect_wire_name_policy_local.wado/Local@5^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.user_id,s.buf]"(value, buf)))) {
     } else {
         $qm_e = ref.as_non_null($match_7);
         cold_path;
@@ -1177,7 +1177,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked
     $v1 = self.used;
     if @unlikely(((0 <= index) & (index < $v1)) == 0) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$cold0$dae[self, value]"(index, $v1);
+        "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$cold0$dae[self,value]"(index, $v1);
         unreachable;
     }
     builtin::array_set_u8(self.repr, index, value);
@@ -1398,7 +1398,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     return content_len;
 }
 
-fn "core:serde/reflect_wire_name_policy_local.wado/Local@5^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.user_id, s.buf]"(self, s) {
+fn "core:serde/reflect_wire_name_policy_local.wado/Local@5^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.user_id,s.buf]"(self, s) {
     let st: ref "core:json//JsonStructSerializer";
     let $qm_e_10: ref "core:serde//SerializeError";
     let $match_13: ref null "core:serde//SerializeError";

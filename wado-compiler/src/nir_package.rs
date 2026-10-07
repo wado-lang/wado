@@ -812,7 +812,7 @@ mod tests {
                 r.names().0
             })
             .collect();
-        assert_eq!(names, ["f$sroa[a.x]", "f$sroa[&a.x]", "f$sroa[&mut a.x]"]);
+        assert_eq!(names, ["f$sroa[a.x]", "f$sroa[&a.x]", "f$sroa[&mut(a.x)]"]);
     }
 
     #[test]
@@ -821,10 +821,10 @@ mod tests {
         narrow(&mut r, 0, "x");
         assert_eq!(r.names().0, "f$sroa[a.x]");
         r.reshape_return(ReturnShape::Scalarized);
-        assert_eq!(r.names().0, "f$sroa[a.x, return]");
+        assert_eq!(r.names().0, "f$sroa[a.x,return]");
         r.drop_params(&[false, true]);
         r.reshape_return(ReturnShape::Dropped);
-        assert_eq!(r.names().0, "f$sroa[a.x]$dae[b, return]");
+        assert_eq!(r.names().0, "f$sroa[a.x]$dae[b,return]");
     }
 
     /// A `param_spec` clone's name spells its source's shape already, so only

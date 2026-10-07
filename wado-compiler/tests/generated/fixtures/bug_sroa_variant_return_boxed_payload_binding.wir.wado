@@ -66,7 +66,7 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(19)
 
-type "functype//bug_sroa_variant_return_boxed_payload_binding.wado/make" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>") -> [i32, ref null "bug_sroa_variant_return_boxed_payload_binding.wado//Big", ref null "bug_sroa_variant_return_boxed_payload_binding.wado//Failure"];  // TypeId(20)
+type "functype//bug_sroa_variant_return_boxed_payload_binding.wado/make$sroa[return]" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>") -> [i32, ref null "bug_sroa_variant_return_boxed_payload_binding.wado//Big", ref null "bug_sroa_variant_return_boxed_payload_binding.wado//Failure"];  // TypeId(20)
 
 type "functype//bug_sroa_variant_return_boxed_payload_binding.wado/describe" = fn(ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>") -> ref "core:prelude/string.wado//String";  // TypeId(21)
 
@@ -86,7 +86,7 @@ type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  //
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(29)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$dae[self, index]" = fn(i32);  // TypeId(30)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$dae[self,index]" = fn(i32);  // TypeId(30)
 
 type "functype//core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$sroa[f.buf]" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(31)
 
@@ -154,7 +154,7 @@ global global:core:prelude/traits.wado::$const_obj_92: ref Array<u8> = array.new
 global global:core:prelude/traits.wado::$const_obj_93: ref Array<u8> = array.new_fixed<u8>(70, 97, 105, 108, 117, 114, 101);
 global global:core:prelude/traits.wado::$const_obj_94: ref Array<u8> = array.new_fixed<u8>(80, 97, 105, 114);
 
-fn "bug_sroa_variant_return_boxed_payload_binding.wado/make"(inputs) {
+fn "bug_sroa_variant_return_boxed_payload_binding.wado/make$sroa[return]"(inputs) {
     let $load_2: ref "core:prelude/string.wado//String";
     let $load_5: i32;
     let $load_8: i32;
@@ -196,7 +196,7 @@ fn "bug_sroa_variant_return_boxed_payload_binding.wado/make"(inputs) {
     };
     return 0, struct.new "bug_sroa_variant_return_boxed_payload_binding.wado//Big" { name: $load_14 = items.used; if @unlikely(0 >= $load_14) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$dae[self, index]"($load_14);
+        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$dae[self,index]"($load_14);
         unreachable;
     }; $load_14 = local.tee $load_9(builtin::array_get_value<ref "core:prelude/string.wado//String">(items.repr, 0)).used; struct.new "core:prelude/string.wado//String" { repr: $array_clone_dst_11 = $load_9.repr; builtin::array_copy<u8>(local.tee $array_clone_src_10(builtin::array_new<u8>($load_14)), 0, $array_clone_dst_11, 0, $load_14); $array_clone_src_10, used: $load_14 }, items: items }, ref.null none;
 }
@@ -212,7 +212,7 @@ fn "bug_sroa_variant_return_boxed_payload_binding.wado/describe"(inputs) {
     let $mv$$sroa_result_value_67$0: i32;
     let $mv$$sroa_result_value_67$1: ref null "bug_sroa_variant_return_boxed_payload_binding.wado//Big";
     let $mv$$sroa_result_value_67$2: ref null "bug_sroa_variant_return_boxed_payload_binding.wado//Failure";
-    multivalue_bind [$mv$$sroa_result_value_67$0, $mv$$sroa_result_value_67$1, $mv$$sroa_result_value_67$2] = "bug_sroa_variant_return_boxed_payload_binding.wado/make"(inputs);
+    multivalue_bind [$mv$$sroa_result_value_67$0, $mv$$sroa_result_value_67$1, $mv$$sroa_result_value_67$2] = "bug_sroa_variant_return_boxed_payload_binding.wado/make$sroa[return]"(inputs);
     if $mv$$sroa_result_value_67$0 == 1 {
         $sroa_err_value_74 = ref.as_non_null($mv$$sroa_result_value_67$2);
         return $local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }, if @unlikely(local.tee new_used_18(0 + 8) > builtin::array_len($local_4.repr)) {
@@ -438,7 +438,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$dae[self, index]"($v1) {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$dae[self,index]"($v1) {
     let $load_2: ref Array<u8>;
     let $local_4: ref "core:prelude/string.wado//String";
     let new_used_11: i32;

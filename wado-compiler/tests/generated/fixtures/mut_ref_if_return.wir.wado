@@ -51,9 +51,9 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(14)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//mut_ref_if_return.wado/parse_item" = fn(ref "mut_ref_if_return.wado//Parser") -> [i32, ref null "mut_ref_if_return.wado//NodeA", ref null "core:prelude/string.wado//String"];  // TypeId(16)
+type "functype//mut_ref_if_return.wado/parse_item$sroa[return]" = fn(ref "mut_ref_if_return.wado//Parser") -> [i32, ref null "mut_ref_if_return.wado//NodeA", ref null "core:prelude/string.wado//String"];  // TypeId(16)
 
-type "functype//mut_ref_if_return.wado/parse_root" = fn(ref "mut_ref_if_return.wado//Parser") -> [i32, i32, ref null "core:prelude/string.wado//String"];  // TypeId(17)
+type "functype//mut_ref_if_return.wado/parse_root$sroa[return]" = fn(ref "mut_ref_if_return.wado//Parser") -> [i32, i32, ref null "core:prelude/string.wado//String"];  // TypeId(17)
 
 type "functype//mut_ref_if_return.wado/run" = fn();  // TypeId(18)
 
@@ -75,7 +75,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::with_c
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(27)
 
-type "functype//mut_ref_if_return.wado/mut_ref_if_return.wado/Parser::expect$dae[kind]" = fn(ref "mut_ref_if_return.wado//Parser") -> [i32, ref null "mut_ref_if_return.wado//Token", ref null "core:prelude/string.wado//String"];  // TypeId(28)
+type "functype//mut_ref_if_return.wado/mut_ref_if_return.wado/Parser::expect$sroa[return]$dae[kind]" = fn(ref "mut_ref_if_return.wado//Parser") -> [i32, ref null "mut_ref_if_return.wado//Token", ref null "core:prelude/string.wado//String"];  // TypeId(28)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(29)
 
@@ -120,7 +120,7 @@ global global:mut_ref_if_return.wado::$const_obj_30: ref Array<u8> = array.new_f
 global global:mut_ref_if_return.wado::$const_obj_33: ref Array<u8> = array.new_fixed<u8>(109, 117, 116, 95, 114, 101, 102, 95, 105, 102, 95, 114, 101, 116, 117, 114, 110, 46, 119, 97, 100, 111);
 global global:mut_ref_if_return.wado::$const_obj_35: ref Array<u8> = array.new_fixed<u8>(112, 97, 114, 115, 101, 95, 114, 111, 111, 116);
 
-fn "mut_ref_if_return.wado/parse_item"(p) {
+fn "mut_ref_if_return.wado/parse_item$sroa[return]"(p) {
     let $load_1: ref "core:prelude//List<mut_ref_if_return.wado/Token>";
     let $qm_v_2: ref "mut_ref_if_return.wado//NodeA";
     let index_8: i32;
@@ -137,10 +137,10 @@ fn "mut_ref_if_return.wado/parse_item"(p) {
         index_8 = 0;
         $sroa_slot_19 = ref.null none;
         $sroa_slot_20 = ref.null none;
-        $inline_parse_leaf_2: block {
+        $inline_parse_leaf_sroa_return__2: block {
             let $mv$$vr_4$1: ref null "mut_ref_if_return.wado//Token";
             let $mv$$vr_4$2: ref null "core:prelude/string.wado//String";
-            multivalue_bind [$v1, $mv$$vr_4$1, $mv$$vr_4$2] = "mut_ref_if_return.wado/mut_ref_if_return.wado/Parser::expect$dae[kind]"(p);
+            multivalue_bind [$v1, $mv$$vr_4$1, $mv$$vr_4$2] = "mut_ref_if_return.wado/mut_ref_if_return.wado/Parser::expect$sroa[return]$dae[kind]"(p);
             $qm_v_14 = (if $v1 == 0 -> ref "mut_ref_if_return.wado//Token" {
                 local.tee $qm_v_14(ref.as_non_null($mv$$vr_4$1));
             } else if @unlikely($v1 == 1) -> ref "mut_ref_if_return.wado//Token" {
@@ -148,14 +148,14 @@ fn "mut_ref_if_return.wado/parse_item"(p) {
                 cold_path;
                 index_8 = 1;
                 $sroa_slot_19 = ref.null none;
-                break $inline_parse_leaf_2: $sroa_slot_20 = $qm_e_15;
+                break $inline_parse_leaf_sroa_return__2: $sroa_slot_20 = $qm_e_15;
             } else {
                 unreachable;
             });
             index_8 = 0;
             $sroa_slot_19 = struct.new "mut_ref_if_return.wado//NodeA::Leaf" { discriminant: 0, payload_0: $qm_v_14 };
             $sroa_slot_20 = ref.null none;
-            break $inline_parse_leaf_2;
+            break $inline_parse_leaf_sroa_return__2;
         };
         $qm_v_2 = (if index_8 == 0 -> ref "mut_ref_if_return.wado//NodeA" {
             local.tee $qm_v_2(ref.as_non_null($sroa_slot_19));
@@ -171,7 +171,7 @@ fn "mut_ref_if_return.wado/parse_item"(p) {
     return 1, ref.null none, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no match"), used: 8 };
 }
 
-fn "mut_ref_if_return.wado/parse_root"(p) {
+fn "mut_ref_if_return.wado/parse_root$sroa[return]"(p) {
     let $load_1: ref "core:prelude//List<mut_ref_if_return.wado/Token>";
     let $qm_e: ref "core:prelude/string.wado//String";
     let index_13: i32;
@@ -186,7 +186,7 @@ fn "mut_ref_if_return.wado/parse_root"(p) {
             let $mv$$vr_10$0: i32;
             let $mv$$vr_10$1: ref null "mut_ref_if_return.wado//NodeA";
             let $mv$$vr_10$2: ref null "core:prelude/string.wado//String";
-            multivalue_bind [$mv$$vr_10$0, $mv$$vr_10$1, $mv$$vr_10$2] = "mut_ref_if_return.wado/parse_item"(p);
+            multivalue_bind [$mv$$vr_10$0, $mv$$vr_10$1, $mv$$vr_10$2] = "mut_ref_if_return.wado/parse_item$sroa[return]"(p);
             drop((if $mv$$vr_10$0 == 0 -> ref "mut_ref_if_return.wado//NodeA" {
                 ref.as_non_null($mv$$vr_10$1);
             } else if @unlikely($mv$$vr_10$0 == 1) -> ref "mut_ref_if_return.wado//NodeA" {
@@ -215,7 +215,7 @@ fn "mut_ref_if_return.wado/run"() {
     let $mv$$sroa_r_value_7$0: i32;
     let $mv$$sroa_r_value_7$1: i32;
     let $mv$$sroa_r_value_7$2: ref null "core:prelude/string.wado//String";
-    multivalue_bind [$mv$$sroa_r_value_7$0, $mv$$sroa_r_value_7$1, $mv$$sroa_r_value_7$2] = "mut_ref_if_return.wado/parse_root"(parser);
+    multivalue_bind [$mv$$sroa_r_value_7$0, $mv$$sroa_r_value_7$1, $mv$$sroa_r_value_7$2] = "mut_ref_if_return.wado/parse_root$sroa[return]"(parser);
     if @unlikely($mv$$sroa_r_value_7$0 == 1) {
         e = ref.as_non_null($mv$$sroa_r_value_7$2);
         cold_path;
@@ -557,7 +557,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "mut_ref_if_return.wado/mut_ref_if_return.wado/Parser::expect$dae[kind]"(self) {
+fn "mut_ref_if_return.wado/mut_ref_if_return.wado/Parser::expect$sroa[return]$dae[kind]"(self) {
     let $load_0: i32;
     let $load_1: ref "core:prelude//List<mut_ref_if_return.wado/Token>";
     let $load_2: i32;

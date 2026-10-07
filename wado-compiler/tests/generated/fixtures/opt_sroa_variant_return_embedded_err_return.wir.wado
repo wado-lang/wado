@@ -76,9 +76,9 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(18)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(19)
 
-type "functype//opt_sroa_variant_return_embedded_err_return.wado/checked" = fn(i64) -> [i32, i64, ref null "core:prelude/string.wado//String"];  // TypeId(20)
+type "functype//opt_sroa_variant_return_embedded_err_return.wado/checked$sroa[return]" = fn(i64) -> [i32, i64, ref null "core:prelude/string.wado//String"];  // TypeId(20)
 
-type "functype//opt_sroa_variant_return_embedded_err_return.wado/first_two" = fn(ref "core:prelude//List<opt_sroa_variant_return_embedded_err_return.wado/Tree>") -> [i32, ref null "tuple//[i64, i64]", ref null "core:prelude/string.wado//String"];  // TypeId(21)
+type "functype//opt_sroa_variant_return_embedded_err_return.wado/first_two$sroa[return]" = fn(ref "core:prelude//List<opt_sroa_variant_return_embedded_err_return.wado/Tree>") -> [i32, ref null "tuple//[i64, i64]", ref null "core:prelude/string.wado//String"];  // TypeId(21)
 
 type "functype//opt_sroa_variant_return_embedded_err_return.wado/run" = fn();  // TypeId(22)
 
@@ -120,7 +120,7 @@ type "functype//core:prelude/traits.wado/core:prelude/types.wado/Result<[i64,i64
 
 type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(41)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(42)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(42)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(43)
 
@@ -161,14 +161,14 @@ global global:core:prelude/traits.wado::$const_obj_51: ref Array<u8> = array.new
 global global:core:prelude/traits.wado::$const_obj_52: ref Array<u8> = array.new_fixed<u8>(82, 101, 115, 117, 108, 116);
 global global:core:prelude/traits.wado::$const_obj_53: ref Array<u8> = array.new_fixed<u8>(79, 107);
 
-fn "opt_sroa_variant_return_embedded_err_return.wado/checked"(v) {
+fn "opt_sroa_variant_return_embedded_err_return.wado/checked$sroa[return]"(v) {
     if v < 0_i64 {
         return 1, 0_i64, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("negative"), used: 8 };
     }
     return 0, v, ref.null none;
 }
 
-fn "opt_sroa_variant_return_embedded_err_return.wado/first_two"(nodes) {
+fn "opt_sroa_variant_return_embedded_err_return.wado/first_two$sroa[return]"(nodes) {
     let a: i64;
     let b: i64;
     let have_a: bool;
@@ -195,7 +195,7 @@ fn "opt_sroa_variant_return_embedded_err_return.wado/first_two"(nodes) {
                 let $mv$$vr_11$0: i32;
                 let $mv$$vr_11$1: i64;
                 let $mv$$vr_11$2: ref null "core:prelude/string.wado//String";
-                multivalue_bind [$mv$$vr_11$0, $mv$$vr_11$1, $mv$$vr_11$2] = "opt_sroa_variant_return_embedded_err_return.wado/checked"(v);
+                multivalue_bind [$mv$$vr_11$0, $mv$$vr_11$1, $mv$$vr_11$2] = "opt_sroa_variant_return_embedded_err_return.wado/checked$sroa[return]"(v);
                 x = (if $mv$$vr_11$0 == 0 -> i64 {
                     $mv$$vr_11$1;
                 } else if @unlikely($mv$$vr_11$0 == 1) -> i64 {
@@ -227,7 +227,7 @@ fn "opt_sroa_variant_return_embedded_err_return.wado/run"() {
     let $mv$ok$0: i32;
     let $mv$ok$1: ref null "tuple//[i64, i64]";
     let $mv$ok$2: ref null "core:prelude/string.wado//String";
-    multivalue_bind [$mv$ok$0, $mv$ok$1, $mv$ok$2] = "opt_sroa_variant_return_embedded_err_return.wado/first_two"(global:opt_sroa_variant_return_embedded_err_return.wado::$const_obj_12);
+    multivalue_bind [$mv$ok$0, $mv$ok$1, $mv$ok$2] = "opt_sroa_variant_return_embedded_err_return.wado/first_two$sroa[return]"(global:opt_sroa_variant_return_embedded_err_return.wado::$const_obj_12);
     if @unlikely(local.tee $cond_1((if (if $mv$ok$0 == 0 -> i32 {
         if local.tee $local_8(ref.as_non_null($mv$ok$1)).0 == 10_i64 -> i32 {
             ($local_8.1 == 20_i64) & 1;
@@ -244,18 +244,18 @@ fn "opt_sroa_variant_return_embedded_err_return.wado/run"() {
     })) == 0) {
         cold_path;
         $cond_1 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_4("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(134)), 76);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_4.repr, $cond_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_4.repr, $cond_1 + 20, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 117, 110), used: 3 }, 3);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_4.repr, $cond_1 + 23, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 116, 32), used: 4 }, 4);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_4.repr, $cond_1 + 27, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("opt_sroa_variant_return_embedded_err_return.wado"), used: 48 }, 48);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_4.repr, $cond_1 + 75, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_4.repr, $cond_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_4.repr, $cond_1 + 20, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 117, 110), used: 3 }, 3);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_4.repr, $cond_1 + 23, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 116, 32), used: 4 }, 4);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_4.repr, $cond_1 + 27, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("opt_sroa_variant_return_embedded_err_return.wado"), used: 48 }, 48);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_4.repr, $cond_1 + 75, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1);
         $local_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_4);
         "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$sroa[self.value]"(63, $local_5);
         $cond_1 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_4, 44);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_4.repr, $cond_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_4.repr, $cond_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: ok matches { Ok([10, 20]) }
 "), used: 40 }, 40);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_4.repr, $cond_1 + 40, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107, 58, 32), used: 4 }, 4);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_4.repr, $cond_1 + 40, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107, 58, 32), used: 4 }, 4);
         $local_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_4);
         "core:prelude/traits.wado/core:prelude/types.wado/Result<[i64,i64],core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"((if $mv$ok$0 == 0 -> ref "core:prelude/types.wado//Result<[i64,i64],core:prelude/string.wado/String>" {
             struct.new "core:prelude/types.wado//Result<[i64,i64],core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: ref.as_non_null($mv$ok$1) };
@@ -268,22 +268,22 @@ condition: ok matches { Ok([10, 20]) }
         "core:rt/panic"($local_4.repr, $local_4.used);
         unreachable;
     }
-    multivalue_bind [$mv$ok$0, $mv$ok$1, $mv$ok$2] = "opt_sroa_variant_return_embedded_err_return.wado/first_two"(global:opt_sroa_variant_return_embedded_err_return.wado::$const_obj_10);
+    multivalue_bind [$mv$ok$0, $mv$ok$1, $mv$ok$2] = "opt_sroa_variant_return_embedded_err_return.wado/first_two$sroa[return]"(global:opt_sroa_variant_return_embedded_err_return.wado::$const_obj_10);
     if @unlikely(local.tee $cond_1($mv$ok$0 == 1) == 0) {
         cold_path;
         $cond_1 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_4("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(130)), 76);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_4.repr, $cond_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_4.repr, $cond_1 + 20, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 117, 110), used: 3 }, 3);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_4.repr, $cond_1 + 23, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 116, 32), used: 4 }, 4);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_4.repr, $cond_1 + 27, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("opt_sroa_variant_return_embedded_err_return.wado"), used: 48 }, 48);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_4.repr, $cond_1 + 75, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_4.repr, $cond_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_4.repr, $cond_1 + 20, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 117, 110), used: 3 }, 3);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_4.repr, $cond_1 + 23, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 116, 32), used: 4 }, 4);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_4.repr, $cond_1 + 27, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("opt_sroa_variant_return_embedded_err_return.wado"), used: 48 }, 48);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_4.repr, $cond_1 + 75, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1);
         $local_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_4);
         "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$sroa[self.value]"(67, $local_5);
         $cond_1 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_4, 40);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_4.repr, $cond_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_4.repr, $cond_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: bad matches { Err(_) }
 "), used: 35 }, 35);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_4.repr, $cond_1 + 35, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bad: "), used: 5 }, 5);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_4.repr, $cond_1 + 35, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bad: "), used: 5 }, 5);
         $local_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_4);
         "core:prelude/traits.wado/core:prelude/types.wado/Result<[i64,i64],core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"((if $mv$ok$0 == 0 -> ref "core:prelude/types.wado//Result<[i64,i64],core:prelude/string.wado/String>" {
             struct.new "core:prelude/types.wado//Result<[i64,i64],core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: ref.as_non_null($mv$ok$1) };
@@ -1556,7 +1556,7 @@ fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$sroa[s
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $mv_arg_3(f.buf).repr, is_negative, x, self);
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"(self, offset, s, n) {
+fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"(self, offset, s, n) {
     builtin::array_copy<u8>(self, offset, s.repr, 0, n);
 }
 

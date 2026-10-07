@@ -299,7 +299,7 @@ type "functype//core:prelude/primitive.wado/i32::clamp$cold0$dae[value]" = fn(i3
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(67)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all" = fn(i32, ref "core:prelude//List<u8>");  // TypeId(68)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$dae[return]" = fn(i32, ref "core:prelude//List<u8>");  // TypeId(68)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow" = fn(ref "core:prelude//List<core:prelude/list.wado/List<u8>>");  // TypeId(69)
 
@@ -434,7 +434,7 @@ fn "stream_http_echo.wado/$cm_task_entry__handle"(request) {
             break_if b4 $sroa_$pattern_temp_0_0_216 >= request;
             $mv$chunk_6$items = struct.new "core:prelude//List<u8>" { repr: $array_clone_dst_2 = local.tee $mv$chunk_6$items(builtin::array_get_value<ref "core:prelude//List<u8>">(elements, $sroa_$pattern_temp_0_0_216)).repr; builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>(local.tee $load_10($mv$chunk_6$items.used))), 0, $array_clone_dst_2, 0, $load_10); $array_clone_src_1, used: $load_10 };
             $sroa_$pattern_temp_0_0_216 = $sroa_$pattern_temp_0_0_216 + 1;
-            "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(used, $mv$chunk_6$items);
+            "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$dae[return]"(used, $mv$chunk_6$items);
             continue l5;
         };
     };
@@ -1082,7 +1082,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(self, data) {
+fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$dae[return]"(self, data) {
     let $load_0: i32;
     let $load_43: i32;
     let offset: i32;

@@ -25,7 +25,7 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//opt_drve_scalar_loop.wado/advance" = fn(i32);  // TypeId(10)
+type "functype//opt_drve_scalar_loop.wado/advance$dae[return]" = fn(i32);  // TypeId(10)
 
 type "functype//opt_drve_scalar_loop.wado/$cm_export__run" = fn();  // TypeId(11)
 
@@ -77,7 +77,7 @@ global global:opt_drve_scalar_loop.wado::$const_obj_10: ref Array<u8> = array.ne
 global global:opt_drve_scalar_loop.wado::$const_obj_11: ref Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
 global global:opt_drve_scalar_loop.wado::$const_obj_14: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 99, 111, 117, 110, 116, 32, 61, 61, 32, 51, 10);
 
-fn "opt_drve_scalar_loop.wado/advance"(n) {
+fn "opt_drve_scalar_loop.wado/advance$dae[return]"(n) {
     block {
         l1: loop {
             global:opt_drve_scalar_loop.wado::count = global:opt_drve_scalar_loop.wado::count + 1;
@@ -93,13 +93,13 @@ fn "opt_drve_scalar_loop.wado/advance"(n) {
 }
 
 fn "opt_drve_scalar_loop.wado/$cm_export__run"() {
-    "opt_drve_scalar_loop.wado/advance"(black_box(3));
+    "opt_drve_scalar_loop.wado/advance$dae[return]"(black_box(3));
     if @unlikely((global:opt_drve_scalar_loop.wado::count == 3) == 0) {
         cold_path;
         "opt_drve_scalar_loop.wado/run$cold1"();
         unreachable;
     }
-    "opt_drve_scalar_loop.wado/advance"(black_box(8));
+    "opt_drve_scalar_loop.wado/advance$dae[return]"(black_box(8));
     if @unlikely((global:opt_drve_scalar_loop.wado::count == 4) == 0) {
         cold_path;
         "opt_drve_scalar_loop.wado/run$cold0"();

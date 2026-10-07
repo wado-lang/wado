@@ -41,13 +41,13 @@ type "functype//wir_optimize_vcopy_return_struct.wado/$cm_binding__Stdout_write_
 
 type "functype//wir_optimize_vcopy_return_struct.wado/$cm_export__run" = fn();  // TypeId(14)
 
-type "functype//wir_optimize_vcopy_return_struct.wado/make_outer$spec0$dae[v]" = fn() -> [i32, ref null "wir_optimize_vcopy_return_struct.wado//Outer", ref null "core:prelude/string.wado//String"];  // TypeId(15)
+type "functype//wir_optimize_vcopy_return_struct.wado/make_outer$sroa[return]$spec0$dae[v]" = fn() -> [i32, ref null "wir_optimize_vcopy_return_struct.wado//Outer", ref null "core:prelude/string.wado//String"];  // TypeId(15)
 
-type "functype//wir_optimize_vcopy_return_struct.wado/make_outer$spec1$dae[v]" = fn() -> [i32, ref null "wir_optimize_vcopy_return_struct.wado//Outer", ref null "core:prelude/string.wado//String"];  // TypeId(16)
+type "functype//wir_optimize_vcopy_return_struct.wado/make_outer$sroa[return]$spec1$dae[v]" = fn() -> [i32, ref null "wir_optimize_vcopy_return_struct.wado//Outer", ref null "core:prelude/string.wado//String"];  // TypeId(16)
 
-type "functype//wir_optimize_vcopy_return_struct.wado/make_inner$spec0$dae[v]" = fn() -> [i32, ref null "wir_optimize_vcopy_return_struct.wado//Inner", ref null "core:prelude/string.wado//String"];  // TypeId(17)
+type "functype//wir_optimize_vcopy_return_struct.wado/make_inner$sroa[return]$spec0$dae[v]" = fn() -> [i32, ref null "wir_optimize_vcopy_return_struct.wado//Inner", ref null "core:prelude/string.wado//String"];  // TypeId(17)
 
-type "functype//wir_optimize_vcopy_return_struct.wado/make_inner$spec1$dae[v]" = fn() -> [i32, ref null "wir_optimize_vcopy_return_struct.wado//Inner", ref null "core:prelude/string.wado//String"];  // TypeId(18)
+type "functype//wir_optimize_vcopy_return_struct.wado/make_inner$sroa[return]$spec1$dae[v]" = fn() -> [i32, ref null "wir_optimize_vcopy_return_struct.wado//Inner", ref null "core:prelude/string.wado//String"];  // TypeId(18)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(19)
 
@@ -96,7 +96,7 @@ fn "wir_optimize_vcopy_return_struct.wado/run"() with Stdout {
     let $mv$r$0: i32;
     let $mv$r$1: ref null "wir_optimize_vcopy_return_struct.wado//Outer";
     let $mv$r$2: ref null "core:prelude/string.wado//String";
-    multivalue_bind [$mv$r$0, $mv$r$1, $mv$r$2] = "wir_optimize_vcopy_return_struct.wado/make_outer$spec0$dae[v]"();
+    multivalue_bind [$mv$r$0, $mv$r$1, $mv$r$2] = "wir_optimize_vcopy_return_struct.wado/make_outer$sroa[return]$spec0$dae[v]"();
     if $mv$r$0 == 0 {
         o = ref.as_non_null($mv$r$1);
         $sroa_$f_buf_102 = local.tee $local_4_4(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 });
@@ -135,7 +135,7 @@ fn "wir_optimize_vcopy_return_struct.wado/run"() with Stdout {
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(is_negative_21);
     } else {
     }
-    multivalue_bind [is_negative_21, $mv$r$1, $mv$r$2] = "wir_optimize_vcopy_return_struct.wado/make_outer$spec1$dae[v]"();
+    multivalue_bind [is_negative_21, $mv$r$1, $mv$r$2] = "wir_optimize_vcopy_return_struct.wado/make_outer$sroa[return]$spec1$dae[v]"();
     if is_negative_21 == 1 {
         $local_4_4 = ref.as_non_null($mv$r$2);
         is_negative_21 = builtin::i32_wrap_i64(local.tee x_25("wasi/stream-new"()));
@@ -156,33 +156,33 @@ fn "wir_optimize_vcopy_return_struct.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "wir_optimize_vcopy_return_struct.wado/make_outer$spec0$dae[v]"() {
+fn "wir_optimize_vcopy_return_struct.wado/make_outer$sroa[return]$spec0$dae[v]"() {
     let i: ref "wir_optimize_vcopy_return_struct.wado//Inner";
     let $mv$$vr_4$0: i32;
     let $mv$$vr_4$1: ref null "wir_optimize_vcopy_return_struct.wado//Inner";
     let $mv$$vr_4$2: ref null "core:prelude/string.wado//String";
-    multivalue_bind [$mv$$vr_4$0, $mv$$vr_4$1, $mv$$vr_4$2] = "wir_optimize_vcopy_return_struct.wado/make_inner$spec0$dae[v]"();
+    multivalue_bind [$mv$$vr_4$0, $mv$$vr_4$1, $mv$$vr_4$2] = "wir_optimize_vcopy_return_struct.wado/make_inner$sroa[return]$spec0$dae[v]"();
     i = ref.as_non_null($mv$$vr_4$1);
     return 0, struct.new "wir_optimize_vcopy_return_struct.wado//Outer" { inner: i, tag: 50 }, ref.null none;
 }
 
-fn "wir_optimize_vcopy_return_struct.wado/make_outer$spec1$dae[v]"() {
+fn "wir_optimize_vcopy_return_struct.wado/make_outer$sroa[return]$spec1$dae[v]"() {
     let e: ref "core:prelude/string.wado//String";
     let inner: ref "wir_optimize_vcopy_return_struct.wado//Inner";
     let $mv$$vr_4$0: i32;
     let $mv$$vr_4$1: ref null "wir_optimize_vcopy_return_struct.wado//Inner";
     let $mv$$vr_4$2: ref null "core:prelude/string.wado//String";
-    multivalue_bind [$mv$$vr_4$0, $mv$$vr_4$1, $mv$$vr_4$2] = "wir_optimize_vcopy_return_struct.wado/make_inner$spec1$dae[v]"();
+    multivalue_bind [$mv$$vr_4$0, $mv$$vr_4$1, $mv$$vr_4$2] = "wir_optimize_vcopy_return_struct.wado/make_inner$sroa[return]$spec1$dae[v]"();
     e = ref.as_non_null($mv$$vr_4$2);
     inner = return 1, ref.null none, e;
     return 0, struct.new "wir_optimize_vcopy_return_struct.wado//Outer" { inner: inner, tag: -10 }, ref.null none;
 }
 
-fn "wir_optimize_vcopy_return_struct.wado/make_inner$spec0$dae[v]"() {
+fn "wir_optimize_vcopy_return_struct.wado/make_inner$sroa[return]$spec0$dae[v]"() {
     return 0, struct.new "wir_optimize_vcopy_return_struct.wado//Inner" { value: 5, name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("item_5"), used: 6 } }, ref.null none;
 }
 
-fn "wir_optimize_vcopy_return_struct.wado/make_inner$spec1$dae[v]"() {
+fn "wir_optimize_vcopy_return_struct.wado/make_inner$sroa[return]$spec1$dae[v]"() {
     return 1, ref.null none, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("negative"), used: 8 };
 }
 

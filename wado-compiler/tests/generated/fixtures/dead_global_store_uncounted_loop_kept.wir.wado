@@ -20,9 +20,9 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(7)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(8)
 
-type "functype//dead_global_store_uncounted_loop_kept.wado/collatz_steps" = fn(i64);  // TypeId(9)
+type "functype//dead_global_store_uncounted_loop_kept.wado/collatz_steps$dae[return]" = fn(i64);  // TypeId(9)
 
-type "functype//dead_global_store_uncounted_loop_kept.wado/counts_to_a_parameter" = fn(i32);  // TypeId(10)
+type "functype//dead_global_store_uncounted_loop_kept.wado/counts_to_a_parameter$dae[return]" = fn(i32);  // TypeId(10)
 
 type "functype//dead_global_store_uncounted_loop_kept.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
@@ -53,7 +53,7 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-fn "dead_global_store_uncounted_loop_kept.wado/collatz_steps"(start) {
+fn "dead_global_store_uncounted_loop_kept.wado/collatz_steps$dae[return]"(start) {
     b0: block {
         l1: loop {
             break_if b0 start == 1_i64;
@@ -64,7 +64,7 @@ fn "dead_global_store_uncounted_loop_kept.wado/collatz_steps"(start) {
     return;
 }
 
-fn "dead_global_store_uncounted_loop_kept.wado/counts_to_a_parameter"(limit) {
+fn "dead_global_store_uncounted_loop_kept.wado/counts_to_a_parameter$dae[return]"(limit) {
     let i: i32;
     i = 0;
     b2: block {
@@ -85,8 +85,8 @@ fn "dead_global_store_uncounted_loop_kept.wado/$cm_export__run"() {
     let packed: i64;
     let rx_6: i32;
     let tx_7: i32;
-    "dead_global_store_uncounted_loop_kept.wado/collatz_steps"(black_box(27_i64));
-    "dead_global_store_uncounted_loop_kept.wado/counts_to_a_parameter"(black_box(10));
+    "dead_global_store_uncounted_loop_kept.wado/collatz_steps$dae[return]"(black_box(27_i64));
+    "dead_global_store_uncounted_loop_kept.wado/counts_to_a_parameter$dae[return]"(black_box(10));
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
     rx_6 = "dead_global_store_uncounted_loop_kept.wado/$cm_binding__Stdout_write_via_stream"(rx_6);

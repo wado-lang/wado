@@ -59,7 +59,7 @@ type "functype//bug_multi_value_return_block_result.wado/$cm_binding__Stdout_wri
 
 type "functype//bug_multi_value_return_block_result.wado/$cm_export__run" = fn();  // TypeId(20)
 
-type "functype//bug_multi_value_return_block_result.wado/resolve$sroa[sel.value]" = fn(ref "core:prelude//List<i32>", ref "core:prelude//List<i32>", ref "bug_multi_value_return_block_result.wado//Sel") -> [i32, i32];  // TypeId(21)
+type "functype//bug_multi_value_return_block_result.wado/resolve$sroa[sel.value,return]" = fn(ref "core:prelude//List<i32>", ref "core:prelude//List<i32>", ref "bug_multi_value_return_block_result.wado//Sel") -> [i32, i32];  // TypeId(21)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(22)
 
@@ -139,17 +139,17 @@ fn "bug_multi_value_return_block_result.wado/sum"(a, b) {
     s = 0;
     let $mv$$match_6$0: i32;
     let $mv$$match_6$1: i32;
-    multivalue_bind [$mv$$match_6$0, $mv$$match_6$1] = "bug_multi_value_return_block_result.wado/resolve$sroa[sel.value]"(a, b, global:bug_multi_value_return_block_result.wado::$const_obj_2);
+    multivalue_bind [$mv$$match_6$0, $mv$$match_6$1] = "bug_multi_value_return_block_result.wado/resolve$sroa[sel.value,return]"(a, b, global:bug_multi_value_return_block_result.wado::$const_obj_2);
     if $mv$$match_6$0 == 1 {
         s = $mv$$match_6$1;
     } else {
     }
-    multivalue_bind [$mv$$match_6$1, $mv$$match_6$0] = "bug_multi_value_return_block_result.wado/resolve$sroa[sel.value]"(a, b, global:bug_multi_value_return_block_result.wado::$const_obj_1);
+    multivalue_bind [$mv$$match_6$1, $mv$$match_6$0] = "bug_multi_value_return_block_result.wado/resolve$sroa[sel.value,return]"(a, b, global:bug_multi_value_return_block_result.wado::$const_obj_1);
     if $mv$$match_6$1 == 1 {
         s = s + $mv$$match_6$0;
     } else {
     }
-    multivalue_bind [$mv$$match_6$0, $mv$$match_6$1] = "bug_multi_value_return_block_result.wado/resolve$sroa[sel.value]"(a, b, global:bug_multi_value_return_block_result.wado::$const_obj_0);
+    multivalue_bind [$mv$$match_6$0, $mv$$match_6$1] = "bug_multi_value_return_block_result.wado/resolve$sroa[sel.value,return]"(a, b, global:bug_multi_value_return_block_result.wado::$const_obj_0);
     if $mv$$match_6$0 == 1 {
         s = s + $mv$$match_6$1;
     } else {
@@ -189,7 +189,7 @@ fn "bug_multi_value_return_block_result.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "bug_multi_value_return_block_result.wado/resolve$sroa[sel.value]"(a, b, sel) {
+fn "bug_multi_value_return_block_result.wado/resolve$sroa[sel.value,return]"(a, b, sel) {
     let n: i32;
     let $v1_13: i32;
     if ref.test "bug_multi_value_return_block_result.wado//Sel::A"(sel) {
