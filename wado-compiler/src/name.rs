@@ -188,6 +188,14 @@ pub fn before_dae(name: &str) -> &str {
     }
 }
 
+/// The name a function gives up its own for once it is dead and another
+/// stands in for it: `f$retired[17]`, unique by the serial it carries, the
+/// function's store position.
+#[must_use]
+pub fn retired_name(name: &str, serial: usize) -> String {
+    grouped_suffix(name, "retired", &[serial.to_string()])
+}
+
 /// One parameter `sroa_param` narrowed to a field: the parameter, the fields
 /// it was projected through, outermost first, and whether it holds the last
 /// one as `&mut`.

@@ -27,7 +27,7 @@ fn keep(n: i32) -> List<Item> {
 }
 
 export fn run() {
-    assert keep(0).len() == 1;
+    assert keep(builtin::black_box(0)).len() == 1;
 }
 "#;
 

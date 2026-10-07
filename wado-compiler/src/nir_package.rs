@@ -19,7 +19,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader::{DEFAULT_PAGE_SIZE_LOG2, WasmAsset};
 use crate::lower::plan::value_copy::ValueCopyHelpers;
 use crate::module_source::ModuleSource;
-use crate::name::{FunctionId, LocalMethodName};
+use crate::name::{FunctionId, LocalMethodName, retired_name};
 use crate::nir::{
     ClosureFunctor, FuncId, FunctionRef, NirEnum, NirFlags, NirFunction, NirGlobal, NirImport,
     NirStruct, NirTest, NirVariantDecl,
@@ -377,17 +377,23 @@ impl NirPackage {
     }
 
     /// Retire function `id`, whose callers now call another: it is dead, and
-    /// its name no longer finds it.
+    /// gives up its name, which a function minted later may take.
     pub fn retire_function(&mut self, id: FuncId) {
         use cranelift_entity::EntityRef;
-        let mut func = self.functions[id.index()].borrow_mut();
-        let key = FunctionRef::from_resolved(&func, func.module_source.clone()).function_id();
-        func.is_dead = true;
-        drop(func);
+        let (name, method_name) = {
+            let mut func = self.functions[id.index()].borrow_mut();
+            func.is_dead = true;
+            (
+                retired_name(&func.name, id.index()),
+                func.method_info
+                    .as_ref()
+                    .map(|m| retired_name(&m.method_name, id.index())),
+            )
+        };
         assert_eq!(
-            self.func_index.shift_remove(&key),
-            Some(id),
-            "a function is indexed by its name"
+            self.rename_function(id, name, method_name),
+            None,
+            "a retired name is unique by the id it carries"
         );
     }
 
