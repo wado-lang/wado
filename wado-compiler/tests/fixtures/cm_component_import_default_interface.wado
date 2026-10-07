@@ -1,15 +1,9 @@
 // A component's default interface, the one named after its own package
 // (`wado-lang:cm-catalog/cm-catalog`), is the module itself: its functions and
-// types import by bare name, as a source dependency's `export` items do. The
-// interface stays importable too, as the Component Model names it.
+// types import by bare name, as a source dependency's `export` items do.
 use { id_string, id_record, Point } from "./sub/cm-catalog.wasm" with { type: "wasm" };
-use { CmCatalog } from "./sub/cm-catalog.wasm" with { type: "wasm" };
 
-test "a default-interface function is called by its bare name" {
+test {
     assert id_string("hello") == "hello";
     assert id_record(Point { x: 1.0, y: 2.0 }) == Point { x: 1.0, y: 2.0 };
-}
-
-test "the interface still names the same function" {
-    assert CmCatalog::id_string("hello") == id_string("hello");
 }

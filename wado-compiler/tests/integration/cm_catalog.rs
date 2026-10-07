@@ -657,7 +657,7 @@ fn run_round_trips(opt_level: OptLevel) {
             .await
             .expect("instantiate library component");
 
-        // Named-type exports group into the default interface; resolve the
+        // A library's exports sit in its default interface; resolve the
         // `wado-lang:cm-catalog/cm-catalog@…` instance once and look funcs up inside.
         let iface = instance
             .get_export(&mut store, None, LIB_WORLD_FQ)
