@@ -1563,14 +1563,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Whether `ty` is a mutable reference, read through a newtype over one:
-    /// `None` for a type that is no reference at all.
+    /// Whether the reference holding the pointee of `ty` is mutable, read
+    /// through newtypes at every layer: in `&mut &T` the write lands behind the
+    /// inner `&T`. `None` for a type that is no reference at all.
     fn reference_mutability(&self, ty: TypeId) -> Option<bool> {
         let table = self.tysys.type_table.borrow();
-        match table.get(table.representation_head(ty)) {
-            ResolvedType::Ref(_) => Some(false),
-            ResolvedType::MutRef(_) => Some(true),
-            _ => None,
+        let mut mutable = None;
+        let mut layer = table.representation_head(ty);
+        loop {
+            let inner = match table.get(layer) {
+                ResolvedType::Ref(inner) => {
+                    mutable = Some(false);
+                    *inner
+                }
+                ResolvedType::MutRef(inner) => {
+                    mutable = Some(true);
+                    *inner
+                }
+                _ => return mutable,
+            };
+            layer = table.representation_head(inner);
         }
     }
 
