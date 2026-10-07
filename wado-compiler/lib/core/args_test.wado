@@ -531,3 +531,29 @@ test "a variadic element that does not convert reports InvalidValue" {
 test "from_env parses the process arguments" {
     assert from_env::<Counts>() matches { Ok(c) && c.counts.is_empty() };
 }
+
+// A hand-written impl reaches the struct and variant accesses the generated
+// code never calls.
+struct Skipper {}
+impl Deserialize for Skipper {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Skipper, DeserializeError> {
+        let mut s = d.begin_struct("Skipper", 0)?;
+        s.skip()?;
+        s.end()?;
+        return Result::Ok(Skipper {});
+    }
+}
+
+struct UnitProbe {}
+impl Deserialize for UnitProbe {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<UnitProbe, DeserializeError> {
+        let mut v = d.begin_variant("UnitProbe", 1)?;
+        v.is_unit()?;
+        return Result::Ok(UnitProbe {});
+    }
+}
+
+test "a hand-written impl may skip a field, but not probe a case for a payload" {
+    assert parse::<Skipper>([]) matches { Ok(_) };
+    assert parse::<UnitProbe>(["Tag"]) matches { Err(_) };
+}

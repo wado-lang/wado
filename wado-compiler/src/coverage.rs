@@ -545,7 +545,7 @@ impl Planner {
 
     fn function(&mut self, f: &Function) {
         let Some(body) = &f.body else { return };
-        if attribute::coverage_off(&f.attrs) || self.traps_only(&body.stmts) {
+        if attribute::coverage_off(&f.attrs) || self.only_unreachable(&body.stmts) {
             return;
         }
         let name = match &self.owner {
@@ -609,26 +609,27 @@ impl Planner {
     /// to plan. `panic` and `assert` are not, since a caller breaking a
     /// contract reaches them. `builtin::` names `core:builtin` whatever the
     /// module declares.
-    fn is_trap(&self, expr: &Expr) -> bool {
+    fn is_unreachable(&self, expr: &Expr) -> bool {
         match expr {
             Expr::Call(call) if call.args.is_empty() && call.type_args.is_empty() => {
                 matches!(&call.callee, Expr::Ident(ident)
                     if ident.name == "builtin::unreachable"
                         || (ident.name == "unreachable" && self.prelude_unreachable))
             }
-            Expr::Block(block) => self.traps_only(&block.stmts),
+            Expr::Block(block) => self.only_unreachable(&block.stmts),
             _ => false,
         }
     }
 
-    /// Whether `stmts` are one [`is_trap`](Self::is_trap) call and nothing else.
-    fn traps_only(&self, stmts: &[Stmt]) -> bool {
-        matches!(stmts, [Stmt::Expr(s)] if self.is_trap(&s.expr))
+    /// Whether `stmts` are one [`is_unreachable`](Self::is_unreachable) call and nothing else.
+    fn only_unreachable(&self, stmts: &[Stmt]) -> bool {
+        matches!(stmts, [Stmt::Expr(s)] if self.is_unreachable(&s.expr))
     }
 
-    /// The region `block` is, unless it [traps only](Self::traps_only).
+    /// The region `block` is, unless it holds
+    /// [only `unreachable()`](Self::only_unreachable).
     fn branch_block(&mut self, kind: RegionKind, block: &Block, choice: (Pos, u32)) -> Option<u32> {
-        if self.traps_only(&block.stmts) {
+        if self.only_unreachable(&block.stmts) {
             return None;
         }
         let region = self.new_region(
@@ -644,20 +645,20 @@ impl Planner {
 
     /// An `if`, statement or expression. Both branches are regions, and an
     /// omitted `else` is one too: the path that skips the `then` block, unless
-    /// `skip_traps` says that path reaches nothing but a trap.
+    /// `else_unreachable` says that path reaches nothing but `unreachable()`.
     fn if_branches(
         &mut self,
         id: AstId,
         span: Span,
         then_block: &Block,
         else_block: Option<&Block>,
-        skip_traps: bool,
+        else_unreachable: bool,
     ) {
         let at = Pos::start(span);
         let then_region = self.branch_block(RegionKind::Then, then_block, (at, 0));
         let else_region = if let Some(block) = else_block {
             self.branch_block(RegionKind::Else, block, (at, 1))
-        } else if skip_traps {
+        } else if else_unreachable {
             None
         } else {
             let region = self.new_region(
@@ -672,15 +673,16 @@ impl Planner {
         self.last_choice = then_region.into_iter().chain(else_region).collect();
     }
 
-    /// An `if` statement, which `traps_after` says only a trap follows.
-    fn if_stmt(&mut self, s: &ast::IfStmt, traps_after: bool) {
+    /// An `if` statement, which `else_unreachable` says only `unreachable()`
+    /// follows.
+    fn if_stmt(&mut self, s: &ast::IfStmt, else_unreachable: bool) {
         self.visit_condition(&s.condition);
         self.if_branches(
             s.id,
             s.span,
             &s.then_block,
             s.else_block.as_ref(),
-            traps_after,
+            else_unreachable,
         );
     }
 
@@ -692,7 +694,7 @@ impl Planner {
             if let Some(guard) = &arm.guard {
                 self.visit_expr(guard);
             }
-            if self.is_trap(&arm.body) {
+            if self.is_unreachable(&arm.body) {
                 continue;
             }
             let body = arm.body.span();
@@ -722,7 +724,7 @@ impl Planner {
     }
 
     fn loop_body(&mut self, body: &Block) {
-        if self.traps_only(&body.stmts) {
+        if self.only_unreachable(&body.stmts) {
             return;
         }
         let region = self.new_region(
@@ -750,7 +752,7 @@ impl Planner {
         }
         let mut leaves = false;
         for (index, stmt) in block.stmts.iter().enumerate() {
-            if leaves && self.traps_only(&block.stmts[index..]) {
+            if leaves && self.only_unreachable(&block.stmts[index..]) {
                 break;
             }
             if leaves {
@@ -770,7 +772,7 @@ impl Planner {
             }
             match stmt {
                 Stmt::If(s) if !is_contract_check(stmt) => {
-                    self.if_stmt(s, self.traps_only(&block.stmts[index + 1..]));
+                    self.if_stmt(s, self.only_unreachable(&block.stmts[index + 1..]));
                 }
                 _ => self.visit_stmt(stmt),
             }
@@ -808,7 +810,11 @@ impl AstVisitor for Planner {
                 if let Some(value) = &s.value {
                     self.visit_expr(value);
                 }
-                if let Some(block) = s.else_block.as_ref().filter(|b| !self.traps_only(&b.stmts)) {
+                if let Some(block) = s
+                    .else_block
+                    .as_ref()
+                    .filter(|b| !self.only_unreachable(&b.stmts))
+                {
                     let region = self.new_region(
                         RegionKind::LetElse,
                         Pos::start(block.span),
@@ -860,7 +866,8 @@ impl AstVisitor for Planner {
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Binary(b)
-                if matches!(b.op, BinaryOp::And | BinaryOp::Or) && !self.is_trap(&b.right) =>
+                if matches!(b.op, BinaryOp::And | BinaryOp::Or)
+                    && !self.is_unreachable(&b.right) =>
             {
                 self.visit_expr(&b.left);
                 let right = b.right.span();
@@ -878,7 +885,7 @@ impl AstVisitor for Planner {
                 self.if_branches(e.id, e.span, &e.then_block, e.else_block.as_ref(), false);
             }
             Expr::Match(m) => self.match_arms(m),
-            Expr::Closure(c) if self.is_trap(&c.body) => {}
+            Expr::Closure(c) if self.is_unreachable(&c.body) => {}
             Expr::Closure(c) => {
                 let outer_name = &self.plan.functions[self.function as usize].name;
                 let name = format!("{outer_name}::{{closure:{}}}", c.span.line);
@@ -1454,7 +1461,7 @@ mod tests {
     }
 
     #[test]
-    fn an_omitted_else_reaching_only_a_trap_is_no_branch() {
+    fn an_omitted_else_reaching_only_unreachable_is_no_branch() {
         let module = parse(
             "fn f(x: bool) -> i32 {\n    if x {\n        return 1;\n    }\n    unreachable();\n}\n",
         );

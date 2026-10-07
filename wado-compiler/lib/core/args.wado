@@ -379,10 +379,9 @@ impl DeserializeStruct for ArgvStructAccess {
         return T::deserialize(self.de);
     }
 
-    // `next_field` only ever returns indices `lookup`/`positional_at`
-    // resolved, so the generated loop never falls through to `skip`.
-    #[coverage(off)]
     fn skip(&mut self) -> Result<(), DeserializeError> {
+        // `next_field` only ever returns indices `lookup`/`positional_at`
+        // resolved, so the generated loop never falls through to `skip`.
         return Result::Ok(());
     }
 
@@ -443,11 +442,10 @@ impl DeserializeVariant for ArgvVariantAccess {
         return T::deserialize(self.de);
     }
 
-    // The generated variant deserializer decides unit-ness statically, so it
-    // never calls this. argv cannot answer it from the tag alone (it has no
-    // case list), so fail loudly rather than return a guessed answer.
-    #[coverage(off)]
     fn is_unit(&mut self) -> Result<bool, DeserializeError> {
+        // The generated variant deserializer decides unit-ness statically, so it
+        // never calls this. argv cannot answer it from the tag alone (it has no
+        // case list), so fail loudly rather than return a guessed answer.
         return Result::Err(unsupported("unit-variant probing"));
     }
 
