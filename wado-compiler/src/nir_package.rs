@@ -58,19 +58,21 @@ pub struct NirPackage {
     /// callers in a later round, so its current call sites are not its whole
     /// contract. Identity, not a name test — see the declaration-identity WEP.
     pub sroa_param_clones: IndexMap<FuncId, FuncId>,
-    /// Each of those clones by what makes it one: its original and the type of
-    /// every parameter it takes. A run arriving at a signature some earlier
-    /// run minted, by whatever chain of clones, reuses that clone.
-    pub sroa_param_clone_ids: IndexMap<(FuncId, Vec<TypeId>), FuncId>,
+    /// Each of those clones by what makes it one: its original, and for every
+    /// parameter the type it takes and the fields it was projected through. The
+    /// type alone is not enough, since two fields can share one. A run arriving
+    /// at a clone some earlier run minted, by whatever chain of clones, reuses
+    /// it.
+    pub sroa_param_clone_ids: IndexMap<(FuncId, Vec<SroaParamShape>), FuncId>,
     /// For each of those clones, which of its locals holds a scalarized field,
-    /// and the structs it was unwrapped from, outermost first: the last holds
+    /// and the fields it was projected through, outermost first: the last names
     /// the field the local is now, and a clone of a clone carries its source's
     /// chains on. Durable because the fact is: a later run of the pass
     /// rewriting calls *inside* a clone must know its param already holds the
     /// field, or it projects the wrapper's field onto it a second time; and it
     /// must not unwrap a struct the chain already holds, which a struct
     /// reaching itself through its one field never ends.
-    pub sroa_param_clone_fields: IndexMap<FuncId, IndexMap<u32, Vec<(String, ModuleSource)>>>,
+    pub sroa_param_clone_fields: IndexMap<FuncId, IndexMap<u32, Vec<SroaParamProjection>>>,
     /// All struct declarations (each carries its own `module_source`)
     pub structs: Vec<NirStruct>,
     /// All enum declarations (each carries its own `module_source`)
@@ -157,6 +159,20 @@ pub struct NirPackage {
     /// trait-method instances.
     pub trait_env: std::sync::Arc<TraitEnv>,
 }
+
+/// One field `optimize/sroa_param` projected a parameter through.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SroaParamProjection {
+    /// The struct, as `(name, module_source)`.
+    pub struct_key: (String, ModuleSource),
+    /// The field's declaration index in it.
+    pub field_index: u32,
+}
+
+/// A parameter of an `optimize/sroa_param` clone as its identity sees it: the
+/// type it takes and the fields it was projected through, none for a parameter
+/// taken as the original took it.
+pub type SroaParamShape = (TypeId, Vec<SroaParamProjection>);
 
 impl NirPackage {
     /// Default short-string inline threshold (UTF-8 bytes), used for build

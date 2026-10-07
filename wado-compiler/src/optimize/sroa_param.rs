@@ -25,7 +25,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, ExprNode, NodeRef, Operand};
-use crate::nir_package::NirPackage;
+use crate::nir_package::{NirPackage, SroaParamProjection, SroaParamShape};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -197,7 +197,7 @@ fn collect_and_validate(
             // through its one field, and unwrapping it again would never end.
             if unwrapped
                 .and_then(|chains| chains.get(&param.local_index))
-                .is_some_and(|chain| chain.contains(&info.struct_key))
+                .is_some_and(|chain| chain.iter().any(|p| p.struct_key == info.struct_key))
             {
                 continue;
             }
@@ -902,21 +902,38 @@ fn mint_scalarized_clones(
         let mut clone = project.functions[key.index()].borrow().clone();
         let origin = (clone.module_source.clone(), clone.name.clone());
         let original = project.sroa_param_clones.get(key).copied().unwrap_or(*key);
-        let signature: Vec<TypeId> = clone
+        let mut chains = project
+            .sroa_param_clone_fields
+            .get(key)
+            .cloned()
+            .unwrap_or_default();
+        for pi in positions {
+            let info = &candidates[&(*key, *pi)];
+            chains
+                .entry(clone.params[*pi].local_index)
+                .or_default()
+                .push(SroaParamProjection {
+                    struct_key: info.struct_key.clone(),
+                    field_index: info.field_index,
+                });
+        }
+        let shapes: Vec<SroaParamShape> = clone
             .params
             .iter()
             .enumerate()
             .map(|(pi, param)| {
-                candidates
+                let ty = candidates
                     .get(&(*key, pi))
-                    .map_or(param.type_id, |info| info.scalar_type_id)
+                    .map_or(param.type_id, |info| info.scalar_type_id);
+                let chain = chains.get(&param.local_index).cloned().unwrap_or_default();
+                (ty, chain)
             })
             .collect();
-        // This pass runs once per fixpoint iteration, and reaches a signature by
-        // more than one chain of clones, so a clone taking it may already stand.
+        // This pass runs once per fixpoint iteration, and reaches a clone by more
+        // than one chain of clones, so the one this run wants may already stand.
         if let Some(&existing) = project
             .sroa_param_clone_ids
-            .get(&(original, signature.clone()))
+            .get(&(original, shapes.clone()))
         {
             clones.insert(*key, existing);
             continue;
@@ -984,20 +1001,7 @@ fn mint_scalarized_clones(
 
         project.func_index.insert(func_key, id);
         project.sroa_param_clones.insert(id, original);
-        project
-            .sroa_param_clone_ids
-            .insert((original, signature), id);
-        let mut chains = project
-            .sroa_param_clone_fields
-            .get(key)
-            .cloned()
-            .unwrap_or_default();
-        for pi in positions {
-            chains
-                .entry(clone.params[*pi].local_index)
-                .or_default()
-                .push(candidates[&(*key, *pi)].struct_key.clone());
-        }
+        project.sroa_param_clone_ids.insert((original, shapes), id);
         project.sroa_param_clone_fields.insert(id, chains);
         copy_function_strings(project, &origin, (clone.module_source.clone(), name));
         clones.insert(*key, id);
@@ -1166,8 +1170,8 @@ fn rewrite_call_sites(
             .into_iter()
             .flatten()
             .map(|(local, chain)| {
-                let held = chain.last().expect("a chain records one struct at least");
-                (*local, held.clone())
+                let held = chain.last().expect("a chain records one field at least");
+                (*local, held.struct_key.clone())
             })
             .collect();
         if let Some(body) = func.body.as_mut() {
