@@ -6,9 +6,7 @@
 
 use cranelift_entity::EntityRef;
 
-use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::module_source::ModuleSource;
 use crate::nir::{FunctionKind, NirFunction};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, PatKind, StmtKind};
 use crate::nir_package::{NirPackage, Reshape};
@@ -25,8 +23,8 @@ pub(super) type FnKey = FuncId;
 /// Run to this pass's own fixed point: dropping a parameter deletes the
 /// argument its callers pass, which can leave one of *their* parameters dead.
 pub fn eliminate_dead_arguments(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    // Keyed by struct and method name, which no signature shrink moves, so this
-    // is read once rather than per round.
+    // Keyed by `FuncId`, which no reshape moves, so this is read once rather
+    // than per round.
     let closure_call_keys = collect_closure_call_keys(project);
     let mut changed = false;
     while eliminate_dead_arguments_round(project, gate, &closure_call_keys) {
@@ -87,41 +85,17 @@ fn eliminate_dead_arguments_round(
 /// a synthesised function-table wrapper, and `register_closure_wrappers` /
 /// `register_inspect_wrapper` adapt that wrapper to the shrunken signature.
 fn collect_closure_call_keys(project: &NirPackage) -> IndexSet<FnKey> {
-    let mut keys: IndexSet<FnKey> = IndexSet::default();
-    let functor_struct_names: IndexSet<(ModuleSource, String)> = project
+    project
         .closure_functors
         .iter()
-        .map(|f| (f.module_source.clone(), f.struct_name.clone()))
-        .collect();
-    for f in &project.closure_functors {
-        let cm = f.call_method.borrow();
-        if let Some(id) = cm.id {
-            keys.insert(id);
-        }
-    }
-    // Sweep for synthesised `$Closure_N^Inspect` impls, which have no field on
-    // `ClosureFunctor` to key off.
-    let inspect = project
-        .type_table
-        .borrow()
-        .compiler_items()
-        .trait_def(CompilerItem::Inspect);
-    for func_rc in &project.functions {
-        let func = func_rc.borrow();
-        let Some(mi) = &func.method_info else {
-            continue;
-        };
-        if inspect.is_none() || mi.trait_decl() != inspect {
-            continue;
-        }
-        if !functor_struct_names.contains(&(func.module_source.clone(), mi.struct_name().clone())) {
-            continue;
-        }
-        if let Some(id) = func.id {
-            keys.insert(id);
-        }
-    }
-    keys
+        .flat_map(|f| [&f.call_method, &f.inspect_method])
+        .map(|method| {
+            method
+                .borrow()
+                .id
+                .expect("a functor method is stamped with an id")
+        })
+        .collect()
 }
 
 /// Shared pinning predicate for `dae` and `sroa_param`: both refuse the same

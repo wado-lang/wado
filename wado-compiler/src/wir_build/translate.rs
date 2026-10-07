@@ -18,7 +18,10 @@ use crate::wir::{WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 use super::context::WirContext;
 use crate::canonical::CanonicalIntrinsic;
 use crate::compiler_item::CompilerItem;
-use crate::name::{MangledName, StructName, multi_value_split_local};
+use crate::name::{
+    MangledName, StructName, closure_call_wrapper_name, closure_inspect_wrapper_name,
+    multi_value_split_local,
+};
 use crate::nir_arena::{
     ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
@@ -332,7 +335,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
 
         // Register the call wrapper.
         let global_id = ctx.closure_wrapper_funcs.len();
-        let call_wrapper_fq = format!("closure/{module_source}/$closure_wrapper_{global_id}");
+        let call_wrapper_fq = closure_call_wrapper_name(module_source, global_id);
         let call_wrapper_id = register_call_wrapper(
             ctx,
             &call_wrapper_fq,
@@ -636,8 +639,7 @@ fn register_inspect_wrapper(
         }
     };
 
-    let wrapper_fq =
-        format!("closure/{module_source}/$closure_{CANONICAL_INSPECT_SLOT}_wrapper_{global_id}");
+    let wrapper_fq = closure_inspect_wrapper_name(module_source, global_id);
     let func = WirFunction {
         name: WirName { fq: wrapper_fq },
         type_id: callback_fn_type_id,

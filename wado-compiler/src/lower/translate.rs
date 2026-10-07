@@ -714,16 +714,14 @@ impl Translator<'_> {
         cf: &ClosureFunctor,
         func_map: &IndexMap<*const RefCell<TirFunction>, Rc<RefCell<NirFunction>>>,
     ) -> nir::ClosureFunctor {
-        // The functor's `call_method` is normally shared with a
-        // top-level function (`Rc::ptr_eq` keyed); reuse the already-
-        // converted `Rc` so the optimizer's closure-type DCE still
-        // matches. The fallback covers methods that never made the
-        // top-level list (e.g. inline-only).
+        // A functor's methods are the package's own functions (`Rc::ptr_eq`
+        // keyed), so the optimizer reaches them by the id they carry there.
         let shared = |method: &Rc<RefCell<TirFunction>>| {
-            func_map
-                .get(&Rc::as_ptr(method))
-                .cloned()
-                .unwrap_or_else(|| Rc::new(RefCell::new(self.convert_function(&method.borrow()))))
+            Rc::clone(
+                func_map
+                    .get(&Rc::as_ptr(method))
+                    .expect("a functor method is one of the package's functions"),
+            )
         };
         nir::ClosureFunctor {
             module_source: cf.module_source.clone(),

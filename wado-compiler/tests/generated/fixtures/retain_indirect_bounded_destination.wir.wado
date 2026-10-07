@@ -84,7 +84,7 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//retain_indirect_bounded_destination.wado/$cm_export__run" = fn();  // TypeId(24)
 
-type "functype//retain_indirect_bounded_destination.wado/count_through$$Closure_0$dae[f]$sroa[filler.tags]$dae[filler]" = fn() -> i32;  // TypeId(25)
+type "functype//retain_indirect_bounded_destination.wado/count_through$$Closure_0$dae[f, filler]" = fn() -> i32;  // TypeId(25)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(26)
 
@@ -165,6 +165,7 @@ global global:core:prelude/array.wado::$const_obj_32: ref Array<u8> = array.new_
 global global:core:prelude/array.wado::$const_obj_33: ref Array<u8> = array.new_fixed<u8>(91, 93);
 global global:retain_indirect_bounded_destination.wado::$const_obj_34: ref Array<u8> = array.new_fixed<u8>(124, 38, 109, 117, 116, 32, 83, 108, 111, 116, 44, 32, 38, 66, 97, 103, 124, 32, 45, 62, 32, 40, 41);
 global global:retain_indirect_bounded_destination.wado::$const_obj_35: ref Array<u8> = array.new_fixed<u8>(124, 115, 108, 111, 116, 58, 32, 38, 109, 117, 116, 32, 83, 108, 111, 116, 44, 32, 98, 58, 32, 38, 66, 97, 103, 124, 32, 104, 111, 108, 100, 40, 115, 108, 111, 116, 44, 32, 98, 41);
+global global:retain_indirect_bounded_destination.wado::$const_obj_36: ref Array<u8> = array.new_fixed<u8>(97);
 global global:core:prelude/traits.wado::$const_obj_51: ref Array<u8> = array.new_fixed<u8>(125);
 global global:core:prelude/traits.wado::$const_obj_53: ref Array<u8> = array.new_fixed<u8>(44);
 global global:core:prelude/traits.wado::$const_obj_54: ref Array<u8> = array.new_fixed<u8>(58, 32);
@@ -174,7 +175,6 @@ global global:core:prelude/traits.wado::$const_obj_58: ref Array<u8> = array.new
 global global:core:prelude/primitive.wado::$const_obj_59: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 global global:core:prelude/traits.wado::$const_obj_62: ref Array<u8> = array.new_fixed<u8>(32, 125);
 global global:core:prelude/traits.wado::$const_obj_65: ref Array<u8> = array.new_fixed<u8>(32, 123, 32);
-global global:retain_indirect_bounded_destination.wado::$const_obj_67: ref Array<u8> = array.new_fixed<u8>(97);
 
 fn "retain_indirect_bounded_destination.wado/$cm_export__run"() {
     let $v2: i32;
@@ -183,7 +183,7 @@ fn "retain_indirect_bounded_destination.wado/$cm_export__run"() {
     let $fuse_at_5: i32;
     let $sroa_filler_tags_10: ref "core:prelude//List<core:prelude/string.wado/String>";
     $sroa_filler_tags_10 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 };
-    if @unlikely(local.tee $v2("retain_indirect_bounded_destination.wado/count_through$$Closure_0$dae[f]$sroa[filler.tags]$dae[filler]"()) != 2) {
+    if @unlikely(local.tee $v2("retain_indirect_bounded_destination.wado/count_through$$Closure_0$dae[f, filler]"()) != 2) {
         cold_path;
         $fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_3("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(214)), 68);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut self.repr]"($local_3.repr, $fuse_at_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -219,7 +219,7 @@ condition: count_through(hold, &filler) == 2
     "wasi/task-return"(0);
 }
 
-fn "retain_indirect_bounded_destination.wado/count_through$$Closure_0$dae[f]$sroa[filler.tags]$dae[filler]"() {
+fn "retain_indirect_bounded_destination.wado/count_through$$Closure_0$dae[f, filler]"() {
     let origin: ref "retain_indirect_bounded_destination.wado//Bag";
     let kept: ref "core:prelude//List<retain_indirect_bounded_destination.wado/Bag>";
     let $local_5_3: ref "core:prelude/string.wado//String";
@@ -231,7 +231,7 @@ fn "retain_indirect_bounded_destination.wado/count_through$$Closure_0$dae[f]$sro
     origin = struct.new "retain_indirect_bounded_destination.wado//Bag" { tags: struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: local.tee elements_32(array.new_fixed<ref "core:prelude/string.wado//String">($local_5_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 }; if @unlikely(local.tee new_used(0 + 1) > builtin::array_len($local_5_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5_3, new_used);
-    }; start_17 = $local_5_3.used; $local_5_3.used = new_used; builtin::array_copy<u8>($local_5_3.repr, start_17, global:retain_indirect_bounded_destination.wado::$const_obj_67, 0, 1); new_used = local.tee start_17(black_box(1)) < 0; start_17 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(start_17); select i64(x < 0_i64, 0_i64 - x, x))); new_used = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_5_3, new_used, start_17); "core:prelude/primitive.wado/write_decimal_digits"($local_5_3.repr, new_used, x, start_17); $local_5_3, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 })), used: builtin::array_len(elements_32) } };
+    }; start_17 = $local_5_3.used; $local_5_3.used = new_used; builtin::array_copy<u8>($local_5_3.repr, start_17, global:retain_indirect_bounded_destination.wado::$const_obj_36, 0, 1); new_used = local.tee start_17(black_box(1)) < 0; start_17 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(start_17); select i64(x < 0_i64, 0_i64 - x, x))); new_used = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_5_3, new_used, start_17); "core:prelude/primitive.wado/write_decimal_digits"($local_5_3.repr, new_used, x, start_17); $local_5_3, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 })), used: builtin::array_len(elements_32) } };
     kept = struct.new "core:prelude//List<retain_indirect_bounded_destination.wado/Bag>" { repr: local.tee elements_38(array.new_fixed<ref "retain_indirect_bounded_destination.wado//Bag">()), used: 0 };
     if @unlikely(0 >= builtin::array_len(kept.repr)) {
         cold_path;

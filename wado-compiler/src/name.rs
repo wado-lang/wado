@@ -468,6 +468,20 @@ pub fn closure_call_method_info(module: &ModuleSource, functor_id: u32) -> Local
     )
 }
 
+/// The name of the `global_id`-th closure's function-table wrapper forwarding to
+/// its `$call`.
+#[must_use]
+pub fn closure_call_wrapper_name(module: &ModuleSource, global_id: usize) -> String {
+    format!("closure/{module}/{INTERNAL_PREFIX}closure_wrapper_{global_id}")
+}
+
+/// The name of the `global_id`-th closure's function-table wrapper forwarding to
+/// its `^Inspect` impl.
+#[must_use]
+pub fn closure_inspect_wrapper_name(module: &ModuleSource, global_id: usize) -> String {
+    format!("closure/{module}/{INTERNAL_PREFIX}closure_inspect_wrapper_{global_id}")
+}
+
 /// The mangled name of closure functor `functor_id`'s `$call`.
 #[must_use]
 pub fn closure_call_name(module: &ModuleSource, functor_id: u32) -> String {

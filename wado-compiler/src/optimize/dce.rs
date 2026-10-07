@@ -630,6 +630,7 @@ struct AnalysisGraph {
     /// `project.functions`. Seeded into [`DceAnalysis::types`] by
     /// [`populate_type_reachability`]'s Phase 1.
     per_func_types: Vec<IndexSet<TypeId>>,
+    functors: FunctorMethods,
 }
 
 /// Build the call graph **and** per-function used-globals / used-types
@@ -701,6 +702,7 @@ fn build_analysis_graph(project: &NirPackage, descriptors: &[FunctionRef]) -> An
         func_positions,
         per_func_globals,
         per_func_types,
+        functors,
     }
 }
 
@@ -1558,7 +1560,7 @@ fn populate_type_reachability(
     // re-walk — the per-function used-types set is already populated.
     {
         let type_table = project.type_table.borrow();
-        let functors = functor_methods(project);
+        let functors = &graph.functors;
 
         // Sum per-function used-types for reachable functions only.
         for &pos in &analysis.functions {
@@ -1584,7 +1586,7 @@ fn populate_type_reachability(
             }
             collect_type_transitive(global.ty, &type_table, &mut analysis.types);
             let mut walker =
-                DceWalker::new(&type_table, &global.module_source, descriptors, &functors);
+                DceWalker::new(&type_table, &global.module_source, descriptors, functors);
             let init_body = global.init.slot_expr().body();
             walker.walk_node(init_body, NodeRef::Block(init_body.root));
             for id in walker.analysis.used_types {

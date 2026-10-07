@@ -350,15 +350,13 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slic
 
 type "functype//core:prelude/format.wado/&core:prelude/string.wado/StrSlice^core:prelude/traits.wado/Inspect::inspect$spec0$sroa[f.buf]" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(160)
 
-type "functype//core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0$dae[is_neg]$sroa[f.buf]" = fn(ref "core:prelude/int128.wado//u128", ref "core:prelude/string.wado//String");  // TypeId(161)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(161)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(162)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(162)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(163)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(163)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(164)
-
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(165)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(164)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -8091,7 +8089,7 @@ fn "core:prelude/int128.wado/write_int_exp_128$dae[upper]$spec1"(f, is_negative,
         };
     };
     buf_32 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(40), used: 0 };
-    "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0$dae[is_neg]$sroa[f.buf]"(value_4, buf_32);
+    "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0$sroa[f.buf]$dae[is_neg]"(value_4, buf_32);
     fraction_len = buf_32.used - 1;
     if is_negative {
         "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(local.tee self_43(f.buf), 45);
@@ -12304,61 +12302,6 @@ fn "core:prelude/format.wado/&core:prelude/string.wado/StrSlice^core:prelude/tra
     f.used = new_used;
     builtin::array_copy<u8>(f.repr, start_16, global:core:prelude/format.wado::$const_obj_513, 0, 1);
     "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/StrSlice>$spec0$sroa[f.buf]"(f, self.repr, self.start, self.end);
-}
-
-fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0$dae[is_neg]$sroa[f.buf]"(self, f) {
-    let $load_3: u64;
-    let $load_4: u64;
-    let top: u64;
-    let mid: u64;
-    let bottom: u64;
-    let chunks: i32;
-    let top_digits: i32;
-    let digit_count: i32;
-    let offset: i32;
-    let arr: ref Array<u8>;
-    top = self.low;
-    mid = 0_i64;
-    bottom = 0_i64;
-    chunks = 1;
-    if self.high != 0_i64 {
-        let $mv$$pattern_temp_0$1: ref "core:prelude/int128.wado//u128";
-        multivalue_bind [self, $mv$$pattern_temp_0$1] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem"(self, struct.new "core:prelude/int128.wado//u128" { low: -8446744073709551616_i64, high: 0_i64 });
-        bottom = $mv$$pattern_temp_0$1.low;
-        top = local.tee $load_3(self.low);
-        chunks = 2;
-        if $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Ord__cmp_1: block -> "core:prelude/traits.wado//enum:Ordering" {
-            if local.tee $load_4(self.high) <u 0_i64 {
-                break $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Ord__cmp_1: 0;
-            }
-            if $load_4 >u 0_i64 {
-                break $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Ord__cmp_1: 2;
-            }
-            if $load_3 <u -8446744073709551616_i64 {
-                break $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Ord__cmp_1: 0;
-            }
-            if $load_3 >u -8446744073709551616_i64 {
-                break $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Ord__cmp_1: 2;
-            }
-            break $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Ord__cmp_1: 1;
-        } != 0 {
-            multivalue_bind [self, $mv$$pattern_temp_0$1] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem"(self, struct.new "core:prelude/int128.wado//u128" { low: -8446744073709551616_i64, high: 0_i64 });
-            mid = $mv$$pattern_temp_0$1.low;
-            top = self.low;
-            chunks = 3;
-        }
-    }
-    digit_count = local.tee top_digits("core:prelude/primitive.wado/count_digits_u64"(top)) + ((chunks - 1) * 19);
-    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec3$sroa[self.buf]$dae[alt_prefix]"(f, 0, digit_count);
-    arr = f.repr;
-    digit_count = offset + digit_count;
-    if chunks == 3 {
-        "core:prelude/primitive.wado/write_decimal_digits"(arr, digit_count - 38, mid, 19);
-    }
-    if chunks > 1 {
-        "core:prelude/primitive.wado/write_decimal_digits"(arr, digit_count - 19, bottom, 19);
-    }
-    "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, top, top_digits);
 }
 
 export fn "template_format_spec.wado/$cm_export__$test_0_fill_and_alignment" as "$test_0_fill_and_alignment"

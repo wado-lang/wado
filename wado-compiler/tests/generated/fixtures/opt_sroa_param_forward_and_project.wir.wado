@@ -35,9 +35,9 @@ type "functype//opt_sroa_param_forward_and_project.wado/$cm_binding__Stdout_writ
 
 type "functype//opt_sroa_param_forward_and_project.wado/$cm_export__run" = fn();  // TypeId(13)
 
-type "functype//opt_sroa_param_forward_and_project.wado/mid$sroa[b.s]" = fn(ref "core:prelude/string.wado//String", ref "opt_sroa_param_forward_and_project.wado//Counter");  // TypeId(14)
+type "functype//opt_sroa_param_forward_and_project.wado/sink$spec0$sroa[&mut b.s]$dae[t]" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(14)
 
-type "functype//opt_sroa_param_forward_and_project.wado/sink$spec0$dae[t]$sroa[&mut b.s]" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(15)
+type "functype//opt_sroa_param_forward_and_project.wado/mid$sroa[b.s]" = fn(ref "core:prelude/string.wado//String", ref "opt_sroa_param_forward_and_project.wado//Counter");  // TypeId(15)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(16)
 
@@ -72,8 +72,8 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:opt_sroa_param_forward_and_project.wado::$const_obj_14: ref Array<u8> = array.new_fixed<u8>(55);
-global global:opt_sroa_param_forward_and_project.wado::$const_obj_15: ref Array<u8> = array.new_fixed<u8>(124);
+global global:opt_sroa_param_forward_and_project.wado::$const_obj_11: ref Array<u8> = array.new_fixed<u8>(55);
+global global:opt_sroa_param_forward_and_project.wado::$const_obj_12: ref Array<u8> = array.new_fixed<u8>(124);
 
 fn "opt_sroa_param_forward_and_project.wado/bump"(c) {
     c.v = c.v + 1;
@@ -102,12 +102,7 @@ fn "opt_sroa_param_forward_and_project.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "opt_sroa_param_forward_and_project.wado/mid$sroa[b.s]"(b, c) {
-    "opt_sroa_param_forward_and_project.wado/sink$spec0$dae[t]$sroa[&mut b.s]"(b, "opt_sroa_param_forward_and_project.wado/bump"(c));
-    "opt_sroa_param_forward_and_project.wado/sink$spec0$dae[t]$sroa[&mut b.s]"(b, "opt_sroa_param_forward_and_project.wado/bump"(c));
-}
-
-fn "opt_sroa_param_forward_and_project.wado/sink$spec0$dae[t]$sroa[&mut b.s]"(b, n) {
+fn "opt_sroa_param_forward_and_project.wado/sink$spec0$sroa[&mut b.s]$dae[t]"(b, n) {
     let $load_14: ref Array<u8>;
     let $local_5: ref "core:prelude/string.wado//String";
     let new_used_34: i32;
@@ -119,7 +114,7 @@ fn "opt_sroa_param_forward_and_project.wado/sink$spec0$dae[t]$sroa[&mut b.s]"(b,
     }
     start_35 = b.used;
     b.used = new_used_34;
-    builtin::array_copy<u8>(b.repr, start_35, global:opt_sroa_param_forward_and_project.wado::$const_obj_14, 0, 1);
+    builtin::array_copy<u8>(b.repr, start_35, global:opt_sroa_param_forward_and_project.wado::$const_obj_11, 0, 1);
     $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     start_35 = n < 0;
     n = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_51(x_51 = builtin::i64_extend_i32_s(n); select i64(x_51 < 0_i64, 0_i64 - x_51, x_51)));
@@ -141,14 +136,19 @@ fn "opt_sroa_param_forward_and_project.wado/sink$spec0$dae[t]$sroa[&mut b.s]"(b,
     }
     new_used_34 = b.used;
     b.used = n;
-    builtin::array_copy<u8>(local.tee $load_14(b.repr), new_used_34, global:opt_sroa_param_forward_and_project.wado::$const_obj_15, 0, 1);
+    builtin::array_copy<u8>(local.tee $load_14(b.repr), new_used_34, global:opt_sroa_param_forward_and_project.wado::$const_obj_12, 0, 1);
     if @unlikely(local.tee new_used_34(b.used + 1) > builtin::array_len($load_14)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(b, new_used_34);
     }
     n = b.used;
     b.used = new_used_34;
-    builtin::array_copy<u8>(b.repr, n, global:opt_sroa_param_forward_and_project.wado::$const_obj_14, 0, 1);
+    builtin::array_copy<u8>(b.repr, n, global:opt_sroa_param_forward_and_project.wado::$const_obj_11, 0, 1);
+}
+
+fn "opt_sroa_param_forward_and_project.wado/mid$sroa[b.s]"(b, c) {
+    "opt_sroa_param_forward_and_project.wado/sink$spec0$sroa[&mut b.s]$dae[t]"(b, "opt_sroa_param_forward_and_project.wado/bump"(c));
+    "opt_sroa_param_forward_and_project.wado/sink$spec0$sroa[&mut b.s]$dae[t]"(b, "opt_sroa_param_forward_and_project.wado/bump"(c));
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
