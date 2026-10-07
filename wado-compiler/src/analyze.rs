@@ -6,7 +6,7 @@
 //! 3. Name resolution (binding identifiers to their definitions)
 
 use crate::ast::{
-    AstId, AstVisitor, CmImport, Function, FunctionSite, GenericParam, ImportAttributes, Item,
+    AstId, AstVisitor, Function, FunctionSite, GenericParam, ImportAttributes, InterfaceDecl, Item,
     Module, UseDecl, UseItem, Visibility, WorldExport, cm_import_of, for_each_function,
     walk_generic_params, walk_item,
 };
@@ -26,6 +26,7 @@ use crate::symbol::{
 use crate::syntax::{expression_keyword_name_message, is_expression_keyword};
 use crate::token::Span;
 use crate::unparse::unparse_type_into;
+use crate::wit_consume::exported_interfaces;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -1081,16 +1082,23 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
 
     /// A component's default interface is its binding module itself: each
     /// operation is also a module-level name, as a source library's `export fn`
-    /// is, so the two consume alike.
+    /// is, so the two consume alike. A name two default interfaces share stays
+    /// reachable only through each interface; one the module declares itself
+    /// resolves to that declaration, which a re-export never overrides.
     fn reexport_default_interface(&mut self, module: &Module, module_source: &ModuleSource) {
-        for item in &module.items {
-            let Item::Interface(iface) = item else {
-                continue;
-            };
-            if !cm_import_of(&iface.attrs).is_some_and(CmImport::is_package_default) {
-                continue;
-            }
+        let defaults: Vec<&InterfaceDecl> = exported_interfaces(module)
+            .filter(|(_, cm)| cm.is_package_default())
+            .map(|(iface, _)| iface)
+            .collect();
+        let mut uses: hashmap::IndexMap<&str, usize> = hashmap::IndexMap::default();
+        for op in defaults.iter().flat_map(|iface| &iface.methods) {
+            *uses.entry(op.name.as_str()).or_default() += 1;
+        }
+        for iface in defaults {
             for op in &iface.methods {
+                if uses[op.name.as_str()] > 1 {
+                    continue;
+                }
                 self.symbols.register_reexport(
                     module_source,
                     &op.name,

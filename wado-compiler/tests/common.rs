@@ -830,44 +830,56 @@ pub fn compile_lib_world(
         .wasm
 }
 
-/// Resolve `name` in `iface`, or among the top-level exports with none.
+/// The function `name` in `iface`, or `None` where `iface` exports none.
 pub fn lookup_func(
     store: &mut Store<WasiState>,
     instance: &Instance,
-    iface: Option<&ComponentExportIndex>,
+    iface: &ComponentExportIndex,
     name: &str,
 ) -> Option<Func> {
-    let (_, idx) = instance.get_export(&mut *store, iface, name)?;
+    let (_, idx) = instance.get_export(&mut *store, Some(iface), name)?;
     instance.get_func(&mut *store, idx)
 }
 
-/// The export `name` of the interface `iface_fq` a component exports, as a
-/// library exports every function, panicking where it is not there.
+/// The interface `iface_fq` a component exports, as a library exports its
+/// default interface, panicking where it is not there.
+pub fn interface_index(
+    mut store: impl AsContextMut,
+    instance: &Instance,
+    iface_fq: &str,
+) -> ComponentExportIndex {
+    let (_, iface) = instance
+        .get_export(&mut store, None, iface_fq)
+        .unwrap_or_else(|| panic!("interface `{iface_fq}` not exported"));
+    iface
+}
+
+/// The export `name` of the interface `iface_fq` a component exports,
+/// panicking where it is not there.
 pub fn interface_export(
     mut store: impl AsContextMut,
     instance: &Instance,
     iface_fq: &str,
     name: &str,
 ) -> ComponentExportIndex {
-    let (_, iface) = instance
-        .get_export(&mut store, None, iface_fq)
-        .unwrap_or_else(|| panic!("interface `{iface_fq}` not exported"));
+    let iface = interface_index(&mut store, instance, iface_fq);
     let (_, idx) = instance
         .get_export(&mut store, Some(&iface), name)
         .unwrap_or_else(|| panic!("`{name}` not exported by `{iface_fq}`"));
     idx
 }
 
-/// The function `name` of the `world_fq` library world's interface.
+/// The function `name` of the interface `iface_fq` a component exports,
+/// panicking where it is not there.
 pub fn lib_func(
-    store: &mut Store<WasiState>,
+    mut store: impl AsContextMut,
     instance: &Instance,
-    world_fq: &str,
+    iface_fq: &str,
     name: &str,
 ) -> Func {
-    let idx = interface_export(&mut *store, instance, world_fq, name);
+    let idx = interface_export(&mut store, instance, iface_fq, name);
     instance
-        .get_func(&mut *store, idx)
+        .get_func(&mut store, idx)
         .unwrap_or_else(|| panic!("`{name}` is not a function"))
 }
 

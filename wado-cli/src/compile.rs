@@ -65,10 +65,6 @@ pub struct CompileOptions {
     /// the compiler synthesizes a library world from the entry module's
     /// `export fn`s and exports each one as a Component Model function.
     pub lib_world: Option<String>,
-    /// `--implement <fq>`: build a provider component — a library world whose
-    /// exports land in the foreign interface `lib_world` names, so the artifact
-    /// satisfies another component's import of that interface.
-    pub lib_interface_export: bool,
     /// The entry came from a manifest (no path argument, or a directory
     /// argument), so the build is the package's declared artifact and carries
     /// its metadata. False for an explicit `.wado` file argument.
@@ -97,7 +93,6 @@ impl CompileOptions {
             embed: EmbedOptions::default(),
             target_world,
             lib_world,
-            lib_interface_export: false,
             manifest_driven: true,
         }
     }
@@ -118,7 +113,6 @@ impl CompileOptions {
             knobs: self.knobs.clone(),
             target_world: self.target_world.clone(),
             lib_world: self.lib_world.clone(),
-            lib_interface_export: self.lib_interface_export,
             ..CompileFlags::default()
         }
     }
@@ -146,9 +140,6 @@ pub struct CompileFlags {
     pub test_name_filters: Vec<String>,
     /// Library world FQ for `--lib`. Forwarded to `CompilerOptions::lib_world`.
     pub lib_world: Option<String>,
-    /// Force library exports into the `lib_world` interface (`--implement`).
-    /// Forwarded to `CompilerOptions::lib_interface_export`.
-    pub lib_interface_export: bool,
     /// Retain the WIR module in the result. `wado compile` sets it when
     /// embedding WIT, to read the world surface without a second compile.
     pub retain_wir: bool,
@@ -301,7 +292,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         embed,
         target_world,
         lib_world: None,
-        lib_interface_export: false,
         manifest_driven: false,
     })
 }
@@ -396,7 +386,6 @@ pub async fn try_compile_with_run_cache(
         invocations: pipeline_outcome.invocations,
         test_name_filters: flags.test_name_filters.clone(),
         lib_world: flags.lib_world.clone(),
-        lib_interface_export: flags.lib_interface_export,
         retain_wir: flags.retain_wir,
         embed_wit_contract: flags.embed_wit_contract.clone(),
         coverage: flags.coverage,

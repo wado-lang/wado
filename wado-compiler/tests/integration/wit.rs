@@ -136,6 +136,36 @@ fn functions_only_become_direct_world_exports() {
     );
 }
 
+/// A library's exports sit in its default interface even when no signature
+/// names a type, as the compiled component exports them.
+#[test]
+fn library_functions_only_group_into_default_interface() {
+    let source = "export fn greet(s: String) -> String { return s; }";
+    let host = in_memory_host(&[]);
+    let mut sem = block_on(semantics(source, &host, Some("lib.wado")));
+    assert!(sem.is_complete(), "library source did not analyze");
+    sem.set_wit_contract(wit_emit::wit_contract(
+        None,
+        Some("acme:plib/plib@0.1.0"),
+        None,
+    ));
+    let text = emit_wit_text(
+        &sem,
+        &WitEmitOptions {
+            scope: WitScope::Local,
+        },
+        &WorldSurface::default(),
+    )
+    .expect("emit_wit_text failed");
+    assert_eq!(
+        text.trim_end(),
+        "package root:component;\n\n\
+         interface plib {\n  greet: func(s: string) -> string;\n}\n\n\
+         world root {\n  export plib;\n}",
+        "\n--- emitted ---\n{text}"
+    );
+}
+
 #[test]
 fn record_export_groups_into_default_interface() {
     check(

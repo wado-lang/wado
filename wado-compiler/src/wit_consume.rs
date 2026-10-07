@@ -12,7 +12,7 @@ use crate::ast::{
     AstId, AstIdSpace, AttrArg, Attribute, CmBoundary, CmImport, EnumCase, EnumDecl, FlagsDecl,
     FlagsVariant, Function, GenericType, InnerAttribute, InterfaceDecl, Item, Module, NamedType,
     Newtype, Param, SelfKind, StructDecl, StructField, Type, UseDecl, UseItem, VariantCase,
-    VariantDecl, Visibility,
+    VariantDecl, Visibility, cm_import_of,
 };
 use crate::attribute::{CM, CM_HOST_IMPORTS, CM_PARAMS};
 use crate::component_model::SourceInterfaceBatch;
@@ -62,6 +62,21 @@ pub fn module_host_leaf_imports(module: &Module) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// The interfaces a component-binding module's dependency exports, each with
+/// its `#[cm]` import. A reconstructed import interface (a guest effect the
+/// consumer provides) sits in the same module but is not among them, so it is
+/// excluded via the module's host-leaf import list. Empty for a core-wasm
+/// asset, whose decls carry `#[canonical(...)]`.
+pub fn exported_interfaces(module: &Module) -> impl Iterator<Item = (&InterfaceDecl, &CmImport)> {
+    let imports = module_host_leaf_imports(module);
+    module.items.iter().filter_map(move |item| match item {
+        Item::Interface(decl) => cm_import_of(&decl.attrs)
+            .filter(|cm| !imports.contains(&cm.interface_path()))
+            .map(|cm| (decl, cm)),
+        _ => None,
+    })
 }
 
 /// Build a Wado AST module from a component's decoded `Resolve` + target world.

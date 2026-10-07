@@ -36,7 +36,7 @@ use super::types::{
 };
 use super::tysys::TypeSystem;
 use super::{AbstractSelectionCache, Elaborator};
-use crate::ast::{CmImport, GenericType, NamedType, UseItem, cm_import_of};
+use crate::ast::{GenericType, NamedType, UseItem};
 use crate::compiler_item::{CompilerItemKind, Resolved};
 use crate::component_model::SourceInterfaceBatch;
 use crate::defs::{DefId, DefKind, DefTable};
@@ -68,7 +68,7 @@ use crate::symbol::SymbolKind;
 use crate::tir::{StructDef, TirFunction, TraitRef};
 use crate::token::Span;
 use crate::unparse::unparse_type_into;
-use crate::wit_consume::module_host_leaf_imports;
+use crate::wit_consume::{exported_interfaces, module_host_leaf_imports};
 
 /// What every trait bound a module writes, wherever it stands, gets wrong in
 /// the associated types it binds: one its trait does not declare, or one
@@ -2538,7 +2538,9 @@ pub(crate) fn fold_component_interfaces(
         if !matches!(ms, ModuleSource::Wasm { .. }) || stdlib_set.contains(ms) {
             continue;
         }
-        let interface_fqs = component_interface_fqs(module);
+        let interface_fqs: Vec<String> = exported_interfaces(module)
+            .map(|(_, cm)| cm.interface_path())
+            .collect();
         let world_func_names = component_world_func_names(module);
         if !interface_fqs.is_empty() || !world_func_names.is_empty() {
             let host_leaf_imports = module_host_leaf_imports(module);
@@ -2566,25 +2568,6 @@ fn component_world_func_names(module: &Module) -> Vec<String> {
             }
             _ => None,
         })
-        .collect()
-}
-
-/// Exported interface FQs of a component-binding module. Empty for a core-wasm
-/// asset (whose decls carry `#[canonical(...)]`, not `#[cm(...)]` interfaces).
-///
-/// A reconstructed *import* interface (a guest effect the consumer provides) is
-/// synthesized into the same module but is not composed from the dependency's
-/// exports, so it is excluded via the module's host-leaf import list.
-fn component_interface_fqs(module: &Module) -> Vec<String> {
-    let imports: IndexSet<String> = module_host_leaf_imports(module).into_iter().collect();
-    module
-        .items
-        .iter()
-        .filter_map(|item| match item {
-            Item::Interface(decl) => cm_import_of(&decl.attrs).map(CmImport::interface_path),
-            _ => None,
-        })
-        .filter(|fq| !imports.contains(fq))
         .collect()
 }
 

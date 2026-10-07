@@ -490,13 +490,12 @@ impl Resolutions {
     }
 
     /// The declaration owning what `ident` names: `E` in `[ns::]E::op` through
-    /// its site, or the owner of an imported bare `op` through the operation's.
+    /// its site, or the owner of an imported `[ns::]op` through the operation's.
+    /// A namespace qualifier declares nothing, so `ns::op` takes the second way.
     #[must_use]
     pub fn operation_owner(&self, ident: &ast::IdentExpr) -> Option<DefId> {
-        match ident.owner_segment() {
-            Some(_) => self.owner_decl(ident),
-            None => self.defs().parent(self.declared_if_walked(ident.id)?),
-        }
+        self.owner_decl(ident)
+            .or_else(|| self.defs().parent(self.declared_if_walked(ident.id)?))
     }
 
     /// The declaration a qualified path's owner segment names: `Color` in

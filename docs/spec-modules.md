@@ -416,7 +416,10 @@ or side-car `.wit` is involved.
   ([The Library World as a Component](./spec-packages.md#the-library-world-as-a-component)).
   Each of its functions is also a free function of the module, imported by bare
   name. So a `use` of a library reads the same whether its source is Wado code
-  or a component. Any other interface is reached only through its name.
+  or a component. A name two exported default interfaces share is left out,
+  and a world-level function keeps its name over an interface function of the
+  same name. Any other interface, an imported one included, is reached only
+  through its name.
 - A function the component's world exports directly becomes a free function,
   imported by bare name.
 - An `async func` becomes an `async fn` returning `AsyncCall<T>`

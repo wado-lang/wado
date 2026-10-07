@@ -1,0 +1,10 @@
+// `pick` is in both `wado:left/left` and `wado:right/right`, so neither claims
+// the bare name.
+use { pick } from "./sub/wasm_import_cm_two_defaults.wat" with { type: "wat" };
+
+test {
+    assert pick() == 1;
+}
+
+__DATA__
+{"compile_error": ":3:7: analysis error: symbol 'pick' not found in module './sub/wasm_import_cm_two_defaults.wat'", "compile_error_codes": ["IMPORT_NOT_FOUND"]}

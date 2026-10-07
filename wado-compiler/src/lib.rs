@@ -404,7 +404,7 @@ pub struct CompilerOptions {
     /// The library implements a foreign interface, `lib_world` (a provider
     /// component), whose consumers connect by interface FQ. A provider is a
     /// leaf: it resolves no providers of its own.
-    pub lib_interface_export: bool,
+    pub is_provider: bool,
     /// Provider components that satisfy a dependency's guest-effect imports.
     /// Each is composed as a sibling and wired `provider.export[fq] ->
     /// dependency.import[fq]` (research-cm-boundary-callbacks.md).
@@ -437,7 +437,7 @@ impl Default for CompilerOptions {
             unused_diagnostics: true,
             lib_world: None,
             analysis_only: false,
-            lib_interface_export: false,
+            is_provider: false,
             providers: Vec::new(),
             params: param_resolution::ParamInputs::default(),
             embed_wit_contract: None,
@@ -1063,10 +1063,10 @@ pub async fn compile_with_options<H: CompilerHost>(
     // Provider pre-pass: an `import with { provider: "./p.wado" }` compiles `p`
     // on-demand into a component satisfying the dependency's guest-effect
     // imports, before effect-check (which discharges the requirement) and
-    // codegen (which composes it). A provider build (`lib_interface_export`) is
+    // codegen (which composes it). A provider build (`is_provider`) is
     // a leaf: skipping it there bounds the reentrant compile so a
     // provider-references-provider chain cannot recurse without limit.
-    if !options.lib_interface_export {
+    if !options.is_provider {
         match resolve_inline_providers(&mut load_result, host, &options, &logger).await {
             Ok(mut extra) => options.providers.append(&mut extra),
             Err(Bail) => return Err(CompileFailure { is_todo_module }),
@@ -1171,10 +1171,10 @@ async fn resolve_inline_providers<H: CompilerHost>(
         // Inherit the parent's compilation options so the provider is built the
         // same way (optimization, `-D` params, codegen flags, log level); only
         // the world is overridden, and `providers` stays empty (the
-        // provider is a leaf — see the `lib_interface_export` guard above).
+        // provider is a leaf — see the `is_provider` guard above).
         let opts = CompilerOptions {
             lib_world: Some(fq.clone()),
-            lib_interface_export: true,
+            is_provider: true,
             opt_level: parent.opt_level,
             opt: parent.opt,
             log_level: parent.log_level,

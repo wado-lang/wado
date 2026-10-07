@@ -41,7 +41,13 @@ source dependency's `export fn id_string` would.
 The rule reads only the artifact, so it holds for a registry dependency and for
 a component file imported by path alike. A component built elsewhere that
 follows the same naming is read the same way. Any other interface is reached
-through its name alone.
+through its name alone, and so is a default interface the component imports
+rather than exports: the consumer provides that one.
+
+A composed component may export more than one default interface. A function
+name two of them share is left out of the module, so neither shadows the other,
+and each is called through its interface. A function the component's world
+exports directly keeps its name over an interface function of the same name.
 
 ### The interface stays importable
 
