@@ -175,16 +175,11 @@ fn collect_and_validate(
         if !is_eligible(&func) {
             continue;
         }
-        // A position this pass already scalarized holds the field now. Taking it
-        // again would unwrap a one-field struct holding itself without end.
-        let scalarized = project.sroa_param_clone_fields.get(&key);
+        let unwrapped = project.sroa_param_clone_fields.get(&key);
         // A receiver is fair game like any parameter, a trait method's included:
         // the original function survives this pass for the calls it cannot
         // retarget — see `mint_scalarized_clones`.
         for (pi, param) in func.params.iter().enumerate() {
-            if scalarized.is_some_and(|fields| fields.contains_key(&param.local_index)) {
-                continue;
-            }
             if func.address_taken_locals.contains(&param.local_index) {
                 continue;
             }
@@ -198,6 +193,14 @@ fn collect_and_validate(
             else {
                 continue;
             };
+            // A struct this position was already unwrapped from reaches itself
+            // through its one field, and unwrapping it again would never end.
+            if unwrapped
+                .and_then(|chains| chains.get(&param.local_index))
+                .is_some_and(|chain| chain.contains(&info.struct_key))
+            {
+                continue;
+            }
             info.form = func.body.as_ref().map_or(FieldForm::Value, |body| {
                 param_field_form(body, param.local_index)
             });
@@ -957,19 +960,18 @@ fn mint_scalarized_clones(
         }
 
         project.func_index.insert(func_key, id);
-        // A clone of a clone keeps the positions its source already scalarized.
-        let mut fields = project
+        let mut chains = project
             .sroa_param_clone_fields
             .get(key)
             .cloned()
             .unwrap_or_default();
-        fields.extend(positions.iter().map(|pi| {
-            (
-                clone.params[*pi].local_index,
-                candidates[&(*key, *pi)].struct_key.clone(),
-            )
-        }));
-        project.sroa_param_clone_fields.insert(id, fields);
+        for pi in positions {
+            chains
+                .entry(clone.params[*pi].local_index)
+                .or_default()
+                .push(candidates[&(*key, *pi)].struct_key.clone());
+        }
+        project.sroa_param_clone_fields.insert(id, chains);
         copy_function_strings(project, &origin, (clone.module_source.clone(), name));
         clones.insert(*key, id);
         minted.push(Rc::new(RefCell::new(clone)));
@@ -1157,7 +1159,15 @@ fn rewrite_call_sites(
         // through. Read from the package, not from this run's `clones`: a clone
         // minted on an earlier fixpoint iteration is still a clone, and losing
         // that fact projects the wrapper's field onto it a second time.
-        let scalar_param_struct = clone_fields.get(&key).cloned().unwrap_or_default();
+        let scalar_param_struct: IndexMap<u32, (String, ModuleSource)> = clone_fields
+            .get(&key)
+            .into_iter()
+            .flatten()
+            .map(|(local, chain)| {
+                let held = chain.last().expect("a chain records one struct at least");
+                (*local, held.clone())
+            })
+            .collect();
         if let Some(body) = func.body.as_mut() {
             let root = body.root;
             let type_table = type_table_rc.borrow();

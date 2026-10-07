@@ -57,13 +57,15 @@ pub struct NirPackage {
     /// later round, so its current call sites are not its whole contract.
     /// Identity, not a name test — see the declaration-identity WEP.
     pub sroa_param_clones: IndexSet<FuncId>,
-    /// For each of those clones, which of its locals holds a scalarized field
-    /// and the struct that field came from, its source's included. Durable
-    /// because the fact is: a later run of the pass rewriting calls *inside* a
-    /// clone must know its param already holds the field, or it projects the
-    /// wrapper's field onto it a second time; and it must not scalarize that
-    /// position again, which a one-field struct holding itself never ends.
-    pub sroa_param_clone_fields: IndexMap<FuncId, IndexMap<u32, (String, ModuleSource)>>,
+    /// For each of those clones, which of its locals holds a scalarized field,
+    /// and the structs it was unwrapped from, outermost first: the last holds
+    /// the field the local is now, and a clone of a clone carries its source's
+    /// chains on. Durable because the fact is: a later run of the pass
+    /// rewriting calls *inside* a clone must know its param already holds the
+    /// field, or it projects the wrapper's field onto it a second time; and it
+    /// must not unwrap a struct the chain already holds, which a struct
+    /// reaching itself through its one field never ends.
+    pub sroa_param_clone_fields: IndexMap<FuncId, IndexMap<u32, Vec<(String, ModuleSource)>>>,
     /// All struct declarations (each carries its own `module_source`)
     pub structs: Vec<NirStruct>,
     /// All enum declarations (each carries its own `module_source`)
