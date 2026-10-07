@@ -43,7 +43,9 @@ const workflowRuns = `repos/${opt.repo}/actions/workflows/${opt.workflow}/runs`;
 
 if (opt.sha) {
   const sha = execFileSync("git", ["rev-parse", opt.sha]).toString().trim();
-  opt.run = String(gh(`${workflowRuns}?head_sha=${sha}`).workflow_runs[0].id);
+  const [run] = gh(`${workflowRuns}?head_sha=${sha}`).workflow_runs;
+  if (!run) throw new Error(`${opt.workflow} has no run on ${sha}`);
+  opt.run = String(run.id);
 }
 if (opt.run) {
   for (const job of jobsOf(opt.run)) {

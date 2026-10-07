@@ -47,3 +47,6 @@ request's run.
   show a real change. A single run does not.
 - The slowest job sets how long CI takes. A step that grew in a job that
   finishes early does not slow CI down.
+- A test step grows as tests are added. Compare its growth with the growth in
+  the count of what it runs (`wado-compiler/tests/fixtures/*.wado`, `test`
+  blocks under `wado-compiler/lib/`) before calling it a regression.
