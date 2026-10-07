@@ -584,7 +584,7 @@ impl TargetSet {
 
 /// What one body writes itself, before its callees' writes join in.
 #[derive(Debug, PartialEq)]
-pub(super) struct OwnWrites {
+struct OwnWrites {
     globals: IndexSet<(ModuleSource, String)>,
     indirect: bool,
     /// The callees whose writes reach what runs after their call. A call typed
@@ -682,9 +682,7 @@ fn transitive_reachable_writes(
             continue;
         };
         for &c in &own.callees {
-            if c < n {
-                callers[c].push(i);
-            }
+            callers[c].push(i);
         }
         if own.indirect {
             writes.push(ReachableWrites::Opaque);
