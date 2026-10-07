@@ -1408,7 +1408,7 @@ impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Serialize> Serialize for V {
                 return var.end();
             }
         }
-        return Result::Err(SerializeError::unsupported_value(`unknown case of ${type_name}`));
+        unreachable();
     }
 }
 
@@ -1426,7 +1426,7 @@ impl<E: ReflectEnum<Members = [..M]>, ..M> Serialize for E {
                 );
             }
         }
-        return Result::Err(SerializeError::unsupported_value(`unknown discriminant of ${Reflect::<E>::type_name()}`));
+        unreachable();
     }
 }
 
