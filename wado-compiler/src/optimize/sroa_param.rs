@@ -932,8 +932,19 @@ fn mint_scalarized_clones(
         let func_key =
             FunctionRef::from_resolved(&clone, clone.module_source.clone()).function_id();
         if let Some(&existing) = project.func_index.get(&func_key) {
+            // The scalar type where this run scalarizes, the source's elsewhere.
+            let wanted: Vec<TypeId> = clone
+                .params
+                .iter()
+                .enumerate()
+                .map(|(pi, from)| {
+                    candidates
+                        .get(&(*key, pi))
+                        .map_or(from.type_id, |info| info.scalar_type_id)
+                })
+                .collect();
             assert!(
-                takes_wanted_params(project, existing, &clone, *key, candidates),
+                project.takes_param_types(existing, &wanted),
                 "[NIR] sroa_param: {name} stands with another signature"
             );
             clones.insert(*key, existing);
@@ -992,31 +1003,6 @@ fn mint_scalarized_clones(
         project.functions.push(Rc::new(RefCell::new(clone)));
     }
     clones
-}
-
-/// Whether the standing clone `existing` takes what this run's clone of `key`
-/// would: the scalar type where this run scalarizes, `source`'s elsewhere.
-fn takes_wanted_params(
-    project: &NirPackage,
-    existing: FnKey,
-    source: &NirFunction,
-    key: FnKey,
-    candidates: &IndexMap<(FnKey, usize), SroaInfo>,
-) -> bool {
-    let standing = project.functions[existing.index()].borrow();
-    let types = project.type_table.borrow();
-    standing.params.len() == source.params.len()
-        && standing
-            .params
-            .iter()
-            .zip(&source.params)
-            .enumerate()
-            .all(|(pi, (param, from))| {
-                let wanted = candidates
-                    .get(&(key, pi))
-                    .map_or(from.type_id, |info| info.scalar_type_id);
-                types.type_key(param.type_id) == types.type_key(wanted)
-            })
 }
 
 /// Give the clone its own entry in `function_strings`, which is name-keyed: DCE

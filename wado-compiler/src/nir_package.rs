@@ -493,6 +493,20 @@ impl NirPackage {
         named
     }
 
+    /// Whether function `id` takes parameters of exactly the types `wanted`,
+    /// compared as types rather than as table slots.
+    pub fn takes_param_types(&self, id: FuncId, wanted: &[TypeId]) -> bool {
+        use cranelift_entity::EntityRef;
+        let func = self.functions[id.index()].borrow();
+        let types = self.type_table.borrow();
+        func.params.len() == wanted.len()
+            && func
+                .params
+                .iter()
+                .zip(wanted)
+                .all(|(param, &want)| types.type_key(param.type_id) == types.type_key(want))
+    }
+
     /// Retire function `id`, which `rename_functions` merged into another
     /// whose callers its own now are: it is dead, and nothing walks its body.
     pub fn retire_function(&mut self, id: FuncId) {

@@ -14,7 +14,7 @@ use crate::nir_package::{NirPackage, Reshape};
 use super::arena_query;
 use super::gate::{FunctionGate, GatedPass};
 use crate::nir::FuncId;
-use crate::tir::TypeTable;
+use crate::tir::{TypeId, TypeTable};
 
 /// A function's canonical [`FuncId`]: the candidate/confirmed/pinned sets key on
 /// it, and a call site is matched by the stamped `func_id` on its call node.
@@ -300,7 +300,16 @@ fn apply_dae(project: &mut NirPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) -
     let merged = project.rename_functions(renames);
     if !merged.is_empty() {
         for (&id, &holder) in &merged {
-            assert_same_params(project, id, holder);
+            let params: Vec<TypeId> = project.functions[id.index()]
+                .borrow()
+                .params
+                .iter()
+                .map(|p| p.type_id)
+                .collect();
+            assert!(
+                project.takes_param_types(holder, &params),
+                "[NIR] dae: a function reshaped into another's name takes other parameters"
+            );
         }
         for (i, func_rc) in project.functions.iter().enumerate() {
             if let Some(body) = func_rc.borrow_mut().body.as_mut()
@@ -336,26 +345,6 @@ fn retarget_calls(body: &mut Body, merged: &IndexMap<FuncId, FuncId>) -> bool {
         }
     }
     !calls.is_empty()
-}
-
-/// The two functions one name stands for take the same parameters.
-fn assert_same_params(project: &NirPackage, a: FuncId, b: FuncId) {
-    let (fa, fb) = (
-        project.functions[a.index()].borrow(),
-        project.functions[b.index()].borrow(),
-    );
-    let types = project.type_table.borrow();
-    assert!(
-        fa.params.len() == fb.params.len()
-            && fa
-                .params
-                .iter()
-                .zip(&fb.params)
-                .all(|(x, y)| types.type_key(x.type_id) == types.type_key(y.type_id)),
-        "[NIR] dae: `{}` reshaped into `{}`'s name with other parameters",
-        fa.name,
-        fb.name
-    );
 }
 
 /// Rewrite every call of a confirmed function in `body`: drop the dead-position
