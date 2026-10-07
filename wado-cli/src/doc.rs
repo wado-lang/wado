@@ -490,7 +490,10 @@ mod format_contract_tests {
         assert!(md.contains("#### `pub fn head(&self) -> u8`"), "got:\n{md}");
         assert!(md.contains("#### `impl Sized2 for Bytes`"), "got:\n{md}");
         let simple = simple_all_of(source);
-        assert!(simple.contains("impl Bytes {\n    pub fn head(&self) -> u8;"), "got:\n{simple}");
+        assert!(
+            simple.contains("impl Bytes {\n    pub fn head(&self) -> u8;"),
+            "got:\n{simple}"
+        );
         assert!(simple.contains("impl Sized2 for Bytes {"), "got:\n{simple}");
     }
 

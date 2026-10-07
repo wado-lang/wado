@@ -1,4 +1,5 @@
-//! Replace a call to a small, non-recursive function with its body, spliced
+//! Replace a call to a small function off every call cycle, or a bridge onto
+//! one ([`splice_barred_cycle_members`]), with its body, spliced
 //! into a labeled block so the `return` becomes a `break`.
 //!
 //! A body carries two prices, parting company where it keeps a cold arm.
@@ -1436,7 +1437,7 @@ struct Verdict {
 /// for a body that will stay a call.
 fn splice_barred(
     func: &NirFunction,
-    recursive_functions: &IndexSet<FuncId>,
+    barred_cycle_members: &IndexSet<FuncId>,
     type_table: &TypeTable,
 ) -> bool {
     // A CM binding is an ABI bridge between Wado GC types and CM linear memory,
@@ -1447,9 +1448,10 @@ fn splice_barred(
     // Recursion is barred ahead of the `#[inline(always)]` short-circuit below:
     // splicing a recursive call only exposes the next one, so a force would
     // expand without bound over the fixed point (a compiler stack overflow at
-    // higher iteration counts). Keyed on `FuncId`, the identity the recursive set
-    // is built on, so a cross-module recursive function is not missed.
-    if func.id.is_some_and(|id| recursive_functions.contains(&id)) {
+    // higher iteration counts). A bridge is the exception
+    // `splice_barred_cycle_members` proves bounded. Keyed on `FuncId`, the
+    // identity the set is built on, so a cross-module cycle is not missed.
+    if func.id.is_some_and(|id| barred_cycle_members.contains(&id)) {
         return true;
     }
     // A `!`-returning body is an error/abort path: never hot, nothing to gain.
@@ -1478,7 +1480,7 @@ fn effective_threshold(func: &NirFunction, inline_threshold: usize) -> usize {
 fn classify_callee(
     func: &NirFunction,
     const_view: Option<&ConstView<'_>>,
-    recursive_functions: &IndexSet<FuncId>,
+    barred_cycle_members: &IndexSet<FuncId>,
     type_table: &TypeTable,
     inline_threshold: usize,
     descriptors: &[FunctionRef],
@@ -1494,7 +1496,7 @@ fn classify_callee(
         return Verdict::default();
     };
 
-    if splice_barred(func, recursive_functions, type_table) {
+    if splice_barred(func, barred_cycle_members, type_table) {
         return Verdict::default();
     }
 
@@ -1980,7 +1982,7 @@ pub fn inline_functions(
         .iter()
         .map(|s| s.calls.iter().map(|(c, _)| c.index()).collect())
         .collect();
-    let recursive_functions = splice_barred_cycle_members(&call_graph);
+    let barred_cycle_members = splice_barred_cycle_members(&call_graph);
 
     // Collect inline candidates from all modules, keyed by `FuncId` (the
     // function's store position). A call site resolves its candidate by its
@@ -2051,7 +2053,7 @@ pub fn inline_functions(
                 return 0;
             };
             if !loopy.get(i).copied().unwrap_or(false)
-                || splice_barred(&func, &recursive_functions, &type_table)
+                || splice_barred(&func, &barred_cycle_members, &type_table)
             {
                 return 0;
             }
@@ -2084,7 +2086,7 @@ pub fn inline_functions(
         let verdict = classify_callee(
             &func,
             view.as_ref(),
-            &recursive_functions,
+            &barred_cycle_members,
             &type_table,
             inline_threshold,
             descriptors,
@@ -2403,7 +2405,8 @@ fn add_site(
 
 /// [`Candidates::carried`]: per candidate, its body's call sites with each
 /// candidate among them expanded into the sites it carries in turn. No
-/// candidate reaches itself, since a recursive function is never one.
+/// candidate reaches itself: the only one on a cycle is a bridge, and the
+/// member it enters is barred.
 fn carried_calls(
     candidates: &IndexMap<FuncId, NirFunction>,
 ) -> IndexMap<FuncId, IndexMap<FuncId, usize>> {
