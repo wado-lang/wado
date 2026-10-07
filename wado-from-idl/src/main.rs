@@ -380,10 +380,10 @@ fn run_webidl_mode(snapshot_path: &Path, output_dir: &Path, glue_dir: &Path) -> 
     Ok(())
 }
 
-/// Generate a flat package-level re-exporting file (e.g., wasi/filesystem.wado,
-/// core/kiln.wado). Re-exports all types from sub-interface files so consumers
-/// import a single module (`wasi:filesystem`, `core:kiln`) rather than individual
-/// sub-interfaces.
+/// Generate a flat package-level re-exporting file (e.g., wasi/filesystem.wado).
+/// Re-exports every type from the sub-interface files and every world from
+/// `worlds.wado`, so consumers import a single module (`wasi:filesystem`)
+/// rather than individual sub-interfaces.
 fn write_flat_reexport_file(
     output_dir: &Path,
     namespace: &str,
