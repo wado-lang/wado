@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.0.36](https://github.com/wado-lang/wado/compare/v0.0.35...v0.0.36) - 2026-10-07
+
+- feat(cm)!: a library imports by the same names from a component as from source by @gfx in https://github.com/wado-lang/wado/pull/2299
+- docs(spec)!: define `builtin::`, reject `reactive`, drop `unique` by @gfx in https://github.com/wado-lang/wado/pull/2300
+
 ## [v0.0.35](https://github.com/wado-lang/wado/compare/v0.0.34...v0.0.35) - 2026-10-07
 
 - fix(gale): match ANTLR4 on non-greedy wildcards and trailing lexer predicates by @gfx in https://github.com/wado-lang/wado/pull/2226
