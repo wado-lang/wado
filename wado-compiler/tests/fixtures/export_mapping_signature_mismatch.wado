@@ -1,0 +1,10 @@
+// The function `export(World::name)` maps must take the signature the world
+// declares for that export: `run` takes no parameter.
+use { Command } from "wasi:cli";
+
+export(Command::run) fn main(code: i32) {
+    assert code == 0;
+}
+
+__DATA__
+{"compile_error": "export function `run` has 1 parameter(s), but the world expects 0 parameter(s)"}

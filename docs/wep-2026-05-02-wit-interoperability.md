@@ -18,7 +18,7 @@ restated here.
 | WEP                                                                                     | Scope                                                                          |
 | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | [WIT and Wado Mapping](./wep-2026-01-29-wit-wado-mapping.md)                            | The bidirectional type and structure mapping, and `export` as the CM boundary. |
-| [World Conformance and Export Syntax](./wep-2026-01-16-world-conformance-and-export.md) | The `contract <World>;` declaration and `export(World::name)` mapping syntax.  |
+| [World Conformance and Export Syntax](./wep-2026-01-16-world-conformance-and-export.md) | World selection and the `export(World::name)` mapping syntax.                  |
 | [TIR-Level CM Binding Synthesis](./wep-2026-02-15-cm-binding-synthesis.md)              | Type-driven lift/lower synthesis at the boundary.                              |
 | [WIT Bundling in Component Binaries](./wep-2026-03-21-wit-bundling.md)                  | The `component-type` custom-section format.                                    |
 | [WebAssembly Module Import Support](./wep-2026-01-10-wasm-import.md)                    | Core-wasm asset import; the CM analogue lives in its own WEP below.            |
@@ -310,10 +310,8 @@ external WIT support; they are listed so the inventory stays honest.
   making a `use` outside it an error; L4 would model WIT's `include` / `with`
   / world inheritance. Consuming external WIT realistically wants L2 and
   probably L3, since two unrelated worlds can carry same-named interfaces.
-- [ ] The `contract` declaration. Its syntax is specified by
-  [World Conformance](./wep-2026-01-16-world-conformance-and-export.md) but
-  the parser does not implement it, and its runtime meaning depends on
-  choosing L2 or L3 above.
+- [x] The `export(World::name)` mapping, specified by
+  [World Conformance](./wep-2026-01-16-world-conformance-and-export.md).
 - [ ] An opt-out of the default-interface fallback, so that every non-entry-point
   export must live in an explicit `export interface`.
 

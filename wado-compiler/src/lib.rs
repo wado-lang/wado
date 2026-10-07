@@ -689,7 +689,7 @@ fn collect_lib_surface(
                 Item::Interface(decl) if decl.visibility.is_public() => {
                     submodule_interfaces.push(decl.clone());
                 }
-                Item::Function(func) if func.is_export => {
+                Item::Function(func) if func.exports_own_name() => {
                     submodule_exports.push(WorldExportInfo {
                         name: func.name.clone(),
                         is_async: func.is_async,
@@ -755,7 +755,7 @@ fn stdlib_newtypes_in_lib_surface(
     let mut pending: Vec<&ast::Type> = entry_items
         .chain(surface.submodule_type_decls.iter().map(|(_, item)| item))
         .flat_map(|item| match item {
-            Item::Function(f) if f.is_export => signature(f),
+            Item::Function(f) if f.exports_own_name() => signature(f),
             Item::Interface(decl) => decl.methods.iter().flat_map(signature).collect(),
             _ => declared_member_types(item),
         })
@@ -828,7 +828,7 @@ fn synthesize_lib_world_info(
         .items
         .iter()
         .filter_map(|item| match item {
-            Item::Function(func) if func.is_export => Some(WorldExportInfo {
+            Item::Function(func) if func.exports_own_name() => Some(WorldExportInfo {
                 name: func.name.clone(),
                 is_async: func.is_async,
                 params: func
@@ -1312,6 +1312,7 @@ fn compile_after_load<H: CompilerHost>(
             sem.world_registry_arc()
                 .expect("world_registry present when is_complete"),
             contract.clone(),
+            sem.export_mappings.clone(),
         )
     });
 
@@ -1611,6 +1612,7 @@ fn compile_after_load<H: CompilerHost>(
 
     let semantics::Semantics {
         entry_module_source,
+        export_mappings,
         symbols,
         state,
         tir_modules,
@@ -1698,6 +1700,7 @@ fn compile_after_load<H: CompilerHost>(
 
     // Apply options to package (must be before synthesis)
     let mut package = package;
+    package.export_mappings = export_mappings;
     // Last-use spans (WEP 2026-05-21) drive value-copy elision downstream.
     package.moved_local_spans = liveness.moved_spans;
     if let Some(world) = options.target_world {
@@ -2189,6 +2192,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     let tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =
         sem.is_complete().then(|| sem.tir_modules.clone());
     let assert_plan_text = sem.assert_plan_text();
+    let export_mappings = sem.export_mappings.clone();
 
     // === Phase 7b+8+9+10: Build Package and run remaining phases ===
     // Create Package early so CM binding synthesis runs before monomorphize,
@@ -2231,6 +2235,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             // Apply target world override (must be before synthesis)
             let mut package = package;
             package.moved_local_spans = moved_local_spans;
+            package.export_mappings = export_mappings;
             if let Some(world) = target_world {
                 package.target_world = world.to_string();
             }

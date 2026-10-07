@@ -751,6 +751,9 @@ pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
 /// Everything [`walk_function`] visits but the body.
 pub fn walk_function_signature<V: AstVisitor>(v: &mut V, func: &Function) {
     v.visit_id(func.id, func.span);
+    for target in &func.export_targets {
+        v.visit_id(target.id, target.span);
+    }
     v.visit_generic_params(&func.type_params);
     walk_params(v, &func.params);
     if let Some(ret) = &func.return_type {
@@ -2378,6 +2381,8 @@ pub struct Function {
     pub visibility: Visibility,
     /// Whether this function is exported at the Component Model boundary (world export)
     pub is_export: bool,
+    /// The world exports `export(World::name, …)` names this function as.
+    pub export_targets: Vec<ExportTarget>,
     /// Whether this is an async function (`export async fn`).
     /// Async functions use `task return` instead of `return` to deliver results
     /// without terminating the function.
@@ -2399,7 +2404,28 @@ pub struct Function {
     pub span: Span,
 }
 
+/// One `World::name` in `export(…)`: the world export a function provides.
+#[derive(Debug, Clone)]
+pub struct ExportTarget {
+    /// The reference site of the world name.
+    pub id: AstId,
+    /// The namespace in `ns::World::name`.
+    pub namespace: Option<String>,
+    /// The world, `World` in `World::name`.
+    pub world: String,
+    /// The export of that world, `name` in `World::name`.
+    pub name: String,
+    pub span: Span,
+}
+
 impl Function {
+    /// Whether this is an `export fn` exported under its own name: an
+    /// `export(…)` names the world exports it provides instead.
+    #[must_use]
+    pub fn exports_own_name(&self) -> bool {
+        self.is_export && self.export_targets.is_empty()
+    }
+
     /// The effects the source wrote here. Empty when the enclosing trait's
     /// head supplied them.
     pub fn written_effects(&self) -> &[EffectName] {
@@ -4818,6 +4844,8 @@ impl Point {
 fn add(a: i32, b: i32) -> i32 {
     return a + b;
 }
+
+export(Command::run) fn main() {}
 
 test "addition" {
     assert add(1, 2) == 3;

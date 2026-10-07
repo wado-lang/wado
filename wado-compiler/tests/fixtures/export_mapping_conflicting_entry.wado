@@ -1,0 +1,12 @@
+// A world export has one provider: `export fn run` and a mapping onto `run`
+// cannot both stand.
+use { Command } from "wasi:cli";
+
+export fn run() {
+}
+
+export(Command::run) fn main() {
+}
+
+__DATA__
+{"compile_error": "both `fn run` and `fn main` provide the world export `run`; keep one of them"}

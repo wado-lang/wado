@@ -407,6 +407,18 @@ fn test_format_visibility_modifiers_roundtrip() {
     assert_eq!(formatted, formatted2, "format should be idempotent");
 }
 
+/// `export(World::name, …)` keeps every target, namespaced or not.
+#[test]
+fn test_format_keeps_export_targets() {
+    let source = "export(Command::run,cli::Daemon::run) async fn main() {}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(
+        formatted,
+        "export(Command::run, cli::Daemon::run) async fn main() {\n}\n"
+    );
+    assert_format_preserves_ast(source);
+}
+
 #[test]
 fn test_format_field_visibility_modifiers_roundtrip() {
     let source = "struct S {\n    pub a: i32,\n    internal b: i32,\n    c: i32,\n}\n";

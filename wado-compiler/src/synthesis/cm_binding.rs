@@ -569,6 +569,9 @@ fn generate_import_adapters(project: &mut Package) -> Callbacks {
 /// record it in `export_binding_names`. Prefers the synthesized library world
 /// (`--lib`) over the static registry.
 fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
+    let entry_type_table = entry_type_table(project);
+    let selected_world = project.active_world_info().map(|w| w.fq_name.as_str());
+    validate_export_mappings(project, selected_world, &entry_type_table)?;
     let Some(world_info) = project.active_world_info().cloned() else {
         return Ok(());
     };
@@ -583,7 +586,6 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
     let is_kiln_generator = project
         .world_registry
         .is_generator_world(&project.target_world);
-    let entry_type_table = entry_type_table(project);
     validate_exports_representable(project, &entry_type_table)?;
 
     // Collect adapters in a read-only pass (synthesize_export_binding needs &tir_modules)
@@ -617,7 +619,8 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
                 .as_ref()
                 .map(|(m, _)| m.clone())
                 .unwrap_or_else(|| entry_source.clone());
-            let user_func_rc = find_export_user_func(&project.tir_modules, entry_module, export)?;
+            let user_func_rc =
+                find_export_user_func(project, entry_module, &world_info.fq_name, export)?;
             {
                 let user_func = user_func_rc.borrow();
                 let tt = entry_type_table.borrow();
@@ -887,20 +890,26 @@ fn collect_named_types(ty: &Type, out: &mut IndexMap<String, IndexSet<String>>) 
     }
 }
 
-/// The user function backing a world export: the origin `pub fn` for an
-/// `export use` re-export, otherwise the `export fn` in the entry module.
+/// The user function backing the export `export` of `world`: the origin `pub
+/// fn` for an `export use` re-export, otherwise the one entry-module function
+/// providing it ([`ExportMappings::provided_export`]).
 ///
-/// A world export with no function at all is a missing entry point. The test
-/// world handles `test` blocks separately and never reaches this lookup, so
-/// in CLI / HTTP / other worlds the entry must be defined — never silently
-/// stubbed.
+/// A world export with no function at all is a missing entry point, never
+/// silently stubbed. The test world exports `test` blocks instead, and reaches
+/// this lookup only for an export some `export(…)` names.
 fn find_export_user_func(
-    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    project: &Package,
     entry_module: &TirModule,
+    world: &str,
     export: &WorldExportInfo,
 ) -> Result<Rc<RefCell<TirFunction>>, String> {
     if let Some((origin_module, origin_name)) = &export.reexport_origin {
-        return tir_modules
+        assert!(
+            project.export_mappings.iter().all(|m| m.world != world),
+            "a re-export arises only in a library world, which no `export(…)` can name"
+        );
+        return project
+            .tir_modules
             .get(origin_module)
             .and_then(|m| {
                 m.functions
@@ -916,31 +925,77 @@ fn find_export_user_func(
             });
     }
 
-    let mut found_exported = None;
-    let mut found_without_export = false;
-    for f in &entry_module.functions {
-        let func = f.borrow();
-        if func.name == export.name {
-            if func.is_export {
-                found_exported = Some(f.clone());
-            } else {
-                found_without_export = true;
-            }
-        }
-    }
-    match found_exported {
-        Some(f) => Ok(f),
-        None if found_without_export => Err(format!(
-            "function `{}` exists but is not marked with `export` keyword. \
-             Add `export` to make it a world entry point: `export fn {}(...)`",
-            export.name, export.name
+    let mut providers = entry_module.functions.iter().filter(|f| {
+        project.export_mappings.provided_export(world, &f.borrow()) == Some(export.name.as_str())
+    });
+    match (providers.next(), providers.next()) {
+        (Some(f), None) => Ok(f.clone()),
+        (Some(first), Some(second)) => Err(format!(
+            "both `fn {}` and `fn {}` provide the world export `{}`; keep one of them",
+            first.borrow().name,
+            second.borrow().name,
+            export.name,
         )),
-        None => Err(format!(
+        (None, _)
+            if entry_module
+                .functions
+                .iter()
+                .any(|f| f.borrow().name == export.name && !f.borrow().is_export) =>
+        {
+            Err(format!(
+                "function `{}` exists but is not marked with `export` keyword. \
+                 Add `export` to make it a world entry point: `export fn {}(...)`",
+                export.name, export.name
+            ))
+        }
+        (None, _) => Err(format!(
             "function `{}` is required as a world entry point but is not defined. \
              Define it with: `export fn {}(...)`",
             export.name, export.name
         )),
     }
+}
+
+/// Each `export(World::name)` names an export its world declares, with one
+/// provider and a signature that world accepts. The selected world's exports
+/// have their signatures checked where the binding is synthesized; this checks
+/// the rest.
+fn validate_export_mappings(
+    project: &Package,
+    selected_world: Option<&str>,
+    entry_type_table: &RefCell<TypeTable>,
+) -> Result<(), String> {
+    let entry_module = &project.tir_modules[&project.entry_module_source];
+    for mapping in project.export_mappings.iter() {
+        if !project.world_registry.has_world(&mapping.world) {
+            return Err(format!(
+                "`export(…) fn {}` names the world `{}`, which no compilation can \
+                 target; only a standard library world can be",
+                mapping.function_name, mapping.world
+            ));
+        }
+        let Some(export) = project
+            .world_registry
+            .get_export(&mapping.world, &mapping.export_name)
+        else {
+            return Err(format!(
+                "world `{}` has no export `{}` for `fn {}` to provide",
+                mapping.world, mapping.export_name, mapping.function_name
+            ));
+        };
+        let func = find_export_user_func(project, entry_module, &mapping.world, export)?;
+        if selected_world == Some(mapping.world.as_str()) {
+            continue;
+        }
+        validate_world_signature_compatibility(
+            &func.borrow(),
+            export,
+            &entry_type_table.borrow(),
+            &project.tir_modules,
+            &project.cm_interface_registry,
+        )?;
+    }
+    Ok(())
 }
 
 /// Every `export fn` lands on the component's surface, not just the ones the

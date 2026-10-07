@@ -1551,6 +1551,18 @@ export fn run() with Stdout {
 }
 ```
 
+Any name provides a world export through `export(World::name)`, in place of the
+function of that name:
+
+```wado
+use { println, Stdout } from "core:cli";
+use { Command } from "wasi:cli";
+
+export(Command::run) fn main() with Stdout {
+    println("Hello!");
+}
+```
+
 `handle(request)` is the entry point for `wasi:http/service`. It must be `async` because HTTP handlers use the Component Model async calling convention:
 
 ```wado
