@@ -20,10 +20,10 @@ use super::arena_query::{cold_exprs, cold_path_id};
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::const_folding::ConstFoldRule;
 use super::dae::is_dae_sroa_eligible;
-use super::dce::{DescriptorCache, reachable_function_positions};
+use super::dce::{DescriptorCache, ReachabilityCache, reachable_function_positions};
 use super::extract::is_place_read;
-use super::gate::{FunctionGate, GatedPass};
-use super::inline::find_recursive_functions;
+use super::gate::{BodyMemo, FunctionGate, GatedPass};
+use super::inline::{body_callees, recursive_functions};
 use crate::ast::Visibility;
 use crate::compiler_trace;
 use crate::module_source::ModuleSource;
@@ -132,6 +132,11 @@ pub(super) struct ParamSpecState {
     /// `dae` renumbers local indices when it drops a parameter. Doubles as the
     /// set of clones, which are never specialized again.
     param_consts: IndexMap<FuncId, IndexMap<String, ParamSeed>>,
+    /// The per-function walks behind the reachable set the constants are
+    /// taken over.
+    reachability: ReachabilityCache,
+    /// The call graph whose cycles a clone must not split.
+    callees: BodyMemo<Vec<usize>>,
 }
 
 /// What a clone knows about one of its own parameters.
@@ -215,8 +220,7 @@ struct Signatures {
 }
 
 impl Signatures {
-    fn build(project: &NirPackage, types: &TypeTable) -> Self {
-        let recursive = find_recursive_functions(&project.functions);
+    fn build(project: &NirPackage, types: &TypeTable, recursive: &IndexSet<FuncId>) -> Self {
         let mut param_locals = Vec::with_capacity(project.functions.len());
         let mut param_struct = Vec::with_capacity(project.functions.len());
         let mut has_body = Vec::with_capacity(project.functions.len());
@@ -973,7 +977,8 @@ pub(super) fn specialize_const_params(
         .chain(project.sroa_param_clones.iter())
         .copied()
         .collect();
-    let mut reachable = reachable_function_positions(project, descriptors, cached);
+    let mut reachable =
+        reachable_function_positions(project, descriptors, &mut state.reachability, gate, cached);
     let mut changed = false;
     while specialize_round(project, state, gate, descriptors, &mut reachable) {
         changed = true;
@@ -995,7 +1000,8 @@ fn specialize_round(
     let propagated = propagate_scalar_constants(project, state, &constants, gate);
     let signatures = {
         let types = project.type_table.borrow();
-        Signatures::build(project, &types)
+        let recursive = recursive_functions(state.callees.refresh(project, gate, body_callees));
+        Signatures::build(project, &types, &recursive)
     };
     let facts = summarize_params(project, &signatures);
     let cold = cold_path_id(descriptors.descriptors(project));

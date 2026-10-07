@@ -5,6 +5,7 @@ use std::ops::ControlFlow;
 use cranelift_entity::EntityRef;
 
 use super::arena_query::is_pure_nontrapping_operand_typed;
+use super::gate::{BodyMemo, FunctionGate};
 use super::mod_ref::{CallFacts, FnSummaries};
 
 use crate::canonical::CmCallTarget;
@@ -43,7 +44,7 @@ type EffectUsageMap = IndexMap<FunctionId, IndexSet<(String, String)>>;
 /// walk. The edge is only added to the graph once the inspectable signature set
 /// (computed from the reachable-without-inspect-roots set) is known. Storing them
 /// out-of-band lets us build the call graph in a single AST walk instead of twice.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct PendingInspectEdge {
     /// The functor's `^Inspect` impl.
     inspect: FunctionId,
@@ -52,7 +53,7 @@ struct PendingInspectEdge {
 }
 
 /// Analysis results for a single function
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 struct FunctionAnalysis {
     /// Functions called by this function
     callees: IndexSet<FunctionId>,
@@ -161,10 +162,14 @@ pub(super) fn analyze_dce(project: &mut NirPackage, cache: &mut DescriptorCache)
 pub(super) fn reachable_function_positions(
     project: &mut NirPackage,
     cache: &mut DescriptorCache,
+    walks: &mut ReachabilityCache,
+    gate: &FunctionGate,
     cached: impl IntoIterator<Item = FuncId>,
 ) -> IndexSet<usize> {
     let descriptors = cache.descriptors(project);
-    let mut graph = build_analysis_graph(project, descriptors);
+    let functors = functor_methods(project);
+    let analyses = walks.analyses(project, gate, descriptors, &functors);
+    let mut graph = assemble_analysis_graph(project, analyses, functors);
     let mut reachable = compute_function_reachability(project, descriptors, &mut graph);
     let roots = cached
         .into_iter()
@@ -640,6 +645,74 @@ struct AnalysisGraph {
 /// reachable subset instead of re-walking bodies — three independent
 /// walks collapsed into one.
 fn build_analysis_graph(project: &NirPackage, descriptors: &[FunctionRef]) -> AnalysisGraph {
+    let type_table = &*project.type_table.borrow();
+    let functors = functor_methods(project);
+    let analyses = project
+        .functions
+        .iter()
+        .map(|f| function_analysis(&f.borrow(), type_table, descriptors, &functors));
+    assemble_analysis_graph(project, analyses.collect::<Vec<_>>(), functors)
+}
+
+/// One function's facts for [`build_analysis_graph`], from its signature and body.
+fn function_analysis(
+    func: &NirFunction,
+    type_table: &TypeTable,
+    descriptors: &[FunctionRef],
+    functors: &FunctorMethods,
+) -> FunctionAnalysis {
+    let mut walker = DceWalker::new(type_table, &func.module_source, descriptors, functors);
+    walker.analyze(func);
+    let mut analysis = walker.analysis;
+    // Promoted operands hold their source type in the body's value pool, not
+    // in an `ExprNode`, so the walker misses them. Keep those types reachable
+    // (a literal of an otherwise-unreachable newtype) — else its `TypeId`
+    // dangles after `remove_unreachable_types`.
+    if let Some(body) = &func.body {
+        for ty in body.values.recorded_types() {
+            analysis.used_types.insert(ty);
+        }
+    }
+    analysis
+}
+
+/// The [`DceWalker`] results [`reachable_function_positions`] reads, kept
+/// across the fixed-point loop. A walk records each callee by the name its
+/// descriptor carried, so a rename anywhere restales every walk that calls it.
+#[derive(Default)]
+pub(super) struct ReachabilityCache {
+    walks: BodyMemo<FunctionAnalysis>,
+    renames_seen: usize,
+}
+
+impl ReachabilityCache {
+    /// Every function's [`function_analysis`] as `project` stands. Every
+    /// rewrite since the last call must have been reported to `gate`.
+    fn analyses(
+        &mut self,
+        project: &NirPackage,
+        gate: &FunctionGate,
+        descriptors: &[FunctionRef],
+        functors: &FunctorMethods,
+    ) -> Vec<FunctionAnalysis> {
+        if self.renames_seen != project.renamed.len() {
+            self.walks.clear();
+            self.renames_seen = project.renamed.len();
+        }
+        let type_table = &*project.type_table.borrow();
+        self.walks
+            .refresh(project, gate, |f| {
+                function_analysis(f, type_table, descriptors, functors)
+            })
+            .to_vec()
+    }
+}
+
+fn assemble_analysis_graph(
+    project: &NirPackage,
+    analyses: Vec<FunctionAnalysis>,
+    functors: FunctorMethods,
+) -> AnalysisGraph {
     let n = project.functions.len();
     // `call_graph` and `func_positions` get exactly one entry per function,
     // so size them up front to avoid the incremental rehashing that an
@@ -653,26 +726,9 @@ fn build_analysis_graph(project: &NirPackage, descriptors: &[FunctionRef]) -> An
     let mut per_func_globals: Vec<IndexSet<(String, String)>> = Vec::with_capacity(n);
     let mut per_func_types: Vec<IndexSet<TypeId>> = Vec::with_capacity(n);
 
-    let type_table = &*project.type_table.borrow();
-    let functors = functor_methods(project);
-
-    for (pos, func_rc) in project.functions.iter().enumerate() {
+    for ((pos, func_rc), analysis) in project.functions.iter().enumerate().zip(analyses) {
         let func = func_rc.borrow();
-        let module_source = &func.module_source;
         let func_id = function_id_for(&func);
-
-        let mut walker = DceWalker::new(type_table, module_source, descriptors, &functors);
-        walker.analyze(&func);
-        let mut analysis = walker.analysis;
-        // Promoted operands hold their source type in the body's value pool, not
-        // in an `ExprNode`, so the walker misses them. Keep those types reachable
-        // (a literal of an otherwise-unreachable newtype) — else its `TypeId`
-        // dangles after `remove_unreachable_types`.
-        if let Some(body) = &func.body {
-            for ty in body.values.recorded_types() {
-                analysis.used_types.insert(ty);
-            }
-        }
 
         if let Some(prior) = func_positions.insert(func_id.clone(), pos) {
             let prior = project.functions[prior].borrow();

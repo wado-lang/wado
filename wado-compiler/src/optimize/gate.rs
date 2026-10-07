@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use cranelift_entity::EntityRef;
 
 use crate::hashmap::IndexSet;
-use crate::nir::FuncId;
+use crate::nir::{FuncId, NirFunction};
 use crate::nir_arena::ExprKind;
 use crate::nir_package::NirPackage;
 
@@ -57,6 +57,89 @@ pub enum GatedPass {
 
 impl GatedPass {
     const COUNT: usize = 20;
+}
+
+/// Facts each function's body answers alone, kept across the fixed-point loop
+/// and re-derived only where one [`FunctionGate`] counted an edit since. What
+/// `of` reads beyond the function must hold still for the gate's lifetime.
+pub struct BodyMemo<T> {
+    gate: Option<u64>,
+    edits: Vec<u64>,
+    facts: Vec<T>,
+    /// Where `assert_one_settled` resumes its rotation.
+    #[cfg(debug_assertions)]
+    cursor: usize,
+}
+
+impl<T> Default for BodyMemo<T> {
+    fn default() -> Self {
+        Self {
+            gate: None,
+            edits: Vec::new(),
+            facts: Vec::new(),
+            #[cfg(debug_assertions)]
+            cursor: 0,
+        }
+    }
+}
+
+impl<T: PartialEq + std::fmt::Debug> BodyMemo<T> {
+    /// Forget every entry, for a caller whose facts read something beyond the
+    /// body that has since moved.
+    pub fn clear(&mut self) {
+        *self = Self::default();
+    }
+
+    /// Every function's facts as `project` stands, indexed by store position.
+    /// Every rewrite since the last call must have been reported to `gate`.
+    pub fn refresh(
+        &mut self,
+        project: &NirPackage,
+        gate: &FunctionGate,
+        mut of: impl FnMut(&NirFunction) -> T,
+    ) -> &[T] {
+        let len = project.functions.len();
+        if self.gate != Some(gate.id) || self.facts.len() > len {
+            *self = Self {
+                gate: Some(gate.id),
+                ..Self::default()
+            };
+        }
+        for (i, f) in project.functions.iter().enumerate() {
+            let edit = gate.edits(FuncId::new(i));
+            if self.edits.get(i) == Some(&edit) {
+                continue;
+            }
+            let fact = of(&f.borrow());
+            if i < self.facts.len() {
+                self.edits[i] = edit;
+                self.facts[i] = fact;
+            } else {
+                self.edits.push(edit);
+                self.facts.push(fact);
+            }
+        }
+        #[cfg(debug_assertions)]
+        self.assert_one_settled(project, of);
+        &self.facts
+    }
+
+    /// A body rewritten without a report to the gate keeps facts that no longer
+    /// answer for it. One function per refresh, rotating, keeps the check cheap.
+    #[cfg(debug_assertions)]
+    fn assert_one_settled(&mut self, project: &NirPackage, mut of: impl FnMut(&NirFunction) -> T) {
+        let Some(n) = self.cursor.checked_rem(self.facts.len()) else {
+            return;
+        };
+        self.cursor = n + 1;
+        let fresh = of(&project.functions[n].borrow());
+        assert!(
+            fresh == self.facts[n],
+            "memoized body facts went stale: function {n} was rewritten without \
+             `FunctionGate::mark_changed`\n  memo:  {:?}\n  fresh: {fresh:?}",
+            self.facts[n],
+        );
+    }
 }
 
 /// Static call graph over [`FuncId`]s, built once at loop start from each call

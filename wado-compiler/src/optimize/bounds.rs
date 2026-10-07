@@ -18,7 +18,7 @@ use crate::tir::{BuiltinDeclaration, ResolvedType, TypeTable};
 
 /// The builtin calls in one body whose every trap condition holds, each
 /// with the callee its checks were proven against.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub(super) struct Proofs(IndexMap<ExprId, FuncId>);
 
 impl Proofs {

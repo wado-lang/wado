@@ -44,7 +44,9 @@ converge within the level's own count. At `-O1`, and wherever
 NIR has two tiers: a skeleton carrying effect order, control flow, and
 allocation, and a hash-consed graph of the pure values it reaches. Local
 rewrites are rules on one worklist engine, and a per-function dirty set lets a
-pass skip functions unchanged since it last ran. CSE, GVN, and pure copy
+pass skip functions unchanged since it last ran. A whole-program analysis keeps
+what each body answers alone across rounds, and re-derives it only for the
+bodies a rewrite reached. CSE, GVN, and pure copy
 propagation are not passes, because the hash-consing already does them. See
 [WEP: NIR Optimizer Architecture](./wep-2026-06-05-nir-optimizer-architecture.md).
 

@@ -18,7 +18,6 @@
 //! body worth more copied than called past the budget destroys it, one-way.
 
 use std::cell::{Cell, RefCell};
-use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::inline_block_label;
@@ -37,14 +36,14 @@ use cranelift_entity::EntityRef;
 
 use super::arena_query;
 use super::dce::callee_descriptor;
-use super::gate::{FunctionGate, GatedPass};
+use super::gate::{BodyMemo, FunctionGate, GatedPass};
 use crate::compiler_trace;
 use crate::nir::FuncId;
 use crate::nir_value_graph::OpaqueSource;
 use crate::niri::is_ctfe_eligible;
 use crate::optimize::alias::{CallImmutability, call_verdicts, first_param_types};
 use crate::optimize::dce::DescriptorCache;
-use crate::optimize::mod_ref::compute_fn_effects;
+use crate::optimize::mod_ref::SummaryCache;
 use crate::token::Span;
 use crate::trace::filter;
 
@@ -985,7 +984,7 @@ fn safepoint_calls(project: &NirPackage, descriptors: &[FunctionRef]) -> Vec<boo
 
 /// What `inline` reads off one body each round, gathered in one walk; empty for
 /// a bodyless function.
-#[derive(Default)]
+#[derive(Default, Debug, PartialEq)]
 struct BodyScan {
     /// Locals the body writes, counting a write anywhere in the place (`p.x =
     /// f()` writes `p`) and a mutable hand-out, which is a write the body does
@@ -999,6 +998,10 @@ struct BodyScan {
     /// Whether the body holds a `loop`.
     loopy: bool,
 }
+
+/// The [`BodyScan`]s, kept across rounds.
+#[derive(Default)]
+pub(super) struct InlineScans(BodyMemo<BodyScan>);
 
 fn scan_body(func: &NirFunction) -> BodyScan {
     // A site's arguments are keyed by position and the callee's writes by
@@ -1577,7 +1580,8 @@ fn classify_callee(
     }
 }
 
-/// Detect recursive functions using call graph analysis.
+/// A function's edges in the call graph [`recursive_functions`] reads: each
+/// callee once, by store position; none for a bodyless function.
 ///
 /// Every function's `FuncId` equals its store position in `project.functions`
 /// (`FuncId == position`, asserted end-to-end at WIR build), and every call
@@ -1585,19 +1589,13 @@ fn classify_callee(
 /// is indexed directly by position: a node is a function, its edges are the
 /// `func_id.index()` of each callee — no name-keyed identity table, and no
 /// dedup that could collapse two distinct functions onto one node.
-pub(super) fn find_recursive_functions(functions: &[Rc<RefCell<NirFunction>>]) -> IndexSet<FuncId> {
-    let n = functions.len();
-    let mut call_graph: Vec<Vec<usize>> = vec![Vec::new(); n];
-
-    for (i, func_rc) in functions.iter().enumerate() {
-        let func = func_rc.borrow();
-        if let Some(body) = &func.body {
-            let mut callee_ids: IndexSet<usize> = IndexSet::default();
-            collect_callees(body, &mut callee_ids);
-            call_graph[i] = callee_ids.into_iter().collect();
-        }
-    }
-    recursive_functions(&call_graph)
+pub(super) fn body_callees(func: &NirFunction) -> Vec<usize> {
+    let Some(body) = &func.body else {
+        return Vec::new();
+    };
+    let mut callee_ids: IndexSet<usize> = IndexSet::default();
+    collect_callees(body, &mut callee_ids);
+    callee_ids.into_iter().collect()
 }
 
 /// The functions on a call cycle that splicing must leave alone: every member
@@ -1623,7 +1621,7 @@ fn splice_barred_cycle_members(call_graph: &[Vec<usize>]) -> IndexSet<FuncId> {
 
 /// The functions on a call cycle of `call_graph`, which holds each function's
 /// callees by store position.
-fn recursive_functions(call_graph: &[Vec<usize>]) -> IndexSet<FuncId> {
+pub(super) fn recursive_functions(call_graph: &[Vec<usize>]) -> IndexSet<FuncId> {
     // A function is recursive iff it lies on a call cycle — i.e. it is a member
     // of a non-trivial strongly-connected component, or has a self-edge. One
     // iterative Tarjan pass computes every SCC in O(V + E), versus the old
@@ -1637,7 +1635,7 @@ fn recursive_functions(call_graph: &[Vec<usize>]) -> IndexSet<FuncId> {
 
 /// Iterative Tarjan SCC. Returns one bool per node: `true` when the node lies on
 /// a call cycle (a non-singleton SCC member, or a node with a self-edge).
-pub(super) fn recursive_scc_members(call_graph: &[Vec<usize>]) -> Vec<bool> {
+pub(super) fn recursive_scc_members<E: AsRef<[usize]>>(call_graph: &[E]) -> Vec<bool> {
     let n = call_graph.len();
     const UNVISITED: usize = usize::MAX;
     let mut index_of = vec![UNVISITED; n];
@@ -1662,8 +1660,9 @@ pub(super) fn recursive_scc_members(call_graph: &[Vec<usize>]) -> Vec<bool> {
                 scc_stack.push(v);
                 on_stack[v] = true;
             }
-            if ci < call_graph[v].len() {
-                let w = call_graph[v][ci];
+            let callees = call_graph[v].as_ref();
+            if ci < callees.len() {
+                let w = callees[ci];
                 work.last_mut().unwrap().1 += 1;
                 if index_of[w] == UNVISITED {
                     work.push((w, 0));
@@ -1685,7 +1684,7 @@ pub(super) fn recursive_scc_members(call_graph: &[Vec<usize>]) -> Vec<bool> {
                     }
                 }
                 // A singleton SCC is only recursive through a self-edge.
-                if size == 1 && !call_graph[v].contains(&v) {
+                if size == 1 && !callees.contains(&v) {
                     recursive[v] = false;
                 }
             }
@@ -1968,16 +1967,14 @@ pub fn inline_functions(
     holds: &mut InlineHolds,
     gate: &mut FunctionGate,
     descriptor_cache: &mut DescriptorCache,
+    mod_ref: &mut SummaryCache,
+    scans: &mut InlineScans,
 ) -> bool {
     // Callee identity by `func_id` (descriptor table built once from the records,
     // borrow-safe), so a call site is recognized by its stamped id rather than the
     // call node's `FunctionRef`. Indexed by `func_id.index()` (== store position).
     let descriptors = descriptor_cache.descriptors(project);
-    let scans: Vec<BodyScan> = project
-        .functions
-        .iter()
-        .map(|f| scan_body(&f.borrow()))
-        .collect();
+    let scans = scans.0.refresh(project, gate, scan_body);
     let call_graph: Vec<Vec<usize>> = scans
         .iter()
         .map(|s| s.calls.iter().map(|(c, _)| c.index()).collect())
@@ -2001,10 +1998,10 @@ pub fn inline_functions(
     // Inputs for the folded-cost second chance: which parameters arrive
     // constant everywhere, which callees the compile-time engine runs on
     // constant arguments, and which of those spin a loop while doing it.
-    let sites = argument_sites(&scans);
-    let const_params = constant_params(project, &scans, &sites);
+    let sites = argument_sites(scans);
+    let const_params = constant_params(project, scans, &sites);
     let safepoint_calls = safepoint_calls(project, descriptors);
-    let fn_effects = compute_fn_effects(project);
+    let fn_effects = mod_ref.summaries(project, gate).effects;
     let foldable: Vec<bool> = project
         .functions
         .iter()
@@ -2020,8 +2017,8 @@ pub fn inline_functions(
     // counts are taken every round, since a callee's only site is one where its
     // splice pays back.
     let pricing = budget.prices_read();
-    let call_sites = call_site_counts(&scans);
-    let hopeful_params = hopeful_params(project, &scans, &sites);
+    let call_sites = call_site_counts(scans);
+    let hopeful_params = hopeful_params(project, scans, &sites);
     let mut unit_size = 0usize;
     let mut priced: Vec<Candidate> = Vec::new();
 
