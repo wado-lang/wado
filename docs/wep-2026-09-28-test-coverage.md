@@ -297,9 +297,9 @@ function that never ran lists its body alone, `fn 0`, since nothing in it ran
 either. A name repeated within a file takes `#2`, `#3`, … in source order.
 `--coverage=baseline` writes the file.
 
-`mise run test-stdlib-coverage` runs the stdlib tests with `--coverage` and
-`scripts/stdlib-coverage.json`, and CI runs it in the `O2` job. Coverage does
-not depend on `-O`, so one optimization level answers for all.
+`mise run test-stdlib-coverage <level>` runs the stdlib tests with `--coverage`
+and `scripts/stdlib-coverage.json`. CI runs it in the `O0` and `O3` jobs in
+place of their plain stdlib run, since a coverage run is a stdlib run too.
 `mise run update-stdlib-coverage-baseline` rewrites the file.
 The baseline starts as whatever the first run leaves uncovered, and the work
 toward 100% is emptying it: a test for each region that can run, and
@@ -315,11 +315,10 @@ holds.
   a fixture (`coverage_*.wado`), and CI runs them at every level.
 - `wado dump --coverage-plan` prints the plan, as `--assert-plan` prints
   power-assert's.
-- `mise run check-coverage-levels` runs the stdlib tests under coverage at `-O0`
-  and `-O3` and requires the same regions left unrun. It is the check that no
-  pass moves a probe out of its region or drops one that could run. Which test
-  ran a region may differ, since a test that waits on the host or a clock takes
-  the path its timing picks.
+- Holding the stdlib baseline at both `-O0` and `-O3` requires the same regions
+  left unrun at each. It is the check that no pass moves a probe out of its
+  region or drops one that could run. Which test ran a region may differ, since
+  a test that waits on the host or a clock takes the path its timing picks.
 - Integration tests cover what no fixture can: the CLI flags, the LCOV and JSON
   files, and merging plans from several test files.
 
@@ -356,8 +355,7 @@ host call on every run is too slow for loops.
    test world.
 4. [x] The runner: collecting hits, merging plans, the summary, LCOV and JSON.
 5. [x] Fixtures with `uncovered_lines`, `uncovered_branches` and
-   `uncovered_functions`, and the `-O0`/`-O3` check over the stdlib tests
-   (`mise run check-coverage-levels`).
+   `uncovered_functions`, and the `-O0`/`-O3` check over the stdlib tests.
 6. [x] The standard library: its snapshot skipped when measured,
    `--coverage-baseline`, and the CI job with its first baseline.
 7. [ ] 100% for the standard library: the baseline emptied.
