@@ -619,12 +619,8 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
                 .as_ref()
                 .map(|(m, _)| m.clone())
                 .unwrap_or_else(|| entry_source.clone());
-            let user_func_rc = find_export_user_func(
-                project,
-                entry_module,
-                &world_info.fq_name,
-                export,
-            )?;
+            let user_func_rc =
+                find_export_user_func(project, entry_module, &world_info.fq_name, export)?;
             {
                 let user_func = user_func_rc.borrow();
                 let tt = entry_type_table.borrow();
