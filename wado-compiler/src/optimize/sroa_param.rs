@@ -682,6 +682,7 @@ fn transitive_reachable_writes(
             continue;
         };
         for &c in &own.callees {
+            assert!(c < n, "function {i} calls {c}, which is not in the store");
             callers[c].push(i);
         }
         if own.indirect {

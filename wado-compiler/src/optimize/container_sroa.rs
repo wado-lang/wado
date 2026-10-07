@@ -241,26 +241,16 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
         // rewrites nothing. They walk the whole program, so only a round that
         // can use them pays for them.
         let type_table = project.type_table.borrow();
-        let has_candidate = |fid: FuncId| {
-            let func = project.functions[fid.index()].borrow();
-            func.body
-                .as_ref()
-                .filter(|_| !func.is_cm_binding)
-                .is_some_and(|body| {
-                    !collect_candidates(
-                        body,
-                        &type_table,
-                        &struct_index,
-                        &method_sig,
-                        &value_copy_ids,
-                    )
-                    .is_empty()
-                })
-        };
-        if !(0..len)
-            .map(FuncId::new)
-            .any(|fid| gate.needs(GatedPass::ContainerSroa, fid) && has_candidate(fid))
-        {
+        if !(0..len).map(FuncId::new).any(|fid| {
+            gate.needs(GatedPass::ContainerSroa, fid)
+                && holds_candidate(
+                    &project.functions[fid.index()].borrow(),
+                    &type_table,
+                    &struct_index,
+                    &method_sig,
+                    &value_copy_ids,
+                )
+        }) {
             gate.catch_up(GatedPass::ContainerSroa, len);
             return false;
         }
@@ -276,26 +266,16 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
     let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::ContainerSroa, len, |fid| {
         let func_rc = &project.functions[fid.index()];
-        // Skip CM bindings (ABI bridges) and body-less declarations, and a body
-        // holding no candidate, which the rewrite would find before anything
-        // else: the session's indices cost a walk of the whole body.
-        {
-            let func = func_rc.borrow();
-            let Some(body) = func.body.as_ref().filter(|_| !func.is_cm_binding) else {
-                return false;
-            };
-            let type_table = type_table_rc.borrow();
-            if collect_candidates(
-                body,
-                &type_table,
-                &struct_index,
-                &method_sig,
-                &value_copy_ids,
-            )
-            .is_empty()
-            {
-                return false;
-            }
+        // A body holding no candidate is one the rewrite would find nothing in,
+        // and the session's indices cost a walk of the whole body.
+        if !holds_candidate(
+            &func_rc.borrow(),
+            &type_table_rc.borrow(),
+            &struct_index,
+            &method_sig,
+            &value_copy_ids,
+        ) {
+            return false;
         }
         let mut func = func_rc.borrow_mut();
         let rule = ContainerSroaRule {
@@ -316,6 +296,23 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
         // `borrow_mut`.)
         engine.run(&[&rule])
     })
+}
+
+/// Whether `func` has a body holding a candidate. A CM binding (an ABI bridge)
+/// never does.
+fn holds_candidate(
+    func: &NirFunction,
+    type_table: &TypeTable,
+    struct_index: &StructIndex<'_>,
+    sig: &MethodSig,
+    value_copy_ids: &IndexSet<FuncId>,
+) -> bool {
+    func.body
+        .as_ref()
+        .filter(|_| !func.is_cm_binding)
+        .is_some_and(|body| {
+            !collect_candidates(body, type_table, struct_index, sig, value_copy_ids).is_empty()
+        })
 }
 
 /// Standalone-session rule whose single `apply_block` performs the whole-

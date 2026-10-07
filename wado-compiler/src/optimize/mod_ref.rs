@@ -4,7 +4,7 @@
 //! [`ExprKind`] / [`StmtKind`] variant must be added to `accumulate_expr` /
 //! `accumulate_stmt` explicitly, or it silently defaults to pure.
 
-use std::sync::Arc;
+use std::rc::Rc;
 
 use crate::builtin_facts::{SideEffect, Trap};
 use crate::hashmap::IndexSet;
@@ -797,7 +797,7 @@ fn leaf_effects(project: &NirPackage) -> (Vec<FnEffect>, Vec<Option<&BuiltinDecl
 /// its body, both indexed by `func_id.index()`.
 pub(super) struct FnSummaries {
     pub effects: Vec<FnEffect>,
-    proofs: Vec<Arc<Proofs>>,
+    proofs: Vec<Rc<Proofs>>,
 }
 
 impl FnSummaries {
@@ -868,7 +868,7 @@ pub(super) fn summarize(project: &NirPackage) -> (FnSummaries, Vec<Option<&Built
 struct BodySummary {
     own: FnEffect,
     callees: Vec<usize>,
-    proofs: Arc<Proofs>,
+    proofs: Rc<Proofs>,
 }
 
 impl BodySummary {
@@ -938,7 +938,7 @@ impl BodySummary {
         Some(Self {
             own,
             callees,
-            proofs: Arc::new(bounds.proofs),
+            proofs: Rc::new(bounds.proofs),
         })
     }
 }
@@ -949,7 +949,7 @@ fn join_over_calls<'b>(
     mut effects: Vec<FnEffect>,
     bodies: impl ExactSizeIterator<Item = Option<&'b BodySummary>>,
 ) -> FnSummaries {
-    let no_proofs = Arc::new(Proofs::default());
+    let no_proofs = Rc::new(Proofs::default());
     let mut call_graph: Vec<&[usize]> = Vec::with_capacity(bodies.len());
     let mut proofs = Vec::with_capacity(bodies.len());
     for (effect, body) in effects.iter_mut().zip(bodies) {
