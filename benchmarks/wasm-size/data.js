@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791380643247,
+  "lastUpdate": 1791382796615,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -65016,6 +65016,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 20667,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338620,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e6bf15f9beebc8b5803cfb5e9c7a6b9c58ad1095",
+          "message": "Merge pull request #2302 from wado-lang/json-alloc-reduce\n\nperf(json): fewer allocations per container and quoted number",
+          "timestamp": "2026-10-07T22:58:16+09:00",
+          "tree_id": "d582df8523022661ef0a82df8972ac4a422f017e",
+          "url": "https://github.com/wado-lang/wado/commit/e6bf15f9beebc8b5803cfb5e9c7a6b9c58ad1095"
+        },
+        "date": 1791382796196,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20673,
             "unit": "bytes"
           },
           {
