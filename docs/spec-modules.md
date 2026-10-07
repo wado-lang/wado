@@ -517,7 +517,7 @@ by name instead.
 - `use _ from "..."` loads a module and binds no name
 - Wildcards prohibited: `use {*} from "..."` is not allowed
 - No `use * as name` and no default imports
-- All imports must be explicit (except the prelude)
+- All imports must be explicit, except [the prelude](#the-prelude) and the [`builtin` namespace](#the-builtin-namespace)
 - `Effect::{op1, op2}` imports an effect's operations ([Importing Effect Operations](./spec-effects.md#importing-effect-operations))
 
 <!-- {"fixture":"spec_modules_import_rules.wado"} -->
@@ -622,8 +622,7 @@ Rationale: [WEP: Re-export Syntax (`pub use`)](./wep-2026-01-25-pub-use-reexport
 ## The Prelude
 
 The prelude (`core:prelude`) is imported into every module automatically, so
-its names need no `use`. It and the [`builtin` namespace](#the-builtin-namespace)
-are the two exceptions to explicit imports.
+its names need no `use`.
 [Prelude Types](./spec-types.md#prelude-types) lists the types it provides, and
 [`#![no_prelude]`](./spec-attributes.md#no_prelude) turns the import off for one
 module.
