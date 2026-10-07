@@ -320,3 +320,57 @@ test "remove what is not there" {
     assert remove("[1]", "/-") matches { Err(NotFound(_)) };
     assert remove("{}", "") matches { Err(NotFound(_)) };
 }
+
+test "an unterminated string is rejected" {
+    let r: Result<String, DeserializeError> = from_string("\"abc");
+    assert r matches { Err(_) };
+}
+
+test "set writes no value that has no JSON form" {
+    assert set("{}", "/a", &f64::NAN) matches { Err(Serialize(_)) };
+    assert set("[1]", "/0", &f64::NAN) matches { Err(Serialize(_)) };
+    assert set("{\"a\": 1}", "/b", &f64::NAN) matches { Err(Serialize(_)) };
+}
+
+test "set creates missing objects on one line where the container is" {
+    assert set("{\"a\": 1}", "/b/c", &2).unwrap() == "{\"a\": 1, \"b\": {\"c\": 2}}";
+}
+
+test "set into an empty single-line object drops its blanks" {
+    assert set("{\"a\": {\t }}", "/a/b", &1).unwrap() == "{\"a\": {\"b\": 1}}";
+    assert set("{\"a\": {/* c */ }}", "/a/b", &1).unwrap() == "{\"a\": {/* c */ \"b\": 1}}";
+}
+
+test "remove takes a same-line block comment with the member" {
+    let src = "{\n  \"a\": 1, /* one */ /* more */\n  \"b\": 2\n}";
+    assert remove(src, "/a").unwrap() == "{\n  \"b\": 2\n}";
+}
+
+test "remove leaves a block comment that runs onto the next line" {
+    let src = "{\n  \"a\": 1, /* one\n  more */\n  \"b\": 2\n}";
+    assert remove(src, "/a").unwrap() == "{\n  /* one\n  more */\n  \"b\": 2\n}";
+}
+
+test "remove takes a member's CRLF line" {
+    let commented = "{\r\n  \"a\": 1, // one\r\n  \"b\": 2\r\n}";
+    assert remove(commented, "/a").unwrap() == "{\r\n  \"b\": 2\r\n}";
+    let bare = "{\r\n  \"a\": 1,\r\n  \"b\": 2\r\n}";
+    assert remove(bare, "/a").unwrap() == "{\r\n  \"b\": 2\r\n}";
+}
+
+test "remove the only element after a comment keeps the comment" {
+    assert remove("[/* c */ 1]", "/0").unwrap() == "[/* c */ ]";
+}
+
+test "remove rejects what set rejects" {
+    assert remove("{}", "a") matches { Err(InvalidPointer(_)) };
+    assert remove("{", "/a") matches { Err(Syntax(_)) };
+    assert remove("{\"a\": 1}", "/a/b") matches { Err(NotFound(_)) };
+}
+
+test "an edit error renders its reason" {
+    assert `${set("{}", "a", &1).unwrap_err()}` == "invalid JSON pointer: \"a\"";
+    assert `${set("[1]", "/5", &1).unwrap_err()}` == "no value at \"/5\"";
+    assert `${set("{}", "/a", &f64::NAN).unwrap_err()}` == "NaN is not allowed in JSON";
+    assert `${set("{", "/a", &1).unwrap_err()}`.starts_with("invalid JSONC: ");
+}

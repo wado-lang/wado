@@ -1226,6 +1226,7 @@ test "a write fails at each step it takes" {
 test "flags round-trip as their set names" {
     let both = Perm::Read | Perm::Write;
     assert json::to_string(&both) matches { Ok(s) && s == `["Read","Write"]` };
+    assert json::to_string(&Perm::Write) matches { Ok(s) && s == `["Write"]` };
     assert json::from_string::<Perm>(`["Write"]`) matches { Ok(p) && p == Perm::Write };
     assert json::from_string::<Perm>(`["Exec"]`) matches { Err(e) && e.kind == DeserializeErrorKind::UnknownVariant };
 }

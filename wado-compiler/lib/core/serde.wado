@@ -1620,13 +1620,7 @@ impl<L: ReflectFlags<Members = [..M]>, ..M> Deserialize for L {
                 }
             } else {
                 seq.end()?;
-                if let Some(v) = ReflectFlags::<L>::from_bits(raw) {
-                    return Result::Ok(v);
-                }
-                return Result::Err(DeserializeError::invalid_value(
-                    `unknown bits of ${Reflect::<L>::type_name()}`,
-                    -1,
-                ));
+                return Result::Ok(ReflectFlags::<L>::from_bits(raw).expect("only members' bits were set"));
             }
         }
     }
