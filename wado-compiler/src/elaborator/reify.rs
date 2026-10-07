@@ -83,7 +83,7 @@ use crate::name::{
 use crate::primitive::PrimitiveType;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::synthesis::common::builtin_call;
-use crate::synthesis::common::{handle_bits, handle_from_f64, handle_to_f64, not_expr};
+use crate::synthesis::common::{bool_lit, handle_bits, handle_from_f64, handle_to_f64, not_expr};
 use crate::tir::{
     EffectRef, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
     agree_branch_types,
@@ -2963,7 +2963,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     local_index: seen_index,
                     is_mut: true,
                     type_id: TypeTable::BOOL,
-                    value: TirExpr::new(TirExprKind::BoolLiteral(false), TypeTable::BOOL, cap_span),
+                    value: bool_lit(false, cap_span),
                     storage: LetStorage::Taken,
                 },
                 cap_span,
@@ -2980,7 +2980,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             TypeTable::BOOL,
                             cap_span,
                         ),
-                        TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, cap_span),
+                        bool_lit(true, cap_span),
                         cap_span,
                     ),
                     TirStmt::new(TirStmtKind::Expr(local_ref), cap_span),
@@ -4850,7 +4850,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if matches!(range.kind, RangeKind::Inclusive) {
             fields.push(TirStructField {
                 name: "exhausted".to_string(),
-                value: TirExpr::new(TirExprKind::BoolLiteral(false), TypeTable::BOOL, range.span),
+                value: bool_lit(false, range.span),
                 field_index: 2,
             });
         }
@@ -6480,7 +6480,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let pattern_tir = self.reify_pattern(&m.pattern, scrutinee_type, m.span, ctx);
         let arm_body = match &m.guard {
             Some(guard) => self.reify_expr(guard, ctx, Some(TypeTable::BOOL)),
-            None => TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, m.span),
+            None => bool_lit(true, m.span),
         };
 
         let arms = vec![
@@ -6493,7 +6493,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             TirMatchArm {
                 pattern: TirPattern::Wildcard,
                 guard: None,
-                body: TirExpr::new(TirExprKind::BoolLiteral(false), TypeTable::BOOL, m.span),
+                body: bool_lit(false, m.span),
                 span: m.span,
             },
         ];
