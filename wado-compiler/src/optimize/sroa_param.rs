@@ -25,7 +25,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, ExprNode, NodeRef, Operand};
-use crate::nir_package::{NirPackage, ParamShape, Reshape, SroaParamProjection};
+use crate::nir_package::{FieldForm, NirPackage, ParamShape, Reshape, SroaParamProjection};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -669,16 +669,6 @@ fn may_write_aliasing_location(
 // Phase 2 — use checker (arena)
 // -----------------------------------------------------------------------
 
-/// How the callee holds the field, and so how the scalar parameter is typed.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum FieldForm {
-    /// Read as a value — the canonical `Box<T>` case, where a reference would
-    /// only re-box what the unwrap just removed.
-    Value,
-    Shared,
-    Mutable,
-}
-
 impl FieldForm {
     fn of(self, type_table: &mut TypeTable, inner: TypeId) -> TypeId {
         match self {
@@ -910,7 +900,7 @@ fn mint_scalarized_clones(
                 struct_key: info.struct_key.clone(),
                 field_index: info.field_index,
                 field_name: info.field_name.clone(),
-                mutable: info.form == FieldForm::Mutable,
+                form: info.form,
             };
             let shape = reshape.shape_mut(*pi);
             match shape {
@@ -924,11 +914,11 @@ fn mint_scalarized_clones(
         if let (Some(info), Some(method)) = (&mut clone.method_info, method_name) {
             info.method_name = method;
         }
-        // The name spells the clone's shape against its root, and this pass
-        // runs once per fixpoint iteration and reaches one shape by more than
-        // one route, so the clone this run wants may already stand under it.
-        // A function `dae` reshapes since is renamed for its new shape, so
-        // whatever stands under the name takes what the name says.
+        // The name spells the clone's signature against its root, and this
+        // pass runs once per fixpoint iteration and reaches one shape by more
+        // than one route, so the clone this run wants may already stand under
+        // it. A function `dae` or `drve` reshapes since is renamed for its new
+        // shape, so whatever stands under the name takes what the name says.
         let func_key =
             FunctionRef::from_resolved(&clone, clone.module_source.clone()).function_id();
         if let Some(&existing) = project.func_index.get(&func_key) {
@@ -944,7 +934,7 @@ fn mint_scalarized_clones(
                 })
                 .collect();
             assert!(
-                project.takes_param_types(existing, &wanted),
+                project.answers_calls(existing, &wanted, clone.return_type),
                 "[NIR] sroa_param: {name} stands with another signature"
             );
             clones.insert(*key, existing);

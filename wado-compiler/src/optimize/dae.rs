@@ -14,7 +14,7 @@ use crate::nir_package::{NirPackage, Reshape};
 use super::arena_query;
 use super::gate::{FunctionGate, GatedPass};
 use crate::nir::FuncId;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::TypeTable;
 
 /// A function's canonical [`FuncId`]: the candidate/confirmed/pinned sets key on
 /// it, and a call site is matched by the stamped `func_id` on its call node.
@@ -290,61 +290,8 @@ fn apply_dae(project: &mut NirPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) -
     // Phase 3c: name each reshaped callee for its shape. One reshaped into a
     // function that already stands, reached by another route, is that
     // function: its callers, whose arguments 3b already dropped, call it.
-    let renames = confirmed
-        .keys()
-        .map(|&id| {
-            let (name, method_name) = project.reshapes[&id].names();
-            (id, name, method_name)
-        })
-        .collect();
-    let merged = project.rename_functions(renames);
-    if !merged.is_empty() {
-        for (&id, &holder) in &merged {
-            let params: Vec<TypeId> = project.functions[id.index()]
-                .borrow()
-                .params
-                .iter()
-                .map(|p| p.type_id)
-                .collect();
-            assert!(
-                project.takes_param_types(holder, &params),
-                "[NIR] dae: a function reshaped into another's name takes other parameters"
-            );
-        }
-        for (i, func_rc) in project.functions.iter().enumerate() {
-            if let Some(body) = func_rc.borrow_mut().body.as_mut()
-                && retarget_calls(body, &merged)
-            {
-                touched.insert(i);
-            }
-        }
-        for global in &mut project.globals {
-            retarget_calls(global.init.slot_expr_mut().body_mut(), &merged);
-        }
-        for &id in merged.keys() {
-            project.retire_function(id);
-        }
-    }
+    touched.extend(project.rename_reshaped(confirmed.keys().copied()));
     touched.into_iter().collect()
-}
-
-/// Point every call of a key of `merged` at its value.
-fn retarget_calls(body: &mut Body, merged: &IndexMap<FuncId, FuncId>) -> bool {
-    let mut calls = Vec::new();
-    body.for_each_reachable_node(|node| {
-        if let NodeRef::Expr(id) = node
-            && let ExprKind::Call { func_id, .. } = &body.exprs[id].kind
-            && merged.contains_key(func_id)
-        {
-            calls.push(id);
-        }
-    });
-    for &id in &calls {
-        if let ExprKind::Call { func_id, .. } = &mut body.exprs[id].kind {
-            *func_id = merged[&*func_id];
-        }
-    }
-    !calls.is_empty()
 }
 
 /// Rewrite every call of a confirmed function in `body`: drop the dead-position

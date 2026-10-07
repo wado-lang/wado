@@ -207,7 +207,7 @@ impl DescriptorCache {
     }
 
     /// A descriptor is keyed by store position, so a rename in place goes
-    /// stale unless `NirPackage::rename_function` logged it. One entry per
+    /// stale unless `NirPackage::renamed` logged it. One entry per
     /// read, rotating: a whole-table check costs its caller O(n²), since a
     /// pass may read once per function.
     #[cfg(debug_assertions)]
@@ -1237,7 +1237,12 @@ impl<'a> DceWalker<'a> {
     ) {
         // `$call` is always live: the canonical closure struct holds
         // a `ref.func` to it directly.
-        let (call, inspect) = &self.functors[&(closure_module.clone(), functor_id)];
+        let (call, inspect) = self
+            .functors
+            .get(&(closure_module.clone(), functor_id))
+            .expect(
+                "a functor whose closure a live body converts reaches its `$call`, so DCE keeps it",
+            );
         self.analysis.callees.insert(call.clone());
 
         // A per-functor `$Closure_N^Inspect` impl only needs to stay alive

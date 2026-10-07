@@ -3,7 +3,7 @@
 use crate::hashmap::IndexSet;
 use crate::nir::{FunctionKind, NirFunction};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
-use crate::nir_package::NirPackage;
+use crate::nir_package::{NirPackage, Reshape, ReturnShape};
 use crate::tir::TypeTable;
 
 use cranelift_entity::EntityRef;
@@ -42,8 +42,8 @@ pub fn eliminate_dead_return_values(project: &mut NirPackage, gate: &mut Functio
     }
 
     // drve is interprocedural and scans all functions, but reports exactly the
-    // ones it touched (converted callees + retyped callers) so the gated passes
-    // re-examine only those. The call graph is unaffected, so no refresh.
+    // ones it touched (converted callees, retyped or retargeted callers) so the
+    // gated passes re-examine only those, as dae does.
     let touched = apply_drve(project, &confirmed);
     for idx in touched {
         gate.mark_changed(FuncId::new(idx));
@@ -216,9 +216,7 @@ impl ValidateCtx<'_> {
 
 /// Applies the rewrites and returns the indices of every function whose body or
 /// signature changed (converted callees + callers whose call sites were
-/// retyped), so the caller can mark exactly those dirty in the gate. The call
-/// graph is unaffected: drve only voids returns and retypes call expressions,
-/// never adding or removing an edge.
+/// retyped), so the caller can mark exactly those dirty in the gate.
 fn apply_drve(project: &mut NirPackage, confirmed: &IndexSet<FnKey>) -> Vec<usize> {
     let mut touched: IndexSet<usize> = IndexSet::default();
     // Step A: convert each confirmed candidate to void return. The candidate
@@ -226,9 +224,14 @@ fn apply_drve(project: &mut NirPackage, confirmed: &IndexSet<FnKey>) -> Vec<usiz
     // pure expression, so dropping its value is observably equivalent.
     for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
-        if !func.id.is_some_and(|id| confirmed.contains(&id)) {
+        let Some(id) = func.id.filter(|id| confirmed.contains(id)) else {
             continue;
-        }
+        };
+        project
+            .reshapes
+            .entry(id)
+            .or_insert_with(|| Reshape::root(&func))
+            .reshape_return(ReturnShape::Dropped);
         func.return_type = TypeTable::UNIT;
         if let Some(body) = func.body.as_mut() {
             void_returns(body);
@@ -251,6 +254,9 @@ fn apply_drve(project: &mut NirPackage, confirmed: &IndexSet<FnKey>) -> Vec<usiz
     for global in &mut project.globals {
         retype_calls(global.init.slot_expr_mut().body_mut(), confirmed);
     }
+    // Step C: name each voided function for its signature. One voided into a
+    // function that already stands, reached by another route, is that one.
+    touched.extend(project.rename_reshaped(confirmed.iter().copied()));
     touched.into_iter().collect()
 }
 

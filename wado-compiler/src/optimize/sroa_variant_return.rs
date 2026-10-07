@@ -10,7 +10,7 @@ use crate::nir_arena::{
     ArenaStructField, ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef,
     Operand, PatKind, PatNode, StmtId, StmtKind, StmtNode,
 };
-use crate::nir_package::NirPackage;
+use crate::nir_package::{NirPackage, Reshape, ReturnShape};
 use crate::nir_value_graph::ValueKind;
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId, TypeKey, TypeTable};
@@ -207,6 +207,7 @@ pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGa
         });
     }
     rewrite_call_sites(project, &all, &mut touched);
+    touched.extend(project.rename_reshaped(candidates.keys().copied()));
     scalarize_variant_locals(project, &dirty, &mut touched);
     // A round with no new candidates still does work: `nir/inline` plants call
     // sites on callees scalarized earlier, and rewriting one is a change the
@@ -1823,6 +1824,11 @@ fn rewrite_callees(
 ) {
     for (&key, cand) in candidates {
         let mut func = project.functions[key.index()].borrow_mut();
+        project
+            .reshapes
+            .entry(key)
+            .or_insert_with(|| Reshape::root(&func))
+            .reshape_return(ReturnShape::Scalarized);
         func.scalarized_from = Some(cand.variant_type);
         func.return_type = cand.layout.tuple_type;
         let span = func.span;

@@ -720,7 +720,7 @@ impl Translator<'_> {
             Rc::clone(
                 func_map
                     .get(&Rc::as_ptr(method))
-                    .expect("a functor method is one of the package's functions"),
+                    .expect("the closure plan generates a functor's methods with the functor"),
             )
         };
         nir::ClosureFunctor {

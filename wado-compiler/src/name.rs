@@ -9,6 +9,7 @@ use crate::defs::{DefId, DefKind, DefTable};
 use crate::kiln::InvocationIndex;
 use crate::lexer::is_ident_continue;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
+use crate::nir_package::{FieldForm, ReturnShape};
 use crate::path::{is_cwd_relative, normalize, relative_path};
 use crate::primitive::PrimitiveType;
 use crate::syntax::{CONTEXTUAL_KEYWORDS, KEYWORDS, NAME_KEYWORDS};
@@ -169,29 +170,45 @@ fn grouped_suffix(base: &str, marker: &str, items: &[String]) -> String {
 const DAE_MARKER: &str = "dae";
 
 /// The name of the function derived from `root` that takes each `narrowed`
-/// parameter's field where `root` took the struct around it, and none of the
-/// `dropped` ones, both in `root`'s declaration order:
-/// `f$sroa[self.used]`, `g$sroa[&mut o.inner.x, p.y]$dae[q]`. The name spells
-/// everything that makes the function one, so two routes to one shape arrive
-/// at one name.
+/// parameter's field where `root` took the struct around it, none of the
+/// `dropped` ones, both in `root`'s declaration order, and returns as `ret`
+/// says: `f$sroa[self.used]`, `g$sroa[&mut o.inner.x, &p.y]$dae[q, return]`.
+/// The name spells everything that makes the function one, so two routes to
+/// one shape arrive at one name. `return` is a keyword, so no parameter is
+/// named that.
 #[must_use]
-pub fn reshaped_name(root: &str, narrowed: &[NarrowedParam<'_>], dropped: &[&str]) -> String {
-    let mut name = root.to_string();
-    if !narrowed.is_empty() {
-        let items: Vec<String> = narrowed
-            .iter()
-            .map(|n| {
-                let borrow = if n.mutable { "&mut " } else { "" };
-                let mut path = vec![n.param];
-                path.extend(&n.fields);
-                format!("{borrow}{}", path.join("."))
-            })
-            .collect();
-        name = grouped_suffix(&name, "sroa", &items);
+pub fn reshaped_name(
+    root: &str,
+    narrowed: &[NarrowedParam<'_>],
+    dropped: &[&str],
+    ret: ReturnShape,
+) -> String {
+    const RETURN: &str = "return";
+    let mut sroa: Vec<String> = narrowed
+        .iter()
+        .map(|n| {
+            let borrow = match n.form {
+                FieldForm::Value => "",
+                FieldForm::Shared => "&",
+                FieldForm::Mutable => "&mut ",
+            };
+            let mut path = vec![n.param];
+            path.extend(&n.fields);
+            format!("{borrow}{}", path.join("."))
+        })
+        .collect();
+    let mut dae: Vec<String> = dropped.iter().map(ToString::to_string).collect();
+    match ret {
+        ReturnShape::Kept => {}
+        ReturnShape::Scalarized => sroa.push(RETURN.to_string()),
+        ReturnShape::Dropped => dae.push(RETURN.to_string()),
     }
-    if !dropped.is_empty() {
-        let items: Vec<String> = dropped.iter().map(ToString::to_string).collect();
-        name = grouped_suffix(&name, DAE_MARKER, &items);
+    let mut name = root.to_string();
+    if !sroa.is_empty() {
+        name = grouped_suffix(&name, "sroa", &sroa);
+    }
+    if !dae.is_empty() {
+        name = grouped_suffix(&name, DAE_MARKER, &dae);
     }
     name
 }
@@ -226,12 +243,11 @@ pub fn param_label(name: &str, shared_at: Option<usize>) -> String {
 }
 
 /// One parameter `sroa_param` narrowed to a field: the parameter, the fields
-/// it was projected through, outermost first, and whether it holds the last
-/// one as `&mut`.
+/// it was projected through, outermost first, and how it holds the last one.
 pub struct NarrowedParam<'a> {
     pub param: &'a str,
     pub fields: Vec<&'a str>,
-    pub mutable: bool,
+    pub form: FieldForm,
 }
 
 /// The WIR local holding one field of an aggregate the multi-value ABI took
@@ -2440,15 +2456,20 @@ mod tests {
         let x = NarrowedParam {
             param: "self",
             fields: vec!["x"],
-            mutable: false,
+            form: FieldForm::Value,
         };
         assert_eq!(
-            before_dae(&reshaped_name("$call", &[], &["self", "x"])),
+            before_dae(&reshaped_name(
+                "$call",
+                &[],
+                &["self", "x"],
+                ReturnShape::Kept
+            )),
             "$call"
         );
         assert_eq!(before_dae("$call"), "$call");
         assert_eq!(
-            before_dae(&reshaped_name("$call", &[x], &["y"])),
+            before_dae(&reshaped_name("$call", &[x], &["y"], ReturnShape::Kept)),
             "$call$sroa[self.x]"
         );
     }
