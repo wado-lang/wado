@@ -61,7 +61,8 @@ impl GatedPass {
 
 /// Facts each function's body answers alone, kept across the fixed-point loop
 /// and re-derived only where one [`FunctionGate`] counted an edit since. What
-/// `of` reads beyond the function must hold still for the gate's lifetime.
+/// `of` reads beyond the function must hold still for the gate's lifetime, or
+/// the entries that read it be forgotten when it moves.
 pub struct BodyMemo<T> {
     gate: Option<u64>,
     edits: Vec<u64>,

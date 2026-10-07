@@ -658,7 +658,7 @@ fn build_analysis_graph(
     assemble_analysis_graph(project, Cow::Owned(analyses), functors)
 }
 
-/// One function's facts for [`build_analysis_graph`], from its signature and body.
+/// One function's facts for the [`AnalysisGraph`], from its signature and body.
 fn function_analysis(
     func: &NirFunction,
     type_table: &TypeTable,
