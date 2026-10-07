@@ -329,15 +329,6 @@ fn run_directory_mode(
                 .iter()
                 .map(|w| w.name.clone())
                 .collect();
-            if let Some(clash) = world_names.iter().find(|world| {
-                flat_reexports
-                    .iter()
-                    .any(|(_, names)| names.contains(*world))
-            }) {
-                bail!(
-                    "world `{clash}` in package {pkg_name} shares its name with an interface item"
-                );
-            }
             flat_reexports.push(("worlds".to_string(), world_names));
         }
 
@@ -345,6 +336,7 @@ fn run_directory_mode(
         // stdlib package: a wrapper such as `wasmtime:wasi-http` gets none.
         let registered = stdlib_identity_for(&pkg.name.namespace, pkg_name, None).is_some();
         if !flat_reexports.is_empty() && !skip_flat_reexport && registered {
+            reject_world_name_clash(pkg_name, &flat_reexports)?;
             write_flat_reexport_file(output_dir, &pkg.name.namespace, pkg_name, &flat_reexports)?;
         }
     }
@@ -377,6 +369,22 @@ fn run_webidl_mode(snapshot_path: &Path, output_dir: &Path, glue_dir: &Path) -> 
         eprintln!("Skipped: {line}");
     }
     eprintln!("{} members skipped", generated.skipped.len());
+    Ok(())
+}
+
+/// Fail when a world shares its name with an interface item, since the facade
+/// would re-export both under that one name.
+fn reject_world_name_clash(pkg_name: &str, flat_reexports: &[(String, Vec<String>)]) -> Result<()> {
+    let (worlds, items) = flat_reexports
+        .iter()
+        .partition::<Vec<_>, _>(|(module, _)| module == "worlds");
+    let world_names = worlds.iter().flat_map(|(_, names)| names);
+    if let Some(clash) = world_names
+        .into_iter()
+        .find(|world| items.iter().any(|(_, names)| names.contains(*world)))
+    {
+        bail!("world `{clash}` in package {pkg_name} shares its name with an interface item");
+    }
     Ok(())
 }
 

@@ -1176,10 +1176,11 @@ impl Parser {
         } else {
             false
         };
-        let export_targets = if has_export && self.check(&TokenKind::LParen) {
-            self.parse_export_targets()?
+        let (export_fn_id, export_targets) = if has_export && self.check(&TokenKind::LParen) {
+            let fn_id = self.alloc_ast_id();
+            (Some(fn_id), self.parse_export_targets()?)
         } else {
-            Vec::new()
+            (None, Vec::new())
         };
         if has_export && self.check(&TokenKind::Use) {
             self.errors.push(ParseError {
@@ -1237,14 +1238,16 @@ impl Parser {
 
         match self.peek_kind() {
             TokenKind::Use => self.parse_use_decl(visibility, attrs).map(Item::Use),
-            TokenKind::Fn => self
-                .parse_function(visibility, has_export, is_async, attrs, false)
-                .map(|func| {
-                    Item::Function(Function {
-                        export_targets,
-                        ..func
+            TokenKind::Fn => {
+                let id = export_fn_id.unwrap_or_else(|| self.alloc_ast_id());
+                self.parse_function(id, visibility, has_export, is_async, attrs, false)
+                    .map(|func| {
+                        Item::Function(Function {
+                            export_targets,
+                            ..func
+                        })
                     })
-                }),
+            }
             TokenKind::Interface => self
                 .parse_interface_decl(visibility, attrs)
                 .map(Item::Interface),
@@ -1944,8 +1947,12 @@ impl Parser {
         }
     }
 
+    /// Parse a function whose `id` the caller allocated at the item's start,
+    /// ahead of any prefix (`export(…)`) whose nodes would otherwise take the
+    /// item's leading doc comment.
     fn parse_function(
         &mut self,
+        id: AstId,
         visibility: Visibility,
         is_export: bool,
         is_async: bool,
@@ -1953,7 +1960,6 @@ impl Parser {
         is_method: bool,
     ) -> ParseResult<Function> {
         reject_resource_linearity(&attrs)?;
-        let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Fn)?;
 
@@ -5375,7 +5381,8 @@ impl Parser {
 
         // Visibility comes from the interface itself, and an operation is
         // never exported at the CM boundary on its own.
-        self.parse_function(Visibility::Private, false, is_async, attrs, true)
+        let id = self.alloc_ast_id();
+        self.parse_function(id, Visibility::Private, false, is_async, attrs, true)
     }
 
     /// Parse generic type parameters: `<T>`, `<T, U>`, `<T: Ord>`, `<T: Ord + Clone>`, `<T = Default>`
@@ -6080,7 +6087,8 @@ impl Parser {
                         span: const_span.merge(&end),
                     });
                 } else {
-                    methods.push(self.parse_function(member_vis, false, false, attrs, true)?);
+                    let id = self.alloc_ast_id();
+                    methods.push(self.parse_function(id, member_vis, false, false, attrs, true)?);
                 }
             }
         }
@@ -6248,8 +6256,9 @@ impl Parser {
                 // Trait methods cannot be exported at the CM boundary.
                 // Attributes (e.g. `#[compiler_item("...")]`) carry through so
                 // the elaborator can register per-method compiler items.
+                let id = self.alloc_ast_id();
                 let mut method =
-                    self.parse_function(Visibility::Private, false, false, attrs, true)?;
+                    self.parse_function(id, Visibility::Private, false, false, attrs, true)?;
                 // A method that declares nothing takes what the head says, at
                 // sites of its own that the trait's scope answers.
                 if method.effects.is_empty() {

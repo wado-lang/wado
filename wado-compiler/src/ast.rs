@@ -751,6 +751,9 @@ pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
 /// Everything [`walk_function`] visits but the body.
 pub fn walk_function_signature<V: AstVisitor>(v: &mut V, func: &Function) {
     v.visit_id(func.id, func.span);
+    for target in &func.export_targets {
+        v.visit_id(target.id, target.span);
+    }
     v.visit_generic_params(&func.type_params);
     walk_params(v, &func.params);
     if let Some(ret) = &func.return_type {
@@ -4841,6 +4844,8 @@ impl Point {
 fn add(a: i32, b: i32) -> i32 {
     return a + b;
 }
+
+export(Command::run) fn main() {}
 
 test "addition" {
     assert add(1, 2) == 3;
