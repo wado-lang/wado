@@ -12,8 +12,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
 
 use crate::ast::{
-    self, AstId, AstVisitor, BinaryOp, Block, Expr, Function, Item, MatchExpr, Stmt, walk_expr,
-    walk_stmt,
+    self, AstId, AstVisitor, BinaryOp, Block, Expr, Function, Item, MatchExpr, Stmt, UseItem,
+    walk_expr, walk_stmt,
 };
 use crate::attribute;
 use crate::hashmap::IndexMap;
@@ -479,6 +479,7 @@ pub fn plan_module(
             ..ModulePlan::default()
         },
         contract_checks,
+        prelude_unreachable: binds_prelude_unreachable(source, module),
         sites: Vec::new(),
         function: 0,
         region: None,
@@ -507,6 +508,8 @@ struct Planner {
     plan: ModulePlan,
     /// Whether a contract check's body is compiled, and so holds lines.
     contract_checks: bool,
+    /// Whether a bare `unreachable` names `core:rt`'s.
+    prelude_unreachable: bool,
     sites: Sites,
     function: u32,
     /// The innermost region the walk is in, `None` outside a function.
@@ -542,7 +545,7 @@ impl Planner {
 
     fn function(&mut self, f: &Function) {
         let Some(body) = &f.body else { return };
-        if attribute::coverage_off(&f.attrs) {
+        if attribute::coverage_off(&f.attrs) || self.traps_only(&body.stmts) {
             return;
         }
         let name = match &self.owner {
@@ -601,7 +604,33 @@ impl Planner {
         self.plan.lines.push((span.line as u32, region));
     }
 
-    fn branch_block(&mut self, kind: RegionKind, block: &Block, choice: (Pos, u32)) {
+    /// Whether `expr` is a call to `unreachable` with nothing to evaluate
+    /// first: its author's claim that no run reaches it, which is not a path
+    /// to plan. `panic` and `assert` are not, since a caller breaking a
+    /// contract reaches them. `builtin::` names `core:builtin` whatever the
+    /// module declares.
+    fn is_trap(&self, expr: &Expr) -> bool {
+        match expr {
+            Expr::Call(call) if call.args.is_empty() && call.type_args.is_empty() => {
+                matches!(&call.callee, Expr::Ident(ident)
+                    if ident.name == "builtin::unreachable"
+                        || (ident.name == "unreachable" && self.prelude_unreachable))
+            }
+            Expr::Block(block) => self.traps_only(&block.stmts),
+            _ => false,
+        }
+    }
+
+    /// Whether `stmts` are one [`is_trap`](Self::is_trap) call and nothing else.
+    fn traps_only(&self, stmts: &[Stmt]) -> bool {
+        matches!(stmts, [Stmt::Expr(s)] if self.is_trap(&s.expr))
+    }
+
+    /// The region `block` is, unless it [traps only](Self::traps_only).
+    fn branch_block(&mut self, kind: RegionKind, block: &Block, choice: (Pos, u32)) -> Option<u32> {
+        if self.traps_only(&block.stmts) {
+            return None;
+        }
         let region = self.new_region(
             kind,
             Pos::start(block.span),
@@ -610,33 +639,49 @@ impl Planner {
         );
         self.sites.push((ProbeSite::BlockStart, block.id, region));
         self.block_of(region, block);
+        Some(region)
     }
 
     /// An `if`, statement or expression. Both branches are regions, and an
-    /// omitted `else` is one too: the path that skips the `then` block.
+    /// omitted `else` is one too: the path that skips the `then` block, unless
+    /// `skip_traps` says that path reaches nothing but a trap.
     fn if_branches(
         &mut self,
         id: AstId,
         span: Span,
         then_block: &Block,
         else_block: Option<&Block>,
+        skip_traps: bool,
     ) {
         let at = Pos::start(span);
-        let then_region = self.plan.regions.len() as u32;
-        self.branch_block(RegionKind::Then, then_block, (at, 0));
-        let else_region = self.plan.regions.len() as u32;
-        if let Some(block) = else_block {
-            self.branch_block(RegionKind::Else, block, (at, 1));
+        let then_region = self.branch_block(RegionKind::Then, then_block, (at, 0));
+        let else_region = if let Some(block) = else_block {
+            self.branch_block(RegionKind::Else, block, (at, 1))
+        } else if skip_traps {
+            None
         } else {
-            self.new_region(
+            let region = self.new_region(
                 RegionKind::Else,
                 Pos::end(span),
                 Pos::end(span),
                 Some((at, 1)),
             );
-            self.sites.push((ProbeSite::ImplicitElse, id, else_region));
-        }
-        self.last_choice = vec![then_region, else_region];
+            self.sites.push((ProbeSite::ImplicitElse, id, region));
+            Some(region)
+        };
+        self.last_choice = then_region.into_iter().chain(else_region).collect();
+    }
+
+    /// An `if` statement, which `traps_after` says only a trap follows.
+    fn if_stmt(&mut self, s: &ast::IfStmt, traps_after: bool) {
+        self.visit_condition(&s.condition);
+        self.if_branches(
+            s.id,
+            s.span,
+            &s.then_block,
+            s.else_block.as_ref(),
+            traps_after,
+        );
     }
 
     fn match_arms(&mut self, m: &MatchExpr) {
@@ -646,6 +691,9 @@ impl Planner {
         for (side, arm) in m.arms.iter().enumerate() {
             if let Some(guard) = &arm.guard {
                 self.visit_expr(guard);
+            }
+            if self.is_trap(&arm.body) {
+                continue;
             }
             let body = arm.body.span();
             let region = self.new_region(
@@ -674,6 +722,9 @@ impl Planner {
     }
 
     fn loop_body(&mut self, body: &Block) {
+        if self.traps_only(&body.stmts) {
+            return;
+        }
         let region = self.new_region(
             RegionKind::Loop,
             Pos::start(body.span),
@@ -698,7 +749,10 @@ impl Planner {
             self.region = open;
         }
         let mut leaves = false;
-        for stmt in &block.stmts {
+        for (index, stmt) in block.stmts.iter().enumerate() {
+            if leaves && self.traps_only(&block.stmts[index..]) {
+                break;
+            }
             if leaves {
                 let region = self.new_region(
                     RegionKind::Continuation,
@@ -714,7 +768,12 @@ impl Planner {
             if !matches!(stmt, Stmt::Item(_) | Stmt::Error(_)) && !deleted_check {
                 self.line(stmt.span());
             }
-            self.visit_stmt(stmt);
+            match stmt {
+                Stmt::If(s) if !is_contract_check(stmt) => {
+                    self.if_stmt(s, self.traps_only(&block.stmts[index + 1..]));
+                }
+                _ => self.visit_stmt(stmt),
+            }
             leaves = leaves_early(stmt);
             if let Some(region) = open {
                 if enters_choice(stmt) {
@@ -749,7 +808,7 @@ impl AstVisitor for Planner {
                 if let Some(value) = &s.value {
                     self.visit_expr(value);
                 }
-                if let Some(block) = &s.else_block {
+                if let Some(block) = s.else_block.as_ref().filter(|b| !self.traps_only(&b.stmts)) {
                     let region = self.new_region(
                         RegionKind::LetElse,
                         Pos::start(block.span),
@@ -765,10 +824,7 @@ impl AstVisitor for Planner {
                     self.statements(&s.then_block, None);
                 }
             }
-            Stmt::If(s) => {
-                self.visit_condition(&s.condition);
-                self.if_branches(s.id, s.span, &s.then_block, s.else_block.as_ref());
-            }
+            Stmt::If(s) => self.if_stmt(s, false),
             Stmt::While(s) => {
                 self.visit_condition(&s.condition);
                 self.loop_body(&s.body);
@@ -803,7 +859,9 @@ impl AstVisitor for Planner {
 
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
-            Expr::Binary(b) if matches!(b.op, BinaryOp::And | BinaryOp::Or) => {
+            Expr::Binary(b)
+                if matches!(b.op, BinaryOp::And | BinaryOp::Or) && !self.is_trap(&b.right) =>
+            {
                 self.visit_expr(&b.left);
                 let right = b.right.span();
                 let region = self.new_region(
@@ -817,9 +875,10 @@ impl AstVisitor for Planner {
             }
             Expr::If(e) => {
                 self.visit_condition(&e.condition);
-                self.if_branches(e.id, e.span, &e.then_block, e.else_block.as_ref());
+                self.if_branches(e.id, e.span, &e.then_block, e.else_block.as_ref(), false);
             }
             Expr::Match(m) => self.match_arms(m),
+            Expr::Closure(c) if self.is_trap(&c.body) => {}
             Expr::Closure(c) => {
                 let outer_name = &self.plan.functions[self.function as usize].name;
                 let name = format!("{outer_name}::{{closure:{}}}", c.span.line);
@@ -903,6 +962,27 @@ pub(crate) fn contract_check_call(s: &ast::IfStmt) -> Option<AstId> {
 
 fn is_contract_check(stmt: &Stmt) -> bool {
     matches!(stmt, Stmt::If(s) if contract_check_call(s).is_some())
+}
+
+/// Whether a bare `unreachable` in `module` names `core:rt`'s, which the
+/// prelude brings, rather than one the module declares or imports itself.
+fn binds_prelude_unreachable(source: &ModuleSource, module: &ast::Module) -> bool {
+    const NAME: &str = "unreachable";
+    let binds_own = |item: &Item| match item {
+        Item::Function(f) => f.name == NAME,
+        Item::Global(g) => g.name == NAME,
+        Item::Use(u) if u.source != "core:rt" && u.source != "core:prelude" => {
+            u.items.iter().any(|it| match it {
+                UseItem::Simple { name, alias, .. } => alias.as_ref().unwrap_or(name) == NAME,
+                UseItem::InterfaceFunctions { functions, .. } => functions
+                    .iter()
+                    .any(|f| f.alias.as_ref().unwrap_or(&f.name) == NAME),
+                UseItem::Wildcard | UseItem::Namespace { .. } => false,
+            })
+        }
+        _ => false,
+    };
+    *source == ModuleSource::rt() || !module.items.iter().any(binds_own)
 }
 
 fn match_head_may_leave(m: &MatchExpr) -> bool {
@@ -1329,6 +1409,59 @@ mod tests {
         let (plan, _) = plan_check(false);
         assert_eq!(plan.regions.len(), 1);
         assert_eq!(plan.lines, vec![(2, 0)]);
+    }
+
+    /// The kinds of the regions `fn f`'s `if` plans, after `prefix`.
+    fn plan_trap(prefix: &str, then: &str) -> Vec<RegionKind> {
+        let module = parse(&format!(
+            "{prefix}\nfn f(x: bool) {{\n    if x {{ {then} }}\n}}\n"
+        ));
+        let (plan, _, _) = plan_module(&ModuleSource::builtin(), &module, true);
+        let f = plan.functions.iter().find(|f| f.name == "f").expect("`f`");
+        plan.regions[f.region as usize..]
+            .iter()
+            .map(|r| r.kind)
+            .collect()
+    }
+
+    #[test]
+    fn only_the_prelude_unreachable_claims_a_region_unreached() {
+        use RegionKind::{Else, Function, Then};
+        let unplanned = vec![Function, Else];
+        let planned = vec![Function, Then, Else];
+        let shapes = [
+            ("", "unreachable();", &unplanned),
+            ("", "builtin::unreachable();", &unplanned),
+            (
+                "use { unreachable } from \"core:rt\";",
+                "unreachable();",
+                &unplanned,
+            ),
+            ("fn unreachable() {}", "builtin::unreachable();", &unplanned),
+            ("fn unreachable() {}", "unreachable();", &planned),
+            (
+                "use { stop as unreachable } from \"./a.wado\";",
+                "unreachable();",
+                &planned,
+            ),
+            ("", "panic(\"x\");", &planned),
+            ("", "unreachable::<i32>();", &planned),
+            ("", "g(); unreachable();", &planned),
+        ];
+        for (prefix, then, kinds) in shapes {
+            assert_eq!(&plan_trap(prefix, then), kinds, "{prefix} {then}");
+        }
+    }
+
+    #[test]
+    fn an_omitted_else_reaching_only_a_trap_is_no_branch() {
+        let module = parse(
+            "fn f(x: bool) -> i32 {\n    if x {\n        return 1;\n    }\n    unreachable();\n}\n",
+        );
+        let (plan, _, _) = plan_module(&ModuleSource::builtin(), &module, true);
+        let kinds: Vec<RegionKind> = plan.regions.iter().map(|r| r.kind).collect();
+        assert_eq!(kinds, vec![RegionKind::Function, RegionKind::Then]);
+        assert_eq!(plan.lines, vec![(2, 0), (3, 1)]);
     }
 
     #[test]

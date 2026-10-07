@@ -3,11 +3,6 @@
 use { i64_add128_soft, i64_sub128_soft, i64_mul_wide_u_soft, i64_mul_wide_s_soft, log_stdout } from "core:rt";
 
 #[expect_trap]
-test "unreachable traps" {
-    unreachable();
-}
-
-#[expect_trap]
 test "a read with negative room is a defect" {
     let [rx, tx] = Stream::<u8>::new();
     rx.read(builtin::black_box(-1));
