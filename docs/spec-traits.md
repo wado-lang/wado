@@ -227,7 +227,8 @@ level the reference precedes its pointee.
 
 A newtype over a reference continues to the pointee. A call on `H`, where
 `type H = &mut T`, visits `H`, then `&mut T`, then `T`, so `T`'s impls answer it
-as they answer a call on `&mut T`. See
+as they answer a call on `&mut T`. Only a reference a newtype wraps continues
+the chain this way. See
 [A Newtype over a Reference](./spec-types.md#a-newtype-over-a-reference).
 
 How many positions a head impl pins is not part of its generality, so
