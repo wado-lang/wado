@@ -4353,15 +4353,13 @@ _Fields are private._
 
 Wait for the subtask to complete and return the lifted result.
 Drops the CM subtask handle and frees the result buffer before
-returning. After `wait` returns, the `AsyncCall<T>` value must not be
-used again — doing so is a use-after-free (the backing buffer has
-been released).
+returning, which ends the call: any later `wait`, `cancel` or `join`
+on it, or on a copy of it, traps.
 
 #### `pub fn cancel(&self) with Subtask`
 
 Cancel the in-flight subtask and free the result buffer. Any
-partially-written result is discarded. Same single-use contract as
-`wait` — the `AsyncCall<T>` must not be used again after `cancel`.
+partially-written result is discarded. It ends the call as `wait` does.
 
 #### `pub fn join(&self, set: &WaitableSet) -> Waitable with Subtask`
 

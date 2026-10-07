@@ -102,7 +102,9 @@ are baked in at monomorphization time based on `T`.
 `wait` and `cancel` end the call: the subtask handle is dropped and the buffer
 freed. A copy of the struct shares the handle and the buffer, so it shares the
 end too. `__cm_ended` is a reference for that reason, and a `wait`, `cancel` or
-`join` on an ended call traps rather than lift a freed buffer.
+`join` on an ended call traps rather than lift a freed buffer. A call never
+ended leaks its handle and buffer: ending it on drop would need to know that no
+copy is left, which a struct does not track.
 
 ### Synthesis of async imports
 
@@ -129,13 +131,12 @@ monomorphized per `T`:
 
 ### `wado-from-idl` automation
 
-WIT `async func foo(...) -> T` ⇒ Wado `fn foo(...) -> AsyncCall<T>` (no `async`
-keyword, matching the spec's rule that "effect declarations never use the
-`async` keyword"). `wado-from-idl` tracks `is_async` in its IR and emits
-`AsyncCall<ReturnType>` rather than adding the `async` keyword.
+WIT `async func foo(...) -> T` ⇒ Wado `async fn foo(...) -> AsyncCall<T>`.
+`wado-from-idl` tracks `is_async` in its IR and emits both the `async` marker
+and the `AsyncCall<ReturnType>` result.
 
-World exports (entry points like `run`, `handle`) continue to use `async fn`
-since they represent the CM lifting boundary, not a CM import adapter.
+World exports (entry points like `run`, `handle`) are `async fn` too, returning
+`T` itself: they are the CM lifting boundary, not an import adapter.
 
 ### User code patterns
 

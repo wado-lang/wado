@@ -15,7 +15,7 @@ use crate::tir::{
 };
 
 use crate::synthesis::common::{
-    alloc_local, assign, binary, block, break_stmt, builtin_call, cast, expr_stmt,
+    alloc_local, assign, binary, block, break_stmt, builtin_call, cast, deref_expr, expr_stmt,
     generic_method_call, generic_method_call_monomorphized, handle_to_f64, i32_const, i64_const,
     if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, split_packed_ptr_len,
     synth_span,
@@ -30,7 +30,6 @@ use crate::compiler_item::CompilerItem;
 use crate::name::{FqTypeName, UNIT_TYPE_NAME};
 use crate::synthesis::cm_binding::types::{cm_val_type_to_type_id, cm_zero};
 use crate::tir::TirBlock;
-use crate::tir::TirUnaryOp;
 
 /// Join two CM flat slot types via the single Canonical ABI join
 /// ([`cm_abi::CmValType::join`]) so a lowered flat arg matches the core import's
@@ -1059,14 +1058,7 @@ pub(super) fn synthesize_lower_map_to_buffer(
             slot_ref_tid,
             synth_span(),
         );
-        let deref = TirExpr::new(
-            TirExprKind::Unary {
-                op: TirUnaryOp::Deref,
-                expr: Box::new(field),
-            },
-            slot_tid,
-            synth_span(),
-        );
+        let deref = deref_expr(field, slot_tid, synth_span());
         let slot_addr = binary_add(
             local_ref(pair_addr_local, "$elem_addr", TypeTable::I32),
             i32_const(layout.offsets[slot] as i32),

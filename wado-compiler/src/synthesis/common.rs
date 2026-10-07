@@ -721,9 +721,25 @@ pub fn ref_expr(expr: TirExpr, ref_type: TypeId, span: Span) -> TirExpr {
     )
 }
 
+/// Create a mutable reference expression: `&mut expr`.
+pub fn mut_ref_expr(expr: TirExpr, ref_type: TypeId, span: Span) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Unary {
+            op: TirUnaryOp::MutRef,
+            expr: Box::new(expr),
+        },
+        ref_type,
+        span,
+    )
+}
+
 /// Create a `bool` literal expression.
 pub fn bool_lit(value: bool) -> TirExpr {
-    TirExpr::new(TirExprKind::BoolLiteral(value), TypeTable::BOOL, synth_span())
+    TirExpr::new(
+        TirExprKind::BoolLiteral(value),
+        TypeTable::BOOL,
+        synth_span(),
+    )
 }
 
 /// Create a string literal expression.

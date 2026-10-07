@@ -138,8 +138,8 @@ test {
 An `AsyncCall<T>` is used once: `wait` or `cancel` ends the call, and a later
 `wait`, `cancel` or `join` on it traps. A copy names the same call, so it ends
 with the original. `join` only registers the call with the set, so the caller
-still owes the `wait` or `cancel` that ends it. A call that neither ends leaks
-its subtask handle and result buffer.
+still owes the `wait` or `cancel` that ends it. A call never waited on nor
+cancelled leaks its subtask handle and result buffer.
 
 <!-- {"fixture":"async_call_copy_shares_end.wado"} -->
 

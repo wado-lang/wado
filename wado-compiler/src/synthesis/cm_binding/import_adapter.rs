@@ -11,15 +11,14 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{LocalMethodName, cm_binding_func_name, cm_lift_func_name};
 use crate::tir::{
     CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStructField, TirUnaryOp, TypeId,
-    TypeTable,
+    TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStructField, TypeId, TypeTable,
 };
 
 use crate::synthesis::common::{
-    alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cm_raw_call,
-    expr_stmt, generic_method_call, handle_from_f64, handle_to_f64, i32_const, if_stmt,
-    internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, return_stmt, split_packed_ptr_len,
-    synth_span,
+    alloc_local, assign, binary, block, bool_lit, break_stmt, builtin_call, case_chain,
+    cm_raw_call, expr_stmt, generic_method_call, handle_from_f64, handle_to_f64, i32_const,
+    if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, mut_ref_expr,
+    return_stmt, split_packed_ptr_len, synth_span,
 };
 
 use super::lift::{lift_variant_from_disc, materialize_if_needed, synthesize_lift};
@@ -240,15 +239,8 @@ fn make_async_call_literal(
     align: TirExpr,
     lift: TirExpr,
 ) -> TirExpr {
-    let not_ended = TirExpr::new(
-        TirExprKind::Unary {
-            op: TirUnaryOp::MutRef,
-            expr: Box::new(TirExpr::new(
-                TirExprKind::BoolLiteral(false),
-                TypeTable::BOOL,
-                synth_span(),
-            )),
-        },
+    let not_ended = mut_ref_expr(
+        bool_lit(false),
         type_table.borrow_mut().make_mut_ref(TypeTable::BOOL),
         synth_span(),
     );

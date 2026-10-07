@@ -33,7 +33,8 @@ use crate::token::Span;
 
 use crate::synthesis::common::{
     alloc_local, assign, bool_lit, cast, cm_canonical_call, expr_stmt, i32_const, if_stmt,
-    let_mut_stmt, let_stmt, local_ref, option_none, option_some, panic_call, string_lit, synth_span,
+    let_mut_stmt, let_stmt, local_ref, option_none, option_some, panic_call, string_lit,
+    synth_span,
 };
 
 use super::cm_free::{CmShapeContext, FlatSlot, synthesize_free_cm_flat};
@@ -125,7 +126,12 @@ pub(super) fn reduce_task_returns_in_func(
 
     body.stmts.insert(
         0,
-        let_mut_stmt(TASK_DELIVERED_LOCAL, delivered, TypeTable::BOOL, bool_lit(false)),
+        let_mut_stmt(
+            TASK_DELIVERED_LOCAL,
+            delivered,
+            TypeTable::BOOL,
+            bool_lit(false),
+        ),
     );
     func.local_count = next_local;
     func.locals.extend(extra);

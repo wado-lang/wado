@@ -31,12 +31,15 @@ use crate::name::{
     FqTraitName, FqTypeName, LocalMethodName, MethodName, RefKind, TEMPLATE_BLOCK_LABEL,
     TEMPLATE_FORMATTER_LOCAL, TEMPLATE_RESULT_LOCAL, hole_fmt_helper_name,
 };
-use crate::synthesis::common::{field_access, locals_from_params, make_synthetic_free_function};
+use crate::synthesis::common::{
+    deref_expr, field_access, locals_from_params, make_synthetic_free_function, mut_ref_expr,
+    ref_expr,
+};
 use crate::synthesis::traits::case_index_dispatch;
 use crate::tir::{
     CallArg, FunctionRef, LetStorage, MonomorphInfo, ResolvedType, StructDef, TemplateId,
     TemplateShape, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam,
-    TirStmt, TirStmtKind, TirStructField, TirTemplatePart, TirUnaryOp, TypeId, TypeTable,
+    TirStmt, TirStmtKind, TirStructField, TirTemplatePart, TypeId, TypeTable,
 };
 use crate::tir_visitor::{TirOptVisitor, opt_walk_expr};
 use crate::token::Span;
@@ -297,18 +300,8 @@ fn build_hole_fmt_helper(
                 .as_ref()
                 .map_or(FormatKind::Display, |spec| spec.kind);
             let formatter = match hole.spec.as_ref().filter(|s| s.needs_formatter_fields()) {
-                Some(spec) => TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::MutRef,
-                        expr: Box::new(build_formatter_literal(
-                            &f_buf,
-                            formatter_type,
-                            spec,
-                            ctx.tt,
-                            ctx.names,
-                            span,
-                        )),
-                    },
+                Some(spec) => mut_ref_expr(
+                    build_formatter_literal(&f_buf, formatter_type, spec, ctx.tt, ctx.names, span),
                     mut_ref_formatter,
                     span,
                 ),
@@ -556,11 +549,8 @@ fn build_template_block(
                     idx
                 };
 
-                let fmt_mut_ref = TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::MutRef,
-                        expr: Box::new(formatter_local(fmt_index, formatter_type, span)),
-                    },
+                let fmt_mut_ref = mut_ref_expr(
+                    formatter_local(fmt_index, formatter_type, span),
                     mut_ref_formatter,
                     span,
                 );
@@ -620,14 +610,7 @@ impl BufLocal {
 
     fn mut_ref(&self, tt: &Rc<RefCell<TypeTable>>) -> TirExpr {
         let mut_ref_string = tt.borrow_mut().make_mut_ref(self.string_type);
-        TirExpr::new(
-            TirExprKind::Unary {
-                op: TirUnaryOp::MutRef,
-                expr: Box::new(self.read()),
-            },
-            mut_ref_string,
-            self.span,
-        )
+        mut_ref_expr(self.read(), mut_ref_string, self.span)
     }
 
     /// `$r.push_str::<String>(value)`.
@@ -851,14 +834,7 @@ fn deref_to_inner(expr: TirExpr, target_type: TypeId, span: Span) -> TirExpr {
         return expr;
     }
     // Just wrap in a single Deref — the lower phase handles multi-layer deref
-    TirExpr::new(
-        TirExprKind::Unary {
-            op: TirUnaryOp::Deref,
-            expr: Box::new(expr),
-        },
-        target_type,
-        span,
-    )
+    deref_expr(expr, target_type, span)
 }
 
 /// Peel a newtype receiver to its base type so a format call targets the
@@ -928,14 +904,7 @@ fn trait_fmt_call(
     let mangled = local_name.to_mangled_name();
 
     let ref_type = ctx.tt.borrow_mut().make_ref(type_id);
-    let receiver = TirExpr::new(
-        TirExprKind::Unary {
-            op: TirUnaryOp::Ref,
-            expr: Box::new(val),
-        },
-        ref_type,
-        span,
-    );
+    let receiver = ref_expr(val, ref_type, span);
 
     let call = TirExpr::new(
         TirExprKind::method_call(
