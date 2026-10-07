@@ -35,13 +35,13 @@ type "functype//serde_serialize_trait.wado/$cm_binding__Stdout_write_via_stream"
 
 type "functype//serde_serialize_trait.wado/$cm_export__run" = fn();  // TypeId(13)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(14)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(14)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(15)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(16)
 
-type "functype//serde_serialize_trait.wado/serde_serialize_trait.wado/TextSerializer^serde_serialize_trait.wado/Serializer::serialize_string$sroa$&mut self.buf" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref null "serde_serialize_trait.wado//SerializeError";  // TypeId(17)
+type "functype//serde_serialize_trait.wado/serde_serialize_trait.wado/TextSerializer^serde_serialize_trait.wado/Serializer::serialize_string$sroa[&mut self.buf]" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref null "serde_serialize_trait.wado//SerializeError";  // TypeId(17)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(18)
 
@@ -100,9 +100,9 @@ fn "serde_serialize_trait.wado/run"() with Stdout {
     start_109 = builtin::i32_wrap_i64(local.tee packed_43("wasi/stream-new"()));
     start_41 = builtin::i32_wrap_i64(packed_43 >> 32_i64);
     start_109 = "serde_serialize_trait.wado/$cm_binding__Stdout_write_via_stream"(start_109);
-    "core:rt/write_string_to_stream"(start_41, s_6.repr, s_6.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_41, s_6.repr, s_6.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_109);
-    drop("serde_serialize_trait.wado/serde_serialize_trait.wado/TextSerializer^serde_serialize_trait.wado/Serializer::serialize_string$sroa$&mut self.buf"(local.tee s_6(local.tee $sroa_ser_buf_91(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 })), global:serde_serialize_trait.wado::$const_obj_6));
+    drop("serde_serialize_trait.wado/serde_serialize_trait.wado/TextSerializer^serde_serialize_trait.wado/Serializer::serialize_string$sroa[&mut self.buf]"(local.tee s_6(local.tee $sroa_ser_buf_91(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 })), global:serde_serialize_trait.wado::$const_obj_6));
     local.tee s_6(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }).used = 8;
     builtin::array_copy<u8>(s_6.repr, 0, global:serde_serialize_trait.wado::$const_obj_5, 0, 8);
     $inline_core_prelude_string_wado_String__internal_push_string_28: block {
@@ -118,7 +118,7 @@ fn "serde_serialize_trait.wado/run"() with Stdout {
     start_109 = builtin::i32_wrap_i64(local.tee packed_43("wasi/stream-new"()));
     new_used_40 = builtin::i32_wrap_i64(packed_43 >> 32_i64);
     start_109 = "serde_serialize_trait.wado/$cm_binding__Stdout_write_via_stream"(start_109);
-    "core:rt/write_string_to_stream"(new_used_40, s_6.repr, s_6.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_40, s_6.repr, s_6.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_109);
 }
 
@@ -131,7 +131,7 @@ fn "serde_serialize_trait.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -209,7 +209,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "serde_serialize_trait.wado/serde_serialize_trait.wado/TextSerializer^serde_serialize_trait.wado/Serializer::serialize_string$sroa$&mut self.buf"(self, v) {
+fn "serde_serialize_trait.wado/serde_serialize_trait.wado/TextSerializer^serde_serialize_trait.wado/Serializer::serialize_string$sroa[&mut self.buf]"(self, v) {
     let $load_3: ref Array<u8>;
     let $local_2: ref "core:prelude/string.wado//String";
     let self_21: i32;

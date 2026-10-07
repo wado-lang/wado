@@ -41,7 +41,7 @@ type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(16)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(17)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(17)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(18)
 
@@ -89,7 +89,7 @@ fn "bug_const_fold_boxed_ref_writeback.wado/run"() with Stdout {
     rx_22 = "bug_const_fold_boxed_ref_writeback.wado/$cm_binding__Stdout_write_via_stream"(rx_22);
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:bug_const_fold_boxed_ref_writeback.wado::$const_obj_2;
-    "core:rt/write_string_to_stream"(tx_23, $mv_arg_2.repr, $mv_arg_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_23, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_22);
     tx_23 = local.tee rx_22($boxed_param_0_15.value) < 0;
     rx_22 = "core:prelude/primitive.wado/count_digits_u64"(local.tee packed_21(packed_21 = builtin::i64_extend_i32_s(rx_22); select i64(packed_21 < 0_i64, 0_i64 - packed_21, packed_21)));
@@ -113,13 +113,13 @@ fn "bug_const_fold_boxed_ref_writeback.wado/run"() with Stdout {
     rx_22 = builtin::i32_wrap_i64(local.tee packed_21("wasi/stream-new"()));
     tx_23 = builtin::i32_wrap_i64(packed_21 >> 32_i64);
     rx_22 = "bug_const_fold_boxed_ref_writeback.wado/$cm_binding__Stdout_write_via_stream"(rx_22);
-    "core:rt/write_string_to_stream"(tx_23, $local_0.repr, $local_0.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_23, $local_0.repr, $local_0.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_22);
     rx_22 = builtin::i32_wrap_i64(local.tee packed_21("wasi/stream-new"()));
     tx_23 = builtin::i32_wrap_i64(packed_21 >> 32_i64);
     rx_22 = "bug_const_fold_boxed_ref_writeback.wado/$cm_binding__Stdout_write_via_stream"(rx_22);
     $local_0 = global:bug_const_fold_boxed_ref_writeback.wado::$const_obj_1;
-    "core:rt/write_string_to_stream"(tx_23, $local_0.repr, $local_0.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_23, $local_0.repr, $local_0.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_22);
 }
 
@@ -215,7 +215,7 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);

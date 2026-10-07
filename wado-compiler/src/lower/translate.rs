@@ -228,6 +228,8 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
             })
         }),
         sroa_param_clones: IndexMap::default(),
+        dae_reshaped: IndexMap::default(),
+        renamed: Vec::new(),
         sroa_param_clone_fields: IndexMap::default(),
     };
     // Finalize the born-resolved callee ids: append the interned extern stubs,
@@ -718,21 +720,20 @@ impl Translator<'_> {
         // converted `Rc` so the optimizer's closure-type DCE still
         // matches. The fallback covers methods that never made the
         // top-level list (e.g. inline-only).
-        let call_method = func_map
-            .get(&Rc::as_ptr(&cf.call_method))
-            .cloned()
-            .unwrap_or_else(|| {
-                Rc::new(RefCell::new(
-                    self.convert_function(&cf.call_method.borrow()),
-                ))
-            });
+        let shared = |method: &Rc<RefCell<TirFunction>>| {
+            func_map
+                .get(&Rc::as_ptr(method))
+                .cloned()
+                .unwrap_or_else(|| Rc::new(RefCell::new(self.convert_function(&method.borrow()))))
+        };
         nir::ClosureFunctor {
             module_source: cf.module_source.clone(),
             id: cf.id,
             struct_name: cf.struct_name.clone(),
             struct_type_id: cf.struct_type_id,
             ref_type_id: cf.ref_type_id,
-            call_method,
+            call_method: shared(&cf.call_method),
+            inspect_method: shared(&cf.inspect_method),
             canonical_user_params: cf.canonical_user_params.clone(),
             canonical_return: cf.canonical_return,
         }

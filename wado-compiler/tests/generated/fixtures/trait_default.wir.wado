@@ -39,13 +39,13 @@ type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(16)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(17)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(17)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(18)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(19)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(20)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(20)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(21)
 
@@ -94,12 +94,12 @@ fn "trait_default.wado/trait_default_count"() with Stdout {
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $sroa_iter_index_56 = n < 0;
     n = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(n); select i64(x < 0_i64, 0_i64 - x, x)));
-    $sroa_iter_index_56 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($local_3, $sroa_iter_index_56, n);
+    $sroa_iter_index_56 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_3, $sroa_iter_index_56, n);
     "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, $sroa_iter_index_56, x, n);
     n = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     $sroa_iter_index_56 = builtin::i32_wrap_i64(x >> 32_i64);
     n = "trait_default.wado/$cm_binding__Stdout_write_via_stream"(n);
-    "core:rt/write_string_to_stream"($sroa_iter_index_56, $local_3.repr, $local_3.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_iter_index_56, $local_3.repr, $local_3.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(n);
 }
 
@@ -112,13 +112,13 @@ fn "trait_default.wado/trait_default_override"() with Stdout {
     rx_8 = "trait_default.wado/$cm_binding__Stdout_write_via_stream"(rx_8);
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:trait_default.wado::$const_obj_23;
-    "core:rt/write_string_to_stream"(tx_9, $mv_arg_2.repr, $mv_arg_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_9, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_8);
     rx_8 = builtin::i32_wrap_i64(local.tee packed_7("wasi/stream-new"()));
     tx_9 = builtin::i32_wrap_i64(packed_7 >> 32_i64);
     rx_8 = "trait_default.wado/$cm_binding__Stdout_write_via_stream"(rx_8);
     $mv_arg_2 = global:trait_default.wado::$const_obj_22;
-    "core:rt/write_string_to_stream"(tx_9, $mv_arg_2.repr, $mv_arg_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_9, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_8);
 }
 
@@ -135,31 +135,31 @@ fn "trait_default.wado/$cm_export__run"() {
     rx_52 = "trait_default.wado/$cm_binding__Stdout_write_via_stream"(rx_52);
     let $mv_field_2: ref Array<u8>;
     $mv_field_2 = array.new_data<u8>("Hi, Alice!");
-    "core:rt/write_string_to_stream"(tx_53, $mv_field_2, 10);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_53, $mv_field_2, 10);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_52);
     rx_52 = builtin::i32_wrap_i64(local.tee packed_51("wasi/stream-new"()));
     tx_53 = builtin::i32_wrap_i64(packed_51 >> 32_i64);
     rx_52 = "trait_default.wado/$cm_binding__Stdout_write_via_stream"(rx_52);
     $mv_field_2 = array.new_data<u8>("Hello, Robot-42!");
-    "core:rt/write_string_to_stream"(tx_53, $mv_field_2, 16);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_53, $mv_field_2, 16);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_52);
     rx_52 = builtin::i32_wrap_i64(local.tee packed_51("wasi/stream-new"()));
     tx_53 = builtin::i32_wrap_i64(packed_51 >> 32_i64);
     rx_52 = "trait_default.wado/$cm_binding__Stdout_write_via_stream"(rx_52);
     $mv_field_2 = array.new_data<u8>("Widget");
-    "core:rt/write_string_to_stream"(tx_53, $mv_field_2, 6);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_53, $mv_field_2, 6);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_52);
     rx_52 = builtin::i32_wrap_i64(local.tee packed_51("wasi/stream-new"()));
     tx_53 = builtin::i32_wrap_i64(packed_51 >> 32_i64);
     rx_52 = "trait_default.wado/$cm_binding__Stdout_write_via_stream"(rx_52);
     $mv_field_2 = array.new_data<u8>("[Widget]");
-    "core:rt/write_string_to_stream"(tx_53, $mv_field_2, 8);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_53, $mv_field_2, 8);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_52);
     rx_52 = builtin::i32_wrap_i64(local.tee packed_51("wasi/stream-new"()));
     tx_53 = builtin::i32_wrap_i64(packed_51 >> 32_i64);
     rx_52 = "trait_default.wado/$cm_binding__Stdout_write_via_stream"(rx_52);
     $mv_field_2 = array.new_data<u8>("Description: [Widget]");
-    "core:rt/write_string_to_stream"(tx_53, $mv_field_2, 21);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_53, $mv_field_2, 21);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_52);
     "trait_default.wado/trait_default_count"();
     "trait_default.wado/trait_default_override"();
@@ -249,7 +249,7 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -327,7 +327,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

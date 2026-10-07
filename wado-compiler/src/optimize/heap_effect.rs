@@ -10,7 +10,6 @@ use crate::builtin_facts::{SideEffect, Storage};
 use crate::graph::strongly_connected_components;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::is_closure_call_name;
 use crate::nir::{FuncId, NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind};
 use crate::nir_package::NirPackage;
@@ -168,7 +167,7 @@ impl FunctionEntry {
         Self {
             edit,
             callee: classify_callee(f, project),
-            closure: f.body.is_some() && is_closure_call_name(&f.name),
+            closure: f.body.is_some() && f.is_closure_call(),
             calls,
             calls_indirect,
         }

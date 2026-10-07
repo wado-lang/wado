@@ -936,17 +936,19 @@ fn mint_scalarized_clones(
         if let (Some(info), Some(method)) = (&mut clone.method_info, method_name) {
             info.method_name = method;
         }
-        // The name spells the clone as minted, and this pass runs once per
+        // The name spells the clone's identity, and this pass runs once per
         // fixpoint iteration and reaches one clone by more than one chain of
-        // clones, so the one this run wants may already stand under it. `dae`
-        // may since have dropped a parameter from it in place, and then the
-        // calls stay on their source, which still has the shape they pass.
+        // clones, so the one this run wants may already stand under it. A
+        // function reshaped since is renamed for it (`dae_name`), so whatever
+        // stands under the name takes what the name says.
         let func_key =
             FunctionRef::from_resolved(&clone, clone.module_source.clone()).function_id();
         if let Some(&existing) = project.func_index.get(&func_key) {
-            if takes_wanted_params(project, existing, &clone, *key, candidates) {
-                clones.insert(*key, existing);
-            }
+            assert!(
+                takes_wanted_params(project, existing, &clone, *key, candidates),
+                "[NIR] sroa_param: {name} stands with another signature"
+            );
+            clones.insert(*key, existing);
             continue;
         }
         let id = FuncId::new(next_id);
@@ -1382,7 +1384,7 @@ fn plan_call_site(
 ///
 /// A clone's own scalarized parameter is the reason to ask. Unwrapping chains:
 /// `Formatter::write(&mut self)` reading only `self.buf` becomes
-/// `write$sroa$self.buf(buf: &mut String)`, and a later round scalarizes that `String`
+/// `write$sroa[self.buf](buf: &mut String)`, and a later round scalarizes that `String`
 /// in turn. A caller already holding the inner `String` must not have
 /// `Formatter`'s `buf` projected onto it a second time.
 fn classify_arg(

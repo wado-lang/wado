@@ -35,13 +35,13 @@ type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(14)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(15)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(15)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(16)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(17)
 
-type "functype//opt_drve_trait_method.wado/opt_drve_trait_method.wado/Factory^opt_drve_trait_method.wado/Maker::make$sroa$self.seed" = fn();  // TypeId(18)
+type "functype//opt_drve_trait_method.wado/opt_drve_trait_method.wado/Factory^opt_drve_trait_method.wado/Maker::make$sroa[self.seed]$dae[self, x]" = fn();  // TypeId(18)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(19)
 
@@ -73,7 +73,7 @@ fn "opt_drve_trait_method.wado/run"() with Stdout {
     let start_20: i32;
     let x: i64;
     let start_85: i32;
-    "opt_drve_trait_method.wado/opt_drve_trait_method.wado/Factory^opt_drve_trait_method.wado/Maker::make$sroa$self.seed"();
+    "opt_drve_trait_method.wado/opt_drve_trait_method.wado/Factory^opt_drve_trait_method.wado/Maker::make$sroa[self.seed]$dae[self, x]"();
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     if @unlikely(local.tee new_used_19(0 + 5) > builtin::array_len($local_1.repr)) {
         cold_path;
@@ -104,7 +104,7 @@ fn "opt_drve_trait_method.wado/run"() with Stdout {
     start_20 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     new_used_19 = builtin::i32_wrap_i64(x >> 32_i64);
     start_20 = "opt_drve_trait_method.wado/$cm_binding__Stdout_write_via_stream"(start_20);
-    "core:rt/write_string_to_stream"(new_used_19, $local_1.repr, $local_1.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_19, $local_1.repr, $local_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_20);
 }
 
@@ -200,7 +200,7 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -278,7 +278,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "opt_drve_trait_method.wado/opt_drve_trait_method.wado/Factory^opt_drve_trait_method.wado/Maker::make$sroa$self.seed"() {
+fn "opt_drve_trait_method.wado/opt_drve_trait_method.wado/Factory^opt_drve_trait_method.wado/Maker::make$sroa[self.seed]$dae[self, x]"() {
     global:opt_drve_trait_method.wado::MADE = global:opt_drve_trait_method.wado::MADE + 1;
     return;
 }

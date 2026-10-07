@@ -33,13 +33,13 @@ type "functype//comparison_chain_no_short_circuit.wado/$cm_export__run" = fn(); 
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(13)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(14)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(14)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(15)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(16)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa$self.buf" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(17)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(17)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(18)
 
@@ -81,7 +81,7 @@ fn "comparison_chain_no_short_circuit.wado/run"() with Stdout {
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
     });
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_90, text_22.repr, text_22.used);
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($sroa_$f_buf_90, text_22.repr, text_22.used);
     if @unlikely(local.tee $m1_2($local_7_7.used + 1) > builtin::array_len($local_7_7.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7_7, $m1_2);
@@ -95,7 +95,7 @@ fn "comparison_chain_no_short_circuit.wado/run"() with Stdout {
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
     });
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_90, text_22.repr, text_22.used);
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($sroa_$f_buf_90, text_22.repr, text_22.used);
     if @unlikely(local.tee $m1_5($local_7_7.used + 1) > builtin::array_len($local_7_7.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7_7, $m1_5);
@@ -113,7 +113,7 @@ fn "comparison_chain_no_short_circuit.wado/run"() with Stdout {
     $m1_5 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     start_34 = builtin::i32_wrap_i64(packed >> 32_i64);
     $m1_5 = "comparison_chain_no_short_circuit.wado/$cm_binding__Stdout_write_via_stream"($m1_5);
-    "core:rt/write_string_to_stream"(start_34, $local_7_7.repr, $local_7_7.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_34, $local_7_7.repr, $local_7_7.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($m1_5);
 }
 
@@ -148,7 +148,7 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     }
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -226,7 +226,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa$self.buf"(self, $mv$content$repr, $mv$content$used) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"(self, $mv$content$repr, $mv$content$used) {
     let new_used_19: i32;
     let start_20: i32;
     $inline_core_prelude_string_wado_String__internal_push_string_2: block {

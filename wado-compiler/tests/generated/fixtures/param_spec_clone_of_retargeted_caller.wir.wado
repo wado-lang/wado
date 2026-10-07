@@ -25,7 +25,7 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//param_spec_clone_of_retargeted_caller.wado/outer" = fn(i32) -> i32;  // TypeId(10)
+type "functype//param_spec_clone_of_retargeted_caller.wado/outer$dae[level, strategy]" = fn(i32) -> i32;  // TypeId(10)
 
 type "functype//param_spec_clone_of_retargeted_caller.wado/run" = fn();  // TypeId(11)
 
@@ -33,23 +33,23 @@ type "functype//param_spec_clone_of_retargeted_caller.wado/$cm_binding__Stdout_w
 
 type "functype//param_spec_clone_of_retargeted_caller.wado/$cm_export__run" = fn();  // TypeId(13)
 
-type "functype//param_spec_clone_of_retargeted_caller.wado/work$spec0" = fn(i32) -> i32;  // TypeId(14)
+type "functype//param_spec_clone_of_retargeted_caller.wado/work$spec0$dae[level, strategy]" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//param_spec_clone_of_retargeted_caller.wado/pick$spec0" = fn(i32) -> i32;  // TypeId(15)
+type "functype//param_spec_clone_of_retargeted_caller.wado/pick$spec0$dae[mode]" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//param_spec_clone_of_retargeted_caller.wado/pick$spec1" = fn(i32) -> i32;  // TypeId(16)
+type "functype//param_spec_clone_of_retargeted_caller.wado/pick$spec1$dae[mode]" = fn(i32) -> i32;  // TypeId(16)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(17)
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(18)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(19)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(19)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(20)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(21)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(22)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(22)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
 
@@ -72,8 +72,8 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-fn "param_spec_clone_of_retargeted_caller.wado/outer"(n) {
-    return "param_spec_clone_of_retargeted_caller.wado/work$spec0"(n);
+fn "param_spec_clone_of_retargeted_caller.wado/outer$dae[level, strategy]"(n) {
+    return "param_spec_clone_of_retargeted_caller.wado/work$spec0$dae[level, strategy]"(n);
 }
 
 fn "param_spec_clone_of_retargeted_caller.wado/run"() with Stdout {
@@ -84,34 +84,34 @@ fn "param_spec_clone_of_retargeted_caller.wado/run"() with Stdout {
     let x_24: i64;
     n = black_box(7);
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    is_negative_20 = local.tee self_14("param_spec_clone_of_retargeted_caller.wado/pick$spec0"(n)) < 0;
+    is_negative_20 = local.tee self_14("param_spec_clone_of_retargeted_caller.wado/pick$spec0$dae[mode]"(n)) < 0;
     self_14 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_24(x_24 = builtin::i64_extend_i32_s(self_14); select i64(x_24 < 0_i64, 0_i64 - x_24, x_24)));
-    is_negative_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($local_1, is_negative_20, self_14);
+    is_negative_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1, is_negative_20, self_14);
     "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, is_negative_20, x_24, self_14);
     self_14 = builtin::i32_wrap_i64(local.tee x_24("wasi/stream-new"()));
     is_negative_20 = builtin::i32_wrap_i64(x_24 >> 32_i64);
     self_14 = "param_spec_clone_of_retargeted_caller.wado/$cm_binding__Stdout_write_via_stream"(self_14);
-    "core:rt/write_string_to_stream"(is_negative_20, $local_1.repr, $local_1.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_20, $local_1.repr, $local_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_14);
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    is_negative_20 = local.tee self_14("param_spec_clone_of_retargeted_caller.wado/pick$spec1"(n)) < 0;
+    is_negative_20 = local.tee self_14("param_spec_clone_of_retargeted_caller.wado/pick$spec1$dae[mode]"(n)) < 0;
     self_14 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_24(x_24 = builtin::i64_extend_i32_s(self_14); select i64(x_24 < 0_i64, 0_i64 - x_24, x_24)));
-    is_negative_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($local_1, is_negative_20, self_14);
+    is_negative_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1, is_negative_20, self_14);
     "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, is_negative_20, x_24, self_14);
     self_14 = builtin::i32_wrap_i64(local.tee x_24("wasi/stream-new"()));
     is_negative_20 = builtin::i32_wrap_i64(x_24 >> 32_i64);
     self_14 = "param_spec_clone_of_retargeted_caller.wado/$cm_binding__Stdout_write_via_stream"(self_14);
-    "core:rt/write_string_to_stream"(is_negative_20, $local_1.repr, $local_1.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_20, $local_1.repr, $local_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_14);
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    self_14 = local.tee n("param_spec_clone_of_retargeted_caller.wado/outer"(n)) < 0;
+    self_14 = local.tee n("param_spec_clone_of_retargeted_caller.wado/outer$dae[level, strategy]"(n)) < 0;
     n = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_24(x_24 = builtin::i64_extend_i32_s(n); select i64(x_24 < 0_i64, 0_i64 - x_24, x_24)));
-    self_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($local_1, self_14, n);
+    self_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1, self_14, n);
     "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, self_14, x_24, n);
     n = builtin::i32_wrap_i64(local.tee x_24("wasi/stream-new"()));
     self_14 = builtin::i32_wrap_i64(x_24 >> 32_i64);
     n = "param_spec_clone_of_retargeted_caller.wado/$cm_binding__Stdout_write_via_stream"(n);
-    "core:rt/write_string_to_stream"(self_14, $local_1.repr, $local_1.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(self_14, $local_1.repr, $local_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(n);
 }
 
@@ -124,16 +124,16 @@ fn "param_spec_clone_of_retargeted_caller.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "param_spec_clone_of_retargeted_caller.wado/work$spec0"(n) {
+fn "param_spec_clone_of_retargeted_caller.wado/work$spec0$dae[level, strategy]"(n) {
     return n + 6;
 }
 
-fn "param_spec_clone_of_retargeted_caller.wado/pick$spec0"(n) {
-    return "param_spec_clone_of_retargeted_caller.wado/work$spec0"(n) + 1;
+fn "param_spec_clone_of_retargeted_caller.wado/pick$spec0$dae[mode]"(n) {
+    return "param_spec_clone_of_retargeted_caller.wado/work$spec0$dae[level, strategy]"(n) + 1;
 }
 
-fn "param_spec_clone_of_retargeted_caller.wado/pick$spec1"(n) {
-    return "param_spec_clone_of_retargeted_caller.wado/work$spec0"(n);
+fn "param_spec_clone_of_retargeted_caller.wado/pick$spec1$dae[mode]"(n) {
+    return "param_spec_clone_of_retargeted_caller.wado/work$spec0$dae[level, strategy]"(n);
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
@@ -219,7 +219,7 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -297,7 +297,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

@@ -45,15 +45,15 @@ type "functype//blanket_builtin_bound_shadowed_spelling.wado/run$cold0" = fn(); 
 
 type "functype//blanket_builtin_bound_shadowed_spelling.wado/run$cold1" = fn();  // TypeId(17)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(18)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(18)
 
 type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(19)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(20)
 
-type "functype//blanket_builtin_bound_shadowed_spelling.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::reduce$$Closure_0" = fn(ref "core:prelude/slice.wado//SliceValueIter<i32>") -> [i32, i32];  // TypeId(21)
+type "functype//blanket_builtin_bound_shadowed_spelling.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::reduce$$Closure_0$dae[f]" = fn(ref "core:prelude/slice.wado//SliceValueIter<i32>") -> [i32, i32];  // TypeId(21)
 
-type "functype//blanket_builtin_bound_shadowed_spelling.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::reduce$$Closure_1" = fn(ref "core:prelude/slice.wado//SliceValueIter<i32>") -> [i32, i32];  // TypeId(22)
+type "functype//blanket_builtin_bound_shadowed_spelling.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::reduce$$Closure_1$dae[f]" = fn(ref "core:prelude/slice.wado//SliceValueIter<i32>") -> [i32, i32];  // TypeId(22)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
 
@@ -86,7 +86,7 @@ fn "blanket_builtin_bound_shadowed_spelling.wado/run"() with Stdout {
     self_12 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: local.tee $sroa_xs_repr_48(array.new_fixed<i32>(1, 2, 3)), index: 0, end: 3 };
     let $mv$$vr_9$0: i32;
     let $mv$$vr_9$1: i32;
-    multivalue_bind [$mv$$vr_9$0, $mv$$vr_9$1] = "blanket_builtin_bound_shadowed_spelling.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::reduce$$Closure_0"(self_12);
+    multivalue_bind [$mv$$vr_9$0, $mv$$vr_9$1] = "blanket_builtin_bound_shadowed_spelling.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::reduce$$Closure_0$dae[f]"(self_12);
     if @unlikely(local.tee $mv$$vr_9$1((if $mv$$vr_9$0 == 1 -> bool {
         $mv$$vr_9$1 == 6;
     } else {
@@ -96,7 +96,7 @@ fn "blanket_builtin_bound_shadowed_spelling.wado/run"() with Stdout {
         "blanket_builtin_bound_shadowed_spelling.wado/run$cold1"();
         unreachable;
     }
-    multivalue_bind [$mv$$vr_9$1, $mv$$vr_9$0] = "blanket_builtin_bound_shadowed_spelling.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::reduce$$Closure_1"(local.tee self_12(struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_xs_repr_48, index: 0, end: 3 }));
+    multivalue_bind [$mv$$vr_9$1, $mv$$vr_9$0] = "blanket_builtin_bound_shadowed_spelling.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::reduce$$Closure_1$dae[f]"(local.tee self_12(struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_xs_repr_48, index: 0, end: 3 }));
     if @unlikely(local.tee $mv$$vr_9$0((if $mv$$vr_9$1 == 1 -> bool {
         $mv$$vr_9$0 == 6;
     } else {
@@ -111,7 +111,7 @@ fn "blanket_builtin_bound_shadowed_spelling.wado/run"() with Stdout {
     $mv$$vr_9$0 = "blanket_builtin_bound_shadowed_spelling.wado/$cm_binding__Stdout_write_via_stream"($mv$$vr_9$0);
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:blanket_builtin_bound_shadowed_spelling.wado::$const_obj_0;
-    "core:rt/write_string_to_stream"($mv$$vr_9$1, $mv_arg_2.repr, $mv_arg_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($mv$$vr_9$1, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$$vr_9$0);
 }
 
@@ -138,7 +138,7 @@ condition: xs.iter_value().sum() matches { Some(v) && v == 6 }
     unreachable;
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -156,7 +156,7 @@ fn "core:rt/panic"(message) {
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     rx_7 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
-    "core:rt/write_string_to_stream"(tx_8, message.repr, message.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_8, message.repr, message.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_7);
     cold_path;
     unreachable;
@@ -217,7 +217,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
-fn "blanket_builtin_bound_shadowed_spelling.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::reduce$$Closure_0"(self) {
+fn "blanket_builtin_bound_shadowed_spelling.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::reduce$$Closure_0$dae[f]"(self) {
     let $load_1: i32;
     let $load_2: ref Array<i32>;
     let item_7: i32;
@@ -245,7 +245,7 @@ fn "blanket_builtin_bound_shadowed_spelling.wado/core:prelude/slice.wado/SliceVa
     return 0, 0;
 }
 
-fn "blanket_builtin_bound_shadowed_spelling.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::reduce$$Closure_1"(self) {
+fn "blanket_builtin_bound_shadowed_spelling.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::reduce$$Closure_1$dae[f]"(self) {
     let $load_1: i32;
     let $load_2: ref Array<i32>;
     let item_7: i32;

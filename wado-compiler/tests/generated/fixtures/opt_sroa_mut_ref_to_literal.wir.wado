@@ -40,7 +40,7 @@ type "functype//opt_sroa_mut_ref_to_literal.wado/fill" = fn(ref "core:prelude/st
 
 type "functype//opt_sroa_mut_ref_to_literal.wado/bump" = fn(ref "opt_sroa_mut_ref_to_literal.wado//Tally");  // TypeId(14)
 
-type "functype//opt_sroa_mut_ref_to_literal.wado/tally" = fn() -> i32;  // TypeId(15)
+type "functype//opt_sroa_mut_ref_to_literal.wado/tally$dae[start]" = fn() -> i32;  // TypeId(15)
 
 type "functype//opt_sroa_mut_ref_to_literal.wado/run" = fn();  // TypeId(16)
 
@@ -52,7 +52,7 @@ type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(20)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(21)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(21)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(22)
 
@@ -60,7 +60,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(24)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(25)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(25)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(26)
 
@@ -111,7 +111,7 @@ fn "opt_sroa_mut_ref_to_literal.wado/bump"(t) {
     t.n = t.n + 1;
 }
 
-fn "opt_sroa_mut_ref_to_literal.wado/tally"() {
+fn "opt_sroa_mut_ref_to_literal.wado/tally$dae[start]"() {
     let t: ref "opt_sroa_mut_ref_to_literal.wado//Tally";
     "opt_sroa_mut_ref_to_literal.wado/bump"(local.tee t(struct.new "opt_sroa_mut_ref_to_literal.wado//Tally" { n: 5 }));
     "opt_sroa_mut_ref_to_literal.wado/bump"(t);
@@ -142,7 +142,7 @@ fn "opt_sroa_mut_ref_to_literal.wado/run"() with Stdout {
     s_0 = $local_3;
     self_14 = n_2 < 0;
     n_2 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_39(x_39 = builtin::i64_extend_i32_s(n_2); select i64(x_39 < 0_i64, 0_i64 - x_39, x_39)));
-    self_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(s_0, self_14, n_2);
+    self_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(s_0, self_14, n_2);
     "core:prelude/primitive.wado/write_decimal_digits"(s_0.repr, self_14, x_39, n_2);
     if @unlikely(local.tee n_2($local_3.used + 1) > builtin::array_len($local_3.repr)) {
         cold_path;
@@ -152,14 +152,14 @@ fn "opt_sroa_mut_ref_to_literal.wado/run"() with Stdout {
     $local_3.used = n_2;
     builtin::array_copy<u8>($local_3.repr, self_14, global:opt_sroa_mut_ref_to_literal.wado::$const_obj_4, 0, 1);
     s_0 = $local_3;
-    n_2 = local.tee self_14("opt_sroa_mut_ref_to_literal.wado/tally"()) < 0;
+    n_2 = local.tee self_14("opt_sroa_mut_ref_to_literal.wado/tally$dae[start]"()) < 0;
     self_14 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_39(x_39 = builtin::i64_extend_i32_s(self_14); select i64(x_39 < 0_i64, 0_i64 - x_39, x_39)));
-    n_2 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(s_0, n_2, self_14);
+    n_2 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(s_0, n_2, self_14);
     "core:prelude/primitive.wado/write_decimal_digits"(s_0.repr, n_2, x_39, self_14);
     self_14 = builtin::i32_wrap_i64(local.tee x_39("wasi/stream-new"()));
     n_2 = builtin::i32_wrap_i64(x_39 >> 32_i64);
     self_14 = "opt_sroa_mut_ref_to_literal.wado/$cm_binding__Stdout_write_via_stream"(self_14);
-    "core:rt/write_string_to_stream"(n_2, $local_3.repr, $local_3.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(n_2, $local_3.repr, $local_3.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_14);
 }
 
@@ -255,7 +255,7 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -378,7 +378,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     };
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

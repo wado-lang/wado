@@ -47,7 +47,7 @@ type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(17)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(18)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(18)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(19)
 
@@ -162,7 +162,7 @@ fn "let_else_loop.wado/run"() with Stdout {
     sum = builtin::i32_wrap_i64(local.tee x_37("wasi/stream-new"()));
     n_4 = builtin::i32_wrap_i64(x_37 >> 32_i64);
     sum = "let_else_loop.wado/$cm_binding__Stdout_write_via_stream"(sum);
-    "core:rt/write_string_to_stream"(n_4, $local_7_7.repr, $local_7_7.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(n_4, $local_7_7.repr, $local_7_7.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(sum);
     sum = 0;
     $local_7_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
@@ -279,7 +279,7 @@ fn "let_else_loop.wado/run"() with Stdout {
                     rx_90 = builtin::i32_wrap_i64(local.tee packed_89("wasi/stream-new"()));
                     tx_91 = builtin::i32_wrap_i64(packed_89 >> 32_i64);
                     handle_50 = "let_else_loop.wado/$cm_binding__Stdout_write_via_stream"(rx_90);
-                    "core:rt/write_string_to_stream"(tx_91, $local_7_7.repr, $local_7_7.used);
+                    "core:rt/write_string_to_stream$dae[add_newline]"(tx_91, $local_7_7.repr, $local_7_7.used);
                     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_50);
                     sum = sum + 1;
                     break $fused_$inline_at_16;
@@ -383,7 +383,7 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);

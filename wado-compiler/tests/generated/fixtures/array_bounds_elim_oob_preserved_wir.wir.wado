@@ -35,13 +35,13 @@ type "functype//array_bounds_elim_oob_preserved_wir.wado/$cm_export__run" = fn()
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(14)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(15)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(15)
 
 type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(16)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(17)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0" = fn();  // TypeId(18)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$dae[self, index, $v1]" = fn();  // TypeId(18)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(19)
 
@@ -90,7 +90,7 @@ fn "array_bounds_elim_oob_preserved_wir.wado/$cm_export__run"() {
     let $sroa_arr_repr_24: ref Array<i32>;
     $sroa_arr_repr_24 = array.new_fixed<i32>(10, 20, 30);
     cold_path;
-    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"();
+    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$dae[self, index, $v1]"();
     unreachable;
     drop(builtin::array_get_value<i32>($sroa_arr_repr_24, 3));
     rx_16 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
@@ -98,7 +98,7 @@ fn "array_bounds_elim_oob_preserved_wir.wado/$cm_export__run"() {
     rx_16 = "array_bounds_elim_oob_preserved_wir.wado/$cm_binding__Stdout_write_via_stream"(rx_16);
     let $mv_field_2: ref Array<u8>;
     $mv_field_2 = array.new_data<u8>("should not reach here");
-    "core:rt/write_string_to_stream"(tx_17, $mv_field_2, 21);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_17, $mv_field_2, 21);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_16);
     "wasi/task-return"(0);
 }
@@ -125,7 +125,7 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     }
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -143,7 +143,7 @@ fn "core:rt/panic"(message) {
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     rx_7 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
-    "core:rt/write_string_to_stream"(tx_8, message.repr, message.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_8, message.repr, message.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_7);
     cold_path;
     unreachable;
@@ -204,7 +204,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"() {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$dae[self, index, $v1]"() {
     let $load_2: ref Array<u8>;
     let $local_4_2: ref "core:prelude/string.wado//String";
     let new_used_10: i32;

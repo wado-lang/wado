@@ -48,11 +48,11 @@ type "functype//serde_ndjson_wrapper.wado/$cm_export__run" = fn();  // TypeId(15
 
 type "functype//core:json/write_json_bool" = fn(ref "core:prelude/string.wado//String", bool) -> ref null "core:serde//SerializeError";  // TypeId(16)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(17)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(17)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(18)
 
-type "functype//core:json/core/json/to_string<serde_ndjson_wrapper.wado/Message>$sroa$value.ok$spec0" = fn(ref "core:prelude/types.wado//Option<char>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(19)
+type "functype//core:json/core/json/to_string<serde_ndjson_wrapper.wado/Message>$sroa[value.ok]$spec0$dae[value]" = fn(ref "core:prelude/types.wado//Option<char>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(19)
 
 type "functype//core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32);  // TypeId(20)
 
@@ -62,7 +62,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" 
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Add::add" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(23)
 
-type "functype//core:serde/serde_ndjson_wrapper.wado/Message^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa$self.ok$s.buf" = fn(bool, ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(24)
+type "functype//core:serde/serde_ndjson_wrapper.wado/Message^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.ok, s.buf]" = fn(bool, ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(24)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(25)
 
@@ -102,7 +102,7 @@ fn "serde_ndjson_wrapper.wado/$cm_export__run"() {
     let packed: i64;
     let tx_11: i32;
     let s: ref "core:prelude/string.wado//String";
-    s = "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Add::add"(let $mv$$vr_2$0: i32; let $mv$$vr_2$1: ref null "core:prelude/string.wado//String"; let $mv$$vr_2$2: ref null "core:serde//SerializeError"; multivalue_bind [$mv$$vr_2$0, $mv$$vr_2$1, $mv$$vr_2$2] = "core:json/core/json/to_string<serde_ndjson_wrapper.wado/Message>$sroa$value.ok$spec0"(global:core:builtin::$unit_case$core:prelude/types.wado//Option<char>$0); (if $mv$$vr_2$0 == 0 -> ref "core:prelude/string.wado//String" {
+    s = "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Add::add"(let $mv$$vr_2$0: i32; let $mv$$vr_2$1: ref null "core:prelude/string.wado//String"; let $mv$$vr_2$2: ref null "core:serde//SerializeError"; multivalue_bind [$mv$$vr_2$0, $mv$$vr_2$1, $mv$$vr_2$2] = "core:json/core/json/to_string<serde_ndjson_wrapper.wado/Message>$sroa[value.ok]$spec0$dae[value]"(global:core:builtin::$unit_case$core:prelude/types.wado//Option<char>$0); (if $mv$$vr_2$0 == 0 -> ref "core:prelude/string.wado//String" {
         local.tee s(ref.as_non_null($mv$$vr_2$1));
     } else if @likely($mv$$vr_2$0 == 1) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 117, 108, 108), used: 4 };
@@ -112,7 +112,7 @@ fn "serde_ndjson_wrapper.wado/$cm_export__run"() {
     $mv$$vr_2$0 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_11 = builtin::i32_wrap_i64(packed >> 32_i64);
     $mv$$vr_2$0 = "serde_ndjson_wrapper.wado/$cm_binding__Stdout_write_via_stream"($mv$$vr_2$0);
-    "core:rt/write_string_to_stream"(tx_11, s.repr, s.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_11, s.repr, s.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$$vr_2$0);
     "wasi/task-return"(0);
 }
@@ -139,7 +139,7 @@ fn "core:json/write_json_bool"(buf, v) {
     return ref.null none;
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -205,13 +205,13 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
-fn "core:json/core/json/to_string<serde_ndjson_wrapper.wado/Message>$sroa$value.ok$spec0"(trailing_char) {
+fn "core:json/core/json/to_string<serde_ndjson_wrapper.wado/Message>$sroa[value.ok]$spec0$dae[value]"(trailing_char) {
     let buf: ref "core:prelude/string.wado//String";
     let $qm_e: ref "core:serde//SerializeError";
     let c: char;
     let $match_7: ref null "core:serde//SerializeError";
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
-    if @likely(ref.is_null(local.tee $match_7("core:serde/serde_ndjson_wrapper.wado/Message^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa$self.ok$s.buf"(1, buf)))) {
+    if @likely(ref.is_null(local.tee $match_7("core:serde/serde_ndjson_wrapper.wado/Message^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.ok, s.buf]"(1, buf)))) {
     } else {
         $qm_e = ref.as_non_null($match_7);
         cold_path;
@@ -351,7 +351,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits
     return result;
 }
 
-fn "core:serde/serde_ndjson_wrapper.wado/Message^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa$self.ok$s.buf"(self, s) {
+fn "core:serde/serde_ndjson_wrapper.wado/Message^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.ok, s.buf]"(self, s) {
     let $qm_e_10: ref "core:serde//SerializeError";
     let new_used_28: i32;
     let start_29: i32;

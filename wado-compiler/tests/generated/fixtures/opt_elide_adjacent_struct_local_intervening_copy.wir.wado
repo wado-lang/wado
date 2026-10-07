@@ -29,11 +29,11 @@ type "functype//opt_elide_adjacent_struct_local_intervening_copy.wado/$cm_bindin
 
 type "functype//opt_elide_adjacent_struct_local_intervening_copy.wado/$cm_export__run" = fn();  // TypeId(11)
 
-type "functype//opt_elide_adjacent_struct_local_intervening_copy.wado/dump$spec0" = fn();  // TypeId(12)
+type "functype//opt_elide_adjacent_struct_local_intervening_copy.wado/dump$spec0$dae[r]" = fn();  // TypeId(12)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(13)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(14)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(14)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(15)
 
@@ -67,11 +67,11 @@ fn "opt_elide_adjacent_struct_local_intervening_copy.wado/$cm_binding__Stdout_wr
 }
 
 fn "opt_elide_adjacent_struct_local_intervening_copy.wado/$cm_export__run"() {
-    "opt_elide_adjacent_struct_local_intervening_copy.wado/dump$spec0"();
+    "opt_elide_adjacent_struct_local_intervening_copy.wado/dump$spec0$dae[r]"();
     "wasi/task-return"(0);
 }
 
-fn "opt_elide_adjacent_struct_local_intervening_copy.wado/dump$spec0"() with Stdout {
+fn "opt_elide_adjacent_struct_local_intervening_copy.wado/dump$spec0$dae[r]"() with Stdout {
     let $local_1: ref "core:prelude/string.wado//String";
     let packed: i64;
     let $sroa_$f_buf_59: ref "core:prelude/string.wado//String";
@@ -102,7 +102,7 @@ fn "opt_elide_adjacent_struct_local_intervening_copy.wado/dump$spec0"() with Std
     start_148 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     new_used_147 = builtin::i32_wrap_i64(packed >> 32_i64);
     start_148 = "opt_elide_adjacent_struct_local_intervening_copy.wado/$cm_binding__Stdout_write_via_stream"(start_148);
-    "core:rt/write_string_to_stream"(new_used_147, $local_1.repr, $local_1.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_147, $local_1.repr, $local_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_148);
 }
 
@@ -128,7 +128,7 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     }
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);

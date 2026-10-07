@@ -40,13 +40,13 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(11)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//async_export_called_directly.wado/deliver" = fn() -> ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>";  // TypeId(13)
+type "functype//async_export_called_directly.wado/deliver$dae[n]" = fn() -> ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>";  // TypeId(13)
 
 type "functype//async_export_called_directly.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
 type "functype//async_export_called_directly.wado/$cm_export__run" = fn();  // TypeId(15)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(16)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(16)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(17)
 
@@ -73,7 +73,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:async_export_called_directly.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 101, 108, 105, 118, 101, 114, 32, 49), used: 9 };
 
-fn "async_export_called_directly.wado/deliver"() with Stdout {
+fn "async_export_called_directly.wado/deliver$dae[n]"() with Stdout {
     let $task_result: ref null "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>";
     let packed: i64;
     let rx_37: i32;
@@ -84,7 +84,7 @@ fn "async_export_called_directly.wado/deliver"() with Stdout {
     rx_37 = "async_export_called_directly.wado/$cm_binding__Stdout_write_via_stream"(rx_37);
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:async_export_called_directly.wado::$const_obj_0;
-    "core:rt/write_string_to_stream"(tx_38, $mv_arg_2.repr, $mv_arg_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_38, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_37);
     if @likely(ref.is_null(local.tee $task_result(struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: 1 })) == 0) {
         return ref.as_non_null($task_result);
@@ -101,18 +101,18 @@ fn "async_export_called_directly.wado/$cm_export__run"() {
     let packed: i64;
     let rx_6: i32;
     let tx_7: i32;
-    drop("async_export_called_directly.wado/deliver"());
+    drop("async_export_called_directly.wado/deliver$dae[n]"());
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
     rx_6 = "async_export_called_directly.wado/$cm_binding__Stdout_write_via_stream"(rx_6);
     let $mv_field_2: ref Array<u8>;
     $mv_field_2 = array.new_fixed<u8>(100, 111, 110, 101);
-    "core:rt/write_string_to_stream"(tx_7, $mv_field_2, 4);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_7, $mv_field_2, 4);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_6);
     "wasi/task-return"(0);
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);

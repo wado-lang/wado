@@ -49,7 +49,7 @@ type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(12)
 
-type "functype//core:json/core/json/to_string<serde_bound_driven_absence.wado/UsedForSerialize>$sroa$value.x" = fn(i32, ref "core:prelude/types.wado//Option<char>") -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>";  // TypeId(13)
+type "functype//core:json/core/json/to_string<serde_bound_driven_absence.wado/UsedForSerialize>$sroa[value.x]" = fn(i32, ref "core:prelude/types.wado//Option<char>") -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>";  // TypeId(13)
 
 type "functype//core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32);  // TypeId(14)
 
@@ -57,9 +57,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(16)
 
-type "functype//core:serde/serde_bound_driven_absence.wado/UsedForSerialize^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa$self.x$s.buf" = fn(i32, ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(17)
+type "functype//core:serde/serde_bound_driven_absence.wado/UsedForSerialize^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.x, s.buf]" = fn(i32, ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(17)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$sroa$self.buf" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(18)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(18)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
@@ -75,7 +75,7 @@ global global:core:json::$const_obj_33: ref Array<u8> = array.new_fixed<u8>(44, 
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<char>$0: ref "core:prelude/types.wado//Option<char>" = struct.new "core:prelude/types.wado//Option<char>" { 0 };
 
 fn "serde_bound_driven_absence.wado/$cm_export__run"() {
-    drop("core:json/core/json/to_string<serde_bound_driven_absence.wado/UsedForSerialize>$sroa$value.x"(1, global:core:builtin::$unit_case$core:prelude/types.wado//Option<char>$0));
+    drop("core:json/core/json/to_string<serde_bound_driven_absence.wado/UsedForSerialize>$sroa[value.x]"(1, global:core:builtin::$unit_case$core:prelude/types.wado//Option<char>$0));
     "wasi/task-return"(0);
 }
 
@@ -162,12 +162,12 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
-fn "core:json/core/json/to_string<serde_bound_driven_absence.wado/UsedForSerialize>$sroa$value.x"(value, trailing_char) {
+fn "core:json/core/json/to_string<serde_bound_driven_absence.wado/UsedForSerialize>$sroa[value.x]"(value, trailing_char) {
     let buf: ref "core:prelude/string.wado//String";
     let $qm_e: ref "core:serde//SerializeError";
     let $match_7: ref null "core:serde//SerializeError";
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
-    if @likely(ref.is_null(local.tee $match_7("core:serde/serde_bound_driven_absence.wado/UsedForSerialize^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa$self.x$s.buf"(value, buf)))) {
+    if @likely(ref.is_null(local.tee $match_7("core:serde/serde_bound_driven_absence.wado/UsedForSerialize^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.x, s.buf]"(value, buf)))) {
     } else {
         $qm_e = ref.as_non_null($match_7);
         cold_path;
@@ -278,7 +278,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     };
 }
 
-fn "core:serde/serde_bound_driven_absence.wado/UsedForSerialize^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa$self.x$s.buf"(self, s) {
+fn "core:serde/serde_bound_driven_absence.wado/UsedForSerialize^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.x, s.buf]"(self, s) {
     let new_used_28: i32;
     let start_29: i32;
     let x: i64;
@@ -292,7 +292,7 @@ fn "core:serde/serde_bound_driven_absence.wado/UsedForSerialize^core:serde/Seria
     "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"(s, global:core:serde::$const_obj_29, 0);
     start_29 = self < 0;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
-    start_29 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$sroa$self.buf"(s, start_29, self);
+    start_29 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$sroa[self.buf]$dae[alt_prefix]"(s, start_29, self);
     "core:prelude/primitive.wado/write_decimal_digits"(s.repr, start_29, x, self);
     if @unlikely(local.tee self(s.used + 1) > builtin::array_len(s.repr)) {
         cold_path;
@@ -304,7 +304,7 @@ fn "core:serde/serde_bound_driven_absence.wado/UsedForSerialize^core:serde/Seria
     return ref.null none;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$sroa$self.buf"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

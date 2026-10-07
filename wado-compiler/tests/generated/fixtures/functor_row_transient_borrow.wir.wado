@@ -34,7 +34,7 @@ type "functype//functor_row_transient_borrow.wado/read_point" = fn(ref "functor_
 
 type "functype//functor_row_transient_borrow.wado/$cm_export__run" = fn();  // TypeId(12)
 
-type "functype//functor_row_transient_borrow.wado/apply$$Closure_0" = fn(ref "functor_row_transient_borrow.wado//Point") -> i32;  // TypeId(13)
+type "functype//functor_row_transient_borrow.wado/apply$$Closure_0$dae[f]" = fn(ref "functor_row_transient_borrow.wado//Point") -> i32;  // TypeId(13)
 
 type "functype//functor_row_transient_borrow.wado/run$cold0" = fn(i32, i32, i32);  // TypeId(14)
 
@@ -48,7 +48,7 @@ type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(19)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(20)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(20)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(21)
 
@@ -91,7 +91,7 @@ fn "functor_row_transient_borrow.wado/$cm_export__run"() {
     let r: i32;
     let $v0: i32;
     let $v2: i32;
-    r = "functor_row_transient_borrow.wado/apply$$Closure_0"(local.tee p(struct.new "functor_row_transient_borrow.wado//Point" { x: black_box(10), y: black_box(20) }));
+    r = "functor_row_transient_borrow.wado/apply$$Closure_0$dae[f]"(local.tee p(struct.new "functor_row_transient_borrow.wado//Point" { x: black_box(10), y: black_box(20) }));
     if @unlikely(local.tee $v2(local.tee $v0(p.x) + r) != 40) {
         cold_path;
         "functor_row_transient_borrow.wado/run$cold0"(r, $v0, $v2);
@@ -100,7 +100,7 @@ fn "functor_row_transient_borrow.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "functor_row_transient_borrow.wado/apply$$Closure_0"(p) {
+fn "functor_row_transient_borrow.wado/apply$$Closure_0$dae[f]"(p) {
     return "functor_row_transient_borrow.wado/read_point"(p);
 }
 
@@ -127,7 +127,7 @@ fn "functor_row_transient_borrow.wado/run$cold0"(r, $v0, $v2) {
     builtin::array_copy<u8>($load_2, new_used_17, global:functor_row_transient_borrow.wado::$const_obj_12, 0, 33);
     start_18 = start_18 + 60;
     builtin::array_copy<u8>($load_2, start_18, global:functor_row_transient_borrow.wado::$const_obj_11, 0, 1);
-    start_18 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(local.tee $sroa_$f_buf_176($local_5), 0, 2);
+    start_18 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_176($local_5), 0, 2);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_176.repr, start_18, 28_i64, 2);
     if @unlikely(local.tee start_18($local_5.used + 31) > builtin::array_len($local_5.repr)) {
         cold_path;
@@ -141,7 +141,7 @@ fn "functor_row_transient_borrow.wado/run$cold0"(r, $v0, $v2) {
     $sroa_$f_buf_176 = $local_5;
     new_used_17 = $v0 < 0;
     $v0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_77(x_77 = builtin::i64_extend_i32_s($v0); select i64(x_77 < 0_i64, 0_i64 - x_77, x_77)));
-    new_used_17 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_176, new_used_17, $v0);
+    new_used_17 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_176, new_used_17, $v0);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_176.repr, new_used_17, x_77, $v0);
     if @unlikely(local.tee $v0($local_5.used + 4) > builtin::array_len($local_5.repr)) {
         cold_path;
@@ -155,7 +155,7 @@ fn "functor_row_transient_borrow.wado/run$cold0"(r, $v0, $v2) {
     $sroa_$f_buf_176 = $local_5;
     new_used_17 = r < 0;
     r = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_77(x_77 = builtin::i64_extend_i32_s(r); select i64(x_77 < 0_i64, 0_i64 - x_77, x_77)));
-    new_used_17 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_176, new_used_17, r);
+    new_used_17 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_176, new_used_17, r);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_176.repr, new_used_17, x_77, r);
     if @unlikely(local.tee r($local_5.used + 10) > builtin::array_len($local_5.repr)) {
         cold_path;
@@ -169,7 +169,7 @@ fn "functor_row_transient_borrow.wado/run$cold0"(r, $v0, $v2) {
     $sroa_$f_buf_176 = $local_5;
     new_used_17 = $v2 < 0;
     $v2 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_77(x_77 = builtin::i64_extend_i32_s($v2); select i64(x_77 < 0_i64, 0_i64 - x_77, x_77)));
-    new_used_17 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_176, new_used_17, $v2);
+    new_used_17 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_176, new_used_17, $v2);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_176.repr, new_used_17, x_77, $v2);
     if @unlikely(local.tee $v2($local_5.used + 1) > builtin::array_len($local_5.repr)) {
         cold_path;
@@ -352,7 +352,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

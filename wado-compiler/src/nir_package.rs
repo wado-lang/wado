@@ -58,6 +58,13 @@ pub struct NirPackage {
     /// callers in a later round, so its current call sites are not its whole
     /// contract. Identity, not a name test — see the declaration-identity WEP.
     pub sroa_param_clones: IndexMap<FuncId, FuncId>,
+    /// Each function `optimize/dae` has reshaped, as it stood before the first
+    /// parameter was dropped, so its name lists every dropped parameter in
+    /// declaration order however many rounds dropped them.
+    pub dae_reshaped: IndexMap<FuncId, DaeBase>,
+    /// Every function renamed in place, in order, so a cache keyed by store
+    /// position can refresh what went stale. Append-only.
+    pub renamed: Vec<FuncId>,
     /// For each of those clones, which of its locals holds a scalarized field,
     /// and the fields it was projected through, outermost first: the last names
     /// the field the local is now, and a clone of a clone carries its source's
@@ -152,6 +159,17 @@ pub struct NirPackage {
     /// instantiation layer once it has materialised the concrete
     /// trait-method instances.
     pub trait_env: std::sync::Arc<TraitEnv>,
+}
+
+/// A function `optimize/dae` reshaped, as it was declared to it.
+#[derive(Debug, Clone)]
+pub struct DaeBase {
+    pub name: String,
+    pub method_name: Option<String>,
+    /// Every parameter name, in declaration order.
+    pub params: Vec<String>,
+    /// The ones dropped so far.
+    pub dropped: IndexSet<String>,
 }
 
 /// One field `optimize/sroa_param` projected a parameter through.
@@ -309,6 +327,68 @@ impl NirPackage {
             .max()
             .unwrap_or(0);
         FuncId::new(next)
+    }
+
+    /// Give function `id` a new name, and a method its new method name, moving
+    /// the entries keyed by its name along with it. A call names its callee by
+    /// `FuncId`, so calls need no rewrite. Where another function already holds
+    /// the name, nothing changes and that function is returned: a name states
+    /// what a function is, so the two are one.
+    pub fn rename_function(
+        &mut self,
+        id: FuncId,
+        name: String,
+        method_name: Option<String>,
+    ) -> Option<FuncId> {
+        use cranelift_entity::EntityRef;
+        let mut func = self.functions[id.index()].borrow_mut();
+        let old = FunctionRef::from_resolved(&func, func.module_source.clone());
+        let mut renamed = old.clone();
+        renamed.name = name;
+        match (&mut renamed.method_info, method_name) {
+            (Some(info), Some(method)) => info.method_name = method,
+            (None, None) => {}
+            _ => unreachable!("a method is renamed with its method name, and only a method"),
+        }
+        let new_key = renamed.function_id();
+        if let Some(&holder) = self.func_index.get(&new_key) {
+            assert_ne!(holder, id, "a rename changes the name");
+            return Some(holder);
+        }
+        let old_key = old.function_id();
+        let old_strings_key = (func.module_source.clone(), func.name.clone());
+        func.name = renamed.name;
+        if let (Some(info), Some(method)) = (&mut func.method_info, renamed.method_info) {
+            info.method_name = method.method_name;
+        }
+        let new_strings_key = (func.module_source.clone(), func.name.clone());
+        drop(func);
+        assert_eq!(
+            self.func_index.shift_remove(&old_key),
+            Some(id),
+            "a function is indexed by its name"
+        );
+        self.func_index.insert(new_key, id);
+        if let Some(strings) = self.function_strings.shift_remove(&old_strings_key) {
+            self.function_strings.insert(new_strings_key, strings);
+        }
+        self.renamed.push(id);
+        None
+    }
+
+    /// Retire function `id`, whose callers now call another: it is dead, and
+    /// its name no longer finds it.
+    pub fn retire_function(&mut self, id: FuncId) {
+        use cranelift_entity::EntityRef;
+        let mut func = self.functions[id.index()].borrow_mut();
+        let key = FunctionRef::from_resolved(&func, func.module_source.clone()).function_id();
+        func.is_dead = true;
+        drop(func);
+        assert_eq!(
+            self.func_index.shift_remove(&key),
+            Some(id),
+            "a function is indexed by its name"
+        );
     }
 
     /// Check if the project targets the synthetic test world.

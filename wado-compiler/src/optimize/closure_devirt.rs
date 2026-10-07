@@ -7,8 +7,8 @@
 //! instead, and the read of that field only exists after `inline`.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::{FunctionId, is_closure_call_name};
-use crate::nir::{FuncId, FunctionRef};
+use crate::module_source::ModuleSource;
+use crate::nir::FuncId;
 use crate::nir_arena::{
     ArenaCallArg, BlockId, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
@@ -17,8 +17,6 @@ use crate::nir_package::NirPackage;
 use crate::nir_visitor::exprs_under;
 
 use super::arena_query::{is_addressed, is_pure_nontrapping_operand_typed, strip_refs};
-
-use cranelift_entity::EntityRef;
 
 /// How far a callee walk follows bindings, borrows, blocks and fields, so a
 /// long chain costs a fixed amount. Well past what the adaptor shapes need.
@@ -32,28 +30,22 @@ struct CallTarget {
 }
 
 pub(super) struct ClosureDevirtRule {
-    targets: IndexMap<FunctionId, CallTarget>,
+    targets: IndexMap<(ModuleSource, u32), CallTarget>,
 }
 
-/// Index every functor's `$call` under the key [`FunctionRef::closure_call`]
-/// builds from what a `ClosureToCanonical` carries.
+/// Index every functor's `$call` under what a `ClosureToCanonical` carries:
+/// its module and functor id.
 pub(super) fn build_closure_devirt(project: &NirPackage) -> ClosureDevirtRule {
-    let mut targets: IndexMap<FunctionId, CallTarget> = IndexMap::default();
-    for (id, &func_id) in &project.func_index {
-        let FunctionId::Free(free) = id else {
-            continue;
-        };
-        if !is_closure_call_name(&free.name) {
-            continue;
-        }
-        let func = project.functions[func_id.index()].borrow();
+    let mut targets: IndexMap<(ModuleSource, u32), CallTarget> = IndexMap::default();
+    for functor in &project.closure_functors {
+        let func = functor.call_method.borrow();
         if func.is_dead || func.body.is_none() || func.params.is_empty() {
             continue;
         }
         targets.insert(
-            id.clone(),
+            (functor.module_source.clone(), functor.id),
             CallTarget {
-                func_id,
+                func_id: func.id.expect("a functor's `$call` is stamped with an id"),
                 params_is_mut: func.params.iter().map(|p| p.is_mut_ref).collect(),
             },
         );
@@ -253,9 +245,7 @@ impl ClosureDevirtRule {
         else {
             return None;
         };
-        let target = self
-            .targets
-            .get(&FunctionRef::closure_call(closure_module, *functor_id).function_id())?;
+        let target = self.targets.get(&(closure_module.clone(), *functor_id))?;
         (target.params_is_mut.len() == arg_count + 1).then_some(target)
     }
 

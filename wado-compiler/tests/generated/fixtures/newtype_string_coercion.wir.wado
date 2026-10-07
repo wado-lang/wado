@@ -45,13 +45,13 @@ type "functype//newtype_string_coercion.wado/$cm_binding__Stdout_write_via_strea
 
 type "functype//newtype_string_coercion.wado/$cm_export__run" = fn();  // TypeId(14)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(15)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(15)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(16)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(17)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa$self.buf" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(18)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(18)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(19)
 
@@ -94,7 +94,7 @@ fn "newtype_string_coercion.wado/run"() with Stdout {
         $arg_spill_1 = $local_2.buf;
         let $mv_arg_2: ref "core:prelude/string.wado//String";
         $mv_arg_2 = global:newtype_string_coercion.wado::$const_obj_5;
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa$self.buf"($arg_spill_1, $mv_arg_2.repr, $mv_arg_2.used);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($arg_spill_1, $mv_arg_2.repr, $mv_arg_2.used);
         break $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__10;
     };
     if @unlikely(local.tee new_used_70($local_1.used + 1) > builtin::array_len($local_1.repr)) {
@@ -108,18 +108,18 @@ fn "newtype_string_coercion.wado/run"() with Stdout {
     new_used_70 = builtin::i32_wrap_i64(packed_105 >> 32_i64);
     start_71 = "newtype_string_coercion.wado/$cm_binding__Stdout_write_via_stream"(start_71);
     $mv_arg_2 = global:newtype_string_coercion.wado::$const_obj_6;
-    "core:rt/write_string_to_stream"(new_used_70, $mv_arg_2.repr, $mv_arg_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_70, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_71);
     start_71 = builtin::i32_wrap_i64(local.tee packed_105("wasi/stream-new"()));
     new_used_70 = builtin::i32_wrap_i64(packed_105 >> 32_i64);
     start_71 = "newtype_string_coercion.wado/$cm_binding__Stdout_write_via_stream"(start_71);
-    "core:rt/write_string_to_stream"(new_used_70, $local_1.repr, $local_1.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_70, $local_1.repr, $local_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_71);
     start_71 = builtin::i32_wrap_i64(local.tee packed_105("wasi/stream-new"()));
     new_used_70 = builtin::i32_wrap_i64(packed_105 >> 32_i64);
     start_71 = "newtype_string_coercion.wado/$cm_binding__Stdout_write_via_stream"(start_71);
     $local_1 = global:newtype_string_coercion.wado::$const_obj_2;
-    "core:rt/write_string_to_stream"(new_used_70, $local_1.repr, $local_1.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_70, $local_1.repr, $local_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_71);
 }
 
@@ -132,7 +132,7 @@ fn "newtype_string_coercion.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -210,7 +210,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa$self.buf"(self, $mv$content$repr, $mv$content$used) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"(self, $mv$content$repr, $mv$content$used) {
     let new_used_19: i32;
     let start_20: i32;
     $inline_core_prelude_string_wado_String__internal_push_string_2: block {

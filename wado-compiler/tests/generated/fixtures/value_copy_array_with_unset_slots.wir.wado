@@ -37,7 +37,7 @@ type "functype//value_copy_array_with_unset_slots.wado/$cm_export__run" = fn(); 
 
 type "functype//value_copy_array_with_unset_slots.wado/$value_copy$core:prelude/string.wado/String" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(15)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(16)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(16)
 
 type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(17)
 
@@ -188,7 +188,7 @@ fn "value_copy_array_with_unset_slots.wado/run"() with Stdout {
     $array_clone_i_4 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     $array_clone_len_3 = builtin::i32_wrap_i64(packed >> 32_i64);
     $array_clone_i_4 = "value_copy_array_with_unset_slots.wado/$cm_binding__Stdout_write_via_stream"($array_clone_i_4);
-    "core:rt/write_string_to_stream"($array_clone_len_3, $vc_payload_1.repr, $vc_payload_1.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($array_clone_len_3, $vc_payload_1.repr, $vc_payload_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($array_clone_i_4);
 }
 
@@ -207,7 +207,7 @@ fn "value_copy_array_with_unset_slots.wado/$value_copy$core:prelude/string.wado/
     return struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_1)), 0, $array_clone_src_1, 0, $av_1); $array_clone_dst_2, used: $av_1 };
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -225,7 +225,7 @@ fn "core:rt/panic"(message) {
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     rx_7 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
-    "core:rt/write_string_to_stream"(tx_8, message.repr, message.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_8, message.repr, message.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_7);
     cold_path;
     unreachable;

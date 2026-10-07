@@ -31,7 +31,7 @@ type "functype//param_defaults.wado/$cm_binding__Stdout_write_via_stream" = fn(i
 
 type "functype//param_defaults.wado/$cm_export__run" = fn();  // TypeId(12)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(13)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(13)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(14)
 
@@ -96,7 +96,7 @@ fn "param_defaults.wado/run"() with Stdout {
     $load_2 = builtin::i32_wrap_i64(local.tee packed_39("wasi/stream-new"()));
     start_37 = builtin::i32_wrap_i64(packed_39 >> 32_i64);
     $load_2 = "param_defaults.wado/$cm_binding__Stdout_write_via_stream"($load_2);
-    "core:rt/write_string_to_stream"(start_37, $local_0.repr, $local_0.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_37, $local_0.repr, $local_0.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($load_2);
     local.tee $local_0(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }).used = 6;
     builtin::array_copy<u8>($local_0.repr, 0, global:param_defaults.wado::$const_obj_6, 0, 6);
@@ -115,7 +115,7 @@ fn "param_defaults.wado/run"() with Stdout {
     $load_2 = builtin::i32_wrap_i64(local.tee packed_39("wasi/stream-new"()));
     new_used_36 = builtin::i32_wrap_i64(packed_39 >> 32_i64);
     $load_2 = "param_defaults.wado/$cm_binding__Stdout_write_via_stream"($load_2);
-    "core:rt/write_string_to_stream"(new_used_36, $local_0.repr, $local_0.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_36, $local_0.repr, $local_0.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($load_2);
     local.tee $local_0(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }).used = 5;
     builtin::array_copy<u8>($local_0.repr, 0, global:param_defaults.wado::$const_obj_5, 0, 5);
@@ -134,7 +134,7 @@ fn "param_defaults.wado/run"() with Stdout {
     $load_2 = builtin::i32_wrap_i64(local.tee packed_39("wasi/stream-new"()));
     start_37 = builtin::i32_wrap_i64(packed_39 >> 32_i64);
     $load_2 = "param_defaults.wado/$cm_binding__Stdout_write_via_stream"($load_2);
-    "core:rt/write_string_to_stream"(start_37, $local_0.repr, $local_0.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_37, $local_0.repr, $local_0.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($load_2);
     local.tee $local_0(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(26), used: 0 }).used = 10;
     builtin::array_copy<u8>($local_0.repr, 0, global:param_defaults.wado::$const_obj_4, 0, 10);
@@ -153,13 +153,13 @@ fn "param_defaults.wado/run"() with Stdout {
     $load_2 = builtin::i32_wrap_i64(local.tee packed_39("wasi/stream-new"()));
     new_used_36 = builtin::i32_wrap_i64(packed_39 >> 32_i64);
     $load_2 = "param_defaults.wado/$cm_binding__Stdout_write_via_stream"($load_2);
-    "core:rt/write_string_to_stream"(new_used_36, $local_0.repr, $local_0.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_36, $local_0.repr, $local_0.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($load_2);
     $load_2 = builtin::i32_wrap_i64(local.tee packed_39("wasi/stream-new"()));
     new_used_36 = builtin::i32_wrap_i64(packed_39 >> 32_i64);
     $load_2 = "param_defaults.wado/$cm_binding__Stdout_write_via_stream"($load_2);
     $local_0 = global:param_defaults.wado::$const_obj_3;
-    "core:rt/write_string_to_stream"(new_used_36, $local_0.repr, $local_0.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_36, $local_0.repr, $local_0.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($load_2);
 }
 
@@ -172,7 +172,7 @@ fn "param_defaults.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);

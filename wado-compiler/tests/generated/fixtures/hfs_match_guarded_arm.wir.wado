@@ -42,7 +42,7 @@ type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(16)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(17)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(17)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(18)
 
@@ -122,7 +122,7 @@ fn "hfs_match_guarded_arm.wado/run"() with Stdout {
     $match_scrut_0 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     $hfs_v_452 = builtin::i32_wrap_i64(x >> 32_i64);
     $match_scrut_0 = "hfs_match_guarded_arm.wado/$cm_binding__Stdout_write_via_stream"($match_scrut_0);
-    "core:rt/write_string_to_stream"($hfs_v_452, $local_2.repr, $local_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($hfs_v_452, $local_2.repr, $local_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($match_scrut_0);
 }
 
@@ -218,7 +218,7 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);

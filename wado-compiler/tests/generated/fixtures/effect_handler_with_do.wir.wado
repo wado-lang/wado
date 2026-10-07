@@ -83,7 +83,7 @@ type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(27)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(28)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(28)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(29)
 
@@ -91,11 +91,11 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_0::$call" = fn(ref "effect_handler_with_do.wado//$Closure_0") -> u64;  // TypeId(31)
 
-type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_1::$call" = fn() -> u64;  // TypeId(32)
+type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_1::$call$dae[self]" = fn() -> u64;  // TypeId(32)
 
-type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_2::$call" = fn() -> ref "core:prelude/types.wado//AsyncCall<()>";  // TypeId(33)
+type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_2::$call$dae[self, when]" = fn() -> ref "core:prelude/types.wado//AsyncCall<()>";  // TypeId(33)
 
-type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_3::$call" = fn() -> ref "core:prelude/types.wado//AsyncCall<()>";  // TypeId(34)
+type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_3::$call$dae[self, how_long]" = fn() -> ref "core:prelude/types.wado//AsyncCall<()>";  // TypeId(34)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(35)
 
@@ -167,7 +167,7 @@ fn "effect_handler_with_do.wado/run"() with Stdout {
     start_27 = builtin::i32_wrap_i64(local.tee $local_2_9("wasi/stream-new"()));
     start_144 = builtin::i32_wrap_i64($local_2_9 >> 32_i64);
     start_27 = "effect_handler_with_do.wado/$cm_binding__Stdout_write_via_stream"(start_27);
-    "core:rt/write_string_to_stream"(start_144, $local_2_2.repr, $local_2_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_144, $local_2_2.repr, $local_2_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_27);
     global:effect_handler_with_do.wado::$effect_MonotonicClock = $save_MonotonicClock;
 }
@@ -268,7 +268,7 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -350,15 +350,15 @@ fn "effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_0::$call"(s
     return self.$capture_0.mark;
 }
 
-fn "effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_1::$call"() {
+fn "effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_1::$call$dae[self]"() {
     return unreachable;
 }
 
-fn "effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_2::$call"() {
+fn "effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_2::$call$dae[self, when]"() {
     return unreachable;
 }
 
-fn "effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_3::$call"() {
+fn "effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_3::$call$dae[self, how_long]"() {
     return unreachable;
 }
 
@@ -367,15 +367,15 @@ fn "closure/effect_handler_with_do.wado/$closure_wrapper_0"($env) {
 }
 
 fn "closure/effect_handler_with_do.wado/$closure_wrapper_1"($env) {
-    return "effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_1::$call"();
+    return "effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_1::$call$dae[self]"();
 }
 
 fn "closure/effect_handler_with_do.wado/$closure_wrapper_2"($env, $p0) {
-    return "effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_2::$call"();
+    return "effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_2::$call$dae[self, when]"();
 }
 
 fn "closure/effect_handler_with_do.wado/$closure_wrapper_3"($env, $p0) {
-    return "effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_3::$call"();
+    return "effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_3::$call$dae[self, how_long]"();
 }
 
 export fn "effect_handler_with_do.wado/$cm_export__run" as "run"

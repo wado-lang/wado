@@ -3,6 +3,9 @@
 //! This is the core of the `tir_to_wir` phase, translating each TIR function body
 //! into a sequence of WIR instructions.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::compiler_item::SeqField;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
@@ -15,10 +18,7 @@ use crate::wir::{WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 use super::context::WirContext;
 use crate::canonical::CanonicalIntrinsic;
 use crate::compiler_item::CompilerItem;
-use crate::name::{
-    FqTraitName, FqTypeName, MangledName, MethodName, StructName, closure_call_name,
-    multi_value_split_local,
-};
+use crate::name::{MangledName, StructName, multi_value_split_local};
 use crate::nir_arena::{
     ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
@@ -214,11 +214,8 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
         // This check must come before type lookups since DCE may have removed the
         // functor's types from the TypeTable.
         let functor_name = &functor.struct_name;
-        let call_method_local = closure_call_name(module_source, functor.id);
-        let call_method_fq = MangledName::in_module(module_source, &call_method_local);
-        let call_func_id = match ctx.func_map.get(&call_method_fq).cloned() {
-            Some(id) => id,
-            None => continue,
+        let Some(call_func_id) = live_wir_func(ctx, &functor.call_method) else {
+            continue;
         };
 
         // The wrapper's external signature is governed by the *canonical*
@@ -357,16 +354,9 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
         // schema is consistent.
         let inspect_wrapper_id = if is_inspectable {
             let callback_fn_type_id = ctx.get_or_create_canonical_callback_fn_type();
-            let inspect_trait = {
-                let tt = ctx.package.type_table.borrow();
-                tt.compiler_trait_fq(CompilerItem::Inspect)
-            };
             Some(register_inspect_wrapper(
                 ctx,
-                module_source,
-                functor_name,
-                &inspect_trait,
-                "inspect",
+                functor,
                 global_id,
                 callback_fn_type_id,
                 functor_struct_type_id,
@@ -497,6 +487,20 @@ fn register_call_wrapper(
     ctx.register_function(func, None)
 }
 
+/// The WIR function `method` became, or `None` where DCE removed it. Found by
+/// identity: `dae` renames what it reshapes.
+fn live_wir_func(
+    ctx: &WirContext<'_>,
+    method: &Rc<RefCell<nir::NirFunction>>,
+) -> Option<WirFuncId> {
+    let method = method.borrow();
+    if method.is_dead {
+        return None;
+    }
+    let id = method.id.expect("a functor method is stamped with an id");
+    ctx.funcid_map.get(&id).cloned()
+}
+
 /// Build the inspect wrapper for a functor. Its external
 /// signature is fixed at `(env, formatter)` by the canonical callback type, so
 /// the function-table slot stays stable across DAE shrinkage on the impl: only
@@ -504,16 +508,14 @@ fn register_call_wrapper(
 /// keeping the slot populated so the canonical schema holds.
 fn register_inspect_wrapper(
     ctx: &mut WirContext<'_>,
-    module_source: &ModuleSource,
-    functor_name: &str,
-    trait_name: &FqTraitName,
-    method_name: &str,
+    functor: &nir::ClosureFunctor,
     global_id: usize,
     callback_fn_type_id: WirTypeId,
     functor_struct_type_id: WirTypeId,
 ) -> WirFuncId {
     use crate::wir::{WirFunction, WirName, WirType};
 
+    let module_source = &functor.module_source;
     let env_local = "$env".to_string();
     let formatter_local = "$formatter".to_string();
     let abstract_struct_nullable = WirType::AbstractRef {
@@ -521,15 +523,8 @@ fn register_inspect_wrapper(
         nullable: true,
     };
 
-    // The per-functor impl's local name is `<fq functor>^Trait::method`;
-    // module + local name together form its `func_map` key.
-    let impl_local_name = MethodName::format_local(
-        &FqTypeName::shape(module_source, functor_name),
-        Some(trait_name),
-        method_name,
-    );
-    let target_fq = MangledName::in_module(module_source, &impl_local_name);
-    let target_func_id = ctx.func_map.get(&target_fq).cloned();
+    let target_func_id = live_wir_func(ctx, &functor.inspect_method);
+    let impl_name = functor.inspect_method.borrow().name.clone();
 
     // Look up the Formatter struct WIR type id once; needed to
     // refcast the abstract `(ref null struct)` arg to the concrete
@@ -542,38 +537,26 @@ fn register_inspect_wrapper(
         ))
         .cloned();
 
-    // Look up the per-functor impl's TIR function so we can read its
-    // current `params` (post-DAE) and only forward the surviving slots.
-    let impl_param_names: Option<Vec<String>> = ctx.package.functions.iter().find_map(|f| {
-        let f = f.borrow();
-        if f.is_dead {
-            return None;
-        }
-        if f.module_source == *module_source && f.name == impl_local_name {
-            Some(f.params.iter().map(|p| p.name.clone()).collect())
-        } else {
-            None
-        }
-    });
-
     // A DCE'd per-functor impl leaves no target: the vtable slot still has to
     // exist so every `CanonicalClosure_K` keeps one schema, and nothing can
-    // reach the wrapper, so its body traps. The other two lookups are not
-    // independently optional — once the impl survives, both its params and the
-    // `Formatter` it takes must be there.
+    // reach the wrapper, so its body traps. Once the impl survives, the
+    // `Formatter` it takes must be registered.
     let body = match target_func_id {
         None => vec![WirInstr::Unreachable],
         Some(func_id) => {
             let formatter_tid = formatter_struct_type_id.unwrap_or_else(|| {
                 panic!(
-                    "[WIR] `{functor_name}^{trait_name}::{method_name}` survived DCE but the `Formatter` struct is not registered"
+                    "[WIR] `{impl_name}` survived DCE but the `Formatter` struct is not registered"
                 )
             });
-            let impl_params = impl_param_names.unwrap_or_else(|| {
-                panic!(
-                    "[WIR] `{functor_name}^{trait_name}::{method_name}` is in `func_map` but has no live function record"
-                )
-            });
+            // Its current params, after DAE: only the surviving slots forward.
+            let impl_params: Vec<String> = functor
+                .inspect_method
+                .borrow()
+                .params
+                .iter()
+                .map(|p| p.name.clone())
+                .collect();
             let typed_env_local = "$typed_env".to_string();
             let typed_formatter_local = "$typed_formatter".to_string();
             let needs_typed_env = impl_params.iter().any(|n| n == "self");
@@ -639,9 +622,8 @@ fn register_inspect_wrapper(
                         },
                     },
                     other => panic!(
-                        "closure {functor_name}^{trait_name}::{method_name} param \
-                         `{other}` is neither self nor formatter; the canonical layout \
-                         is `(self, f)`."
+                        "closure {impl_name} param `{other}` is neither self nor \
+                         formatter; the canonical layout is `(self, f)`."
                     ),
                 })
                 .collect();
@@ -654,7 +636,8 @@ fn register_inspect_wrapper(
         }
     };
 
-    let wrapper_fq = format!("closure/{module_source}/$closure_{method_name}_wrapper_{global_id}");
+    let wrapper_fq =
+        format!("closure/{module_source}/$closure_{CANONICAL_INSPECT_SLOT}_wrapper_{global_id}");
     let func = WirFunction {
         name: WirName { fq: wrapper_fq },
         type_id: callback_fn_type_id,

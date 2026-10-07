@@ -57,7 +57,7 @@ type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(20)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(21)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(21)
 
 type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(22)
 
@@ -67,7 +67,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//effect_handler_xmod_shadowed_type_bundled.wado/effect_handler_xmod_shadowed_type_bundled.wado/$Closure_0::$call" = fn(ref "effect_handler_xmod_shadowed_type_bundled.wado//$Closure_0") -> i32;  // TypeId(25)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(26)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(26)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(27)
 
@@ -135,7 +135,7 @@ fn "effect_handler_xmod_shadowed_type_bundled.wado/run"() with Stdout {
     builtin::array_copy<u8>($local_3.repr, start_30, global:effect_handler_xmod_shadowed_type_bundled.wado::$const_obj_6, 0, 2);
     start_30 = $local_2 < 0;
     $local_2 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_43(x_43 = builtin::i64_extend_i32_s($local_2); select i64(x_43 < 0_i64, 0_i64 - x_43, x_43)));
-    start_30 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($local_3, start_30, $local_2);
+    start_30 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_3, start_30, $local_2);
     "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, start_30, x_43, $local_2);
     if @unlikely(local.tee $local_2($local_3.used + 8) > builtin::array_len($local_3.repr)) {
         cold_path;
@@ -154,7 +154,7 @@ fn "effect_handler_xmod_shadowed_type_bundled.wado/run"() with Stdout {
     $local_2 = builtin::i32_wrap_i64(local.tee x_43("wasi/stream-new"()));
     start_30 = builtin::i32_wrap_i64(x_43 >> 32_i64);
     $local_2 = "effect_handler_xmod_shadowed_type_bundled.wado/$cm_binding__Stdout_write_via_stream"($local_2);
-    "core:rt/write_string_to_stream"(start_30, $local_3.repr, $local_3.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_30, $local_3.repr, $local_3.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($local_2);
     global:effect_handler_xmod_shadowed_type_bundled.wado::$effect_Log = $save_Log;
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
@@ -167,12 +167,12 @@ fn "effect_handler_xmod_shadowed_type_bundled.wado/run"() with Stdout {
     builtin::array_copy<u8>($local_3.repr, start_30, global:effect_handler_xmod_shadowed_type_bundled.wado::$const_obj_3, 0, 5);
     $local_2 = local.tee start_30(h.seen) < 0;
     start_30 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_43(x_43 = builtin::i64_extend_i32_s(start_30); select i64(x_43 < 0_i64, 0_i64 - x_43, x_43)));
-    $local_2 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($local_3, $local_2, start_30);
+    $local_2 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_3, $local_2, start_30);
     "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, $local_2, x_43, start_30);
     start_30 = builtin::i32_wrap_i64(local.tee x_43("wasi/stream-new"()));
     $local_2 = builtin::i32_wrap_i64(x_43 >> 32_i64);
     start_30 = "effect_handler_xmod_shadowed_type_bundled.wado/$cm_binding__Stdout_write_via_stream"(start_30);
-    "core:rt/write_string_to_stream"($local_2, $local_3.repr, $local_3.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($local_2, $local_3.repr, $local_3.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_30);
 }
 
@@ -268,7 +268,7 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -286,7 +286,7 @@ fn "core:rt/panic"(message) {
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     rx_7 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
-    "core:rt/write_string_to_stream"(tx_8, message.repr, message.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_8, message.repr, message.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_7);
     cold_path;
     unreachable;
@@ -365,7 +365,7 @@ fn "effect_handler_xmod_shadowed_type_bundled.wado/effect_handler_xmod_shadowed_
     return self_1.seen;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

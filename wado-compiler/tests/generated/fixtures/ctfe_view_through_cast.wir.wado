@@ -49,7 +49,7 @@ type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(18)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(19)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(19)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(20)
 
@@ -57,7 +57,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(22)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(23)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(23)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
 
@@ -112,7 +112,7 @@ fn "ctfe_view_through_cast.wado/run"() with Stdout {
     $sroa_$f_buf_165 = local.tee $local_5(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(84), used: 0 });
     used = $sroa_r_value_146 < 0;
     digit_count_30 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_32(x_32 = builtin::i64_extend_i32_s($sroa_r_value_146); select i64(x_32 < 0_i64, 0_i64 - x_32, x_32)));
-    used = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_165, used, digit_count_30);
+    used = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_165, used, digit_count_30);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_165.repr, used, x_32, digit_count_30);
     if @unlikely(local.tee digit_count_30($local_5.used + 1) > builtin::array_len($local_5.repr)) {
         cold_path;
@@ -124,7 +124,7 @@ fn "ctfe_view_through_cast.wado/run"() with Stdout {
     $sroa_$f_buf_165 = $local_5;
     used = $sroa_r_value_146 < 0;
     $sroa_r_value_146 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_32(x_32 = builtin::i64_extend_i32_s($sroa_r_value_146); select i64(x_32 < 0_i64, 0_i64 - x_32, x_32)));
-    used = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_165, used, $sroa_r_value_146);
+    used = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_165, used, $sroa_r_value_146);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_165.repr, used, x_32, $sroa_r_value_146);
     if @unlikely(local.tee $sroa_r_value_146($local_5.used + 1) > builtin::array_len($local_5.repr)) {
         cold_path;
@@ -136,7 +136,7 @@ fn "ctfe_view_through_cast.wado/run"() with Stdout {
     $sroa_$f_buf_165 = $local_5;
     used = len_before < 0;
     len_before = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_32(x_32 = builtin::i64_extend_i32_s(len_before); select i64(x_32 < 0_i64, 0_i64 - x_32, x_32)));
-    used = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_165, used, len_before);
+    used = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_165, used, len_before);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_165.repr, used, x_32, len_before);
     if @unlikely(local.tee len_before($local_5.used + 1) > builtin::array_len($local_5.repr)) {
         cold_path;
@@ -148,7 +148,7 @@ fn "ctfe_view_through_cast.wado/run"() with Stdout {
     $sroa_$f_buf_165 = $local_5;
     len_before = local.tee used(items.used) < 0;
     used = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_32(x_32 = builtin::i64_extend_i32_s(used); select i64(x_32 < 0_i64, 0_i64 - x_32, x_32)));
-    len_before = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_165, len_before, used);
+    len_before = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_165, len_before, used);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_165.repr, len_before, x_32, used);
     if @unlikely(local.tee used($local_5.used + 1) > builtin::array_len($local_5.repr)) {
         cold_path;
@@ -160,12 +160,12 @@ fn "ctfe_view_through_cast.wado/run"() with Stdout {
     $sroa_$f_buf_165 = $local_5;
     used = local.tee len_before(global:ctfe_view_through_cast.wado::G.n) < 0;
     len_before = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_32(x_32 = builtin::i64_extend_i32_s(len_before); select i64(x_32 < 0_i64, 0_i64 - x_32, x_32)));
-    used = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_165, used, len_before);
+    used = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_165, used, len_before);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_165.repr, used, x_32, len_before);
     len_before = builtin::i32_wrap_i64(local.tee x_32("wasi/stream-new"()));
     used = builtin::i32_wrap_i64(x_32 >> 32_i64);
     len_before = "ctfe_view_through_cast.wado/$cm_binding__Stdout_write_via_stream"(len_before);
-    "core:rt/write_string_to_stream"(used, $local_5.repr, $local_5.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(used, $local_5.repr, $local_5.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(len_before);
 }
 
@@ -271,7 +271,7 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -357,7 +357,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
     self.repr = new_repr;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

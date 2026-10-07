@@ -16,8 +16,7 @@ use crate::defs::DefId;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FqTraitName, FqTypeName, FreeFunctionName, FunctionId, MODULE_INIT_FUNCTION, MethodName,
-    UNIT_TYPE_NAME, closure_call_method_name, closure_call_name, closure_functor_type,
+    FqTypeName, FreeFunctionName, FunctionId, MODULE_INIT_FUNCTION, MethodName, UNIT_TYPE_NAME,
     is_fn_type_name, mangle_generic_name, mangle_local_trait_method, mangle_method_generic,
 };
 use crate::nir::{FuncId, FunctionRef, NirFunction, NirImport, NirStruct};
@@ -46,9 +45,8 @@ type EffectUsageMap = IndexMap<FunctionId, IndexSet<(String, String)>>;
 /// out-of-band lets us build the call graph in a single AST walk instead of twice.
 #[derive(Debug, Clone)]
 struct PendingInspectEdge {
-    closure_module: ModuleSource,
-    /// `$Closure_{functor_id}` struct name.
-    struct_name: FqTypeName,
+    /// The functor's `^Inspect` impl.
+    inspect: FunctionId,
     /// `(arity, return_type)` key into `InspectableSignatures`.
     key: (usize, TypeId),
 }
@@ -181,6 +179,8 @@ pub(super) fn reachable_function_positions(
 #[derive(Default)]
 pub(super) struct DescriptorCache {
     refs: Vec<FunctionRef>,
+    /// How much of `NirPackage::renamed` has been refreshed.
+    renames_seen: usize,
     /// Where `assert_one_fresh` resumes its rotation.
     #[cfg(debug_assertions)]
     cursor: usize,
@@ -192,6 +192,13 @@ impl DescriptorCache {
             self.refs.len() <= project.functions.len(),
             "descriptor cache outlived a function removal"
         );
+        for &id in &project.renamed[self.renames_seen..] {
+            if let Some(slot) = self.refs.get_mut(id.index()) {
+                let func = project.functions[id.index()].borrow();
+                *slot = FunctionRef::from_resolved(&func, func.module_source.clone());
+            }
+        }
+        self.renames_seen = project.renamed.len();
         self.refs
             .extend(project.callee_descriptors_from(self.refs.len()));
         #[cfg(debug_assertions)]
@@ -200,8 +207,9 @@ impl DescriptorCache {
     }
 
     /// A descriptor is keyed by store position, so a rename in place goes
-    /// stale. One entry per read, rotating: a whole-table check costs its
-    /// caller O(n²), since a pass may read once per function.
+    /// stale unless `NirPackage::rename_function` logged it. One entry per
+    /// read, rotating: a whole-table check costs its caller O(n²), since a
+    /// pass may read once per function.
     #[cfg(debug_assertions)]
     fn assert_one_fresh(&mut self, project: &NirPackage) {
         if self.refs.is_empty() {
@@ -250,15 +258,7 @@ fn compute_function_reachability(
     // this expansion — no fixpoint iteration is needed.
     let inspectable =
         collect_inspectable_signatures_from_reachable(project, descriptors, &reachable_v1);
-    let items = project.type_table.borrow();
-    let inspect_trait = items.compiler_items().trait_fq(CompilerItem::Inspect);
-    drop(items);
-    apply_inspect_edges(
-        &mut graph.call_graph,
-        &graph.pending_inspects,
-        &inspectable,
-        &inspect_trait,
-    );
+    apply_inspect_edges(&mut graph.call_graph, &graph.pending_inspects, &inspectable);
 
     // Phase 2c: re-compute the reachable set from the augmented graph.
     let mut reachable = compute_reachable_from_entries(project, &graph.call_graph);
@@ -588,25 +588,10 @@ fn collect_bytes_literals_block(body: &Body, root: BlockId, used: &mut IndexSet<
 }
 /// Remove closure functors whose `$call` method was eliminated by function DCE.
 pub fn remove_unreachable_closure_functors(project: &mut NirPackage) {
-    // Build a set of surviving (module_source, func_name) pairs for O(1) lookup.
-    let surviving_funcs: IndexSet<(ModuleSource, String)> = project
-        .functions
-        .iter()
-        .filter_map(|f| {
-            let func = f.borrow();
-            // A dead `$call` lingers in `functions` (Phase 4 marks, never removes),
-            // so filter by liveness rather than mere presence.
-            if func.is_dead {
-                return None;
-            }
-            Some((func.module_source.clone(), func.name.clone()))
-        })
-        .collect();
-
-    project.closure_functors.retain(|functor| {
-        let call_method_name = closure_call_name(&functor.module_source, functor.id);
-        surviving_funcs.contains(&(functor.module_source.clone(), call_method_name))
-    });
+    // A dead `$call` lingers in `functions` (Phase 4 marks, never removes).
+    project
+        .closure_functors
+        .retain(|functor| !functor.call_method.borrow().is_dead);
 }
 
 /// Per-caller pending inspect edges, keyed by the caller's `FunctionId`.
@@ -668,13 +653,14 @@ fn build_analysis_graph(project: &NirPackage, descriptors: &[FunctionRef]) -> An
     let mut per_func_types: Vec<IndexSet<TypeId>> = Vec::with_capacity(n);
 
     let type_table = &*project.type_table.borrow();
+    let functors = functor_methods(project);
 
     for (pos, func_rc) in project.functions.iter().enumerate() {
         let func = func_rc.borrow();
         let module_source = &func.module_source;
         let func_id = function_id_for(&func);
 
-        let mut walker = DceWalker::new(type_table, module_source, descriptors);
+        let mut walker = DceWalker::new(type_table, module_source, descriptors, &functors);
         walker.analyze(&func);
         let mut analysis = walker.analysis;
         // Promoted operands hold their source type in the body's value pool, not
@@ -725,7 +711,6 @@ fn apply_inspect_edges(
     call_graph: &mut CallGraph,
     pending: &PendingInspectsByCaller,
     sigs: &InspectableSignatures,
-    inspect: &FqTraitName,
 ) {
     for (caller, edges) in pending {
         let Some(callees) = call_graph.get_mut(caller) else {
@@ -733,12 +718,7 @@ fn apply_inspect_edges(
         };
         for edge in edges {
             if sigs.contains(&edge.key) {
-                callees.insert(FunctionId::Method(MethodName::new(
-                    edge.closure_module.clone(),
-                    edge.struct_name.clone(),
-                    Some(inspect.clone()),
-                    "inspect".to_string(),
-                )));
+                callees.insert(edge.inspect.clone());
             }
         }
     }
@@ -848,7 +828,27 @@ struct DceWalker<'a> {
     type_table: &'a TypeTable,
     current_module: &'a ModuleSource,
     descriptors: &'a [FunctionRef],
+    functors: &'a FunctorMethods,
     analysis: FunctionAnalysis,
+}
+
+/// Each closure functor's `$call` and `^Inspect` impl, by `(module, functor id)`,
+/// as their records name them: `dae` renames what it reshapes, so a name built
+/// from the functor id would miss one.
+type FunctorMethods = IndexMap<(ModuleSource, u32), (FunctionId, FunctionId)>;
+
+fn functor_methods(project: &NirPackage) -> FunctorMethods {
+    project
+        .closure_functors
+        .iter()
+        .map(|f| {
+            let methods = (
+                function_id_for(&f.call_method.borrow()),
+                function_id_for(&f.inspect_method.borrow()),
+            );
+            ((f.module_source.clone(), f.id), methods)
+        })
+        .collect()
 }
 
 impl<'a> DceWalker<'a> {
@@ -856,11 +856,13 @@ impl<'a> DceWalker<'a> {
         type_table: &'a TypeTable,
         current_module: &'a ModuleSource,
         descriptors: &'a [FunctionRef],
+        functors: &'a FunctorMethods,
     ) -> Self {
         Self {
             type_table,
             current_module,
             descriptors,
+            functors,
             analysis: FunctionAnalysis::default(),
         }
     }
@@ -1233,13 +1235,8 @@ impl<'a> DceWalker<'a> {
     ) {
         // `$call` is always live: the canonical closure struct holds
         // a `ref.func` to it directly.
-        let struct_name = closure_functor_type(closure_module, functor_id);
-        self.analysis
-            .callees
-            .insert(FunctionId::Method(closure_call_method_name(
-                closure_module,
-                functor_id,
-            )));
+        let (call, inspect) = &self.functors[&(closure_module.clone(), functor_id)];
+        self.analysis.callees.insert(call.clone());
 
         // A per-functor `$Closure_N^Inspect` impl only needs to stay alive
         // when its matching `fn(..)^Inspect` dispatch stub is reachable, so a
@@ -1254,8 +1251,7 @@ impl<'a> DceWalker<'a> {
         } = self.type_table.get(target_fn_type)
         {
             self.analysis.pending_inspects.push(PendingInspectEdge {
-                closure_module: closure_module.clone(),
-                struct_name,
+                inspect: inspect.clone(),
                 key: (params.len(), *return_type),
             });
         }
@@ -1562,6 +1558,7 @@ fn populate_type_reachability(
     // re-walk — the per-function used-types set is already populated.
     {
         let type_table = project.type_table.borrow();
+        let functors = functor_methods(project);
 
         // Sum per-function used-types for reachable functions only.
         for &pos in &analysis.functions {
@@ -1586,7 +1583,8 @@ fn populate_type_reachability(
                 continue;
             }
             collect_type_transitive(global.ty, &type_table, &mut analysis.types);
-            let mut walker = DceWalker::new(&type_table, &global.module_source, descriptors);
+            let mut walker =
+                DceWalker::new(&type_table, &global.module_source, descriptors, &functors);
             let init_body = global.init.slot_expr().body();
             walker.walk_node(init_body, NodeRef::Block(init_body.root));
             for id in walker.analysis.used_types {

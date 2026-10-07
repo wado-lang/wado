@@ -9244,6 +9244,8 @@ pub struct ClosureFunctor {
     /// The `$call` method for this closure (with body transformed:
     /// Capture nodes become `FieldAccess` on self)
     pub call_method: Rc<RefCell<TirFunction>>,
+    /// The per-functor `$Closure_N^Inspect::inspect` impl.
+    pub inspect_method: Rc<RefCell<TirFunction>>,
     /// Captures from the original closure
     pub captures: Vec<TirCapture>,
     /// Canonical user-declared `(name, type)` pairs of the closure literal,
