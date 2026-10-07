@@ -7,17 +7,18 @@ use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
 use crate::hashmap::IndexSet;
 use crate::name::FqTraitName;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
 use super::callee::StaticMethodRef;
-use super::method_call::StaticReceiver;
+use super::method_call::{MethodSignatureFacts, StaticReceiver};
 use super::sem::types::CalleeParams;
 use super::sig::MethodSig;
 use super::synth::ArgClass;
 use super::trait_env::{ImplHeader, ImplTargetKey};
-use super::types::TypeError;
+use super::trait_query::DerivedAt;
+use super::types::{TraitMethodMatch, TypeError};
 use super::tysys::TypeSystem;
 
 /// One `Type::method(...)` spelling as the resolution reads it: what it names,
@@ -367,22 +368,178 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_ref,
             }));
         }
+        // The auto-derived `eq` / `cmp`, which the method-call spelling reaches
+        // through the same derivation: the receiver leads the arguments.
+        let derived_receiver = match key.decl() {
+            Some(def) if self.tysys.auto_derive_by_method(method_name).is_some() => {
+                self.derived_receiver_type(def, receiver_type, receiver_args)
+            }
+            Some(_) | None => receiver_type.map(|receiver| (receiver, DerivedAt::Instance)),
+        };
+        if let Some((receiver_type, at)) = derived_receiver
+            && let Some(derived) =
+                self.try_auto_derived_method_match(method_name, receiver_type, at)
+        {
+            let mut callee = self.derived_instance_callee(derived, method_name, receiver_type);
+            self.retype_to_newtype(&mut callee, receiver_type);
+            return StaticLookup::Found(Box::new(callee));
+        }
 
         // A newtype and a `flags` reach what they wrap: their impls are looked
         // up on the base, so the spelling resolves there too. Read from the
         // alias's declaration, since a namespaced `lib::Q::twice()` leaves the
         // caller's frame no `Q` to look one up by; the name answers only where
         // the key reaches no declaration to read.
+        //
+        // One link at a time: the base answers the arguments as it sees them,
+        // its own type where they wrote the newtype, and the answer takes the
+        // newtype back.
         match self.newtype_base_target(&key, receiver_name) {
-            Some((base_key, base_name)) => self.resolve_static_callee(StaticQuery {
-                receiver_key: Some(&base_key),
-                arg_types,
-                receiver_type,
-                receiver_args,
-                required_trait,
-                ..StaticQuery::of(&base_name, method_name)
-            }),
+            Some((base_key, base_name)) => {
+                let (base_type, base_arg_types) = self.at_newtype_base(receiver_type, arg_types);
+                let mut lookup = self.resolve_static_callee(StaticQuery {
+                    receiver_key: Some(&base_key),
+                    arg_types: &base_arg_types,
+                    receiver_type: base_type.or(receiver_type),
+                    receiver_args,
+                    required_trait,
+                    ..StaticQuery::of(&base_name, method_name)
+                });
+                if let (StaticLookup::Found(callee), Some(receiver_type)) =
+                    (&mut lookup, receiver_type)
+                {
+                    self.retype_to_newtype(callee, receiver_type);
+                }
+                lookup
+            }
             None => self.out_of_scope_lookup(receiver_name, &out_of_scope),
+        }
+    }
+
+    /// The base `receiver` wraps, if it is a newtype, and `arg_types` as that
+    /// base reads them: its own type where they wrote the newtype.
+    pub(super) fn at_newtype_base(
+        &self,
+        receiver: Option<TypeId>,
+        arg_types: &[TypeId],
+    ) -> (Option<TypeId>, Vec<TypeId>) {
+        let Some(newtype) = receiver else {
+            return (None, arg_types.to_vec());
+        };
+        let Some(base) = self.tysys.type_table.borrow().get_newtype_base(newtype) else {
+            return (None, arg_types.to_vec());
+        };
+        let at_base = arg_types
+            .iter()
+            .map(|&arg| self.tysys.substitute_newtype_in_type(arg, newtype, base))
+            .collect();
+        (Some(base), at_base)
+    }
+
+    /// `callee` as a newtype inherits it: every base on `receiver`'s chain
+    /// becomes `receiver`, in each parameter and the return type (`spec-types`,
+    /// "Method Signature Substitution"). Any other receiver is left as is.
+    fn retype_to_newtype(&self, callee: &mut StaticCallee, receiver: TypeId) {
+        let mut link = receiver;
+        loop {
+            let Some(base) = self.tysys.type_table.borrow().get_newtype_base(link) else {
+                break;
+            };
+            for param in &mut callee.params.param_types {
+                *param = self
+                    .tysys
+                    .substitute_newtype_in_type(*param, base, receiver);
+            }
+            callee.return_type =
+                self.tysys
+                    .substitute_newtype_in_type(callee.return_type, base, receiver);
+            link = base;
+        }
+    }
+
+    /// The receiver a derived method on `def` is called on by type path: the
+    /// type `def` declares, a generic one at the arguments the path wrote or
+    /// the call inferred, else at its own parameters. The arguments are checked
+    /// against it, never chosen by.
+    fn derived_receiver_type(
+        &mut self,
+        def: DefId,
+        receiver_type: Option<TypeId>,
+        receiver_args: &[TypeId],
+    ) -> Option<(TypeId, DerivedAt)> {
+        if self.type_lookup().declared_type_param_ids(def).is_none() {
+            let receiver = receiver_type.or_else(|| self.declared_self_type(def))?;
+            return Some((receiver, DerivedAt::Instance));
+        }
+        if !receiver_args.is_empty() {
+            let receiver = self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .make_generic_instance(def, receiver_args.to_vec());
+            return Some((receiver, DerivedAt::Instance));
+        }
+        // A bare name reaches here as the declaration with no arguments.
+        let written = receiver_type.filter(|&ty| {
+            self.tysys
+                .type_table
+                .borrow()
+                .nominal_type_args(ty)
+                .is_some_and(|args| !args.is_empty())
+        });
+        match written {
+            Some(receiver) => Some((receiver, DerivedAt::Instance)),
+            None => Some((self.declared_self_type(def)?, DerivedAt::Declaration)),
+        }
+    }
+
+    /// The type a struct, resource, variant, enum or flags declaration `def` declares,
+    /// a generic one applied to its own parameters.
+    pub(super) fn declared_self_type(&self, def: DefId) -> Option<TypeId> {
+        let lookup = self.type_lookup();
+        let mut table = self.tysys.type_table.borrow_mut();
+        let ty = match lookup.declared_type_param_ids(def) {
+            Some(params) => table.make_generic_instance(def, params.to_vec()),
+            None => Self::nominal_type_of(def, &mut table, &lookup),
+        };
+        (ty != TypeTable::UNKNOWN).then_some(ty)
+    }
+
+    /// `derived` as the qualified spelling calls it: the receiver by reference,
+    /// then the method's own parameters.
+    fn derived_instance_callee(
+        &self,
+        derived: TraitMethodMatch,
+        method_name: &str,
+        receiver_type: TypeId,
+    ) -> StaticCallee {
+        let info = derived.method_info;
+        let receiver_ref = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .intern(ResolvedType::Ref(receiver_type));
+        let (_, params) = MethodSignatureFacts {
+            param_is_mut: info.param_is_mut,
+            param_names: info.param_names,
+            param_defaults: info.param_defaults,
+            param_types: info.param_types,
+            type_args: Vec::new(),
+            self_kind: ast::SelfKind::Ref,
+            defaults_module: None,
+        }
+        .into_dispatch_parts(receiver_ref);
+        StaticCallee {
+            params,
+            own_params: Vec::new(),
+            return_type: info.return_type,
+            method_ref: StaticMethodRef::new(
+                derived.impl_module_source,
+                derived.impl_struct_fq.head().name(),
+                method_name,
+                Some(derived.trait_name),
+                info.method_def,
+            ),
         }
     }
 

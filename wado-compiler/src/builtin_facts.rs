@@ -126,6 +126,9 @@ pub struct BuiltinFacts<P> {
     pub len: Option<P>,
     /// `#[side_effect]`.
     pub side_effect: SideEffect<P>,
+    /// `suspend` in `#[side_effect]`: other tasks may run before the call
+    /// returns.
+    pub suspend: bool,
 }
 
 impl<P> BuiltinFacts<P> {
@@ -163,6 +166,7 @@ impl<P> BuiltinFacts<P> {
             storage: self.storage,
             len: self.len.as_ref().map(&mut f),
             side_effect,
+            suspend: self.suspend,
         }
     }
 
@@ -197,7 +201,7 @@ impl<P> BuiltinFacts<P> {
             Some(len) => format!("#[storage({word}, len = {len})]"),
             None => format!("#[storage({word})]"),
         };
-        let effects: Vec<String> = match &self.side_effect {
+        let mut effects: Vec<String> = match &self.side_effect {
             SideEffect::Opaque => vec!["opaque".to_string()],
             SideEffect::BlackBox => vec!["black_box".to_string()],
             SideEffect::Listed {
@@ -216,12 +220,15 @@ impl<P> BuiltinFacts<P> {
                     }
                 }
                 out.extend(written_checks(self.trap_checks()));
-                if out.is_empty() {
+                if out.is_empty() && !self.suspend {
                     out.push("none".to_string());
                 }
                 out
             }
         };
+        if self.suspend {
+            effects.push("suspend".to_string());
+        }
         [storage, format!("#[side_effect({})]", effects.join(", "))]
     }
 
@@ -428,8 +435,11 @@ struct Reader<'a, 'p> {
 /// The `#[side_effect]` keys, in the order a diagnostic lists them.
 const SIDE_EFFECT_KEYS: [&str; 5] = ["outside", "at", "count", "unset", "negative"];
 
-/// The `#[side_effect]` identifiers that stand alone.
+/// The `#[side_effect]` identifiers that stand alone, `suspend` aside.
 const ALONE: [&str; 3] = ["none", "opaque", "black_box"];
+
+/// The `#[side_effect]` identifiers of a call that returns without suspending.
+const NEVER_SUSPENDS: [&str; 3] = ["none", "black_box", "hint"];
 
 impl Reader<'_, '_> {
     fn report(&mut self, attr: &'static str, message: impl Into<String>) {
@@ -471,11 +481,12 @@ impl Reader<'_, '_> {
     ) -> Option<BuiltinFacts<String>> {
         let storage = self.storage(storage);
         let side_effect = self.side_effect(side_effect);
-        let ((storage, len), side_effect) = storage.zip(side_effect)?;
+        let ((storage, len), (side_effect, suspend)) = storage.zip(side_effect)?;
         Some(BuiltinFacts {
             storage,
             len,
             side_effect,
+            suspend,
         })
     }
 
@@ -554,7 +565,8 @@ impl Reader<'_, '_> {
         Some((storage, len))
     }
 
-    fn side_effect(&mut self, args: &[AttrArg]) -> Option<SideEffect<String>> {
+    /// The `#[side_effect]` facts, and whether the call may suspend.
+    fn side_effect(&mut self, args: &[AttrArg]) -> Option<(SideEffect<String>, bool)> {
         if args.is_empty() {
             self.report(
                 SIDE_EFFECT,
@@ -578,7 +590,14 @@ impl Reader<'_, '_> {
                 AttrArg::Ident(word)
                     if matches!(
                         word.as_str(),
-                        "none" | "trap" | "read" | "write" | "opaque" | "hint" | "black_box"
+                        "none"
+                            | "trap"
+                            | "read"
+                            | "write"
+                            | "opaque"
+                            | "hint"
+                            | "black_box"
+                            | "suspend"
                     ) =>
                 {
                     words.insert(word);
@@ -616,6 +635,7 @@ impl Reader<'_, '_> {
             }
         }
 
+        let suspend = words.shift_remove("suspend");
         if let Some(alone) = ALONE.iter().find(|word| words.contains(*word))
             && words.len() + arrays.len() + names.len() > 1
         {
@@ -625,11 +645,18 @@ impl Reader<'_, '_> {
             );
             return None;
         }
+        if suspend && let Some(word) = NEVER_SUSPENDS.iter().find(|w| words.contains(*w)) {
+            self.report(
+                SIDE_EFFECT,
+                format!("`#[side_effect({word})]` returns without suspending, so it goes without `suspend`"),
+            );
+            return None;
+        }
         if words.contains("opaque") {
-            return Some(SideEffect::Opaque);
+            return Some((SideEffect::Opaque, suspend));
         }
         if words.contains("black_box") {
-            return Some(SideEffect::BlackBox);
+            return Some((SideEffect::BlackBox, false));
         }
 
         let array = |key: &str| arrays.iter().find(|(k, _)| *k == key).map(|(_, v)| *v);
@@ -696,12 +723,13 @@ impl Reader<'_, '_> {
         } else {
             Trap::Only(checks)
         };
-        Some(SideEffect::Listed {
+        let listed = SideEffect::Listed {
             trap,
             read: words.contains("read"),
             write: words.contains("write"),
             hint: words.contains("hint"),
-        })
+        };
+        Some((listed, suspend))
     }
 }
 
@@ -827,6 +855,31 @@ mod tests {
     }
 
     #[test]
+    fn suspend_goes_with_opaque_or_a_listing() {
+        for (args, written) in [
+            (
+                vec![ident("opaque"), ident("suspend")],
+                "#[side_effect(opaque, suspend)]",
+            ),
+            (
+                vec![ident("suspend"), ident("write")],
+                "#[side_effect(write, suspend)]",
+            ),
+            (vec![ident("suspend")], "#[side_effect(suspend)]"),
+        ] {
+            let attrs = [attr(STORAGE, vec![ident("none")]), attr(SIDE_EFFECT, args)];
+            let facts = read(&attrs, &[], UNIT).unwrap().unwrap();
+            assert!(facts.suspend);
+            assert_eq!(facts.written()[1], written);
+        }
+        let attrs = [
+            attr(STORAGE, vec![ident("none")]),
+            attr(SIDE_EFFECT, vec![ident("opaque")]),
+        ];
+        assert!(!read(&attrs, &[], UNIT).unwrap().unwrap().suspend);
+    }
+
+    #[test]
     fn neither_attribute_states_nothing() {
         assert_eq!(read(&[], &copy_params(), UNIT), Ok(None));
     }
@@ -883,6 +936,18 @@ mod tests {
                 "`#[side_effect(negative = x)]` names no parameter",
             ),
             (vec![ident("pure")], "`#[side_effect]` takes no `pure`"),
+            (
+                vec![ident("none"), ident("suspend")],
+                "`#[side_effect(none)]` returns without suspending, so it goes without `suspend`",
+            ),
+            (
+                vec![ident("hint"), ident("suspend")],
+                "`#[side_effect(hint)]` returns without suspending, so it goes without `suspend`",
+            ),
+            (
+                vec![ident("opaque"), ident("trap"), ident("suspend")],
+                "`#[side_effect(opaque)]` stands alone",
+            ),
             (
                 vec![
                     ident("trap"),

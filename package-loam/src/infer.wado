@@ -32,6 +32,7 @@ use {
     dims_of,
     element_of,
     is_binary_elementwise,
+    is_unary_operator,
     trailing_axes,
 } from "./graph.wado";
 use { Condition, Poly, owe as owe_at } from "./poly.wado";
@@ -1637,17 +1638,7 @@ fn required_operands(op: &String) -> Option<i32> {
 
 /// The operators whose output shape is their input's.
 fn is_unary_elementwise(op: &String) -> bool {
-    return *op == "Identity"
-        || *op == "Cast"
-        || *op == "Relu"
-        || *op == "Sigmoid"
-        || *op == "Tanh"
-        || *op == "Erf"
-        || *op == "Exp"
-        || *op == "Log"
-        || *op == "Sqrt"
-        || *op == "Neg"
-        || *op == "Abs";
+    return *op == "Identity" || *op == "Cast" || is_unary_operator(op);
 }
 
 /// Operand `index`'s shape. `operands_given` proved it defined, and a folded one

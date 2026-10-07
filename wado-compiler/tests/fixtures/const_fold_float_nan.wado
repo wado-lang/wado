@@ -1,0 +1,23 @@
+// A float operation whose result is a NaN folds. A NaN's bit pattern is
+// host-defined, so the compiler may fix it; the program observes only what
+// every NaN shares.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let zero = 0.0;
+    let q = zero / zero;
+    println(`${q.is_nan()} ${q == f64::NAN} ${q}`);
+    let zero32: f32 = 0.0;
+    let q32 = zero32 * f32::INFINITY;
+    println(`${q32.is_nan()} ${q32}`);
+    // A NaN read from storage is no operation's result: its bits stay exact.
+    let stored = List::<f64>::from_le_bytes(b"\x01\x00\x00\x00\x00\x00\xf8\x7f");
+    println(`${stored[0].to_bits():x}`);
+}
+
+__DATA__
+{
+    "stdout": "true true NaN\ntrue NaN\n7ff8000000000001\n",
+    "wir_not_expect:O2": ["0 / 0", "0_f32 * inf_f32"]
+}

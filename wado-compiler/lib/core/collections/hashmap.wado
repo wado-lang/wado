@@ -4,6 +4,16 @@
 
 use { InsecureSeed } from "wasi:random";
 use {
+    Serialize,
+    Deserialize,
+    Serializer,
+    Deserializer,
+    SerializeError,
+    DeserializeError,
+    DuplicateFieldPolicy,
+    report_duplicate_field,
+} from "core:serde";
+use {
     EntryLog,
     MapKeysRefIter,
     MapKeysValueIter,
@@ -30,19 +40,24 @@ pub struct HashSeed {
 }
 
 impl HashSeed {
-    /// A seed from the host, for a map holding keys from outside the program.
-    /// The host is asked to make it unpredictable but is not obliged to, and
-    /// it asks to be called once: fetch one seed and pass it down.
-    pub fn random() -> HashSeed with InsecureSeed {
-        let [k0, k1] = InsecureSeed::get_insecure_seed();
-        return HashSeed { k0, k1 };
-    }
-
-    /// A seed of the caller's choosing, for a map whose keys the program trusts.
+    /// A seed of the caller's choosing, for a map whose keys the program trusts
+    /// and whose hashing must be the same on every run.
     pub fn fixed(k0: u64, k1: u64) -> HashSeed {
         return HashSeed { k0, k1 };
     }
 }
+
+/// The host is asked to make the seed unpredictable but is not obliged to, and
+/// asks to be called once: `DEFAULT_HASH_SEED` is the only caller.
+fn host_seed() -> HashSeed with InsecureSeed {
+    let [k0, k1] = InsecureSeed::get_insecure_seed();
+    return HashSeed { k0, k1 };
+}
+
+/// What `new()` hashes under. Iteration keeps insertion order, so the seed
+/// never shows through a map and the host call is unobservable.
+#[benign(InsecureSeed)]
+global DEFAULT_HASH_SEED: HashSeed = host_seed();
 
 /// The 128-bit product of `a` and `b` with its halves folded together, so every
 /// bit of either reaches every bit of the result.
@@ -91,8 +106,9 @@ impl Hasher for SeededHasher {
 
 /// A map that iterates in insertion order, found by hashing its keys.
 ///
-/// Its hash function is keyed by the `HashSeed` it is built with. Build one
-/// with `HashSeed::random()` wherever an attacker may choose its keys.
+/// Its hash function is keyed by a `HashSeed`: the host's under `new()`, which
+/// holds up against keys an attacker chooses, or the caller's under
+/// `with_seed`.
 pub struct HashMap<K, V> {
     log: EntryLog<K, V>,
     /// `fps[e]` is the fingerprint of entry `e`'s key.
@@ -106,8 +122,13 @@ pub struct HashMap<K, V> {
 }
 
 impl<K: Hash, V> HashMap<K, V> {
+    /// An empty map hashing under the host's seed.
+    pub fn new() -> HashMap<K, V> {
+        return HashMap::with_seed(DEFAULT_HASH_SEED);
+    }
+
     /// An empty map hashing with `seed`.
-    pub fn new(seed: HashSeed) -> HashMap<K, V> {
+    pub fn with_seed(seed: HashSeed) -> HashMap<K, V> {
         return HashMap {
             log: EntryLog::new(),
             fps: Array::new(0),
@@ -404,15 +425,40 @@ impl<K: Hash, V: RefMut> IndexRefMut<K> for HashMap<K, V> {
     }
 }
 
+// `{ key: value, … }` as a `HashMap<String, V>` under the host's seed, last
+// write wins (WEP 2026-08-24).
+impl<V> From<Array<[String, V]>> for HashMap<String, V> {
+    fn from(entries: Array<[String, V]>) -> HashMap<String, V> {
+        let mut map = HashMap::<String, V>::new();
+        for let [key, value] of entries {
+            map.insert(key, value);
+        }
+        return map;
+    }
+}
+
+impl<V> LiteralSpread for HashMap<String, V> {
+    fn spread_literal(&mut self, base: HashMap<String, V>) {
+        for let [k, v] of base.entries() {
+            self.insert(*k, *v);
+        }
+    }
+}
+
 /// A set that iterates in insertion order, found by hashing its elements.
 pub struct HashSet<T> {
     inner: HashMap<T, ()>,
 }
 
 impl<T: Hash> HashSet<T> {
+    /// An empty set hashing under the host's seed.
+    pub fn new() -> HashSet<T> {
+        return HashSet { inner: HashMap::new() };
+    }
+
     /// An empty set hashing with `seed`.
-    pub fn new(seed: HashSeed) -> HashSet<T> {
-        return HashSet { inner: HashMap::new(seed) };
+    pub fn with_seed(seed: HashSeed) -> HashSet<T> {
+        return HashSet { inner: HashMap::with_seed(seed) };
     }
 
     /// Returns the number of elements in the set.
@@ -456,6 +502,14 @@ impl<T: Hash> HashSet<T> {
     }
 }
 
+/// The lookup that takes any text, as `HashMap<String, V>`'s do.
+impl HashSet<String> {
+    /// Returns true if some element spells the same text as `value`.
+    pub fn contains_str<S: AsStrSlice>(&self, value: S) -> bool {
+        return self.inner.contains_key_str(value);
+    }
+}
+
 impl<T: Inspect> Inspect for HashSet<T> {
     fn inspect(&self, f: &mut Formatter) {
         self.inner.log.inspect_as(f, true);
@@ -471,6 +525,101 @@ impl<T: Hash> IntoIterator for HashSet<T> {
     }
 }
 
+// `[e0, e1, …]` as a `HashSet<T>` under the host's seed, last duplicate
+// ignored (WEP 2026-08-24).
+impl<T: Hash> From<Array<T>> for HashSet<T> {
+    fn from(elements: Array<T>) -> HashSet<T> {
+        let mut set = HashSet::<T>::new();
+        for let element of elements {
+            set.insert(element);
+        }
+        return set;
+    }
+}
+
+// `Default`, `Serialize` and `Deserialize` are written by hand: a derived one
+// would hash under an all-zero seed, write the seed out, or read it from the
+// input.
+
+impl<K: Hash, V> Default for HashMap<K, V> {
+    fn default() -> HashMap<K, V> {
+        return HashMap::new();
+    }
+}
+
+impl<T: Hash> Default for HashSet<T> {
+    fn default() -> HashSet<T> {
+        return HashSet::new();
+    }
+}
+
+/// The entries alone, in insertion order.
+impl<K: Hash + Serialize, V: Serialize> Serialize for HashMap<K, V> {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let mut m = s.begin_map(self.len())?;
+        for let [key, value] of self.entries() {
+            m.key(key)?;
+            m.value(value)?;
+        }
+        return m.end();
+    }
+}
+
+/// Under the host's seed, as `new()` builds one.
+impl<K: Hash + Deserialize + Inspect, V: Deserialize> Deserialize for HashMap<K, V> {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<HashMap<K, V>, DeserializeError> {
+        let on_duplicate = d.on_duplicate_field();
+        let mut map = d.begin_map()?;
+        let mut result = HashMap::<K, V>::new();
+        while let Some(key) = map.next_key::<K>()? {
+            let val = map.next_value::<V>()?;
+            result.insert_decoded(on_duplicate, key, val)?;
+        }
+        map.end()?;
+        return Result::Ok(result);
+    }
+}
+
+impl<K: Hash + Inspect, V> HashMap<K, V> {
+    /// Inserts a decoded entry: a repeated key is reported under `policy`,
+    /// and one the policy admits takes the last value.
+    fn insert_decoded(&mut self, policy: DuplicateFieldPolicy, key: K, value: V) -> Result<(), DeserializeError> {
+        // The losing insert keeps the first value, so a repeat re-assigns.
+        if !self.try_insert(key, value) {
+            report_duplicate_field(policy, &key)?;
+            self[key] = value;
+        }
+        return Result::Ok(());
+    }
+}
+
+/// The elements alone, in insertion order.
+impl<T: Hash + Serialize> Serialize for HashSet<T> {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let mut seq = s.begin_seq(self.len())?;
+        for let element of self.iter_ref() {
+            seq.element(element)?;
+        }
+        return seq.end();
+    }
+}
+
+/// Under the host's seed, as `new()` builds one.
+impl<T: Hash + Deserialize + Inspect> Deserialize for HashSet<T> {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<HashSet<T>, DeserializeError> {
+        let on_duplicate = d.on_duplicate_field();
+        let mut seq = d.begin_seq()?;
+        let mut result = HashSet::<T>::new();
+        while let Some(element) = seq.next_element::<T>()? {
+            if !result.insert(element) {
+                report_duplicate_field(on_duplicate, &element)?;
+            }
+        }
+        seq.end()?;
+        return Result::Ok(result);
+    }
+}
+
 test "a difference in one word survives the next, whatever the seed" {
     let top: u64 = 1 << 63;
     let a: [u64, u64] = [7, 9];
@@ -481,9 +630,9 @@ test "a difference in one word survives the next, whatever the seed" {
         HashSeed::fixed(1, 2),
         HashSeed::fixed(12345, 67890),
     ] as List<HashSeed> {
-        let pairs = HashMap::<[u64, u64], i32>::new(seed);
+        let pairs = HashMap::<[u64, u64], i32>::with_seed(seed);
         assert pairs.fingerprint(&a) != pairs.fingerprint(&b);
-        let lists = HashMap::<List<u64>, i32>::new(seed);
+        let lists = HashMap::<List<u64>, i32>::with_seed(seed);
         assert lists.fingerprint(&c) != lists.fingerprint(&d);
     }
 }

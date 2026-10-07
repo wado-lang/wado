@@ -283,30 +283,24 @@ test {
 }
 ```
 
-A global may have any type. Its initializer runs at module initialization, with
-no handler installed for it and in an order it does not choose. It declares no
-`with` clause and has nowhere to declare one. So calling a function that
-declares an effect is an error, as is dispatching an operation.
+A global may have any type. Its initializer declares no `with` clause and has
+nowhere to declare one. So calling a function that declares an effect is an
+error, as is dispatching an operation, except for the effects a
+[`#[benign(E, ...)]`](./spec-attributes.md#benigne-) on the global lists.
 
-An initializer may install its own handler, whose body holds the effect it
-handles as a function body's would. Installing it demands what the handler
-performs ([Installing a Handler](./spec-effects.md#installing-a-handler)), so
-only a handler that performs nothing can be installed here.
+An initializer runs outside every handler, those installed where the global is
+first read included. Unless it installs a handler of its own, an operation it
+performs runs as it would with no handler installed: the host answers a
+host-backed interface ([Handlers](./spec-effects.md#handlers)). The handler it
+installs has a body that holds the effect it handles as a function body's would.
+Installing it demands what the handler performs
+([Installing a Handler](./spec-effects.md#installing-a-handler)), so only a
+handler that performs nothing can be installed here.
 
-An initializer runs at module initialization whether or not anything reads the
-global, so one that traps traps the program at start, at every optimization
-level:
-
-<!-- {"fixture":"global_unread_trapping_init.wado"} -->
-
-```wado
-global Z: i32 = 1 / 0;
-
-#[expect_trap]
-test "an unread global's trapping initializer still runs" {
-    assert builtin::black_box(1) == 1;
-}
-```
+Whether an initializer runs, and when, is unspecified, except that it runs at
+most once and has run before the global is read. An initializer that traps may
+trap the program at start, at the first read, or never, if nothing reads the
+global. A `#[benign]` global is no exception.
 
 ### Mutability
 
@@ -358,6 +352,8 @@ fn example() {
 Initializers run in dependency order, so one may read another global whatever
 the declaration order. This holds across modules, and whether the initializer
 names the global or reaches it through a call. A cycle among them is an error.
+The order between two initializers that do not depend on each other is
+[unspecified](./spec-overview.md#behavior-classes).
 
 ## Operators
 

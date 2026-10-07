@@ -524,20 +524,31 @@ impl String {
 
     /// Read the byte at `index` without bounds checks. For safe access use `bytes()`.
     ///
-    /// # Safety (caller-side preconditions)
+    /// # Contract
     /// - `0 <= index < self.len()`.
+    ///
+    /// Any other `index` is a contract violation, and the result is
+    /// unspecified: a byte of the backing array past `len()`, or a trap.
     #[compiler_item("string_get_byte_unchecked")]
     pub fn get_byte_unchecked(&self, index: i32) -> u8 {
+        if builtin::contract_checks() {
+            assert 0 <= index < self.used, "index out of bounds";
+        }
         return self.repr[index];
     }
 
     /// Write the byte at `index` without bounds or UTF-8 checks.
     ///
-    /// # Safety (caller-side preconditions)
+    /// # Contract
     /// - `0 <= index < self.len()`.
     /// - The resulting byte sequence must remain valid UTF-8.
+    ///
+    /// Breaking it is a contract violation, and the behavior is unconstrained.
     #[compiler_item("string_set_byte_unchecked")]
     pub fn set_byte_unchecked(&mut self, index: i32, value: u8) {
+        if builtin::contract_checks() {
+            assert 0 <= index < self.used, "index out of bounds";
+        }
         self.repr[index] = value;
     }
 
@@ -661,8 +672,10 @@ impl String {
     /// Append the bytes of any `AsByteSlice` source (`ByteList`, `ByteArray`,
     /// `ByteSlice`, or a `String`).
     ///
-    /// # Safety (caller-side preconditions)
+    /// # Contract
     /// - The resulting byte sequence must remain valid UTF-8.
+    ///
+    /// Breaking it is a contract violation, and the behavior is unconstrained.
     pub fn push_bytes_unchecked<S: AsByteSlice>(&mut self, bytes: &S) {
         let slice = bytes.as_byte_slice();
         let n = slice.len();
@@ -675,14 +688,13 @@ impl String {
 
     /// Append the byte range `[start, end)` of `s` to this string.
     ///
-    /// # Safety (caller-side preconditions)
+    /// # Contract
     /// - `0 <= start <= end <= s.len()`.
     /// - `start` and `end` must lie on UTF-8 character boundaries of `s`.
     /// - The resulting byte sequence must remain valid UTF-8.
+    ///
+    /// Breaking it is a contract violation, and the behavior is unconstrained.
     pub fn push_str_range_unchecked<S: AsStrSlice>(&mut self, s: S, start: i32, end: i32) {
-        if end <= start {
-            return;
-        }
         self.push_str(s.as_str_slice().slice_unchecked(start, end));
     }
 
@@ -716,10 +728,12 @@ impl String {
 
     /// Decodes the UTF-8 character starting at `byte_index` without bounds checks.
     ///
-    /// # Safety (caller-side preconditions)
+    /// # Contract
     /// - `byte_index` lies on a UTF-8 character boundary.
     /// - The full multi-byte sequence (1–4 bytes) starting at `byte_index`
     ///   is in range `[0, self.len())`.
+    ///
+    /// Breaking it is a contract violation, and the behavior is unconstrained.
     pub fn char_at_byte_unchecked(&self, byte_index: i32) -> char {
         return self.as_str_slice().char_at_byte_unchecked(byte_index);
     }
@@ -740,14 +754,17 @@ impl String {
     }
 
     /// Appends a single byte, assumed to be a complete one-byte UTF-8 sequence
-    /// (`byte < 0x80`). A larger byte breaks the String's UTF-8 invariant — the
-    /// `_unchecked` contract.
+    /// (`byte < 0x80`). A larger byte breaks the String's UTF-8 invariant: a
+    /// contract violation, and the behavior is unconstrained.
     ///
     /// `push` routes its ASCII fast path here, and the optimizer's
     /// `nir/const_ascii_push` rewrite retargets `push(<const char < 0x80>)`
     /// here directly, skipping `encode_char`'s width dispatch.
     #[compiler_item("string_push_ascii")]
     pub fn push_ascii_unchecked(&mut self, byte: u8) {
+        if builtin::contract_checks() {
+            assert byte < 0x80, "not an ASCII byte";
+        }
         let start = self.internal_reserve_uninit(1);
         self.set_byte_unchecked(start, byte);
     }
@@ -765,10 +782,15 @@ impl String {
 
     /// Truncate without bounds or UTF-8 boundary checks.
     ///
-    /// # Safety (caller-side preconditions)
+    /// # Contract
     /// - `0 <= byte_len <= self.len()`.
     /// - `byte_len` lies on a UTF-8 character boundary.
+    ///
+    /// Breaking it is a contract violation, and the behavior is unconstrained.
     pub fn truncate_unchecked(&mut self, byte_len: i32) {
+        if builtin::contract_checks() {
+            assert self.is_char_boundary(byte_len), "not a character boundary of the string";
+        }
         self.used = byte_len;
     }
 
@@ -859,9 +881,11 @@ impl String {
     /// Extract a substring by byte range `[start, end)` without bounds or
     /// UTF-8 boundary checks.
     ///
-    /// # Safety (caller-side preconditions)
+    /// # Contract
     /// - `0 <= start <= end <= self.len()`.
     /// - `start` and `end` lie on UTF-8 character boundaries.
+    ///
+    /// Breaking it is a contract violation, and the behavior is unconstrained.
     pub fn substr_bytes_unchecked(&self, start: i32, end: i32) -> String {
         return self.as_str_slice().substr_bytes_unchecked(start, end);
     }
@@ -928,10 +952,15 @@ impl String {
 
     /// Inserts a character at `byte_index` without bounds or UTF-8 boundary checks.
     ///
-    /// # Safety (caller-side preconditions)
+    /// # Contract
     /// - `0 <= byte_index <= self.len()`.
     /// - `byte_index` lies on a UTF-8 character boundary.
+    ///
+    /// Breaking it is a contract violation, and the behavior is unconstrained.
     pub fn insert_unchecked(&mut self, byte_index: i32, ch: char) {
+        if builtin::contract_checks() {
+            assert self.is_char_boundary(byte_index), "not a character boundary of the string";
+        }
         self.make_gap(byte_index, ch.len_utf8());
         encode_char(&mut self.repr as &mut Array<u8>, byte_index, ch as u32);
     }
@@ -945,10 +974,15 @@ impl String {
 
     /// Inserts a string at `byte_index` without bounds or UTF-8 boundary checks.
     ///
-    /// # Safety (caller-side preconditions)
+    /// # Contract
     /// - `0 <= byte_index <= self.len()`.
     /// - `byte_index` lies on a UTF-8 character boundary.
+    ///
+    /// Breaking it is a contract violation, and the behavior is unconstrained.
     pub fn insert_str_unchecked<S: AsStrSlice>(&mut self, byte_index: i32, s: S) {
+        if builtin::contract_checks() {
+            assert self.is_char_boundary(byte_index), "not a character boundary of the string";
+        }
         let view = s.as_str_slice();
         let s_len = view.len();
         if s_len == 0 {
@@ -969,10 +1003,15 @@ impl String {
     /// Removes and returns the character at `byte_index` without bounds or
     /// UTF-8 boundary checks.
     ///
-    /// # Safety (caller-side preconditions)
+    /// # Contract
     /// - `0 <= byte_index < self.len()`.
     /// - `byte_index` lies on a UTF-8 character boundary.
+    ///
+    /// Breaking it is a contract violation, and the behavior is unconstrained.
     pub fn remove_unchecked(&mut self, byte_index: i32) -> char {
+        if builtin::contract_checks() {
+            assert 0 <= byte_index < self.used && self.is_char_boundary(byte_index), "not the start of a character";
+        }
         let [code, char_len] = decode_char_at(&self.repr as &Array<u8>, byte_index);
         builtin::array_copy(
             &mut self.repr as &mut Array<u8>,
@@ -1195,8 +1234,9 @@ impl String {
 
     /// Build a `String` from an iterable of bytes without UTF-8 validation.
     ///
-    /// # Safety
-    /// The caller must ensure the bytes form valid UTF-8.
+    /// # Contract
+    /// The caller must ensure the bytes form valid UTF-8. Breaking it is a
+    /// contract violation, and the behavior is unconstrained.
     pub fn from_utf8_unchecked<I: IntoIterator<Item = u8>>(bytes: I) -> String {
         let mut builder = String::with_capacity(8);
         for let b of bytes {
@@ -1332,9 +1372,15 @@ impl StrSlice {
     /// Read the byte at `index`, counted from the view's start, without bounds
     /// checks.
     ///
-    /// # Safety (caller-side preconditions)
+    /// # Contract
     /// - `0 <= index < self.len()`.
+    ///
+    /// Any other `index` is a contract violation, and the result is
+    /// unspecified: a byte of the backing array outside the view, or a trap.
     pub fn get_byte_unchecked(&self, index: i32) -> u8 {
+        if builtin::contract_checks() {
+            assert 0 <= index < self.len(), "index out of bounds";
+        }
         return self.repr[self.start + index];
     }
 
@@ -1373,10 +1419,15 @@ impl StrSlice {
 
     /// A sub-view without bounds or UTF-8 boundary checks.
     ///
-    /// # Safety (caller-side preconditions)
+    /// # Contract
     /// - `0 <= start <= end <= self.len()`.
     /// - `start` and `end` lie on UTF-8 character boundaries.
+    ///
+    /// Breaking it is a contract violation, and the behavior is unconstrained.
     pub fn slice_unchecked(&self, start: i32, end: i32) -> StrSlice {
+        if builtin::contract_checks() {
+            assert start <= end && self.is_char_boundary(start) && self.is_char_boundary(end), "not a range of characters in the view";
+        }
         return StrSlice { repr: self.repr, start: self.start + start, end: self.start + end };
     }
 
@@ -1665,7 +1716,18 @@ impl StrSlice {
         return chars;
     }
 
+    /// Decodes the UTF-8 character starting at `byte_index`, counted from the
+    /// view's start, without checks.
+    ///
+    /// # Contract
+    /// - `byte_index` lies on a UTF-8 character boundary.
+    /// - The full sequence starting at `byte_index` lies in `[0, self.len())`.
+    ///
+    /// Breaking it is a contract violation, and the behavior is unconstrained.
     pub fn char_at_byte_unchecked(&self, byte_index: i32) -> char {
+        if builtin::contract_checks() {
+            assert 0 <= byte_index < self.len() && self.is_char_boundary(byte_index), "not the start of a character";
+        }
         return char::from_u32_unchecked(decode_char_at(self.repr, self.start + byte_index).0);
     }
 
@@ -1681,6 +1743,13 @@ impl StrSlice {
         return self.slice(start, end).to_string();
     }
 
+    /// Copies out the byte range `[start, end)` of the view without checks.
+    ///
+    /// # Contract
+    /// - `0 <= start <= end <= self.len()`.
+    /// - `start` and `end` lie on UTF-8 character boundaries.
+    ///
+    /// Breaking it is a contract violation, and the behavior is unconstrained.
     pub fn substr_bytes_unchecked(&self, start: i32, end: i32) -> String {
         return self.slice_unchecked(start, end).to_string();
     }
@@ -1731,6 +1800,7 @@ impl StrSlice {
             return self.to_string();
         }
         let mut result = String::with_capacity(len);
+        let mut run_start = 0;
         let mut pos = 0;
         let mut replacements = 0;
         let limit = len - from_len;
@@ -1738,19 +1808,19 @@ impl StrSlice {
             if count >= 0 && replacements >= count {
                 break;
             }
+            // A match starts with the pattern's lead byte, never inside a
+            // character, so each run between matches is whole characters.
             if bytes_match_at(self.repr, self.start + pos, pat.repr, pat.start, from_len) {
+                result.push_str(self.slice_unchecked(run_start, pos));
                 result.push_str(to);
                 pos += from_len;
+                run_start = pos;
                 replacements += 1;
             } else {
-                let dst = result.internal_reserve_uninit(1);
-                result.set_byte_unchecked(dst, self.get_byte_unchecked(pos));
                 pos += 1;
             }
         }
-        if pos < len {
-            result.push_str(self.slice_unchecked(pos, len));
-        }
+        result.push_str(self.slice_unchecked(run_start, len));
         return result;
     }
 }
@@ -1978,7 +2048,7 @@ impl AsStrSlice for String {
     }
 
     fn get_byte_unchecked(&self, index: i32) -> u8 {
-        return self.repr[index];
+        return String::get_byte_unchecked(self, index);
     }
 
     /// Already a `String`: the default would rebuild one byte by byte, which a

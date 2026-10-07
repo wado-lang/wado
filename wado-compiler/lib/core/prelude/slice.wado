@@ -36,8 +36,9 @@ pub trait Sequence with () {
 
     fn len(&self) -> i32;
 
-    /// The caller must guarantee `0 <= index < len()`. Violating it yields an
-    /// unspecified `Elem` or traps; it is never undefined behaviour.
+    /// The caller must guarantee `0 <= index < len()`. Any other `index` is a
+    /// contract violation, and the result is unspecified: some valid `Elem`,
+    /// or a trap.
     fn get_unchecked(&self, index: i32) -> Self::Elem;
 
     fn is_empty(&self) -> bool {
@@ -72,6 +73,9 @@ pub trait Sequence with () {
 /// A contiguous view into a backing `Array<T>` over the half-open range
 /// `[start, end)`. Holds a reference to the whole array, so creating a slice
 /// never copies elements.
+///
+/// A slice of a `List` is bound by the contract on `List`: once the list
+/// shrinks, the slice must not read past the list's new length.
 #[compiler_item("slice")]
 pub struct Slice<T> {
     repr: &Array<T>,
@@ -92,11 +96,15 @@ impl<T> Slice<T> {
         return self.end - self.start;
     }
 
-    /// The caller must guarantee `0 <= index < len()`; an out-of-range `index`
-    /// reads past the view into the backing array or traps. Also the byte-read
+    /// The caller must guarantee `0 <= index < len()`. Any other `index` is a
+    /// contract violation, and the result is unspecified: an element of the
+    /// backing array outside the view, or a trap. Also the byte-read
     /// anchor for `FieldSchema::lookup`, as `len` is for byte length.
     #[compiler_item("byte_slice_get_unchecked")]
     pub fn get_unchecked(&self, index: i32) -> T {
+        if builtin::contract_checks() {
+            assert 0 <= index < self.end - self.start, "index out of bounds";
+        }
         return builtin::array_get_value(self.repr, self.start + index);
     }
 
@@ -166,7 +174,7 @@ impl<T> Sequence for Slice<T> {
     }
 
     fn get_unchecked(&self, index: i32) -> T {
-        return builtin::array_get_value(self.repr, self.start + index);
+        return Slice::get_unchecked(self, index);
     }
 }
 

@@ -254,6 +254,27 @@ fn test_wit_lib_emits_root_world() {
         .stdout(predicate::str::contains("world shapes").not());
 }
 
+/// A function `export(…)` maps onto a world export appears in the WIT as that
+/// export, not under its own name.
+#[test]
+fn test_wit_names_mapped_export_by_world() {
+    let tmp = tempfile::tempdir().unwrap();
+    let file = tmp.path().join("app.wado");
+    std::fs::write(
+        &file,
+        "use { Command } from \"wasi:cli\";\nexport(Command::run) fn main() {\n}\n",
+    )
+    .unwrap();
+
+    wado()
+        .arg("wit")
+        .arg(&file)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("export wasi:cli/run@"))
+        .stdout(predicate::str::contains("export main").not());
+}
+
 #[test]
 fn test_wit_lib_conflicts_with_world() {
     wado()

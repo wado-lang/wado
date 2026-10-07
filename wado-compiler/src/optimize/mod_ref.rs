@@ -740,7 +740,7 @@ fn leaf_effect<'a>(
     let Some(declaration) = declarations.get(f) else {
         return (FnEffect::opaque(), None);
     };
-    let effect = match &declaration.facts.side_effect {
+    let mut effect = match &declaration.facts.side_effect {
         SideEffect::Opaque => FnEffect::opaque(),
         SideEffect::BlackBox => FnEffect {
             pinned: true,
@@ -761,6 +761,17 @@ fn leaf_effect<'a>(
             ..FnEffect::default()
         },
     };
+    // Tasks that run meanwhile may read and write any state, and the call
+    // returns only once something resumes it. `stores_unseen` answers for the
+    // shared heap.
+    if declaration.facts.suspend {
+        effect.merge(FnEffect {
+            reads_mutable_state: true,
+            writes_state: true,
+            may_diverge: true,
+            ..FnEffect::default()
+        });
+    }
     (effect, Some(declaration))
 }
 

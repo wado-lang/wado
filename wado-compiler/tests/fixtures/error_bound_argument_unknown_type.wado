@@ -1,0 +1,27 @@
+// A bound argument naming no type is reported where it is written. Nothing
+// reported it, and a call reaching the bound crashed the compiler asking it.
+trait Conv<X> with () {
+    fn conv(&self) -> i32;
+}
+
+struct A {
+    v: i32,
+}
+
+
+impl Conv<i32> for A {
+    fn conv(&self) -> i32 {
+        return self.v;
+    }
+}
+
+fn f<T: Conv<Nope>>(t: T) -> i32 {
+    return t.conv();
+}
+
+test {
+    assert f(A { v: 1 }) == 1;
+}
+
+__DATA__
+{"compile_error": ":18:14: analysis error: unknown type 'Nope'"}

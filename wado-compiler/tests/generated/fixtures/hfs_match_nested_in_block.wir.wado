@@ -78,36 +78,36 @@ fn "hfs_match_nested_in_block.wado/run"() with Stdout {
     let i_1: i32;
     let $local_3: ref "core:prelude/string.wado//String";
     let x: i64;
-    let $hfs_v_353: i32;
+    let $hfs_v_453: i32;
     b = struct.new "hfs_match_nested_in_block.wado//Buf" { v: 0, pad: 0 };
     i_1 = 0;
-    $hfs_v_353 = 0;
+    $hfs_v_453 = 0;
     b0: block {
         l1: loop {
             break_if b0 i_1 >= 4;
             let $match_scrut_0: i32;
             if local.tee $match_scrut_0(i_1 % 2) == 0 {
-                $hfs_v_353 = $hfs_v_353 + 1;
+                $hfs_v_453 = $hfs_v_453 + 1;
             } else {
-                b.v = $hfs_v_353;
+                b.v = $hfs_v_453;
                 "hfs_match_nested_in_block.wado/external_inc"(b);
-                $hfs_v_353 = b.v;
+                $hfs_v_453 = b.v;
             }
             i_1 = i_1 + 1;
-            b.v = $hfs_v_353;
+            b.v = $hfs_v_453;
             continue l1;
         };
     };
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    $hfs_v_353 = local.tee $match_scrut_0(b.v) < 0;
+    $hfs_v_453 = local.tee $match_scrut_0(b.v) < 0;
     $match_scrut_0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s($match_scrut_0); select i64(x < 0_i64, 0_i64 - x, x)));
-    if $hfs_v_353 {
-        if @unlikely(local.tee $hfs_v_353(0 + 1) > builtin::array_len($local_3.repr)) {
+    if $hfs_v_453 {
+        if @unlikely(local.tee $hfs_v_453(0 + 1) > builtin::array_len($local_3.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, $hfs_v_353);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, $hfs_v_453);
         }
         i_1 = $local_3.used;
-        $local_3.used = $hfs_v_353;
+        $local_3.used = $hfs_v_453;
         builtin::array_set_u8($local_3.repr, i_1, 45);
     } else {
     }
@@ -115,13 +115,13 @@ fn "hfs_match_nested_in_block.wado/run"() with Stdout {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, i_1);
     }
-    $hfs_v_353 = $local_3.used;
+    $hfs_v_453 = $local_3.used;
     $local_3.used = i_1;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, $hfs_v_353, x, $match_scrut_0);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, $hfs_v_453, x, $match_scrut_0);
     $match_scrut_0 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    $hfs_v_353 = builtin::i32_wrap_i64(x >> 32_i64);
+    $hfs_v_453 = builtin::i32_wrap_i64(x >> 32_i64);
     $match_scrut_0 = "hfs_match_nested_in_block.wado/$cm_binding__Stdout_write_via_stream"($match_scrut_0);
-    "core:rt/write_string_to_stream"($hfs_v_353, $local_3.repr, $local_3.used);
+    "core:rt/write_string_to_stream"($hfs_v_453, $local_3.repr, $local_3.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($match_scrut_0);
 }
 

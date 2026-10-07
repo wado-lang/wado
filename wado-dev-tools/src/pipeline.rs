@@ -5,11 +5,9 @@ use std::time::{Duration, Instant};
 use wado_compiler::hashmap::{IndexMap, IndexSet};
 
 use wado_compiler::OptLevel;
+use wado_host::StubHost;
 
-use crate::compiler_host::FilesystemCompilerHost;
-use crate::data_section::{
-    extract_dependencies_from_data_section, extract_world_from_data_section, should_skip_file,
-};
+use crate::data_section::{FixtureCompile, read_fixture_compile, should_skip_file};
 use crate::template::Template;
 
 const COMPILER_STACK_SIZE: usize = 16 * 1024 * 1024;
@@ -513,12 +511,14 @@ async fn render_phases(
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
-    let target_world = extract_world_from_data_section(source, default_world);
-    let dependencies = extract_dependencies_from_data_section(source);
+    let FixtureCompile {
+        world: target_world,
+        inputs,
+    } = read_fixture_compile(source, default_world).unwrap_or_else(|e| panic!("{input_path}: {e}"));
+    let params = inputs.param_inputs();
 
     if needs_dump {
-        let host = FilesystemCompilerHost::silent(base_path.clone())
-            .with_dependencies(dependencies.clone());
+        let host = StubHost::new(base_path.clone()).with_stubs(inputs.host_stubs());
         let dumped = wado_compiler::dump_with_host_and_world(
             source,
             &host,
@@ -527,8 +527,8 @@ async fn render_phases(
             target_world.as_deref(),
             None,
             wado_compiler::OptOverrides::default(),
-            &[],
-            &wado_compiler::param_resolution::ParamInputs::default(),
+            &inputs.codegen_flags,
+            &params,
             wado_compiler::kiln::InvocationIndex::default(),
         )
         .await;
@@ -600,11 +600,13 @@ async fn render_phases(
     }
 
     if needs_wat {
-        let host = FilesystemCompilerHost::silent(base_path).with_dependencies(dependencies);
+        let host = StubHost::new(base_path).with_stubs(inputs.host_stubs());
         let options = wado_compiler::CompilerOptions {
             opt_level,
             target_world: target_world.clone(),
             log_level: Some(wado_compiler::LogLevel::Off),
+            codegen_flags: inputs.codegen_flags.clone(),
+            params,
             ..wado_compiler::CompilerOptions::default()
         };
         let res =
@@ -629,10 +631,10 @@ async fn render_phases(
 }
 
 /// Build an error string that attaches buffered diagnostics from a
-/// `silent()` host. `dump_with_host_and_world` converts a resolve `Bail`
+/// [`StubHost`], which prints none. `dump_with_host_and_world` converts a resolve `Bail`
 /// into a `DumpResult` with all post-resolve fields `None`, so the
 /// pipeline otherwise sees only an empty output with no context.
-fn diagnostics_summary(host: &FilesystemCompilerHost, prefix: &str) -> String {
+fn diagnostics_summary(host: &StubHost, prefix: &str) -> String {
     let diags = host.diagnostics();
     let errors: Vec<String> = diags
         .iter()

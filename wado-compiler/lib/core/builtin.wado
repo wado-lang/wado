@@ -104,9 +104,11 @@ pub fn hole_get<T, V>(t: &T, index: i32) -> V;
 /// Renders hole `index` of template `t` through its specifier into `f`.
 /// Rewritten by lowering to the per-shape helper synthesized alongside
 /// `ReflectTemplate` (WEP 2026-01-10). Used by `TemplateHole::fmt`. It runs
-/// the hole's `Display` impl, which may do anything a body may.
+/// the hole's `Display` impl, which may do anything a body may. It never
+/// suspends: `suspend` stands in for reading and writing globals, which no
+/// other fact states yet.
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn hole_fmt<T>(t: &T, index: i32, f: &mut Formatter);
 
 /// Returns the length of a GC array. `array.len` reads the header, so the
@@ -195,6 +197,16 @@ pub fn array_clone_prefix<T>(src: &Array<T>, len: i32) -> Array<T>;
 #[storage(stores_args)]
 #[side_effect(trap, outside = [arr], at = [offset], count = len)]
 pub fn array_fill<T>(arr: &mut Array<T>, offset: i32, value: T, len: i32);
+
+/// Drops the references `len` elements starting at `offset` hold, so the
+/// collector can reclaim what they reach. Reading a released slot before a
+/// write refills it is unspecified: some value of `T`, or a trap. Fills the
+/// slots with null where `T` holds a reference and does nothing where it does
+/// not, so the range must lie within `arr`: past it, the first traps and the
+/// second does not.
+#[storage(none)]
+#[side_effect(trap, outside = [arr], at = [offset], count = len)]
+pub fn array_release<T>(arr: &mut Array<T>, offset: i32, len: i32);
 
 /// Loads an i32 from linear memory (Wasm i32.load).
 #[storage(none)]
@@ -426,6 +438,14 @@ pub fn black_box<T>(value: T) -> T;
 #[side_effect(none)]
 pub fn is_uninitialized<T>(value: &T) -> bool;
 
+/// Whether this build checks contracts (`-f contract-checks`). It is only
+/// ever the whole condition of an `if builtin::contract_checks() { … }` with
+/// no `else`, which the compiler keeps or deletes before NIR.
+/// `internal`: a check a program could skip would be a removable `assert`.
+#[storage(none)]
+#[side_effect(none)]
+internal fn contract_checks() -> bool;
+
 /// Marks the enclosing code path as cold (rarely executed). `cold_path()` is a
 /// statement placed inside a branch body, so it works anywhere — an `if` /
 /// `if let` / `match` arm, or as the cold fall-through after a guard clause —
@@ -478,16 +498,18 @@ pub fn stream_read(handle: i32, ptr: i32, max: i32) -> i32;
 #[side_effect(opaque)]
 pub fn stream_write(handle: i32, ptr: i32, len: i32) -> i32;
 
-/// Cancel an in-progress read on a readable stream.
+/// Cancel an in-progress read on a readable stream, blocking until the
+/// cancellation completes.
 #[canonical("wasi", "stream-cancel-read")]
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn stream_cancel_read(handle: i32) -> i32;
 
-/// Cancel an in-progress write on a writable stream.
+/// Cancel an in-progress write on a writable stream, blocking until the
+/// cancellation completes.
 #[canonical("wasi", "stream-cancel-write")]
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn stream_cancel_write(handle: i32) -> i32;
 
 /// Drop a readable stream handle.
@@ -525,16 +547,18 @@ pub fn future_read(handle: i32, ptr: i32) -> i32;
 #[side_effect(opaque)]
 pub fn future_write(handle: i32, ptr: i32) -> i32;
 
-/// Cancel an in-progress read on a future.
+/// Cancel an in-progress read on a future, blocking until the cancellation
+/// completes.
 #[canonical("wasi", "future-cancel-read")]
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn future_cancel_read(handle: i32) -> i32;
 
-/// Cancel an in-progress write on a future.
+/// Cancel an in-progress write on a future, blocking until the cancellation
+/// completes.
 #[canonical("wasi", "future-cancel-write")]
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn future_cancel_write(handle: i32) -> i32;
 
 /// Drop a readable future handle.
@@ -561,7 +585,7 @@ pub fn waitable_set_new() -> i32;
 /// Returns the event code (i32).
 #[canonical("wasi", "waitable-set-wait")]
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn waitable_set_wait(ws: i32, outptr: i32) -> i32;
 
 /// Non-blocking poll.  Writes (handle, payload) to `outptr`.
@@ -585,10 +609,10 @@ pub fn waitable_set_drop(ws: i32);
 #[side_effect(opaque)]
 pub fn subtask_drop(handle: i32);
 
-/// Cancel an in-progress subtask.
+/// Cancel an in-progress subtask, blocking until it resolves.
 #[canonical("wasi", "subtask-cancel")]
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn subtask_cancel(handle: i32);
 
 /// Join a waitable (subtask/stream/future) to a waitable set.
@@ -659,16 +683,18 @@ pub fn task_cancel();
 /// Returns the subtask handle for the async operation.
 /// Internal only: used by core:rt for ambient logging (panic, assert).
 /// Public API should use Stdout::write_via_stream() through the effect system.
+/// It calls the Component Model import, so it may suspend as one does.
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn call_indirect_stdout_write_via_stream(rx: i32) -> i32;
 
 /// Calls stderr's write_via_stream indirectly (ambient, no effect required).
 /// Returns the subtask handle for the async operation.
 /// Internal only: used by core:rt for ambient logging (panic, assert).
 /// Public API should use Stderr::write_via_stream() through the effect system.
+/// It calls the Component Model import, so it may suspend as one does.
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn call_indirect_stderr_write_via_stream(rx: i32) -> i32;
 /// Absolute value of f32
 /// Maps to Wasm f32.abs instruction
@@ -1779,11 +1805,11 @@ pub fn f64x2_convert_low_i32x4_u(a: v128) -> v128;
 #[storage(none)]
 #[side_effect(none)]
 pub fn f64x2_promote_low_f32x4(a: v128) -> v128;
-/// Relaxed swizzle of i8x16 lanes (out-of-range indices are implementation-defined).
+/// Relaxed swizzle of i8x16 lanes (out-of-range indices are host-defined).
 #[storage(none)]
 #[side_effect(none)]
 pub fn i8x16_relaxed_swizzle(a: v128, indices: v128) -> v128;
-/// Relaxed lane select for i8x16 (implementation-defined whether bitselect or lane-wise).
+/// Relaxed lane select for i8x16 (host-defined whether bitselect or lane-wise).
 #[storage(none)]
 #[side_effect(none)]
 pub fn i8x16_relaxed_laneselect(a: v128, b: v128, mask: v128) -> v128;
@@ -1799,7 +1825,7 @@ pub fn i32x4_relaxed_laneselect(a: v128, b: v128, mask: v128) -> v128;
 #[storage(none)]
 #[side_effect(none)]
 pub fn i64x2_relaxed_laneselect(a: v128, b: v128, mask: v128) -> v128;
-/// Relaxed fused multiply-add for f32x4: a * b + c (implementation-defined precision).
+/// Relaxed fused multiply-add for f32x4: a * b + c (host-defined precision).
 #[storage(none)]
 #[side_effect(none)]
 pub fn f32x4_relaxed_madd(a: v128, b: v128, c: v128) -> v128;
@@ -1807,7 +1833,7 @@ pub fn f32x4_relaxed_madd(a: v128, b: v128, c: v128) -> v128;
 #[storage(none)]
 #[side_effect(none)]
 pub fn f32x4_relaxed_nmadd(a: v128, b: v128, c: v128) -> v128;
-/// Relaxed fused multiply-add for f64x2: a * b + c (implementation-defined precision).
+/// Relaxed fused multiply-add for f64x2: a * b + c (host-defined precision).
 #[storage(none)]
 #[side_effect(none)]
 pub fn f64x2_relaxed_madd(a: v128, b: v128, c: v128) -> v128;
@@ -1815,35 +1841,35 @@ pub fn f64x2_relaxed_madd(a: v128, b: v128, c: v128) -> v128;
 #[storage(none)]
 #[side_effect(none)]
 pub fn f64x2_relaxed_nmadd(a: v128, b: v128, c: v128) -> v128;
-/// Relaxed minimum of f32x4 lanes (NaN handling is implementation-defined).
+/// Relaxed minimum of f32x4 lanes (NaN handling is host-defined).
 #[storage(none)]
 #[side_effect(none)]
 pub fn f32x4_relaxed_min(a: v128, b: v128) -> v128;
-/// Relaxed maximum of f32x4 lanes (NaN handling is implementation-defined).
+/// Relaxed maximum of f32x4 lanes (NaN handling is host-defined).
 #[storage(none)]
 #[side_effect(none)]
 pub fn f32x4_relaxed_max(a: v128, b: v128) -> v128;
-/// Relaxed minimum of f64x2 lanes (NaN handling is implementation-defined).
+/// Relaxed minimum of f64x2 lanes (NaN handling is host-defined).
 #[storage(none)]
 #[side_effect(none)]
 pub fn f64x2_relaxed_min(a: v128, b: v128) -> v128;
-/// Relaxed maximum of f64x2 lanes (NaN handling is implementation-defined).
+/// Relaxed maximum of f64x2 lanes (NaN handling is host-defined).
 #[storage(none)]
 #[side_effect(none)]
 pub fn f64x2_relaxed_max(a: v128, b: v128) -> v128;
-/// Relaxed truncation of f32x4 to i32x4 (signed, out-of-range is implementation-defined).
+/// Relaxed truncation of f32x4 to i32x4 (signed, out-of-range is host-defined).
 #[storage(none)]
 #[side_effect(none)]
 pub fn i32x4_relaxed_trunc_f32x4_s(a: v128) -> v128;
-/// Relaxed truncation of f32x4 to i32x4 (unsigned, out-of-range is implementation-defined).
+/// Relaxed truncation of f32x4 to i32x4 (unsigned, out-of-range is host-defined).
 #[storage(none)]
 #[side_effect(none)]
 pub fn i32x4_relaxed_trunc_f32x4_u(a: v128) -> v128;
-/// Relaxed truncation of f64x2 to i32x4 (signed, zero-extended, out-of-range is implementation-defined).
+/// Relaxed truncation of f64x2 to i32x4 (signed, zero-extended, out-of-range is host-defined).
 #[storage(none)]
 #[side_effect(none)]
 pub fn i32x4_relaxed_trunc_f64x2_s_zero(a: v128) -> v128;
-/// Relaxed truncation of f64x2 to i32x4 (unsigned, zero-extended, out-of-range is implementation-defined).
+/// Relaxed truncation of f64x2 to i32x4 (unsigned, zero-extended, out-of-range is host-defined).
 #[storage(none)]
 #[side_effect(none)]
 pub fn i32x4_relaxed_trunc_f64x2_u_zero(a: v128) -> v128;

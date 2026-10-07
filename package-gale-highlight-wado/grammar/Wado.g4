@@ -12,7 +12,15 @@ item
     ;
 
 itemModifiers
-    : 'internal'? 'pub'? 'export'? 'async'?
+    : 'internal'? 'pub'? ('export' exportTargets?)? 'async'?
+    ;
+
+exportTargets
+    : '(' exportTarget (',' exportTarget)* ','? ')'
+    ;
+
+exportTarget
+    : identifier '::' identifier ('::' identifier)?
     ;
 
 itemKind
@@ -793,7 +801,7 @@ fragment UNICODE_ESCAPE
     ;
 
 IDENTIFIER
-    : [a-zA-Z_] [\p{Alphabetic}\p{N}_]*
+    : [a-zA-Z_] [a-zA-Z0-9_]*
     ;
 
 SHEBANG
@@ -813,7 +821,7 @@ BLOCK_COMMENT
     ;
 
 WS
-    : [ \t\r\n]+ -> skip
+    : [ \t\r\n\f]+ -> skip
     ;
 
 // A format specifier's fill character when it is not ASCII: `${x:あ>8}`.

@@ -14,7 +14,7 @@ use { collect_paths, ratchet } from "../src/corpus.wado";
 use { args, println, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
-use { GaleMap } from "../src/gale_map.wado";
+use { HashMap } from "core:collections";
 
 global BASELINE_PATH: String = "scripts/rust-inline-paths.json";
 
@@ -127,10 +127,10 @@ fn scan<S: AsStrSlice>(path: S, failed: &mut i32) -> List<InlinePath> with (Stde
 
 /// File path to the number of inline paths it carries, omitting the clean ones.
 /// The baseline is serialized straight from this, so the walk is sorted.
-fn census(paths: &List<String>, failed: &mut i32) -> GaleMap<String, i32> with (Stderr, Preopens) {
+fn census(paths: &List<String>, failed: &mut i32) -> HashMap<String, i32> with (Stderr, Preopens) {
     let mut sorted = *paths;
     sorted.sort();
-    let mut counts = GaleMap::<String, i32>::new();
+    let mut counts = HashMap::<String, i32>::new();
     for let path of &sorted {
         let found = scan(path, failed).len();
         if found > 0 {

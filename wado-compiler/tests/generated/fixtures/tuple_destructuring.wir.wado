@@ -182,10 +182,10 @@ fn "tuple_destructuring.wado/destruct_for_of"() with Stdout {
     let rx_94: i32;
     let tx_95: i32;
     let $sroa_$iter_0_index_108: i32;
-    let new_used_154: i32;
-    let start_155: i32;
-    let new_used_195: i32;
-    let start_196: i32;
+    let new_used_157: i32;
+    let start_158: i32;
+    let new_used_213: i32;
+    let start_214: i32;
     $sroa_pairs_repr_87 = global:tuple_destructuring.wado::$const_obj_11;
     $sroa_$iter_0_index_108 = 0;
     b0: block {
@@ -266,27 +266,27 @@ fn "tuple_destructuring.wado/destruct_for_of"() with Stdout {
                     break $inline_count_digits_u64_12: 20;
                 };
                 if is_negative_27 {
-                    if @unlikely(local.tee new_used_154(0 + 1) > builtin::array_len($local_6.repr)) {
+                    if @unlikely(local.tee new_used_157(0 + 1) > builtin::array_len($local_6.repr)) {
                         cold_path;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, new_used_154);
+                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, new_used_157);
                     }
-                    start_155 = $local_6.used;
-                    $local_6.used = new_used_154;
-                    builtin::array_set_u8($local_6.repr, start_155, 45);
+                    start_158 = $local_6.used;
+                    $local_6.used = new_used_157;
+                    builtin::array_set_u8($local_6.repr, start_158, 45);
                 } else {
                 }
-                if @unlikely(local.tee new_used_195($local_6.used + digit_count_29) > builtin::array_len($local_6.repr)) {
+                if @unlikely(local.tee new_used_213($local_6.used + digit_count_29) > builtin::array_len($local_6.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, new_used_195);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, new_used_213);
                 }
-                start_196 = $local_6.used;
-                $local_6.used = new_used_195;
+                start_214 = $local_6.used;
+                $local_6.used = new_used_213;
                 $load_12 = $local_6.repr;
-                pos = start_196 + digit_count_29;
+                pos = start_214 + digit_count_29;
                 t = abs_val;
                 b26: block {
                     l27: loop {
-                        break_if b26 (pos - start_196) < 2;
+                        break_if b26 (pos - start_214) < 2;
                         q = t /u 100_i64;
                         tens = local.tee pair(builtin::i32_wrap_i64(t - (q * 100_i64))) / 10;
                         builtin::array_set_u8($load_12, pos - 1, ((48 + pair) - (tens * 10)) & 255);
@@ -296,8 +296,8 @@ fn "tuple_destructuring.wado/destruct_for_of"() with Stdout {
                         continue l27;
                     };
                 };
-                if pos > start_196 {
-                    builtin::array_set_u8($load_12, start_196, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
+                if pos > start_214 {
+                    builtin::array_set_u8($load_12, start_214, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
                 }
                 if @unlikely(local.tee new_used_53($local_6.used + 2) > builtin::array_len($load_12)) {
                     cold_path;
@@ -1431,24 +1431,24 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
-    let start_26: i32;
+    let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
         }
-        start_26 = self.used;
+        start_29 = self.used;
         self.used = is_negative;
-        builtin::array_set_u8(self.repr, start_26, 45);
+        builtin::array_set_u8(self.repr, start_29, 45);
     } else {
     }
     if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
     }
-    start_26 = self.used;
+    start_29 = self.used;
     self.used = digit_count;
-    return start_26;
+    return start_29;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(self, $mv$content$repr, $mv$content$used) {

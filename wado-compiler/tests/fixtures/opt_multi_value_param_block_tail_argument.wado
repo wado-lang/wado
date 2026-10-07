@@ -1,0 +1,44 @@
+// A multi-value argument still wrapped in an inlined block reaches the callee
+// as its fields: the block's leading statements run first, then the literal it
+// ends in is split. `HashMap<String, V>::get_ref_str` is the shape. Its inlined
+// `key.as_str_slice()` left `self.find_index_str({ let repr = …; StrSlice { … } })`,
+// where the receiver keeps `opt_multi_value_param_block_argument.wado`'s hoist
+// away, and the `StrSlice` was built and read back (`$mv_arg_`) per lookup.
+
+struct Table {
+    width: i32,
+}
+
+impl Table {
+    #[inline("never")]
+    fn find(&self, key: StrSlice) -> i32 {
+        return if key.len() == self.width { 1 } else { -1 };
+    }
+
+    #[inline("never")]
+    fn lookup<S: AsStrSlice>(&self, key: S) -> Option<i32> {
+        let e = self.find(key.as_str_slice());
+        if e < 0 {
+            return null;
+        }
+        return Option::Some(e);
+    }
+}
+
+export fn run() {
+    let t = Table { width: builtin::black_box(2) };
+    let probe: String = builtin::black_box("bb");
+    assert t.lookup(&probe) matches { Some(1) };
+    assert t.lookup(&"zzz") matches { None };
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "Table::find$scalar\"(self, repr, 0, $mv_field_"
+    ],
+    "wir_not_expect:O2": [
+        "Table::find$scalar\"(self, $mv_arg_"
+    ]
+}

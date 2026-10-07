@@ -127,7 +127,8 @@ Variants and references:
 - `aggregate_forward` — hand a freshly built aggregate to its consumer directly.
 - `known_case` — decide a `match` over a variant whose case is known.
 - `tuple_projection` — `[a, b, c].1` → `b`.
-- `identity_cast` — drop a cast between types that share one representation.
+- `identity_cast` — drop a cast between types that share one representation,
+  and fold `*&e` to `e`.
 
 Scalars and dataflow:
 

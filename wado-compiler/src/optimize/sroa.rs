@@ -656,6 +656,7 @@ fn array_read_of_candidate(
         | CtfeBuiltin::ArraySet
         | CtfeBuiltin::ArrayCopy
         | CtfeBuiltin::ArrayClonePrefix
+        | CtfeBuiltin::ArrayRelease
         | CtfeBuiltin::ColdPath
         | CtfeBuiltin::Select
         | CtfeBuiltin::I32AsChar

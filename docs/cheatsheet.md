@@ -203,7 +203,10 @@ fn example() {
 
 An initializer cannot perform effects: calling a function that declares one, or
 dispatching an operation, is a compile error. It may install its own handler,
-whose body may then dispatch that handler's operations.
+whose body may then dispatch that handler's operations, and
+`#[benign(E, …)]` on the global admits the effects it lists. Whether an
+initializer runs at all is unspecified; it runs at most once, before the first
+read.
 
 ## Types
 
@@ -519,7 +522,7 @@ variant Maybe<T> {
 }
 
 // Option and Result are defined as variants in core:prelude
-// pub variant Option<T> { Some(T), None }
+// pub variant Option<T> { None, Some(T) }
 // pub variant Result<T, E> { Ok(T), Err(E) }
 
 // Construction
@@ -1548,6 +1551,18 @@ export fn run() with Stdout {
 }
 ```
 
+Any name provides a world export through `export(World::name)`, in place of the
+function of that name:
+
+```wado
+use { println, Stdout } from "core:cli";
+use { Command } from "wasi:cli";
+
+export(Command::run) fn main() with Stdout {
+    println("Hello!");
+}
+```
+
 `handle(request)` is the entry point for `wasi:http/service`. It must be `async` because HTTP handlers use the Component Model async calling convention:
 
 ```wado
@@ -1801,6 +1816,7 @@ for let [k, v] of map.entries() { println(`${k}=${v}`); }
 let sizes = { small: 1, large: 3 } as TreeMap<String, i32>;
 let set = ["foo", "bar", "baz"] as TreeSet<String>;
 set.contains("foo");          // -> bool; set.insert(x) -> bool
+set.contains_str(view);       // String set: test a view, no copy
 ```
 
 ### core:serde
@@ -1841,7 +1857,7 @@ use { to_string, to_bytes, from_string, from_bytes, to_bytes_pretty, to_bytes_ca
 
 let bytes = to_bytes(&p);                          // UTF-8 bytes
 let pretty = to_bytes_pretty(&p);                  // indented
-let canon = to_bytes_canonical(&p);                // sorted keys, deterministic
+let canon = to_bytes_canonical(&p);                // RFC 8785 (JCS), for signing
 
 let json = to_string(&Point { x: 1, y: 2 });       // Ok("{\"x\":1,\"y\":2}")
 let p = from_string::<Point>("{\"x\":1,\"y\":2}"); // Ok(Point { x: 1, y: 2 })

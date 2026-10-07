@@ -14,7 +14,7 @@ literal, then `:param`, then `*wildcard`. Once a terminal (or wildcard)
 is reached, method dispatch tries the specific-method list first, then
 falls back to the optional `any` slot.
 
-Static routes (no `:param`, no `*wildcard`) are routed through a sorted
+Static routes (no `:param`, no `*wildcard`) are routed through a hashed
 side-table with pre-built `RouteMatch` shells. Hits on a static route
 return a reference into the table, which (assuming `Option<&T>` niche
 optimization) costs zero heap allocations per match.

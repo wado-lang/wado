@@ -1,0 +1,26 @@
+// A bound whose argument is a projection is in force like any other.
+//
+// `Q: Has<P::Item>` says nothing of `Has<i32>`, so passing `Q` where one is
+// asked is rejected. The lowering could not spell `P::Item`, so the bound was
+// missing from the environment and the question panicked instead.
+
+trait Src with () {
+    type Item;
+}
+
+trait Has<A> with () {
+    fn h(&self) -> i32;
+}
+
+fn need<T: Has<i32>>(a: &T) -> i32 {
+    return a.h();
+}
+
+fn go<P: Src, Q: Has<P::Item>>(q: &Q) -> i32 {
+    return need(q);
+}
+
+test {}
+
+__DATA__
+{"compile_error": "type 'Q' does not implement trait 'Has<i32>' required by bound on 'T'"}

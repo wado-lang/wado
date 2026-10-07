@@ -1057,6 +1057,15 @@ test "replacen" {
     assert "aaa".replacen("a", "bb", 0) == "aaa";
 }
 
+test "replacen copies the tail from a character boundary" {
+    // The scan stops one byte into `é`; the tail after it must not be a view
+    // starting inside the character, which the test world's contract check
+    // on `slice_unchecked` rejects.
+    assert "é".replacen("xy", "z", -1) == "é";
+    assert "aé".replacen("a", "b", 1) == "bé";
+    assert "日本".replacen("本本", "x", -1) == "日本";
+}
+
 test "split" {
     let parts: List<String> = "a,b,c".split(",").collect();
     assert parts.len() == 3;
@@ -1466,4 +1475,12 @@ test "a whole buffer ending mid-character is malformed, not pending" {
     // incomplete rather than invalid.
     assert utf8_err([0xE6, 0x97] as List<u8>) == Utf8Error::incomplete(0);
     assert utf8_err([0xC3] as List<u8>) == Utf8Error::incomplete(0);
+}
+
+test "a String compares its bytes against any text with cmp_str" {
+    let s: String = "beta";
+    let text = "xbetax";
+    assert s.cmp_str(text.as_str_slice().slice(1, 5)) matches { Equal };
+    assert s.cmp_str("alpha") matches { Greater };
+    assert s.cmp_str("betamax") matches { Less };
 }

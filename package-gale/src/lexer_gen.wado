@@ -31,7 +31,7 @@ use {
 } from "./superclass.wado";
 use { MemberDecls, members_present } from "./java2wado/jmembers.wado";
 use { action_language_is_emittable } from "./java2wado.wado";
-use { clip_to_scalars } from "./g4/unicode.wado";
+use { clip_to_scalars, scalar_count, SCALAR_COUNT } from "./g4/unicode.wado";
 use { is_ident_char } from "./text.wado";
 use {
     ModeAttrUse,
@@ -40,7 +40,8 @@ use {
     LEXER_MODE_READER,
     LEXER_SET_MODE_FIELD,
 } from "./action_translate.wado";
-use { GaleMap, GaleSet } from "./gale_map.wado";
+use { HashMap, HashSet } from "core:collections";
+use { GALE_SEED } from "./hash_seed.wado";
 use icu from "core:icu";
 
 /// A grammar literal rendered the way ANTLR4's vocabulary shows it: the source
@@ -309,7 +310,7 @@ pub fn gen_lexer<S: AsStrSlice>(
     w: &mut CodeWriter,
     grammar: &Grammar,
     lit_tokens: &List<LitToken>,
-    atn_class: &GaleMap<String, i32>,
+    atn_class: &HashMap<String, i32>,
     members: &MemberDecls,
     has_members: bool,
     sc_name: S,
@@ -662,7 +663,7 @@ fn gen_lexer_match_fns<S: AsStrSlice>(
     lexer_rules: &List<LexerRule>,
     routes: &List<LexerRuleRoute>,
     grammar_opts: &List<GrammarOption>,
-    atn_class: &GaleMap<String, i32>,
+    atn_class: &HashMap<String, i32>,
     replayed: &List<String>,
     ea: bool,
     hm: bool,
@@ -820,7 +821,7 @@ pub fn lexer_rule_routes(
     lit_tokens: &List<LitToken>,
     grammar_opts: &List<GrammarOption>,
     grammar_ci: bool,
-    atn_class: &GaleMap<String, i32>,
+    atn_class: &HashMap<String, i32>,
     replayed: &List<String>,
 ) -> List<LexerRuleRoute> {
     let mut routes: List<LexerRuleRoute> = [];
@@ -840,7 +841,7 @@ pub fn lexer_rule_routes(
 fn statically_called_rules(
     lexer_rules: &List<LexerRule>,
     routes: &List<LexerRuleRoute>,
-    atn_class: &GaleMap<String, i32>,
+    atn_class: &HashMap<String, i32>,
     replayed: &List<String>,
 ) -> List<String> {
     let mut emitted: List<String> = [];
@@ -1008,7 +1009,7 @@ fn lexer_rule_outranks(name: &String, mode: i32, earlier: &List<LexerRuleRoute>,
 fn check_lexer_calls_resolve(
     lexer_rules: &List<LexerRule>,
     routes: &List<LexerRuleRoute>,
-    atn_class: &GaleMap<String, i32>,
+    atn_class: &HashMap<String, i32>,
     replayed: &List<String>,
 ) {
     for let mut i = 0; i < lexer_rules.len(); i += 1 {
@@ -1029,7 +1030,7 @@ fn check_lexer_calls_resolve(
 
 /// Whether `rule` gets a `try_` matcher whose body is emitted here rather than
 /// delegated to `latn_match`.
-fn emits_static_matcher(route: &LexerRuleRoute, rule: &LexerRule, atn_class: &GaleMap<String, i32>) -> bool {
+fn emits_static_matcher(route: &LexerRuleRoute, rule: &LexerRule, atn_class: &HashMap<String, i32>) -> bool {
     return route.has_match_fn() && !atn_class.contains_key_str(&rule.name);
 }
 
@@ -1038,7 +1039,7 @@ fn emits_static_matcher(route: &LexerRuleRoute, rule: &LexerRule, atn_class: &Ga
 fn emits_static_body(
     route: &LexerRuleRoute,
     rule: &LexerRule,
-    atn_class: &GaleMap<String, i32>,
+    atn_class: &HashMap<String, i32>,
     replayed: &List<String>,
 ) -> bool {
     return emits_static_matcher(route, rule, atn_class) || replayed.contains(&rule.name);
@@ -1411,7 +1412,7 @@ fn gen_lexer_match_fn<S: AsStrSlice>(
     plan: &Option<LexerBodyPlan>,
     all_rules: &List<LexerRule>,
     grammar_opts: &List<GrammarOption>,
-    atn_class: &GaleMap<String, i32>,
+    atn_class: &HashMap<String, i32>,
     ea: bool,
     hm: bool,
     sc_name: S,
@@ -2495,7 +2496,7 @@ pub fn lexer_matcher_plans(
     lexer_rules: &List<LexerRule>,
     routes: &List<LexerRuleRoute>,
     grammar_opts: &List<GrammarOption>,
-    atn_class: &GaleMap<String, i32>,
+    atn_class: &HashMap<String, i32>,
     replayed: &List<String>,
 ) -> LexerMatcherPlans {
     let mut rules: List<Option<LexerBodyPlan>> = [];
@@ -2978,13 +2979,26 @@ pub fn lexer_alts_can_collide(alts: &List<LexerAlternative>, all_rules: &List<Le
             },
         }
     }
+    // Read only for an arm that shares a first char with another, which most
+    // alternations have none of.
     let mut seconds: List<Option<SecondChars>> = [];
-    for let alt of alts {
-        seconds.push(lexer_second_chars(&[*alt], all_rules, casing));
+    let mut seconds_read: List<bool> = [];
+    for let _ of alts {
+        seconds.push(null);
+        seconds_read.push(false);
     }
     for let mut i = 0; i < sets.len(); i += 1 {
         for let mut j = i + 1; j < sets.len(); j += 1 {
-            if leading_chars_overlap(&sets[i], &sets[j]) && !second_chars_apart(&seconds[i], &seconds[j]) {
+            if !leading_chars_overlap(&sets[i], &sets[j]) {
+                continue;
+            }
+            for let k of [i, j] {
+                if !seconds_read[k] {
+                    seconds[k] = lexer_second_chars(&[alts[k]], all_rules, casing);
+                    seconds_read[k] = true;
+                }
+            }
+            if !second_chars_apart(&seconds[i], &seconds[j]) {
                 return true;
             }
         }
@@ -4740,12 +4754,51 @@ fn char_pat(start: char, end: char) -> String {
     return `${quoted_char(start)}..=${quoted_char(end)}`;
 }
 
-/// The `General_Category` groups whose chars print as nothing on their own.
-global UNPRINTED_CHAR_GROUPS: List<String> = ["Z", "M", "C"];
+/// The code points whose chars print as nothing on their own (the
+/// `General_Category` groups `Z`, `M` and `C`), as ascending, disjoint ranges:
+/// `starts[i]..=ends[i]`. Asked of ICU once, since a generation quotes
+/// thousands of chars.
+struct UnprintedChars {
+    starts: List<u32>,
+    ends: List<u32>,
+}
+
+global UNPRINTED_CHARS: UnprintedChars = unprinted_chars();
+
+fn unprinted_chars() -> UnprintedChars {
+    let mut ranges: List<[u32, u32]> = [];
+    for let group of ["Z", "M", "C"] {
+        for let r of icu::value_ranges("gc", group).unwrap() {
+            ranges.push(r);
+        }
+    }
+    ranges.sort_by(|a: &[u32, u32], b: &[u32, u32]| a.0.cmp(&b.0));
+    let mut out = UnprintedChars { starts: [], ends: [] };
+    for let [start, end] of ranges {
+        out.starts.push(start);
+        out.ends.push(end);
+    }
+    return out;
+}
+
+fn is_unprinted(code: u32) -> bool {
+    let set = &UNPRINTED_CHARS;
+    let mut lo = 0;
+    let mut hi = set.starts.len();
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        if set.starts[mid] <= code {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    return lo > 0 && code <= set.ends[lo - 1];
+}
 
 fn quoted_char(c: char) -> String {
     let code = c as u32;
-    if code > 0x7F && UNPRINTED_CHAR_GROUPS.iter_ref().any(|g| icu::value_contains("gc", *g, c).unwrap()) {
+    if code > 0x7F && is_unprinted(code) {
         return `'\\u{${code:x}}'`;
     }
     return `${char_range_pat(c..=c)}`;
@@ -5042,7 +5095,7 @@ pub fn compute_elem_first_chars(
     ci: bool,
     grammar_opts: &List<GrammarOption>,
 ) -> [bool, bool] {
-    let mut seen = GaleSet::<i64>::new();
+    let mut seen = HashSet::<i64>::with_seed(GALE_SEED);
     let mut visiting: List<String> = [];
     return elem_first_chars_dedup(body, all_rules, out, &mut seen, ci, grammar_opts, &mut visiting);
 }
@@ -5051,7 +5104,7 @@ fn elem_first_chars_dedup(
     body: &List<LexerAlternative>,
     all_rules: &List<LexerRule>,
     out: &mut List<[char, char]>,
-    seen: &mut GaleSet<i64>,
+    seen: &mut HashSet<i64>,
     ci: bool,
     grammar_opts: &List<GrammarOption>,
     visiting: &mut List<String>,
@@ -5079,7 +5132,7 @@ fn elem_first_chars_dedup(
     return [false, any_nullable];
 }
 
-fn add_folded_range(out: &mut List<[char, char]>, seen: &mut GaleSet<i64>, start: char, end: char, ci: bool) {
+fn add_folded_range(out: &mut List<[char, char]>, seen: &mut HashSet<i64>, start: char, end: char, ci: bool) {
     if !ci {
         add_range(out, seen, start, end);
         return;
@@ -5097,7 +5150,7 @@ fn compute_single_elem_first(
     elem: &LexerElement,
     all_rules: &List<LexerRule>,
     out: &mut List<[char, char]>,
-    seen: &mut GaleSet<i64>,
+    seen: &mut HashSet<i64>,
     ci: bool,
     grammar_opts: &List<GrammarOption>,
     visiting: &mut List<String>,
@@ -5180,7 +5233,7 @@ fn char_matches_ranges(c: char, ranges: &List<[char, char]>) -> bool {
     return ranges.iter_ref().any(|r| c >= r[0] && c <= r[1]);
 }
 
-fn add_range(out: &mut List<[char, char]>, seen: &mut GaleSet<i64>, start: char, end: char) {
+fn add_range(out: &mut List<[char, char]>, seen: &mut HashSet<i64>, start: char, end: char) {
     if seen.insert(range_key(start, end)) {
         out.push([start, end]);
     }
@@ -5247,7 +5300,7 @@ struct DispatchGroup {
 /// The arms of the emitted first-char dispatch: a partition of the character
 /// space at every first-set boundary, one arm per distinct call list.
 fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
-    let mut cuts = GaleSet::<i32>::new();
+    let mut cuts = HashSet::<i32>::with_seed(GALE_SEED);
     for let call of calls {
         if call.is_wildcard {
             continue;
@@ -5257,7 +5310,7 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
             cuts.insert(r[1] as i32 + 1);
         }
     }
-    // A GaleSet iterates in insertion order.
+    // A HashSet iterates in insertion order.
     let mut points: List<i32> = cuts.into_iter().collect();
     points.sort();
 
@@ -5267,7 +5320,8 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
     }
 
     let mut groups: List<DispatchGroup> = [];
-    let mut group_by_calls = GaleMap::<List<i32>, i32>::new();
+    let mut group_by_calls = HashMap::<List<i32>, i32>::with_seed(GALE_SEED);
+    let mut claimed_scalars = 0;
     for let mut i = 0; i + 1 < points.len(); i += 1 {
         let mut spans: List<CharRange> = [];
         clip_to_scalars(&mut spans, points[i], points[i + 1] - 1);
@@ -5288,6 +5342,7 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
         if members.is_empty() {
             continue;
         }
+        claimed_scalars += scalar_count(&spans);
         for let ci of &branch_catch_all_calls(calls, &members) {
             members.push(*ci);
         }
@@ -5303,6 +5358,11 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
         }
     }
 
+    // The arms claim every char, so a `_` arm after them would be unreachable,
+    // which a match rejects.
+    if claimed_scalars == SCALAR_COUNT {
+        return groups;
+    }
     // A char no interval claims is outside every bounded first set, so only a
     // rule with an unbounded one can match it.
     let last_resort = last_resort_calls(calls);
@@ -5312,7 +5372,7 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
             wildcard_calls.push(i);
         }
     }
-    if !wildcard_calls.is_empty() {
+    if !wildcard_calls.is_empty() || !groups.is_empty() {
         groups.push(DispatchGroup { pattern: String::from(FALLBACK_PATTERN), calls: wildcard_calls });
     }
 
@@ -5342,7 +5402,7 @@ fn build_mode_try_calls(
             let text: List<char> = lit.text.chars().collect();
             let c = text[0];
             let mut fc: List<[char, char]> = [];
-            let mut fc_seen = GaleSet::<i64>::new();
+            let mut fc_seen = HashSet::<i64>::with_seed(GALE_SEED);
             // Parser literals inherit grammar-level caseInsensitive.
             add_folded_range(&mut fc, &mut fc_seen, c, c, grammar_ci);
             let lit_extras = literal_command_extras(
@@ -5403,16 +5463,15 @@ fn gen_dispatch_groups(
     } else if !groups.is_empty() {
         // The arms are a partition, so an else-if chain's order buys nothing and
         // would put the letters and digits behind every punctuation branch.
-        let has_wildcard_arm = groups.iter_ref().any(|g| g.pattern == FALLBACK_PATTERN);
         w.begin("match first_char");
         for let g of groups {
+            if g.calls.is_empty() {
+                w.line(`${g.pattern} => {},`);
+                continue;
+            }
             w.begin(`${g.pattern} =>`);
             gen_second_char_dispatch(w, calls, &g.calls, needs_extras, has_actions, has_members);
             w.end_with(",");
-        }
-        // `char` has no finite case list, so the arms alone never exhaust it.
-        if !has_wildcard_arm {
-            w.line("_ => {},");
         }
         w.end();
     }
@@ -5471,7 +5530,7 @@ fn gen_second_char_dispatch(
 /// A partition of the second char among `members`, each arm in grammar order.
 /// The `_` arm holds the calls `second_char_admits` places in every arm.
 fn second_char_arms(calls: &List<TryCall>, members: &List<i32>) -> List<DispatchGroup> {
-    let mut cuts = GaleSet::<i32>::new();
+    let mut cuts = HashSet::<i32>::with_seed(GALE_SEED);
     for let m of members {
         if let Some(s) = &calls[*m].second_chars && !s.may_end {
             for let r of &s.ranges {
@@ -5483,13 +5542,15 @@ fn second_char_arms(calls: &List<TryCall>, members: &List<i32>) -> List<Dispatch
     let mut points: List<i32> = cuts.into_iter().collect();
     points.sort();
     let mut arms: List<DispatchGroup> = [];
-    let mut arm_by_calls = GaleMap::<List<i32>, i32>::new();
+    let mut arm_by_calls = HashMap::<List<i32>, i32>::with_seed(GALE_SEED);
+    let mut claimed_scalars = 0;
     for let mut i = 0; i + 1 < points.len(); i += 1 {
         let mut spans: List<CharRange> = [];
         clip_to_scalars(&mut spans, points[i], points[i + 1] - 1);
         if spans.is_empty() {
             continue;
         }
+        claimed_scalars += scalar_count(&spans);
         let at = points[i];
         let arm_calls: List<i32> = members.iter_value().filter(|m| second_char_admits(&calls[m], at)).collect();
         let pattern = spans.iter_ref().map(|s| char_pat(s.start, s.end)).collect().join(" | ");
@@ -5501,8 +5562,7 @@ fn second_char_arms(calls: &List<TryCall>, members: &List<i32>) -> List<Dispatch
         }
     }
     let rest: List<i32> = members.iter_value().filter(|m| second_char_admits(&calls[m], -1)).collect();
-    let covers_every_char = !points.is_empty() && points[0] == 0 && points[points.len() - 1] == 0x110000;
-    if covers_every_char && !arms.iter_ref().any(|a| a.calls == rest) {
+    if claimed_scalars == SCALAR_COUNT && !arms.iter_ref().any(|a| a.calls == rest) {
         return arms;
     }
     let mut out: List<DispatchGroup> = arms.into_iter().filter(|a| a.calls != rest).collect();

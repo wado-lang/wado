@@ -29,6 +29,40 @@ does until then:
 > Not yet implemented: a function writes a mutable global without declaring an
 > effect.
 
+## Behavior Classes
+
+Where the specification leaves behavior open, it says which of three classes
+the behavior belongs to.
+
+- _Unspecified_: the specification lists the permitted outcomes, and the
+  compiler chooses one. The choice may change with the optimization level or the
+  compiler version, but a compiled program keeps it on every host. A correct
+  program is correct under every listed outcome.
+- _Host-defined_: unspecified, except that the compiled program need not fix
+  the choice, so the host may make it. The same compiled program may behave
+  differently on two hosts. Each case says whether the choice stays fixed on
+  one host. What a world import returns is host-defined within
+  what its interface promises: `InsecureSeed` may return the same value every
+  time, for one.
+- _Unconstrained_: the specification lists no outcomes, and the compiler may
+  assume the case never arises. Its effects may appear anywhere in the program
+  and at any later time. Only these guarantees remain: the Wasm instance stays
+  memory-safe, components stay isolated from each other, no capability is used
+  that the world's imports did not grant, and GC references stay well-typed. A
+  trap, a wrong value, a loop that never ends, or data leaking inside the
+  instance are all possible.
+
+A _contract violation_ is a program reaching an operation outside the contract
+the operation states, such as calling an `_unchecked` function on input it does
+not accept. It is always a bug, and each operation says which class of behavior
+its violation has. Unconstrained behavior arises from a contract violation and
+from nothing else.
+
+Any build may detect a contract violation and trap, and
+[Contract Checks](./spec-assertions.md#contract-checks) says which builds do.
+No build may trap on unspecified or host-defined behavior that is not a
+contract violation.
+
 ## Overview
 
 | Item      | Description               |

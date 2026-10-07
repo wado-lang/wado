@@ -46,7 +46,7 @@ fn aliased_records_cross(opt_level: OptLevel) {
         lib_world: Some(LIB_WORLD_FQ.to_string()),
         ..Default::default()
     };
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/lib.wado");
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/lib.wado");
     let wasm = compile_source_with_compiler_options(&path, SOURCE, options)
         .expect("library failed to compile")
         .wasm;

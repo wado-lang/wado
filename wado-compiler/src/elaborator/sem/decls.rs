@@ -6,8 +6,10 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::tir::TypeId;
+use crate::tir::{TraitRef, TypeId};
+use crate::token::Span;
 
+use super::super::scope::TraitContext;
 use super::super::sig::{DeclSig, MethodSig};
 use super::super::types::{DataDecls, StructFieldInfo};
 use crate::defs::DefId;
@@ -37,6 +39,35 @@ pub(crate) struct FunctionSig {
     /// Declared `with` effects, resolved in the declaring perspective
     /// (effect parameters stay symbolic as `EffectRef::Param`).
     pub(crate) effects: Vec<EffectRef>,
+}
+
+/// Bounds a written type owes, at the span that wrote it.
+#[derive(Clone)]
+pub(in crate::elaborator) struct OwedBounds {
+    pub(in crate::elaborator) span: Span,
+    pub(in crate::elaborator) owed: Owed,
+}
+
+/// What [`OwedBounds`] asks.
+#[derive(Clone)]
+pub(in crate::elaborator) enum Owed {
+    /// A generic type application's arguments, owing its declaration's bounds.
+    DeclArgs { def: DefId, type_args: Vec<TypeId> },
+    /// An argument owing bounds already instantiated, on behalf of
+    /// `param_name`.
+    TraitRefs {
+        type_arg: TypeId,
+        refs: Vec<TraitRef>,
+        param_name: String,
+    },
+}
+
+/// [`OwedBounds`] held until the solver can answer them, with the frame that
+/// places the type parameters they name: gone once the decl pass leaves it.
+#[derive(Clone)]
+pub(in crate::elaborator) struct PendingBounds {
+    pub(in crate::elaborator) bounds: OwedBounds,
+    pub(in crate::elaborator) frame: TraitContext,
 }
 
 /// Per-module declaration tables produced by elaboration.
@@ -120,6 +151,9 @@ pub(crate) struct ModuleDecls {
     /// `TirModule::synthesis_requests`. Decouples annotate
     /// (which records) from reify (which emits).
     pub(crate) pending_synthesis_requests: Vec<tir::SynthesisRequest>,
+
+    /// Bounds the decl pass met before the solver that answers them was built.
+    pub(in crate::elaborator) pending_bounds: Vec<PendingBounds>,
 
     /// Additions to the data tables made during this module's walk, read by
     /// `TypeLookup` ahead of the program's. Keyed by declaration, never spelling.

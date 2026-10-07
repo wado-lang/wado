@@ -88,6 +88,7 @@ The bare identifiers are:
 | `opaque`    | The optimizer assumes nothing the signature does not state       |
 | `hint`      | The call computes nothing, but its position is what it means     |
 | `black_box` | The optimizer may assume nothing about the operand or the result |
+| `suspend`   | Other tasks may run before the call returns                      |
 
 The signature states two facts, so no identifier lists them. A `&mut` parameter
 is written through. A declaration returning `!` never returns: every call ends
@@ -104,13 +105,36 @@ A fact the attribute leaves out is a fact the call does not have. A call with no
 `trap` never traps. A wrong attribute miscompiles as wrong code does, so
 validation checks the form of an attribute and never second-guesses its facts.
 
-`none`, `opaque` and `black_box` each stand alone. `black_box` exists for
+`none`, `opaque` and `black_box` each stand alone, except that `opaque` takes
+`suspend`. `black_box` exists for
 `builtin::black_box`, which a test or a benchmark uses to keep the work it
 measures from being folded away. The optimizer never deletes, moves or merges
 such a call, and never computes its result from the operand. Its storage is
 still stated, `#[storage(part_of_args)]`, because where a value is copied
 depends on what the result shares, not on what the optimizer may assume about
 it.
+
+### Suspension
+
+`suspend` is a fact of its own, beside `opaque` or the listing identifiers. The
+tasks that run while a call is suspended may read and write anything held
+elsewhere, so a field read through a reference is loaded again after it, and a
+parameter split into scalars is written back before it. A call without
+`suspend`, `opaque` included, reaches only what its arguments reach, linear
+memory and the host.
+
+`opaque` alone used to imply suspension, and so cost those loads and
+write-backs at every call into the host, though few such calls suspend. A
+canonical builtin suspends only where the Canonical ABI blocks: `waitable-set.wait`,
+and the cancel builtins, which Wado lowers synchronously. The copy builtins are
+lowered with `async`, and hand `BLOCKED` back rather than suspend. A core Wasm
+asset imports nothing but its memory, so it cannot suspend. A Component Model
+import may, and so may a builtin that calls one, such as
+`call_indirect_stdout_write_via_stream`.
+
+The name is the Component Model's own word for a task that stops until an event
+resumes it. A positive fact keeps the rule that what the attribute leaves out is
+a fact the call does not have.
 
 ### Trap Conditions
 
@@ -225,9 +249,9 @@ when one is installed, and the handler's own body states what it does.
 
 - The adapter lowers every argument to flat scalars and linear memory, and
   lifts the result back. The raw call shares no storage: `#[storage(none)]`.
-- The callee is opaque: `#[side_effect(opaque)]`. That covers the adapter's
-  stores before the raw call and loads after it, which the optimizer sees on
-  both sides.
+- The callee is opaque and may suspend: `#[side_effect(opaque, suspend)]`. That
+  covers the adapter's stores before the raw call and loads after it, which the
+  optimizer sees on both sides.
 
 ### Validation
 
@@ -241,7 +265,9 @@ fact.
   method requirement, or on a declaration carrying `#[cm(...)]`.
 - A second `#[storage]` or `#[side_effect]` on one declaration.
 - A repeated key, or an unknown value, identifier or key.
-- `none`, `opaque` or `black_box` beside anything else in `#[side_effect]`.
+- `none`, `opaque` or `black_box` beside anything else in `#[side_effect]`,
+  but for `opaque` beside `suspend`.
+- `suspend` beside `none`, `hint` or `black_box`.
 - A condition key without `trap`.
 - `at` or `count` without `outside`, or `outside` and `at`
   arrays of different lengths.
@@ -296,8 +322,14 @@ declaration still to be written.
 - [x] Move the rules into `spec-attributes.md`, replacing the four sections,
   and update what `spec-effects.md` and `spec-memory.md` say about
   `#[retain]` and `#[result]`.
+- [x] Split `suspend` out of `opaque` (Suspension), and declare it on the
+  builtins that block.
 
 ## Known gaps
+
+- `hole_fmt` declares `suspend` though it never suspends. It runs a `Display`
+  impl, which may read and write globals, and no other fact states that. It is
+  a stand-in until reading and writing globals is an effect of its own.
 
 - A Component Model import that passes GC references at the boundary, as
   [WEP: Migration to GC in Components](./wep-2026-03-28-gc-in-components.md)

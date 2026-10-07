@@ -21,6 +21,7 @@ use crate::elaborator::trait_env::{
 use crate::name::{FqTypeName, namespace_member_alias};
 use crate::symbol::SymbolKind;
 use crate::tir::TraitRef;
+use crate::trait_solver::args_per_param;
 
 /// What a trait's declared parameters stand for at a frame, by name.
 pub(super) type ParamSpace = Vec<(String, TypeId)>;
@@ -84,8 +85,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             }
             Type::Tuple(elements) => {
-                let elem_types: Vec<TypeId> =
-                    elements.iter().map(|e| self.resolve_type(e)).collect();
+                let mut elem_types = Vec::with_capacity(elements.len());
+                for element in elements {
+                    let resolved = self.resolve_type(element);
+                    // A pack a space has bound to its arguments' tuple splices
+                    // them here, as `[..X]` at `X = [i32, bool]` is `[i32, bool]`.
+                    match element {
+                        Type::TypePackSpread(..) => elem_types
+                            .extend(self.tysys.type_table.borrow().elem_types_or_self(resolved)),
+                        _ => elem_types.push(resolved),
+                    }
+                }
                 self.tysys.type_table.borrow_mut().make_tuple(elem_types)
             }
             Type::Reference(inner) => {
@@ -99,13 +109,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Type::NamespacedGeneric(namespaced) => self.resolve_namespaced_generic_type(namespaced),
             Type::TypePackSpread(name, span) => {
                 // Look up the type pack parameter
-                if let Some(BinderInScope { index, .. }) =
+                if let Some(&BinderInScope { index, type_id, .. }) =
                     self.annotate_ctx.trait_ctx.type_params.get(name)
                 {
+                    if self.tysys.type_table.borrow().is_tuple(type_id) {
+                        return type_id;
+                    }
                     self.tysys
                         .type_table
                         .borrow_mut()
-                        .make_type_pack(name.clone(), *index)
+                        .make_type_pack(name.clone(), index)
                 } else {
                     let _ = self.emit(TypeError::UnknownType {
                         name: format!("..{name}"),
@@ -1073,12 +1086,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                     let at_decl = e.param_space_of(decl, &written);
                     let args: Vec<TypeId> = at_decl.iter().map(|(_, id)| *id).collect();
-                    let closure = e
-                        .tysys
-                        .trait_env
-                        .supertrait_closure_declared(&decl)
-                        .1
-                        .to_vec();
+                    let closure = e.tysys.trait_env.supertrait_closure(&decl).to_vec();
                     out.push((bound, at_decl));
                     for inherited in closure {
                         let space = e.inherited_space(decl, &args, &inherited.via);
@@ -1124,13 +1132,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///
     /// Every parameter enters the space, an unanswered one as [`TypeTable::UNKNOWN`]:
     /// it stands for no type here, and leaving it out would let a same-named
-    /// declaration at the reading site answer in its place.
+    /// declaration at the reading site answer in its place. A pack answers the
+    /// tuple of the arguments it absorbs.
     fn param_space_of(&mut self, decl: DefId, args: &[TypeId]) -> ParamSpace {
-        let params = self.tysys.trait_env.trait_decl_params(decl).to_vec();
+        let trait_env = Arc::clone(&self.tysys.trait_env);
+        let params = trait_env.trait_type_params(decl);
+        let args = args_per_param(
+            args,
+            params.len(),
+            params.iter().position(|p| p.is_pack),
+            |run| self.tysys.type_table.borrow_mut().make_tuple(run),
+        );
         let mut space = ParamSpace::new();
         for (index, param) in params.iter().enumerate() {
-            let arg = match (args.get(index), param.default.clone()) {
-                (Some(&arg), _) => arg,
+            let arg = match (args.get(index).copied().flatten(), param.default.clone()) {
+                (Some(arg), _) => arg,
                 (None, Some(default)) => {
                     self.resolve_in_space(&space, std::slice::from_ref(&default))[0]
                 }
@@ -1439,10 +1455,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && self
                     .tysys
                     .trait_env
-                    .supertrait_closure_declared(&decl)
-                    .1
-                    .iter()
-                    .any(|inherited| inherited.decl == trait_);
+                    .supertrait_decls(&decl)
+                    .any(|inherited| inherited == trait_);
             if decl != trait_ && !inherits {
                 continue;
             }

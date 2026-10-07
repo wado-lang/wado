@@ -1821,13 +1821,6 @@ pub struct "StructField<core:prelude/string.wado/Utf8Error,[i32,core:prelude/typ
     is_secret: bool,
 }
 
-pub struct "VariantCase<core:prelude/types.wado/Option<i32>,()>" {
-    index: i32,
-    case_name: String,
-    wire_override: Option<String>,
-    is_unit: bool,
-}
-
 pub struct "VariantCase<core:prelude/types.wado/Option<i32>,i32>" {
     index: i32,
     case_name: String,
@@ -1835,7 +1828,14 @@ pub struct "VariantCase<core:prelude/types.wado/Option<i32>,i32>" {
     is_unit: bool,
 }
 
-pub struct "VariantCase<core:prelude/types.wado/Option<i32>,[i32,()]>" {
+pub struct "VariantCase<core:prelude/types.wado/Option<i32>,()>" {
+    index: i32,
+    case_name: String,
+    wire_override: Option<String>,
+    is_unit: bool,
+}
+
+pub struct "VariantCase<core:prelude/types.wado/Option<i32>,[(),i32]>" {
     index: i32,
     case_name: String,
     wire_override: Option<String>,
@@ -2695,6 +2695,8 @@ pub fn bf16_reinterpret_u16(i: u16) -> bf16;
 
 pub fn unreachable() -> !;
 
+fn contract_checks() -> bool;
+
 pub fn cold_path();
 
 pub fn stream_read(handle: i32, ptr: i32, max: i32) -> i32;
@@ -2728,6 +2730,13 @@ pub fn f64_is_nan(x: f64) -> bool;
 pub fn i8x16_eq(a: v128, b: v128) -> v128;
 
 pub fn i8x16_all_true(a: v128) -> bool;
+
+pub fn "core:prelude/format.wado/Formatter::resolved_seq_limit"(self: &Formatter) -> i32 {
+    if (self.precision == -2) {
+        return 256;
+    }
+    return self.precision;
+}
 
 // retains: buf
 pub fn "core:prelude/format.wado/Formatter::new"(buf: &mut String) -> Formatter {
@@ -2898,6 +2907,10 @@ pub fn "core:prelude/format.wado/Formatter::write_indent"(self: &mut Formatter) 
 pub fn "core:prelude/format.wado/Formatter::write_newline_indent"(self: &mut Formatter) {
     self."core:prelude/format.wado/Formatter::write_char"('\n');
     self."core:prelude/format.wado/Formatter::write_indent"();
+}
+
+pub fn "core:prelude/string.wado/StrSlice^core:prelude/traits.wado/Inspect::inspect"(self: &StrSlice, f: &mut Formatter) {
+    "core::prelude/format.wado::core/prelude/format.wado/inspect_text<core:prelude/string.wado/StrSlice>"(f, *self);
 }
 
 pub fn "$field_get$core:prelude/format.wado/Formatter$char"(v: &Formatter, index: i32) -> char {
@@ -4004,6 +4017,51 @@ fn count_digits_u64(val: u64) -> i32 {
     return 20;
 }
 
+fn count_digits_u64_base(val_i64: i64, bits_per_digit: i32) -> i32 {
+    if (val_i64 == 0) {
+        return 1;
+    }
+    return ((("core::prelude/fpfmt.wado::u64_bit_len"(val_i64 as u64) - 1) / bits_per_digit) + 1);
+}
+
+fn write_u64_base_digits(arr: &mut Array<u8>, offset: i32, val_i64: i64, digit_count: i32, bits_per_digit: i32, mask: i32, upper: bool) {
+    let mask64: i64 = mask as i64;
+    let mut pos: i32 = (offset + digit_count);
+    if (val_i64 == 0) {
+        core::builtin::array_set_u8(arr, offset, 48);
+    } else {
+        let mut temp: i64 = val_i64;
+        loop {
+            if !(temp != 0) {
+                break;
+            }
+            pos = (pos - 1);
+            let digit: i32 = (temp & mask64) as i32;
+            let ch: i32 = if (digit < 10) {
+                (48 + digit);
+            } else {
+                if upper {
+                    ((65 + digit) - 10);
+                } else {
+                    ((97 + digit) - 10);
+                };
+            };
+            core::builtin::array_set_u8(arr, pos, ch as u8);
+            let shift_u64: u64 = bits_per_digit as u64;
+            temp = (temp as u64 >> shift_u64) as i64;
+        }
+    }
+}
+
+fn bool::fmt_into(self: Box<bool>, f: &mut Formatter) {
+    let text: String = if self.value {
+        String { repr: packed"true", used: 4 };
+    } else {
+        String { repr: packed"false", used: 5 };
+    };
+    f."core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(text);
+}
+
 pub fn char::from_u32_unchecked(value: u32) -> char {
     return core::builtin::i32_as_char(value as i32);
 }
@@ -4020,6 +4078,10 @@ pub fn char::len_utf8(self: Box<char>) -> i32 {
         return 3;
     }
     return 4;
+}
+
+fn u8::fmt_into(self: Box<u8>, f: &mut Formatter) {
+    Box<i32> { value: self.value as i32 }.i32::fmt_decimal(f);
 }
 
 pub fn i32::max(a: i32, b: i32) -> i32 {
@@ -4050,6 +4112,17 @@ fn i32::fmt_into(self: Box<i32>, f: &mut Formatter) {
     self.i32::fmt_decimal(f);
 }
 
+fn u32::fmt_decimal(self: Box<u32>, f: &mut Formatter) {
+    let value: u64 = self.value as u64;
+    let digit_count: i32 = "core::prelude/primitive.wado::count_digits_u64"(value);
+    let offset: i32 = f."core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(false, String { repr: packed"", used: 0 }, digit_count);
+    "core::prelude/primitive.wado::write_decimal_digits"(f.buf."core:prelude/string.wado/String::internal_raw_bytes_mut"(), offset, value, digit_count);
+}
+
+fn u32::fmt_into(self: Box<u32>, f: &mut Formatter) {
+    self.u32::fmt_decimal(f);
+}
+
 pub fn i64::abs(x: i64) -> i64 {
     return if (x < 0) {
         -x;
@@ -4075,6 +4148,23 @@ fn u64::fmt_decimal(self: Box<u64>, f: &mut Formatter) {
     let digit_count: i32 = "core::prelude/primitive.wado::count_digits_u64"(self.value);
     let offset: i32 = f."core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(false, String { repr: packed"", used: 0 }, digit_count);
     "core::prelude/primitive.wado::write_decimal_digits"(f.buf."core:prelude/string.wado/String::internal_raw_bytes_mut"(), offset, self.value, digit_count);
+}
+
+fn u64::fmt_base(self: Box<u64>, f: &mut Formatter, base: i32, upper: bool, alt_prefix: String) {
+    let val_i64: i64 = self.value as i64;
+    let bits_per_digit: i32 = if (base == 2) {
+        1;
+    } else {
+        if (base == 8) {
+            3;
+        } else {
+            4;
+        };
+    };
+    let mask: i32 = (base - 1);
+    let digit_count: i32 = "core::prelude/primitive.wado::count_digits_u64_base"(val_i64, bits_per_digit);
+    let offset: i32 = f."core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(false, alt_prefix, digit_count);
+    "core::prelude/primitive.wado::write_u64_base_digits"(f.buf."core:prelude/string.wado/String::internal_raw_bytes_mut"(), offset, val_i64, digit_count, bits_per_digit, mask, upper);
 }
 
 fn u64::fmt_into(self: Box<u64>, f: &mut Formatter) {
@@ -4237,8 +4327,20 @@ pub fn "v128^core:prelude/traits.wado/Eq::eq"(self: Box<v128>, other: Box<v128>)
     return core::builtin::i8x16_all_true(core::builtin::i8x16_eq(self.value, other.value));
 }
 
+pub fn "bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<bool>, f: &mut Formatter) {
+    self.bool::fmt_into(f);
+}
+
+pub fn "u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<u8>, f: &mut Formatter) {
+    self.u8::fmt_into(f);
+}
+
 pub fn "i32^core:prelude/traits.wado/Inspect::inspect"(self: Box<i32>, f: &mut Formatter) {
     self.i32::fmt_into(f);
+}
+
+pub fn "u32^core:prelude/traits.wado/Inspect::inspect"(self: Box<u32>, f: &mut Formatter) {
+    self.u32::fmt_into(f);
 }
 
 pub fn "i64^core:prelude/traits.wado/Inspect::inspect"(self: Box<i64>, f: &mut Formatter) {
@@ -4251,6 +4353,10 @@ pub fn "u64^core:prelude/traits.wado/Inspect::inspect"(self: Box<u64>, f: &mut F
 
 pub fn "f64^core:prelude/traits.wado/Inspect::inspect"(self: Box<f64>, f: &mut Formatter) {
     self.f64::inspect_into(f);
+}
+
+pub fn "i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex"(self: Box<i32>, f: &mut Formatter) {
+    Box<u64> { value: self.value as u32 as u64 }.u64::fmt_base(f, 16, false, String { repr: packed"0x", used: 2 });
 }
 
 pub fn "i8^core:prelude/traits.wado/Eq::eq"(self: Box<i8>, other: Box<i8>) -> bool {
@@ -4430,6 +4536,26 @@ pub fn "$field_get$core:prelude/primitive.wado/ParseCharError$core:prelude/primi
     };
 }
 
+fn decode_char_at(repr: &Array<u8>, pos: i32) -> [u32, i32] {
+    let b0: u32 = repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"(pos) as u32;
+    if (b0 < 128) {
+        return [b0, 1];
+    }
+    if (b0 < 224) {
+        let b1: u32 = repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"((pos + 1)) as u32;
+        return [(((b0 & 31) << 6) | (b1 & 63)), 2];
+    }
+    if (b0 < 240) {
+        let b1: u32 = repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"((pos + 1)) as u32;
+        let b2: u32 = repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"((pos + 2)) as u32;
+        return [((((b0 & 15) << 12) | ((b1 & 63) << 6)) | (b2 & 63)), 3];
+    }
+    let b1: u32 = repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"((pos + 1)) as u32;
+    let b2: u32 = repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"((pos + 2)) as u32;
+    let b3: u32 = repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"((pos + 3)) as u32;
+    return [(((((b0 & 7) << 18) | ((b1 & 63) << 12)) | ((b2 & 63) << 6)) | (b3 & 63)), 4];
+}
+
 fn encode_char(repr: &mut Array<u8>, pos: i32, code: u32) -> i32 {
     if (code < 128) {
         repr."Array<u8>^core:prelude/traits.wado/IndexAssign<i32>::index_assign"(pos, code as u8);
@@ -4455,6 +4581,43 @@ fn encode_char(repr: &mut Array<u8>, pos: i32, code: u32) -> i32 {
 
 fn is_char_start(b: u8) -> bool {
     return ((b & 192) != 128);
+}
+
+fn boundary_at(repr: &Array<u8>, start: i32, len: i32, index: i32) -> bool {
+    if ((index == 0) || (index == len)) {
+        return true;
+    }
+    if ((index < 0) || (index > len)) {
+        return false;
+    }
+    return "core::prelude/string.wado::is_char_start"(repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"((start + index)));
+}
+
+pub fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"(self: &mut StrCharIter) -> Option<char> {
+    if (self.byte_index >= self.used) {
+        return null;
+    }
+    let $pattern_temp_0: [u32, i32] = "core::prelude/string.wado::decode_char_at"(self.repr, self.byte_index);
+    let code: u32 = $pattern_temp_0.0;
+    let len: i32 = $pattern_temp_0.1;
+    self.byte_index = (self.byte_index + len);
+    return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(code));
+}
+
+pub fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::count"(self: &mut StrCharIter) -> i32 {
+    let mut n: i32 = 0;
+    loop {
+        let $match_2: Option<char> = self."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"();
+        match $match_2 {
+            Some(_) => $block_0: {
+                n = (n + 1);
+            },
+            _ => $block_1: {
+                break;
+            },
+        };
+    }
+    return n;
 }
 
 pub fn "core:prelude/string.wado/String::with_capacity"(capacity: i32) -> String {
@@ -4588,6 +4751,20 @@ pub fn "core:prelude/string.wado/StrSlice::get_byte_unchecked"(self: &StrSlice, 
     return self.repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"((self.start + index));
 }
 
+pub fn "core:prelude/string.wado/StrSlice::is_char_boundary"(self: &StrSlice, index: i32) -> bool {
+    return "core::prelude/string.wado::boundary_at"(self.repr, self.start, self."core:prelude/string.wado/StrSlice::len"(), index);
+}
+
+// retains: self
+pub fn "core:prelude/string.wado/StrSlice::slice_unchecked"(self: &StrSlice, start: i32, end: i32) -> StrSlice {
+    return StrSlice { repr: self.repr, start: (self.start + start), end: (self.start + end) };
+}
+
+// retains: self
+pub fn "core:prelude/string.wado/StrSlice::chars"(self: &StrSlice) -> StrCharIter {
+    return StrCharIter { repr: self.repr, used: self.end, byte_index: self.start };
+}
+
 // retains: self
 fn "core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"(self: &String) -> StrSlice {
     return "core::prelude/string.wado::core:prelude/string.wado/StrSlice::internal_new"(&self.repr as &Array<u8>, 0, self.used);
@@ -4605,6 +4782,11 @@ fn "core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::as_st
 pub fn "core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to"(self: &StrSlice, out: &mut String) {
     let view: StrSlice = self."core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::as_str_slice"();
     out."core:prelude/string.wado/String::internal_push_view"(&view);
+}
+
+// retains: self
+pub fn "core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::chars"(self: &StrSlice) -> StrCharIter {
+    return self."core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::as_str_slice"()."core:prelude/string.wado/StrSlice::chars"();
 }
 
 pub fn "core:prelude/string.wado/StrSlice^core:prelude/traits.wado/Eq::eq"(self: &StrSlice, other: &StrSlice) -> bool {
@@ -5391,7 +5573,7 @@ fn "core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/IndexValue<i3
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude/list.wado", used: 22 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 340 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 359 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed": ", used: 2 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"index out of bounds", used: 19 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: index < self.used\n", used: 30 });
@@ -5469,6 +5651,12 @@ pub fn "core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/Stri
     return true;
 }
 
+pub fn "&core:prelude/string.wado/StrSlice^core:prelude/traits.wado/Inspect::inspect"(self: &&StrSlice, f: &mut Formatter) {
+    f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(String { repr: packed"&", used: 1 });
+    let inner: &StrSlice = *self;
+    *inner."core:prelude/string.wado/StrSlice^core:prelude/traits.wado/Inspect::inspect"(f);
+}
+
 fn "core/prelude/array.wado/seq_cmp<u8>"(a: &Array<u8>, a_start: i32, a_end: i32, b: &Array<u8>, b_start: i32, b_end: i32) -> Ordering {
     let a_len: i32 = (a_end - a_start);
     let b_len: i32 = (b_end - b_start);
@@ -5539,6 +5727,49 @@ fn "Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &Arra
 }
 
 pub fn "core/builtin/select<i32>"(cond: bool, if_true: i32, if_false: i32) -> i32;
+
+pub fn "core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(self: &mut Formatter, content: String) {
+    if (self.width <= 0) {
+        self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(content);
+        return;
+    }
+    let view: StrSlice = content."core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"();
+    let content_len: i32 = view."core:prelude/string.wado/StrSlice::chars"()."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::count"();
+    if (content_len >= self.width) {
+        self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(content);
+        return;
+    }
+    let padding: i32 = (self.width - content_len);
+    if self.zero_pad {
+        let sign_len: i32 = "core::prelude/format.wado::core/prelude/format.wado/leading_sign_byte_len<core:prelude/string.wado/StrSlice>"(view, 0, view."core:prelude/string.wado/StrSlice::len"());
+        self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/StrSlice>"(view."core:prelude/string.wado/StrSlice::slice_unchecked"(0, sign_len));
+        self."core:prelude/format.wado/Formatter::write_char_n"('0', padding);
+        self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/StrSlice>"(view."core:prelude/string.wado/StrSlice::slice_unchecked"(sign_len, view."core:prelude/string.wado/StrSlice::len"()));
+        return;
+    }
+    let align: Alignment = self.align;
+    if match align {
+        Left => true,
+        _ => false,
+    } {
+        self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(content);
+        self."core:prelude/format.wado/Formatter::write_char_n"(self.fill, padding);
+    } else {
+        if match align {
+            Center => true,
+            _ => false,
+        } {
+            let left_pad: i32 = (padding / 2);
+            let right_pad: i32 = (padding - left_pad);
+            self."core:prelude/format.wado/Formatter::write_char_n"(self.fill, left_pad);
+            self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(content);
+            self."core:prelude/format.wado/Formatter::write_char_n"(self.fill, right_pad);
+        } else {
+            self."core:prelude/format.wado/Formatter::write_char_n"(self.fill, padding);
+            self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(content);
+        }
+    }
+}
 
 pub fn "core:prelude/format.wado/Formatter::write_str<&core:prelude/string.wado/String>"(self: &mut Formatter, s: &String) {
     self.buf."core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(s);
@@ -5639,7 +5870,7 @@ fn "core:prelude/list.wado/List<u32>^core:prelude/traits.wado/IndexValue<i32>::i
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude/list.wado", used: 22 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 340 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 359 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed": ", used: 2 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"index out of bounds", used: 19 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: index < self.used\n", used: 30 });
@@ -5684,7 +5915,7 @@ fn "core:prelude/list.wado/List<u64>^core:prelude/traits.wado/IndexValue<i32>::i
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude/list.wado", used: 22 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 340 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 359 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed": ", used: 2 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"index out of bounds", used: 19 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: index < self.used\n", used: 30 });
@@ -5709,6 +5940,73 @@ fn "core:prelude/list.wado/List<u64>^core:prelude/traits.wado/From<Array<T>>::fr
 
 pub fn "core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(self: &mut Formatter, s: String) {
     self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(s);
+}
+
+fn "core/prelude/format.wado/inspect_text<core:prelude/string.wado/StrSlice>"(f: &mut Formatter, text: StrSlice) {
+    let limit: i32 = f."core:prelude/format.wado/Formatter::resolved_seq_limit"();
+    f."core:prelude/format.wado/Formatter::write_char"('"');
+    let mut count: i32 = 0;
+    let mut truncated: bool = false;
+    $for_of_0: {
+        let mut $iter_0: StrCharIter = "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(text."core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::chars"()."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/IntoIterator::into_iter"());
+        loop {
+            let $match_10: Option<char> = $iter_0."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"();
+            match $match_10 {
+                Some(c) => $block_14: {
+                    if ((limit >= 0) && (count >= limit)) {
+                        truncated = true;
+                        break;
+                    }
+                    if (c == '"') {
+                        f."core:prelude/format.wado/Formatter::write_char"('\\');
+                        f."core:prelude/format.wado/Formatter::write_char"('"');
+                    } else {
+                        if (c == '\\') {
+                            f."core:prelude/format.wado/Formatter::write_char"('\\');
+                            f."core:prelude/format.wado/Formatter::write_char"('\\');
+                        } else {
+                            if (c == '\n') {
+                                f."core:prelude/format.wado/Formatter::write_char"('\\');
+                                f."core:prelude/format.wado/Formatter::write_char"('n');
+                            } else {
+                                if (c == '\r') {
+                                    f."core:prelude/format.wado/Formatter::write_char"('\\');
+                                    f."core:prelude/format.wado/Formatter::write_char"('r');
+                                } else {
+                                    if (c == '\t') {
+                                        f."core:prelude/format.wado/Formatter::write_char"('\\');
+                                        f."core:prelude/format.wado/Formatter::write_char"('t');
+                                    } else {
+                                        let code: i32 = c as i32;
+                                        if ((code < 32) || (code == 127)) {
+                                            f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(String { repr: packed"\\u{", used: 3 });
+                                            f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"($tmpl: {
+                                                let mut $r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(16);
+                                                let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
+                                                Box<i32> { value: code }."i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex"(&mut $f);
+                                                break $tmpl: $r;
+                                            });
+                                            f."core:prelude/format.wado/Formatter::write_char"('}');
+                                        } else {
+                                            f."core:prelude/format.wado/Formatter::write_char"(c);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    count = (count + 1);
+                },
+                _ => $block_15: {
+                    break;
+                },
+            };
+        }
+    }
+    f."core:prelude/format.wado/Formatter::write_char"('"');
+    if truncated {
+        f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(String { repr: packed"...", used: 3 });
+    }
 }
 
 fn "core/prelude/format.wado/leading_sign_byte_len<&mut core:prelude/string.wado/String>"(s: &mut String, at: i32, len: i32) -> i32 {
@@ -5742,6 +6040,11 @@ pub fn "core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prel
     return [VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/Utf8Error>,core:prelude/string.wado/String> { index: 0, case_name: String { repr: packed"Ok", used: 2 }, wire_override: Option<String>::None, is_unit: false }, VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/Utf8Error>,core:prelude/string.wado/Utf8Error> { index: 1, case_name: String { repr: packed"Err", used: 3 }, wire_override: Option<String>::None, is_unit: false }];
 }
 
+// retains: self
+fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/IntoIterator::into_iter"(self: &StrCharIter) -> StrCharIter {
+    return *self;
+}
+
 fn "Array<u64>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &Array<u64>, index: i32) -> u64 {
     return core::builtin::array_get_value::<u64>(self, index);
 }
@@ -5772,6 +6075,17 @@ pub fn "Array<u32>::len"(self: &Array<u32>) -> i32 {
 
 pub fn "core:prelude/string.wado/String::push_str<core:prelude/string.wado/StrSlice>"(self: &mut String, other: StrSlice) {
     other."core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to"(self);
+}
+
+fn "core/prelude/format.wado/leading_sign_byte_len<core:prelude/string.wado/StrSlice>"(s: StrSlice, at: i32, len: i32) -> i32 {
+    if (len == 0) {
+        return 0;
+    }
+    let first: u8 = s."core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::as_str_slice"()."core:prelude/string.wado/StrSlice::get_byte_unchecked"(at);
+    if ((first == 45) || (first == 43)) {
+        return 1;
+    }
+    return 0;
 }
 
 // retains: self
@@ -5809,8 +6123,8 @@ pub fn "core:prelude/list.wado/List<u8>::push"(self: &mut List<u8>, value: u8) {
     self.used = (used + 1);
 }
 
-pub fn "core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/ReflectVariant::members"() -> [VariantCase<core:prelude/types.wado/Option<i32>,i32>, VariantCase<core:prelude/types.wado/Option<i32>,()>] {
-    return [VariantCase<core:prelude/types.wado/Option<i32>,i32> { index: 0, case_name: String { repr: packed"Some", used: 4 }, wire_override: Option<String>::None, is_unit: false }, VariantCase<core:prelude/types.wado/Option<i32>,()> { index: 1, case_name: String { repr: packed"None", used: 4 }, wire_override: Option<String>::None, is_unit: true }];
+pub fn "core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/ReflectVariant::members"() -> [VariantCase<core:prelude/types.wado/Option<i32>,()>, VariantCase<core:prelude/types.wado/Option<i32>,i32>] {
+    return [VariantCase<core:prelude/types.wado/Option<i32>,()> { index: 0, case_name: String { repr: packed"None", used: 4 }, wire_override: Option<String>::None, is_unit: true }, VariantCase<core:prelude/types.wado/Option<i32>,i32> { index: 1, case_name: String { repr: packed"Some", used: 4 }, wire_override: Option<String>::None, is_unit: false }];
 }
 
 pub fn "core:prelude/list.wado/List<u8>::grow"(self: &mut List<u8>) {
@@ -6623,7 +6937,7 @@ pub fn "$field_get$core:prelude/slice.wado/SliceValueIter<fn()->()>$i32"(v: &Sli
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/String>$core:prelude/string.wado/String"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>, index: i32) -> String {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/String>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -6633,14 +6947,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/St
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/String>$core:prelude/string.wado/String"(payload: String, index: i32) -> Option<String> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/String>$()"(payload: (), index: i32) -> Option<String> {
     return match index {
-        0 => Option<String>::Some(payload),
+        0 => Option<String>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/String>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/String>$core:prelude/string.wado/String"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>, index: i32) -> String {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -6650,9 +6964,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/St
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/String>$()"(payload: (), index: i32) -> Option<String> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/String>$core:prelude/string.wado/String"(payload: String, index: i32) -> Option<String> {
     return match index {
-        1 => Option<String>::None,
+        1 => Option<String>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -6661,7 +6975,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/string.wado/Str
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<i32>$i32"(v: Box<core:prelude/types.wado/Option<i32>>, index: i32) -> i32 {
+pub fn "$case_extract$core:prelude/types.wado/Option<i32>$()"(v: Box<core:prelude/types.wado/Option<i32>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -6671,14 +6985,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<i32>$i32"(v: Box<core:prelu
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<i32>$i32"(payload: i32, index: i32) -> Option<i32> {
+pub fn "$case_construct$core:prelude/types.wado/Option<i32>$()"(payload: (), index: i32) -> Option<i32> {
     return match index {
-        0 => Option<i32>::Some(payload),
+        0 => Option<i32>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<i32>$()"(v: Box<core:prelude/types.wado/Option<i32>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<i32>$i32"(v: Box<core:prelude/types.wado/Option<i32>>, index: i32) -> i32 {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -6688,9 +7002,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<i32>$()"(v: Box<core:prelud
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<i32>$()"(payload: (), index: i32) -> Option<i32> {
+pub fn "$case_construct$core:prelude/types.wado/Option<i32>$i32"(payload: i32, index: i32) -> Option<i32> {
     return match index {
-        1 => Option<i32>::None,
+        1 => Option<i32>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -6699,7 +7013,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<i32>"(self: Box<core:prelude
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<u64>$u64"(v: Box<core:prelude/types.wado/Option<u64>>, index: i32) -> u64 {
+pub fn "$case_extract$core:prelude/types.wado/Option<u64>$()"(v: Box<core:prelude/types.wado/Option<u64>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -6709,14 +7023,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<u64>$u64"(v: Box<core:prelu
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<u64>$u64"(payload: u64, index: i32) -> Option<u64> {
+pub fn "$case_construct$core:prelude/types.wado/Option<u64>$()"(payload: (), index: i32) -> Option<u64> {
     return match index {
-        0 => Option<u64>::Some(payload),
+        0 => Option<u64>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<u64>$()"(v: Box<core:prelude/types.wado/Option<u64>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<u64>$u64"(v: Box<core:prelude/types.wado/Option<u64>>, index: i32) -> u64 {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -6726,9 +7040,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<u64>$()"(v: Box<core:prelud
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<u64>$()"(payload: (), index: i32) -> Option<u64> {
+pub fn "$case_construct$core:prelude/types.wado/Option<u64>$u64"(payload: u64, index: i32) -> Option<u64> {
     return match index {
-        1 => Option<u64>::None,
+        1 => Option<u64>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -7441,7 +7755,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Result<f32,core:prelude/traits.wado
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/int128.wado/u128>$core:prelude/int128.wado/u128"(v: Box<core:prelude/types.wado/Option<core:prelude/int128.wado/u128>>, index: i32) -> u128 {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/int128.wado/u128>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/int128.wado/u128>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -7451,14 +7765,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/int128.wado/u1
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/int128.wado/u128>$core:prelude/int128.wado/u128"(payload: u128, index: i32) -> Option<u128> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/int128.wado/u128>$()"(payload: (), index: i32) -> Option<u128> {
     return match index {
-        0 => Option<u128>::Some(payload),
+        0 => Option<u128>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/int128.wado/u128>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/int128.wado/u128>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/int128.wado/u128>$core:prelude/int128.wado/u128"(v: Box<core:prelude/types.wado/Option<core:prelude/int128.wado/u128>>, index: i32) -> u128 {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -7468,9 +7782,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/int128.wado/u1
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/int128.wado/u128>$()"(payload: (), index: i32) -> Option<u128> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/int128.wado/u128>$core:prelude/int128.wado/u128"(payload: u128, index: i32) -> Option<u128> {
     return match index {
-        1 => Option<u128>::None,
+        1 => Option<u128>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -7479,7 +7793,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/int128.wado/u12
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/int128.wado/i128>$core:prelude/int128.wado/i128"(v: Box<core:prelude/types.wado/Option<core:prelude/int128.wado/i128>>, index: i32) -> i128 {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/int128.wado/i128>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/int128.wado/i128>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -7489,14 +7803,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/int128.wado/i1
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/int128.wado/i128>$core:prelude/int128.wado/i128"(payload: i128, index: i32) -> Option<i128> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/int128.wado/i128>$()"(payload: (), index: i32) -> Option<i128> {
     return match index {
-        0 => Option<i128>::Some(payload),
+        0 => Option<i128>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/int128.wado/i128>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/int128.wado/i128>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/int128.wado/i128>$core:prelude/int128.wado/i128"(v: Box<core:prelude/types.wado/Option<core:prelude/int128.wado/i128>>, index: i32) -> i128 {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -7506,9 +7820,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/int128.wado/i1
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/int128.wado/i128>$()"(payload: (), index: i32) -> Option<i128> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/int128.wado/i128>$core:prelude/int128.wado/i128"(payload: i128, index: i32) -> Option<i128> {
     return match index {
-        1 => Option<i128>::None,
+        1 => Option<i128>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -7961,7 +8275,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Result<bool,core:prelude/traits.wad
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<char>$char"(v: Box<core:prelude/types.wado/Option<char>>, index: i32) -> char {
+pub fn "$case_extract$core:prelude/types.wado/Option<char>$()"(v: Box<core:prelude/types.wado/Option<char>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -7971,14 +8285,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<char>$char"(v: Box<core:pre
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<char>$char"(payload: char, index: i32) -> Option<char> {
+pub fn "$case_construct$core:prelude/types.wado/Option<char>$()"(payload: (), index: i32) -> Option<char> {
     return match index {
-        0 => Option<char>::Some(payload),
+        0 => Option<char>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<char>$()"(v: Box<core:prelude/types.wado/Option<char>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<char>$char"(v: Box<core:prelude/types.wado/Option<char>>, index: i32) -> char {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -7988,9 +8302,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<char>$()"(v: Box<core:prelu
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<char>$()"(payload: (), index: i32) -> Option<char> {
+pub fn "$case_construct$core:prelude/types.wado/Option<char>$char"(payload: char, index: i32) -> Option<char> {
     return match index {
-        1 => Option<char>::None,
+        1 => Option<char>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -9143,7 +9457,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Result<u8,core:prelude/traits.wado/
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<i8>$i8"(v: Box<core:prelude/types.wado/Option<i8>>, index: i32) -> i8 {
+pub fn "$case_extract$core:prelude/types.wado/Option<i8>$()"(v: Box<core:prelude/types.wado/Option<i8>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9153,14 +9467,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<i8>$i8"(v: Box<core:prelude
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<i8>$i8"(payload: i8, index: i32) -> Option<i8> {
+pub fn "$case_construct$core:prelude/types.wado/Option<i8>$()"(payload: (), index: i32) -> Option<i8> {
     return match index {
-        0 => Option<i8>::Some(payload),
+        0 => Option<i8>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<i8>$()"(v: Box<core:prelude/types.wado/Option<i8>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<i8>$i8"(v: Box<core:prelude/types.wado/Option<i8>>, index: i32) -> i8 {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9170,9 +9484,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<i8>$()"(v: Box<core:prelude
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<i8>$()"(payload: (), index: i32) -> Option<i8> {
+pub fn "$case_construct$core:prelude/types.wado/Option<i8>$i8"(payload: i8, index: i32) -> Option<i8> {
     return match index {
-        1 => Option<i8>::None,
+        1 => Option<i8>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -9181,7 +9495,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<i8>"(self: Box<core:prelude/
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<i16>$i16"(v: Box<core:prelude/types.wado/Option<i16>>, index: i32) -> i16 {
+pub fn "$case_extract$core:prelude/types.wado/Option<i16>$()"(v: Box<core:prelude/types.wado/Option<i16>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9191,14 +9505,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<i16>$i16"(v: Box<core:prelu
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<i16>$i16"(payload: i16, index: i32) -> Option<i16> {
+pub fn "$case_construct$core:prelude/types.wado/Option<i16>$()"(payload: (), index: i32) -> Option<i16> {
     return match index {
-        0 => Option<i16>::Some(payload),
+        0 => Option<i16>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<i16>$()"(v: Box<core:prelude/types.wado/Option<i16>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<i16>$i16"(v: Box<core:prelude/types.wado/Option<i16>>, index: i32) -> i16 {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9208,9 +9522,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<i16>$()"(v: Box<core:prelud
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<i16>$()"(payload: (), index: i32) -> Option<i16> {
+pub fn "$case_construct$core:prelude/types.wado/Option<i16>$i16"(payload: i16, index: i32) -> Option<i16> {
     return match index {
-        1 => Option<i16>::None,
+        1 => Option<i16>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -9219,7 +9533,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<i16>"(self: Box<core:prelude
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<i64>$i64"(v: Box<core:prelude/types.wado/Option<i64>>, index: i32) -> i64 {
+pub fn "$case_extract$core:prelude/types.wado/Option<i64>$()"(v: Box<core:prelude/types.wado/Option<i64>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9229,14 +9543,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<i64>$i64"(v: Box<core:prelu
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<i64>$i64"(payload: i64, index: i32) -> Option<i64> {
+pub fn "$case_construct$core:prelude/types.wado/Option<i64>$()"(payload: (), index: i32) -> Option<i64> {
     return match index {
-        0 => Option<i64>::Some(payload),
+        0 => Option<i64>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<i64>$()"(v: Box<core:prelude/types.wado/Option<i64>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<i64>$i64"(v: Box<core:prelude/types.wado/Option<i64>>, index: i32) -> i64 {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9246,9 +9560,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<i64>$()"(v: Box<core:prelud
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<i64>$()"(payload: (), index: i32) -> Option<i64> {
+pub fn "$case_construct$core:prelude/types.wado/Option<i64>$i64"(payload: i64, index: i32) -> Option<i64> {
     return match index {
-        1 => Option<i64>::None,
+        1 => Option<i64>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -9257,7 +9571,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<i64>"(self: Box<core:prelude
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<u8>$u8"(v: Box<core:prelude/types.wado/Option<u8>>, index: i32) -> u8 {
+pub fn "$case_extract$core:prelude/types.wado/Option<u8>$()"(v: Box<core:prelude/types.wado/Option<u8>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9267,14 +9581,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<u8>$u8"(v: Box<core:prelude
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<u8>$u8"(payload: u8, index: i32) -> Option<u8> {
+pub fn "$case_construct$core:prelude/types.wado/Option<u8>$()"(payload: (), index: i32) -> Option<u8> {
     return match index {
-        0 => Option<u8>::Some(payload),
+        0 => Option<u8>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<u8>$()"(v: Box<core:prelude/types.wado/Option<u8>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<u8>$u8"(v: Box<core:prelude/types.wado/Option<u8>>, index: i32) -> u8 {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9284,9 +9598,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<u8>$()"(v: Box<core:prelude
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<u8>$()"(payload: (), index: i32) -> Option<u8> {
+pub fn "$case_construct$core:prelude/types.wado/Option<u8>$u8"(payload: u8, index: i32) -> Option<u8> {
     return match index {
-        1 => Option<u8>::None,
+        1 => Option<u8>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -9295,7 +9609,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<u8>"(self: Box<core:prelude/
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<u16>$u16"(v: Box<core:prelude/types.wado/Option<u16>>, index: i32) -> u16 {
+pub fn "$case_extract$core:prelude/types.wado/Option<u16>$()"(v: Box<core:prelude/types.wado/Option<u16>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9305,14 +9619,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<u16>$u16"(v: Box<core:prelu
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<u16>$u16"(payload: u16, index: i32) -> Option<u16> {
+pub fn "$case_construct$core:prelude/types.wado/Option<u16>$()"(payload: (), index: i32) -> Option<u16> {
     return match index {
-        0 => Option<u16>::Some(payload),
+        0 => Option<u16>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<u16>$()"(v: Box<core:prelude/types.wado/Option<u16>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<u16>$u16"(v: Box<core:prelude/types.wado/Option<u16>>, index: i32) -> u16 {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9322,9 +9636,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<u16>$()"(v: Box<core:prelud
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<u16>$()"(payload: (), index: i32) -> Option<u16> {
+pub fn "$case_construct$core:prelude/types.wado/Option<u16>$u16"(payload: u16, index: i32) -> Option<u16> {
     return match index {
-        1 => Option<u16>::None,
+        1 => Option<u16>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -9333,7 +9647,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<u16>"(self: Box<core:prelude
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<u32>$u32"(v: Box<core:prelude/types.wado/Option<u32>>, index: i32) -> u32 {
+pub fn "$case_extract$core:prelude/types.wado/Option<u32>$()"(v: Box<core:prelude/types.wado/Option<u32>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9343,14 +9657,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<u32>$u32"(v: Box<core:prelu
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<u32>$u32"(payload: u32, index: i32) -> Option<u32> {
+pub fn "$case_construct$core:prelude/types.wado/Option<u32>$()"(payload: (), index: i32) -> Option<u32> {
     return match index {
-        0 => Option<u32>::Some(payload),
+        0 => Option<u32>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<u32>$()"(v: Box<core:prelude/types.wado/Option<u32>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<u32>$u32"(v: Box<core:prelude/types.wado/Option<u32>>, index: i32) -> u32 {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9360,9 +9674,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<u32>$()"(v: Box<core:prelud
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<u32>$()"(payload: (), index: i32) -> Option<u32> {
+pub fn "$case_construct$core:prelude/types.wado/Option<u32>$u32"(payload: u32, index: i32) -> Option<u32> {
     return match index {
-        1 => Option<u32>::None,
+        1 => Option<u32>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -9371,7 +9685,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<u32>"(self: Box<core:prelude
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<[i32,char]>$[i32,char]"(v: Box<core:prelude/types.wado/Option<[i32,char]>>, index: i32) -> [i32, char] {
+pub fn "$case_extract$core:prelude/types.wado/Option<[i32,char]>$()"(v: Box<core:prelude/types.wado/Option<[i32,char]>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9381,14 +9695,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<[i32,char]>$[i32,char]"(v: 
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<[i32,char]>$[i32,char]"(payload: [i32, char], index: i32) -> Option<[i32, char]> {
+pub fn "$case_construct$core:prelude/types.wado/Option<[i32,char]>$()"(payload: (), index: i32) -> Option<[i32, char]> {
     return match index {
-        0 => Option<[i32, char]>::Some(payload),
+        0 => Option<[i32, char]>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<[i32,char]>$()"(v: Box<core:prelude/types.wado/Option<[i32,char]>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<[i32,char]>$[i32,char]"(v: Box<core:prelude/types.wado/Option<[i32,char]>>, index: i32) -> [i32, char] {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9398,9 +9712,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<[i32,char]>$()"(v: Box<core
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<[i32,char]>$()"(payload: (), index: i32) -> Option<[i32, char]> {
+pub fn "$case_construct$core:prelude/types.wado/Option<[i32,char]>$[i32,char]"(payload: [i32, char], index: i32) -> Option<[i32, char]> {
     return match index {
-        1 => Option<[i32, char]>::None,
+        1 => Option<[i32, char]>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -9497,8 +9811,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Result<i32,core:prelude/string.wado
     return $variant_tag(self.value);
 }
 
-// retains: v
-pub fn "$case_extract$core:prelude/types.wado/Option<[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]>$[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]"(v: Box<core:prelude/types.wado/Option<[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]>>, index: i32) -> [StrSlice, StrSlice] {
+pub fn "$case_extract$core:prelude/types.wado/Option<[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]>$()"(v: Box<core:prelude/types.wado/Option<[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9508,15 +9821,15 @@ pub fn "$case_extract$core:prelude/types.wado/Option<[core:prelude/string.wado/S
     };
 }
 
-// retains: payload
-pub fn "$case_construct$core:prelude/types.wado/Option<[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]>$[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]"(payload: [StrSlice, StrSlice], index: i32) -> Option<[StrSlice, StrSlice]> {
+pub fn "$case_construct$core:prelude/types.wado/Option<[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]>$()"(payload: (), index: i32) -> Option<[StrSlice, StrSlice]> {
     return match index {
-        0 => Option<[StrSlice, StrSlice]>::Some(payload),
+        0 => Option<[StrSlice, StrSlice]>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]>$()"(v: Box<core:prelude/types.wado/Option<[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]>>, index: i32) {
+// retains: v
+pub fn "$case_extract$core:prelude/types.wado/Option<[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]>$[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]"(v: Box<core:prelude/types.wado/Option<[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]>>, index: i32) -> [StrSlice, StrSlice] {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9526,9 +9839,10 @@ pub fn "$case_extract$core:prelude/types.wado/Option<[core:prelude/string.wado/S
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]>$()"(payload: (), index: i32) -> Option<[StrSlice, StrSlice]> {
+// retains: payload
+pub fn "$case_construct$core:prelude/types.wado/Option<[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]>$[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]"(payload: [StrSlice, StrSlice], index: i32) -> Option<[StrSlice, StrSlice]> {
     return match index {
-        1 => Option<[StrSlice, StrSlice]>::None,
+        1 => Option<[StrSlice, StrSlice]>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -9581,8 +9895,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Result<core:prelude/string.wado/Str
     return $variant_tag(self.value);
 }
 
-// retains: v
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrSlice>$core:prelude/string.wado/StrSlice"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrSlice>>, index: i32) -> StrSlice {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrSlice>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrSlice>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9592,15 +9905,15 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/St
     };
 }
 
-// retains: payload
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrSlice>$core:prelude/string.wado/StrSlice"(payload: StrSlice, index: i32) -> Option<StrSlice> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrSlice>$()"(payload: (), index: i32) -> Option<StrSlice> {
     return match index {
-        0 => Option<StrSlice>::Some(payload),
+        0 => Option<StrSlice>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrSlice>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrSlice>>, index: i32) {
+// retains: v
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrSlice>$core:prelude/string.wado/StrSlice"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrSlice>>, index: i32) -> StrSlice {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9610,9 +9923,10 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/St
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrSlice>$()"(payload: (), index: i32) -> Option<StrSlice> {
+// retains: payload
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrSlice>$core:prelude/string.wado/StrSlice"(payload: StrSlice, index: i32) -> Option<StrSlice> {
     return match index {
-        1 => Option<StrSlice>::None,
+        1 => Option<StrSlice>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -9621,7 +9935,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/string.wado/Str
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/types.wado/WaitEvent>$core:prelude/types.wado/WaitEvent"(v: Box<core:prelude/types.wado/Option<core:prelude/types.wado/WaitEvent>>, index: i32) -> WaitEvent {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/types.wado/WaitEvent>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/types.wado/WaitEvent>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9631,14 +9945,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/types.wado/Wai
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/types.wado/WaitEvent>$core:prelude/types.wado/WaitEvent"(payload: WaitEvent, index: i32) -> Option<WaitEvent> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/types.wado/WaitEvent>$()"(payload: (), index: i32) -> Option<WaitEvent> {
     return match index {
-        0 => Option<WaitEvent>::Some(payload),
+        0 => Option<WaitEvent>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/types.wado/WaitEvent>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/types.wado/WaitEvent>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/types.wado/WaitEvent>$core:prelude/types.wado/WaitEvent"(v: Box<core:prelude/types.wado/Option<core:prelude/types.wado/WaitEvent>>, index: i32) -> WaitEvent {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9648,9 +9962,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/types.wado/Wai
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/types.wado/WaitEvent>$()"(payload: (), index: i32) -> Option<WaitEvent> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/types.wado/WaitEvent>$core:prelude/types.wado/WaitEvent"(payload: WaitEvent, index: i32) -> Option<WaitEvent> {
     return match index {
-        1 => Option<WaitEvent>::None,
+        1 => Option<WaitEvent>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -9697,7 +10011,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Result<(),wasi:cli/types.wado/Error
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/format.wado/Alignment>$core:prelude/format.wado/Alignment"(v: Box<core:prelude/types.wado/Option<core:prelude/format.wado/Alignment>>, index: i32) -> Alignment {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/format.wado/Alignment>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/format.wado/Alignment>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9707,14 +10021,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/format.wado/Al
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/format.wado/Alignment>$core:prelude/format.wado/Alignment"(payload: Alignment, index: i32) -> Option<Alignment> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/format.wado/Alignment>$()"(payload: (), index: i32) -> Option<Alignment> {
     return match index {
-        0 => Option<Alignment>::Some(payload),
+        0 => Option<Alignment>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/format.wado/Alignment>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/format.wado/Alignment>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/format.wado/Alignment>$core:prelude/format.wado/Alignment"(v: Box<core:prelude/types.wado/Option<core:prelude/format.wado/Alignment>>, index: i32) -> Alignment {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9724,9 +10038,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/format.wado/Al
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/format.wado/Alignment>$()"(payload: (), index: i32) -> Option<Alignment> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/format.wado/Alignment>$core:prelude/format.wado/Alignment"(payload: Alignment, index: i32) -> Option<Alignment> {
     return match index {
-        1 => Option<Alignment>::None,
+        1 => Option<Alignment>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -9735,7 +10049,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/format.wado/Ali
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<bool>$bool"(v: Box<core:prelude/types.wado/Option<bool>>, index: i32) -> bool {
+pub fn "$case_extract$core:prelude/types.wado/Option<bool>$()"(v: Box<core:prelude/types.wado/Option<bool>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9745,14 +10059,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<bool>$bool"(v: Box<core:pre
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<bool>$bool"(payload: bool, index: i32) -> Option<bool> {
+pub fn "$case_construct$core:prelude/types.wado/Option<bool>$()"(payload: (), index: i32) -> Option<bool> {
     return match index {
-        0 => Option<bool>::Some(payload),
+        0 => Option<bool>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<bool>$()"(v: Box<core:prelude/types.wado/Option<bool>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<bool>$bool"(v: Box<core:prelude/types.wado/Option<bool>>, index: i32) -> bool {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9762,9 +10076,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<bool>$()"(v: Box<core:prelu
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<bool>$()"(payload: (), index: i32) -> Option<bool> {
+pub fn "$case_construct$core:prelude/types.wado/Option<bool>$bool"(payload: bool, index: i32) -> Option<bool> {
     return match index {
-        1 => Option<bool>::None,
+        1 => Option<bool>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -9773,8 +10087,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<bool>"(self: Box<core:prelud
     return $variant_tag(self.value);
 }
 
-// retains: v
-pub fn "$case_extract$core:prelude/types.wado/Option<&mut core:prelude/string.wado/String>$&mut core:prelude/string.wado/String"(v: Box<core:prelude/types.wado/Option<&mut core:prelude/string.wado/String>>, index: i32) -> &mut String {
+pub fn "$case_extract$core:prelude/types.wado/Option<&mut core:prelude/string.wado/String>$()"(v: Box<core:prelude/types.wado/Option<&mut core:prelude/string.wado/String>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9784,15 +10097,15 @@ pub fn "$case_extract$core:prelude/types.wado/Option<&mut core:prelude/string.wa
     };
 }
 
-// retains: payload
-pub fn "$case_construct$core:prelude/types.wado/Option<&mut core:prelude/string.wado/String>$&mut core:prelude/string.wado/String"(payload: &mut String, index: i32) -> Option<&mut String> {
+pub fn "$case_construct$core:prelude/types.wado/Option<&mut core:prelude/string.wado/String>$()"(payload: (), index: i32) -> Option<&mut String> {
     return match index {
-        0 => Option<&mut String>::Some(payload),
+        0 => Option<&mut String>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<&mut core:prelude/string.wado/String>$()"(v: Box<core:prelude/types.wado/Option<&mut core:prelude/string.wado/String>>, index: i32) {
+// retains: v
+pub fn "$case_extract$core:prelude/types.wado/Option<&mut core:prelude/string.wado/String>$&mut core:prelude/string.wado/String"(v: Box<core:prelude/types.wado/Option<&mut core:prelude/string.wado/String>>, index: i32) -> &mut String {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9802,9 +10115,10 @@ pub fn "$case_extract$core:prelude/types.wado/Option<&mut core:prelude/string.wa
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<&mut core:prelude/string.wado/String>$()"(payload: (), index: i32) -> Option<&mut String> {
+// retains: payload
+pub fn "$case_construct$core:prelude/types.wado/Option<&mut core:prelude/string.wado/String>$&mut core:prelude/string.wado/String"(payload: &mut String, index: i32) -> Option<&mut String> {
     return match index {
-        1 => Option<&mut String>::None,
+        1 => Option<&mut String>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -9813,7 +10127,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<&mut core:prelude/string.wad
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/intparse.wado/IntErrorKind>$core:prelude/intparse.wado/IntErrorKind"(v: Box<core:prelude/types.wado/Option<core:prelude/intparse.wado/IntErrorKind>>, index: i32) -> IntErrorKind {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/intparse.wado/IntErrorKind>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/intparse.wado/IntErrorKind>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9823,14 +10137,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/intparse.wado/
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/intparse.wado/IntErrorKind>$core:prelude/intparse.wado/IntErrorKind"(payload: IntErrorKind, index: i32) -> Option<IntErrorKind> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/intparse.wado/IntErrorKind>$()"(payload: (), index: i32) -> Option<IntErrorKind> {
     return match index {
-        0 => Option<IntErrorKind>::Some(payload),
+        0 => Option<IntErrorKind>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/intparse.wado/IntErrorKind>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/intparse.wado/IntErrorKind>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/intparse.wado/IntErrorKind>$core:prelude/intparse.wado/IntErrorKind"(v: Box<core:prelude/types.wado/Option<core:prelude/intparse.wado/IntErrorKind>>, index: i32) -> IntErrorKind {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9840,9 +10154,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/intparse.wado/
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/intparse.wado/IntErrorKind>$()"(payload: (), index: i32) -> Option<IntErrorKind> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/intparse.wado/IntErrorKind>$core:prelude/intparse.wado/IntErrorKind"(payload: IntErrorKind, index: i32) -> Option<IntErrorKind> {
     return match index {
-        1 => Option<IntErrorKind>::None,
+        1 => Option<IntErrorKind>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -9851,7 +10165,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/intparse.wado/I
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/intparse.wado/FloatErrorKind>$core:prelude/intparse.wado/FloatErrorKind"(v: Box<core:prelude/types.wado/Option<core:prelude/intparse.wado/FloatErrorKind>>, index: i32) -> FloatErrorKind {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/intparse.wado/FloatErrorKind>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/intparse.wado/FloatErrorKind>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9861,14 +10175,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/intparse.wado/
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/intparse.wado/FloatErrorKind>$core:prelude/intparse.wado/FloatErrorKind"(payload: FloatErrorKind, index: i32) -> Option<FloatErrorKind> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/intparse.wado/FloatErrorKind>$()"(payload: (), index: i32) -> Option<FloatErrorKind> {
     return match index {
-        0 => Option<FloatErrorKind>::Some(payload),
+        0 => Option<FloatErrorKind>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/intparse.wado/FloatErrorKind>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/intparse.wado/FloatErrorKind>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/intparse.wado/FloatErrorKind>$core:prelude/intparse.wado/FloatErrorKind"(v: Box<core:prelude/types.wado/Option<core:prelude/intparse.wado/FloatErrorKind>>, index: i32) -> FloatErrorKind {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9878,9 +10192,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/intparse.wado/
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/intparse.wado/FloatErrorKind>$()"(payload: (), index: i32) -> Option<FloatErrorKind> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/intparse.wado/FloatErrorKind>$core:prelude/intparse.wado/FloatErrorKind"(payload: FloatErrorKind, index: i32) -> Option<FloatErrorKind> {
     return match index {
-        1 => Option<FloatErrorKind>::None,
+        1 => Option<FloatErrorKind>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -9889,7 +10203,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/intparse.wado/F
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/primitive.wado/CharErrorKind>$core:prelude/primitive.wado/CharErrorKind"(v: Box<core:prelude/types.wado/Option<core:prelude/primitive.wado/CharErrorKind>>, index: i32) -> CharErrorKind {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/primitive.wado/CharErrorKind>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/primitive.wado/CharErrorKind>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9899,14 +10213,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/primitive.wado
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/primitive.wado/CharErrorKind>$core:prelude/primitive.wado/CharErrorKind"(payload: CharErrorKind, index: i32) -> Option<CharErrorKind> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/primitive.wado/CharErrorKind>$()"(payload: (), index: i32) -> Option<CharErrorKind> {
     return match index {
-        0 => Option<CharErrorKind>::Some(payload),
+        0 => Option<CharErrorKind>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/primitive.wado/CharErrorKind>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/primitive.wado/CharErrorKind>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/primitive.wado/CharErrorKind>$core:prelude/primitive.wado/CharErrorKind"(v: Box<core:prelude/types.wado/Option<core:prelude/primitive.wado/CharErrorKind>>, index: i32) -> CharErrorKind {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9916,9 +10230,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/primitive.wado
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/primitive.wado/CharErrorKind>$()"(payload: (), index: i32) -> Option<CharErrorKind> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/primitive.wado/CharErrorKind>$core:prelude/primitive.wado/CharErrorKind"(payload: CharErrorKind, index: i32) -> Option<CharErrorKind> {
     return match index {
-        1 => Option<CharErrorKind>::None,
+        1 => Option<CharErrorKind>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -9927,7 +10241,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/primitive.wado/
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/types.wado/Option<i32>>$core:prelude/types.wado/Option<i32>"(v: Box<core:prelude/types.wado/Option<core:prelude/types.wado/Option<i32>>>, index: i32) -> Option<i32> {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/types.wado/Option<i32>>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/types.wado/Option<i32>>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9937,14 +10251,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/types.wado/Opt
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/types.wado/Option<i32>>$core:prelude/types.wado/Option<i32>"(payload: Option<i32>, index: i32) -> Option<Option<i32>> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/types.wado/Option<i32>>$()"(payload: (), index: i32) -> Option<Option<i32>> {
     return match index {
-        0 => Option<Option<i32>>::Some(payload),
+        0 => Option<Option<i32>>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/types.wado/Option<i32>>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/types.wado/Option<i32>>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/types.wado/Option<i32>>$core:prelude/types.wado/Option<i32>"(v: Box<core:prelude/types.wado/Option<core:prelude/types.wado/Option<i32>>>, index: i32) -> Option<i32> {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9954,9 +10268,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/types.wado/Opt
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/types.wado/Option<i32>>$()"(payload: (), index: i32) -> Option<Option<i32>> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/types.wado/Option<i32>>$core:prelude/types.wado/Option<i32>"(payload: Option<i32>, index: i32) -> Option<Option<i32>> {
     return match index {
-        1 => Option<Option<i32>>::None,
+        1 => Option<Option<i32>>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -9965,7 +10279,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/types.wado/Opti
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<Array<u8>>$Array<u8>"(v: Box<core:prelude/types.wado/Option<Array<u8>>>, index: i32) -> Array<u8> {
+pub fn "$case_extract$core:prelude/types.wado/Option<Array<u8>>$()"(v: Box<core:prelude/types.wado/Option<Array<u8>>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9975,14 +10289,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<Array<u8>>$Array<u8>"(v: Bo
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<Array<u8>>$Array<u8>"(payload: Array<u8>, index: i32) -> Option<Array<u8>> {
+pub fn "$case_construct$core:prelude/types.wado/Option<Array<u8>>$()"(payload: (), index: i32) -> Option<Array<u8>> {
     return match index {
-        0 => Option<Array<u8>>::Some(payload),
+        0 => Option<Array<u8>>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<Array<u8>>$()"(v: Box<core:prelude/types.wado/Option<Array<u8>>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<Array<u8>>$Array<u8>"(v: Box<core:prelude/types.wado/Option<Array<u8>>>, index: i32) -> Array<u8> {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -9992,9 +10306,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<Array<u8>>$()"(v: Box<core:
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<Array<u8>>$()"(payload: (), index: i32) -> Option<Array<u8>> {
+pub fn "$case_construct$core:prelude/types.wado/Option<Array<u8>>$Array<u8>"(payload: Array<u8>, index: i32) -> Option<Array<u8>> {
     return match index {
-        1 => Option<Array<u8>>::None,
+        1 => Option<Array<u8>>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -10003,8 +10317,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<Array<u8>>"(self: Box<core:p
     return $variant_tag(self.value);
 }
 
-// retains: v
-pub fn "$case_extract$core:prelude/types.wado/Option<&Array<u8>>$&Array<u8>"(v: Box<core:prelude/types.wado/Option<&Array<u8>>>, index: i32) -> &Array<u8> {
+pub fn "$case_extract$core:prelude/types.wado/Option<&Array<u8>>$()"(v: Box<core:prelude/types.wado/Option<&Array<u8>>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10014,15 +10327,15 @@ pub fn "$case_extract$core:prelude/types.wado/Option<&Array<u8>>$&Array<u8>"(v: 
     };
 }
 
-// retains: payload
-pub fn "$case_construct$core:prelude/types.wado/Option<&Array<u8>>$&Array<u8>"(payload: &Array<u8>, index: i32) -> Option<&Array<u8>> {
+pub fn "$case_construct$core:prelude/types.wado/Option<&Array<u8>>$()"(payload: (), index: i32) -> Option<&Array<u8>> {
     return match index {
-        0 => Option<&Array<u8>>::Some(payload),
+        0 => Option<&Array<u8>>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<&Array<u8>>$()"(v: Box<core:prelude/types.wado/Option<&Array<u8>>>, index: i32) {
+// retains: v
+pub fn "$case_extract$core:prelude/types.wado/Option<&Array<u8>>$&Array<u8>"(v: Box<core:prelude/types.wado/Option<&Array<u8>>>, index: i32) -> &Array<u8> {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10032,9 +10345,10 @@ pub fn "$case_extract$core:prelude/types.wado/Option<&Array<u8>>$()"(v: Box<core
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<&Array<u8>>$()"(payload: (), index: i32) -> Option<&Array<u8>> {
+// retains: payload
+pub fn "$case_construct$core:prelude/types.wado/Option<&Array<u8>>$&Array<u8>"(payload: &Array<u8>, index: i32) -> Option<&Array<u8>> {
     return match index {
-        1 => Option<&Array<u8>>::None,
+        1 => Option<&Array<u8>>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -10043,7 +10357,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<&Array<u8>>"(self: Box<core:
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/types.wado/CopyResult>$core:prelude/types.wado/CopyResult"(v: Box<core:prelude/types.wado/Option<core:prelude/types.wado/CopyResult>>, index: i32) -> CopyResult {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/types.wado/CopyResult>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/types.wado/CopyResult>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10053,14 +10367,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/types.wado/Cop
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/types.wado/CopyResult>$core:prelude/types.wado/CopyResult"(payload: CopyResult, index: i32) -> Option<CopyResult> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/types.wado/CopyResult>$()"(payload: (), index: i32) -> Option<CopyResult> {
     return match index {
-        0 => Option<CopyResult>::Some(payload),
+        0 => Option<CopyResult>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/types.wado/CopyResult>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/types.wado/CopyResult>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/types.wado/CopyResult>$core:prelude/types.wado/CopyResult"(v: Box<core:prelude/types.wado/Option<core:prelude/types.wado/CopyResult>>, index: i32) -> CopyResult {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10070,9 +10384,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/types.wado/Cop
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/types.wado/CopyResult>$()"(payload: (), index: i32) -> Option<CopyResult> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/types.wado/CopyResult>$core:prelude/types.wado/CopyResult"(payload: CopyResult, index: i32) -> Option<CopyResult> {
     return match index {
-        1 => Option<CopyResult>::None,
+        1 => Option<CopyResult>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -10081,7 +10395,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/types.wado/Copy
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/fpfmt.wado/SpecialKind>$core:prelude/fpfmt.wado/SpecialKind"(v: Box<core:prelude/types.wado/Option<core:prelude/fpfmt.wado/SpecialKind>>, index: i32) -> SpecialKind {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/fpfmt.wado/SpecialKind>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/fpfmt.wado/SpecialKind>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10091,14 +10405,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/fpfmt.wado/Spe
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/fpfmt.wado/SpecialKind>$core:prelude/fpfmt.wado/SpecialKind"(payload: SpecialKind, index: i32) -> Option<SpecialKind> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/fpfmt.wado/SpecialKind>$()"(payload: (), index: i32) -> Option<SpecialKind> {
     return match index {
-        0 => Option<SpecialKind>::Some(payload),
+        0 => Option<SpecialKind>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/fpfmt.wado/SpecialKind>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/fpfmt.wado/SpecialKind>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/fpfmt.wado/SpecialKind>$core:prelude/fpfmt.wado/SpecialKind"(v: Box<core:prelude/types.wado/Option<core:prelude/fpfmt.wado/SpecialKind>>, index: i32) -> SpecialKind {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10108,9 +10422,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/fpfmt.wado/Spe
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/fpfmt.wado/SpecialKind>$()"(payload: (), index: i32) -> Option<SpecialKind> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/fpfmt.wado/SpecialKind>$core:prelude/fpfmt.wado/SpecialKind"(payload: SpecialKind, index: i32) -> Option<SpecialKind> {
     return match index {
-        1 => Option<SpecialKind>::None,
+        1 => Option<SpecialKind>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -10119,7 +10433,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/fpfmt.wado/Spec
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/traits.wado/Ordering>$core:prelude/traits.wado/Ordering"(v: Box<core:prelude/types.wado/Option<core:prelude/traits.wado/Ordering>>, index: i32) -> Ordering {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/traits.wado/Ordering>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/traits.wado/Ordering>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10129,14 +10443,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/traits.wado/Or
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/traits.wado/Ordering>$core:prelude/traits.wado/Ordering"(payload: Ordering, index: i32) -> Option<Ordering> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/traits.wado/Ordering>$()"(payload: (), index: i32) -> Option<Ordering> {
     return match index {
-        0 => Option<Ordering>::Some(payload),
+        0 => Option<Ordering>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/traits.wado/Ordering>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/traits.wado/Ordering>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/traits.wado/Ordering>$core:prelude/traits.wado/Ordering"(v: Box<core:prelude/types.wado/Option<core:prelude/traits.wado/Ordering>>, index: i32) -> Ordering {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10146,9 +10460,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/traits.wado/Or
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/traits.wado/Ordering>$()"(payload: (), index: i32) -> Option<Ordering> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/traits.wado/Ordering>$core:prelude/traits.wado/Ordering"(payload: Ordering, index: i32) -> Option<Ordering> {
     return match index {
-        1 => Option<Ordering>::None,
+        1 => Option<Ordering>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -10157,7 +10471,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/traits.wado/Ord
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/traits.wado/CaseStyle>$core:prelude/traits.wado/CaseStyle"(v: Box<core:prelude/types.wado/Option<core:prelude/traits.wado/CaseStyle>>, index: i32) -> CaseStyle {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/traits.wado/CaseStyle>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/traits.wado/CaseStyle>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10167,14 +10481,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/traits.wado/Ca
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/traits.wado/CaseStyle>$core:prelude/traits.wado/CaseStyle"(payload: CaseStyle, index: i32) -> Option<CaseStyle> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/traits.wado/CaseStyle>$()"(payload: (), index: i32) -> Option<CaseStyle> {
     return match index {
-        0 => Option<CaseStyle>::Some(payload),
+        0 => Option<CaseStyle>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/traits.wado/CaseStyle>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/traits.wado/CaseStyle>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/traits.wado/CaseStyle>$core:prelude/traits.wado/CaseStyle"(v: Box<core:prelude/types.wado/Option<core:prelude/traits.wado/CaseStyle>>, index: i32) -> CaseStyle {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10184,9 +10498,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/traits.wado/Ca
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/traits.wado/CaseStyle>$()"(payload: (), index: i32) -> Option<CaseStyle> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/traits.wado/CaseStyle>$core:prelude/traits.wado/CaseStyle"(payload: CaseStyle, index: i32) -> Option<CaseStyle> {
     return match index {
-        1 => Option<CaseStyle>::None,
+        1 => Option<CaseStyle>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -10195,7 +10509,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/traits.wado/Cas
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<wasi:cli/types.wado/ErrorCode>$wasi:cli/types.wado/ErrorCode"(v: Box<core:prelude/types.wado/Option<wasi:cli/types.wado/ErrorCode>>, index: i32) -> ErrorCode {
+pub fn "$case_extract$core:prelude/types.wado/Option<wasi:cli/types.wado/ErrorCode>$()"(v: Box<core:prelude/types.wado/Option<wasi:cli/types.wado/ErrorCode>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10205,14 +10519,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<wasi:cli/types.wado/ErrorCo
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<wasi:cli/types.wado/ErrorCode>$wasi:cli/types.wado/ErrorCode"(payload: ErrorCode, index: i32) -> Option<ErrorCode> {
+pub fn "$case_construct$core:prelude/types.wado/Option<wasi:cli/types.wado/ErrorCode>$()"(payload: (), index: i32) -> Option<ErrorCode> {
     return match index {
-        0 => Option<ErrorCode>::Some(payload),
+        0 => Option<ErrorCode>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<wasi:cli/types.wado/ErrorCode>$()"(v: Box<core:prelude/types.wado/Option<wasi:cli/types.wado/ErrorCode>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<wasi:cli/types.wado/ErrorCode>$wasi:cli/types.wado/ErrorCode"(v: Box<core:prelude/types.wado/Option<wasi:cli/types.wado/ErrorCode>>, index: i32) -> ErrorCode {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10222,9 +10536,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<wasi:cli/types.wado/ErrorCo
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<wasi:cli/types.wado/ErrorCode>$()"(payload: (), index: i32) -> Option<ErrorCode> {
+pub fn "$case_construct$core:prelude/types.wado/Option<wasi:cli/types.wado/ErrorCode>$wasi:cli/types.wado/ErrorCode"(payload: ErrorCode, index: i32) -> Option<ErrorCode> {
     return match index {
-        1 => Option<ErrorCode>::None,
+        1 => Option<ErrorCode>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -10233,8 +10547,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<wasi:cli/types.wado/ErrorCod
     return $variant_tag(self.value);
 }
 
-// retains: v
-pub fn "$case_extract$core:prelude/types.wado/Option<&Array<fn()->()>>$&Array<fn()->()>"(v: Box<core:prelude/types.wado/Option<&Array<fn()->()>>>, index: i32) -> &Array<fn() -> ()> {
+pub fn "$case_extract$core:prelude/types.wado/Option<&Array<fn()->()>>$()"(v: Box<core:prelude/types.wado/Option<&Array<fn()->()>>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10244,15 +10557,15 @@ pub fn "$case_extract$core:prelude/types.wado/Option<&Array<fn()->()>>$&Array<fn
     };
 }
 
-// retains: payload
-pub fn "$case_construct$core:prelude/types.wado/Option<&Array<fn()->()>>$&Array<fn()->()>"(payload: &Array<fn() -> ()>, index: i32) -> Option<&Array<fn() -> ()>> {
+pub fn "$case_construct$core:prelude/types.wado/Option<&Array<fn()->()>>$()"(payload: (), index: i32) -> Option<&Array<fn() -> ()>> {
     return match index {
-        0 => Option<&Array<fn() -> ()>>::Some(payload),
+        0 => Option<&Array<fn() -> ()>>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<&Array<fn()->()>>$()"(v: Box<core:prelude/types.wado/Option<&Array<fn()->()>>>, index: i32) {
+// retains: v
+pub fn "$case_extract$core:prelude/types.wado/Option<&Array<fn()->()>>$&Array<fn()->()>"(v: Box<core:prelude/types.wado/Option<&Array<fn()->()>>>, index: i32) -> &Array<fn() -> ()> {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10262,9 +10575,10 @@ pub fn "$case_extract$core:prelude/types.wado/Option<&Array<fn()->()>>$()"(v: Bo
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<&Array<fn()->()>>$()"(payload: (), index: i32) -> Option<&Array<fn() -> ()>> {
+// retains: payload
+pub fn "$case_construct$core:prelude/types.wado/Option<&Array<fn()->()>>$&Array<fn()->()>"(payload: &Array<fn() -> ()>, index: i32) -> Option<&Array<fn() -> ()>> {
     return match index {
-        1 => Option<&Array<fn() -> ()>>::None,
+        1 => Option<&Array<fn() -> ()>>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -10273,8 +10587,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<&Array<fn()->()>>"(self: Box
     return $variant_tag(self.value);
 }
 
-// retains: v
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIter>$core:prelude/string.wado/StrCharIter"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIter>>, index: i32) -> StrCharIter {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIter>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIter>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10284,15 +10597,15 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/St
     };
 }
 
-// retains: payload
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIter>$core:prelude/string.wado/StrCharIter"(payload: StrCharIter, index: i32) -> Option<StrCharIter> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIter>$()"(payload: (), index: i32) -> Option<StrCharIter> {
     return match index {
-        0 => Option<StrCharIter>::Some(payload),
+        0 => Option<StrCharIter>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIter>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIter>>, index: i32) {
+// retains: v
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIter>$core:prelude/string.wado/StrCharIter"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIter>>, index: i32) -> StrCharIter {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10302,9 +10615,10 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/St
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIter>$()"(payload: (), index: i32) -> Option<StrCharIter> {
+// retains: payload
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIter>$core:prelude/string.wado/StrCharIter"(payload: StrCharIter, index: i32) -> Option<StrCharIter> {
     return match index {
-        1 => Option<StrCharIter>::None,
+        1 => Option<StrCharIter>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -10313,7 +10627,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/string.wado/Str
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(char)->char>$fn mut(char)->char"(v: Box<core:prelude/types.wado/Option<fn mut(char)->char>>, index: i32) -> fn mut(char) -> char {
+pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(char)->char>$()"(v: Box<core:prelude/types.wado/Option<fn mut(char)->char>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10323,14 +10637,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(char)->char>$fn mut(
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(char)->char>$fn mut(char)->char"(payload: fn mut(char) -> char, index: i32) -> Option<fn mut(char) -> char> {
+pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(char)->char>$()"(payload: (), index: i32) -> Option<fn mut(char) -> char> {
     return match index {
-        0 => Option<fn mut(char) -> char>::Some(payload),
+        0 => Option<fn mut(char) -> char>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(char)->char>$()"(v: Box<core:prelude/types.wado/Option<fn mut(char)->char>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(char)->char>$fn mut(char)->char"(v: Box<core:prelude/types.wado/Option<fn mut(char)->char>>, index: i32) -> fn mut(char) -> char {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10340,9 +10654,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(char)->char>$()"(v: 
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(char)->char>$()"(payload: (), index: i32) -> Option<fn mut(char) -> char> {
+pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(char)->char>$fn mut(char)->char"(payload: fn mut(char) -> char, index: i32) -> Option<fn mut(char) -> char> {
     return match index {
-        1 => Option<fn mut(char) -> char>::None,
+        1 => Option<fn mut(char) -> char>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -10351,8 +10665,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<fn mut(char)->char>"(self: B
     return $variant_tag(self.value);
 }
 
-// retains: v
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrLinesIter>$core:prelude/string.wado/StrLinesIter"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrLinesIter>>, index: i32) -> StrLinesIter {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrLinesIter>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrLinesIter>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10362,15 +10675,15 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/St
     };
 }
 
-// retains: payload
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrLinesIter>$core:prelude/string.wado/StrLinesIter"(payload: StrLinesIter, index: i32) -> Option<StrLinesIter> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrLinesIter>$()"(payload: (), index: i32) -> Option<StrLinesIter> {
     return match index {
-        0 => Option<StrLinesIter>::Some(payload),
+        0 => Option<StrLinesIter>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrLinesIter>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrLinesIter>>, index: i32) {
+// retains: v
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrLinesIter>$core:prelude/string.wado/StrLinesIter"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrLinesIter>>, index: i32) -> StrLinesIter {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10380,9 +10693,10 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/St
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrLinesIter>$()"(payload: (), index: i32) -> Option<StrLinesIter> {
+// retains: payload
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrLinesIter>$core:prelude/string.wado/StrLinesIter"(payload: StrLinesIter, index: i32) -> Option<StrLinesIter> {
     return match index {
-        1 => Option<StrLinesIter>::None,
+        1 => Option<StrLinesIter>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -10391,7 +10705,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/string.wado/Str
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(core:prelude/string.wado/String)->bool>$fn mut(core:prelude/string.wado/String)->bool"(v: Box<core:prelude/types.wado/Option<fn mut(core:prelude/string.wado/String)->bool>>, index: i32) -> fn mut(String) -> bool {
+pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(core:prelude/string.wado/String)->bool>$()"(v: Box<core:prelude/types.wado/Option<fn mut(core:prelude/string.wado/String)->bool>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10401,14 +10715,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(core:prelude/string.
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(core:prelude/string.wado/String)->bool>$fn mut(core:prelude/string.wado/String)->bool"(payload: fn mut(String) -> bool, index: i32) -> Option<fn mut(String) -> bool> {
+pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(core:prelude/string.wado/String)->bool>$()"(payload: (), index: i32) -> Option<fn mut(String) -> bool> {
     return match index {
-        0 => Option<fn mut(String) -> bool>::Some(payload),
+        0 => Option<fn mut(String) -> bool>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(core:prelude/string.wado/String)->bool>$()"(v: Box<core:prelude/types.wado/Option<fn mut(core:prelude/string.wado/String)->bool>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(core:prelude/string.wado/String)->bool>$fn mut(core:prelude/string.wado/String)->bool"(v: Box<core:prelude/types.wado/Option<fn mut(core:prelude/string.wado/String)->bool>>, index: i32) -> fn mut(String) -> bool {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10418,9 +10732,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(core:prelude/string.
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(core:prelude/string.wado/String)->bool>$()"(payload: (), index: i32) -> Option<fn mut(String) -> bool> {
+pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(core:prelude/string.wado/String)->bool>$fn mut(core:prelude/string.wado/String)->bool"(payload: fn mut(String) -> bool, index: i32) -> Option<fn mut(String) -> bool> {
     return match index {
-        1 => Option<fn mut(String) -> bool>::None,
+        1 => Option<fn mut(String) -> bool>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -10429,8 +10743,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<fn mut(core:prelude/string.w
     return $variant_tag(self.value);
 }
 
-// retains: v
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitWhitespaceIter>$core:prelude/string.wado/StrSplitWhitespaceIter"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitWhitespaceIter>>, index: i32) -> StrSplitWhitespaceIter {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitWhitespaceIter>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitWhitespaceIter>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10440,15 +10753,15 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/St
     };
 }
 
-// retains: payload
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitWhitespaceIter>$core:prelude/string.wado/StrSplitWhitespaceIter"(payload: StrSplitWhitespaceIter, index: i32) -> Option<StrSplitWhitespaceIter> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitWhitespaceIter>$()"(payload: (), index: i32) -> Option<StrSplitWhitespaceIter> {
     return match index {
-        0 => Option<StrSplitWhitespaceIter>::Some(payload),
+        0 => Option<StrSplitWhitespaceIter>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitWhitespaceIter>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitWhitespaceIter>>, index: i32) {
+// retains: v
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitWhitespaceIter>$core:prelude/string.wado/StrSplitWhitespaceIter"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitWhitespaceIter>>, index: i32) -> StrSplitWhitespaceIter {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10458,9 +10771,10 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/St
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitWhitespaceIter>$()"(payload: (), index: i32) -> Option<StrSplitWhitespaceIter> {
+// retains: payload
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitWhitespaceIter>$core:prelude/string.wado/StrSplitWhitespaceIter"(payload: StrSplitWhitespaceIter, index: i32) -> Option<StrSplitWhitespaceIter> {
     return match index {
-        1 => Option<StrSplitWhitespaceIter>::None,
+        1 => Option<StrSplitWhitespaceIter>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -10469,8 +10783,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/string.wado/Str
     return $variant_tag(self.value);
 }
 
-// retains: v
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitNIter>$core:prelude/string.wado/StrSplitNIter"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitNIter>>, index: i32) -> StrSplitNIter {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitNIter>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitNIter>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10480,15 +10793,15 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/St
     };
 }
 
-// retains: payload
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitNIter>$core:prelude/string.wado/StrSplitNIter"(payload: StrSplitNIter, index: i32) -> Option<StrSplitNIter> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitNIter>$()"(payload: (), index: i32) -> Option<StrSplitNIter> {
     return match index {
-        0 => Option<StrSplitNIter>::Some(payload),
+        0 => Option<StrSplitNIter>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitNIter>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitNIter>>, index: i32) {
+// retains: v
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitNIter>$core:prelude/string.wado/StrSplitNIter"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitNIter>>, index: i32) -> StrSplitNIter {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10498,9 +10811,10 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/St
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitNIter>$()"(payload: (), index: i32) -> Option<StrSplitNIter> {
+// retains: payload
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitNIter>$core:prelude/string.wado/StrSplitNIter"(payload: StrSplitNIter, index: i32) -> Option<StrSplitNIter> {
     return match index {
-        1 => Option<StrSplitNIter>::None,
+        1 => Option<StrSplitNIter>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -10509,8 +10823,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/string.wado/Str
     return $variant_tag(self.value);
 }
 
-// retains: v
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitIter>$core:prelude/string.wado/StrSplitIter"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitIter>>, index: i32) -> StrSplitIter {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitIter>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitIter>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10520,15 +10833,15 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/St
     };
 }
 
-// retains: payload
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitIter>$core:prelude/string.wado/StrSplitIter"(payload: StrSplitIter, index: i32) -> Option<StrSplitIter> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitIter>$()"(payload: (), index: i32) -> Option<StrSplitIter> {
     return match index {
-        0 => Option<StrSplitIter>::Some(payload),
+        0 => Option<StrSplitIter>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitIter>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitIter>>, index: i32) {
+// retains: v
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitIter>$core:prelude/string.wado/StrSplitIter"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitIter>>, index: i32) -> StrSplitIter {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10538,9 +10851,10 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/St
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitIter>$()"(payload: (), index: i32) -> Option<StrSplitIter> {
+// retains: payload
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitIter>$core:prelude/string.wado/StrSplitIter"(payload: StrSplitIter, index: i32) -> Option<StrSplitIter> {
     return match index {
-        1 => Option<StrSplitIter>::None,
+        1 => Option<StrSplitIter>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -10549,8 +10863,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/string.wado/Str
     return $variant_tag(self.value);
 }
 
-// retains: v
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIndicesIter>$core:prelude/string.wado/StrCharIndicesIter"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIndicesIter>>, index: i32) -> StrCharIndicesIter {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIndicesIter>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIndicesIter>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10560,15 +10873,15 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/St
     };
 }
 
-// retains: payload
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIndicesIter>$core:prelude/string.wado/StrCharIndicesIter"(payload: StrCharIndicesIter, index: i32) -> Option<StrCharIndicesIter> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIndicesIter>$()"(payload: (), index: i32) -> Option<StrCharIndicesIter> {
     return match index {
-        0 => Option<StrCharIndicesIter>::Some(payload),
+        0 => Option<StrCharIndicesIter>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIndicesIter>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIndicesIter>>, index: i32) {
+// retains: v
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIndicesIter>$core:prelude/string.wado/StrCharIndicesIter"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIndicesIter>>, index: i32) -> StrCharIndicesIter {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10578,9 +10891,10 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/St
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIndicesIter>$()"(payload: (), index: i32) -> Option<StrCharIndicesIter> {
+// retains: payload
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIndicesIter>$core:prelude/string.wado/StrCharIndicesIter"(payload: StrCharIndicesIter, index: i32) -> Option<StrCharIndicesIter> {
     return match index {
-        1 => Option<StrCharIndicesIter>::None,
+        1 => Option<StrCharIndicesIter>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -10589,7 +10903,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/string.wado/Str
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<fn mut([i32,char])->bool>$fn mut([i32,char])->bool"(v: Box<core:prelude/types.wado/Option<fn mut([i32,char])->bool>>, index: i32) -> fn mut([i32, char]) -> bool {
+pub fn "$case_extract$core:prelude/types.wado/Option<fn mut([i32,char])->bool>$()"(v: Box<core:prelude/types.wado/Option<fn mut([i32,char])->bool>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10599,14 +10913,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<fn mut([i32,char])->bool>$f
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<fn mut([i32,char])->bool>$fn mut([i32,char])->bool"(payload: fn mut([i32, char]) -> bool, index: i32) -> Option<fn mut([i32, char]) -> bool> {
+pub fn "$case_construct$core:prelude/types.wado/Option<fn mut([i32,char])->bool>$()"(payload: (), index: i32) -> Option<fn mut([i32, char]) -> bool> {
     return match index {
-        0 => Option<fn mut([i32, char]) -> bool>::Some(payload),
+        0 => Option<fn mut([i32, char]) -> bool>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<fn mut([i32,char])->bool>$()"(v: Box<core:prelude/types.wado/Option<fn mut([i32,char])->bool>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<fn mut([i32,char])->bool>$fn mut([i32,char])->bool"(v: Box<core:prelude/types.wado/Option<fn mut([i32,char])->bool>>, index: i32) -> fn mut([i32, char]) -> bool {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10616,9 +10930,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<fn mut([i32,char])->bool>$(
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<fn mut([i32,char])->bool>$()"(payload: (), index: i32) -> Option<fn mut([i32, char]) -> bool> {
+pub fn "$case_construct$core:prelude/types.wado/Option<fn mut([i32,char])->bool>$fn mut([i32,char])->bool"(payload: fn mut([i32, char]) -> bool, index: i32) -> Option<fn mut([i32, char]) -> bool> {
     return match index {
-        1 => Option<fn mut([i32, char]) -> bool>::None,
+        1 => Option<fn mut([i32, char]) -> bool>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -10627,7 +10941,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<fn mut([i32,char])->bool>"(s
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(char)->bool>$fn mut(char)->bool"(v: Box<core:prelude/types.wado/Option<fn mut(char)->bool>>, index: i32) -> fn mut(char) -> bool {
+pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(char)->bool>$()"(v: Box<core:prelude/types.wado/Option<fn mut(char)->bool>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10637,14 +10951,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(char)->bool>$fn mut(
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(char)->bool>$fn mut(char)->bool"(payload: fn mut(char) -> bool, index: i32) -> Option<fn mut(char) -> bool> {
+pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(char)->bool>$()"(payload: (), index: i32) -> Option<fn mut(char) -> bool> {
     return match index {
-        0 => Option<fn mut(char) -> bool>::Some(payload),
+        0 => Option<fn mut(char) -> bool>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(char)->bool>$()"(v: Box<core:prelude/types.wado/Option<fn mut(char)->bool>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(char)->bool>$fn mut(char)->bool"(v: Box<core:prelude/types.wado/Option<fn mut(char)->bool>>, index: i32) -> fn mut(char) -> bool {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10654,9 +10968,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(char)->bool>$()"(v: 
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(char)->bool>$()"(payload: (), index: i32) -> Option<fn mut(char) -> bool> {
+pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(char)->bool>$fn mut(char)->bool"(payload: fn mut(char) -> bool, index: i32) -> Option<fn mut(char) -> bool> {
     return match index {
-        1 => Option<fn mut(char) -> bool>::None,
+        1 => Option<fn mut(char) -> bool>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -10665,8 +10979,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<fn mut(char)->bool>"(self: B
     return $variant_tag(self.value);
 }
 
-// retains: v
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrUtf8ByteIter>$core:prelude/string.wado/StrUtf8ByteIter"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrUtf8ByteIter>>, index: i32) -> StrUtf8ByteIter {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrUtf8ByteIter>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrUtf8ByteIter>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10676,15 +10989,15 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/St
     };
 }
 
-// retains: payload
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrUtf8ByteIter>$core:prelude/string.wado/StrUtf8ByteIter"(payload: StrUtf8ByteIter, index: i32) -> Option<StrUtf8ByteIter> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrUtf8ByteIter>$()"(payload: (), index: i32) -> Option<StrUtf8ByteIter> {
     return match index {
-        0 => Option<StrUtf8ByteIter>::Some(payload),
+        0 => Option<StrUtf8ByteIter>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrUtf8ByteIter>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrUtf8ByteIter>>, index: i32) {
+// retains: v
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrUtf8ByteIter>$core:prelude/string.wado/StrUtf8ByteIter"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrUtf8ByteIter>>, index: i32) -> StrUtf8ByteIter {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10694,9 +11007,10 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/St
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrUtf8ByteIter>$()"(payload: (), index: i32) -> Option<StrUtf8ByteIter> {
+// retains: payload
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrUtf8ByteIter>$core:prelude/string.wado/StrUtf8ByteIter"(payload: StrUtf8ByteIter, index: i32) -> Option<StrUtf8ByteIter> {
     return match index {
-        1 => Option<StrUtf8ByteIter>::None,
+        1 => Option<StrUtf8ByteIter>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -10705,7 +11019,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/string.wado/Str
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(u8)->bool>$fn mut(u8)->bool"(v: Box<core:prelude/types.wado/Option<fn mut(u8)->bool>>, index: i32) -> fn mut(u8) -> bool {
+pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(u8)->bool>$()"(v: Box<core:prelude/types.wado/Option<fn mut(u8)->bool>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10715,14 +11029,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(u8)->bool>$fn mut(u8
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(u8)->bool>$fn mut(u8)->bool"(payload: fn mut(u8) -> bool, index: i32) -> Option<fn mut(u8) -> bool> {
+pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(u8)->bool>$()"(payload: (), index: i32) -> Option<fn mut(u8) -> bool> {
     return match index {
-        0 => Option<fn mut(u8) -> bool>::Some(payload),
+        0 => Option<fn mut(u8) -> bool>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(u8)->bool>$()"(v: Box<core:prelude/types.wado/Option<fn mut(u8)->bool>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(u8)->bool>$fn mut(u8)->bool"(v: Box<core:prelude/types.wado/Option<fn mut(u8)->bool>>, index: i32) -> fn mut(u8) -> bool {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10732,9 +11046,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(u8)->bool>$()"(v: Bo
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(u8)->bool>$()"(payload: (), index: i32) -> Option<fn mut(u8) -> bool> {
+pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(u8)->bool>$fn mut(u8)->bool"(payload: fn mut(u8) -> bool, index: i32) -> Option<fn mut(u8) -> bool> {
     return match index {
-        1 => Option<fn mut(u8) -> bool>::None,
+        1 => Option<fn mut(u8) -> bool>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -10743,8 +11057,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<fn mut(u8)->bool>"(self: Box
     return $variant_tag(self.value);
 }
 
-// retains: v
-pub fn "$case_extract$core:prelude/types.wado/Option<&Array<core:prelude/string.wado/String>>$&Array<core:prelude/string.wado/String>"(v: Box<core:prelude/types.wado/Option<&Array<core:prelude/string.wado/String>>>, index: i32) -> &Array<String> {
+pub fn "$case_extract$core:prelude/types.wado/Option<&Array<core:prelude/string.wado/String>>$()"(v: Box<core:prelude/types.wado/Option<&Array<core:prelude/string.wado/String>>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10754,15 +11067,15 @@ pub fn "$case_extract$core:prelude/types.wado/Option<&Array<core:prelude/string.
     };
 }
 
-// retains: payload
-pub fn "$case_construct$core:prelude/types.wado/Option<&Array<core:prelude/string.wado/String>>$&Array<core:prelude/string.wado/String>"(payload: &Array<String>, index: i32) -> Option<&Array<String>> {
+pub fn "$case_construct$core:prelude/types.wado/Option<&Array<core:prelude/string.wado/String>>$()"(payload: (), index: i32) -> Option<&Array<String>> {
     return match index {
-        0 => Option<&Array<String>>::Some(payload),
+        0 => Option<&Array<String>>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<&Array<core:prelude/string.wado/String>>$()"(v: Box<core:prelude/types.wado/Option<&Array<core:prelude/string.wado/String>>>, index: i32) {
+// retains: v
+pub fn "$case_extract$core:prelude/types.wado/Option<&Array<core:prelude/string.wado/String>>$&Array<core:prelude/string.wado/String>"(v: Box<core:prelude/types.wado/Option<&Array<core:prelude/string.wado/String>>>, index: i32) -> &Array<String> {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10772,9 +11085,10 @@ pub fn "$case_extract$core:prelude/types.wado/Option<&Array<core:prelude/string.
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<&Array<core:prelude/string.wado/String>>$()"(payload: (), index: i32) -> Option<&Array<String>> {
+// retains: payload
+pub fn "$case_construct$core:prelude/types.wado/Option<&Array<core:prelude/string.wado/String>>$&Array<core:prelude/string.wado/String>"(payload: &Array<String>, index: i32) -> Option<&Array<String>> {
     return match index {
-        1 => Option<&Array<String>>::None,
+        1 => Option<&Array<String>>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -10783,8 +11097,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<&Array<core:prelude/string.w
     return $variant_tag(self.value);
 }
 
-// retains: v
-pub fn "$case_extract$core:prelude/types.wado/Option<&Array<u32>>$&Array<u32>"(v: Box<core:prelude/types.wado/Option<&Array<u32>>>, index: i32) -> &Array<u32> {
+pub fn "$case_extract$core:prelude/types.wado/Option<&Array<u32>>$()"(v: Box<core:prelude/types.wado/Option<&Array<u32>>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10794,15 +11107,15 @@ pub fn "$case_extract$core:prelude/types.wado/Option<&Array<u32>>$&Array<u32>"(v
     };
 }
 
-// retains: payload
-pub fn "$case_construct$core:prelude/types.wado/Option<&Array<u32>>$&Array<u32>"(payload: &Array<u32>, index: i32) -> Option<&Array<u32>> {
+pub fn "$case_construct$core:prelude/types.wado/Option<&Array<u32>>$()"(payload: (), index: i32) -> Option<&Array<u32>> {
     return match index {
-        0 => Option<&Array<u32>>::Some(payload),
+        0 => Option<&Array<u32>>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<&Array<u32>>$()"(v: Box<core:prelude/types.wado/Option<&Array<u32>>>, index: i32) {
+// retains: v
+pub fn "$case_extract$core:prelude/types.wado/Option<&Array<u32>>$&Array<u32>"(v: Box<core:prelude/types.wado/Option<&Array<u32>>>, index: i32) -> &Array<u32> {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10812,9 +11125,10 @@ pub fn "$case_extract$core:prelude/types.wado/Option<&Array<u32>>$()"(v: Box<cor
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<&Array<u32>>$()"(payload: (), index: i32) -> Option<&Array<u32>> {
+// retains: payload
+pub fn "$case_construct$core:prelude/types.wado/Option<&Array<u32>>$&Array<u32>"(payload: &Array<u32>, index: i32) -> Option<&Array<u32>> {
     return match index {
-        1 => Option<&Array<u32>>::None,
+        1 => Option<&Array<u32>>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -10823,8 +11137,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<&Array<u32>>"(self: Box<core
     return $variant_tag(self.value);
 }
 
-// retains: v
-pub fn "$case_extract$core:prelude/types.wado/Option<&Array<u64>>$&Array<u64>"(v: Box<core:prelude/types.wado/Option<&Array<u64>>>, index: i32) -> &Array<u64> {
+pub fn "$case_extract$core:prelude/types.wado/Option<&Array<u64>>$()"(v: Box<core:prelude/types.wado/Option<&Array<u64>>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10834,15 +11147,15 @@ pub fn "$case_extract$core:prelude/types.wado/Option<&Array<u64>>$&Array<u64>"(v
     };
 }
 
-// retains: payload
-pub fn "$case_construct$core:prelude/types.wado/Option<&Array<u64>>$&Array<u64>"(payload: &Array<u64>, index: i32) -> Option<&Array<u64>> {
+pub fn "$case_construct$core:prelude/types.wado/Option<&Array<u64>>$()"(payload: (), index: i32) -> Option<&Array<u64>> {
     return match index {
-        0 => Option<&Array<u64>>::Some(payload),
+        0 => Option<&Array<u64>>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<&Array<u64>>$()"(v: Box<core:prelude/types.wado/Option<&Array<u64>>>, index: i32) {
+// retains: v
+pub fn "$case_extract$core:prelude/types.wado/Option<&Array<u64>>$&Array<u64>"(v: Box<core:prelude/types.wado/Option<&Array<u64>>>, index: i32) -> &Array<u64> {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10852,9 +11165,10 @@ pub fn "$case_extract$core:prelude/types.wado/Option<&Array<u64>>$()"(v: Box<cor
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<&Array<u64>>$()"(payload: (), index: i32) -> Option<&Array<u64>> {
+// retains: payload
+pub fn "$case_construct$core:prelude/types.wado/Option<&Array<u64>>$&Array<u64>"(payload: &Array<u64>, index: i32) -> Option<&Array<u64>> {
     return match index {
-        1 => Option<&Array<u64>>::None,
+        1 => Option<&Array<u64>>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -10863,7 +11177,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<&Array<u64>>"(self: Box<core
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>$core:prelude/list.wado/List<u8>"(v: Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>>, index: i32) -> List<u8> {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10873,14 +11187,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/list.wado/List
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>$core:prelude/list.wado/List<u8>"(payload: List<u8>, index: i32) -> Option<List<u8>> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>$()"(payload: (), index: i32) -> Option<List<u8>> {
     return match index {
-        0 => Option<List<u8>>::Some(payload),
+        0 => Option<List<u8>>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>$core:prelude/list.wado/List<u8>"(v: Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>>, index: i32) -> List<u8> {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10890,9 +11204,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/list.wado/List
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>$()"(payload: (), index: i32) -> Option<List<u8>> {
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>$core:prelude/list.wado/List<u8>"(payload: List<u8>, index: i32) -> Option<List<u8>> {
     return match index {
-        1 => Option<List<u8>>::None,
+        1 => Option<List<u8>>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -10929,79 +11243,79 @@ pub fn "$initialize_modules"() {
 
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>"(v: Option<List<u8>>) -> Option<List<u8>> {
     return match v {
-        Some($vc_payload_0) => Option<List<u8>>::Some("ops.all_dirty.wado::$value_copy$core:prelude/list.wado/List<u8>"($vc_payload_0)),
         None => v,
+        Some($vc_payload_1) => Option<List<u8>>::Some("ops.all_dirty.wado::$value_copy$core:prelude/list.wado/List<u8>"($vc_payload_1)),
     };
 }
 
 // retains: v
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrUtf8ByteIter>"(v: Option<StrUtf8ByteIter>) -> Option<StrUtf8ByteIter> {
     return match v {
-        Some($vc_payload_0) => Option<StrUtf8ByteIter>::Some("ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrUtf8ByteIter"($vc_payload_0)),
         None => v,
+        Some($vc_payload_1) => Option<StrUtf8ByteIter>::Some("ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrUtf8ByteIter"($vc_payload_1)),
     };
 }
 
 // retains: v
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIndicesIter>"(v: Option<StrCharIndicesIter>) -> Option<StrCharIndicesIter> {
     return match v {
-        Some($vc_payload_0) => Option<StrCharIndicesIter>::Some("ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"($vc_payload_0)),
         None => v,
+        Some($vc_payload_1) => Option<StrCharIndicesIter>::Some("ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"($vc_payload_1)),
     };
 }
 
 // retains: v
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitIter>"(v: Option<StrSplitIter>) -> Option<StrSplitIter> {
     return match v {
-        Some($vc_payload_0) => Option<StrSplitIter>::Some("ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitIter"($vc_payload_0)),
         None => v,
+        Some($vc_payload_1) => Option<StrSplitIter>::Some("ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitIter"($vc_payload_1)),
     };
 }
 
 // retains: v
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitNIter>"(v: Option<StrSplitNIter>) -> Option<StrSplitNIter> {
     return match v {
-        Some($vc_payload_0) => Option<StrSplitNIter>::Some("ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitNIter"($vc_payload_0)),
         None => v,
+        Some($vc_payload_1) => Option<StrSplitNIter>::Some("ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitNIter"($vc_payload_1)),
     };
 }
 
 // retains: v
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitWhitespaceIter>"(v: Option<StrSplitWhitespaceIter>) -> Option<StrSplitWhitespaceIter> {
     return match v {
-        Some($vc_payload_0) => Option<StrSplitWhitespaceIter>::Some("ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitWhitespaceIter"($vc_payload_0)),
         None => v,
+        Some($vc_payload_1) => Option<StrSplitWhitespaceIter>::Some("ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitWhitespaceIter"($vc_payload_1)),
     };
 }
 
 // retains: v
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrLinesIter>"(v: Option<StrLinesIter>) -> Option<StrLinesIter> {
     return match v {
-        Some($vc_payload_0) => Option<StrLinesIter>::Some("ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrLinesIter"($vc_payload_0)),
         None => v,
+        Some($vc_payload_1) => Option<StrLinesIter>::Some("ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrLinesIter"($vc_payload_1)),
     };
 }
 
 // retains: v
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIter>"(v: Option<StrCharIter>) -> Option<StrCharIter> {
     return match v {
-        Some($vc_payload_0) => Option<StrCharIter>::Some("ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"($vc_payload_0)),
         None => v,
+        Some($vc_payload_1) => Option<StrCharIter>::Some("ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"($vc_payload_1)),
     };
 }
 
 fn "$value_copy$core:prelude/types.wado/Option<Array<u8>>"(v: Option<Array<u8>>) -> Option<Array<u8>> {
     return match v {
-        Some($vc_payload_0) => Option<Array<u8>>::Some(core::builtin::array_clone::<u8>(&$vc_payload_0)),
         None => v,
+        Some($vc_payload_1) => Option<Array<u8>>::Some(core::builtin::array_clone::<u8>(&$vc_payload_1)),
     };
 }
 
 // retains: v
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrSlice>"(v: Option<StrSlice>) -> Option<StrSlice> {
     return match v {
-        Some($vc_payload_0) => Option<StrSlice>::Some("ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSlice"($vc_payload_0)),
         None => v,
+        Some($vc_payload_1) => Option<StrSlice>::Some("ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSlice"($vc_payload_1)),
     };
 }
 
@@ -11013,16 +11327,16 @@ fn "$value_copy$core:prelude/types.wado/Result<core:prelude/string.wado/String,c
 }
 
 // retains: v
-fn "$value_copy$core:prelude/types.wado/Option<[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]>"(v: Option<[StrSlice, StrSlice]>) -> Option<[StrSlice, StrSlice]> {
-    return match v {
-        Some($vc_payload_0) => Option<[StrSlice, StrSlice]>::Some("ops.all_dirty.wado::$value_copy$[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]"($vc_payload_0)),
-        None => v,
-    };
+fn "$value_copy$[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]"(v: [StrSlice, StrSlice]) -> [StrSlice, StrSlice] {
+    return [core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice] { 0: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSlice"(v.0), 1: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSlice"(v.1) };
 }
 
 // retains: v
-fn "$value_copy$[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]"(v: [StrSlice, StrSlice]) -> [StrSlice, StrSlice] {
-    return [core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice] { 0: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSlice"(v.0), 1: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSlice"(v.1) };
+fn "$value_copy$core:prelude/types.wado/Option<[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]>"(v: Option<[StrSlice, StrSlice]>) -> Option<[StrSlice, StrSlice]> {
+    return match v {
+        None => v,
+        Some($vc_payload_1) => Option<[StrSlice, StrSlice]>::Some("ops.all_dirty.wado::$value_copy$[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]"($vc_payload_1)),
+    };
 }
 
 fn "$value_copy$core:prelude/types.wado/Result<i32,core:prelude/string.wado/Utf8Error>"(v: Result<i32, Utf8Error>) -> Result<i32, Utf8Error> {
@@ -11039,15 +11353,15 @@ fn "$value_copy$core:prelude/types.wado/Result<core:prelude/string.wado/String,c
     };
 }
 
-fn "$value_copy$core:prelude/types.wado/Option<[i32,char]>"(v: Option<[i32, char]>) -> Option<[i32, char]> {
-    return match v {
-        Some($vc_payload_0) => Option<[i32, char]>::Some("ops.all_dirty.wado::$value_copy$[i32,char]"($vc_payload_0)),
-        None => v,
-    };
-}
-
 fn "$value_copy$[i32,char]"(v: [i32, char]) -> [i32, char] {
     return [i32,char] { 0: v.0, 1: v.1 };
+}
+
+fn "$value_copy$core:prelude/types.wado/Option<[i32,char]>"(v: Option<[i32, char]>) -> Option<[i32, char]> {
+    return match v {
+        None => v,
+        Some($vc_payload_1) => Option<[i32, char]>::Some("ops.all_dirty.wado::$value_copy$[i32,char]"($vc_payload_1)),
+    };
 }
 
 fn "$value_copy$core:prelude/types.wado/Result<u8,core:prelude/traits.wado/ConvertError>"(v: Result<u8, ConvertError>) -> Result<u8, ConvertError> {
@@ -11312,15 +11626,15 @@ fn "$value_copy$[core:prelude/string.wado/String,u32]"(v: [String, u32]) -> [Str
 
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/int128.wado/i128>"(v: Option<i128>) -> Option<i128> {
     return match v {
-        Some($vc_payload_0) => Option<i128>::Some("ops.all_dirty.wado::$value_copy$core:prelude/int128.wado/i128"($vc_payload_0)),
         None => v,
+        Some($vc_payload_1) => Option<i128>::Some("ops.all_dirty.wado::$value_copy$core:prelude/int128.wado/i128"($vc_payload_1)),
     };
 }
 
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/int128.wado/u128>"(v: Option<u128>) -> Option<u128> {
     return match v {
-        Some($vc_payload_0) => Option<u128>::Some("ops.all_dirty.wado::$value_copy$core:prelude/int128.wado/u128"($vc_payload_0)),
         None => v,
+        Some($vc_payload_1) => Option<u128>::Some("ops.all_dirty.wado::$value_copy$core:prelude/int128.wado/u128"($vc_payload_1)),
     };
 }
 
@@ -11678,16 +11992,16 @@ fn "$value_copy$core:prelude/slice.wado/Slice<fn()->()>"(v: Slice<fn()->()>) -> 
     return Slice<fn()->()> { repr: v.repr, start: v.start, end: v.end };
 }
 
-fn "$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Option<i32>,()>"(v: VariantCase<core:prelude/types.wado/Option<i32>,()>) -> VariantCase<core:prelude/types.wado/Option<i32>,()> {
-    return VariantCase<core:prelude/types.wado/Option<i32>,()> { index: v.index, case_name: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.case_name), wire_override: "ops.all_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), is_unit: v.is_unit };
-}
-
 fn "$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Option<i32>,i32>"(v: VariantCase<core:prelude/types.wado/Option<i32>,i32>) -> VariantCase<core:prelude/types.wado/Option<i32>,i32> {
     return VariantCase<core:prelude/types.wado/Option<i32>,i32> { index: v.index, case_name: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.case_name), wire_override: "ops.all_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), is_unit: v.is_unit };
 }
 
-fn "$value_copy$[core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Option<i32>,i32>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Option<i32>,()>]"(v: [VariantCase<core:prelude/types.wado/Option<i32>,i32>, VariantCase<core:prelude/types.wado/Option<i32>,()>]) -> [VariantCase<core:prelude/types.wado/Option<i32>,i32>, VariantCase<core:prelude/types.wado/Option<i32>,()>] {
-    return [core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Option<i32>,i32>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Option<i32>,()>] { 0: "ops.all_dirty.wado::$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Option<i32>,i32>"(v.0), 1: "ops.all_dirty.wado::$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Option<i32>,()>"(v.1) };
+fn "$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Option<i32>,()>"(v: VariantCase<core:prelude/types.wado/Option<i32>,()>) -> VariantCase<core:prelude/types.wado/Option<i32>,()> {
+    return VariantCase<core:prelude/types.wado/Option<i32>,()> { index: v.index, case_name: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.case_name), wire_override: "ops.all_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), is_unit: v.is_unit };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Option<i32>,()>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Option<i32>,i32>]"(v: [VariantCase<core:prelude/types.wado/Option<i32>,()>, VariantCase<core:prelude/types.wado/Option<i32>,i32>]) -> [VariantCase<core:prelude/types.wado/Option<i32>,()>, VariantCase<core:prelude/types.wado/Option<i32>,i32>] {
+    return [core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Option<i32>,()>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Option<i32>,i32>] { 0: "ops.all_dirty.wado::$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Option<i32>,()>"(v.0), 1: "ops.all_dirty.wado::$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Option<i32>,i32>"(v.1) };
 }
 
 fn "$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/Utf8Error>,core:prelude/string.wado/Utf8Error>"(v: VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/Utf8Error>,core:prelude/string.wado/Utf8Error>) -> VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/Utf8Error>,core:prelude/string.wado/Utf8Error> {
@@ -11696,8 +12010,8 @@ fn "$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Res
 
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v: Option<String>) -> Option<String> {
     return match v {
-        Some($vc_payload_0) => Option<String>::Some("ops.all_dirty.wado::$value_copy$core:prelude/string.wado/String"($vc_payload_0)),
         None => v,
+        Some($vc_payload_1) => Option<String>::Some("ops.all_dirty.wado::$value_copy$core:prelude/string.wado/String"($vc_payload_1)),
     };
 }
 
@@ -11731,8 +12045,8 @@ fn "$value_copy$Array<fn()->()>"(v: Array<fn() -> ()>) -> Array<fn() -> ()> {
 
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/types.wado/WaitEvent>"(v: Option<WaitEvent>) -> Option<WaitEvent> {
     return match v {
-        Some($vc_payload_0) => Option<WaitEvent>::Some("ops.all_dirty.wado::$value_copy$core:prelude/types.wado/WaitEvent"($vc_payload_0)),
         None => v,
+        Some($vc_payload_1) => Option<WaitEvent>::Some("ops.all_dirty.wado::$value_copy$core:prelude/types.wado/WaitEvent"($vc_payload_1)),
     };
 }
 
@@ -11807,11 +12121,6 @@ fn "$value_copy$core:prelude/string.wado/StrCharIndicesIter"(v: StrCharIndicesIt
 }
 
 // retains: v
-fn "$value_copy$core:prelude/string.wado/StrCharIter"(v: StrCharIter) -> StrCharIter {
-    return StrCharIter { repr: v.repr, used: v.used, byte_index: v.byte_index };
-}
-
-// retains: v
 fn "$value_copy$core:prelude/string.wado/StrUtf8ByteIter"(v: StrUtf8ByteIter) -> StrUtf8ByteIter {
     return StrUtf8ByteIter { repr: v.repr, used: v.used, index: v.index };
 }
@@ -11824,13 +12133,17 @@ fn "$value_copy$core:prelude/string.wado/Utf8Error"(v: Utf8Error) -> Utf8Error {
     return Utf8Error { valid_up_to: v.valid_up_to, error_len: v.error_len };
 }
 
-// retains: v
-fn "$value_copy$core:prelude/string.wado/StrSlice"(v: StrSlice) -> StrSlice {
-    return StrSlice { repr: v.repr, start: v.start, end: v.end };
-}
-
 fn "$value_copy$Array<u8>"(v: Array<u8>) -> Array<u8> {
     return core::builtin::array_clone::<u8>(&v);
+}
+
+// retains: v
+fn "$value_copy$core:prelude/string.wado/StrCharIter"(v: StrCharIter) -> StrCharIter {
+    return StrCharIter { repr: v.repr, used: v.used, byte_index: v.byte_index };
+}
+
+fn "$value_copy$[u32,i32]"(v: [u32, i32]) -> [u32, i32] {
+    return [u32,i32] { 0: v.0, 1: v.1 };
 }
 
 fn "$value_copy$core:prelude/primitive.wado/ParseCharError"(v: ParseCharError) -> ParseCharError {
@@ -11878,12 +12191,17 @@ fn "$value_copy$core:prelude/fpfmt.wado/UnpackResult"(v: UnpackResult) -> Unpack
 }
 
 // retains: v
-fn "$value_copy$core:prelude/format.wado/Formatter"(v: Formatter) -> Formatter {
-    return Formatter { fill: v.fill, align: v.align, sign_plus: v.sign_plus, alternate: v.alternate, zero_pad: v.zero_pad, width: v.width, precision: v.precision, indent: v.indent, buf: v.buf };
+fn "$value_copy$core:prelude/string.wado/StrSlice"(v: StrSlice) -> StrSlice {
+    return StrSlice { repr: v.repr, start: v.start, end: v.end };
 }
 
 fn "$value_copy$core:prelude/string.wado/String"(v: String) -> String {
     return String { repr: core::builtin::array_clone_prefix::<u8>(&v.repr, v.used), used: v.used };
+}
+
+// retains: v
+fn "$value_copy$core:prelude/format.wado/Formatter"(v: Formatter) -> Formatter {
+    return Formatter { fill: v.fill, align: v.align, sign_plus: v.sign_plus, alternate: v.alternate, zero_pad: v.zero_pad, width: v.width, precision: v.precision, indent: v.indent, buf: v.buf };
 }
 
 fn "$value_copy$[i64,i64]"(v: [i64, i64]) -> [i64, i64] {

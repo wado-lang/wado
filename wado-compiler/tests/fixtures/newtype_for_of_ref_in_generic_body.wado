@@ -1,0 +1,23 @@
+// Iterating a reference to a newtype over `List` from inside a generic body
+// reaches the base's `impl IntoIterator for &List<T>`, as it does from a
+// plain one.
+
+fn bytes() -> ByteList {
+    return b"\x01\x02";
+}
+
+fn sum_with_len<S: AsStrSlice>(name: S) -> i32 {
+    let bs = bytes();
+    let mut sum = 0;
+    for let b of &bs {
+        sum += *b as i32;
+    }
+    return sum + name.len();
+}
+
+export fn run() {
+    assert sum_with_len("ab") == 5;
+}
+
+__DATA__
+{}

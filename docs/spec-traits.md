@@ -788,9 +788,18 @@ it must bind that type as the pin says.
 
 ## Coherence and Orphan Rules
 
-Wado enforces coherence: a `(Trait, Type)` pair is implemented once. A second impl of one pair is rejected where it is written, and the orphan rules below keep two packages from each writing one.
+Wado enforces coherence: an impl is written once. Two impls are one when they
+name the same trait at the same argument list, write the same target, and bound
+their parameters the same way. A parameter's name and the order its bounds are
+listed in do not tell them apart. The second is rejected where it is written,
+since nothing could rank the two. The orphan rules below keep two packages from
+each writing one.
 
-That is a rule about where impls may be written, not about how many apply to a call: a trait carries several blanket impls, and more than one of them can apply to a receiver. [Method Resolution](#method-resolution) orders those.
+That is a rule about where impls may be written, not about how many apply to a
+call. Impls that differ in target or bounds may reach one receiver: a specific
+impl beside a general one, or two blankets whose bounds the receiver both
+satisfies. [Method Resolution](#method-resolution) orders those, and reports at
+the call the ones it cannot.
 
 ### Package Boundary
 
@@ -898,18 +907,23 @@ impl Box_<i32> { fn a(&self) -> i32 { return self.v; } }   // ERROR: duplicate d
 
 Inherent blocks that reach no receiver in common may share a name.
 
-Two impls that are general in the same way cannot be ordered at all, so a second
-variadic impl of one trait is rejected where it is written:
+Two variadic impls of one trait are separated as two head impls are. A tuple
+takes the one whose bounds it meets, and one meeting both reports at the call
+([Ambiguity](#ambiguity)):
 
-<!-- {"fixture":"spec_traits_variadic_overlap.wado"} -->
+<!-- {"fixture":"spec_traits_variadic_bounds.wado"} -->
 
 ```wado
-impl<..T: Inspect> Tag for [..T] { fn tag(&self) -> String { return "inspect"; } }
-impl<..T: Eq> Tag for [..T] { fn tag(&self) -> String { return "eq"; } }     // ERROR: overlapping variadic impls
+impl<..T: Small> Tag for [..T] { fn tag(&self) -> String { return "small"; } }
+impl<..T: Flag> Tag for [..T] { fn tag(&self) -> String { return "flag"; } }
+
+test {
+    assert [1, 2].tag() == "small" && [true, false].tag() == "flag";
+}
 ```
 
-Bounds do not separate them. A trait's own arguments do, since they make the
-two impls of different traits:
+A trait's own arguments separate them too, since they make the two impls of
+different traits:
 
 <!-- {"fixture":"spec_traits_variadic_args.wado"} -->
 
@@ -918,7 +932,7 @@ impl<..T> Conv<i32> for [..T] { fn conv(&self, x: i32) -> String { return "i32";
 impl<..T> Conv<String> for [..T] { fn conv(&self, x: String) -> String { return "String"; } } // OK — a different trait
 
 test {
-    assert [1, true].conv(7 as i32) == "i32" && [1, true].conv("s") == "String";
+    assert [1, true].conv(7_i32) == "i32" && [1, true].conv("s") == "String";
 }
 ```
 
@@ -1126,10 +1140,9 @@ Each prelude trait follows one policy for when an impl exists:
 | written   | an impl is written, `T` is a plain `enum`, or `T` is a newtype whose base has one | `Display`                                          |
 | explicit  | an impl is written                                                                | every user-defined trait                           |
 
-Two exceptions narrow the on-demand row. `Default` asks that every field carry a
-default expression, not that every member satisfy `Default`
-([Auto-Derivation](./spec-standard-traits.md#auto-derivation)). A `variant`
-derives `Eq` but never `Ord`.
+One exception narrows the on-demand row. `Default` asks that every field carry a
+default expression, not that every member satisfy `Default`, so only a struct
+derives it ([Auto-Derivation](./spec-standard-traits.md#auto-derivation)).
 
 `Eq` and `Ord` on one type come from one source. A type with a written `Ord`
 and no written `Eq` gets its `Eq` from `cmp`, not from its members:
@@ -1161,7 +1174,7 @@ bound; for `Default`, a `T: Default` bound or a `T::default()` call; for serde,
 a bound. A [marker](#compiler-synthesized-impl) needs one too.
 
 A `fn`-typed member blocks `Eq`, `Ord`, and serde. A plain `enum` and a `flags`
-type have no members, so they satisfy every structural obligation.
+type have no members, so they satisfy those three outright.
 [Auto-derived Traits](./spec-types.md#auto-derived-traits) says what each
 derived `Eq` and `Ord` compares.
 

@@ -32,7 +32,7 @@ test {
 
 ### `#[benign(E, ...)]`
 
-Lets a function perform the listed effects without declaring `with E`, and stops them from propagating to callers. It is meant for effects that no caller can observe through the function's interface. Only the named effects are suppressed. Others propagate normally, and the world import for each is still required. The compiler cannot verify that they are unobservable, so this is an unchecked assertion that must be audited.
+Lets a function perform the listed effects without declaring `with E`, and stops them from propagating to callers. On a global, it lets the initializer perform them. It is meant for effects that no caller can observe through the function's interface, or through the global's value. Only the named effects are admitted. Any other effect a function performs propagates as usual, and in an initializer it is an error. The world import for each named effect is still required. The compiler cannot verify that they are unobservable, so this is an unchecked assertion that must be audited.
 
 An argument names an effect the way a `with` clause does, by the name the function's module gives it, an import alias included. A name that reaches no effect there is an error. An effect of the same name declared in another module is a different effect, and stays required.
 
@@ -56,7 +56,27 @@ fn fresh() -> HashIndex {   // declares no effect, and needs none
 }
 ```
 
-Rationale: [WEP: Effect System and Randomness in Collections](./wep-2026-01-20-effect-system-randomness.md).
+On a global, the listed effects are admitted in its initializer:
+
+<!-- {"fixture":"global_benign_initializer.wado"} -->
+
+```wado
+use { println, Stdout } from "core:cli";
+
+fn announce() -> i32 with Stdout {
+    println("initialized");
+    return 7;
+}
+
+#[benign(Stdout)]
+global SEVEN: i32 = announce();
+
+test {
+    assert SEVEN == 7;
+}
+```
+
+Rationale: [WEP: Effect System and Randomness in Collections](./wep-2026-01-20-effect-system-randomness.md) and [WEP: HashMap](./wep-2026-10-01-hash-map.md).
 
 ### `#[ambient]`
 
@@ -622,6 +642,7 @@ result.
 | `opaque`    | The optimizer assumes nothing the signature does not state       |
 | `hint`      | The call computes nothing, but its position is what it means     |
 | `black_box` | The optimizer may assume nothing about the operand or the result |
+| `suspend`   | Other tasks may run before the call returns                      |
 
 <!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
 
@@ -644,7 +665,23 @@ The signature states facts of its own, so no identifier lists them:
   `opaque` in either attribute.
 
 A fact the attribute leaves out is a fact the call does not have: a call with no
-`trap` never traps. `none`, `opaque` and `black_box` each stand alone.
+`trap` never traps. `none`, `opaque` and `black_box` each stand alone, except
+that `opaque` takes `suspend`.
+
+The tasks that run while a call is suspended may read and write anything held
+elsewhere: a global, and whatever a global or another task can reach. A call
+without `suspend`, `opaque` included, reaches only what its arguments reach,
+linear memory and the host. `none`, `hint` and `black_box` return without
+suspending, so none of them takes `suspend`.
+
+<!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
+
+```wado
+#[canonical("wasi", "waitable-set-wait")]
+#[storage(none)]
+#[side_effect(opaque, suspend)]
+pub fn waitable_set_wait(ws: i32, outptr: i32) -> i32;
+```
 
 A `hint` call is never deleted, moved or merged on its own. It goes when the
 code that contains it goes, and it never keeps that code alive.
@@ -702,7 +739,8 @@ it carries `#[storage(none)]` and `#[side_effect(opaque)]`.
 
 A Component Model import carries neither attribute. Its adapter lowers every
 argument to scalars and linear memory and lifts the result back, so the import
-call it makes shares no storage and is opaque, the same for every import.
+call it makes shares no storage, is opaque and may suspend, the same for every
+import.
 
 #### Errors
 
@@ -716,7 +754,9 @@ other fact:
   method requirement, or on a declaration carrying `#[cm(...)]`.
 - A second `#[storage]` or `#[side_effect]` on one declaration.
 - A repeated key, or an unknown value, identifier or key.
-- `none`, `opaque` or `black_box` beside anything else in `#[side_effect]`.
+- `none`, `opaque` or `black_box` beside anything else in `#[side_effect]`,
+  but for `opaque` beside `suspend`.
+- `suspend` beside `none`, `hint` or `black_box`.
 - A condition key without `trap`.
 - `at` or `count` without `outside`, or `outside` and `at` arrays of different
   lengths.

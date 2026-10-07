@@ -63,7 +63,8 @@ use {
     union_kind_arrays,
 } from "./gen_context.wado";
 use { CallForm, CallStmt, CodeWriter, FnSpec, ParamSpec, wado } from "lib:wadopoet";
-use { GaleMap, GaleSet } from "./gale_map.wado";
+use { HashMap, HashSet } from "core:collections";
+use { GALE_SEED } from "./hash_seed.wado";
 use {
     PredictionNode,
     PredictionDispatch,
@@ -309,7 +310,7 @@ pub fn gen_parser(
 /// its caller, `CALL_FOLLOW_SETS` holding each distinct set once.
 /// `CALL_FOLLOW_ENDS[site]` says whether the caller may end there instead.
 fn gen_call_follow_tables(w: &mut CodeWriter, ctx: &GenContext) {
-    let mut set_ids = GaleMap::<String, i32>::new();
+    let mut set_ids = HashMap::<String, i32>::with_seed(GALE_SEED);
     let mut sets: List<String> = [];
     let mut index: List<String> = [];
     for let follow of &ctx.recovery_sets().call_follow {
@@ -1420,7 +1421,7 @@ fn emit_lr_overlap(
     mid_operand_gated: bool,
     token_proven: bool,
 ) {
-    let mut emitted = GaleSet::<String>::new();
+    let mut emitted = HashSet::<String>::with_seed(GALE_SEED);
     let mut chained = false;
 
     for let mut k = 0; k < group.len(); k += 1 {

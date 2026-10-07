@@ -103,7 +103,7 @@ export fn run() with Stdout {
     println(`${add_one(41)}`);
 }
 "#;
-    let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures");
     let result = compile_source_with_opts(
         &fixture_dir.join("__wasm_import_dce_entry__.wado"),
         source,
@@ -140,7 +140,7 @@ export fn run() with Stdout {
     println("no wat call");
 }
 "#;
-    let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures");
     let result = compile_source_with_opts(
         &fixture_dir.join("__wasm_import_dce_unused_entry__.wado"),
         source,
@@ -256,7 +256,7 @@ export fn run() with Stdout {
     println(`${f64::sin(builtin::black_box(0.5))}`);
 }
 "#;
-    let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures");
     let result = compile_source_with_opts(
         &fixture_dir.join(entry),
         source,

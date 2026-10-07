@@ -10,12 +10,16 @@ wado() {
 }
 
 # The `wado run` flags a benchmark wants for the guest's GC heap, keyed by its
-# source path. Only these two beat the CLI's 256 MiB default: microgpt holds a
-# whole autograd graph live and gale_gen its grammar tables, so both pay for
-# every collection and want room to allocate between them. Every other row is
-# flat at 512 MiB or slower, so it takes the default.
+# source path. Only microgpt beats the CLI's 256 MiB default: it holds a whole
+# autograd graph live, so it pays for every collection and wants room to
+# allocate between them. Every other row is flat at 512 MiB or slower, so it
+# takes the default. gale_gen runs at the default and again at
+# `GALE_GEN_BIG_HEAP` as a row of its own.
 gc_heap_flags() {
     case "$1" in
-        *microgpt* | *gale_gen*) echo "--gc-heap-initial 512m" ;;
+        *microgpt*) echo "--gc-heap-initial 512m" ;;
     esac
 }
+
+# gale_gen's second row: how far its time falls once collections are rare.
+GALE_GEN_BIG_HEAP="--gc-heap-initial 1g"

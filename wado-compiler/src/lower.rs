@@ -5,6 +5,7 @@
 //! [`plan::LowerPlan`]. [`translate::translate`] is then a single fold.
 
 pub mod bare_asserts;
+pub mod contract_checks;
 pub mod plan;
 pub mod translate;
 pub mod wide_arith;
@@ -16,6 +17,8 @@ use crate::nir_package::NirPackage;
 
 /// Lower a [`FlatPackage`] and return a [`NirPackage`].
 pub fn lower(mut flat: FlatPackage, errors: &dyn ErrorSink) -> Result<NirPackage, Bail> {
+    // Ahead of the plan, so no sub-pass sees a check that this build deletes.
+    contract_checks::lower(&flat, flat.codegen_flags.contract_checks);
     let plan = plan::plan(&mut flat, errors)?;
     // `translate` mints canonical FuncIds and stamps every call node at
     // construction ("born resolved"); there is no post-pass id assignment.

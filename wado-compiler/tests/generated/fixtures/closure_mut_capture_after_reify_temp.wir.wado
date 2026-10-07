@@ -65,36 +65,36 @@ global global:closure_mut_capture_after_reify_temp.wado::$const_obj_2: ref Array
 
 fn "closure_mut_capture_after_reify_temp.wado/run"() with Stdout {
     let $load_2: ref Array<u8>;
-    let $local_5: ref "core:prelude/string.wado//String";
+    let $local_5_5: ref "core:prelude/string.wado//String";
     let new_used_19: i32;
     let start_20: i32;
     let packed: i64;
     let $sroa_$f_buf_101: ref "core:prelude/string.wado//String";
-    $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
-    if @unlikely(local.tee new_used_19(0 + 2) > builtin::array_len($local_5.repr)) {
+    $local_5_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
+    if @unlikely(local.tee new_used_19(0 + 2) > builtin::array_len($local_5_5.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, new_used_19);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5_5, new_used_19);
     }
-    start_20 = $local_5.used;
-    $local_5.used = new_used_19;
-    builtin::array_copy<u8>(local.tee $load_2($local_5.repr), start_20, global:closure_mut_capture_after_reify_temp.wado::$const_obj_2, 0, 1);
+    start_20 = $local_5_5.used;
+    $local_5_5.used = new_used_19;
+    builtin::array_copy<u8>(local.tee $load_2($local_5_5.repr), start_20, global:closure_mut_capture_after_reify_temp.wado::$const_obj_2, 0, 1);
     start_20 = start_20 + 1;
     builtin::array_copy<u8>($load_2, start_20, global:closure_mut_capture_after_reify_temp.wado::$const_obj_0, 0, 1);
-    if @unlikely(local.tee start_20(local.tee $sroa_$f_buf_101($local_5).used + 1) > builtin::array_len($sroa_$f_buf_101.repr)) {
+    if @unlikely(local.tee start_20(local.tee $sroa_$f_buf_101($local_5_5).used + 1) > builtin::array_len($sroa_$f_buf_101.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_101, start_20);
     }
     new_used_19 = $sroa_$f_buf_101.used;
     $sroa_$f_buf_101.used = start_20;
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_101.repr, new_used_19, 2_i64, 1);
-    if @unlikely(local.tee new_used_19($local_5.used + 1) > builtin::array_len($local_5.repr)) {
+    if @unlikely(local.tee new_used_19($local_5_5.used + 1) > builtin::array_len($local_5_5.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, new_used_19);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5_5, new_used_19);
     }
-    start_20 = $local_5.used;
-    $local_5.used = new_used_19;
-    builtin::array_copy<u8>($local_5.repr, start_20, global:closure_mut_capture_after_reify_temp.wado::$const_obj_0, 0, 1);
-    if @unlikely(local.tee start_20(local.tee $sroa_$f_buf_101($local_5).used + 1) > builtin::array_len($sroa_$f_buf_101.repr)) {
+    start_20 = $local_5_5.used;
+    $local_5_5.used = new_used_19;
+    builtin::array_copy<u8>($local_5_5.repr, start_20, global:closure_mut_capture_after_reify_temp.wado::$const_obj_0, 0, 1);
+    if @unlikely(local.tee start_20(local.tee $sroa_$f_buf_101($local_5_5).used + 1) > builtin::array_len($sroa_$f_buf_101.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_101, start_20);
     }
@@ -104,7 +104,7 @@ fn "closure_mut_capture_after_reify_temp.wado/run"() with Stdout {
     new_used_19 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     start_20 = builtin::i32_wrap_i64(packed >> 32_i64);
     new_used_19 = "closure_mut_capture_after_reify_temp.wado/$cm_binding__Stdout_write_via_stream"(new_used_19);
-    "core:rt/write_string_to_stream"(start_20, $local_5.repr, $local_5.used);
+    "core:rt/write_string_to_stream"(start_20, $local_5_5.repr, $local_5_5.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_19);
 }
 

@@ -6,7 +6,7 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use lexopt::Arg::Long;
 use wit_parser::{PackageId, PackageSourceMap, Resolve};
 
@@ -323,9 +323,20 @@ fn run_directory_mode(
                 .with_context(|| format!("Failed to write {}", output_path.display()))?;
 
             eprintln!("Generated: {}", output_path.display());
+
+            let world_names: Vec<String> = worlds_module
+                .worlds
+                .iter()
+                .map(|w| w.name.clone())
+                .collect();
+            flat_reexports.push(("worlds".to_string(), world_names));
         }
 
-        if !flat_reexports.is_empty() && !skip_flat_reexport {
+        // A facade is the module `ns:pkg`, which exists only for a registered
+        // stdlib package: a wrapper such as `wasmtime:wasi-http` gets none.
+        let registered = stdlib_identity_for(&pkg.name.namespace, pkg_name, None).is_some();
+        if !flat_reexports.is_empty() && !skip_flat_reexport && registered {
+            reject_world_name_clash(pkg_name, &flat_reexports)?;
             write_flat_reexport_file(output_dir, &pkg.name.namespace, pkg_name, &flat_reexports)?;
         }
     }
@@ -361,10 +372,26 @@ fn run_webidl_mode(snapshot_path: &Path, output_dir: &Path, glue_dir: &Path) -> 
     Ok(())
 }
 
-/// Generate a flat package-level re-exporting file (e.g., wasi/filesystem.wado,
-/// core/kiln.wado). Re-exports all types from sub-interface files so consumers
-/// import a single module (`wasi:filesystem`, `core:kiln`) rather than individual
-/// sub-interfaces.
+/// Fail when a world shares its name with an interface item, since the facade
+/// would re-export both under that one name.
+fn reject_world_name_clash(pkg_name: &str, flat_reexports: &[(String, Vec<String>)]) -> Result<()> {
+    let (worlds, items) = flat_reexports
+        .iter()
+        .partition::<Vec<_>, _>(|(module, _)| module == "worlds");
+    if let Some(clash) = worlds
+        .iter()
+        .flat_map(|(_, names)| names)
+        .find(|world| items.iter().any(|(_, names)| names.contains(*world)))
+    {
+        bail!("world `{clash}` in package {pkg_name} shares its name with an interface item");
+    }
+    Ok(())
+}
+
+/// Generate a flat package-level re-exporting file (e.g., wasi/filesystem.wado).
+/// Re-exports every type from the sub-interface files and every world from
+/// `worlds.wado`, so consumers import a single module (`wasi:filesystem`)
+/// rather than individual sub-interfaces.
 fn write_flat_reexport_file(
     output_dir: &Path,
     namespace: &str,

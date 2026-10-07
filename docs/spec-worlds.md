@@ -73,14 +73,10 @@ each world it targets to an entry module, or the `--world` option of
 `wado compile` and `wado run` target `wasi:cli/command`, and `wado serve`
 targets `wasi:http/service`.
 
-An effect the selected world does not import is not rejected. The compiler adds
-the effect's interface to the component's imports, and the host decides whether
-it can instantiate the component.
-
-Both behaviours are undecided. Whether a module declares the world it conforms
-to in source, and whether an effect outside the world's imports is a compile
-error, are open
-([WEP: World Conformance](./wep-2026-01-16-world-conformance-and-export.md)).
+A program's effects declare its imports: the component imports the interface of
+every effect the program performs and does not handle itself. An effect the
+selected world does not import is no exception. It is imported all the same,
+and the host decides whether it can instantiate the component.
 
 The manifest declares worlds in two places:
 
@@ -107,7 +103,8 @@ The library world's entry module needs no [entry point](#entry-points).
 [The Library World](./spec-packages.md#the-library-world) says what it offers
 other packages, and what building it produces.
 
-Rationale: [WEP: Package Manifest](./wep-2026-02-14-package-manifest.md).
+Rationale: [WEP: Package Manifest](./wep-2026-02-14-package-manifest.md) and
+[WEP: World Conformance](./wep-2026-01-16-world-conformance-and-export.md).
 
 ## Entry Points
 
@@ -137,6 +134,25 @@ fn run() with Stdout {
 ```
 
 The entry point's signature must match what the world declares.
+
+`export(World::name)` makes a function of any name provide the world export
+`name`. The host calls it as `name`, and Wado code calls it by its own name:
+
+<!-- {"fixture":"export_mapping_command_run.wado", "assert": false} -->
+
+```wado
+export(Command::run) fn main() with Stdout {
+    println(greeting());
+}
+```
+
+`World` is a world in scope, and `name` one of its exports. A list,
+`export(A::run, B::run)`, names one export in each of several worlds. A target
+in the selected world makes the function that world's export and no other. A
+target in another world exports nothing; it only holds the signature to that
+world's. Both are checked as the entry point's signature is. Two functions
+providing one export do not compile, and neither does an `export fn name` beside
+a function mapped to `name`.
 
 ## `wasi:cli/command`
 

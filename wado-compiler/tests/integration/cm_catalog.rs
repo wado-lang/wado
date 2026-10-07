@@ -148,10 +148,7 @@ pub(crate) const LIB_WORLD_FQ: &str = concat!(
     env!("CARGO_PKG_VERSION")
 );
 
-pub(crate) const FIXTURE: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/tests/fixtures/cm_catalog.wado"
-);
+pub(crate) const FIXTURE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/cm_catalog.wado");
 
 /// A single round-trip case: call the kebab-named export with `value` and
 /// assert the returned value equals `value`.
@@ -2011,7 +2008,7 @@ fn cm_lib_rejects_a_map_key_outside_the_component_model_key_types() {
 fn cm_catalog_fixture_matches_package_source() {
     const PACKAGE_SOURCE: &str = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../package-cm-catalog/src/lib.wado"
+        "/../../package-cm-catalog/src/lib.wado"
     );
     let fixture = std::fs::read_to_string(FIXTURE).expect("read cm_catalog fixture");
     let package = std::fs::read_to_string(PACKAGE_SOURCE).expect("read package source");

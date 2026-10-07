@@ -167,6 +167,7 @@ impl Model {
         let input: List<i64> = ids.into_iter().map(|id| id as i64).collect();
         let extents: List<i32> = [gpt2::Batch::EXTENT, ids.len()];
         let logits = gpt2::forward(
+            &mut gpt2::Cpu {},
             &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: input, extents },
             &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: List::<i64>::filled(ids.len(), 1), extents },
             &self.weights,

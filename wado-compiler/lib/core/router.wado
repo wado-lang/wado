@@ -9,7 +9,7 @@
 //! is reached, method dispatch tries the specific-method list first, then
 //! falls back to the optional `any` slot.
 //!
-//! Static routes (no `:param`, no `*wildcard`) are routed through a sorted
+//! Static routes (no `:param`, no `*wildcard`) are routed through a hashed
 //! side-table with pre-built `RouteMatch` shells. Hits on a static route
 //! return a reference into the table, which (assuming `Option<&T>` niche
 //! optimization) costs zero heap allocations per match.
@@ -24,6 +24,7 @@
 
 
 use { Request } from "wasi:http";
+use { HashMap, HashSeed } from "core:collections";
 use {
     Deserialize,
     DeserializeError,
@@ -117,18 +118,14 @@ variant Segment {
     Wildcard(String),
 }
 
-struct LiteralEdge {
-    label: String,
-    target: i32,
-}
-
 struct MethodEntry {
     method: Method,
     handler_idx: i32,
 }
 
 struct DfaState {
-    literals: List<LiteralEdge>,
+    /// A literal segment's text to the state it leads to.
+    literals: HashMap<String, i32>,
     param_target: i32,
     param_name: String,
     wildcard_methods: List<MethodEntry>,
@@ -145,9 +142,15 @@ struct DfaState {
     wildcard_names: List<String>,
 }
 
+/// What the router's maps hash under. Their keys are the routes the program
+/// registers; a request only probes chains registration built, so it cannot
+/// grow one. A fixed seed exposes nothing, and spares every program that routes
+/// the host's seed call.
+global ROUTER_SEED: HashSeed = HashSeed::fixed(0x452821E638D01377, 0xBE5466CF34E90C6C);
+
 fn new_state() -> DfaState {
     return DfaState {
-        literals: [],
+        literals: HashMap::with_seed(ROUTER_SEED),
         param_target: -1,
         param_name: "",
         wildcard_methods: [],
@@ -160,10 +163,9 @@ fn new_state() -> DfaState {
     };
 }
 
-/// Sorted entry for the static-route fast path.
+/// One method's route on the static-route fast path.
 struct StaticEntry<H> {
     method: Option<Method>,
-    pattern: String,
     rm: RouteMatch<H>,
 }
 
@@ -182,7 +184,8 @@ fn empty_path_params() -> PathParams {
 
 /// Generic HTTP path router.
 pub struct Router<H> {
-    static_entries: List<StaticEntry<H>>,
+    /// A static pattern to its routes, one per method registered for it.
+    static_routes: HashMap<String, List<StaticEntry<H>>>,
     states: List<DfaState>,
     handlers: List<H>,
 }
@@ -190,7 +193,7 @@ pub struct Router<H> {
 impl<H> Router<H> {
     pub fn new() -> Router<H> {
         let mut r = Router {
-            static_entries: [],
+            static_routes: HashMap::with_seed(ROUTER_SEED),
             states: [],
             handlers: [],
         };
@@ -245,34 +248,18 @@ impl<H> Router<H> {
     }
 
     fn insert_static<S: AsStrSlice>(&mut self, method_opt: Option<Method>, pattern: S, handler: H) {
-        // `static_entries` is kept sorted by `static_entry_cmp` so both
-        // `match_static` and this last-write-wins lookup can locate an
-        // existing entry in O(log n). The narrow `[lo, hi)` range covers
-        // the patterns equal to `pattern`; methods within it are still
-        // scanned linearly (one entry per HTTP method, so single digits).
-        let new_entry = StaticEntry {
-            method: method_opt,
-            pattern: pattern.to_string(),
-            rm: RouteMatch {
-                handler,
-                params: empty_path_params(),
-            },
-        };
-        let [lo, hi] = bsearch_pattern_range(&self.static_entries, &new_entry.pattern);
-        for let mut i = lo; i < hi; i += 1 {
-            if method_opt_eq(&self.static_entries[i].method, &new_entry.method) {
-                self.static_entries[i].rm = new_entry.rm;
+        let rm = RouteMatch { handler, params: empty_path_params() };
+        let key = pattern.to_string();
+        self.static_routes.try_insert(key, []);
+        let entries = &mut self.static_routes[key];
+        // One entry per HTTP method, so single digits to scan.
+        for let mut i = 0; i < entries.len(); i += 1 {
+            if method_opt_eq(&entries[i].method, &method_opt) {
+                entries[i].rm = rm;
                 return;
             }
         }
-        // No existing (pattern, method) match: insert at the position that
-        // keeps the table sorted. Within the equal-pattern band that means
-        // the slot where the method-rank order places the new entry.
-        let mut pos = lo;
-        while pos < hi && static_entry_cmp(&self.static_entries[pos], &new_entry) matches { Less } {
-            pos += 1;
-        }
-        self.static_entries.insert(pos, new_entry);
+        entries.push(StaticEntry { method: method_opt, rm });
     }
 
     fn insert_dynamic(&mut self, method_opt: &Option<Method>, segs: &List<Segment>, handler: H) {
@@ -318,17 +305,12 @@ impl<H> Router<H> {
                     cur = self.states[cur].param_target;
                 },
                 Literal(lit) => {
-                    let key = *lit;
-                    let [pos, found] = bsearch_label(&self.states[cur].literals, &key);
-                    if found {
-                        cur = self.states[cur].literals[pos].target;
+                    if let Some(target) = self.states[cur].literals.get(*lit) {
+                        cur = target;
                     } else {
                         let new_id = self.states.len();
                         self.states.push(new_state());
-                        self.states[cur].literals.insert(pos, LiteralEdge {
-                            label: key,
-                            target: new_id,
-                        });
+                        self.states[cur].literals[*lit] = new_id;
                         cur = new_id;
                     }
                 },
@@ -358,16 +340,15 @@ impl<H> Router<H> {
     }
 
     fn match_static<S: AsStrSlice>(&self, method: &Method, path: S) -> Option<&RouteMatch<H>> {
-        let [lo, hi] = bsearch_pattern_range(&self.static_entries, path);
-        if lo >= hi {
+        let Some(entries) = self.static_routes.get_ref_str(path) else {
             return null;
-        }
-        // Within the equal-pattern range, prefer specific method, then `any`.
+        };
+        // Prefer the specific method, then `any`.
         let mut any_idx: i32 = -1;
-        for let mut i = lo; i < hi; i += 1 {
-            match self.static_entries[i].method {
+        for let mut i = 0; i < entries.len(); i += 1 {
+            match entries[i].method {
                 Some(m) => if m == *method {
-                    return Option::Some(&self.static_entries[i].rm);
+                    return Option::Some(&entries[i].rm);
                 },
                 None => {
                     any_idx = i;
@@ -375,7 +356,7 @@ impl<H> Router<H> {
             }
         }
         if any_idx >= 0 {
-            return Option::Some(&self.static_entries[any_idx].rm);
+            return Option::Some(&entries[any_idx].rm);
         }
         return null;
     }
@@ -400,8 +381,7 @@ impl<H> Router<H> {
                 return null;
             }
             let segment = view.slice_unchecked(pos, end);
-            let target = bsearch_target_by_bytes(&self.states[state].literals, &segment);
-            if target >= 0 {
+            if let Some(target) = self.states[state].literals.get_str(segment) {
                 state = target;
             } else if self.states[state].param_target >= 0 {
                 ranges.push(pos);
@@ -489,11 +469,10 @@ impl<H> Router<H> {
     /// contribute. Empty array on a 404 or when only `any` is registered.
     pub fn allowed_methods<S: AsStrSlice>(&self, path: S) -> List<Method> {
         // Static side first.
-        let [lo, hi] = bsearch_pattern_range(&self.static_entries, path);
-        if lo < hi {
+        if let Some(entries) = self.static_routes.get_ref_str(path) {
             let mut out: List<Method> = [];
-            for let mut i = lo; i < hi; i += 1 {
-                if let Some(m) = self.static_entries[i].method {
+            for let e of entries {
+                if let Some(m) = e.method {
                     out.push(m);
                 }
             }
@@ -517,8 +496,7 @@ impl<H> Router<H> {
                 return [];
             }
             let segment = view.slice_unchecked(pos, end);
-            let target = bsearch_target_by_bytes(&self.states[state].literals, &segment);
-            if target >= 0 {
+            if let Some(target) = self.states[state].literals.get_str(segment) {
                 state = target;
             } else if self.states[state].param_target >= 0 {
                 state = self.states[state].param_target;
@@ -591,66 +569,6 @@ fn method_opt_eq(a: &Option<Method>, b: &Option<Method>) -> bool {
             },
         },
     }
-}
-
-/// Compare two static entries by (pattern, method-rank). `any` (None) sorts
-/// after specific methods.
-fn static_entry_cmp<H>(a: &StaticEntry<H>, b: &StaticEntry<H>) -> Ordering {
-    let c = a.pattern.cmp(&b.pattern);
-    if c matches { Equal } {
-        let ar = method_rank(&a.method);
-        let br = method_rank(&b.method);
-        if ar < br {
-            return Ordering::Less;
-        }
-        if ar > br {
-            return Ordering::Greater;
-        }
-        return Ordering::Equal;
-    }
-    return c;
-}
-
-fn method_rank(m: &Option<Method>) -> i32 {
-    return match m {
-        Some(_) => 0,
-        None => 1,
-    };
-}
-
-/// Find the [lo, hi) range of entries whose `pattern` equals `path`.
-fn bsearch_pattern_range<H, S: AsStrSlice>(entries: &List<StaticEntry<H>>, path: S) -> [i32, i32] {
-    let n = entries.len();
-    // Lower bound
-    let mut lo = 0;
-    let mut hi = n;
-    while lo < hi {
-        let mid = (lo + hi) / 2;
-        match entries[mid].pattern.cmp_str(path) {
-            Less => {
-                lo = mid + 1;
-            },
-            _ => {
-                hi = mid;
-            },
-        }
-    }
-    let lower = lo;
-    // Upper bound
-    lo = lower;
-    hi = n;
-    while lo < hi {
-        let mid = (lo + hi) / 2;
-        match entries[mid].pattern.cmp_str(path) {
-            Greater => {
-                hi = mid;
-            },
-            _ => {
-                lo = mid + 1;
-            },
-        }
-    }
-    return [lower, lo];
 }
 
 fn has_wildcard(s: &DfaState) -> bool {
@@ -744,46 +662,6 @@ fn parse_pattern<S: AsStrSlice>(path: S) -> List<Segment> {
         i = j + 1;
     }
     return out;
-}
-
-fn bsearch_label<S: AsStrSlice>(edges: &List<LiteralEdge>, key: S) -> [i32, bool] {
-    let mut lo = 0;
-    let mut hi = edges.len();
-    while lo < hi {
-        let mid = (lo + hi) / 2;
-        match edges[mid].label.cmp_str(key) {
-            Less => {
-                lo = mid + 1;
-            },
-            Greater => {
-                hi = mid;
-            },
-            Equal => {
-                return [mid, true];
-            },
-        }
-    }
-    return [lo, false];
-}
-
-fn bsearch_target_by_bytes(edges: &List<LiteralEdge>, segment: &StrSlice) -> i32 {
-    let mut lo = 0;
-    let mut hi = edges.len();
-    while lo < hi {
-        let mid = (lo + hi) / 2;
-        match edges[mid].label.as_str_slice().cmp(segment) {
-            Less => {
-                lo = mid + 1;
-            },
-            Greater => {
-                hi = mid;
-            },
-            Equal => {
-                return edges[mid].target;
-            },
-        }
-    }
-    return -1;
 }
 
 /// `Deserializer` for `PathParams`. Iterates captured params in the order

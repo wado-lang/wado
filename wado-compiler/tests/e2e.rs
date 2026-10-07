@@ -11,7 +11,7 @@
 //! Helper modules that are imported by tests go in subdirectories
 //! (e.g., fixtures/sub/) and are not run as tests themselves.
 
-mod common;
+use wado_compiler_tests as common;
 
 use bytes::Bytes;
 use futures::future::{Either, select};
@@ -31,6 +31,7 @@ use wasmtime_wasi_http::p3::bindings::Service;
 use wado_compiler::ast::TodoMark;
 use wado_compiler::coverage::{Branch, Coverage, CoverageScope, read_from_component, render_plan};
 use wado_compiler::{CompilerOptions, OptLevel};
+use wado_host::fixture::{CompileInputs, data_section};
 
 // ---------------------------------------------------------------------------
 // __DATA__ spec
@@ -190,7 +191,8 @@ struct TestSpec {
 
     /// Preopened directories, each `[template, guest_path]`. Every preopen is a
     /// fresh temp dir (see `prepare_preopened_dirs`). `template` seeds it:
-    /// `""` for empty scratch, or a workspace-relative path to copy in.
+    /// `""` for empty scratch, or a directory to copy in, relative to the
+    /// fixture's own as `dependencies` paths are.
     #[serde(default)]
     preopened_dirs: Vec<[String; 2]>,
 
@@ -219,34 +221,10 @@ struct TestSpec {
     #[serde(default, deserialize_with = "one_or_many")]
     allocator: Vec<String>,
 
-    /// Compile-time parameter overrides (`-D NAME=value`) for `#[param]` globals.
-    #[serde(default)]
-    params: indexmap::IndexMap<String, String>,
-
-    /// Stubbed compile-time environment for `#[param(from_env = ...)]`.
-    #[serde(default)]
-    param_env: indexmap::IndexMap<String, String>,
-
-    /// Host-supplied parameter fallbacks, as `wado test` supplies `log.level`.
-    #[serde(default)]
-    param_defaults: indexmap::IndexMap<String, String>,
-
-    /// Stubbed path `[dependencies]`: name → the dependency's `[package].lib`,
-    /// relative to the fixture directory. Each entry is its own package.
-    #[serde(default)]
-    dependencies: indexmap::IndexMap<String, String>,
-
-    /// Override the `--param-unknown` policy level (`error` / `warn` / `ignore`).
-    #[serde(default)]
-    param_unknown: Option<String>,
-
-    /// Override the `--param-invalid` policy level (`error` / `warn` / `ignore`).
-    #[serde(default)]
-    param_invalid: Option<String>,
-
-    /// Override the `--param-missing` policy level (`error` / `warn` / `ignore`).
-    #[serde(default)]
-    param_missing: Option<String>,
+    /// The keys that say how to compile the fixture, shared with the golden
+    /// dumps.
+    #[serde(flatten)]
+    compile: CompileInputs,
 
     /// Mock responses for outgoing HTTP requests (keyed by URL or path).
     /// When present, any `wasi:http/client#send` from the guest will be
@@ -402,27 +380,23 @@ fn one_or_many<'de, D: serde::Deserializer<'de>>(de: D) -> Result<Vec<String>, D
     }
 }
 
-/// Whether `wir` contains `pattern`, where `{}` stands for a run of digits.
-/// A generated local's number is an allocation counter, not what a golden means.
+/// Whether `wir` contains `pattern`, where `{}` stands for a run of digits and
+/// `{name}` for one run that every `{name}` in the pattern repeats. A generated
+/// local's number is an allocation counter, not what a golden means; that two
+/// sites name the same local is.
 fn wir_contains(wir: &str, pattern: &str) -> bool {
-    let parts: Vec<&str> = pattern.split("{}").collect();
-    if parts.len() == 1 {
-        return wir.contains(pattern);
+    let mut texts = Vec::new();
+    let mut holes = Vec::new();
+    let mut rest = pattern;
+    while let Some((start, name, end)) = next_hole(rest) {
+        texts.push(&rest[..start]);
+        holes.push(name);
+        rest = &rest[end..];
     }
+    texts.push(rest);
     let mut from = 0;
-    while let Some(hit) = wir[from..].find(parts[0]) {
-        let mut pos = from + hit + parts[0].len();
-        let mut matched = true;
-        for part in &parts[1..] {
-            let rest = &wir[pos..];
-            let digits = rest.len() - rest.trim_start_matches(|c: char| c.is_ascii_digit()).len();
-            if digits == 0 || !wir[pos + digits..].starts_with(part) {
-                matched = false;
-                break;
-            }
-            pos += digits + part.len();
-        }
-        if matched {
+    while let Some(hit) = wir[from..].find(texts[0]) {
+        if holes_match(&wir[from + hit + texts[0].len()..], &holes, &texts[1..]) {
             return true;
         }
         from += hit + 1;
@@ -431,6 +405,55 @@ fn wir_contains(wir: &str, pattern: &str) -> bool {
         }
     }
     false
+}
+
+/// The first hole in `pattern`: where it starts, its name (empty for `{}`),
+/// and where it ends.
+fn next_hole(pattern: &str) -> Option<(usize, &str, usize)> {
+    pattern.match_indices('{').find_map(|(start, _)| {
+        let after = &pattern[start + 1..];
+        let name = after.trim_start_matches(|c: char| c.is_ascii_lowercase() || c == '_');
+        let name = &after[..after.len() - name.len()];
+        after[name.len()..]
+            .starts_with('}')
+            .then_some((start, name, start + name.len() + 2))
+    })
+}
+
+/// Whether `wir` opens with each hole's digits followed by its text, a named
+/// hole repeating the digits it took first.
+fn holes_match(mut wir: &str, holes: &[&str], texts: &[&str]) -> bool {
+    let mut taken: Vec<(&str, &str)> = Vec::new();
+    for (&name, text) in holes.iter().zip(texts) {
+        let digits = wir.len() - wir.trim_start_matches(|c: char| c.is_ascii_digit()).len();
+        let serial = &wir[..digits];
+        if digits == 0 {
+            return false;
+        }
+        if !name.is_empty() {
+            match taken.iter().find(|(taken_name, _)| *taken_name == name) {
+                Some((_, first)) if *first != serial => return false,
+                Some(_) => {}
+                None => taken.push((name, serial)),
+            }
+        }
+        let Some(after) = wir[digits..].strip_prefix(text) else {
+            return false;
+        };
+        wir = after;
+    }
+    true
+}
+
+#[test]
+fn wir_patterns_match_serials_by_hole() {
+    let wir = "$a_16 = $a_16 + 1; $b_3 = $a_16;";
+    assert!(wir_contains(wir, "$a_{} = $a_{} + 1"));
+    assert!(wir_contains(wir, "$a_{p} = $a_{p} + 1"));
+    assert!(wir_contains(wir, "$b_{} = $a_{p};"));
+    assert!(!wir_contains(wir, "$b_{p} = $a_{p};"));
+    assert!(!wir_contains("$a_16 = $a_17 + 1", "$a_{p} = $a_{p} + 1"));
+    assert!(wir_contains("{ x }", "{ x }"));
 }
 
 /// The body of the first function in `wir` whose name contains `scope`, from
@@ -765,7 +788,7 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
     // without is a library-shaped source run under the test world (compile +
     // instantiate, executing its `test` blocks). The latter lets a published
     // library double as a fixture verbatim — see `cm_catalog.wado`.
-    let spec: TestSpec = match common::extract_data_section(source) {
+    let spec: TestSpec = match data_section(source) {
         Some(data_section) => common::parse_data_section(data_section, &test_id),
         None => TestSpec {
             test_world: Some(TestWorldSpec::default()),
@@ -870,43 +893,14 @@ fn run_with_allocator(
         None
     };
 
-    let allocator = Some(allocator.to_string());
-    let mut param_policy = wado_compiler::param_resolution::ParamPolicy::default();
-    let parse_level = |s: &Option<String>, field: &str| {
-        s.as_ref().map(|v| {
-            wado_compiler::param_resolution::ParamPolicyLevel::parse(v)
-                .unwrap_or_else(|| panic!("[{test_id}] invalid {field} level: {v:?}"))
-        })
-    };
-    if let Some(level) = parse_level(&spec.param_unknown, "param_unknown") {
-        param_policy.unknown = level;
-    }
-    if let Some(level) = parse_level(&spec.param_invalid, "param_invalid") {
-        param_policy.invalid = level;
-    }
-    if let Some(level) = parse_level(&spec.param_missing, "param_missing") {
-        param_policy.missing = level;
-    }
-
     let options = CompilerOptions {
         opt_level,
         target_world,
         skip_validation: false,
         retain_wir: spec.has_wir_expectations(opt_level),
-        allocator,
-        params: wado_compiler::param_resolution::ParamInputs {
-            overrides: spec
-                .params
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect(),
-            defaults: spec
-                .param_defaults
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect(),
-            policy: param_policy,
-        },
+        allocator: Some(allocator.to_string()),
+        codegen_flags: spec.compile.codegen_flags.clone(),
+        params: spec.compile.param_inputs(),
         coverage: spec.coverage.as_ref().map(|_| CoverageScope::default()),
         ..Default::default()
     };
@@ -920,10 +914,7 @@ fn run_with_allocator(
         fixture_path.to_path_buf(),
         source.to_string(),
         options,
-        common::HostStubs {
-            env: spec.param_env.clone(),
-            dependencies: spec.dependencies.clone(),
-        },
+        spec.compile.host_stubs(),
     );
 
     // Assert compile-time warnings (e.g. DeadFunction / DeadGlobal). These are
@@ -1071,7 +1062,8 @@ fn run_with_allocator(
     } else {
         // Default: wasi:cli/command. `_temp_dirs` must outlive the run: dropping
         // a `TempDir` deletes it from disk.
-        let (dirs, _temp_dirs) = prepare_preopened_dirs(&spec.preopened_dirs, test_id);
+        let (dirs, _temp_dirs) =
+            prepare_preopened_dirs(fixture_path, &spec.preopened_dirs, test_id);
         let result = common::run_wasm_with_full_options(
             wasm,
             &dirs,
@@ -1190,13 +1182,18 @@ fn assert_wir_expectations(
 
 /// Back each `preopened_dirs` entry with a fresh temp dir so filesystem tests
 /// stay hermetic across the parallel per-optimization-level runs. An empty
-/// `template` yields empty scratch; otherwise it is copied in as a seed corpus.
-/// Returns the `(host, guest)` pairs plus the owning `TempDir` guards, which the
-/// caller must keep alive until the guest finishes.
+/// `template` yields empty scratch; otherwise the directory it names, relative
+/// to the fixture's own, is copied in as a seed corpus. Returns the
+/// `(host, guest)` pairs plus the owning `TempDir` guards, which the caller
+/// must keep alive until the guest finishes.
 fn prepare_preopened_dirs(
+    fixture_path: &Path,
     specs: &[[String; 2]],
     test_id: &str,
 ) -> (Vec<(String, String)>, Vec<tempfile::TempDir>) {
+    let fixture_dir = fixture_path
+        .parent()
+        .expect("a fixture is a file in a directory");
     let mut dirs = Vec::with_capacity(specs.len());
     let mut temp_dirs = Vec::with_capacity(specs.len());
 
@@ -1205,7 +1202,7 @@ fn prepare_preopened_dirs(
             .unwrap_or_else(|e| panic!("[{test_id}] failed to create temp preopen dir: {e}"));
 
         if !template.is_empty() {
-            copy_dir_recursive(Path::new(template), temp.path()).unwrap_or_else(|e| {
+            copy_dir_recursive(&fixture_dir.join(template), temp.path()).unwrap_or_else(|e| {
                 panic!("[{test_id}] failed to seed preopen dir from {template:?}: {e}")
             });
         }
@@ -1371,13 +1368,13 @@ datatest_mini::harness! {
     // The env is read at macro expansion, so toggling requires re-expanding the
     // macro (touch this file or `cargo clean`); locally, run them on demand with
     // `cargo test -- --ignored`.
-    { test = fixture_test_o0, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
-    { test = fixture_test_o1, root = "tests/fixtures", pattern = r"^[^/]+\.wado$",
+    { test = fixture_test_o0, root = "fixtures", pattern = r"^[^/]+\.wado$" },
+    { test = fixture_test_o1, root = "fixtures", pattern = r"^[^/]+\.wado$",
       ignore_unless_env = ["CI", "WADO_FULL_TEST"] },
-    { test = fixture_test_o2, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
-    { test = fixture_test_o3, root = "tests/fixtures", pattern = r"^[^/]+\.wado$",
+    { test = fixture_test_o2, root = "fixtures", pattern = r"^[^/]+\.wado$" },
+    { test = fixture_test_o3, root = "fixtures", pattern = r"^[^/]+\.wado$",
       ignore_unless_env = ["CI", "WADO_FULL_TEST"] },
-    { test = fixture_test_os, root = "tests/fixtures", pattern = r"^[^/]+\.wado$",
+    { test = fixture_test_os, root = "fixtures", pattern = r"^[^/]+\.wado$",
       ignore_unless_env = ["CI", "WADO_FULL_TEST"] },
 }
 

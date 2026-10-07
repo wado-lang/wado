@@ -746,6 +746,12 @@ test "i128::from_str basic" {
     assert i128::from_str("-42") matches { Ok(v) && v == expected_neg };
 }
 
+test "i128::from_str rejects what spells no integer" {
+    assert i128::from_str("") matches { Err(e) && e.kind() == IntErrorKind::Empty };
+    assert i128::from_str("-") matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
+    assert i128::from_str("-4x") matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
+}
+
 test "i128::from_str max min" {
     let max = i128::from_pair(u64::MAX, i64::MAX);
     let min = i128::from_pair(0, i64::MIN);

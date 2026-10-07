@@ -8,8 +8,8 @@ use crate::ast::{
     ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport, CmResourceLinearity,
     ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement,
     ContinueStmt, EFFECT_HOLE, EffectHandlerBinding, EffectName, EnumCase, EnumDecl, ErrorExpr,
-    ErrorItem, ErrorStmt, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt,
-    ForStmt, FormatSpec, Function, FunctionType, GenericParam, GenericType, GlobalDecl,
+    ErrorItem, ErrorStmt, ExportTarget, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
+    ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericParam, GenericType, GlobalDecl,
     HandleClasses, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr,
     InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt, Literal,
     LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType,
@@ -1176,6 +1176,12 @@ impl Parser {
         } else {
             false
         };
+        let (export_fn_id, export_targets) = if has_export && self.check(&TokenKind::LParen) {
+            let fn_id = self.alloc_ast_id();
+            (Some(fn_id), self.parse_export_targets()?)
+        } else {
+            (None, Vec::new())
+        };
         if has_export && self.check(&TokenKind::Use) {
             self.errors.push(ParseError {
                 message: "a re-export is not lowered at the component boundary, so a `use` \
@@ -1214,6 +1220,15 @@ impl Parser {
             reject_resource_linearity(&attrs)?;
         }
 
+        if !export_targets.is_empty() && !self.check(&TokenKind::Fn) {
+            return Err(ParseError {
+                message: "`export(…)` names the world export a function provides, \
+                    so a `fn` must follow it"
+                    .to_string(),
+                span: self.peek().span,
+            });
+        }
+
         // Check for contextual keyword "test" (identifier followed by string or block)
         if let TokenKind::Ident(name) = self.peek_kind()
             && name == "test"
@@ -1223,9 +1238,16 @@ impl Parser {
 
         match self.peek_kind() {
             TokenKind::Use => self.parse_use_decl(visibility, attrs).map(Item::Use),
-            TokenKind::Fn => self
-                .parse_function(visibility, has_export, is_async, attrs, false)
-                .map(Item::Function),
+            TokenKind::Fn => {
+                let id = export_fn_id.unwrap_or_else(|| self.alloc_ast_id());
+                self.parse_function(id, visibility, has_export, is_async, attrs, false)
+                    .map(|func| {
+                        Item::Function(Function {
+                            export_targets,
+                            ..func
+                        })
+                    })
+            }
             TokenKind::Interface => self
                 .parse_interface_decl(visibility, attrs)
                 .map(Item::Interface),
@@ -1925,8 +1947,12 @@ impl Parser {
         }
     }
 
+    /// Parse a function whose `id` the caller allocated at the item's start,
+    /// ahead of any prefix (`export(…)`) whose nodes would otherwise take the
+    /// item's leading doc comment.
     fn parse_function(
         &mut self,
+        id: AstId,
         visibility: Visibility,
         is_export: bool,
         is_async: bool,
@@ -1934,7 +1960,6 @@ impl Parser {
         is_method: bool,
     ) -> ParseResult<Function> {
         reject_resource_linearity(&attrs)?;
-        let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Fn)?;
 
@@ -2010,6 +2035,7 @@ impl Parser {
             name_span,
             visibility,
             is_export,
+            export_targets: Vec::new(),
             is_async,
             type_params,
             attrs,
@@ -2021,6 +2047,45 @@ impl Parser {
             body,
             span,
         })
+    }
+
+    /// `(World::name, ns::World::name, …)` after `export`: the world exports
+    /// the function provides.
+    fn parse_export_targets(&mut self) -> ParseResult<Vec<ExportTarget>> {
+        self.expect(&TokenKind::LParen)?;
+        let targets = self.parse_comma_separated(&TokenKind::RParen, |p| {
+            let start = p.peek().span;
+            let mut segments = vec![p.consume_ident()?];
+            while p.check(&TokenKind::ColonColon) {
+                p.advance();
+                segments.push(p.consume_ident()?);
+            }
+            let span = start.merge(&p.previous().span);
+            if !(2..=3).contains(&segments.len()) {
+                return Err(p.error_at_span(
+                    span,
+                    "an export target is `World::name` or `ns::World::name`",
+                ));
+            }
+            let name = segments.pop().expect("two segments at least");
+            let world = segments.pop().expect("two segments at least");
+            let namespace = segments.pop();
+            Ok(ExportTarget {
+                id: p.alloc_ast_id(),
+                namespace,
+                world,
+                name,
+                span,
+            })
+        })?;
+        self.expect(&TokenKind::RParen)?;
+        if targets.is_empty() {
+            return Err(self.error_at_span(
+                self.previous().span,
+                "`export(…)` names at least one world export",
+            ));
+        }
+        Ok(targets)
     }
 
     fn parse_param_list(&mut self) -> ParseResult<Vec<Param>> {
@@ -5316,7 +5381,8 @@ impl Parser {
 
         // Visibility comes from the interface itself, and an operation is
         // never exported at the CM boundary on its own.
-        self.parse_function(Visibility::Private, false, is_async, attrs, true)
+        let id = self.alloc_ast_id();
+        self.parse_function(id, Visibility::Private, false, is_async, attrs, true)
     }
 
     /// Parse generic type parameters: `<T>`, `<T, U>`, `<T: Ord>`, `<T: Ord + Clone>`, `<T = Default>`
@@ -6021,7 +6087,8 @@ impl Parser {
                         span: const_span.merge(&end),
                     });
                 } else {
-                    methods.push(self.parse_function(member_vis, false, false, attrs, true)?);
+                    let id = self.alloc_ast_id();
+                    methods.push(self.parse_function(id, member_vis, false, false, attrs, true)?);
                 }
             }
         }
@@ -6189,8 +6256,9 @@ impl Parser {
                 // Trait methods cannot be exported at the CM boundary.
                 // Attributes (e.g. `#[compiler_item("...")]`) carry through so
                 // the elaborator can register per-method compiler items.
+                let id = self.alloc_ast_id();
                 let mut method =
-                    self.parse_function(Visibility::Private, false, false, attrs, true)?;
+                    self.parse_function(id, Visibility::Private, false, false, attrs, true)?;
                 // A method that declares nothing takes what the head says, at
                 // sites of its own that the trait's scope answers.
                 if method.effects.is_empty() {

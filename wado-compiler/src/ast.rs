@@ -751,6 +751,9 @@ pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
 /// Everything [`walk_function`] visits but the body.
 pub fn walk_function_signature<V: AstVisitor>(v: &mut V, func: &Function) {
     v.visit_id(func.id, func.span);
+    for target in &func.export_targets {
+        v.visit_id(target.id, target.span);
+    }
     v.visit_generic_params(&func.type_params);
     walk_params(v, &func.params);
     if let Some(ret) = &func.return_type {
@@ -2378,6 +2381,8 @@ pub struct Function {
     pub visibility: Visibility,
     /// Whether this function is exported at the Component Model boundary (world export)
     pub is_export: bool,
+    /// The world exports `export(World::name, …)` names this function as.
+    pub export_targets: Vec<ExportTarget>,
     /// Whether this is an async function (`export async fn`).
     /// Async functions use `task return` instead of `return` to deliver results
     /// without terminating the function.
@@ -2399,7 +2404,28 @@ pub struct Function {
     pub span: Span,
 }
 
+/// One `World::name` in `export(…)`: the world export a function provides.
+#[derive(Debug, Clone)]
+pub struct ExportTarget {
+    /// The reference site of the world name.
+    pub id: AstId,
+    /// The namespace in `ns::World::name`.
+    pub namespace: Option<String>,
+    /// The world, `World` in `World::name`.
+    pub world: String,
+    /// The export of that world, `name` in `World::name`.
+    pub name: String,
+    pub span: Span,
+}
+
 impl Function {
+    /// Whether this is an `export fn` exported under its own name: an
+    /// `export(…)` names the world exports it provides instead.
+    #[must_use]
+    pub fn exports_own_name(&self) -> bool {
+        self.is_export && self.export_targets.is_empty()
+    }
+
     /// The effects the source wrote here. Empty when the enclosing trait's
     /// head supplied them.
     pub fn written_effects(&self) -> &[EffectName] {
@@ -3938,6 +3964,31 @@ impl Type {
         }
     }
 
+    /// This type with each named type `at` answers for replaced by the answer,
+    /// at any depth.
+    #[must_use]
+    pub fn substituted(&self, at: &dyn Fn(&NamedType) -> Option<Type>) -> Type {
+        let each = |types: &[Type]| types.iter().map(|t| t.substituted(at)).collect();
+        match self {
+            Type::Named(named) => at(named).unwrap_or_else(|| self.clone()),
+            Type::Generic(g) => Type::Generic(GenericType {
+                args: each(&g.args),
+                ..g.clone()
+            }),
+            Type::NamespacedGeneric(g) => {
+                Type::NamespacedGeneric(Box::new(NamespacedGenericType {
+                    args: each(&g.args),
+                    ..(**g).clone()
+                }))
+            }
+            Type::Function(f) => Type::Function(Box::new(f.substituted(at))),
+            Type::Tuple(elems) => Type::Tuple(each(elems)),
+            Type::Reference(inner) => Type::Reference(Box::new(inner.substituted(at))),
+            Type::MutReference(inner) => Type::MutReference(Box::new(inner.substituted(at))),
+            Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => self.clone(),
+        }
+    }
+
     /// Calls `f` on this type and on every type within it, outermost first.
     pub fn for_each<'a>(&'a self, f: &mut impl FnMut(&'a Type)) {
         let _ = self.any(&mut |ty| {
@@ -4106,6 +4157,18 @@ pub struct FunctionType {
     pub effects: Vec<EffectName>,
 }
 
+impl FunctionType {
+    /// [`Type::substituted`] over the parameters and the return.
+    #[must_use]
+    pub fn substituted(&self, at: &dyn Fn(&NamedType) -> Option<Type>) -> Self {
+        Self {
+            params: self.params.iter().map(|t| t.substituted(at)).collect(),
+            return_type: self.return_type.substituted(at),
+            ..self.clone()
+        }
+    }
+}
+
 /// One effect name in a `with` clause, at the site that writes it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EffectName {
@@ -4221,6 +4284,38 @@ pub struct GenericParam {
 }
 
 impl GenericParam {
+    /// This parameter with [`Type::substituted`] applied to every type its
+    /// bounds and its default write.
+    #[must_use]
+    pub fn substituted(&self, at: &dyn Fn(&NamedType) -> Option<Type>) -> Self {
+        let mut param = self.clone();
+        for bound in &mut param.bounds {
+            for arg in &mut bound.type_args {
+                *arg = arg.substituted(at);
+            }
+            for assoc in &mut bound.assoc_types {
+                assoc.ty = assoc.ty.substituted(at);
+            }
+            if let Some(signature) = &mut bound.fn_signature {
+                **signature = signature.substituted(at);
+            }
+        }
+        param.default = param.default.map(|ty| ty.substituted(at));
+        param
+    }
+
+    /// Whether [`Type::any`] holds of a type its bounds or its default write.
+    #[must_use]
+    pub fn any_type<'a>(&'a self, pred: &mut impl FnMut(&'a Type) -> bool) -> bool {
+        self.bounds.iter().any(|bound| {
+            bound.type_args.iter().any(|arg| arg.any(pred))
+                || bound.assoc_types.iter().any(|assoc| assoc.ty.any(pred))
+                || bound.fn_signature.as_ref().is_some_and(|signature| {
+                    signature.params.iter().any(|p| p.any(pred)) || signature.return_type.any(pred)
+                })
+        }) || self.default.as_ref().is_some_and(|ty| ty.any(pred))
+    }
+
     /// The trait bounds this param declares. An `fn`-signature bound is
     /// excluded: it is already realised in the parameter's own type, so there
     /// is no trait to check a type argument against.
@@ -4749,6 +4844,8 @@ impl Point {
 fn add(a: i32, b: i32) -> i32 {
     return a + b;
 }
+
+export(Command::run) fn main() {}
 
 test "addition" {
     assert add(1, 2) == 3;

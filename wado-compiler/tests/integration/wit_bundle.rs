@@ -7,7 +7,7 @@
 //! and the embedded `component-type` section is additive full-fidelity metadata
 //! decodable as a standalone WIT package.
 
-use crate::common::{InMemoryHost, block_on, world_surface};
+use crate::common::{block_on, in_memory_host, world_surface};
 use wado_compiler::OptLevel;
 use wado_compiler::semantics::semantics;
 use wado_compiler::wit_bundle::{embed_component_type, encode_component_type};
@@ -17,7 +17,7 @@ use wit_parser::decoding::{DecodedWasm, decode};
 
 /// Compile `source` to component bytes at the given world.
 fn compile(source: &str, world_fq: &str) -> Vec<u8> {
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let mut options = wado_compiler::CompilerOptions {
         opt_level: OptLevel::O2,
         target_world: Some(world_fq.to_string()),
@@ -100,7 +100,7 @@ fn component_is_self_describing_without_embedding() {
 #[test]
 fn embedding_appends_section_and_preserves_component() {
     let wasm = compile(HELLO, CLI_WORLD);
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = with_contract(
         block_on(semantics(HELLO, &host, Some("entry.wado"))),
         CLI_WORLD,
@@ -110,7 +110,7 @@ fn embedding_appends_section_and_preserves_component() {
     let embedded = embed_component_type(
         &wasm,
         &sem,
-        &world_surface(&InMemoryHost::new(), HELLO, CLI_WORLD),
+        &world_surface(&in_memory_host(&[]), HELLO, CLI_WORLD),
     )
     .expect("embed_component_type");
 
@@ -140,13 +140,13 @@ fn embedding_appends_section_and_preserves_component() {
 /// for `wkg` / `wasm-tools metadata` and relink flows.
 #[test]
 fn encoded_payload_decodes_as_wit_package() {
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = with_contract(
         block_on(semantics(HELLO, &host, Some("entry.wado"))),
         CLI_WORLD,
     );
     let payload =
-        encode_component_type(&sem, &world_surface(&InMemoryHost::new(), HELLO, CLI_WORLD))
+        encode_component_type(&sem, &world_surface(&in_memory_host(&[]), HELLO, CLI_WORLD))
             .expect("encode_component_type");
     assert!(
         matches!(decode(&payload), Ok(DecodedWasm::WitPackage(..))),
@@ -158,7 +158,7 @@ fn encoded_payload_decodes_as_wit_package() {
 #[test]
 fn pure_compute_world_embeds() {
     let wasm = compile(PURE, CLI_WORLD);
-    let host = InMemoryHost::new();
+    let host = in_memory_host(&[]);
     let sem = with_contract(
         block_on(semantics(PURE, &host, Some("entry.wado"))),
         CLI_WORLD,
@@ -166,13 +166,13 @@ fn pure_compute_world_embeds() {
     let embedded = embed_component_type(
         &wasm,
         &sem,
-        &world_surface(&InMemoryHost::new(), PURE, CLI_WORLD),
+        &world_surface(&in_memory_host(&[]), PURE, CLI_WORLD),
     )
     .expect("embed");
     assert!(matches!(decode(&embedded), Ok(DecodedWasm::Component(..))));
 
     let payload =
-        encode_component_type(&sem, &world_surface(&InMemoryHost::new(), PURE, CLI_WORLD))
+        encode_component_type(&sem, &world_surface(&in_memory_host(&[]), PURE, CLI_WORLD))
             .expect("encode");
     assert!(matches!(decode(&payload), Ok(DecodedWasm::WitPackage(..))));
 }

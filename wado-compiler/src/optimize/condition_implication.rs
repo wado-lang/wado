@@ -25,7 +25,7 @@ use crate::optimize::arena_query::{
 };
 use crate::optimize::gate::{FunctionGate, GatedPass};
 use crate::optimize::value_copy::mutation::{MutationOracle, Witness, expr_witnesses};
-use crate::tir::{ResolvedType, TypeTable};
+use crate::tir::TypeTable;
 use crate::{hashmap, nir_arena};
 
 /// Run condition implication at the body root on an existing engine session.
@@ -113,7 +113,7 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
             ..
         } = &mut *func;
         let body = body.as_mut().expect("checked above");
-        let (aliased, untrackable, mut_escaped) = builder_alias_sets(
+        let alias = builder_alias_sets(
             body,
             locals,
             address_taken_locals,
@@ -124,7 +124,7 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
         );
         let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
         let mut engine = Engine::new(body, &mut buffers, locals);
-        engine.set_alias_sets(aliased, untrackable, mut_escaped);
+        engine.set_alias_sets(alias);
         engine.set_value_graph_type_table(&type_table);
         engine.set_param_locals(param_locals);
         engine.set_panic_callee_ids(&panic_ids);
@@ -164,6 +164,7 @@ pub(super) fn build_copy_bindings(engine: &Engine) -> Binds {
     });
     let mut walk = BindWalk {
         engine,
+        reassigned,
         tick: 0,
         last_write: hashmap::IndexMap::default(),
         last_aliased: 0,
@@ -174,7 +175,7 @@ pub(super) fn build_copy_bindings(engine: &Engine) -> Binds {
     walk.node(NodeRef::Block(body.root));
     walk.pending
         .into_iter()
-        .filter(|(t, _)| !walk.stale.contains(t) && !reassigned.contains(t))
+        .filter(|(t, _)| !walk.stale.contains(t))
         .map(|(t, p)| (t, p.value))
         .collect()
 }
@@ -193,6 +194,9 @@ struct PendingBind {
 /// a write to something it depends on.
 struct BindWalk<'e, 'a> {
     engine: &'e Engine<'a>,
+    /// Locals assigned after their `let`: never a bind, so a read of one stands
+    /// for the local alone and passes on no dependency of its initializer.
+    reassigned: hashmap::IndexSet<u32>,
     tick: u64,
     last_write: hashmap::IndexMap<u32, u64>,
     last_aliased: u64,
@@ -256,6 +260,9 @@ impl BindWalk<'_, '_> {
     }
 
     fn bind(&mut self, t: u32, value: Operand) {
+        if self.reassigned.contains(&t) {
+            return;
+        }
         let body = &*self.engine.body;
         if self.pending.contains_key(&t) || operand_reads_global(body, value) {
             self.stale.insert(t);
@@ -1075,7 +1082,11 @@ fn write_through(engine: &Engine, place: ExprId, sink: &mut impl FnMut(Write)) {
     match write_root(engine.body, place, false) {
         WriteRoot::Local(root) => {
             sink(Write::Root(root));
-            if engine.aliased().contains(&root) || place_crosses_reference(engine, place) {
+            if engine.aliased().contains(&root)
+                || engine
+                    .body
+                    .place_crosses_reference(place, engine.value_graph_type_table())
+            {
                 sink(Write::Aliased);
             }
         }
@@ -1084,71 +1095,84 @@ fn write_through(engine: &Engine, place: ExprId, sink: &mut impl FnMut(Write)) {
     }
 }
 
-/// Whether some step of the place chain at `e`, its root included, is a
-/// reference. Without a type table every step might be.
-fn place_crosses_reference(engine: &Engine, e: ExprId) -> bool {
-    let Some(types) = engine.value_graph_type_table() else {
-        return true;
-    };
-    let mut cur = e;
-    loop {
-        if matches!(
-            types.get(engine.body.exprs[cur].type_id),
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-        ) {
-            return true;
-        }
-        let next = match &engine.body.exprs[cur].kind {
-            ExprKind::Unary { expr: inner, .. }
-            | ExprKind::Cast { expr: inner, .. }
-            | ExprKind::FieldAccess { expr: inner, .. }
-            | ExprKind::VariantPayload { expr: inner, .. }
-            | ExprKind::Index { expr: inner, .. } => inner.as_expr(),
-            _ => None,
-        };
-        match next {
-            Some(inner) => cur = inner,
-            None => return false,
-        }
-    }
-}
-
-/// Whether `w` may change what `root` holds.
+/// Whether `w` may change what `root` holds. A call reaches a reference's
+/// pointee through a global without taking the reference.
 fn write_hits(engine: &Engine, w: Write, root: u32) -> bool {
     match w {
         Write::Root(r) => r == root,
         Write::Aliased => reachable_elsewhere(engine, root),
-        Write::Call => engine.mut_escaped().contains(&root),
+        Write::Call => engine.mut_escaped().contains(&root) || is_reference(engine, root),
     }
 }
 
 /// Whether another handle may reach what `root` holds: an aliased local, or a
 /// reference, whose pointee the frame does not own.
 fn reachable_elsewhere(engine: &Engine, root: u32) -> bool {
-    engine.aliased().contains(&root)
-        || engine.locals().get(root as usize).is_none_or(|l| {
-            engine.value_graph_type_table().is_none_or(|types| {
-                matches!(
-                    types.get(l.type_id),
-                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-                )
-            })
-        })
+    engine.aliased().contains(&root) || is_reference(engine, root)
 }
 
-/// Whether anything under `node` may change what one of `roots` holds.
+/// Whether `local` may name storage rather than hold a value. A local minted
+/// past the type table's reach might.
+fn is_reference(engine: &Engine, local: u32) -> bool {
+    engine.locals().get(local as usize).is_none_or(|l| {
+        engine
+            .value_graph_type_table()
+            .is_none_or(|types| types.is_reference_shaped(l.type_id))
+    })
+}
+
+/// Whether anything under `node` may change what one of `roots` holds for the
+/// code after it. A block that [`panics_before_any_exit`] never hands control
+/// on, so its writes do not count.
 fn modifies_any_root(engine: &Engine, node: NodeRef, roots: &[u32]) -> bool {
-    engine
-        .body
-        .find_in_live_node_under(node, |n| {
-            let NodeRef::Expr(e) = n else { return None };
-            let mut hit = false;
-            for_each_write(engine, e, &mut |w| {
-                hit |= roots.iter().any(|&r| write_hits(engine, w, r));
+    let body = &*engine.body;
+    let mut diverging: hashmap::IndexSet<ExprId> = hashmap::IndexSet::default();
+    body.for_each_live_node_under(node, |n| {
+        if let NodeRef::Block(b) = n
+            && panics_before_any_exit(engine, b)
+        {
+            body.for_each_live_node_under(n, |m| {
+                if let NodeRef::Expr(e) = m {
+                    diverging.insert(e);
+                }
             });
-            hit.then_some(())
-        })
-        .is_some()
+        }
+    });
+    body.find_in_live_node_under(node, |n| {
+        let NodeRef::Expr(e) = n else { return None };
+        if diverging.contains(&e) {
+            return None;
+        }
+        let mut hit = false;
+        for_each_write(engine, e, &mut |w| {
+            hit |= roots.iter().any(|&r| write_hits(engine, w, r));
+        });
+        hit.then_some(())
+    })
+    .is_some()
+}
+
+/// Whether `block` reaches a top-level panic with no `return`, `break` or
+/// `continue` before it, which could leave the block first.
+fn panics_before_any_exit(engine: &Engine, block: BlockId) -> bool {
+    let body = &*engine.body;
+    for &s in &body.blocks[block].stmts {
+        if let StmtKind::Expr(op) = &body.stmts[s].kind
+            && op.as_expr().is_some_and(|e| is_panic_call(engine, e))
+        {
+            return true;
+        }
+        let jumps = body
+            .find_in_live_node_under(NodeRef::Stmt(s), |n| match n {
+                NodeRef::Stmt(t) => body.stmts[t].kind.is_jump().then_some(()),
+                NodeRef::Block(_) | NodeRef::Expr(_) | NodeRef::Pat(_) => None,
+            })
+            .is_some();
+        if jumps {
+            return false;
+        }
+    }
+    false
 }
 
 /// Structural loop-guard BCE (value_of-free, mirrors the `licm` migration off

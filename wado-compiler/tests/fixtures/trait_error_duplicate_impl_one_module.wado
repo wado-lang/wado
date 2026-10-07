@@ -1,6 +1,6 @@
-// Two impls of one `(Trait, Type)` pair are rejected where the second is
-// written: no rank separates them, and a package compiles whole, so the check
-// needs no open-world reasoning (WEP 2026-09-01, "The candidates").
+// One impl written twice is rejected where the second copy is written: no rank
+// separates them, and a package compiles whole, so the check needs no
+// open-world reasoning (WEP 2026-09-01, "The candidates").
 
 trait Describe with () {
     fn describe(&self) -> String;
@@ -28,4 +28,4 @@ export fn run() {
 }
 
 __DATA__
-{"compile_error": "duplicate impl of `Describe` for `Point`: an earlier impl in this file"}
+{"compile_error": "duplicate impl `impl Describe for Point`: an earlier impl in this file"}

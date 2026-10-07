@@ -968,6 +968,20 @@ module declares one item per name, so the pair names one declaration. What it
 admits is a second identity beside the `DefId`: a pass holding a `DefId` has to
 render it into that pair, and nothing checks that the two agree.
 
+## Known gap: a type parameter is its name and its position
+
+A `TypeParam` carries the name and the position its declaration gave it, not the
+declaration, and a scope places it by the name alone. Two items' parameters with
+the same name and position are one `TypeId`. What it admits is a question about
+one declaration's parameter answered under another's bounds.
+
+Two ways in are closed, both a callee's binder reaching the caller's scope as
+the caller's parameter of that name. A call's slot nothing has answered yet is a
+fresh inference variable, never the callee's binder, so a default fills it and
+an unanswered one is reported
+(`generic_call_default_beside_caller_binder.wado`). A binder inference cannot
+settle is reported once, and its slot becomes the error type.
+
 ## Known gap: a CM operation is bound by its spelling
 
 A call to an interface operation finds its Component Model binding by

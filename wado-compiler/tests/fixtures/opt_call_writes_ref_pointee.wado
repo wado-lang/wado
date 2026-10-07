@@ -1,0 +1,221 @@
+// A field read through a reference is not shared across a call that may write
+// the pointee: through a global the reference may name, whether or not the call
+// takes the reference, or through a `&mut` another argument holds. That holds
+// for a read, a stored value, a condition, and a reference held in a struct
+// field, and for a call that may suspend, which lets another task run. A call
+// writing only objects of another type keeps the read, and so does an opaque
+// call that does not suspend.
+
+use { println, Stdout } from "core:cli";
+
+struct P {
+    x: i32,
+    y: i32,
+}
+
+struct H {
+    p: &P,
+    k: i32,
+}
+
+struct M {
+    p: &mut P,
+}
+
+global mut G: P = P { x: 1, y: 0 };
+
+#[inline(never)]
+fn bump_global() {
+    G.x += 1;
+}
+
+#[inline(never)]
+fn bump_global_and(n: &mut i32) {
+    G.x += 1;
+    *n += 1;
+}
+
+#[inline(never)]
+fn through_ref(r: &P, c: bool) -> i32 {
+    let mut s = 0;
+    if c {
+        s = r.x * 100;
+    }
+    bump_global();
+    return s + r.x;
+}
+
+#[inline(never)]
+fn through_mut_ref(r: &mut P, c: bool) -> i32 {
+    let mut s = 0;
+    if c {
+        s = r.x * 100;
+    }
+    bump_global();
+    return s + r.x;
+}
+
+#[inline(never)]
+fn across_call_with_mut_arg(r: &P, c: bool) -> i32 {
+    let mut s = 0;
+    let mut n = 0;
+    if c {
+        s = r.x * 100;
+    }
+    bump_global_and(&mut n);
+    return s + r.x + n * 1000;
+}
+
+#[inline(never)]
+fn stored_then_call(r: &mut P) -> i32 {
+    r.x = 5;
+    bump_global();
+    return r.x;
+}
+
+#[inline(never)]
+fn condition_across_call(r: &P) -> i32 {
+    let before = r.x == 1;
+    bump_global();
+    let mut n = 0;
+    if before {
+        n += 10;
+        if r.x == 1 {
+            n += 1;
+        }
+    }
+    return n;
+}
+
+#[inline(never)]
+fn through_held_ref(h: H, c: bool) -> i32 {
+    let mut s = 0;
+    if c {
+        s = h.p.x * 100;
+    }
+    bump_global();
+    return s + h.p.x;
+}
+
+#[inline(never)]
+fn write_through(m: &mut M) {
+    m.p.x += 1;
+}
+
+#[inline(never)]
+fn write_through_value(m: M) {
+    m.p.x += 1;
+}
+
+#[inline(never)]
+fn push_one(l: &mut List<i32>) {
+    l.push(1);
+}
+
+#[inline(never)]
+fn via_mut_holder(r: &P, m: &mut M, c: bool) -> i32 {
+    let mut s = 0;
+    if c {
+        s = r.x * 100;
+    }
+    write_through(m);
+    return s + r.x;
+}
+
+#[inline(never)]
+fn via_value_holder(r: &P, m: M, c: bool) -> i32 {
+    let mut s = 0;
+    if c {
+        s = r.x * 100;
+    }
+    write_through_value(m);
+    return s + r.x;
+}
+
+#[inline(never)]
+fn across_unrelated_write(r: &mut P, l: &mut List<i32>, c: bool) -> i32 {
+    let mut s = 0;
+    if c {
+        s = r.x * 100;
+    }
+    push_one(l);
+    r.y = s;
+    return s + r.x;
+}
+
+// An opaque call that does not suspend reaches only what it is handed.
+#[inline(never)]
+fn across_opaque(r: &P, c: bool) -> i32 {
+    let mut s = 0;
+    if c {
+        s = r.x * 100;
+    }
+    builtin::waitable_set_drop(builtin::waitable_set_new());
+    return s + r.x;
+}
+
+// Another task may run while a call suspends, and write a global.
+#[inline(never)]
+fn across_suspend(r: &P, c: bool, wait: bool) -> i32 {
+    let mut s = 0;
+    if c {
+        s = r.x * 100;
+    }
+    if wait {
+        builtin::waitable_set_wait(builtin::waitable_set_new(), 0);
+    }
+    return s + r.x;
+}
+
+#[inline(never)]
+fn suspend_inside(wait: bool) {
+    if wait {
+        builtin::waitable_set_wait(builtin::waitable_set_new(), 0);
+    }
+}
+
+#[inline(never)]
+fn across_suspend_caller(r: &P, c: bool, wait: bool) -> i32 {
+    let mut s = 0;
+    if c {
+        s = r.x * 100;
+    }
+    suspend_inside(wait);
+    return s + r.x;
+}
+
+export fn run() with Stdout {
+    let c = builtin::black_box(true);
+    println(`${through_ref(&G, c)}`);
+    G.x = 1;
+    println(`${through_mut_ref(&mut G, c)}`);
+    G.x = 1;
+    println(`${across_call_with_mut_arg(&G, c)}`);
+    println(`${stored_then_call(&mut G)}`);
+    G.x = 1;
+    println(`${condition_across_call(&G)}`);
+    G.x = 1;
+    println(`${through_held_ref(H { p: &G, k: 0 }, c)}`);
+    let mut p = P { x: builtin::black_box(1), y: 0 };
+    let mut m = M { p: &mut p };
+    println(`${via_mut_holder(&p, &mut m, c)}`);
+    p.x = 1;
+    println(`${via_value_holder(&p, M { p: &mut p }, c)}`);
+    p.x = 1;
+    let mut l: List<i32> = [];
+    println(`${across_unrelated_write(&mut p, &mut l, c)} ${p.y}`);
+    G.x = 1;
+    let wait = builtin::black_box(false);
+    println(`${across_opaque(&G, c)} ${across_suspend(&G, c, wait)} ${across_suspend_caller(&G, c, wait)}`);
+}
+
+__DATA__
+{
+    "stdout": "102\n102\n1102\n6\n10\n102\n102\n102\n101 100\n101 101 101\n",
+    "wir_expect:O2": [
+        "r.y = s;\n    return s + $av_",
+        "\"wasi/waitable-set-drop\"(\"wasi/waitable-set-new\"());\n    return s + r;",
+        "drop(\"wasi/waitable-set-wait\"(\"wasi/waitable-set-new\"(), 0));\n    }\n    return s + r.x;",
+        "\"opt_call_writes_ref_pointee.wado/suspend_inside\"(wait);\n    return s + r.x;"
+    ]
+}

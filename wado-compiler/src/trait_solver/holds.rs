@@ -2,8 +2,8 @@
 //! this one, and every step it takes is through an impl's bounds.
 
 use super::program::{
-    ArgDefault, AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, ParamBound,
-    Program, RefRule, SolverType, TraitDeclId, TypeDeclId,
+    AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, ParamBound, Program,
+    RefRule, SolverType, TraitDeclId, TypeDeclId,
 };
 use crate::hashmap::IndexSet;
 
@@ -11,9 +11,40 @@ use crate::hashmap::IndexSet;
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct Holds {
     pub requests: Vec<DerivationRequest>,
-    /// The associated types the answering impl binds, at the receiver; empty
-    /// where no impl answered.
-    pub assoc: Vec<(AssocId, SolverType)>,
+    /// The associated types the answering impl binds; empty where no impl
+    /// answered.
+    assoc: Vec<(AssocId, Member)>,
+}
+
+impl Holds {
+    /// What the answering impl binds `assoc` to at the receiver, a family's
+    /// member at `args`. `None` where it names an impl parameter the match
+    /// left unbound.
+    fn assoc_at(&self, assoc: AssocId, args: &[SolverType]) -> Option<SolverType> {
+        let (_, member) = self.assoc.iter().find(|(a, _)| *a == assoc)?;
+        member.at(args)
+    }
+}
+
+/// An associated type as one impl binds it, in that impl's parameter space,
+/// with what the match bound each parameter to. A family's own parameters
+/// follow the impl's, and stay open for each projection's arguments: they
+/// share no space with the receiver's parameters the match bound.
+#[derive(Clone, PartialEq, Eq, Debug)]
+struct Member {
+    binding: SolverType,
+    matched: Vec<Option<SolverType>>,
+}
+
+impl Member {
+    fn at(&self, args: &[SolverType]) -> Option<SolverType> {
+        let own = self.matched.len();
+        self.binding
+            .map_params(&|i| match (i as usize).checked_sub(own) {
+                None => self.matched[i as usize].clone(),
+                Some(j) => args.get(j).cloned(),
+            })
+    }
 }
 
 /// Whether `ty` satisfies `trait_`, asked from `scope`. `None` is "does not
@@ -83,36 +114,29 @@ pub fn owed(
     owed
 }
 
-/// Whether a bound in force answers `trait_` at `wanted`, comparing what the
-/// walk to the trait writes there against `wanted`, defaulted where it writes
-/// none.
+/// Whether a bound in force on `subject` answers `trait_` at `wanted`,
+/// comparing what the walk to the trait writes for each parameter against
+/// `wanted`, defaulted where it writes none.
 fn bound_answers(
     program: &Program,
+    subject: &SolverType,
     bound: &ParamBound,
     trait_: TraitDeclId,
     wanted: &[SolverType],
 ) -> bool {
-    program.args_reaching(bound, trait_).iter().any(|args| {
-        wanted.iter().enumerate().all(|(i, want)| {
-            args.get(i).or_else(|| named_default(program, trait_, i)) == Some(want)
+    let wanted = program.per_param(Some(trait_), wanted);
+    program
+        .args_reaching(bound, trait_, subject)
+        .iter()
+        .any(|args| {
+            let args = program.per_param(Some(trait_), args);
+            wanted.iter().enumerate().all(|(i, want)| {
+                want.as_ref().is_none_or(|want| {
+                    let given = args.get(i).and_then(Option::as_ref);
+                    program.arg_at(trait_, given, i, subject).as_ref() == Some(want)
+                })
+            })
         })
-    })
-}
-
-/// The trait's declared default at `index` where it names a type. A `Self`
-/// default names whatever is answering, which no written argument equals, so it
-/// answers nothing here — as `TypeSystem::args_answer` decides it.
-fn named_default(program: &Program, trait_: TraitDeclId, index: usize) -> Option<&SolverType> {
-    match program
-        .traits
-        .get(&trait_)?
-        .arg_defaults
-        .get(index)?
-        .as_ref()?
-    {
-        ArgDefault::Type(ty) => Some(ty),
-        ArgDefault::SelfType | ArgDefault::Opaque => None,
-    }
 }
 
 /// One question and the questions open under it.
@@ -158,6 +182,21 @@ impl Query<'_> {
         {
             return None;
         }
+        self.asking.push((ty.clone(), trait_, args.to_vec()));
+        let answer = self.decide(ty, trait_, args, subject);
+        self.asking.pop();
+        answer
+    }
+
+    /// [`Self::holds_at`] once the question is open: every step that asks
+    /// another, a bound's projection normalized included, finds it asked.
+    fn decide(
+        &mut self,
+        ty: &SolverType,
+        trait_: TraitDeclId,
+        args: &[SolverType],
+        subject: Option<&SolverType>,
+    ) -> Option<Holds> {
         let program = self.program;
         let trait_def = program.traits.get(&trait_);
         if trait_def.is_some_and(|def| def.holds_for_all) {
@@ -171,12 +210,19 @@ impl Query<'_> {
             return Some(Holds::default());
         }
         // A pack's bound holds of each element, so an element in a variadic
-        // body answers from the pack's slot.
+        // body answers from the pack's slot. A bound reads a projection the
+        // program answers as what it binds: `U: Conv<Self::Item>` in
+        // `impl Ints` is `U: Conv<i32>`.
+        let env = self.env;
         if let SolverType::Param(index) | SolverType::Pack(index) = ty
-            && let Some(bounds) = self.env.param_bounds.get(*index as usize)
-            && bounds
-                .iter()
-                .any(|bound| bound_answers(program, bound, trait_, args))
+            && let Some(bounds) = env.param_bounds.get(*index as usize)
+            && bounds.iter().any(|bound| {
+                let bound = ParamBound {
+                    trait_: bound.trait_,
+                    args: bound.args.iter().map(|arg| self.normalized(arg)).collect(),
+                };
+                bound_answers(program, ty, &bound, trait_, args)
+            })
         {
             return Some(Holds::default());
         }
@@ -192,7 +238,7 @@ impl Query<'_> {
                 .is_some_and(|bounds| {
                     bounds
                         .iter()
-                        .any(|&bound| program.bound_reaches(bound, trait_))
+                        .any(|&bound| program.bound_reaches(bound, trait_, ty))
                 })
         {
             return Some(Holds::default());
@@ -213,9 +259,7 @@ impl Query<'_> {
                 ..Holds::default()
             });
         }
-
-        self.asking.push((ty.clone(), trait_, args.to_vec()));
-        let answer = program
+        program
             .impls
             .iter()
             .find_map(|(&id, def)| {
@@ -248,9 +292,7 @@ impl Query<'_> {
                     RefRule::Inherits => self.holds(inner, trait_, args),
                     RefRule::Always | RefRule::Never => None,
                 }
-            });
-        self.asking.pop();
-        answer
+            })
     }
 
     /// Whether one impl applies to `ty`: its target matches, and every bound
@@ -270,9 +312,6 @@ impl Query<'_> {
         if reached_by(program, implemented, ty, def.origin.yields_to()) {
             return None;
         }
-        let bound_to = |ty: &SolverType| {
-            ty.map_params(&|i| bindings.get(i as usize)?.as_ref().map(Binding::as_type))
-        };
         let mut requests = match def.origin {
             ImplOrigin::Written => Vec::new(),
             ImplOrigin::Derived | ImplOrigin::Marker | ImplOrigin::Paired => {
@@ -316,17 +355,20 @@ impl Query<'_> {
                     let args: Vec<SolverType> = bound
                         .args
                         .iter()
-                        .map(|arg| bound_to(arg).unwrap_or_else(|| arg.clone()))
+                        .map(|arg| {
+                            self.at_bindings(arg, &bindings)
+                                .unwrap_or_else(|| arg.clone())
+                        })
                         .collect();
                     let answer = self.holds(element, bound.trait_, &args)?;
                     // An impl binding the pinned assoc otherwise is refuted;
                     // one binding nothing is not.
                     for pin in param.pins.iter().filter(|pin| pin.trait_ == bound.trait_) {
-                        let Some(expected) = bound_to(&pin.ty) else {
+                        let Some(expected) = self.at_bindings(&pin.ty, &bindings) else {
                             continue;
                         };
-                        let actual = answer.assoc.iter().find(|(assoc, _)| *assoc == pin.assoc);
-                        if actual.is_some_and(|(_, actual)| *actual != expected) {
+                        let actual = answer.assoc_at(pin.assoc, &[]);
+                        if actual.is_some_and(|actual| self.normalized(&actual) != expected) {
                             return None;
                         }
                     }
@@ -334,21 +376,83 @@ impl Query<'_> {
                 }
             }
         }
+        let matched: Vec<Option<SolverType>> = bindings
+            .iter()
+            .map(|binding| binding.as_ref().map(Binding::as_type))
+            .collect();
         let assoc = program
             .assoc_bindings
             .get(&id)
             .into_iter()
             .flatten()
-            .filter_map(|(assoc, binding)| Some((*assoc, bound_to(binding)?)))
+            .map(|(assoc, binding)| {
+                let member = Member {
+                    binding: binding.clone(),
+                    matched: matched.clone(),
+                };
+                (*assoc, member)
+            })
             .collect();
         Some(Answer {
             holds: Holds { requests, assoc },
             trait_args: def
                 .trait_args
                 .iter()
-                .map(|arg| bound_to(arg).unwrap_or_else(|| arg.clone()))
+                .map(|arg| {
+                    self.at_bindings(arg, &bindings)
+                        .unwrap_or_else(|| arg.clone())
+                })
                 .collect(),
         })
+    }
+
+    /// `ty`, written in an impl's parameter space, at what the match bound
+    /// each parameter to, normalized there. `None` where it names a parameter
+    /// the match left unbound.
+    fn at_bindings(&mut self, ty: &SolverType, bindings: &[Option<Binding>]) -> Option<SolverType> {
+        let bound = ty.map_params(&|i| bindings.get(i as usize)?.as_ref().map(Binding::as_type))?;
+        Some(self.normalized(&bound))
+    }
+
+    /// `ty` with each projection an impl answers replaced by what that impl
+    /// binds: `<Ints as Src>::Item` is `i32` under `impl Src for Ints`, and a
+    /// family's member is its binding at the projection's arguments. A
+    /// projection off a parameter binds nothing here and stays as written.
+    fn normalized(&mut self, ty: &SolverType) -> SolverType {
+        match ty {
+            SolverType::Projection {
+                base,
+                trait_,
+                assoc,
+                args,
+            } => {
+                let base = self.normalized(base);
+                let args: Vec<SolverType> = args.iter().map(|a| self.normalized(a)).collect();
+                let member = self
+                    .holds(&base, *trait_, &[])
+                    .and_then(|held| held.assoc_at(*assoc, &args));
+                match member {
+                    Some(ty) => self.normalized(&ty),
+                    None => SolverType::Projection {
+                        base: Box::new(base),
+                        trait_: *trait_,
+                        assoc: *assoc,
+                        args,
+                    },
+                }
+            }
+            SolverType::Decl(head, args) => {
+                SolverType::Decl(*head, args.iter().map(|a| self.normalized(a)).collect())
+            }
+            SolverType::Tuple(elems) => {
+                SolverType::Tuple(elems.iter().map(|e| self.normalized(e)).collect())
+            }
+            SolverType::Ref { is_mut, inner } => SolverType::Ref {
+                is_mut: *is_mut,
+                inner: Box::new(self.normalized(inner)),
+            },
+            SolverType::Param(_) | SolverType::Pack(_) => ty.clone(),
+        }
     }
 }
 
@@ -515,8 +619,9 @@ pub(super) fn newtype_base(program: &Program, ty: &SolverType) -> Option<SolverT
     )
 }
 
-/// Whether the impl answers a bound writing `args`: at every position each side
-/// says its written argument, or the trait's default at `ty` where it wrote none.
+/// Whether the impl answers a bound writing `args`: at every parameter each
+/// side says its written argument, or the trait's default at `ty` where it
+/// wrote none.
 pub(super) fn answers_args(
     program: &Program,
     def: &ImplDef,
@@ -525,6 +630,8 @@ pub(super) fn answers_args(
     written: &[SolverType],
     args: &[SolverType],
 ) -> bool {
+    let written = program.per_param(def.trait_, written);
+    let args = program.per_param(def.trait_, args);
     // A `Self` default lowers to the impl's target, which the match bound to
     // `ty` — and to the newtype a peeled question was asked at, which the
     // inherited impl also spells `Self`.
@@ -538,10 +645,13 @@ pub(super) fn answers_args(
         },
     };
     (0..written.len().max(args.len())).all(|i| {
-        let asks = said(i, args.get(i));
+        let asks = said(i, args.get(i).and_then(Option::as_ref));
         // A position the bound leaves open and the trait gives no default is
         // one no bound can name, so every impl answers there.
-        asks.is_empty() || asks.iter().any(|ask| said(i, written.get(i)).contains(ask))
+        asks.is_empty()
+            || asks
+                .iter()
+                .any(|ask| said(i, written.get(i).and_then(Option::as_ref)).contains(ask))
     })
 }
 
@@ -623,7 +733,7 @@ fn match_target(target: &SolverType, ty: &SolverType, bindings: &mut [Option<Bin
 
 #[cfg(test)]
 mod tests {
-    use super::super::program::{Fact, ParamDef, Pin, TraitDef, TypeDef};
+    use super::super::program::{ArgDefault, Fact, ParamDef, Pin, TraitDef, TypeDef};
     use super::super::testing::{Builder, concrete, decl, generic, ref_to};
     use super::*;
 
@@ -778,6 +888,119 @@ mod tests {
         assert_eq!(ask(&[]), Some(Holds::default()));
         assert_eq!(ask(&[decl(I32)]), Some(Holds::default()));
         assert_eq!(ask(&[decl(POINT)]), None);
+    }
+
+    /// A clause writing the subtrait's own parameter answers at what the bound
+    /// supplies for it, through every step of a chain:
+    /// `trait Top<X>: Sub<X>`, `trait Sub<Y>: Base<Y>`, and `T: Top<i32>`.
+    #[test]
+    fn a_supertrait_clause_answers_at_the_bounds_arguments() {
+        let p = Builder::default()
+            .supertrait_args(
+                ALPHA,
+                ParamBound {
+                    trait_: SUB,
+                    args: vec![SolverType::Param(0)],
+                },
+            )
+            .supertrait_args(
+                SUB,
+                ParamBound {
+                    trait_: BASE,
+                    args: vec![SolverType::Param(0)],
+                },
+            )
+            .build();
+        let bound = Env {
+            param_bounds: vec![vec![ParamBound {
+                trait_: ALPHA,
+                args: vec![decl(I32)],
+            }]],
+        };
+        let ask = |trait_: TraitDeclId, args: &[SolverType]| {
+            holds_with_args(&p, &bound, &SolverType::Param(0), trait_, HERE, args)
+        };
+        assert_eq!(ask(SUB, &[decl(I32)]), Some(Holds::default()));
+        assert_eq!(ask(BASE, &[decl(I32)]), Some(Holds::default()));
+        assert_eq!(ask(BASE, &[decl(POINT)]), None);
+    }
+
+    /// A parameter the bound leaves at a `Self` default is the bounded type
+    /// itself, down the clause: `trait Top<X = Self>: Sub<X>` and `T: Top`
+    /// answer `Sub<T>`.
+    #[test]
+    fn a_self_default_reaches_a_clause_as_the_subject() {
+        let mut p = Builder::default()
+            .supertrait_args(
+                ALPHA,
+                ParamBound {
+                    trait_: SUB,
+                    args: vec![SolverType::Param(0)],
+                },
+            )
+            .build();
+        p.traits.entry(ALPHA).or_default().arg_defaults = vec![Some(ArgDefault::SelfType)];
+        let bound = env(vec![vec![ALPHA]]);
+        let ask = |args: &[SolverType]| {
+            holds_with_args(&p, &bound, &SolverType::Param(0), SUB, HERE, args)
+        };
+        assert_eq!(ask(&[SolverType::Param(0)]), Some(Holds::default()));
+        assert_eq!(ask(&[decl(I32)]), None);
+    }
+
+    /// A clause spreading the subtrait's pack reads the run of arguments the
+    /// pack absorbs: `trait Alpha<..X>: Sub<[..X]>` and `T: Alpha<i32, Point>`
+    /// answer `Sub<[i32, Point]>`.
+    #[test]
+    fn a_pack_spread_in_a_clause_reads_the_absorbed_arguments() {
+        let mut p = Builder::default()
+            .supertrait_args(
+                ALPHA,
+                ParamBound {
+                    trait_: SUB,
+                    args: vec![SolverType::Tuple(vec![SolverType::Pack(0)])],
+                },
+            )
+            .build();
+        let alpha = p.traits.entry(ALPHA).or_default();
+        alpha.arg_defaults = vec![None];
+        alpha.pack = Some(0);
+        let bound = Env {
+            param_bounds: vec![vec![ParamBound {
+                trait_: ALPHA,
+                args: vec![decl(I32), decl(POINT)],
+            }]],
+        };
+        let ask = |args: &[SolverType]| {
+            holds_with_args(&p, &bound, &SolverType::Param(0), SUB, HERE, args)
+        };
+        let pair = SolverType::Tuple(vec![decl(I32), decl(POINT)]);
+        assert_eq!(ask(&[pair]), Some(Holds::default()));
+        assert_eq!(ask(&[SolverType::Tuple(vec![decl(I32)])]), None);
+    }
+
+    /// A pack the bound stops short of absorbs nothing and moves no default:
+    /// `trait Alpha<A = i32, ..P>: Sub<A>` and `T: Alpha` answer `Sub<i32>`.
+    #[test]
+    fn a_pack_past_the_written_arguments_leaves_the_defaults_in_place() {
+        let mut p = Builder::default()
+            .supertrait_args(
+                ALPHA,
+                ParamBound {
+                    trait_: SUB,
+                    args: vec![SolverType::Param(0)],
+                },
+            )
+            .build();
+        let alpha = p.traits.entry(ALPHA).or_default();
+        alpha.arg_defaults = vec![Some(ArgDefault::Type(decl(I32))), None];
+        alpha.pack = Some(1);
+        let bound = env(vec![vec![ALPHA]]);
+        let ask = |args: &[SolverType]| {
+            holds_with_args(&p, &bound, &SolverType::Param(0), SUB, HERE, args)
+        };
+        assert_eq!(ask(&[decl(I32)]), Some(Holds::default()));
+        assert_eq!(ask(&[SolverType::Tuple(Vec::new())]), None);
     }
 
     /// A clause writing no argument says the supertrait's declared defaults, so
@@ -1104,7 +1327,6 @@ mod tests {
             DURATION,
             TypeDef {
                 newtype_base: Some(decl(I32)),
-                ..TypeDef::default()
             },
         );
         assert_eq!(
@@ -1191,7 +1413,6 @@ mod tests {
             MY_LIST,
             TypeDef {
                 newtype_base: Some(list_of(SolverType::Param(0))),
-                ..TypeDef::default()
             },
         );
         assert_eq!(
@@ -1231,7 +1452,6 @@ mod tests {
             DURATION,
             TypeDef {
                 newtype_base: Some(decl(I32)),
-                ..TypeDef::default()
             },
         );
         // Answered through the marker, so it owes the body; through the base
@@ -1419,11 +1639,9 @@ mod tests {
         );
         // The answer reports what the impl binds, at the receiver.
         assert_eq!(
-            holds(&p, &Env::default(), &decl(CM), MUL, HERE),
-            Some(Holds {
-                assoc: vec![(OUTPUT, decl(AREA))],
-                ..Holds::default()
-            })
+            holds(&p, &Env::default(), &decl(CM), MUL, HERE)
+                .and_then(|held| held.assoc_at(OUTPUT, &[])),
+            Some(decl(AREA))
         );
     }
 

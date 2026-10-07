@@ -4,7 +4,18 @@ use protobuf from "../grammar/Protobuf.g4"
     with {
         generator: { module: "lib:gale" },
     };
-use { EnumDecl, EnumValue, Features, Field, FieldType, Label, MessageDecl, ProtoFile, Syntax } from "./schema.wado";
+use {
+    EnumDecl,
+    EnumValue,
+    Features,
+    Field,
+    FieldType,
+    Label,
+    MessageDecl,
+    ProtoFile,
+    Syntax,
+    scalar_type,
+} from "./schema.wado";
 
 /// Read a `.proto` file. A syntax error comes back as its first diagnostic,
 /// `line:col: message`.
@@ -176,14 +187,19 @@ impl Reader {
 
     fn read_map_field(&self, node: i32) -> Result<Field, String> {
         let types = self.nodes_of(node, protobuf::RK_TYPE_REF);
+        let name = self.text(self.child(node, protobuf::RK_IDENT));
+        let key_text = self.text(types[0]);
+        let key = match scalar_type(&key_text) {
+            Some(t) && t.is_map_key() => t,
+            _ => {
+                return Result::Err(`${self.line(node)}: ${name}: a map key cannot be ${key_text}`);
+            },
+        };
         return Result::Ok(Field {
-            name: self.text(self.child(node, protobuf::RK_IDENT)),
+            name,
             number: self.field_number(node)?,
             label: Label::Repeated,
-            type_: FieldType::Map([
-                self.text(types[0]),
-                type_of(self.text(types[1])),
-            ]),
+            type_: FieldType::Map([key, type_of(self.text(types[1]))]),
             features: self.field_features(node),
             line: self.line(node),
         });
@@ -352,18 +368,10 @@ impl Reader {
 }
 
 fn type_of(name: String) -> FieldType {
-    if is_scalar(&name) {
-        return FieldType::Scalar(name);
-    }
-    return FieldType::Named(name);
-}
-
-pub fn is_scalar(name: &String) -> bool {
-    let scalars: List<String> = [
-        "double", "float", "int32", "int64", "uint32", "uint64", "sint32", "sint64", "fixed32", "fixed64", "sfixed32",
-        "sfixed64", "bool", "string", "bytes",
-    ];
-    return scalars.contains_str(name);
+    return match scalar_type(&name) {
+        Some(t) => FieldType::Scalar(t),
+        None => FieldType::Named(name),
+    };
 }
 
 /// A `signedInt` or an `INT` as protoc reads it: `0x` is hex, a leading `0`

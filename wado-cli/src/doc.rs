@@ -491,6 +491,19 @@ mod format_contract_tests {
         );
     }
 
+    /// The `export(…)` targets parse ahead of the `fn`, yet the doc comment
+    /// above them is the function's.
+    #[test]
+    fn an_export_mapping_keeps_the_doc_comment_of_its_function() {
+        let out = markdown_of(
+            "//! Demo.\n\nuse { Command } from \"wasi:cli\";\n\n/// The entry.\nexport(Command::run) fn main() {}\n",
+        );
+        assert!(
+            out.contains("### `export(Command::run) fn main()`\n\nThe entry.\n"),
+            "the doc comment must stay on `main`:\n{out}"
+        );
+    }
+
     /// `--all` documents a struct at every visibility.
     #[test]
     fn an_internal_struct_heads_its_impl_block_with_its_own_name() {

@@ -1,7 +1,7 @@
 //! An int64 tensor through the layout kernels, and the Cast that makes it a
 //! float.
 
-use { Batch, Head, Key, Query, Tensor, Weights, forward } from "./mask.onnxtext"
+use { Batch, Cpu, Head, Key, Query, Tensor, Weights, forward } from "./mask.onnxtext"
     with {
         generator: {
             module: "../src/generator.wado",
@@ -26,6 +26,7 @@ use { Batch, Head, Key, Query, Tensor, Weights, forward } from "./mask.onnxtext"
 
 test "a masked key becomes -f32::MAX and a kept one 0" {
     let got: Tensor<f32, [Batch, Head, Query, Key]> = forward(
+        &mut Cpu {},
         &Tensor::<i64, [Batch, Key]> {
             data: [1, 1, 0],
             extents: [1, 3],

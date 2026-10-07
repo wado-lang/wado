@@ -1,0 +1,14 @@
+// A mapping onto a world the compilation does not select is still checked
+// against that world: `handle` takes a request.
+use { Service } from "wasi:http";
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    println("ran");
+}
+
+export(Service::handle) fn serve() {
+}
+
+__DATA__
+{"compile_error": "export function `handle` has 0 parameter(s), but the world expects 1 parameter(s)"}

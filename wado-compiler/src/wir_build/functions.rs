@@ -16,7 +16,8 @@ use crate::wir::{
 use crate::wir_build::packed_array_is_eager;
 
 use super::context::{PendingFunctionBody, WirContext};
-use super::translate::{OPTION_NONE_CASE, resolve_param_names};
+use super::translate::resolve_param_names;
+use crate::compiler_item::CompilerItem;
 use crate::component_model::{
     CmFunctionInfo, CmInterfaceRegistry, cm_return_needs_outptr, flatten_cm_param_type,
 };
@@ -663,7 +664,7 @@ fn register_globals(ctx: &mut WirContext<'_>) {
         let init_op = slot.expr();
         let init =
             if is_null_operand(init_body, init_op) && type_table.as_option(global.ty).is_some() {
-                option_none(&wir_type)
+                option_none(&wir_type, type_table)
             } else {
                 translate_global_init(
                     init_body,
@@ -769,44 +770,16 @@ fn global_init_value(body: &Body, op: Operand, type_table: &TypeTable) -> Option
 /// Whether it *is* a null reference is `wir_optimize::nullable_ref`'s answer,
 /// which reaches this slot by rewriting it along with the rest; deciding it here
 /// is what let a global disagree with the module around it.
-fn option_none(wir_type: &WirType) -> WirInstr {
+fn option_none(wir_type: &WirType, type_table: &TypeTable) -> WirInstr {
     let WirType::Ref { type_id, .. } = wir_type else {
         panic!("[WIR] an Option-typed global's slot is not a reference: {wir_type:?}");
     };
+    let none_index = type_table.compiler_variant_case(CompilerItem::OptionNone).3;
     WirInstr::StructNew {
         type_id: type_id.clone(),
         fields: vec![WirInstr::I32Const(
-            i32::try_from(OPTION_NONE_CASE).expect("case index fits i32"),
+            i32::try_from(none_index).expect("case index fits i32"),
         )],
-    }
-}
-
-/// The value a slot starts at when its initializer is assigned by the module
-/// initialization function instead of being reduced here. It has to inhabit the
-/// slot's own Wasm type: `ref.null` is a value only for a reference slot.
-fn init_placeholder(wir_type: &WirType) -> WirInstr {
-    use crate::wir::WirInstr;
-
-    match wir_type {
-        WirType::Ref { .. } | WirType::AbstractRef { .. } => WirInstr::RefNull {
-            heap_type: WirAbstractHeapType::None,
-        },
-        WirType::I64 | WirType::U64 => WirInstr::I64Const(0),
-        WirType::F32 => WirInstr::F32Const(0.0),
-        WirType::F64 => WirInstr::F64Const(0.0),
-        WirType::I8
-        | WirType::I16
-        | WirType::I32
-        | WirType::U8
-        | WirType::U16
-        | WirType::U32
-        | WirType::Bool
-        | WirType::Char
-        | WirType::Enum { .. }
-        | WirType::Flags { .. } => WirInstr::I32Const(0),
-        WirType::V128 => WirInstr::V128Const(0),
-        // `register_globals` gives a unit global no slot, so it never gets here.
-        WirType::Unit => panic!("[WIR] unit-typed global has no Wasm slot to initialize"),
     }
 }
 
@@ -824,9 +797,10 @@ fn translate_global_init(
     use crate::wir::WirInstr;
 
     // What the evaluator cannot reduce is assigned by the initialization
-    // function instead, so the slot starts at a placeholder.
+    // function instead, so the slot starts at its type's default. A unit global
+    // never gets here: `register_globals` gives it no slot.
     let Some(value) = global_init_value(body, op, type_table) else {
-        return init_placeholder(wir_type);
+        return wir_type.default_value();
     };
     let bits = match value {
         Value::Int { value, .. } => value,

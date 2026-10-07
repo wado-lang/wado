@@ -681,10 +681,12 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// An `impl Ord for T;` marker where a written `eq` leaves `Ord` nothing to
-    /// derive from: an order read from the members could disagree with the
-    /// written equality. `why` names the link of the newtype chain writing it.
-    OrdMarkerBesideWrittenEq {
+    /// A marker the derivation rule withholds for a reason of its own rather
+    /// than a member lacking the trait: `Ord` beside a written `eq`, whose
+    /// order could disagree with it, or `Default` on a type with no default
+    /// expression to read. `why` says which.
+    MarkerWithheld {
+        trait_name: String,
         type_name: String,
         why: String,
         span: Span,
@@ -730,8 +732,8 @@ pub enum TypeError {
     AmbiguousHeadImpls {
         trait_name: String,
         receiver: String,
-        /// Each impl's target as written, in declaration order.
-        targets: Vec<String>,
+        /// Each impl's header as written, in declaration order.
+        headers: Vec<String>,
         span: Span,
     },
 
@@ -1011,24 +1013,12 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// Coherence violation: two variadic impls of the same trait accepting a
-    /// common tuple. They apply at every such arity and bounds do not separate
-    /// them.
-    OverlappingVariadicImpls {
-        trait_name: String,
-        self_type_name: String,
-        /// Where the impl this one collides with lives, named so the other
-        /// half of the pair is not left for the reader to hunt down.
-        conflicting_impl: String,
-        span: Span,
-    },
-
-    /// Coherence violation: two impls of one `(Trait, Type)` pair. No rank
-    /// separates them, so without this the collection order decides which body
-    /// every call runs.
+    /// Coherence violation: one impl written twice, at the same trait arguments,
+    /// target and bounds. No rank separates them, so without this the
+    /// collection order decides which body every call runs.
     DuplicateTraitImpl {
-        trait_name: String,
-        self_type_name: String,
+        /// The header as written, bounds and all.
+        header: String,
         /// Where the impl this one duplicates lives.
         conflicting_impl: String,
         span: Span,
@@ -1331,6 +1321,12 @@ pub enum TypeError {
     DefaultInExportFn {
         function: String,
         param: String,
+        span: Span,
+    },
+
+    /// `export(World::name)` where `World` names no world.
+    ExportTargetNotWorld {
+        world: String,
         span: Span,
     },
 
@@ -1974,15 +1970,15 @@ impl TypeError {
             TypeError::AmbiguousHeadImpls {
                 trait_name,
                 receiver,
-                targets,
+                headers,
                 span,
             } => (
                 Code::AmbiguousCandidate,
                 format!(
-                    "ambiguous impls of '{trait_name}' for '{receiver}': the ones for {} both reach it, and nothing ranks them; write 'impl {trait_name} for {receiver}'",
-                    targets
+                    "ambiguous impls of '{trait_name}' for '{receiver}': {} both reach it, and nothing ranks them; write 'impl {trait_name} for {receiver}'",
+                    headers
                         .iter()
-                        .map(|t| format!("'{t}'"))
+                        .map(|h| format!("'{h}'"))
                         .collect::<Vec<_>>()
                         .join(" and "),
                 ),
@@ -2208,13 +2204,14 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::OrdMarkerBesideWrittenEq {
+            TypeError::MarkerWithheld {
+                trait_name,
                 type_name,
                 why,
                 span,
             } => (
                 Code::TraitDeclInvalid,
-                format!("cannot derive `Ord` for `{type_name}`: {why}"),
+                format!("cannot derive `{trait_name}` for `{type_name}`: {why}"),
                 *span,
             ),
             TypeError::InvalidPattern { message, span } => (
@@ -2305,27 +2302,14 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::OverlappingVariadicImpls {
-                trait_name,
-                self_type_name,
-                conflicting_impl,
-                span,
-            } => (
-                Code::OrphanRule,
-                format!(
-                    "overlapping variadic impls of `{trait_name}` for `{self_type_name}`: this one and {conflicting_impl} accept the same tuples, and a pack's bounds are only checked at monomorphization, so neither can be selected over the other"
-                ),
-                *span,
-            ),
             TypeError::DuplicateTraitImpl {
-                trait_name,
-                self_type_name,
+                header,
                 conflicting_impl,
                 span,
             } => (
                 Code::OrphanRule,
                 format!(
-                    "duplicate impl of `{trait_name}` for `{self_type_name}`: {conflicting_impl} implements the same pair, and nothing ranks two impls of one pair, so which one every call runs would be decided by the order they were loaded in"
+                    "duplicate impl `{header}`: {conflicting_impl} writes the same trait, target and bounds, and nothing ranks two such impls, so which one every call runs would be decided by the order they were loaded in"
                 ),
                 *span,
             ),
@@ -2721,6 +2705,11 @@ impl TypeError {
                 format!(
                     "default value for parameter '{param}' in export fn '{function}' is not allowed; the Component Model ABI requires every parameter at the boundary"
                 ),
+                *span,
+            ),
+            TypeError::ExportTargetNotWorld { world, span } => (
+                Code::UnknownType,
+                format!("`{world}` in `export(…)` is not a world in scope"),
                 *span,
             ),
             TypeError::WireDefaultAttr { field, span } => (

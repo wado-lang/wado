@@ -1,0 +1,69 @@
+use { TreeMap } from "core:collections";
+use { DecodeError, Enum, Enumeration, Int32, Message, Reader, Sizer, Writer, decode, encode } from "./lib.wado";
+
+/// A closed enum, as Grog generates one for proto2.
+enum Closed {
+    One,
+}
+
+impl Enumeration for Closed {
+    fn number(&self) -> i32 {
+        return 1;
+    }
+
+    fn from_number(number: i32) -> Option<Closed> {
+        return if number == 1 { Option::Some(Closed::One) } else { null };
+    }
+
+    fn first() -> Closed {
+        return Closed::One;
+    }
+}
+
+/// A map keyed by a closed enum, which no schema declares but the runtime's
+/// API admits.
+struct Keyed {
+    m: TreeMap<Closed, i32> = TreeMap::new(),
+    unknown_fields: ByteList = b"",
+}
+
+impl Message for Keyed {
+    fn size(&self, s: &mut Sizer) -> i64 {
+        return self.unknown_fields.len() as i64 + s.map::<Enum<Closed>, Int32, Closed, i32>(1, &self.m);
+    }
+
+    fn write(&self, w: &mut Writer) {
+        w.map::<Enum<Closed>, Int32, Closed, i32>(1, &self.m);
+        w.raw(&self.unknown_fields);
+    }
+
+    fn merge_field(&mut self, number: i32, r: &mut Reader) -> Result<bool, DecodeError> {
+        if number == 1 {
+            return r.map::<Enum<Closed>, Int32, Closed, i32>(&mut self.m);
+        }
+        return Result::Ok(false);
+    }
+
+    fn unknown_fields(&mut self) -> &mut ByteList {
+        return &mut self.unknown_fields;
+    }
+}
+
+test "a map entry whose key the type does not hold is an unknown field" {
+    // m (1) = { key (1) = 9, value (2) = 5 }
+    let input: ByteList = b"\x0a\x04\x08\x09\x10\x05";
+    let back = decode::<Keyed, ByteList>(input).unwrap();
+    assert back.m.len() == 0;
+    assert encode(&back) == input;
+}
+
+test "a map entry's repeated key is read as its last" {
+    // m (1) = { key (1) = 9, key (1) = 1, value (2) = 5 }
+    let held = decode::<Keyed, ByteList>(b"\x0a\x06\x08\x09\x08\x01\x10\x05").unwrap();
+    assert held.m.len() == 1 && held.m[Closed::One] == 5;
+    // m (1) = { key (1) = 1, key (1) = 9, value (2) = 5 }
+    let input: ByteList = b"\x0a\x06\x08\x01\x08\x09\x10\x05";
+    let dropped = decode::<Keyed, ByteList>(input).unwrap();
+    assert dropped.m.len() == 0;
+    assert encode(&dropped) == input;
+}

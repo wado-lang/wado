@@ -1,0 +1,35 @@
+// A trait argument spelled as a function type carries a projection like any
+// other shape: `Uses<fn(P::Item) -> i32>` asks what the call binds `Item` to.
+
+trait Src with () {
+    type Item;
+}
+
+trait Uses<A> with () {
+    fn go(&self) -> i32;
+}
+
+struct Feed {}
+
+impl Src for Feed {
+    type Item = String;
+}
+
+struct User {}
+
+impl Uses<fn(String) -> i32> for User {
+    fn go(&self) -> i32 {
+        return 7;
+    }
+}
+
+fn drive<P: Src, U: Uses<fn(P::Item) -> i32>>(_p: &P, u: &U) -> i32 {
+    return u.go();
+}
+
+test "a projection inside a function-typed trait argument is answered" {
+    assert drive(&Feed {}, &User {}) == 7;
+}
+
+__DATA__
+{"test": {}}

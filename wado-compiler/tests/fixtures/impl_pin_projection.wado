@@ -1,0 +1,45 @@
+// An impl's pin and its associated type binding may name a projection off the
+// impl's own parameter. `B: Src<Item = A::Item>` at `A = Ints` pins `i32`, and
+// `type Item = A::Item` binds `i32`. The solver compared both with
+// `<Ints as Src>::Item` as written, so it refuted the pin and `Both` held no
+// `Src`, the shape `IterChain`'s `Iterator` impl has.
+
+trait Src with () {
+    type Item;
+}
+
+trait Show with () {
+    fn show(&self) -> i32;
+}
+
+struct Ints {}
+
+impl Src for Ints {
+    type Item = i32;
+}
+
+struct Both<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<A: Src, B: Src<Item = A::Item>> Src for Both<A, B> {
+    type Item = A::Item;
+}
+
+impl<T: Src<Item = i32>> Show for T {
+    fn show(&self) -> i32 {
+        return 1;
+    }
+}
+
+fn show<T: Show>(t: &T) -> i32 {
+    return t.show();
+}
+
+test {
+    assert show(&Both { a: Ints {}, b: Ints {} }) == 1;
+}
+
+__DATA__
+{"test": {}}

@@ -79,7 +79,7 @@ fn "opt_licm_mut_ref_no_hoist.wado/run"() with Stdout {
     let i_3: i32;
     let $local_4_4: ref "core:prelude/string.wado//String";
     let x: i64;
-    let start_70: i32;
+    let start_73: i32;
     config = struct.new "opt_licm_mut_ref_no_hoist.wado//Config" { threshold: 100, scale: 2 };
     sum = 0;
     i_3 = 0;
@@ -100,17 +100,17 @@ fn "opt_licm_mut_ref_no_hoist.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, i_3);
         }
-        start_70 = $local_4_4.used;
+        start_73 = $local_4_4.used;
         $local_4_4.used = i_3;
-        builtin::array_set_u8($local_4_4.repr, start_70, 45);
+        builtin::array_set_u8($local_4_4.repr, start_73, 45);
     } else {
     }
-    if @unlikely(local.tee start_70($local_4_4.used + sum) > builtin::array_len($local_4_4.repr)) {
+    if @unlikely(local.tee start_73($local_4_4.used + sum) > builtin::array_len($local_4_4.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, start_70);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, start_73);
     }
     i_3 = $local_4_4.used;
-    $local_4_4.used = start_70;
+    $local_4_4.used = start_73;
     "core:prelude/primitive.wado/write_decimal_digits"($local_4_4.repr, i_3, x, sum);
     sum = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     i_3 = builtin::i32_wrap_i64(x >> 32_i64);

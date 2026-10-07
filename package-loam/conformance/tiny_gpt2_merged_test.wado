@@ -150,6 +150,7 @@ fn run(
     let past = cache[0].extents[2];
     let length = past + ids.len();
     let o = merged::forward(
+        &mut merged::Cpu {},
         &merged::Tensor::<i64, [merged::Batch, merged::Seq]> {
             data: ids,
             extents: [1, ids.len()],
@@ -234,6 +235,7 @@ test "a mask that is not as long as the past and the step stops the step" {
     let weights = merged::Weights::embedded();
     let [_, cache] = run([1, 5, 42, 7], &empty_cache(), &weights);
     merged::forward(
+        &mut merged::Cpu {},
         &merged::Tensor::<i64, [merged::Batch, merged::Seq]> {
             data: [11],
             extents: [1, 1],

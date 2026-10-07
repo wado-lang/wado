@@ -147,13 +147,30 @@ fn emit_visibility_into(visibility: Visibility, output: &mut String) {
 }
 
 /// Leading keyword for a function declaration; `export` implies `pub` and is
-/// emitted alone.
-fn function_decl_keyword(is_export: bool, visibility: Visibility) -> &'static str {
-    if is_export {
-        "export "
-    } else {
-        visibility.keyword()
+/// emitted alone, with the world exports it names.
+fn function_decl_keyword_into(f: &Function, output: &mut String) {
+    if !f.is_export {
+        output.push_str(f.visibility.keyword());
+        return;
     }
+    output.push_str("export");
+    if !f.export_targets.is_empty() {
+        output.push('(');
+        for (i, target) in f.export_targets.iter().enumerate() {
+            if i > 0 {
+                output.push_str(", ");
+            }
+            if let Some(ns) = &target.namespace {
+                output.push_str(ns);
+                output.push_str("::");
+            }
+            output.push_str(&target.world);
+            output.push_str("::");
+            output.push_str(&target.name);
+        }
+        output.push(')');
+    }
+    output.push(' ');
 }
 
 /// Number of blank lines the formatter emits between two source lines.
@@ -871,8 +888,7 @@ impl<'a> Unparser<'a> {
 
     fn unparse_function(&mut self, f: &Function) {
         self.emit_outer_attrs(&f.attrs);
-        self.output
-            .push_str(function_decl_keyword(f.is_export, f.visibility));
+        function_decl_keyword_into(f, &mut self.output);
         self.emit_kw_if(f.is_async, "async ");
 
         self.output.push_str("fn ");
@@ -2420,7 +2436,7 @@ impl<'a> Unparser<'a> {
                 }
                 self.output.push_str("{ ");
                 self.comma_sep(fields, |s, field| {
-                    let bare_name = is_bare_field_name(&field.field_name);
+                    let bare_name = is_valid_ident(&field.field_name);
                     s.output.push_str(&format_field_name(&field.field_name));
                     let is_shorthand = bare_name
                         && matches!(&field.pattern, Pattern::Ident { name: n, .. } if n == &field.field_name);
@@ -3393,22 +3409,11 @@ fn needs_parens(expr: &Expr, parent_op: BinaryOp, is_left: bool) -> bool {
     }
 }
 
-/// Returns true if `name` can be emitted as a bare identifier or keyword in a
-/// struct-literal / struct-pattern field position. Otherwise the field name
-/// must be rendered as a quoted string literal (for JSON compatibility).
-fn is_bare_field_name(name: &str) -> bool {
-    let mut chars = name.chars();
-    match chars.next() {
-        Some(c) if c.is_ascii_alphabetic() || c == '_' => {}
-        _ => return false,
-    }
-    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
-}
-
-/// Emit a struct-literal / struct-pattern field name, wrapping it in a string
-/// literal if it is not a valid bare identifier.
+/// Emit a struct-literal / struct-pattern field name. A name spelled as an
+/// identifier, a keyword included, stays bare; any other is quoted, as JSON
+/// compatibility allows.
 fn format_field_name(name: &str) -> String {
-    if is_bare_field_name(name) {
+    if is_valid_ident(name) {
         name.to_string()
     } else {
         quoted(name)
@@ -3906,7 +3911,7 @@ fn unparse_pattern_into(pattern: &Pattern, output: &mut String) {
             }
             output.push_str("{ ");
             comma_sep_into(fields, output, |field, o| {
-                let bare_name = is_bare_field_name(&field.field_name);
+                let bare_name = is_valid_ident(&field.field_name);
                 o.push_str(&format_field_name(&field.field_name));
                 let is_shorthand = bare_name
                     && matches!(&field.pattern, Pattern::Ident { name: n, .. } if n == &field.field_name);
@@ -4139,7 +4144,7 @@ pub fn unparse_attributes(attrs: &[Attribute]) -> Vec<String> {
 }
 
 pub fn unparse_function_signature_into(f: &Function, output: &mut String) {
-    output.push_str(function_decl_keyword(f.is_export, f.visibility));
+    function_decl_keyword_into(f, output);
     emit_kw_if_into(f.is_async, "async ", output);
     output.push_str("fn ");
     output.push_str(&f.name);

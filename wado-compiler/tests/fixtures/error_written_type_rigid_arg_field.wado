@@ -1,0 +1,20 @@
+// A field's type owes its declaration's bounds at the struct's parameters:
+// `Wrap<U>` needs `U: Tag`, which `Outer` does not declare.
+
+trait Tag with () {}
+
+struct Wrap<T: Tag> {
+    v: T,
+}
+
+struct Outer<U> {
+    w: Wrap<U>,
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":11:8: analysis error: type 'U' does not implement trait 'Tag' required by bound on 'T'",
+  "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
+}
