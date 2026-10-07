@@ -1051,7 +1051,6 @@ mod tests {
                 name: format!("$l{index}"),
                 local_index: index,
                 is_mut: false,
-                is_reactive: false,
                 type_id: ty(),
                 value: value.into(),
                 skip_value_copy: false,

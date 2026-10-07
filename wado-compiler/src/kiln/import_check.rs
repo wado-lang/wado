@@ -234,7 +234,6 @@ pub fn inject_kiln_request_adapter(
         },
         name_span: span,
         is_mut: false,
-        is_reactive: false,
         ty: None,
         value: Some(request_lit),
         else_block: None,

@@ -535,7 +535,6 @@ fn let_stmt(
             name,
             local_index: local,
             is_mut: false,
-            is_reactive: false,
             type_id,
             value,
             skip_value_copy: true,

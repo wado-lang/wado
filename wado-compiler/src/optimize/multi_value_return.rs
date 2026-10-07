@@ -302,8 +302,7 @@ pub(super) fn is_eligible_field_type(type_id: TypeId, type_table: &TypeTable) ->
         | ResolvedType::Flags { .. }
         | ResolvedType::BuiltinArray(_)
         | ResolvedType::Ref(_)
-        | ResolvedType::MutRef(_)
-        | ResolvedType::Reactive(_) => true,
+        | ResolvedType::MutRef(_) => true,
         // A newtype erases to its base, so what the base takes a slot for is
         // what this does.
         ResolvedType::Newtype { base_type, .. } => is_eligible_field_type(*base_type, type_table),

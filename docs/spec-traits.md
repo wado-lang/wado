@@ -315,9 +315,8 @@ parameter named `T` inside the method is the method's own `T`.
 
 #### Qualified Calls
 
-Wado has no fully qualified `<Type as Trait>::method()` form, because a leading
-`<` in expression position begins JSX. A call names its trait with the
-trait-qualified form `Trait::method(recv, args…)` instead:
+Wado has no fully qualified `<Type as Trait>::method()` form. A call names its
+trait with the trait-qualified form `Trait::method(recv, args…)` instead:
 
 <!-- {"fixture":"spec_traits_qualified_calls.wado"} -->
 

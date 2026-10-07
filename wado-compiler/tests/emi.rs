@@ -564,7 +564,7 @@ fn let_bindings(stmt: &Stmt) -> Vec<Binding> {
     let Stmt::Let(let_stmt) = stmt else {
         return Vec::new();
     };
-    if let_stmt.is_reactive || let_stmt.value.is_none() {
+    if let_stmt.value.is_none() {
         return Vec::new();
     }
     // `let mut x` carries the `mut` on the statement; `MutIdent` is what a

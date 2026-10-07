@@ -1429,12 +1429,6 @@ impl<'a> Unparser<'a> {
 
     fn unparse_let(&mut self, l: &LetStmt) {
         self.emit_outer_attrs(&l.attrs);
-        // `reactive` is a prefix keyword that must precede `let` (the parser
-        // accepts `reactive let ...`, not `let reactive ...`), so emit it
-        // before the `let` keyword to keep the formatted output reparseable.
-        if l.is_reactive {
-            self.output.push_str("reactive ");
-        }
         self.output.push_str("let ");
 
         if l.is_mut {
@@ -4812,16 +4806,12 @@ impl<'a> TirUnparser<'a> {
             TirStmtKind::Let {
                 name,
                 is_mut,
-                is_reactive,
                 type_id,
                 value,
                 ..
             } => {
                 self.write_indent();
                 self.output.push_str("let ");
-                if *is_reactive {
-                    self.output.push_str("reactive ");
-                }
                 if *is_mut {
                     self.output.push_str("mut ");
                 }

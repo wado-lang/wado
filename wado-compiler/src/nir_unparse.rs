@@ -351,7 +351,6 @@ impl<'a> NirUnparser<'a> {
             StmtKind::Let {
                 name,
                 is_mut,
-                is_reactive,
                 type_id,
                 value,
                 ..
@@ -359,9 +358,6 @@ impl<'a> NirUnparser<'a> {
                 let value = *value;
                 self.write_indent();
                 self.output.push_str("let ");
-                if *is_reactive {
-                    self.output.push_str("reactive ");
-                }
                 if *is_mut {
                     self.output.push_str("mut ");
                 }

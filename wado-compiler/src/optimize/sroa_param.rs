@@ -482,8 +482,7 @@ fn mut_reachable_contains(
         }
         ResolvedType::MutRef(inner) => (*inner, true),
         ResolvedType::Ref(inner) => (*inner, false),
-        ResolvedType::Reactive(inner)
-        | ResolvedType::BuiltinArray(inner)
+        ResolvedType::BuiltinArray(inner)
         | ResolvedType::Newtype {
             base_type: inner, ..
         } => (*inner, writable),

@@ -2572,7 +2572,6 @@ pub struct LetStmt {
     /// `pattern` itself.
     pub name_span: Span,
     pub is_mut: bool,
-    pub is_reactive: bool,
     pub ty: Option<Type>,
     /// Initializer expression, or `None` for uninitialized declarations (`let x: i32;`).
     pub value: Option<Expr>,

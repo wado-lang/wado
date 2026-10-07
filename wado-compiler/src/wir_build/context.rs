@@ -913,11 +913,9 @@ impl<'a> WirContext<'a> {
             ResolvedType::AssocTypeProjection { assoc_name, .. } => {
                 panic!("unsubstituted AssocTypeProjection `{assoc_name}` reached codegen")
             }
-            // Type checking rejects a program that still holds these, and
-            // `Reactive` is erased before lowering.
+            // Type checking rejects a program that still holds these.
             ResolvedType::Error => panic!("error type reached codegen"),
             ResolvedType::Unknown => panic!("unresolved type reached codegen"),
-            ResolvedType::Reactive(_) => panic!("unerased `Reactive` type reached codegen"),
         })
     }
 

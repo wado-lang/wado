@@ -1823,7 +1823,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::Flags { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::GenericResource { .. }
-            | ResolvedType::Reactive(_)
             | ResolvedType::BuiltinArray(_) => {}
         }
         let type_name = self.tysys.type_table.borrow().type_name(struct_type);

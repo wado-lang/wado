@@ -660,7 +660,6 @@ impl HeapEffects<'_> {
             }
             // A closure's environment holds whatever it captured.
             ResolvedType::Function { .. }
-            | ResolvedType::Reactive(_)
             | ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }

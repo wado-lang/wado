@@ -177,7 +177,6 @@ impl Build<'_, '_> {
                 name,
                 local_index,
                 is_mut: false,
-                is_reactive: false,
                 type_id: ty,
                 value,
                 skip_value_copy: true,
