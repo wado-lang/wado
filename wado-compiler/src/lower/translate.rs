@@ -953,7 +953,6 @@ impl FunctionTranslator<'_, '_> {
                 name: format!("$deref_ref_{ref_idx}"),
                 local_index: ref_idx,
                 is_mut: false,
-                is_reactive: false,
                 type_id: ref_type_id,
                 value: ref_nir.into(),
                 // Translator-synthesized binding — never a user-visible
@@ -968,7 +967,6 @@ impl FunctionTranslator<'_, '_> {
                 name: format!("$deref_val_{val_idx}"),
                 local_index: val_idx,
                 is_mut: false,
-                is_reactive: false,
                 type_id: inner_type_id,
                 value: val_nir,
                 // The copy decision is made above (`should_wrap_value_copy`), so
@@ -1136,7 +1134,6 @@ impl FunctionTranslator<'_, '_> {
                 name,
                 local_index,
                 is_mut,
-                is_reactive,
                 type_id,
                 value,
                 storage,
@@ -1169,7 +1166,6 @@ impl FunctionTranslator<'_, '_> {
                     name: name.clone(),
                     local_index: *local_index,
                     is_mut: *is_mut,
-                    is_reactive: *is_reactive,
                     type_id: effective_type,
                     value: value_op,
                     skip_value_copy: storage.skips_copy(),
@@ -1418,7 +1414,6 @@ impl FunctionTranslator<'_, '_> {
                     name: "$wide_scrut".to_string(),
                     local_index: scrut_idx,
                     is_mut: false,
-                    is_reactive: false,
                     type_id: scrutinee.type_id,
                     value: (**scrutinee).clone(),
                     // Translator-synthesized; invisible to

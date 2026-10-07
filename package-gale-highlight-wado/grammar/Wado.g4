@@ -12,7 +12,15 @@ item
     ;
 
 itemModifiers
-    : 'internal'? 'pub'? 'export'? 'async'?
+    : 'internal'? 'pub'? ('export' exportTargets?)? 'async'?
+    ;
+
+exportTargets
+    : '(' exportTarget (',' exportTarget)* ','? ')'
+    ;
+
+exportTarget
+    : identifier '::' identifier ('::' identifier)?
     ;
 
 itemKind
@@ -100,7 +108,7 @@ identifier
     : IDENTIFIER
     | 'from' | 'of' | 'type' | 'matches' | 'world'
     | 'interface' | 'resource' | 'import' | 'export' | 'reactive'
-    | 'unique' | 'forward' | 'trap' | 'effect' | 'flags' | 'variant'
+    | 'forward' | 'trap' | 'effect' | 'flags' | 'variant'
     | 'test' | 'do' | 'task' | 'extends'
     ;
 
@@ -317,7 +325,7 @@ memberName
     | 'use' | 'from' | 'as' | 'fn' | 'with' | 'let' | 'mut' | 'return'
     | 'if' | 'else' | 'match' | 'for' | 'while' | 'loop' | 'break'
     | 'continue' | 'in' | 'of' | 'pub' | 'effect' | 'interface'
-    | 'reactive' | 'unique' | 'struct' | 'enum' | 'variant' | 'flags'
+    | 'reactive' | 'struct' | 'enum' | 'variant' | 'flags'
     | 'type' | 'impl' | 'trait' | 'resource' | 'world' | 'async'
     | 'import' | 'export' | 'assert' | 'global' | 'const' | 'matches'
     | 'true' | 'false' | 'null' | 'trap' | 'forward' | 'Self'
@@ -366,7 +374,7 @@ labeledBlock
     ;
 
 letStatement
-    : attribute* 'reactive'? 'let' pattern ('=' expression ('else' block)?)?
+    : attribute* 'let' pattern ('=' expression ('else' block)?)?
     ;
 
 assertStatement

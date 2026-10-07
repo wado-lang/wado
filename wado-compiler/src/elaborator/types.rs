@@ -1324,6 +1324,12 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// `export(World::name)` where `World` names no world.
+    ExportTargetNotWorld {
+        world: String,
+        span: Span,
+    },
+
     /// `#[wire(default)]` is removed: a struct field default value is the
     /// single mechanism for an optional field. Guides to `field: T = <value>`.
     WireDefaultAttr {
@@ -2699,6 +2705,11 @@ impl TypeError {
                 format!(
                     "default value for parameter '{param}' in export fn '{function}' is not allowed; the Component Model ABI requires every parameter at the boundary"
                 ),
+                *span,
+            ),
+            TypeError::ExportTargetNotWorld { world, span } => (
+                Code::UnknownType,
+                format!("`{world}` in `export(…)` is not a world in scope"),
                 *span,
             ),
             TypeError::WireDefaultAttr { field, span } => (

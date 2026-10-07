@@ -889,7 +889,6 @@ pub(super) fn synthesize_lift_from_flat_params(
                 | ResolvedType::Ref(_)
                 | ResolvedType::MutRef(_)
                 | ResolvedType::Function { .. }
-                | ResolvedType::Reactive(_)
                 | ResolvedType::TypeParam { .. }
                 | ResolvedType::AssocParam { .. }
                 | ResolvedType::InferVar(_)

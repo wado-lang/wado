@@ -1538,8 +1538,7 @@ impl Gate<'_> {
             | ResolvedType::MutRef(inner)
             | ResolvedType::Newtype {
                 base_type: inner, ..
-            }
-            | ResolvedType::Reactive(inner) => Some(*inner),
+            } => Some(*inner),
             // Struct / tuple: decided by the fields below. Anything else
             // (a variant and its payloads, a generic instance) cannot be
             // walked here, so assume it owns storage — `Option<String>` and

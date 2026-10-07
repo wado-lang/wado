@@ -154,7 +154,7 @@ impl TypeSystem {
 
     /// Whether a value of `type_id` reaches a `&mut`, through which a call
     /// handed it may write: one it is or holds at any depth, or one behind a
-    /// function, resource or signal, whose captures and state no type shows.
+    /// function or resource, whose captures and state no type shows.
     pub(crate) fn reaches_mut_ref(&self, type_id: TypeId) -> bool {
         self.reaches(type_id, &|_, resolved| {
             matches!(
@@ -163,7 +163,6 @@ impl TypeSystem {
                     | ResolvedType::Function { .. }
                     | ResolvedType::Resource { .. }
                     | ResolvedType::GenericResource { .. }
-                    | ResolvedType::Reactive(_)
             )
         })
     }
@@ -194,7 +193,7 @@ impl TypeSystem {
             return true;
         }
         let reached = match resolved {
-            ResolvedType::MutRef(inner) | ResolvedType::Reactive(inner) => vec![inner],
+            ResolvedType::MutRef(inner) => vec![inner],
             ResolvedType::Function { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::GenericResource { .. } => return false,
@@ -649,9 +648,6 @@ impl TypeSystem {
                     .collect();
                 let name = self.type_table.borrow().def_name(def).to_string();
                 format!("{}<{}>", name, args.join(", "))
-            }
-            ResolvedType::Reactive(inner) => {
-                format!("Reactive<{}>", self.type_id_to_string(inner))
             }
             ResolvedType::TypePack { name, .. } => format!("..{name}"),
             ResolvedType::AssocTypeProjection {

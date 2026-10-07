@@ -793,7 +793,6 @@ fn check_cm_boundary_representable_inner(
             | R::Ref(_)
             | R::MutRef(_)
             | R::Function { .. }
-            | R::Reactive(_)
             | R::TypeParam { .. }
             | R::AssocParam { .. }
             | R::TypePack { .. }
@@ -1435,7 +1434,6 @@ pub(super) fn type_id_to_ast_type(
         ))),
         ResolvedType::Never
         | ResolvedType::Function { .. }
-        | ResolvedType::Reactive(_)
         | ResolvedType::BuiltinArray(_)
         | ResolvedType::TypeParam { .. }
         | ResolvedType::AssocParam { .. }

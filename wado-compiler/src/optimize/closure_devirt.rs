@@ -335,7 +335,6 @@ impl Rule for ClosureDevirtRule {
                 name: name.clone(),
                 local_index: local,
                 is_mut: false,
-                is_reactive: false,
                 type_id,
                 value: Operand::Expr(functor),
                 skip_value_copy: true,

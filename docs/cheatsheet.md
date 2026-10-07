@@ -75,7 +75,11 @@ use { helper }   from "./mod.wasm" with { type: "wasm" };
 // called like a WASI method.
 use { Compress, Decompress } from "./brotli.wasm" with { type: "wasm" };
 
-let out = Compress::compress(bytes);  // requires `with Compress`
+let out = Compress::compress(bytes);
+
+// The default interface, named after its package (`acme:geo/geo`, what a Wado
+// library exports), also offers its functions by bare name, as source does.
+use { area } from "./geo.wasm" with { type: "wasm" };
 ```
 
 Wado↔CM type correspondence at the boundary is in [the spec](./spec-components.md#type-mapping-at-component-boundaries).
@@ -1547,6 +1551,18 @@ The entrypoint is defined in a world, which requires `export` keyword.
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
+    println("Hello!");
+}
+```
+
+Any name provides a world export through `export(World::name)`, in place of the
+function of that name:
+
+```wado
+use { println, Stdout } from "core:cli";
+use { Command } from "wasi:cli";
+
+export(Command::run) fn main() with Stdout {
     println("Hello!");
 }
 ```

@@ -1,6 +1,7 @@
 //! Which GC-heap objects a call may read or write: [`HeapEffectsCache`]
 //! summarises each function over the call graph, [`HeapFrame`] one body's objects.
 
+use std::borrow::Cow;
 use std::cell::{OnceCell, RefCell};
 use std::rc::Rc;
 
@@ -131,13 +132,12 @@ enum Callee {
     Body,
     /// A `core:builtin` declaration.
     Builtin(Box<BuiltinDeclaration>),
-    /// No body, and nothing declared or `#[side_effect(opaque)]`: it may read,
-    /// write and keep anything it is handed, and read and write anything held
-    /// elsewhere, since an async one yields to tasks that do.
-    Opaque,
-    /// `builtin::black_box`: it may read, write and keep anything it is handed,
-    /// and nothing else.
-    BlackBox,
+    /// No body, and nothing declared, `opaque` or `black_box`: it may read,
+    /// write and keep anything it is handed. One that `suspends` also reads
+    /// and writes anything held elsewhere, since other tasks run meanwhile.
+    Opaque {
+        suspends: bool,
+    },
 }
 
 /// One function as the solver sees it, taken when its gate edit count was
@@ -370,7 +370,7 @@ impl HeapEffectsCache {
                     .filter(|&c| c < indirect)
                     .chain(f.calls_indirect.then_some(indirect))
                     .collect(),
-                Callee::Builtin { .. } | Callee::Opaque | Callee::BlackBox => Vec::new(),
+                Callee::Builtin(_) | Callee::Opaque { .. } => Vec::new(),
             })
             .collect();
         successors.push(self.closure_bodies().collect());
@@ -409,7 +409,7 @@ impl HeapEffectsCache {
                 let params: Vec<u32> = f.params.iter().map(|p| p.local_index).collect();
                 HeapFrame::new(&effects, body, &params).summary(&effects, body)
             }
-            Callee::Builtin { .. } | Callee::Opaque | Callee::BlackBox => Summary::default(),
+            Callee::Builtin(_) | Callee::Opaque { .. } => Summary::default(),
         }
     }
 
@@ -491,7 +491,7 @@ impl HeapEffects<'_> {
                             }),
                         }
                     }
-                    Target::Opaque | Target::BlackBox => Kept {
+                    Target::Opaque { .. } => Kept {
                         in_result: true,
                         stored: true,
                     },
@@ -508,11 +508,10 @@ impl HeapEffects<'_> {
             return ObjectTypes::default();
         }
         let (target, args) = call_parts(self, body, call);
-        let mut out = match target {
-            Target::Summary(t) => t.writes.elsewhere.clone(),
-            Target::Opaque => return ObjectTypes::everything(),
-            Target::Builtin(_) | Target::BlackBox => ObjectTypes::default(),
-        };
+        let mut out = target.elsewhere(Effect::Write).into_owned();
+        if out.is_any() {
+            return out;
+        }
         for (j, &a) in args.iter().enumerate() {
             let ty = body.operand_type(a);
             match target {
@@ -521,8 +520,7 @@ impl HeapEffects<'_> {
                     out.union(&builtin_touches(self, declaration, ty));
                 }
                 Target::Builtin(_) => {}
-                Target::BlackBox => out.union(&self.reach(ty)),
-                Target::Opaque => unreachable!("an opaque call returned `everything` above"),
+                Target::Opaque { .. } => out.union(&self.reach(ty)),
             }
         }
         out
@@ -661,7 +659,6 @@ impl HeapEffects<'_> {
             }
             // A closure's environment holds whatever it captured.
             ResolvedType::Function { .. }
-            | ResolvedType::Reactive(_)
             | ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
@@ -752,11 +749,12 @@ fn classify_callee(f: &NirFunction, project: &NirPackage) -> Callee {
     }
     match project.builtin_declarations.get(f) {
         Some(declaration) => match declaration.facts.side_effect {
-            SideEffect::BlackBox => Callee::BlackBox,
-            SideEffect::Opaque => Callee::Opaque,
             SideEffect::Listed { .. } => Callee::Builtin(Box::new(declaration.clone())),
+            SideEffect::Opaque | SideEffect::BlackBox => Callee::Opaque {
+                suspends: declaration.facts.suspend,
+            },
         },
-        None => Callee::Opaque,
+        None => Callee::Opaque { suspends: true },
     }
 }
 
@@ -1430,7 +1428,7 @@ impl HeapFrame {
                     }
                 }
             }
-            Target::Opaque | Target::BlackBox => {
+            Target::Opaque { .. } => {
                 for &n in &nodes {
                     self.unify_nodes(result, n);
                 }
@@ -1492,17 +1490,8 @@ impl HeapFrame {
         } else {
             &mut unobserved
         };
-        match target {
-            Target::Summary(t) => {
-                reads.elsewhere.union(&t.reads.elsewhere);
-                writes.elsewhere.union(&t.writes.elsewhere);
-            }
-            Target::Opaque => {
-                reads.elsewhere.set_any();
-                writes.elsewhere.set_any();
-            }
-            Target::Builtin(_) | Target::BlackBox => {}
-        }
+        reads.elsewhere.union(&target.elsewhere(Effect::Read));
+        writes.elsewhere.union(&target.elsewhere(Effect::Write));
         for (j, &a) in args.iter().enumerate() {
             let OperandNode::Node(n) = self.lookup(effects, body, a) else {
                 continue;
@@ -1525,7 +1514,7 @@ impl HeapFrame {
                         writes.record(prov, &touched);
                     }
                 }
-                Target::Opaque | Target::BlackBox => {
+                Target::Opaque { .. } => {
                     let reach = effects.reach(ty);
                     reads.record(prov, &reach);
                     writes.record(prov, &reach);
@@ -1651,12 +1640,7 @@ impl HeapFrame {
         let h = self.local_root(local);
         let h_escapes = h.is_none_or(|r| !self.prov[r as usize].is_fresh());
         let (target, args) = call_parts(effects, body, call);
-        let elsewhere = match target {
-            Target::Summary(t) => keys.meets(&t.access(effect).elsewhere),
-            Target::Opaque => keys.meets(&ObjectTypes::everything()),
-            Target::Builtin(_) | Target::BlackBox => false,
-        };
-        if h_escapes && elsewhere {
+        if h_escapes && keys.meets(&target.elsewhere(effect)) {
             return true;
         }
         args.iter().enumerate().any(|(j, &a)| {
@@ -1672,7 +1656,7 @@ impl HeapFrame {
                     (effect == Effect::Read || declaration.mut_params.contains(&j))
                         && keys.meets(&builtin_touches(effects, declaration, ty))
                 }
-                Target::Opaque | Target::BlackBox => keys.meets(&effects.reach(ty)),
+                Target::Opaque { .. } => keys.meets(&effects.reach(ty)),
             }
         })
     }
@@ -1846,8 +1830,24 @@ fn returns_part_of(declaration: &BuiltinDeclaration, j: usize) -> bool {
 enum Target<'s> {
     Summary(&'s Summary),
     Builtin(&'s BuiltinDeclaration),
-    Opaque,
-    BlackBox,
+    Opaque { suspends: bool },
+}
+
+impl Target<'_> {
+    /// The object types held elsewhere that the call may `effect`: every type
+    /// where other tasks run before it returns, and what a body's calls reach.
+    fn elsewhere(&self, effect: Effect) -> Cow<'_, ObjectTypes> {
+        let suspends = match self {
+            Target::Summary(t) => return Cow::Borrowed(&t.access(effect).elsewhere),
+            Target::Builtin(declaration) => declaration.facts.suspend,
+            Target::Opaque { suspends } => *suspends,
+        };
+        Cow::Owned(if suspends {
+            ObjectTypes::everything()
+        } else {
+            ObjectTypes::default()
+        })
+    }
 }
 
 /// The call's target and its arguments in the callee's parameter order; an
@@ -1859,8 +1859,8 @@ fn call_parts<'s>(effects: &'s HeapEffects, body: &Body, e: ExprId) -> (Target<'
             let target = match cache.functions.get(func_id.index()).map(|f| &f.callee) {
                 Some(Callee::Body) => Target::Summary(&cache.summaries[func_id.index()]),
                 Some(Callee::Builtin(declaration)) => Target::Builtin(declaration),
-                Some(Callee::Opaque) | None => Target::Opaque,
-                Some(Callee::BlackBox) => Target::BlackBox,
+                Some(&Callee::Opaque { suspends }) => Target::Opaque { suspends },
+                None => Target::Opaque { suspends: true },
             };
             (target, args.iter().map(|a| a.expr).collect())
         }

@@ -284,7 +284,6 @@ impl TypeSystem {
             ResolvedType::Function { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::GenericResource { .. }
-            | ResolvedType::Reactive(_)
             | ResolvedType::AssocTypeProjection { .. } => true,
             // `Array<T>` is a GC array reference: `i32.eq` against it produces
             // invalid core Wasm, and `wir_build` panics before that ("no scalar

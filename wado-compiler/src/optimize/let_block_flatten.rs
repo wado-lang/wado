@@ -224,7 +224,6 @@ mod tests {
                 name: name.to_string(),
                 local_index: index,
                 is_mut: false,
-                is_reactive: false,
                 type_id: TypeTable::I32,
                 value,
                 skip_value_copy: false,

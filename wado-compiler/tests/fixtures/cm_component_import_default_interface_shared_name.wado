@@ -1,0 +1,11 @@
+// A name two default interfaces share, or one the component also exports at
+// world level, is not flattened: each interface's own stays behind its name.
+use { Left, Right, only_left, twin } from "./sub/wasm_import_cm_two_defaults.wat" with { type: "wat" };
+
+test {
+    assert only_left() == 3;
+    assert Left::pick() == 1;
+    assert Right::pick() == 2;
+    assert twin() == 10;
+    assert Left::twin() == 20;
+}

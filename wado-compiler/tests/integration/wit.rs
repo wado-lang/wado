@@ -49,6 +49,17 @@ fn emit(source: &str) -> String {
     emit_scope(source, WitScope::Local)
 }
 
+/// Emit WIT for a `lib.wado` whose source imports no CM interface, under
+/// `contract` and `scope`.
+fn emit_with_contract(source: &str, contract: wit_emit::WitContract, scope: WitScope) -> String {
+    let host = in_memory_host(&[]);
+    let mut sem = block_on(semantics(source, &host, Some("lib.wado")));
+    assert!(sem.is_complete(), "source did not analyze");
+    sem.set_wit_contract(contract);
+    emit_wit_text(&sem, &WitEmitOptions { scope }, &WorldSurface::default())
+        .expect("emit_wit_text failed")
+}
+
 /// Assert the emitted WIT equals `expected` and is valid WIT.
 fn check(source: &str, expected: &str) {
     let text = emit(source);
@@ -133,6 +144,24 @@ fn functions_only_become_direct_world_exports() {
     check(
         "export fn add(a: i32, b: i32) -> i32 { return a + b; }",
         "package root:component;\n\nworld command {\n  export add: func(a: s32, b: s32) -> s32;\n}",
+    );
+}
+
+/// A library's exports sit in its default interface even when no signature
+/// names a type, as the compiled component exports them.
+#[test]
+fn library_functions_only_group_into_default_interface() {
+    let text = emit_with_contract(
+        "export fn greet(s: String) -> String { return s; }",
+        wit_emit::wit_contract(None, Some("acme:plib/plib@0.1.0"), None),
+        WitScope::Local,
+    );
+    assert_eq!(
+        text.trim_end(),
+        "package root:component;\n\n\
+         interface plib {\n  greet: func(s: string) -> string;\n}\n\n\
+         world root {\n  export plib;\n}",
+        "\n--- emitted ---\n{text}"
     );
 }
 
@@ -472,23 +501,11 @@ fn future_and_stream_map_to_wit() {
 fn cm_catalog_matches_committed_wit() {
     let source = include_str!("../../../package-cm-catalog/src/lib.wado");
     let expected = include_str!("../../../package-cm-catalog/cm-catalog.wit");
-    let host = in_memory_host(&[]);
-    let mut sem = block_on(semantics(source, &host, Some("lib.wado")));
-    assert!(sem.is_complete(), "catalog source did not analyze");
-    sem.set_wit_contract(wit_emit::wit_contract(
-        Some("wasi:cli/command"),
-        None,
-        Some("cm-catalog"),
-    ));
-    // Pure value types import no CM interface.
-    let text = emit_wit_text(
-        &sem,
-        &WitEmitOptions {
-            scope: WitScope::Full,
-        },
-        &WorldSurface::default(),
-    )
-    .expect("emit_wit_text failed");
+    let text = emit_with_contract(
+        source,
+        wit_emit::wit_contract(Some("wasi:cli/command"), None, Some("cm-catalog")),
+        WitScope::Full,
+    );
     assert_eq!(
         text.trim_end(),
         expected.trim_end(),

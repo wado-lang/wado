@@ -157,7 +157,7 @@ keeps worlds and interfaces in separate namespaces, so the shared name is valid
 and unambiguous — it is the common single-package shape (e.g. as produced by
 `cargo-component`). It reads slightly redundant but needs no disambiguation.
 
-When only functions are exported (no referenced user types), they become direct world exports instead of forming an interface:
+Outside a library, when only functions are exported (no referenced user types), they become direct world exports instead of forming an interface. A library keeps its default interface either way ([WEP: A Package's Default Interface Is Its Module](./wep-2026-10-07-default-interface-as-module.md)):
 
 ```wado
 export fn run() { ... }

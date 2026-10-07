@@ -31,8 +31,8 @@ use wasmtime::component::{
 use wasmtime::{AsContextMut, Store, StoreContextMut};
 
 use crate::common::{
-    DEFAULT_TIMEOUT_MS, WasiState, compile_source_with_compiler_options, engine, limit_store,
-    linker, lookup_func, opt_level_name, runtime,
+    DEFAULT_TIMEOUT_MS, WasiState, compile_source_with_compiler_options, engine, interface_index,
+    lib_func, limit_store, linker, lookup_func, opt_level_name, runtime,
 };
 
 /// Stream producer that delivers a batch with `Completed`, then signals
@@ -389,7 +389,7 @@ fn flags(names: &[&str]) -> Val {
 fn require_func(
     store: &mut Store<WasiState>,
     instance: &Instance,
-    iface: Option<&ComponentExportIndex>,
+    iface: &ComponentExportIndex,
     export: &str,
 ) -> Result<wasmtime::component::Func, String> {
     lookup_func(store, instance, iface, export)
@@ -402,7 +402,7 @@ fn require_func(
 async fn future_round_trip<T>(
     store: &mut Store<WasiState>,
     instance: &Instance,
-    iface: Option<&ComponentExportIndex>,
+    iface: &ComponentExportIndex,
     export: &'static str,
     payload: T,
 ) -> Result<(), String>
@@ -461,7 +461,7 @@ where
 async fn stream_round_trip<T>(
     store: &mut Store<WasiState>,
     instance: &Instance,
-    iface: Option<&ComponentExportIndex>,
+    iface: &ComponentExportIndex,
     export: &'static str,
     payload: Vec<T>,
 ) -> Result<(), String>
@@ -528,7 +528,7 @@ where
 async fn embedded_future_round_trip(
     store: &mut Store<WasiState>,
     instance: &Instance,
-    iface: Option<&ComponentExportIndex>,
+    iface: &ComponentExportIndex,
     export: &'static str,
     wrap: impl FnOnce(Val) -> Val,
     unwrap: impl FnOnce(Val) -> Option<FutureAny>,
@@ -569,7 +569,7 @@ async fn embedded_future_round_trip(
 async fn embedded_stream_round_trip(
     store: &mut Store<WasiState>,
     instance: &Instance,
-    iface: Option<&ComponentExportIndex>,
+    iface: &ComponentExportIndex,
     export: &'static str,
     wrap: impl FnOnce(Val) -> Val,
     unwrap: impl FnOnce(Val) -> Option<StreamAny>,
@@ -657,19 +657,13 @@ fn run_round_trips(opt_level: OptLevel) {
             .await
             .expect("instantiate library component");
 
-        // Named-type exports group into the default interface; resolve the
+        // A library's exports sit in its default interface; resolve the
         // `wado-lang:cm-catalog/cm-catalog@…` instance once and look funcs up inside.
-        let iface = instance
-            .get_export(&mut store, None, LIB_WORLD_FQ)
-            .map(|(_, idx)| idx);
+        let iface = interface_index(&mut store, &instance, LIB_WORLD_FQ);
 
         let mut failures = Vec::new();
         for Case { export, value } in cases() {
-            let func = iface
-                .as_ref()
-                .and_then(|i| instance.get_export(&mut store, Some(i), export))
-                .map(|(_, idx)| idx)
-                .and_then(|idx| instance.get_func(&mut store, idx));
+            let func = lookup_func(&mut store, &instance, &iface, export);
             let Some(func) = func else {
                 failures.push(format!("[{opt}] export `${export}` not found"));
                 continue;
@@ -701,7 +695,7 @@ fn run_round_trips(opt_level: OptLevel) {
                 }
             };
         }
-        let i = iface.as_ref();
+        let i = &iface;
 
         check!(future_round_trip(&mut store, &instance, i, "id-future-bool", true));
         check!(future_round_trip(&mut store, &instance, i, "id-future-u8", 0xABu8));
@@ -879,7 +873,7 @@ fn compile_lib_source(source: &str, opt_level: OptLevel) -> Vec<u8> {
 async fn produce_and_read_back<T>(
     store: &mut Store<WasiState>,
     instance: &Instance,
-    iface: Option<&ComponentExportIndex>,
+    iface: &ComponentExportIndex,
     export: &'static str,
     input: Val,
     expected: T,
@@ -942,10 +936,8 @@ fn run_producer_round_trips(opt_level: OptLevel) {
             .instantiate_async(&mut store, &component)
             .await
             .expect("instantiate producer component");
-        let iface = instance
-            .get_export(&mut store, None, LIB_WORLD_FQ)
-            .map(|(_, idx)| idx);
-        let i = iface.as_ref();
+        let iface = interface_index(&mut store, &instance, LIB_WORLD_FQ);
+        let i = &iface;
 
         let mut failures = Vec::new();
         macro_rules! check {
@@ -1028,7 +1020,7 @@ export async fn mk_stream_u32(data: List<u32>) -> Stream<u32> {
 async fn produce_stream_and_read_back<T>(
     store: &mut Store<WasiState>,
     instance: &Instance,
-    iface: Option<&ComponentExportIndex>,
+    iface: &ComponentExportIndex,
     export: &'static str,
     input: Val,
     expected: Vec<T>,
@@ -1096,13 +1088,11 @@ fn run_stream_producer_round_trips(opt_level: OptLevel) {
             .instantiate_async(&mut store, &component)
             .await
             .expect("instantiate stream producer");
-        let iface = instance
-            .get_export(&mut store, None, LIB_WORLD_FQ)
-            .map(|(_, idx)| idx);
+        let iface = interface_index(&mut store, &instance, LIB_WORLD_FQ);
         if let Err(e) = produce_stream_and_read_back(
             &mut store,
             &instance,
-            iface.as_ref(),
+            &iface,
             "mk-stream-u32",
             Val::List(vec![Val::U32(1), Val::U32(2), Val::U32(3), Val::U32(4)]),
             vec![1u32, 2, 3, 4],
@@ -1174,12 +1164,8 @@ where
             .instantiate_async(&mut store, &component)
             .await
             .expect("instantiate identity component");
-        let iface = instance
-            .get_export(&mut store, None, LIB_WORLD_FQ)
-            .map(|(_, idx)| idx);
-        if let Err(e) =
-            future_round_trip(&mut store, &instance, iface.as_ref(), export, payload).await
-        {
+        let iface = interface_index(&mut store, &instance, LIB_WORLD_FQ);
+        if let Err(e) = future_round_trip(&mut store, &instance, &iface, export, payload).await {
             panic!("[{opt}] {e}");
         }
     });
@@ -1278,13 +1264,11 @@ fn run_record_future_identity(opt_level: OptLevel) {
             .instantiate_async(&mut store, &component)
             .await
             .expect("instantiate record future component");
-        let iface = instance
-            .get_export(&mut store, None, LIB_WORLD_FQ)
-            .map(|(_, idx)| idx);
+        let iface = interface_index(&mut store, &instance, LIB_WORLD_FQ);
         if let Err(e) = future_round_trip(
             &mut store,
             &instance,
-            iface.as_ref(),
+            &iface,
             "id-future-point",
             Point { x: 1.5, y: -2.5 },
         )
@@ -1344,13 +1328,11 @@ fn run_record_stream_identity(opt_level: OptLevel) {
             .instantiate_async(&mut store, &component)
             .await
             .expect("instantiate record stream component");
-        let iface = instance
-            .get_export(&mut store, None, LIB_WORLD_FQ)
-            .map(|(_, idx)| idx);
+        let iface = interface_index(&mut store, &instance, LIB_WORLD_FQ);
         if let Err(e) = stream_round_trip(
             &mut store,
             &instance,
-            iface.as_ref(),
+            &iface,
             "id-stream-point",
             vec![Point { x: 1.0, y: 2.0 }, Point { x: -3.5, y: 4.5 }],
         )
@@ -1527,10 +1509,8 @@ fn run_named_future_identity(opt_level: OptLevel) {
             .instantiate_async(&mut store, &component)
             .await
             .expect("instantiate named-payload future component");
-        let iface = instance
-            .get_export(&mut store, None, LIB_WORLD_FQ)
-            .map(|(_, idx)| idx);
-        let i = iface.as_ref();
+        let iface = interface_index(&mut store, &instance, LIB_WORLD_FQ);
+        let i = &iface;
 
         let mut failures = Vec::new();
         macro_rules! check {
@@ -1609,10 +1589,8 @@ fn run_named_stream_identity(opt_level: OptLevel) {
             .instantiate_async(&mut store, &component)
             .await
             .expect("instantiate named-payload stream component");
-        let iface = instance
-            .get_export(&mut store, None, LIB_WORLD_FQ)
-            .map(|(_, idx)| idx);
-        let i = iface.as_ref();
+        let iface = interface_index(&mut store, &instance, LIB_WORLD_FQ);
+        let i = &iface;
 
         let mut failures = Vec::new();
         macro_rules! check {
@@ -1721,12 +1699,8 @@ where
             .instantiate_async(&mut store, &component)
             .await
             .expect("instantiate identity component");
-        let iface = instance
-            .get_export(&mut store, None, LIB_WORLD_FQ)
-            .map(|(_, idx)| idx);
-        if let Err(e) =
-            stream_round_trip(&mut store, &instance, iface.as_ref(), export, payload).await
-        {
+        let iface = interface_index(&mut store, &instance, LIB_WORLD_FQ);
+        if let Err(e) = stream_round_trip(&mut store, &instance, &iface, export, payload).await {
             panic!("[{opt}] {e}");
         }
     });
@@ -1935,15 +1909,7 @@ fn map_last_wins_on_a_repeated_key() {
             .instantiate_async(&mut store, &component)
             .await
             .expect("instantiate library component");
-        let iface = instance
-            .get_export(&mut store, None, LIB_WORLD_FQ)
-            .map(|(_, idx)| idx)
-            .expect("catalog interface");
-        let func = instance
-            .get_export(&mut store, Some(&iface), "id-map-string-u32")
-            .map(|(_, idx)| idx)
-            .and_then(|idx| instance.get_func(&mut store, idx))
-            .expect("id-map-string-u32 export");
+        let func = lib_func(&mut store, &instance, LIB_WORLD_FQ, "id-map-string-u32");
 
         let mut results = vec![Val::Bool(false)];
         func.call_async(
@@ -2054,17 +2020,11 @@ fn run_double_free_guard(opt_level: OptLevel) {
             .instantiate_async(&mut store, &component)
             .await
             .expect("instantiate library component");
-        let iface = instance
-            .get_export(&mut store, None, LIB_WORLD_FQ)
-            .map(|(_, idx)| idx);
+        let iface = interface_index(&mut store, &instance, LIB_WORLD_FQ);
 
         let mut failures = Vec::new();
         for Case { export, value } in cases() {
-            let func = iface
-                .as_ref()
-                .and_then(|i| instance.get_export(&mut store, Some(i), export))
-                .map(|(_, idx)| idx)
-                .and_then(|idx| instance.get_func(&mut store, idx));
+            let func = lookup_func(&mut store, &instance, &iface, export);
             let Some(func) = func else {
                 failures.push(format!("[{opt}] export `{export}` not found"));
                 continue;

@@ -93,7 +93,6 @@ pub(super) fn build_if_chain(
                         name: name.clone(),
                         local_index: *local_index,
                         is_mut: false,
-                        is_reactive: false,
                         type_id: *type_id,
                         value: scrutinee.clone(),
                         storage: LetStorage::Aliased,

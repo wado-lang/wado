@@ -1,0 +1,9 @@
+// A `test` block is no function, so `export(…)` cannot head one.
+use { Command } from "wasi:cli";
+
+export(Command::run) test {
+    assert true;
+}
+
+__DATA__
+{"test": {}, "compile_error": ":4:22: parse error: `export(…)` names the world export a function provides, so a `fn` must follow it"}

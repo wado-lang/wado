@@ -484,8 +484,7 @@ fn mut_reachable_contains(
         }
         ResolvedType::MutRef(inner) => (*inner, true),
         ResolvedType::Ref(inner) => (*inner, false),
-        ResolvedType::Reactive(inner)
-        | ResolvedType::BuiltinArray(inner)
+        ResolvedType::BuiltinArray(inner)
         | ResolvedType::Newtype {
             base_type: inner, ..
         } => (*inner, writable),
@@ -577,7 +576,7 @@ fn transitive_reachable_writes(
         let mut direct: IndexSet<(ModuleSource, String)> = IndexSet::default();
         let mut indirect = false;
         // Another task may write any global.
-        if func.body.is_none() && project.builtin_declarations.leaves_for_host(&*func) {
+        if func.body.is_none() && project.builtin_declarations.may_suspend(&*func) {
             direct.extend(
                 project
                     .globals

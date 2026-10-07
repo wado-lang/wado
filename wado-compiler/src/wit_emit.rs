@@ -30,7 +30,9 @@ use crate::tir::{
     TypeTable,
 };
 use crate::unparse::unparse_type_into;
-use crate::world_registry::{CALLBACK_INTERFACE, CallbackExport, WorldRegistry, WorldSurface};
+use crate::world_registry::{
+    CALLBACK_INTERFACE, CallbackExport, ExportMappings, WorldRegistry, WorldSurface,
+};
 
 /// How much of the referenced interface graph to inline into the WIT document.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -67,6 +69,9 @@ pub struct WitContract {
     pub world_fq: String,
     /// Name of the default interface grouping bare exports.
     pub default_interface: String,
+    /// Whether the target is a library, whose exports always sit in the default
+    /// interface: a consumer imports that interface by bare name.
+    pub library: bool,
 }
 
 /// Single source of truth for a target's emitted world name + default interface.
@@ -95,11 +100,13 @@ pub fn wit_contract(
                 parts.namespace, parts.package, LIB_WORLD_NAME, version
             ),
             default_interface: parts.interface,
+            library: true,
         };
     }
     WitContract {
         world_fq: target_world.unwrap_or("wasi:cli/command").to_string(),
         default_interface: default_interface.unwrap_or("root").to_string(),
+        library: false,
     }
 }
 
@@ -122,6 +129,8 @@ pub struct WitEmitInput<'a> {
     pub world_registry: Option<&'a WorldRegistry>,
     /// Emitted world name + default interface. `None` until the CLI sets it.
     pub wit_contract: Option<&'a WitContract>,
+    /// Which world export each `export(…)` function provides.
+    pub export_mappings: &'a ExportMappings,
 }
 
 /// A detached, owned copy of the WIT-relevant frontend subset, cloned before
@@ -134,6 +143,7 @@ pub struct WitEmitSnapshot {
     cm_interface_registry: Arc<CmInterfaceRegistry>,
     world_registry: Arc<WorldRegistry>,
     wit_contract: WitContract,
+    export_mappings: ExportMappings,
 }
 
 impl WitEmitSnapshot {
@@ -144,6 +154,7 @@ impl WitEmitSnapshot {
         cm_interface_registry: Arc<CmInterfaceRegistry>,
         world_registry: Arc<WorldRegistry>,
         wit_contract: WitContract,
+        export_mappings: ExportMappings,
     ) -> Self {
         Self {
             tir_modules,
@@ -151,6 +162,7 @@ impl WitEmitSnapshot {
             cm_interface_registry,
             world_registry,
             wit_contract,
+            export_mappings,
         }
     }
 
@@ -164,6 +176,7 @@ impl WitEmitSnapshot {
             cm_interface_registry: Some(&self.cm_interface_registry),
             world_registry: Some(&self.world_registry),
             wit_contract: Some(&self.wit_contract),
+            export_mappings: &self.export_mappings,
         }
     }
 }
@@ -260,6 +273,7 @@ struct Emitter<'a> {
     cm_interface_registry: Option<&'a CmInterfaceRegistry>,
     world_registry: Option<&'a WorldRegistry>,
     wit_contract: Option<&'a WitContract>,
+    export_mappings: &'a ExportMappings,
     types: &'a TypeTable,
     /// User-authored type declarations keyed by source name, gathered across
     /// every loaded user module so referenced types can be looked up by name.
@@ -322,6 +336,7 @@ impl<'a> Emitter<'a> {
             cm_interface_registry: input.cm_interface_registry,
             world_registry: input.world_registry,
             wit_contract: input.wit_contract,
+            export_mappings: input.export_mappings,
             types: input.types,
             decls,
             referenced_interfaces: BTreeSet::new(),
@@ -335,7 +350,7 @@ impl<'a> Emitter<'a> {
             .wit_contract
             .ok_or(WitEmitError::IncompleteSemantics)?
             .clone();
-        let exports = self.collect_exported_functions();
+        let exports = self.collect_exported_functions(&contract.world_fq);
         let world_info = self
             .world_registry
             .and_then(|registry| registry.get(&contract.world_fq));
@@ -392,8 +407,8 @@ impl<'a> Emitter<'a> {
 
         if user_funcs.is_empty() {
             // No ordinary user exports beyond world conformance.
-        } else if type_defs.is_empty() {
-            // Only functions, no referenced user types: direct world exports.
+        } else if type_defs.is_empty() && !contract.library {
+            // A program's functions naming no user type: direct world exports.
             for func in user_funcs {
                 world.item(WorldItem::function_export(func));
             }
@@ -429,8 +444,8 @@ impl<'a> Emitter<'a> {
     }
 
     /// Exported functions across every loaded user module, in module-then-decl
-    /// order.
-    fn collect_exported_functions(&self) -> Vec<ExportedFn> {
+    /// order, each under the name it provides in `world`.
+    fn collect_exported_functions(&self, world: &str) -> Vec<ExportedFn> {
         let mut out = Vec::new();
         for module in self.tir_modules.values() {
             // Only user-authored modules contribute to the WIT contract; the
@@ -442,9 +457,9 @@ impl<'a> Emitter<'a> {
             }
             for func_rc in &module.functions {
                 let func = func_rc.borrow();
-                if !func.is_export {
+                let Some(name) = self.export_mappings.provided_export(world, &func) else {
                     continue;
-                }
+                };
                 let params = func
                     .params
                     .iter()
@@ -458,7 +473,7 @@ impl<'a> Emitter<'a> {
                     func.return_type
                 };
                 out.push(ExportedFn {
-                    name: func.name.clone(),
+                    name: name.to_string(),
                     params,
                     return_type,
                     is_async: func.is_async,

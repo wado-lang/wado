@@ -31,7 +31,7 @@ use crate::symbol_notation::SymbolNotation;
 use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
 use crate::token::Span;
 use crate::wit_emit::{WitContract, WitEmitInput};
-use crate::world_registry::WorldRegistry;
+use crate::world_registry::{ExportMapping, ExportMappings, WorldRegistry, world_key};
 use crate::{ast, load, loader, parse, report_without_span, symbol_notation};
 
 /// A ready-to-query analysis result.
@@ -95,6 +95,9 @@ pub struct Semantics {
     /// the CLI before WIT emission so `wado wit` and the `wado compile` embed
     /// path derive them identically. `None` until set.
     pub(crate) wit_contract: Option<WitContract>,
+    /// What each `export(World::name)` in the entry module names. Empty unless
+    /// lowering succeeded.
+    pub(crate) export_mappings: ExportMappings,
     /// The coverage plan reify instrumented this compile with, under
     /// `wado test --coverage`.
     pub(crate) coverage: Option<CoverageMap>,
@@ -171,6 +174,7 @@ impl Semantics {
             cm_interface_registry: self.cm_interface_registry(),
             world_registry: self.world_registry(),
             wit_contract: self.wit_contract.as_ref(),
+            export_mappings: &self.export_mappings,
         }
     }
 
@@ -247,6 +251,7 @@ impl Semantics {
             liveness: Liveness::default(),
             is_complete: false,
             wit_contract: None,
+            export_mappings: ExportMappings::default(),
             coverage: None,
         }
     }
@@ -1231,6 +1236,15 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         .iter()
         .map(|(ms, m)| (m.ast_id_space(), ms.clone()))
         .collect();
+    let export_mappings = if lower_ok {
+        export_mappings_of(
+            &load_result.modules,
+            &load_result.entry_module_source,
+            &state.tysys.resolutions,
+        )
+    } else {
+        ExportMappings::default()
+    };
     Semantics {
         entry_module_source: load_result.entry_module_source,
         modules: load_result.modules,
@@ -1245,8 +1259,52 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         liveness,
         is_complete: cm_bound && no_syntax_errors,
         wit_contract: None,
+        export_mappings,
         coverage,
     }
+}
+
+/// What each `export(World::name)` in `entry` names, every target having
+/// resolved to a world.
+fn export_mappings_of(
+    modules: &IndexMap<ModuleSource, Module>,
+    entry: &ModuleSource,
+    resolutions: &Resolutions,
+) -> ExportMappings {
+    let defs = resolutions.defs();
+    let functions = modules[entry].items.iter().filter_map(|item| {
+        let Item::Function(func) = item else {
+            return None;
+        };
+        Some(func)
+    });
+    let mappings = functions
+        .flat_map(|func| {
+            func.export_targets.iter().map(move |target| {
+                let world_def = resolutions
+                    .declared(target.id)
+                    .expect("lowering rejects an export target naming no world");
+                let world_id = defs.ast_id(world_def);
+                let world = modules[defs.module(world_def)]
+                    .items
+                    .iter()
+                    .find_map(|item| {
+                        let Item::World(world) = item else {
+                            return None;
+                        };
+                        (world.id == world_id).then_some(world)
+                    })
+                    .expect("a world def is a world declaration in its module");
+                ExportMapping {
+                    world: world_key(world),
+                    export_name: target.name.clone(),
+                    function: defs.def_at(func.id),
+                    function_name: func.name.clone(),
+                }
+            })
+        })
+        .collect();
+    ExportMappings::new(mappings)
 }
 
 /// Register the CM bindings the program's own modules and its dependencies

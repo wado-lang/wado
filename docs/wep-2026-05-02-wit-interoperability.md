@@ -18,7 +18,7 @@ restated here.
 | WEP                                                                                     | Scope                                                                          |
 | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | [WIT and Wado Mapping](./wep-2026-01-29-wit-wado-mapping.md)                            | The bidirectional type and structure mapping, and `export` as the CM boundary. |
-| [World Conformance and Export Syntax](./wep-2026-01-16-world-conformance-and-export.md) | The `contract <World>;` declaration and `export(World::name)` mapping syntax.  |
+| [World Conformance and Export Syntax](./wep-2026-01-16-world-conformance-and-export.md) | World selection and the `export(World::name)` mapping syntax.                  |
 | [TIR-Level CM Binding Synthesis](./wep-2026-02-15-cm-binding-synthesis.md)              | Type-driven lift/lower synthesis at the boundary.                              |
 | [WIT Bundling in Component Binaries](./wep-2026-03-21-wit-bundling.md)                  | The `component-type` custom-section format.                                    |
 | [WebAssembly Module Import Support](./wep-2026-01-10-wasm-import.md)                    | Core-wasm asset import; the CM analogue lives in its own WEP below.            |
@@ -138,8 +138,8 @@ becomes WIT. A resource value maps to `own<R>`, a reference to it to `borrow<R>`
 ### Interface grouping and the default interface
 
 - Bare `export fn` / `export struct` / … form a default interface named after the
-  package (or the entry file's stem, with no manifest). If only functions are
-  exported, they become direct world exports instead.
+  package (or the entry file's stem, with no manifest). Outside a library, if
+  only functions are exported, they become direct world exports instead.
 - `export interface Foo { item1, item2, … }` groups named items into one WIT
   interface. The items are defined elsewhere; the block lists names.
 - World-conformance entry points — `run` for the CLI world, `handle` for the HTTP
@@ -172,15 +172,16 @@ is textual only; the default-interface FQ is the codegen identity and the
 component's real export. `wado wit --lib` renders the same shape, so text and
 embedded section agree.
 
-Export grouping follows one rule, applied by both the WIT emitter and codegen:
-
-- No exported signature references a named user type → the exports are direct
-  world exports, with structural types inlined.
-- Some exported signature references a named user type → the exports plus the
-  transitive closure of their named types are grouped into the default interface
-  and exported as an instance. This is forced by WIT: a world export list admits
-  functions and interfaces, never a bare type, so a named type reaches consumers
-  as a reusable entity only through an exported interface.
+A library's exports, plus the transitive closure of their named types, are
+always grouped into the default interface and exported as an instance, applied
+alike by the WIT emitter and codegen. WIT forces the interface once a named type
+is exported: a world export list admits functions and interfaces, never a bare
+type, so a named type reaches consumers as a reusable entity only through an
+exported interface. Exports with no named type used to become direct world
+exports instead. That made one export's shape depend on another's signature,
+and a Wado consumer imports the default interface by bare name
+([WEP: A Package's Default Interface Is Its Module](./wep-2026-10-07-default-interface-as-module.md)),
+so the library keeps the interface either way.
 
 Codegen mirrors this with no world-specific special-casing. The entry module's
 exported and transitively referenced named types are registered under the
@@ -310,10 +311,8 @@ external WIT support; they are listed so the inventory stays honest.
   making a `use` outside it an error; L4 would model WIT's `include` / `with`
   / world inheritance. Consuming external WIT realistically wants L2 and
   probably L3, since two unrelated worlds can carry same-named interfaces.
-- [ ] The `contract` declaration. Its syntax is specified by
-  [World Conformance](./wep-2026-01-16-world-conformance-and-export.md) but
-  the parser does not implement it, and its runtime meaning depends on
-  choosing L2 or L3 above.
+- [x] The `export(World::name)` mapping, specified by
+  [World Conformance](./wep-2026-01-16-world-conformance-and-export.md).
 - [ ] An opt-out of the default-interface fallback, so that every non-entry-point
   export must live in an explicit `export interface`.
 

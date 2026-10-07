@@ -921,7 +921,7 @@ impl RefCarrying<'_> {
             ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::AssocTypeProjection { .. } => (true, false),
-            ResolvedType::Reactive(inner) | ResolvedType::BuiltinArray(inner) => {
+            ResolvedType::BuiltinArray(inner) => {
                 let inner = *inner;
                 self.walk(inner, open)
             }

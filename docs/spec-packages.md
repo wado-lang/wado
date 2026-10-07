@@ -286,13 +286,22 @@ with no operator is an error.
 "acme:ui" = { version = "0.2.0" }     # error: bare version "0.2.0" requires explicit prefix (^, ~, or =)
 ```
 
-Resolution picks, for each dependency, the highest version that meets every
-requirement on it anywhere in the dependency graph. When no version meets them
-all, resolution fails and says which requirements conflict.
+A compatibility range is the set of versions `^` accepts from one version: one
+major version, one minor before `1.0.0`, one patch before `0.1.0`. Resolution
+groups the requirements on a package anywhere in the dependency graph by the
+range they fall in. In each group it picks the highest version that meets every
+requirement, and when none does, resolution fails and says which requirements
+conflict. Two groups resolve to two versions, which are two packages
+([One Package, One Set of Types](#one-package-one-set-of-types)). This is how
+two `lib:` aliases depend on two major versions of one coordinate.
+
+> Not yet implemented: the resolver gives each package one version, so
+> requirements in two compatibility ranges conflict.
 
 A range is allowed only in `wado.toml`, where a lock file resolves it. A
-specifier's `@version` and an inline source take an exact version, and a range
-there is an error.
+specifier's `@version` and an inline source's `version` are a bare version
+(`1.0.0`), which names exactly that version. An operator or a range there is an
+error.
 
 ## Package Specifiers
 
@@ -358,8 +367,10 @@ named after the world with `:` and `/` written as `-`:
 
 A registry package is a prebuilt component. Its specifier imports the
 interfaces the component exports, as a `use` of a component file does
-([Components](./spec-modules.md#components)). A `pub` item the component does
-not export does not reach the consumer. Whether a registry package will also
+([Components](./spec-modules.md#components)). The package's `export` items sit
+in its default interface, so they import by bare name, as from a source
+dependency. A `pub` item the component does not export does not reach the
+consumer. Whether a registry package will also
 carry its `pub` items to a Wado consumer is undecided
 ([WEP: Provider Metadata](./wep-2026-07-26-provider-metadata.md)):
 
@@ -367,14 +378,14 @@ carry its `pub` items to a Wado consumer is undecided
 
 ```wado
 use { println, Stdout } from "core:cli";
-use { CmCatalog } from "wado-lang:cm-catalog";
+use { id_list_u8, id_string, id_u32 } from "wado-lang:cm-catalog";
 ```
 
 <!-- {"source": "example/hello-packages/src/main.wado"} -->
 
 ```wado
-let n = CmCatalog::id_u32(42);
-let s = CmCatalog::id_string("hello");
+let n = id_u32(42);
+let s = id_string("hello");
 ```
 
 ## The Library World
@@ -515,9 +526,11 @@ a dependency never resolves against them.
 
 ### The Library World as a Component
 
-Built on its own, the library world is a component. Its interface carries the
-entry module's `export` items and no `pub`-only item. The interface is named
-after the package, `<namespace>:<name>/<name>@<version>`, so building it needs
+Built on its own, the library world is a component. It exports one interface,
+the package's default interface, which carries every `export` item of the entry
+module and no `pub`-only item. Its functions never become world-level exports,
+whatever their signatures name. The interface is named after the package,
+`<namespace>:<name>/<name>@<version>`, so building it needs
 `[package].namespace`. The world itself is named `root`, so no package may take
 that name, in any letter case. An entry module that exports nothing gives the
 component no interface, and building it is an error.

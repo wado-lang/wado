@@ -284,10 +284,6 @@ impl SubstitutionContext {
                     type_args: new_args,
                 })
             }
-            ResolvedType::Reactive(inner) => {
-                let new_inner = self.substitute(inner, type_table);
-                type_table.intern(ResolvedType::Reactive(new_inner))
-            }
             // Other types don't contain type parameters
             _ => type_id,
         }
@@ -592,7 +588,6 @@ pub enum ResolvedType {
         return_type: TypeId,
         effects: Vec<EffectRef>,
     },
-    Reactive(TypeId),
     /// Type parameter (e.g., `T` in `struct Box<T>`) — a *rigid* variable.
     ///
     /// It stands for whatever a caller instantiates the binding item with, so
@@ -1399,8 +1394,7 @@ impl TypeTable {
             ResolvedType::Struct { .. }
             | ResolvedType::BuiltinArray(_)
             | ResolvedType::Variant { .. }
-            | ResolvedType::Function { .. }
-            | ResolvedType::Reactive(_) => Some(self.type_key(ty)),
+            | ResolvedType::Function { .. } => Some(self.type_key(ty)),
             ResolvedType::GenericInstance { .. } => {
                 Some(self.type_key(self.monomorphized_or_self(ty)))
             }
@@ -1790,7 +1784,6 @@ impl TypeTable {
             | ResolvedType::Variant { .. }
             | ResolvedType::GenericResource { .. }
             | ResolvedType::Function { .. }
-            | ResolvedType::Reactive(_)
             | ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
@@ -2306,7 +2299,6 @@ impl TypeTable {
                     }
                     ResolvedType::Ref(inner)
                     | ResolvedType::MutRef(inner)
-                    | ResolvedType::Reactive(inner)
                     | ResolvedType::BuiltinArray(inner) => components.push(*inner),
                     ResolvedType::Function {
                         params,
@@ -4618,18 +4610,6 @@ impl TypeTable {
                     )
                 }
             }
-            // `Reactive` wraps an inner type, so substitute it recursively.
-            // Defensive: reactive bindings are typed with the underlying value
-            // type today, so the wrapper never reaches monomorphize — but the
-            // contract is "rewrite every embedded parameter", and it embeds one.
-            ResolvedType::Reactive(inner) => {
-                let new_inner = self.subst_rec(inner, leaves);
-                if new_inner == inner {
-                    type_id
-                } else {
-                    self.intern(ResolvedType::Reactive(new_inner))
-                }
-            }
             ResolvedType::Newtype {
                 def,
                 type_args,
@@ -5196,8 +5176,7 @@ impl TypeTable {
         match self.get(id) {
             ResolvedType::BuiltinArray(inner)
             | ResolvedType::Ref(inner)
-            | ResolvedType::MutRef(inner)
-            | ResolvedType::Reactive(inner) => f(*inner),
+            | ResolvedType::MutRef(inner) => f(*inner),
             ResolvedType::Function {
                 params,
                 return_type,
@@ -5472,7 +5451,6 @@ impl TypeTable {
                     arg_names.join(", ")
                 )
             }
-            ResolvedType::Reactive(inner) => format!("Reactive<{}>", type_name(*inner)),
             ResolvedType::TypeParam { name, .. } | ResolvedType::AssocParam { name, .. } => {
                 name.clone()
             }
@@ -6013,7 +5991,6 @@ impl TypeTable {
                     args,
                 }
             }
-            ResolvedType::Reactive(inner) => TypeNameInfo::Reactive(self.mangle_type_name(*inner)),
             ResolvedType::AssocTypeProjection {
                 param_id,
                 assoc_name,
@@ -7084,7 +7061,6 @@ pub enum TirStmtKind {
         name: String,
         local_index: u32,
         is_mut: bool,
-        is_reactive: bool,
         type_id: TypeId,
         value: TirExpr,
         /// Whose storage the binding holds.
@@ -7737,7 +7713,6 @@ impl TypeTable {
             | ResolvedType::Resource { .. }
             | ResolvedType::Variant { .. }
             | ResolvedType::GenericResource { .. }
-            | ResolvedType::Reactive(_)
             | ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::InferVar(_)
@@ -7917,7 +7892,6 @@ impl TypeTable {
         match (self.get(a), self.get(b)) {
             (ResolvedType::Ref(x), ResolvedType::Ref(y))
             | (ResolvedType::MutRef(x), ResolvedType::MutRef(y))
-            | (ResolvedType::Reactive(x), ResolvedType::Reactive(y))
             | (ResolvedType::BuiltinArray(x), ResolvedType::BuiltinArray(y)) => {
                 Some(all(&[*x], &[*y]))
             }
@@ -7996,7 +7970,6 @@ impl TypeTable {
         match self.get(id) {
             ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
-            | ResolvedType::Reactive(inner)
             | ResolvedType::BuiltinArray(inner) => inside(&[*inner]),
             ResolvedType::Function {
                 params,
@@ -8320,6 +8293,9 @@ pub struct BuiltinDeclaration {
     pub element_access: Option<(usize, ArrayElementAccess)>,
     /// Every call ends in a trap, as a `!` return states.
     pub never_returns: bool,
+    /// No parameter's type can carry storage, so the call is handed nothing it
+    /// could write a field of.
+    pub handed_no_storage: bool,
 }
 
 impl BuiltinDeclaration {
@@ -8391,6 +8367,7 @@ impl BuiltinDeclaration {
             _ => None,
         };
         let ranged_params = facts.ranged_arrays().copied().collect();
+        let handed_no_storage = shape.storage_params.is_empty();
         Self {
             arity: shape.arity,
             facts,
@@ -8401,6 +8378,7 @@ impl BuiltinDeclaration {
             immediate_params: shape.immediate_params,
             element_access,
             never_returns: shape.returns_never,
+            handed_no_storage,
         }
     }
 
@@ -8411,31 +8389,37 @@ impl BuiltinDeclaration {
     }
 
     /// Whether the call may store where neither its result nor a `&mut`
-    /// argument shows.
+    /// argument shows, itself or through the tasks that run while it suspends.
     pub fn stores_unseen(&self) -> bool {
         self.facts.storage == Storage::Opaque
             || matches!(self.facts.side_effect, SideEffect::Opaque)
+            || self.facts.suspend
     }
 
     /// Whether the call writes nothing itself: it hands back part of an
     /// argument, and its one `&mut` parameter, if any, is the array whose
-    /// element it hands back. A write through the result is its user's.
+    /// element it hands back, and it does not suspend. A write through the
+    /// result is its user's.
     pub fn only_aliases(&self) -> bool {
         matches!(self.returns, Some(ReturnConvention::PartOf(_)))
             && !self.facts.is_opaque()
+            && !self.facts.suspend
             && self
                 .mut_params
                 .iter()
                 .all(|&p| self.element_access == Some((p, ArrayElementAccess::Write)))
     }
 
-    /// Whether the call writes no struct field: its storage and effects are
-    /// stated, and every `&mut` parameter is an array it ranges over. An
-    /// opaque call may suspend, and another task may write any field meanwhile.
+    /// Whether the call writes no struct field. A call that suspends may let
+    /// another task write any field. Otherwise it reaches only what it is
+    /// handed: nothing that carries storage, or, where its storage and effects
+    /// are stated, arrays it ranges over through its `&mut` parameters.
     pub fn writes_no_field(&self) -> bool {
-        self.facts.storage != Storage::Opaque
-            && !self.facts.is_opaque()
-            && self.mut_params.is_subset(&self.ranged_params)
+        !self.facts.suspend
+            && (self.handed_no_storage
+                || self.facts.storage != Storage::Opaque
+                    && !self.facts.is_opaque()
+                    && self.mut_params.is_subset(&self.ranged_params))
     }
 }
 
@@ -8544,12 +8528,18 @@ impl DeclarationTable<BuiltinDeclaration> {
         self.get(call.into()).is_some_and(|d| d.returns.is_some())
     }
 
-    /// Whether a call to the body-less `call` may leave for the host, where
-    /// another task may run: nothing declares it, or it declares
-    /// `#[side_effect(opaque)]`.
+    /// Whether a call to the body-less `call` may leave for the host: nothing
+    /// declares it, or it declares `#[side_effect(opaque)]`.
     pub fn leaves_for_host<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {
         self.get(call.into())
             .is_none_or(|d| matches!(d.facts.side_effect, SideEffect::Opaque))
+    }
+
+    /// Whether another task may run before a call to the body-less `call`
+    /// returns, and read or write anything held elsewhere: nothing declares
+    /// it, as for a Component Model import, or it declares `suspend`.
+    pub fn may_suspend<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {
+        self.get(call.into()).is_none_or(|d| d.facts.suspend)
     }
 
     /// Whether the call leaves the argument *object* at `pos` where the caller

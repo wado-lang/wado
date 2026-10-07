@@ -1,0 +1,10 @@
+// A default interface the component imports is the consumer's to provide, not
+// the component's to export, so its operations are not module-level names.
+use { get } from "./sub/wasm_import_cm_guest_effect.wat" with { type: "wat" };
+
+test {
+    assert get() == 1;
+}
+
+__DATA__
+{"compile_error": ":3:7: analysis error: symbol 'get' not found in module './sub/wasm_import_cm_guest_effect.wat'", "compile_error_codes": ["IMPORT_NOT_FOUND"]}

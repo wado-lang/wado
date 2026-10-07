@@ -1724,8 +1724,7 @@ fn collect_type_dependencies(
     match type_table.get(type_id) {
         ResolvedType::BuiltinArray(inner)
         | ResolvedType::Ref(inner)
-        | ResolvedType::MutRef(inner)
-        | ResolvedType::Reactive(inner) => {
+        | ResolvedType::MutRef(inner) => {
             collect_type_transitive(*inner, type_table, reachable);
         }
         ResolvedType::GenericResource { type_args, .. } => {

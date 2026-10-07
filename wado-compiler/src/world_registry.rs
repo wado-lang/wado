@@ -11,7 +11,9 @@ use crate::hashmap::IndexMap;
 use crate::ast::{
     Attribute, CmImport, Type, WorldDecl, WorldExport, WorldExportFn, WorldImport, cm_import_of,
 };
+use crate::defs::DefId;
 use crate::module_source::ModuleSource;
+use crate::tir::TirFunction;
 
 /// Well-known world name for the test world.
 ///
@@ -168,12 +170,11 @@ pub struct WorldInfo {
 
 impl WorldInfo {
     /// Whether this world exports the WASI HTTP handler — a handler-instance
-    /// export whose interface is in the `http` package. Gates HTTP-specific
-    /// behavior (importing `wasi:http/types`, the free-list allocator), so the
-    /// package check keeps a non-HTTP handler-shaped export (e.g. a future
-    /// `acme:widget/handler`) out of the HTTP path. The generic instance-export
-    /// wrapping for all interface exports lives in
-    /// `append_interface_instance_exports`.
+    /// export whose interface is in the `http` package. Picks the free-list
+    /// allocator for an HTTP service, so the package check keeps a non-HTTP
+    /// handler-shaped export (e.g. a future `acme:widget/handler`) on the
+    /// default. The generic instance-export wrapping for all interface exports
+    /// lives in `append_interface_instance_exports`.
     pub fn has_http_handler_export(&self) -> bool {
         self.exports.iter().any(|e| {
             e.is_handler_instance_export()
@@ -269,6 +270,63 @@ fn fq_name_from_attrs(attrs: &[Attribute]) -> Option<String> {
     cm_import_of(attrs).map(CmImport::bare_path)
 }
 
+/// The key [`WorldRegistry`] files `world` under: its `#[cm("…")]` name, or
+/// failing that its own.
+pub fn world_key(world: &WorldDecl) -> String {
+    fq_name_from_attrs(&world.attrs).unwrap_or_else(|| world.name.clone())
+}
+
+/// A function `export(World::name)` names as the export `name` of `world`.
+#[derive(Debug, Clone)]
+pub struct ExportMapping {
+    /// The [`world_key`] of the target world.
+    pub world: String,
+    /// The world export it provides.
+    pub export_name: String,
+    /// The Wado function providing it.
+    pub function: DefId,
+    /// That function's name, for diagnostics.
+    pub function_name: String,
+}
+
+/// Every `export(World::name)` in the entry module.
+#[derive(Debug, Clone, Default)]
+pub struct ExportMappings(Vec<ExportMapping>);
+
+impl ExportMappings {
+    /// Wrap the mappings the entry module declares.
+    #[must_use]
+    pub fn new(mappings: Vec<ExportMapping>) -> Self {
+        Self(mappings)
+    }
+
+    /// Each mapping, in declaration order.
+    pub fn iter(&self) -> std::slice::Iter<'_, ExportMapping> {
+        self.0.iter()
+    }
+
+    /// The export of `world` that `func` provides: the one `export(…)` maps it
+    /// to, none when `export(…)` maps it only to other worlds, and otherwise
+    /// its own name when it is an `export fn`.
+    #[must_use]
+    pub fn provided_export<'a>(&'a self, world: &str, func: &'a TirFunction) -> Option<&'a str> {
+        if !func.is_export {
+            return None;
+        }
+        let mut mapped = self
+            .0
+            .iter()
+            .filter(|m| func.def_id == Some(m.function))
+            .peekable();
+        if mapped.peek().is_none() {
+            return Some(&func.name);
+        }
+        mapped
+            .find(|m| m.world == world)
+            .map(|m| m.export_name.as_str())
+    }
+}
+
 impl WorldRegistry {
     /// Create a new empty registry
     pub fn new() -> Self {
@@ -285,7 +343,7 @@ impl WorldRegistry {
         lookup_interface_export: impl Fn(&str) -> Option<InterfaceExportLookup>,
         lookup_interface_import: impl Fn(&str) -> Option<String>,
     ) {
-        let fq_name = fq_name_from_attrs(&world.attrs).unwrap_or_else(|| world.name.clone());
+        let fq_name = world_key(world);
 
         assert!(
             !self.worlds.contains_key(&fq_name),

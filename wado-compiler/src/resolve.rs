@@ -490,13 +490,12 @@ impl Resolutions {
     }
 
     /// The declaration owning what `ident` names: `E` in `[ns::]E::op` through
-    /// its site, or the owner of an imported bare `op` through the operation's.
+    /// its site, or the owner of an imported `[ns::]op` through the operation's.
+    /// A namespace qualifier declares nothing, so `ns::op` takes the second way.
     #[must_use]
     pub fn operation_owner(&self, ident: &ast::IdentExpr) -> Option<DefId> {
-        match ident.owner_segment() {
-            Some(_) => self.owner_decl(ident),
-            None => self.defs().parent(self.declared_if_walked(ident.id)?),
-        }
+        self.owner_decl(ident)
+            .or_else(|| self.defs().parent(self.declared_if_walked(ident.id)?))
     }
 
     /// The declaration a qualified path's owner segment names: `Color` in
@@ -647,6 +646,16 @@ impl Resolver<'_> {
         self.scopes
             .resolve_value(self.module, name)
             .map_or(Resolution::Unresolved, Resolution::Def)
+    }
+
+    /// `ns::member` through a namespace import, which registers each member
+    /// under its `ns$member` alias.
+    fn namespace_member(&self, namespace: &str, member: &str) -> Resolution {
+        self.symbols
+            .imported(self.module, &namespace_member_alias(namespace, member))
+            .map_or(Resolution::Unresolved, |sym| {
+                Resolution::Def(self.defs.def_at(sym.defined_at))
+            })
     }
 
     fn resolve_name(&self, name: &str) -> Resolution {
@@ -978,6 +987,13 @@ impl AstVisitor for Resolver<'_> {
     /// The parameters and the body's own bindings share one scope, so a `let`
     /// taking a parameter's name redeclares it.
     fn visit_function(&mut self, func: &ast::Function) {
+        for target in &func.export_targets {
+            let answer = match &target.namespace {
+                Some(ns) => self.namespace_member(ns, &target.world),
+                None => self.resolve_name(&target.world),
+            };
+            self.record(target.id, answer);
+        }
         self.in_scope(&func.type_params, None, |s| {
             s.in_frame(|s| {
                 for param in &func.params {
@@ -1263,15 +1279,7 @@ impl AstVisitor for Resolver<'_> {
                 // different declaration that happens to share the name.
                 let answer = match self.binder(&ns.namespace) {
                     Some(base) => Resolution::Projection(base),
-                    None => self
-                        .symbols
-                        .imported(
-                            self.module,
-                            &namespace_member_alias(&ns.namespace, &ns.name),
-                        )
-                        .map_or(Resolution::Unresolved, |sym| {
-                            Resolution::Def(self.defs.def_at(sym.defined_at))
-                        }),
+                    None => self.namespace_member(&ns.namespace, &ns.name),
                 };
                 self.record(ns.id, answer);
                 for arg in &ns.args {

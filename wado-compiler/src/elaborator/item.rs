@@ -1516,7 +1516,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return true;
         }
         match type_table.get(base) {
-            ResolvedType::Ref(t) | ResolvedType::MutRef(t) | ResolvedType::Reactive(t) => {
+            ResolvedType::Ref(t) | ResolvedType::MutRef(t) => {
                 self.type_contains_slice_view_inner(type_table, *t, visited)
             }
             ResolvedType::BuiltinArray(t) => {
@@ -1566,10 +1566,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
         match type_table.get(type_id) {
             ResolvedType::Function { .. } => true,
-            ResolvedType::Ref(t)
-            | ResolvedType::MutRef(t)
-            | ResolvedType::Reactive(t)
-            | ResolvedType::BuiltinArray(t) => {
+            ResolvedType::Ref(t) | ResolvedType::MutRef(t) | ResolvedType::BuiltinArray(t) => {
                 self.type_contains_closure_inner(type_table, *t, visited)
             }
             ResolvedType::GenericInstance { type_args, .. }
@@ -2518,6 +2515,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // parameter default, and nothing crossing the Component Model boundary
         // takes a closure: the ABI represents neither.
         let crosses_cm_boundary = func.is_export || func.is_cm_import();
+        for target in &func.export_targets {
+            let names_world = scope
+                .tysys
+                .resolutions
+                .declared(target.id)
+                .is_some_and(|def| scope.tysys.resolutions.defs().kind(def) == DefKind::World);
+            if !names_world {
+                let _ = scope.emit(TypeError::ExportTargetNotWorld {
+                    world: target.world.clone(),
+                    span: target.span,
+                });
+            }
+        }
 
         let mut param_types = Vec::with_capacity(func.params.len());
         for param in &func.params {

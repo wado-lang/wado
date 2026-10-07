@@ -407,6 +407,18 @@ fn test_format_visibility_modifiers_roundtrip() {
     assert_eq!(formatted, formatted2, "format should be idempotent");
 }
 
+/// `export(World::name, …)` keeps every target, namespaced or not.
+#[test]
+fn test_format_keeps_export_targets() {
+    let source = "export(Command::run,cli::Daemon::run) async fn main() {}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(
+        formatted,
+        "export(Command::run, cli::Daemon::run) async fn main() {\n}\n"
+    );
+    assert_format_preserves_ast(source);
+}
+
 #[test]
 fn test_format_field_visibility_modifiers_roundtrip() {
     let source = "struct S {\n    pub a: i32,\n    internal b: i32,\n    c: i32,\n}\n";
@@ -466,24 +478,6 @@ fn test_format_drops_explicit_unit_return_type() {
         "a closure's unit return type is not the same declaration, got:\n{formatted}"
     );
     assert_format_preserves_ast(closure);
-}
-
-/// `reactive` is a prefix keyword that must precede `let`. The formatter used
-/// to emit `let reactive ...`, which the parser rejects ("expected pattern,
-/// found Reactive"), so formatting any `reactive let` binding produced output
-/// that no longer reparsed. Pin the keyword order and round-trip stability.
-#[test]
-fn test_format_reactive_let_keeps_keyword_order() {
-    let source = "fn run() {\n    reactive let mut r = 1;\n}\n";
-    let formatted = wado_compiler::format(source).expect("format failed");
-    assert!(
-        formatted.contains("reactive let mut r"),
-        "expected `reactive let` order, got:\n{formatted}"
-    );
-    // Formatted output must reparse and stay idempotent.
-    assert_format_preserves_ast(source);
-    let formatted2 = wado_compiler::format(&formatted).expect("reformat failed");
-    assert_eq!(formatted, formatted2, "format should be idempotent");
 }
 
 /// A `use { ... } from "..."` whose item list fits in 120 chars but whose

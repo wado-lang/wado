@@ -175,7 +175,6 @@ fn collapse_to_binding(
                 name: binding.name,
                 local_index: binding.local_index,
                 is_mut: false,
-                is_reactive: false,
                 type_id: payload_type,
                 value: Operand::Expr(payload),
                 // The payload is read out of the scrutinee, as the pattern
@@ -309,7 +308,6 @@ mod tests {
                 name: "p".into(),
                 local_index: 0,
                 is_mut: false,
-                is_reactive: false,
                 type_id: TypeTable::I32,
                 value: Operand::Expr(construct),
                 skip_value_copy: false,

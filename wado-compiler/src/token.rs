@@ -116,7 +116,6 @@ pub enum TokenKind {
     Effect,
     Interface,
     Reactive,
-    Unique,
     Struct,
     Enum,
     Variant,
@@ -298,7 +297,6 @@ impl fmt::Display for TokenKind {
             | Self::Effect
             | Self::Interface
             | Self::Reactive
-            | Self::Unique
             | Self::Struct
             | Self::Enum
             | Self::Variant
@@ -498,7 +496,7 @@ pub fn canonical_token_bytes(out: &mut Vec<u8>, kind: &TokenKind) {
         MinusEq, Mut, Not, NotEq, Null, NumberLit, Of, Or, Percent, PercentEq, Pipe, PipeEq, Plus,
         PlusEq, Pub, Question, RBrace, RBracket, RParen, Reactive, Resource, Return, Semicolon,
         ShlEq, ShrEq, Slash, SlashEq, Star, StarEq, StringLit, Struct, TemplateStringLit, Tilde,
-        Trait, True, Type, Unique, Use, Variant, While, With, World,
+        Trait, True, Type, Use, Variant, While, With, World,
     };
     // `Error` is excluded: it only appears in malformed lex output, which
     // kiln gates out before reaching this function. Omitting it from the
@@ -546,7 +544,6 @@ pub fn canonical_token_bytes(out: &mut Vec<u8>, kind: &TokenKind) {
         Effect => write_str(out, b'V', "Effect"),
         Interface => write_str(out, b'V', "Interface"),
         Reactive => write_str(out, b'V', "Reactive"),
-        Unique => write_str(out, b'V', "Unique"),
         Struct => write_str(out, b'V', "Struct"),
         Enum => write_str(out, b'V', "Enum"),
         Variant => write_str(out, b'V', "Variant"),

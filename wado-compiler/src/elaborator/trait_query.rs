@@ -1087,7 +1087,6 @@ impl TypeSystem {
             | ResolvedType::Flags { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::GenericResource { .. }
-            | ResolvedType::Reactive(_)
             | ResolvedType::Unit
             | ResolvedType::Never
             | ResolvedType::Unknown

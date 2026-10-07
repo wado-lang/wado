@@ -5,11 +5,11 @@
 //!
 //! `sub/hlc.wasm` imports `test:hlc/highlight@0.1.0` and exports
 //! `test:hlc/hlc` (`wrap(code, lang) -> Wrapped`). A provider is compiled from
-//! source as `test:hlc/highlight@0.1.0` (`lib_interface_export`). We compose
+//! source as `test:hlc/highlight@0.1.0` (`is_provider`). We compose
 //! provider.export → hlc.import, export hlc's `wrap`, then call it: the host
 //! calls `wrap`, hlc calls its `highlight` import, the provider runs.
 
-use crate::common::compile_source_with_compiler_options;
+use crate::common::{compile_source_with_compiler_options, interface_export, lib_func};
 use std::path::Path;
 use wado_compiler::{CompilerOptions, OptLevel};
 
@@ -26,7 +26,7 @@ export fn highlight(code: String, lang: String) -> String {
     let options = CompilerOptions {
         opt_level: OptLevel::O2,
         lib_world: Some(GUEST_IFACE_FQ.to_string()),
-        lib_interface_export: true,
+        is_provider: true,
         ..Default::default()
     };
     compile_source_with_compiler_options(Path::new("provider.wado"), source, options)
@@ -91,14 +91,7 @@ fn provider_satisfies_dep_import_and_roundtrips() {
 
     use wasmtime::component::Val;
 
-    // Look up `wrap` inside the exported `test:hlc/hlc` interface instance.
-    let (_, iface) = instance
-        .get_export(&mut store, None, DEP_EXPORT_FQ)
-        .expect("hlc interface export");
-    let (_, wrap_idx) = instance
-        .get_export(&mut store, Some(&iface), "wrap")
-        .expect("wrap export");
-    let wrap = instance.get_func(&mut store, wrap_idx).expect("wrap func");
+    let wrap = lib_func(&mut store, &instance, DEP_EXPORT_FQ, "wrap");
 
     let mut results = [Val::Bool(false)];
     wrap.call(
@@ -178,8 +171,9 @@ export fn go(code: String, lang: String) -> String {
         .instantiate(&mut store, &component)
         .expect("instantiate");
 
+    let go = interface_export(&mut store, &instance, "test:consumer/consumer@0.1.0", "go");
     let go = instance
-        .get_typed_func::<(&str, &str), (String,)>(&mut store, "go")
+        .get_typed_func::<(&str, &str), (String,)>(&mut store, &go)
         .expect("go export (code, lang) -> string");
     let (text,) = go
         .call(&mut store, ("y", "wado"))

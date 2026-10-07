@@ -96,7 +96,6 @@ fn hello_compile_opts(output_path: &Path, format: Option<OutputFormat>) -> Compi
         embed: EmbedOptions::default(),
         target_world: None,
         lib_world: None,
-        lib_interface_export: false,
         // Input is an explicit `.wado` file, so this is not manifest-driven.
         manifest_driven: false,
     }

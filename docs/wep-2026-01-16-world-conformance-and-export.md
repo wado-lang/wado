@@ -19,7 +19,7 @@ Currently, Wado has:
 
 To properly support Component Model worlds, we need:
 
-1. **Explicit world conformance declaration**: Verify that a module satisfies a world's requirements (similar to interface implementation in other languages)
+1. **World conformance**: Verify that a module satisfies a world's requirements (similar to interface implementation in other languages)
 2. **CM boundary export**: Generate ABI glue code to expose functions across the Component Model boundary (like `extern "C"` in C/Rust)
 3. **Multiple world support**: Allow a single module to conform to multiple worlds
 4. **Conflict resolution**: Handle cases where multiple worlds export functions with the same name
@@ -27,8 +27,8 @@ To properly support Component Model worlds, we need:
 ### Design Goals
 
 - **No attribute syntax**: Avoid Rust-style `#[...]` attributes which can become chaotic
-- **Clear separation of concerns**: Distinguish between Wado module visibility (`pub`), world conformance declaration, and CM boundary export
-- **Implicit conformance**: Allow world conformance to be inferred from exports (like Go's interfaces)
+- **Clear separation of concerns**: Distinguish between Wado module visibility (`pub`) and CM boundary export
+- **Implicit conformance**: Infer world conformance from exports (like Go's interfaces)
 - **Align with WIT**: Use `export` keyword consistent with WIT syntax
 
 ## Decision
@@ -40,7 +40,7 @@ Visibility is two orthogonal axes — superseded by [WEP: Visibility —
 Summary: `internal` (package) and `pub` (library) form a scope ladder; `export`
 is an additive CM-boundary flag with `export ⟹ pub`. This WEP's original
 two-keyword table (`pub` = Wado modules, `export` = CM) is replaced by that
-model; the `contract` and export-mapping syntax below is unaffected.
+model; the export-mapping syntax below is unaffected.
 
 - **`export`**: Generates Component Model ABI glue code, making the item
   accessible across the CM boundary (and, by `export ⟹ pub`, part of the
@@ -48,44 +48,46 @@ model; the `contract` and export-mapping syntax below is unaffected.
 
 ### World as First-Class Entity
 
-Worlds are imported like other Wado entities:
+A world is a Wado declaration (`pub world Command { ... }`), imported like other
+Wado entities:
 
 ```wado
 use { Command } from "wasi:cli";
 ```
 
-### `contract` Declaration
+### World Selection
 
-Declares that this module conforms to a specified world:
+A module does not name its world in source. The package's `wado.toml` maps each
+world to an entry module, or `--world` selects one for a single file. The
+compiler checks conformance against the selected world: the entry point it
+exports, the `export` on it, and its signature.
 
-```wado
-use { Command } from "wasi:cli";
-
-contract Command;
-```
-
-- One world per line; multiple worlds supported via multiple declarations
-- Triggers compile-time verification that all world requirements are satisfied
-- **Optional**: If omitted, the runtime environment determines the expected world (e.g., `wado run` expects `wasi:cli/Command`)
+This WEP first proposed a `contract World;` declaration for that purpose. It is
+not adopted. The manifest already names the world, and a second place to name it
+would need a rule for when the two disagree. A module that serves two worlds is
+the entry module of both in the manifest.
 
 ### Explicit Export Mapping
 
 When function names don't match world export names, or when exporting to multiple worlds:
 
 ```wado
-use { Command, HttpServer } from "wasi:cli";
-
-contract Command;
-contract HttpServer;
+use { Command, Daemon } from "my:worlds";
 
 // Explicit mapping to a single world
-export(Command::run) pub fn run_cli() { ... }
+export(Command::run) fn run_cli() { ... }
 
 // Export to multiple worlds
-export(Command::run, HttpServer::run) pub fn shared_run() { ... }
+export(Command::run, Daemon::run) fn shared_run() { ... }
 ```
 
 If signature matches, a single `export fn` can satisfy multiple worlds without explicit mapping.
+
+A target in a world other than the selected one exports nothing and is checked
+against that world's signature, so a module serving two worlds learns of a
+mismatch whichever one it is compiled for. The mapped function is exported only
+under the mapped name. A second provider of the same export, mapped or named,
+is an error rather than a precedence rule.
 
 ### Type Export
 
@@ -98,50 +100,35 @@ export(SomeWorld::MyType) struct AliasedRecord { x: i32 }
 
 ### World Imports and Effect System
 
-World imports (dependencies the component needs from its host) are not explicitly declared. Instead:
-
-- Use `use` to import capabilities from WASI modules
-- Effect system tracks which capabilities a function requires
-- **Compile-time check**: Using an effect not provided by the world's imports is a compile error
+A program declares its imports through its effects. No effect is performed
+without a `with` clause naming it. Unless a handler takes the effect over, that
+clause tells the compiler to import the effect's interface. No separate import
+declaration exists.
 
 ```wado
-use { Command } from "wasi:cli";
-use { Stdout } from "wasi:cli";  // Required for println
-
-contract Command;
+use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
-    println("Hello!");  // OK: Command world imports Stdout
+    println("Hello!");  // the component imports the interface behind Stdout
 }
 ```
+
+An effect the selected world does not import is imported all the same, not
+rejected. The program has already declared it, and whether the host provides it
+is the host's call: a `wasi:cli/command` program performing `wasi:http/types`
+operations compiles to a component importing `wasi:http/types`, which a host
+that lacks it refuses to instantiate.
 
 ## Examples
 
-### Simple Case: CLI Application
+### CLI Application
 
 ```wado
-use { Command } from "wasi:cli";
 use { println, Stdout } from "core:cli";
 
-contract Command;
-
+// `wado run` selects the Command world
 export fn run() with Stdout {
     println("Hello, World!");
-}
-```
-
-### Implicit World Conformance
-
-For simple scripts, `contract` can be omitted:
-
-```wado
-use { println, Stdout } from "core:cli";
-
-// No contract declaration - runtime determines expected world
-// `wado run` expects Command world
-
-export fn run() with Stdout {
-    println("Hello!");
 }
 ```
 
@@ -150,14 +137,11 @@ export fn run() with Stdout {
 ```wado
 use { Command, Daemon } from "my:worlds";
 
-contract Command;
-contract Daemon;
-
-export(Command::run) pub fn run_cli() {
+export(Command::run) fn run_cli() {
     println("CLI mode");
 }
 
-export(Daemon::run) pub fn run_daemon() {
+export(Daemon::run) fn run_daemon() {
     loop {
         // Daemon loop
     }
@@ -167,66 +151,43 @@ export(Daemon::run) pub fn run_daemon() {
 ### Shared Implementation Across Worlds
 
 ```wado
-use { Command, HttpServer } from "my:worlds";
-
-contract Command;
-contract HttpServer;
+use { Command, Daemon } from "my:worlds";
 
 // Both worlds have compatible `run` - export to both
-export(Command::run, HttpServer::run) pub fn run() {
+export(Command::run, Daemon::run) fn run() {
     initialize();
     serve();
 }
 ```
 
-## Keyword Selection Rationale
-
-| Keyword      | Pros                               | Cons                           | Decision     |
-| ------------ | ---------------------------------- | ------------------------------ | ------------ |
-| `implements` | Common in OOP languages            | Strong class-level connotation | Rejected     |
-| `conforms`   | Clear protocol conformance meaning | Slightly verbose               | Considered   |
-| `confirms`   | Declarative reading                | Unusual verb form              | Considered   |
-| `contract`   | Clear boundary contract semantics  | N/A                            | **Accepted** |
-
-**Why `contract`:**
-
-- "This module satisfies the specified world contract"
-- Natural for multiple declarations: `contract A; contract B;`
-- Aligns with Component Model terminology
-- Works as both noun and verb in singular form
-
 ## Consequences
 
 ### Positive
 
-- **Explicit world conformance**: Developers can verify their module satisfies world requirements
-- **Implicit conformance option**: Simple scripts work without boilerplate (like Go interfaces)
-- **Multiple world support**: Natural syntax for conforming to multiple worlds
+- **Implicit conformance**: Simple scripts work without boilerplate (like Go interfaces)
+- **One place names the world**: the manifest or the command line, never the source as well
 - **Conflict resolution**: Explicit mapping syntax resolves name conflicts
 - **Clear separation**:
   - `pub`: Wado module visibility
   - `export`: CM boundary accessibility
-  - `contract`: World conformance verification (optional)
-- **Effect system integration**: World import requirements checked at compile time
+- **Effect system integration**: the effects a program declares are its imports, with no second declaration
 
 ### Negative
 
-- **More keywords**: Introduces `contract` and extends `export` syntax
-- **Three concepts**: Developers must understand `pub`, `export`, and `contract`
+- **Extended `export` syntax**: `export(World::name)` adds a form to learn
+- **Conformance is not visible in source**: a reader learns a module's world from the manifest
 
 ## Known gaps
 
-The design is to be reviewed again before it is implemented, so the
-specification states the current behaviour and leaves the rest undecided.
-
-- `contract` does not parse. No declaration names the world a module conforms
-  to, so the world comes from the command line or the manifest alone.
-- `export(World::name)` mapping and type export do not parse.
-- An effect the selected world does not import is not rejected. The compiler
-  adds the interface to the component's imports instead: a `wasi:cli/command`
-  program performing `wasi:http/types` operations compiles to a component
-  importing `wasi:http/types`, which the host then refuses to instantiate or
-  provides by accident.
+- Type export, `export(World::Type) struct`, does not parse.
+- Only a standard library world can be named in `export(…)`: a world a package
+  declares is not registered, so the compiler reports it as one no compilation
+  can target.
+- `export(…)` is honoured only in the entry module.
+- The world and export checks run when the component is built, so `wado check`
+  and the language service do not report them, and their errors carry no span.
+- The language service answers neither hover nor go-to-definition on a target
+  in `export(…)`.
 
 ## References
 

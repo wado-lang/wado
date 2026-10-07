@@ -104,9 +104,11 @@ pub fn hole_get<T, V>(t: &T, index: i32) -> V;
 /// Renders hole `index` of template `t` through its specifier into `f`.
 /// Rewritten by lowering to the per-shape helper synthesized alongside
 /// `ReflectTemplate` (WEP 2026-01-10). Used by `TemplateHole::fmt`. It runs
-/// the hole's `Display` impl, which may do anything a body may.
+/// the hole's `Display` impl, which may do anything a body may. It never
+/// suspends: `suspend` stands in for reading and writing globals, which no
+/// other fact states yet.
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn hole_fmt<T>(t: &T, index: i32, f: &mut Formatter);
 
 /// Returns the length of a GC array. `array.len` reads the header, so the
@@ -496,16 +498,18 @@ pub fn stream_read(handle: i32, ptr: i32, max: i32) -> i32;
 #[side_effect(opaque)]
 pub fn stream_write(handle: i32, ptr: i32, len: i32) -> i32;
 
-/// Cancel an in-progress read on a readable stream.
+/// Cancel an in-progress read on a readable stream, blocking until the
+/// cancellation completes.
 #[canonical("wasi", "stream-cancel-read")]
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn stream_cancel_read(handle: i32) -> i32;
 
-/// Cancel an in-progress write on a writable stream.
+/// Cancel an in-progress write on a writable stream, blocking until the
+/// cancellation completes.
 #[canonical("wasi", "stream-cancel-write")]
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn stream_cancel_write(handle: i32) -> i32;
 
 /// Drop a readable stream handle.
@@ -543,16 +547,18 @@ pub fn future_read(handle: i32, ptr: i32) -> i32;
 #[side_effect(opaque)]
 pub fn future_write(handle: i32, ptr: i32) -> i32;
 
-/// Cancel an in-progress read on a future.
+/// Cancel an in-progress read on a future, blocking until the cancellation
+/// completes.
 #[canonical("wasi", "future-cancel-read")]
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn future_cancel_read(handle: i32) -> i32;
 
-/// Cancel an in-progress write on a future.
+/// Cancel an in-progress write on a future, blocking until the cancellation
+/// completes.
 #[canonical("wasi", "future-cancel-write")]
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn future_cancel_write(handle: i32) -> i32;
 
 /// Drop a readable future handle.
@@ -579,7 +585,7 @@ pub fn waitable_set_new() -> i32;
 /// Returns the event code (i32).
 #[canonical("wasi", "waitable-set-wait")]
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn waitable_set_wait(ws: i32, outptr: i32) -> i32;
 
 /// Non-blocking poll.  Writes (handle, payload) to `outptr`.
@@ -603,10 +609,10 @@ pub fn waitable_set_drop(ws: i32);
 #[side_effect(opaque)]
 pub fn subtask_drop(handle: i32);
 
-/// Cancel an in-progress subtask.
+/// Cancel an in-progress subtask, blocking until it resolves.
 #[canonical("wasi", "subtask-cancel")]
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn subtask_cancel(handle: i32);
 
 /// Join a waitable (subtask/stream/future) to a waitable set.
@@ -677,16 +683,18 @@ pub fn task_cancel();
 /// Returns the subtask handle for the async operation.
 /// Internal only: used by core:rt for ambient logging (panic, assert).
 /// Public API should use Stdout::write_via_stream() through the effect system.
+/// It calls the Component Model import, so it may suspend as one does.
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn call_indirect_stdout_write_via_stream(rx: i32) -> i32;
 
 /// Calls stderr's write_via_stream indirectly (ambient, no effect required).
 /// Returns the subtask handle for the async operation.
 /// Internal only: used by core:rt for ambient logging (panic, assert).
 /// Public API should use Stderr::write_via_stream() through the effect system.
+/// It calls the Component Model import, so it may suspend as one does.
 #[storage(none)]
-#[side_effect(opaque)]
+#[side_effect(opaque, suspend)]
 pub fn call_indirect_stderr_write_via_stream(rx: i32) -> i32;
 /// Absolute value of f32
 /// Maps to Wasm f32.abs instruction

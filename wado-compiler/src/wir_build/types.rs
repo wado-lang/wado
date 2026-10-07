@@ -57,8 +57,7 @@ fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String>
         }
         ResolvedType::BuiltinArray(inner)
         | ResolvedType::Ref(inner)
-        | ResolvedType::MutRef(inner)
-        | ResolvedType::Reactive(inner) => get_type_dependencies(type_table, *inner),
+        | ResolvedType::MutRef(inner) => get_type_dependencies(type_table, *inner),
         ResolvedType::GenericResource { type_args, .. } => type_args
             .iter()
             .flat_map(|a| get_type_dependencies(type_table, *a))
