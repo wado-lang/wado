@@ -2778,7 +2778,8 @@ fn build_inlined_labeled_block(
             kind: StmtKind::Let {
                 name: binding.name,
                 local_index: new_local_index,
-                is_mut: binding.is_mut,                type_id: binding.local_type,
+                is_mut: binding.is_mut,
+                type_id: binding.local_type,
                 value: binding.value,
                 skip_value_copy: false,
             },
@@ -3046,21 +3047,18 @@ pub(super) fn splice_stmt(
         StmtKind::Let {
             name,
             local_index,
-            is_mut,            type_id,
+            is_mut,
+            type_id,
             value,
             skip_value_copy,
         } => {
             let (li, v) = (*local_index, *value);
-            let (name, is_mut, type_id, scv) = (
-                name.clone(),
-                *is_mut,
-                *type_id,
-                *skip_value_copy,
-            );
+            let (name, is_mut, type_id, scv) = (name.clone(), *is_mut, *type_id, *skip_value_copy);
             StmtKind::Let {
                 name,
                 local_index: ctx.local(li),
-                is_mut,                type_id,
+                is_mut,
+                type_id,
                 value: splice_operand(caller, callee, v, ctx),
                 skip_value_copy: scv,
             }

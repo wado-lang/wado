@@ -5450,7 +5450,8 @@ impl TypeTable {
                     self.head_name(*def, qualified),
                     arg_names.join(", ")
                 )
-            }            ResolvedType::TypeParam { name, .. } | ResolvedType::AssocParam { name, .. } => {
+            }
+            ResolvedType::TypeParam { name, .. } | ResolvedType::AssocParam { name, .. } => {
                 name.clone()
             }
             ResolvedType::InferVar(var) => self.infer_var_name(*var),
@@ -5989,7 +5990,8 @@ impl TypeTable {
                     name: self.def_name(*def).to_string(),
                     args,
                 }
-            }            ResolvedType::AssocTypeProjection {
+            }
+            ResolvedType::AssocTypeProjection {
                 param_id,
                 assoc_name,
                 args,
@@ -7889,7 +7891,8 @@ impl TypeTable {
         };
         match (self.get(a), self.get(b)) {
             (ResolvedType::Ref(x), ResolvedType::Ref(y))
-            | (ResolvedType::MutRef(x), ResolvedType::MutRef(y))            | (ResolvedType::BuiltinArray(x), ResolvedType::BuiltinArray(y)) => {
+            | (ResolvedType::MutRef(x), ResolvedType::MutRef(y))
+            | (ResolvedType::BuiltinArray(x), ResolvedType::BuiltinArray(y)) => {
                 Some(all(&[*x], &[*y]))
             }
             (

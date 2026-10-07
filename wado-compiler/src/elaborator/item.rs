@@ -1566,8 +1566,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
         match type_table.get(type_id) {
             ResolvedType::Function { .. } => true,
-            ResolvedType::Ref(t)
-            | ResolvedType::MutRef(t)            | ResolvedType::BuiltinArray(t) => {
+            ResolvedType::Ref(t) | ResolvedType::MutRef(t) | ResolvedType::BuiltinArray(t) => {
                 self.type_contains_closure_inner(type_table, *t, visited)
             }
             ResolvedType::GenericInstance { type_args, .. }

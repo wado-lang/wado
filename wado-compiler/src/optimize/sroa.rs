@@ -1101,7 +1101,8 @@ fn rewrite_expr(engine: &mut Engine, id: ExprId, ctx: &Rewrite) {
                     StmtKind::Let {
                         name: name.clone(),
                         local_index: temp,
-                        is_mut: false,                        type_id: slot.type_id,
+                        is_mut: false,
+                        type_id: slot.type_id,
                         value,
                         skip_value_copy: true,
                     },
@@ -1176,7 +1177,8 @@ fn expand_struct_let(
             StmtKind::Let {
                 name: slot.name.clone(),
                 local_index: slot.local_index,
-                is_mut: false,                type_id: slot.type_id,
+                is_mut: false,
+                type_id: slot.type_id,
                 value,
                 skip_value_copy: true,
             },
@@ -1216,7 +1218,8 @@ fn push_field_let(
         StmtKind::Let {
             name: slot.name.clone(),
             local_index: slot.local_index,
-            is_mut,            type_id: slot.type_id,
+            is_mut,
+            type_id: slot.type_id,
             value,
             // The original literal was a fresh value, so its fields don't need
             // value_copy — see the original pass comment.

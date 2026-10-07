@@ -4845,7 +4845,8 @@ fn scalar_order_stmts(
             TirStmtKind::Let {
                 name: String::from(name),
                 local_index,
-                is_mut: false,                type_id: ty,
+                is_mut: false,
+                type_id: ty,
                 value,
                 storage: LetStorage::Planned,
             },
@@ -5236,7 +5237,8 @@ fn build_struct_ord_body(
             TirStmtKind::Let {
                 name: "c".to_string(),
                 local_index: local_idx,
-                is_mut: false,                type_id: ordering_type,
+                is_mut: false,
+                type_id: ordering_type,
                 value: cmp_result,
                 storage: LetStorage::Planned,
             },

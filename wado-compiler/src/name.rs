@@ -1866,7 +1866,8 @@ pub fn format_type_name(info: TypeNameInfo) -> String {
         TypeNameInfo::Generic { name, args } => mangle_generic_name(&name, &args),
         TypeNameInfo::Tuple(elems) => mangle_tuple_type(&elems),
         TypeNameInfo::Option(inner) => mangle_option_type(&inner),
-        TypeNameInfo::BuiltinArray(elem) => mangle_builtin_array_type(&elem),        TypeNameInfo::Ref(inner) => inner,
+        TypeNameInfo::BuiltinArray(elem) => mangle_builtin_array_type(&elem),
+        TypeNameInfo::Ref(inner) => inner,
         TypeNameInfo::Unknown => "unknown".to_string(),
     }
 }

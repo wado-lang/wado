@@ -591,7 +591,8 @@ fn build_dispatch_wrapper_function(
         TirStmtKind::Let {
             name: "$saved".to_string(),
             local_index: saved_local,
-            is_mut: false,            type_id: nullable_ref_type_id,
+            is_mut: false,
+            type_id: nullable_ref_type_id,
             value: global_get_expr,
             storage: LetStorage::Aliased,
         },
@@ -665,7 +666,8 @@ fn build_dispatch_wrapper_function(
             TirStmtKind::Let {
                 name: "$result".to_string(),
                 local_index: rl,
-                is_mut: false,                type_id: return_type,
+                is_mut: false,
+                type_id: return_type,
                 value: indirect_call,
                 storage: LetStorage::Planned,
             },
@@ -1579,7 +1581,8 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                     TirStmtKind::Let {
                         name: name.clone(),
                         local_index: local,
-                        is_mut: false,                        type_id: handler_type,
+                        is_mut: false,
+                        type_id: handler_type,
                         value: binding.handler.clone(),
                         storage: LetStorage::Aliased,
                     },
@@ -1595,7 +1598,8 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                 TirStmtKind::Let {
                     name: name.clone(),
                     local_index: local,
-                    is_mut: false,                    type_id: handler_type,
+                    is_mut: false,
+                    type_id: handler_type,
                     value: binding.handler.clone(),
                     storage: LetStorage::Aliased,
                 },
@@ -1619,7 +1623,8 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             TirStmtKind::Let {
                 name: save_name.clone(),
                 local_index: save_local,
-                is_mut: false,                type_id: plan.nullable_ref_type_id,
+                is_mut: false,
+                type_id: plan.nullable_ref_type_id,
                 value: global_get,
                 storage: LetStorage::Aliased,
             },
@@ -1691,7 +1696,8 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             TirStmtKind::Let {
                 name: d_name.clone(),
                 local_index: d_local,
-                is_mut: false,                type_id: plan.struct_type_id,
+                is_mut: false,
+                type_id: plan.struct_type_id,
                 value: struct_lit,
                 storage: LetStorage::Taken,
             },
@@ -1782,7 +1788,8 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             TirStmtKind::Let {
                 name: name.clone(),
                 local_index: local,
-                is_mut: false,                type_id: result_type,
+                is_mut: false,
+                type_id: result_type,
                 value: body_expr,
                 storage: LetStorage::Planned,
             },
@@ -1875,7 +1882,8 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
                     TirStmtKind::Let {
                         name: temp_name.clone(),
                         local_index: temp_local,
-                        is_mut: false,                        type_id: value_type,
+                        is_mut: false,
+                        type_id: value_type,
                         value: value_expr,
                         storage: LetStorage::Aliased,
                     },

@@ -743,7 +743,8 @@ impl Lowering {
             }
             ResolvedType::AssocParam { .. } => param(Binder::Family(id))
                 .map(SolverType::Param)
-                .ok_or(Unsaid::Open),            ResolvedType::InferVar(_) => Err(Unsaid::Open),
+                .ok_or(Unsaid::Open),
+            ResolvedType::InferVar(_) => Err(Unsaid::Open),
             ResolvedType::Unknown | ResolvedType::Error => Err(Unsaid::Failed),
         }
     }

@@ -1050,7 +1050,8 @@ mod tests {
             StmtKind::Let {
                 name: format!("$l{index}"),
                 local_index: index,
-                is_mut: false,                type_id: ty(),
+                is_mut: false,
+                type_id: ty(),
                 value: value.into(),
                 skip_value_copy: false,
             },

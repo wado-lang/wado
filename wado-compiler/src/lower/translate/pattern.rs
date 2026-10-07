@@ -920,7 +920,8 @@ impl<'a> PatternLowerer<'a> {
                     TirStmtKind::Let {
                         name: temp_name,
                         local_index: temp_index,
-                        is_mut: false,                        type_id: pattern_type,
+                        is_mut: false,
+                        type_id: pattern_type,
                         value,
                         storage: LetStorage::Planned,
                     },
@@ -950,7 +951,8 @@ impl<'a> PatternLowerer<'a> {
                     TirStmtKind::Let {
                         name: temp_name.clone(),
                         local_index: temp_index,
-                        is_mut: false,                        type_id: pattern_type,
+                        is_mut: false,
+                        type_id: pattern_type,
                         value,
                         storage: LetStorage::Planned,
                     },
@@ -1013,7 +1015,8 @@ impl<'a> PatternLowerer<'a> {
                     TirStmtKind::Let {
                         name: temp_name.clone(),
                         local_index: temp_index,
-                        is_mut: false,                        type_id: pattern_type,
+                        is_mut: false,
+                        type_id: pattern_type,
                         value,
                         storage: LetStorage::Planned,
                     },
@@ -1074,7 +1077,8 @@ impl<'a> PatternLowerer<'a> {
                     TirStmtKind::Let {
                         name: temp_name.clone(),
                         local_index: temp_index,
-                        is_mut: false,                        type_id: pattern_type,
+                        is_mut: false,
+                        type_id: pattern_type,
                         value,
                         storage: LetStorage::Planned,
                     },
@@ -1151,7 +1155,8 @@ impl<'a> PatternLowerer<'a> {
                     TirStmtKind::Let {
                         name: temp_name.clone(),
                         local_index: temp_index,
-                        is_mut: false,                        type_id: pattern_type,
+                        is_mut: false,
+                        type_id: pattern_type,
                         value,
                         storage: LetStorage::Planned,
                     },
@@ -1200,7 +1205,8 @@ impl<'a> PatternLowerer<'a> {
                     TirStmtKind::Let {
                         name: temp_name.clone(),
                         local_index: temp_index,
-                        is_mut: false,                        type_id: pattern_type,
+                        is_mut: false,
+                        type_id: pattern_type,
                         value,
                         storage: LetStorage::Planned,
                     },
@@ -1258,7 +1264,8 @@ impl<'a> PatternLowerer<'a> {
                     TirStmtKind::Let {
                         name: temp_name.clone(),
                         local_index: temp_index,
-                        is_mut: false,                        type_id: pattern_type,
+                        is_mut: false,
+                        type_id: pattern_type,
                         value,
                         storage: LetStorage::Planned,
                     },
@@ -1316,7 +1323,8 @@ impl<'a> PatternLowerer<'a> {
                     TirStmtKind::Let {
                         name: temp_name.clone(),
                         local_index: temp_index,
-                        is_mut: false,                        type_id: pattern_type,
+                        is_mut: false,
+                        type_id: pattern_type,
                         value,
                         storage: LetStorage::Planned,
                     },
@@ -1583,7 +1591,8 @@ impl<'a> PatternLowerer<'a> {
                 value,
                 name,
                 local_index,
-                is_mut,                type_id,
+                is_mut,
+                type_id,
                 storage,
             } => {
                 // Lower expressions inside the Let value
@@ -1593,7 +1602,8 @@ impl<'a> PatternLowerer<'a> {
                     TirStmtKind::Let {
                         name,
                         local_index,
-                        is_mut,                        type_id,
+                        is_mut,
+                        type_id,
                         value,
                         storage,
                     },
@@ -1698,7 +1708,8 @@ impl<'a> PatternLowerer<'a> {
             TirStmtKind::Let {
                 name: name.to_string(),
                 local_index,
-                is_mut: self.locals[local_index as usize].is_mut,                type_id: binding_type,
+                is_mut: self.locals[local_index as usize].is_mut,
+                type_id: binding_type,
                 value,
                 storage: LetStorage::Planned,
             },
@@ -1779,7 +1790,8 @@ impl<'a> PatternLowerer<'a> {
             TirStmtKind::Let {
                 name,
                 local_index: temp,
-                is_mut: false,                type_id,
+                is_mut: false,
+                type_id,
                 value: hoisted,
                 storage: LetStorage::Planned,
             },
@@ -1811,7 +1823,8 @@ impl<'a> PatternLowerer<'a> {
             TirStmtKind::Let {
                 name: name.clone(),
                 local_index,
-                is_mut: false,                type_id,
+                is_mut: false,
+                type_id,
                 value,
                 storage: LetStorage::Planned,
             },

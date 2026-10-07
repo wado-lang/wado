@@ -164,7 +164,8 @@ impl WriteBack<'_> {
             TirStmtKind::Let {
                 name: name.clone(),
                 local_index: index,
-                is_mut,                type_id,
+                is_mut,
+                type_id,
                 value,
                 storage,
             },

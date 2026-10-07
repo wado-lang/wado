@@ -954,7 +954,8 @@ impl FunctionTranslator<'_, '_> {
             StmtKind::Let {
                 name: format!("$deref_ref_{ref_idx}"),
                 local_index: ref_idx,
-                is_mut: false,                type_id: ref_type_id,
+                is_mut: false,
+                type_id: ref_type_id,
                 value: ref_nir.into(),
                 // Translator-synthesized binding — never a user-visible
                 // defensive copy. See the equivalent flag on the
@@ -967,7 +968,8 @@ impl FunctionTranslator<'_, '_> {
             StmtKind::Let {
                 name: format!("$deref_val_{val_idx}"),
                 local_index: val_idx,
-                is_mut: false,                type_id: inner_type_id,
+                is_mut: false,
+                type_id: inner_type_id,
                 value: val_nir,
                 // The copy decision is made above (`should_wrap_value_copy`), so
                 // this synthesized binding must not re-wrap.
@@ -1133,7 +1135,8 @@ impl FunctionTranslator<'_, '_> {
             TirStmtKind::Let {
                 name,
                 local_index,
-                is_mut,                type_id,
+                is_mut,
+                type_id,
                 value,
                 storage,
             } => {
@@ -1164,7 +1167,8 @@ impl FunctionTranslator<'_, '_> {
                 StmtKind::Let {
                     name: name.clone(),
                     local_index: *local_index,
-                    is_mut: *is_mut,                    type_id: effective_type,
+                    is_mut: *is_mut,
+                    type_id: effective_type,
                     value: value_op,
                     skip_value_copy: storage.skips_copy(),
                 }
@@ -1411,7 +1415,8 @@ impl FunctionTranslator<'_, '_> {
                 TirStmtKind::Let {
                     name: "$wide_scrut".to_string(),
                     local_index: scrut_idx,
-                    is_mut: false,                    type_id: scrutinee.type_id,
+                    is_mut: false,
+                    type_id: scrutinee.type_id,
                     value: (**scrutinee).clone(),
                     // Translator-synthesized; invisible to
                     // `value_copy::analyze`'s seed walker, so any

@@ -283,7 +283,8 @@ impl TypeSystem {
             // `i32.eq` against a GC reference and fails validation.
             ResolvedType::Function { .. }
             | ResolvedType::Resource { .. }
-            | ResolvedType::GenericResource { .. }            | ResolvedType::AssocTypeProjection { .. } => true,
+            | ResolvedType::GenericResource { .. }
+            | ResolvedType::AssocTypeProjection { .. } => true,
             // `Array<T>` is a GC array reference: `i32.eq` against it produces
             // invalid core Wasm, and `wir_build` panics before that ("no scalar
             // lowering for BuiltinArray"). Its comparison dispatches through the

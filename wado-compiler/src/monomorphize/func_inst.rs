@@ -3039,7 +3039,8 @@ impl Monomorphizer {
                 TirStmtKind::Let {
                     name: temp_name.clone(),
                     local_index: temp_local_idx,
-                    is_mut: false,                    type_id: iterable_type,
+                    is_mut: false,
+                    type_id: iterable_type,
                     value: iterable.clone(),
                     storage: LetStorage::Planned,
                 },
@@ -3112,7 +3113,8 @@ impl Monomorphizer {
                     TirStmtKind::Let {
                         name: b_name.clone(),
                         local_index: iter_binding,
-                        is_mut: b_mut,                        type_id: bind_type,
+                        is_mut: b_mut,
+                        type_id: bind_type,
                         value: bind_value,
                         storage: LetStorage::Taken,
                     },
@@ -3178,7 +3180,8 @@ impl Monomorphizer {
                         if let TirStmtKind::Let {
                             name,
                             local_index,
-                            is_mut,                            value: orig_value,
+                            is_mut,
+                            value: orig_value,
                             ..
                         } = &orig_stmt.kind
                         {
@@ -3227,7 +3230,8 @@ impl Monomorphizer {
                                 TirStmtKind::Let {
                                     name: name.clone(),
                                     local_index: *local_index,
-                                    is_mut: *is_mut,                                    type_id: field_type,
+                                    is_mut: *is_mut,
+                                    type_id: field_type,
                                     value: field_access,
                                     storage: LetStorage::Taken,
                                 },
@@ -3586,7 +3590,8 @@ impl Monomorphizer {
                     TirStmtKind::Let {
                         name: b_name.clone(),
                         local_index: iter_binding,
-                        is_mut: false,                        type_id: bind_type,
+                        is_mut: false,
+                        type_id: bind_type,
                         value: bind_value,
                         storage: LetStorage::Taken,
                     },
@@ -3641,7 +3646,8 @@ impl Monomorphizer {
                     TirStmtKind::Let {
                         name: name.clone(),
                         local_index: sub_local,
-                        is_mut: false,                        type_id: field_type,
+                        is_mut: false,
+                        type_id: field_type,
                         value: if inline_enumerate_pair {
                             if field_index == 0 {
                                 index_literal.clone()
@@ -3754,7 +3760,8 @@ impl Monomorphizer {
                 TirStmtKind::Let {
                     name: temp_name,
                     local_index: temp_local,
-                    is_mut: false,                    type_id: source_type,
+                    is_mut: false,
+                    type_id: source_type,
                     value: source,
                     storage: LetStorage::Planned,
                 },

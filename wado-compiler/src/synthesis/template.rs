@@ -483,7 +483,8 @@ fn build_template_block(
         TirStmtKind::Let {
             name: TEMPLATE_RESULT_LOCAL.to_string(),
             local_index: buf_index,
-            is_mut: true,            type_id: string_type,
+            is_mut: true,
+            type_id: string_type,
             value: with_capacity_call,
             storage: LetStorage::Planned,
         },
@@ -545,7 +546,8 @@ fn build_template_block(
                         TirStmtKind::Let {
                             name: TEMPLATE_FORMATTER_LOCAL.to_string(),
                             local_index: idx,
-                            is_mut: true,                            type_id: formatter_type,
+                            is_mut: true,
+                            type_id: formatter_type,
                             value: formatter_expr(),
                             storage: LetStorage::Planned,
                         },

@@ -792,7 +792,8 @@ fn check_cm_boundary_representable_inner(
             R::Never
             | R::Ref(_)
             | R::MutRef(_)
-            | R::Function { .. }            | R::TypeParam { .. }
+            | R::Function { .. }
+            | R::TypeParam { .. }
             | R::AssocParam { .. }
             | R::TypePack { .. }
             | R::InferVar(_)
@@ -1432,7 +1433,8 @@ pub(super) fn type_id_to_ast_type(
             cm_interface_registry,
         ))),
         ResolvedType::Never
-        | ResolvedType::Function { .. }        | ResolvedType::BuiltinArray(_)
+        | ResolvedType::Function { .. }
+        | ResolvedType::BuiltinArray(_)
         | ResolvedType::TypeParam { .. }
         | ResolvedType::AssocParam { .. }
         | ResolvedType::InferVar(_)

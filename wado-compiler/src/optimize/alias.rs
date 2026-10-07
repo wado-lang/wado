@@ -1018,7 +1018,8 @@ fn shared_object_key(type_id: TypeId, type_table: &TypeTable) -> Option<TypeKey>
             | ResolvedType::Resource { .. }
             | ResolvedType::Variant { .. }
             | ResolvedType::GenericResource { .. }
-            | ResolvedType::Function { .. }            | ResolvedType::TypeParam { .. }
+            | ResolvedType::Function { .. }
+            | ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
             | ResolvedType::AssocTypeProjection { .. }
@@ -1125,7 +1126,8 @@ fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
         | ResolvedType::Resource { .. }
         | ResolvedType::Variant { .. }
         | ResolvedType::GenericResource { .. }
-        | ResolvedType::Function { .. }        | ResolvedType::TypeParam { .. }
+        | ResolvedType::Function { .. }
+        | ResolvedType::TypeParam { .. }
         | ResolvedType::AssocParam { .. }
         | ResolvedType::TypePack { .. }
         | ResolvedType::AssocTypeProjection { .. }

@@ -3470,7 +3470,8 @@ fn let_stmt_b(name: &str, local_index: u32, type_id: TypeId, value: Build) -> St
             StmtKind::Let {
                 name: name.clone(),
                 local_index,
-                is_mut: false,                type_id,
+                is_mut: false,
+                type_id,
                 value,
                 skip_value_copy: false,
             },
@@ -3487,7 +3488,8 @@ fn let_mut_stmt_b(name: &str, local_index: u32, type_id: TypeId, value: Build) -
             StmtKind::Let {
                 name: name.clone(),
                 local_index,
-                is_mut: true,                type_id,
+                is_mut: true,
+                type_id,
                 value,
                 skip_value_copy: false,
             },

@@ -659,7 +659,8 @@ impl HeapEffects<'_> {
                 self.reach_into(*element, seen, out);
             }
             // A closure's environment holds whatever it captured.
-            ResolvedType::Function { .. }            | ResolvedType::TypeParam { .. }
+            ResolvedType::Function { .. }
+            | ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
             | ResolvedType::AssocTypeProjection { .. }

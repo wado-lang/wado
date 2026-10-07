@@ -176,7 +176,8 @@ impl Build<'_, '_> {
             StmtKind::Let {
                 name,
                 local_index,
-                is_mut: false,                type_id: ty,
+                is_mut: false,
+                type_id: ty,
                 value,
                 skip_value_copy: true,
             },

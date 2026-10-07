@@ -791,7 +791,8 @@ fn elab_stmt(
         TirStmtKind::Let {
             name,
             local_index,
-            is_mut,            type_id,
+            is_mut,
+            type_id,
             value,
             storage,
         } => {
@@ -808,7 +809,8 @@ fn elab_stmt(
                 kind: TirStmtKind::Let {
                     name,
                     local_index,
-                    is_mut,                    type_id,
+                    is_mut,
+                    type_id,
                     value,
                     storage,
                 },

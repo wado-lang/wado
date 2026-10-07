@@ -1822,7 +1822,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::Variant { .. }
             | ResolvedType::Flags { .. }
             | ResolvedType::Resource { .. }
-            | ResolvedType::GenericResource { .. }            | ResolvedType::BuiltinArray(_) => {}
+            | ResolvedType::GenericResource { .. }
+            | ResolvedType::BuiltinArray(_) => {}
         }
         let type_name = self.tysys.type_table.borrow().type_name(struct_type);
         let _ = self.emit(TypeError::FieldOfFieldless {

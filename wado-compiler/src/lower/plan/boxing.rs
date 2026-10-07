@@ -156,7 +156,8 @@ fn shadow_one_function(func: &mut TirFunction, plan: &BoxPlan, type_table: &Type
                 TirStmtKind::Let {
                     name: format!("$boxed_param_{param_idx}"),
                     local_index: *shadow_idx,
-                    is_mut: false,                    type_id: *box_type_id,
+                    is_mut: false,
+                    type_id: *box_type_id,
                     value: wrap,
                     storage: LetStorage::Taken,
                 },

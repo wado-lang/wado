@@ -2300,7 +2300,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 TirStmtKind::Let {
                     name: binding.name.to_string(),
                     local_index,
-                    is_mut,                    type_id,
+                    is_mut,
+                    type_id,
                     value: placeholder,
                     storage: LetStorage::Planned,
                 },
@@ -2349,7 +2350,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     TirStmtKind::Let {
                         name: name.clone(),
                         local_index,
-                        is_mut,                        type_id,
+                        is_mut,
+                        type_id,
                         value,
                         storage: LetStorage::Planned,
                     },
@@ -2934,7 +2936,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 TirStmtKind::Let {
                     name: cap_name,
                     local_index,
-                    is_mut: false,                    type_id,
+                    is_mut: false,
+                    type_id,
                     value: resolved,
                     storage: LetStorage::Planned,
                 },
@@ -2958,7 +2961,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 TirStmtKind::Let {
                     name: seen_local_name(&cap_name),
                     local_index: seen_index,
-                    is_mut: true,                    type_id: TypeTable::BOOL,
+                    is_mut: true,
+                    type_id: TypeTable::BOOL,
                     value: TirExpr::new(TirExprKind::BoolLiteral(false), TypeTable::BOOL, cap_span),
                     storage: LetStorage::Taken,
                 },
@@ -3079,7 +3083,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             TirStmtKind::Let {
                 name: render_name,
                 local_index: render_index,
-                is_mut: false,                type_id: string_type,
+                is_mut: false,
+                type_id: string_type,
                 value: choice,
                 storage: LetStorage::Planned,
             },
@@ -3162,7 +3167,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             TirStmtKind::Let {
                 name: cond_name.clone(),
                 local_index: cond_local_index,
-                is_mut: false,                type_id: cond_type,
+                is_mut: false,
+                type_id: cond_type,
                 value: cond_tir,
                 storage: LetStorage::Planned,
             },
@@ -3409,7 +3415,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             TirStmtKind::Let {
                 name: iter_var.clone(),
                 local_index: iter_local_index,
-                is_mut: true,                type_id: iter_type,
+                is_mut: true,
+                type_id: iter_type,
                 value: into_iter_call,
                 storage: LetStorage::Planned,
             },
@@ -3552,7 +3559,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             TirStmtKind::Let {
                 name: temp_name.clone(),
                 local_index: temp_local,
-                is_mut: false,                type_id: tuple_type_id,
+                is_mut: false,
+                type_id: tuple_type_id,
                 value: iterable,
                 storage: LetStorage::Planned,
             },
@@ -3662,7 +3670,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                 TirStmtKind::Let {
                                     name: name.clone(),
                                     local_index,
-                                    is_mut,                                    type_id: bind_elem_type,
+                                    is_mut,
+                                    type_id: bind_elem_type,
                                     value: bind_value,
                                     storage: LetStorage::Planned,
                                 },
@@ -3941,7 +3950,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 TirStmtKind::Let {
                     name: name.clone(),
                     local_index,
-                    is_mut,                    type_id: elem_type,
+                    is_mut,
+                    type_id: elem_type,
                     value: field_access,
                     storage: LetStorage::Planned,
                 },
@@ -4697,7 +4707,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     TirStmtKind::Let {
                         name: name.clone(),
                         local_index,
-                        is_mut: false,                        type_id: hole_ty,
+                        is_mut: false,
+                        type_id: hole_ty,
                         value,
                         storage: LetStorage::Planned,
                     },
@@ -5114,7 +5125,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 TirStmtKind::Let {
                     name: name.clone(),
                     local_index: index,
-                    is_mut: false,                    type_id,
+                    is_mut: false,
+                    type_id,
                     value,
                     storage: LetStorage::Planned,
                 },
@@ -5663,7 +5675,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             TirStmtKind::Let {
                 name: name.clone(),
                 local_index,
-                is_mut: false,                type_id,
+                is_mut: false,
+                type_id,
                 value,
                 storage: LetStorage::Planned,
             },
@@ -5794,7 +5807,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 TirStmtKind::Let {
                     name: mc.ref_name.clone(),
                     local_index: ref_index,
-                    is_mut: false,                    type_id: mc.ref_type,
+                    is_mut: false,
+                    type_id: mc.ref_type,
                     value: TirExpr::new(
                         TirExprKind::Unary {
                             op: TirUnaryOp::MutRef,
@@ -6165,7 +6179,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             name,
                             local_index: idx,
                             value,
-                            is_mut: false,                            type_id,
+                            is_mut: false,
+                            type_id,
                             storage: LetStorage::Planned,
                         },
                         span,
@@ -6266,7 +6281,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         TirStmtKind::Let {
                             name: "$acc".to_string(),
                             local_index: index,
-                            is_mut: true,                            type_id: output_type,
+                            is_mut: true,
+                            type_id: output_type,
                             value,
                             storage: LetStorage::Planned,
                         },
@@ -10163,7 +10179,8 @@ fn bind_to_local(
             name: name.clone(),
             local_index: index,
             value,
-            is_mut: false,            type_id,
+            is_mut: false,
+            type_id,
             storage: LetStorage::Planned,
         },
         span,

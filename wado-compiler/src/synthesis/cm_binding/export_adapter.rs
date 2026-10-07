@@ -888,7 +888,8 @@ pub(super) fn synthesize_lift_from_flat_params(
                 | ResolvedType::GenericInstance { .. }
                 | ResolvedType::Ref(_)
                 | ResolvedType::MutRef(_)
-                | ResolvedType::Function { .. }                | ResolvedType::TypeParam { .. }
+                | ResolvedType::Function { .. }
+                | ResolvedType::TypeParam { .. }
                 | ResolvedType::AssocParam { .. }
                 | ResolvedType::InferVar(_)
                 | ResolvedType::TypePack { .. }

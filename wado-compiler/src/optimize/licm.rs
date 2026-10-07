@@ -543,7 +543,8 @@ fn licm_loop(
                 StmtKind::Let {
                     name: hoist_name.clone(),
                     local_index: new_local_index,
-                    is_mut: false,                    type_id: candidate.type_id,
+                    is_mut: false,
+                    type_id: candidate.type_id,
                     value: field_access_expr.into(),
                     skip_value_copy: true,
                 },
@@ -715,7 +716,8 @@ fn hoist_reloadable_field_loads(
             StmtKind::Let {
                 name: hoist_name.clone(),
                 local_index: new_local_index,
-                is_mut: true,                type_id: candidate.type_id,
+                is_mut: true,
+                type_id: candidate.type_id,
                 value: hoist_value.into(),
                 skip_value_copy: true,
             },
@@ -2059,7 +2061,8 @@ fn hoist_invariant_arith(
             StmtKind::Let {
                 name: name.clone(),
                 local_index: new_idx,
-                is_mut: false,                type_id,
+                is_mut: false,
+                type_id,
                 value: value.into(),
                 skip_value_copy: true,
             },
@@ -2280,7 +2283,8 @@ fn cse_loop_body(
                 StmtKind::Let {
                     name: name.clone(),
                     local_index: temp,
-                    is_mut: false,                    type_id: ty,
+                    is_mut: false,
+                    type_id: ty,
                     value: Operand::Expr(cloned),
                     skip_value_copy: true,
                 },
@@ -2480,7 +2484,8 @@ fn hoist_invariant_value_operands(
             StmtKind::Let {
                 name,
                 local_index: temp,
-                is_mut: false,                type_id: ty,
+                is_mut: false,
+                type_id: ty,
                 value: Operand::Value(rep),
                 skip_value_copy: true,
             },

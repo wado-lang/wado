@@ -1330,7 +1330,8 @@ fn emit_variant_payload_let(engine: &mut Engine, vc: ExprId, f: &Fusion, out: &m
         StmtKind::Let {
             name: engine.local_name(payload_local),
             local_index: payload_local,
-            is_mut: false,            type_id: payload_type,
+            is_mut: false,
+            type_id: payload_type,
             value,
             skip_value_copy: false,
         },
@@ -1373,7 +1374,8 @@ fn emit_slot_lets(engine: &mut Engine, elements: &[Operand], f: &Fusion, out: &m
             StmtKind::Let {
                 name: engine.local_name(slot.local_index),
                 local_index: slot.local_index,
-                is_mut: false,                type_id: slot.type_id,
+                is_mut: false,
+                type_id: slot.type_id,
                 value,
                 skip_value_copy: false,
             },
@@ -1938,7 +1940,8 @@ fn thread_exit(
             StmtKind::Let {
                 name,
                 local_index: b_local,
-                is_mut: false,                type_id,
+                is_mut: false,
+                type_id,
                 value: payload_op,
                 skip_value_copy: false,
             },
@@ -2303,7 +2306,8 @@ fn perform_slot_temp_sroa(
             StmtKind::Let {
                 name: engine.local_name(local_index),
                 local_index,
-                is_mut: true,                type_id,
+                is_mut: true,
+                type_id,
                 value: zero,
                 skip_value_copy: false,
             },
@@ -2405,7 +2409,8 @@ fn scalarize_materialized_exit(
         StmtKind::Let {
             name: name.clone(),
             local_index: index,
-            is_mut: false,            type_id: agg_type,
+            is_mut: false,
+            type_id: agg_type,
             value: Operand::Expr(exit),
             skip_value_copy: true,
         },

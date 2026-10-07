@@ -1086,7 +1086,8 @@ impl TypeSystem {
             ResolvedType::Enum { .. }
             | ResolvedType::Flags { .. }
             | ResolvedType::Resource { .. }
-            | ResolvedType::GenericResource { .. }            | ResolvedType::Unit
+            | ResolvedType::GenericResource { .. }
+            | ResolvedType::Unit
             | ResolvedType::Never
             | ResolvedType::Unknown
             | ResolvedType::Error

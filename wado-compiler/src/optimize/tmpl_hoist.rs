@@ -1364,7 +1364,8 @@ fn transform_tmpl_block(
         StmtKind::Let {
             name: buf_local_name.clone(),
             local_index: buf_local_index,
-            is_mut: true,            type_id: string_type,
+            is_mut: true,
+            type_id: string_type,
             value: candidate.init_value.into(),
             skip_value_copy: false,
         },
@@ -1529,7 +1530,8 @@ fn transform_fmts_in_tmpl_block(
             StmtKind::Let {
                 name: info.hoisted_name.clone(),
                 local_index: info.hoisted_index,
-                is_mut: true,                type_id: info.formatter_type,
+                is_mut: true,
+                type_id: info.formatter_type,
                 value: info.init_value.into(),
                 skip_value_copy: false,
             },
@@ -1788,7 +1790,8 @@ mod tests {
             kind: StmtKind::Let {
                 name: format!("$l{local_index}"),
                 local_index,
-                is_mut: false,                type_id: TypeId(0),
+                is_mut: false,
+                type_id: TypeId(0),
                 value: value.into(),
                 skip_value_copy: false,
             },
