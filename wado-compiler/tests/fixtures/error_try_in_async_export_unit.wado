@@ -1,0 +1,19 @@
+// `?` in an `export async fn` is one fault, reported once: the export's own
+// result type does not add a second complaint about where `?` may return.
+
+fn parse(n: i32) -> Result<i32, String> {
+    if n < 0 { return Result::<i32, String>::Err("negative"); }
+    return Result::<i32, String>::Ok(n);
+}
+
+export async fn deliver(n: i32) {
+    let v = parse(n)?;
+    task return ();
+}
+
+export fn run() {
+    deliver(1);
+}
+
+__DATA__
+{"compile_error": "cannot use `?` in `export async fn`", "compile_errors_not_contains": ["requires function to return"]}

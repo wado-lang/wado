@@ -1,0 +1,17 @@
+// A Wado caller sees the same rule as the CM: a second `task return` traps
+// rather than replace the result already delivered.
+
+use { println, Stdout } from "core:cli";
+
+export async fn deliver(n: i32) -> Result<i32, String> {
+    task return Result::<i32, String>::Ok(n);
+    task return Result::<i32, String>::Ok(n + 1);
+}
+
+export fn run() with Stdout {
+    println("start");
+    let _ = deliver(1);
+}
+
+__DATA__
+{"stdout": "start\n", "stderr_contains": ["task return after the result was delivered"], "trapped": true}

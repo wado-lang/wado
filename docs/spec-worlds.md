@@ -538,8 +538,14 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
   first (`panic`, an endless loop) has no result to deliver and is exempt.
 - Whether a `task return` under a branch is reached is not checked. A path that
   misses it traps.
-- A plain `return` is forbidden in an `async fn` body. It would exit the Wasm
-  function without telling the Component Model runtime.
+- A `task return` delivers once. A second one reached in the same call traps,
+  as the Component Model's `task.return` does.
+- `return expr` is forbidden in an `export async fn` body, and so is `?`, which
+  returns its error. Only `task return` delivers. A bare `return` ends the
+  function and delivers nothing. A closure in the body is a function of its
+  own, so both are allowed there.
+- An error after delivery has no result left to take it. It travels through a
+  stream or future the result carries, such as a response's trailers.
 - The `task return` expression is type-checked against the declared return type
   of the enclosing `export async fn`.
 - `task return` delivers the result to the function's caller. A call through
@@ -559,7 +565,7 @@ export fn run() {
 }
 ```
 
-Neither does a plain `return` inside one:
+Neither does a `return expr` inside one:
 
 <!-- {"fixture":"spec_worlds_http_return_forbidden.wado"} -->
 

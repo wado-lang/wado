@@ -1584,7 +1584,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 }
 ```
 
-`task return expr;` delivers the function's result to the CM runtime without terminating the function. Valid only inside `export async fn`, and required there: a body carrying none can never deliver, so the compiler rejects it. One under a branch is fine; a path that misses it traps. Regular `return` is forbidden in `async fn` bodies. A Wado call of such a function gets the delivered value back as an ordinary return value, so a test can assert on it.
+`task return expr;` delivers the function's result to the CM runtime without terminating the function. Valid only inside `export async fn`, and required there: a body carrying none can never deliver, so the compiler rejects it. One under a branch is fine; a path that misses it traps, and so does a second one. `return expr` and `?` are forbidden in its body; a bare `return` ends it. A Wado call of such a function gets the delivered value back as an ordinary return value, so a test can assert on it.
 
 ## Test Blocks
 

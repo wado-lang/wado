@@ -71,16 +71,16 @@ fn "async_export_without_delivery_traps.wado/$cm_export__run"() {
     let new_used: i32;
     let start_19: i32;
     let x: i64;
-    let $sroa_other_repr_49: ref Array<u8>;
+    let $sroa_other_repr_50: ref Array<u8>;
     $local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
-    $sroa_other_repr_49 = array.new_fixed<u8>(103, 111, 116, 32);
+    $sroa_other_repr_50 = array.new_fixed<u8>(103, 111, 116, 32);
     if @unlikely(local.tee new_used(0 + 4) > builtin::array_len($local_0.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, new_used);
     }
     start_19 = $local_0.used;
     $local_0.used = new_used;
-    builtin::array_copy<u8>($local_0.repr, start_19, $sroa_other_repr_49, 0, 4);
+    builtin::array_copy<u8>($local_0.repr, start_19, $sroa_other_repr_50, 0, 4);
     new_used = local.tee start_19(unreachable) < 0;
     start_19 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(start_19); select i64(x < 0_i64, 0_i64 - x, x)));
     new_used = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_0, new_used, start_19);

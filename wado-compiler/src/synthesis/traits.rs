@@ -8,7 +8,6 @@ use std::cell::RefCell;
 use std::convert::identity;
 use std::rc::Rc;
 
-use crate::call_args::CallArgs;
 use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::hashmap::IndexSet;
 
@@ -38,7 +37,9 @@ use crate::name::{
     field_get_helper_name, hole_get_helper_name,
 };
 use crate::synthesis::common;
-use crate::synthesis::common::{locals_from_params, option_some, relocate_synthetic_locals};
+use crate::synthesis::common::{
+    bool_lit, locals_from_params, option_some, relocate_synthetic_locals, unreachable_call,
+};
 use crate::synthesis::template::{
     answering_link, blanket_dispatch_for, ref_blanket_call, trait_call_template,
 };
@@ -991,20 +992,12 @@ fn generate_struct_members_fn(
                 },
                 TirStructField {
                     name: "has_default".to_string(),
-                    value: TirExpr::new(
-                        TirExprKind::BoolLiteral(f.has_default),
-                        TypeTable::BOOL,
-                        span,
-                    ),
+                    value: bool_lit(f.has_default, span),
                     field_index: 3,
                 },
                 TirStructField {
                     name: "is_secret".to_string(),
-                    value: TirExpr::new(
-                        TirExprKind::BoolLiteral(f.is_secret),
-                        TypeTable::BOOL,
-                        span,
-                    ),
+                    value: bool_lit(f.is_secret, span),
                     field_index: 4,
                 },
             ];
@@ -1659,11 +1652,7 @@ fn generate_template_members_fn(
                 string_field("source", &hole.source, 3),
                 TirStructField {
                     name: "has_spec".to_string(),
-                    value: TirExpr::new(
-                        TirExprKind::BoolLiteral(hole.spec.is_some()),
-                        TypeTable::BOOL,
-                        span,
-                    ),
+                    value: bool_lit(hole.spec.is_some(), span),
                     field_index: 4,
                 },
             ]
@@ -2004,11 +1993,7 @@ fn generate_variant_cases_fn(
                     },
                     TirStructField {
                         name: "is_unit".to_string(),
-                        value: TirExpr::new(
-                            TirExprKind::BoolLiteral(*payload == TypeTable::UNIT),
-                            TypeTable::BOOL,
-                            span,
-                        ),
+                        value: bool_lit(*payload == TypeTable::UNIT, span),
                         field_index: 3,
                     },
                 ];
@@ -2103,26 +2088,6 @@ pub(super) fn generate_case_bridge_helpers(
         ));
     }
     helpers
-}
-
-/// A call to `builtin::unreachable()` typed as `result_type`, the trap arm of
-/// the case-bridge dispatch.
-fn unreachable_call(result_type: TypeId, span: Span) -> TirExpr {
-    TirExpr::new(
-        TirExprKind::Call {
-            func: Box::new(FunctionRef {
-                module_source: ModuleSource::builtin(),
-                name: "unreachable".to_string(),
-                template: None,
-                monomorph_info: None,
-                method_info: None,
-            }),
-            type_args: vec![],
-            args: CallArgs::free(vec![]),
-        },
-        result_type,
-        span,
-    )
 }
 
 /// Dispatch `match index { k => <arm(k)>, _ => unreachable() }` over the
@@ -5061,7 +5026,7 @@ fn build_struct_eq_chain(
     span: Span,
 ) -> TirExpr {
     if fields.is_empty() {
-        return TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span);
+        return bool_lit(true, span);
     }
 
     let field_eq = |name: &str, field_type: TypeId, field_index: u32, tt: &mut TypeTable| {
@@ -5295,7 +5260,6 @@ fn generate_variant_eq_fn(
     let eq_trait_name = tt.compiler_trait_fq(CompilerItem::Eq);
     let method_info = trait_method_info(receiver, &eq_trait_name, "eq");
     let qualified_name = method_info.to_mangled_name();
-    let bool_literal = |b| TirExpr::new(TirExprKind::BoolLiteral(b), TypeTable::BOOL, span);
 
     let mut locals = binary_method_locals(ref_variant_type);
     let body_stmt = variant_case_pairs(
@@ -5303,8 +5267,8 @@ fn generate_variant_eq_fn(
         variant_type,
         ref_variant_type,
         &mut locals,
-        bool_literal(true),
-        Some(bool_literal(false)),
+        bool_lit(true, span),
+        Some(bool_lit(false, span)),
         |left, right, payload_type| {
             eq_call_expr(
                 left,

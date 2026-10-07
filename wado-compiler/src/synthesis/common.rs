@@ -261,6 +261,45 @@ pub fn if_stmt(condition: TirExpr, then_block: TirBlock, else_block: Option<TirB
     )
 }
 
+/// Create a `panic(message)` call, which prints the message and traps.
+pub fn panic_call(message: TirExpr, span: Span) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Call {
+            func: Box::new(FunctionRef {
+                module_source: ModuleSource::rt(),
+                name: "panic".to_string(),
+                template: None,
+                monomorph_info: None,
+                method_info: None,
+            }),
+            type_args: vec![],
+            args: CallArgs::free(vec![CallArg::new(message, false)]),
+        },
+        TypeTable::NEVER,
+        span,
+    )
+}
+
+/// Create a `builtin::unreachable()` call typed as `result_type`, for an arm
+/// no well-formed input reaches.
+pub fn unreachable_call(result_type: TypeId, span: Span) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Call {
+            func: Box::new(FunctionRef {
+                module_source: ModuleSource::builtin(),
+                name: "unreachable".to_string(),
+                template: None,
+                monomorph_info: None,
+                method_info: None,
+            }),
+            type_args: vec![],
+            args: CallArgs::free(vec![]),
+        },
+        result_type,
+        span,
+    )
+}
+
 /// Create a loop statement.
 pub fn loop_stmt(body: TirBlock) -> TirStmt {
     TirStmt::new(TirStmtKind::Loop { body }, synth_span())
@@ -700,6 +739,23 @@ pub fn ref_expr(expr: TirExpr, ref_type: TypeId, span: Span) -> TirExpr {
         ref_type,
         span,
     )
+}
+
+/// Create a mutable reference expression: `&mut expr`.
+pub fn mut_ref_expr(expr: TirExpr, ref_type: TypeId, span: Span) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Unary {
+            op: TirUnaryOp::MutRef,
+            expr: Box::new(expr),
+        },
+        ref_type,
+        span,
+    )
+}
+
+/// Create a `bool` literal expression.
+pub fn bool_lit(value: bool, span: Span) -> TirExpr {
+    TirExpr::new(TirExprKind::BoolLiteral(value), TypeTable::BOOL, span)
 }
 
 /// Create a string literal expression.

@@ -514,28 +514,28 @@ fn "http_uninit_string_conditional_trap.wado/$cm_export__handle"(request) {
 fn "http_uninit_string_conditional_trap.wado/$cm_task_entry__handle"(request) {
     let take_else: bool;
     let resp_headers: i32;
-    let $match_179: ref null "core:prelude/string.wado//String";
-    let packed_186: i64;
-    let tx_188: i32;
-    let rx_190: i32;
-    let tx_191: i32;
-    if local.tee take_else(ref.is_null(local.tee $match_179("http_uninit_string_conditional_trap.wado/$cm_binding__Request_get_path_with_query"(request))) == 0) == 0 {
-        $match_179 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("fallback"), used: 8 };
+    let $match_180: ref null "core:prelude/string.wado//String";
+    let packed_187: i64;
+    let tx_189: i32;
+    let rx_191: i32;
+    let tx_192: i32;
+    if local.tee take_else(ref.is_null(local.tee $match_180("http_uninit_string_conditional_trap.wado/$cm_binding__Request_get_path_with_query"(request))) == 0) == 0 {
+        $match_180 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("fallback"), used: 8 };
     } else {
-        $match_179 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98, 99, 10), used: 4 };
+        $match_180 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98, 99, 10), used: 4 };
     }
-    take_else = builtin::i32_wrap_i64(local.tee packed_186("wasi/future-new"()));
-    tx_188 = builtin::i32_wrap_i64(packed_186 >> 32_i64);
-    rx_190 = builtin::i32_wrap_i64(local.tee packed_186("wasi/stream-new"()));
-    tx_191 = builtin::i32_wrap_i64(packed_186 >> 32_i64);
+    take_else = builtin::i32_wrap_i64(local.tee packed_187("wasi/future-new"()));
+    tx_189 = builtin::i32_wrap_i64(packed_187 >> 32_i64);
+    rx_191 = builtin::i32_wrap_i64(local.tee packed_187("wasi/stream-new"()));
+    tx_192 = builtin::i32_wrap_i64(packed_187 >> 32_i64);
     drop("http_uninit_string_conditional_trap.wado/$cm_binding__Fields_append"(local.tee resp_headers("http_uninit_string_conditional_trap.wado/$cm_binding__Fields_new"()), global:http_uninit_string_conditional_trap.wado::$const_obj_5, "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: global:http_uninit_string_conditional_trap.wado::$const_obj_6, used: 10, index: 0 })));
-    drop("http_uninit_string_conditional_trap.wado/$cm_binding__Response_set_status_code"(local.tee take_else("http_uninit_string_conditional_trap.wado/$cm_binding__Response_new"(resp_headers, struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: rx_190 }, take_else).0), 200));
-    rx_190 = 0;
-    rx_190 = take_else;
-    "wasi/task-return:handle"(0, rx_190, 0, 0_i64, 0, 0, 0, 0);
-    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$dae[return]"(tx_191, "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: $match_179.repr, used: $match_179.used, index: 0 }));
-    "wasi/stream-drop-writable"(tx_191);
-    "http_uninit_string_conditional_trap.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx_188, global:http_uninit_string_conditional_trap.wado::$const_obj_4);
+    drop("http_uninit_string_conditional_trap.wado/$cm_binding__Response_set_status_code"(local.tee take_else("http_uninit_string_conditional_trap.wado/$cm_binding__Response_new"(resp_headers, struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: rx_191 }, take_else).0), 200));
+    rx_191 = 0;
+    rx_191 = take_else;
+    "wasi/task-return:handle"(0, rx_191, 0, 0_i64, 0, 0, 0, 0);
+    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$dae[return]"(tx_192, "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: $match_180.repr, used: $match_180.used, index: 0 }));
+    "wasi/stream-drop-writable"(tx_192);
+    "http_uninit_string_conditional_trap.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx_189, global:http_uninit_string_conditional_trap.wado::$const_obj_4);
     "wasi/resource-drop:wasi/http/types.wado#request"(request);
 }
 

@@ -1,0 +1,31 @@
+// A `?` in a closure nested in an `export async fn` returns from the closure,
+// which is a function of its own, so the ban on `?` in the export stops there.
+
+use { println, Stdout } from "core:cli";
+
+fn parse(n: i32) -> Result<i32, String> {
+    if n < 0 { return Result::<i32, String>::Err("negative"); }
+    return Result::<i32, String>::Ok(n);
+}
+
+export async fn deliver(n: i32) -> Result<i32, String> {
+    let doubled = |x: i32| -> Result<i32, String> {
+        let v = parse(x)?;
+        return Result::<i32, String>::Ok(v * 2);
+    };
+    task return doubled(n);
+}
+
+export fn run() with Stdout {
+    match deliver(3) {
+        Result::Ok(v) => println(`ok ${v}`),
+        Result::Err(e) => println(`err ${e}`),
+    }
+    match deliver(-1) {
+        Result::Ok(v) => println(`ok ${v}`),
+        Result::Err(e) => println(`err ${e}`),
+    }
+}
+
+__DATA__
+{"stdout": "ok 6\nerr negative\n"}

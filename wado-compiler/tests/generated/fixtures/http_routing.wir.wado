@@ -351,10 +351,10 @@ fn "http_routing.wado/$cm_task_entry__handle"(request) {
     let packed: i64;
     let rx: i32;
     let tx: i32;
-    let a_191: ref Array<u8>;
-    let a_end_193: i32;
-    let b_194: ref Array<u8>;
-    let i_198: i32;
+    let a_192: ref Array<u8>;
+    let a_end_194: i32;
+    let b_195: ref Array<u8>;
+    let i_199: i32;
     path = "http_routing.wado/$cm_binding__Request_get_path_with_query"(request);
     rx = builtin::i32_wrap_i64(local.tee packed("wasi/future-new"()));
     tx = builtin::i32_wrap_i64(packed >> 32_i64);
@@ -362,20 +362,20 @@ fn "http_routing.wado/$cm_task_entry__handle"(request) {
     if ref.is_null(path) == 0 {
         p = ref.as_non_null(path);
         if $inline_core_prelude_array_wado_seq_eq_u8__spec0_0: block -> bool {
-            a_191 = p.repr;
-            a_end_193 = p.used;
-            b_194 = global:http_routing.wado::$const_obj_2;
-            if a_end_193 != 10 {
+            a_192 = p.repr;
+            a_end_194 = p.used;
+            b_195 = global:http_routing.wado::$const_obj_2;
+            if a_end_194 != 10 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__spec0_0: 0;
             }
-            i_198 = 0;
+            i_199 = 0;
             b7: block {
                 l8: loop {
-                    break_if b7 i_198 >= a_end_193;
-                    if builtin::array_get_value<u8>(a_191, i_198) != builtin::array_get_value<u8>(b_194, i_198) {
+                    break_if b7 i_199 >= a_end_194;
+                    if builtin::array_get_value<u8>(a_192, i_199) != builtin::array_get_value<u8>(b_195, i_199) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__spec0_0: 0;
                     }
-                    i_198 = i_198 + 1;
+                    i_199 = i_199 + 1;
                     continue l8;
                 };
             };
@@ -383,20 +383,20 @@ fn "http_routing.wado/$cm_task_entry__handle"(request) {
         } {
             drop("http_routing.wado/$cm_binding__Response_set_status_code$spec0"(rx, 404));
         } else if $inline_core_prelude_array_wado_seq_eq_u8__spec1_1: block -> bool {
-            b_194 = p.repr;
-            i_198 = p.used;
-            a_191 = global:http_routing.wado::$const_obj_1;
-            if i_198 != 8 {
+            b_195 = p.repr;
+            i_199 = p.used;
+            a_192 = global:http_routing.wado::$const_obj_1;
+            if i_199 != 8 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__spec1_1: 0;
             }
-            a_end_193 = 0;
+            a_end_194 = 0;
             b12: block {
                 l13: loop {
-                    break_if b12 a_end_193 >= i_198;
-                    if builtin::array_get_value<u8>(b_194, a_end_193) != builtin::array_get_value<u8>(a_191, a_end_193) {
+                    break_if b12 a_end_194 >= i_199;
+                    if builtin::array_get_value<u8>(b_195, a_end_194) != builtin::array_get_value<u8>(a_192, a_end_194) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__spec1_1: 0;
                     }
-                    a_end_193 = a_end_193 + 1;
+                    a_end_194 = a_end_194 + 1;
                     continue l13;
                 };
             };
@@ -406,9 +406,9 @@ fn "http_routing.wado/$cm_task_entry__handle"(request) {
         }
     } else {
     }
-    i_198 = 0;
-    i_198 = rx;
-    "wasi/task-return:handle"(0, i_198, 0, 0_i64, 0, 0, 0, 0);
+    i_199 = 0;
+    i_199 = rx;
+    "wasi/task-return:handle"(0, i_199, 0, 0_i64, 0, 0, 0, 0);
     "http_routing.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx, global:http_routing.wado::$const_obj_0);
     "wasi/resource-drop:wasi/http/types.wado#request"(request);
 }

@@ -4,29 +4,33 @@
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(0)
 
-variant wasi:sockets/types.wado//IpAddress {  // TypeId(1)
+struct core:prelude/types.wado//Box<bool> {  // TypeId(1)
+    mut value: bool,
+}
+
+variant wasi:sockets/types.wado//IpAddress {  // TypeId(2)
     Ipv4(ref "tuple//[u8, u8, u8, u8]"),
     Ipv6(ref "tuple//[u16, u16, u16, u16, u16, u16, u16, u16]"),
 }
 
-struct wasi:sockets/types.wado//IpAddress::Ipv4 {  // TypeId(2)
+struct wasi:sockets/types.wado//IpAddress::Ipv4 {  // TypeId(3)
     discriminant: i32,
     payload_0: ref "tuple//[u8, u8, u8, u8]",
 }
 
-struct wasi:sockets/types.wado//IpAddress::Ipv6 {  // TypeId(3)
+struct wasi:sockets/types.wado//IpAddress::Ipv6 {  // TypeId(4)
     discriminant: i32,
     payload_0: ref "tuple//[u16, u16, u16, u16, u16, u16, u16, u16]",
 }
 
-array Array<u8> (mut u8);  // TypeId(4)
+array Array<u8> (mut u8);  // TypeId(5)
 
-struct core:prelude/string.wado//String {  // TypeId(5)
+struct core:prelude/string.wado//String {  // TypeId(6)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-variant wasi:sockets/ip_name_lookup.wado//ErrorCode {  // TypeId(6)
+variant wasi:sockets/ip_name_lookup.wado//ErrorCode {  // TypeId(7)
     AccessDenied,
     InvalidArgument,
     NameUnresolvable,
@@ -35,19 +39,19 @@ variant wasi:sockets/ip_name_lookup.wado//ErrorCode {  // TypeId(6)
     Other(ref null "core:prelude/string.wado//String"),
 }
 
-struct wasi:sockets/ip_name_lookup.wado//ErrorCode::Other {  // TypeId(7)
+struct wasi:sockets/ip_name_lookup.wado//ErrorCode::Other {  // TypeId(8)
     discriminant: i32,
     payload_0: ref null "core:prelude/string.wado//String",
 }
 
-struct tuple//[u8, u8, u8, u8] {  // TypeId(8)
+struct tuple//[u8, u8, u8, u8] {  // TypeId(9)
     mut 0: u8,
     mut 1: u8,
     mut 2: u8,
     mut 3: u8,
 }
 
-struct tuple//[u16, u16, u16, u16, u16, u16, u16, u16] {  // TypeId(9)
+struct tuple//[u16, u16, u16, u16, u16, u16, u16, u16] {  // TypeId(10)
     mut 0: u16,
     mut 1: u16,
     mut 2: u16,
@@ -58,106 +62,109 @@ struct tuple//[u16, u16, u16, u16, u16, u16, u16, u16] {  // TypeId(9)
     mut 7: u16,
 }
 
-struct cm_lift_same_name_across_interfaces.wado//$Closure_0 {  // TypeId(10)}
+struct cm_lift_same_name_across_interfaces.wado//$Closure_0 {  // TypeId(11)}
 
-array Array<wasi:sockets/types.wado/IpAddress> (mut ref "wasi:sockets/types.wado//IpAddress");  // TypeId(11)
+array Array<wasi:sockets/types.wado/IpAddress> (mut ref "wasi:sockets/types.wado//IpAddress");  // TypeId(12)
 
-struct core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>> {  // TypeId(12)
+struct core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>> {  // TypeId(13)
     mut __cm_packed: i32,
     mut __cm_outptr: i32,
     mut __cm_size: i32,
     mut __cm_align: i32,
     mut __cm_lift: ref struct,
+    mut __cm_ended: ref "core:prelude/types.wado//Box<bool>",
 }
 
-struct core:prelude//List<wasi:sockets/types.wado/IpAddress> {  // TypeId(13)
+struct core:prelude//List<wasi:sockets/types.wado/IpAddress> {  // TypeId(14)
     mut repr: ref "Array<wasi:sockets/types.wado/IpAddress>",
     mut used: i32,
 }
 
-variant core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode> {  // TypeId(14)
+variant core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode> {  // TypeId(15)
     Ok(ref "core:prelude//List<wasi:sockets/types.wado/IpAddress>"),
     Err(ref "wasi:sockets/ip_name_lookup.wado//ErrorCode"),
 }
 
-struct core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>::Ok {  // TypeId(15)
+struct core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>::Ok {  // TypeId(16)
     discriminant: i32,
     payload_0: ref "core:prelude//List<wasi:sockets/types.wado/IpAddress>",
 }
 
-struct core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>::Err {  // TypeId(16)
+struct core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>::Err {  // TypeId(17)
     discriminant: i32,
     payload_0: ref "wasi:sockets/ip_name_lookup.wado//ErrorCode",
 }
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> ref "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>";  // TypeId(17)
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> ref "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>";  // TypeId(18)
 
-struct canonical//CanonicalClosure_0 {  // TypeId(18)
+struct canonical//CanonicalClosure_0 {  // TypeId(19)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_0",
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(19)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(20)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(20)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(21)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(21)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(22)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(22)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(23)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(23)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(24)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(24)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(25)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(25)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(26)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(26)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(27)
 
-type "functype//wasi/wasi:sockets/IpNameLookup::resolve_addresses" = fn(i32, i32, i32) -> i32;  // TypeId(27)
+type "functype//wasi/wasi:sockets/IpNameLookup::resolve_addresses" = fn(i32, i32, i32) -> i32;  // TypeId(28)
 
-type "functype//cm_lift_same_name_across_interfaces.wado/run" = fn();  // TypeId(28)
+type "functype//cm_lift_same_name_across_interfaces.wado/run" = fn();  // TypeId(29)
 
-type "functype//cm_lift_same_name_across_interfaces.wado/$cm_binding__IpNameLookup_resolve_addresses" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>>";  // TypeId(29)
+type "functype//cm_lift_same_name_across_interfaces.wado/$cm_binding__IpNameLookup_resolve_addresses" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>>";  // TypeId(30)
 
-type "functype//cm_lift_same_name_across_interfaces.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(30)
+type "functype//cm_lift_same_name_across_interfaces.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(31)
 
-type "functype//cm_lift_same_name_across_interfaces.wado/$cm_lift__IpNameLookup_resolve_addresses" = fn(i32) -> ref "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>";  // TypeId(31)
+type "functype//cm_lift_same_name_across_interfaces.wado/$cm_lift__IpNameLookup_resolve_addresses" = fn(i32) -> ref "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>";  // TypeId(32)
 
-type "functype//cm_lift_same_name_across_interfaces.wado/$cm_export__run" = fn();  // TypeId(32)
+type "functype//cm_lift_same_name_across_interfaces.wado/$cm_export__run" = fn();  // TypeId(33)
 
-type "functype//cm_lift_same_name_across_interfaces.wado/$value_copy$wasi:sockets/types.wado/IpAddress" = fn(ref "wasi:sockets/types.wado//IpAddress") -> ref "wasi:sockets/types.wado//IpAddress";  // TypeId(33)
+type "functype//cm_lift_same_name_across_interfaces.wado/$value_copy$wasi:sockets/types.wado/IpAddress" = fn(ref "wasi:sockets/types.wado//IpAddress") -> ref "wasi:sockets/types.wado//IpAddress";  // TypeId(34)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(34)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(35)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(35)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(36)
 
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(36)
+type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(37)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(37)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(38)
 
-type "functype//core:prelude/types.wado/cm_subtask_settled$cold0$dae[event]" = fn(i32);  // TypeId(38)
+type "functype//core:prelude/types.wado/cm_subtask_settled$cold0$dae[event]" = fn(i32);  // TypeId(39)
 
-type "functype//core:rt/write_string_to_stream$spec0$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(39)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>>::ensure_live$cold0$dae[self]" = fn();  // TypeId(40)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(40)
+type "functype//core:rt/write_string_to_stream$spec0$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(41)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>";  // TypeId(41)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(42)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>::grow" = fn(ref "core:prelude//List<wasi:sockets/types.wado/IpAddress>");  // TypeId(42)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>";  // TypeId(43)
 
-type "functype//cm_lift_same_name_across_interfaces.wado/cm_lift_same_name_across_interfaces.wado/$Closure_0::$call$dae[self]" = fn(i32) -> ref "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>";  // TypeId(43)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>::grow" = fn(ref "core:prelude//List<wasi:sockets/types.wado/IpAddress>");  // TypeId(44)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(44)
+type "functype//cm_lift_same_name_across_interfaces.wado/cm_lift_same_name_across_interfaces.wado/$Closure_0::$call$dae[self]" = fn(i32) -> ref "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>";  // TypeId(45)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(45)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(46)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(46)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(47)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(47)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(48)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(48)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(49)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(49)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(50)
+
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(51)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -273,7 +280,7 @@ fn "cm_lift_same_name_across_interfaces.wado/$cm_binding__IpNameLookup_resolve_a
     };
     $name_packed = builtin::i64_extend_i32_u(ptr_7) | (builtin::i64_extend_i32_s(self_8) << 32_i64);
     self_8 = "mem/realloc"(0, 0, 4, 20);
-    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>>" { __cm_packed: "wasi/wasi:sockets/IpNameLookup::resolve_addresses"(builtin::i32_wrap_i64($name_packed), builtin::i32_wrap_i64($name_packed >> 32_i64), self_8), __cm_outptr: self_8, __cm_size: 20, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "cm_lift_same_name_across_interfaces.wado//$Closure_0" {  }, func: ref.func "closure/cm_lift_same_name_across_interfaces.wado/$closure_wrapper_0" } };
+    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>>" { __cm_packed: "wasi/wasi:sockets/IpNameLookup::resolve_addresses"(builtin::i32_wrap_i64($name_packed), builtin::i32_wrap_i64($name_packed >> 32_i64), self_8), __cm_outptr: self_8, __cm_size: 20, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "cm_lift_same_name_across_interfaces.wado//$Closure_0" {  }, func: ref.func "closure/cm_lift_same_name_across_interfaces.wado/$closure_wrapper_0" }, __cm_ended: struct.new "core:prelude/types.wado//Box<bool>" { value: 0 } };
 }
 
 fn "cm_lift_same_name_across_interfaces.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -567,6 +574,11 @@ fn "core:prelude/types.wado/cm_subtask_settled$cold0$dae[event]"($v0) {
     unreachable;
 }
 
+fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>>::ensure_live$cold0$dae[self]"() {
+    "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("AsyncCall used after wait or cancel"), used: 35 });
+    unreachable;
+}
+
 fn "core:rt/write_string_to_stream$spec0$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
@@ -591,17 +603,24 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>>::wait"(self) with Subtask, WaitableSet {
+    let $load_0: ref "core:prelude/types.wado//Box<bool>";
     let handle_1: i32;
     let ws_3: i32;
     let result: ref "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>";
     let out_ptr: i32;
     let code: i32;
     let payload: i32;
+    if @unlikely(local.tee $load_0(self.__cm_ended).value) {
+        cold_path;
+        "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>>::ensure_live$cold0$dae[self]"();
+        unreachable;
+    }
+    $load_0.value = 1;
     if local.tee handle_1(self.__cm_packed >>u 4) != 0 {
         ws_3 = "wasi/waitable-set-new"();
         "wasi/waitable-join"(handle_1, ws_3);
-        b65: block {
-            l66: loop {
+        b66: block {
+            l67: loop {
                 out_ptr = "mem/realloc"(0, 0, 4, 8);
                 code = "wasi/waitable-set-wait"(ws_3, out_ptr);
                 drop(builtin::load_i32(out_ptr));
@@ -612,8 +631,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
                     "core:prelude/types.wado/cm_subtask_settled$cold0$dae[event]"(code);
                     unreachable;
                 }
-                break_if b65 payload >u 1;
-                continue l66;
+                break_if b66 payload >u 1;
+                continue l67;
             };
         };
         "wasi/subtask-drop"(handle_1);

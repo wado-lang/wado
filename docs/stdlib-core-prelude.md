@@ -4355,9 +4355,10 @@ result type `T`. Returned by the synthesised adapter for a WIT
 `async func` import.
 
 `AsyncCall<T>` pairs the raw CM subtask handle with the linear-memory
-buffer into which the host writes the async result. Use `wait(self)` to
-block until the call returns and take the lifted result; use
-`cancel(self)` to abort the in-flight call.
+buffer into which the host writes the async result. `wait` blocks until
+the call returns and takes the lifted result; `cancel` aborts the
+in-flight call. Either one ends the call, for every copy of the value; a
+call that neither ends leaks its handle and buffer.
 
 The subtask begins running the moment the adapter returns, so writes to
 stream parameters (e.g. a request body) made after the adapter call and
@@ -4380,15 +4381,13 @@ _Fields are private._
 
 Wait for the subtask to complete and return the lifted result.
 Drops the CM subtask handle and frees the result buffer before
-returning. After `wait` returns, the `AsyncCall<T>` value must not be
-used again — doing so is a use-after-free (the backing buffer has
-been released).
+returning, which ends the call: any later `wait`, `cancel` or `join`
+on it, or on a copy of it, traps.
 
 #### `pub fn cancel(&self) with Subtask`
 
 Cancel the in-flight subtask and free the result buffer. Any
-partially-written result is discarded. Same single-use contract as
-`wait` — the `AsyncCall<T>` must not be used again after `cancel`.
+partially-written result is discarded. It ends the call as `wait` does.
 
 #### `pub fn join(&self, set: &WaitableSet) -> Waitable with Subtask`
 

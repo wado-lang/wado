@@ -385,34 +385,34 @@ fn "stream_await_blocked_roundtrip.wado/$cm_export__handle"(request) {
 
 fn "stream_await_blocked_roundtrip.wado/$cm_task_entry__handle"(request) {
     let body: ref "core:prelude//List<u8>";
-    let elements_198: ref Array<u8>;
-    let end_202: i32;
-    let item_204: u8;
+    let elements_199: ref Array<u8>;
+    let end_203: i32;
+    let item_205: u8;
     let used: i32;
-    let packed_212: i64;
-    let elements_224: ref Array<u8>;
-    let $sroa_$pattern_temp_0_0_227: i32;
-    let $sroa_$iter_0_index_241: i32;
-    $sroa_$pattern_temp_0_0_227 = builtin::i32_wrap_i64("wasi/future-new:transmission-wasi/http/types.wado#error-code"());
-    $sroa_$pattern_temp_0_0_227 = "stream_await_blocked_roundtrip.wado/$cm_binding__Request_consume_body"(request, $sroa_$pattern_temp_0_0_227).0;
-    body = struct.new "core:prelude//List<u8>" { repr: local.tee elements_198(array.new_fixed<u8>()), used: 0 };
+    let packed_213: i64;
+    let elements_225: ref Array<u8>;
+    let $sroa_$pattern_temp_0_0_228: i32;
+    let $sroa_$iter_0_index_242: i32;
+    $sroa_$pattern_temp_0_0_228 = builtin::i32_wrap_i64("wasi/future-new:transmission-wasi/http/types.wado#error-code"());
+    $sroa_$pattern_temp_0_0_228 = "stream_await_blocked_roundtrip.wado/$cm_binding__Request_consume_body"(request, $sroa_$pattern_temp_0_0_228).0;
+    body = struct.new "core:prelude//List<u8>" { repr: local.tee elements_199(array.new_fixed<u8>()), used: 0 };
     b1: block {
         l2: loop {
             let $mv$chunk$items: ref "core:prelude//List<u8>";
-            multivalue_bind [$mv$chunk$items, request] = "core:rt/cm_stream_read_u8"($sroa_$pattern_temp_0_0_227, 1);
-            end_202 = $mv$chunk$items.used;
-            elements_198 = $mv$chunk$items.repr;
-            $sroa_$iter_0_index_241 = 0;
+            multivalue_bind [$mv$chunk$items, request] = "core:rt/cm_stream_read_u8"($sroa_$pattern_temp_0_0_228, 1);
+            end_203 = $mv$chunk$items.used;
+            elements_199 = $mv$chunk$items.repr;
+            $sroa_$iter_0_index_242 = 0;
             b3: block {
                 l4: loop {
-                    break_if b3 $sroa_$iter_0_index_241 >= end_202;
-                    item_204 = builtin::array_get_value<u8>(elements_198, $sroa_$iter_0_index_241);
-                    $sroa_$iter_0_index_241 = $sroa_$iter_0_index_241 + 1;
+                    break_if b3 $sroa_$iter_0_index_242 >= end_203;
+                    item_205 = builtin::array_get_value<u8>(elements_199, $sroa_$iter_0_index_242);
+                    $sroa_$iter_0_index_242 = $sroa_$iter_0_index_242 + 1;
                     if @unlikely(local.tee used(body.used) >= builtin::array_len(body.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(body);
                     }
-                    builtin::array_set_u8(body.repr, used, item_204);
+                    builtin::array_set_u8(body.repr, used, item_205);
                     body.used = used + 1;
                     continue l4;
                 };
@@ -421,24 +421,24 @@ fn "stream_await_blocked_roundtrip.wado/$cm_task_entry__handle"(request) {
             continue l2;
         };
     };
-    "wasi/stream-drop-readable"($sroa_$pattern_temp_0_0_227);
-    $sroa_$pattern_temp_0_0_227 = builtin::i32_wrap_i64(local.tee packed_212("wasi/future-new"()));
-    used = builtin::i32_wrap_i64(packed_212 >> 32_i64);
-    item_204 = builtin::i32_wrap_i64(local.tee packed_212("wasi/stream-new"()));
-    request = builtin::i32_wrap_i64(packed_212 >> 32_i64);
-    $sroa_$pattern_temp_0_0_227 = "stream_await_blocked_roundtrip.wado/$cm_binding__Response_new"("stream_await_blocked_roundtrip.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: item_204 }, $sroa_$pattern_temp_0_0_227).0;
-    item_204 = 0;
-    item_204 = $sroa_$pattern_temp_0_0_227;
-    "wasi/task-return:handle"(0, item_204, 0, 0_i64, 0, 0, 0, 0);
-    item_204 = body.used;
-    elements_198 = body.repr;
-    $sroa_$pattern_temp_0_0_227 = 0;
+    "wasi/stream-drop-readable"($sroa_$pattern_temp_0_0_228);
+    $sroa_$pattern_temp_0_0_228 = builtin::i32_wrap_i64(local.tee packed_213("wasi/future-new"()));
+    used = builtin::i32_wrap_i64(packed_213 >> 32_i64);
+    item_205 = builtin::i32_wrap_i64(local.tee packed_213("wasi/stream-new"()));
+    request = builtin::i32_wrap_i64(packed_213 >> 32_i64);
+    $sroa_$pattern_temp_0_0_228 = "stream_await_blocked_roundtrip.wado/$cm_binding__Response_new"("stream_await_blocked_roundtrip.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: item_205 }, $sroa_$pattern_temp_0_0_228).0;
+    item_205 = 0;
+    item_205 = $sroa_$pattern_temp_0_0_228;
+    "wasi/task-return:handle"(0, item_205, 0, 0_i64, 0, 0, 0, 0);
+    item_205 = body.used;
+    elements_199 = body.repr;
+    $sroa_$pattern_temp_0_0_228 = 0;
     b6: block {
         l7: loop {
-            break_if b6 $sroa_$pattern_temp_0_0_227 >= item_204;
-            $sroa_$iter_0_index_241 = builtin::array_get_value<u8>(elements_198, $sroa_$pattern_temp_0_0_227);
-            $sroa_$pattern_temp_0_0_227 = $sroa_$pattern_temp_0_0_227 + 1;
-            body = struct.new "core:prelude//List<u8>" { repr: local.tee elements_224(array.new_fixed<u8>($sroa_$iter_0_index_241)), used: builtin::array_len(elements_224) };
+            break_if b6 $sroa_$pattern_temp_0_0_228 >= item_205;
+            $sroa_$iter_0_index_242 = builtin::array_get_value<u8>(elements_199, $sroa_$pattern_temp_0_0_228);
+            $sroa_$pattern_temp_0_0_228 = $sroa_$pattern_temp_0_0_228 + 1;
+            body = struct.new "core:prelude//List<u8>" { repr: local.tee elements_225(array.new_fixed<u8>($sroa_$iter_0_index_242)), used: builtin::array_len(elements_225) };
             "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$dae[return]"(request, body);
             continue l7;
         };

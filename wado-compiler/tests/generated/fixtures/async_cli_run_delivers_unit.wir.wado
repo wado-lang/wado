@@ -55,15 +55,15 @@ fn "async_cli_run_delivers_unit.wado/$cm_binding__Stdout_write_via_stream"(data)
 
 fn "async_cli_run_delivers_unit.wado/$cm_export__run"() {
     let packed: i64;
-    let rx_6: i32;
-    let tx_7: i32;
-    rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    rx_6 = "async_cli_run_delivers_unit.wado/$cm_binding__Stdout_write_via_stream"(rx_6);
+    let rx_7: i32;
+    let tx_8: i32;
+    rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
+    rx_7 = "async_cli_run_delivers_unit.wado/$cm_binding__Stdout_write_via_stream"(rx_7);
     let $mv_field_2: ref Array<u8>;
     $mv_field_2 = array.new_fixed<u8>(114, 97, 110);
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_7, $mv_field_2, 3);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_6);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_8, $mv_field_2, 3);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_7);
     "wasi/task-return:run"(0);
 }
 

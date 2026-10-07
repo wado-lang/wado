@@ -1,0 +1,13 @@
+// `cancel` ends an `AsyncCall` as `wait` does, so a `join` after it traps.
+
+use { MonotonicClock } from "wasi:clocks";
+
+export fn run() with (MonotonicClock, WaitableSet) {
+    let call = MonotonicClock::wait_for(1_000_000_000);
+    call.cancel();
+    let set = WaitableSet::new();
+    call.join(&set);
+}
+
+__DATA__
+{"stderr_contains": ["AsyncCall used after wait or cancel"], "trapped": true}

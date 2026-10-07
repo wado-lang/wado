@@ -7,6 +7,7 @@ use crate::lower::plan::value_copy::place;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, LocalMethodName, minted_name};
 use crate::primitive::PrimitiveType;
+use crate::synthesis::common::bool_lit;
 use crate::tir::{
     CallArg, FunctionRef, LetStorage, ResolvedType, StructDef, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirField, TirFunction, TirLiteralPattern, TirLocal, TirMatchArm, TirPattern,
@@ -625,9 +626,7 @@ impl<'a> PatternLowerer<'a> {
         let inner_guard: Option<TirExpr> = if body_prefix_stmts.is_empty() {
             existing_guard
         } else {
-            let final_bool = existing_guard.unwrap_or_else(|| {
-                TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span)
-            });
+            let final_bool = existing_guard.unwrap_or_else(|| bool_lit(true, span));
             let mut block_stmts = body_prefix_stmts;
             block_stmts.push(TirStmt::new(TirStmtKind::Expr(final_bool), span));
             Some(TirExpr::new(
@@ -856,8 +855,7 @@ impl<'a> PatternLowerer<'a> {
                     span,
                 );
                 let original = std::mem::replace(sub, TirPattern::Wildcard);
-                let true_literal =
-                    TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span);
+                let true_literal = bool_lit(true, span);
                 let check = self.build_pattern_check(
                     &original,
                     temp_expr,
@@ -1275,8 +1273,7 @@ impl<'a> PatternLowerer<'a> {
                 // Alternatives are tried in order, first match wins, so each
                 // carries its own copy of the continuation — that is what
                 // re-tests the rest of the pattern per alternative.
-                let mut checks =
-                    TirExpr::new(TirExprKind::BoolLiteral(false), TypeTable::BOOL, span);
+                let mut checks = bool_lit(false, span);
                 for alternative in alternatives.iter().rev() {
                     let bound = TirExpr::new(
                         TirExprKind::Local {
@@ -1462,9 +1459,7 @@ impl<'a> PatternLowerer<'a> {
                 local_type,
                 span,
             ),
-            TirLiteralPattern::Bool(val) => {
-                TirExpr::new(TirExprKind::BoolLiteral(*val), TypeTable::BOOL, span)
-            }
+            TirLiteralPattern::Bool(val) => bool_lit(*val, span),
             TirLiteralPattern::Char(val) => {
                 TirExpr::new(TirExprKind::CharLiteral(*val), TypeTable::CHAR, span)
             }

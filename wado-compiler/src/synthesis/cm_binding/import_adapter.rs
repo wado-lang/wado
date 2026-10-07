@@ -15,10 +15,10 @@ use crate::tir::{
 };
 
 use crate::synthesis::common::{
-    alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cm_raw_call,
-    expr_stmt, generic_method_call, handle_from_f64, handle_to_f64, i32_const, if_stmt,
-    internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, return_stmt, split_packed_ptr_len,
-    synth_span,
+    alloc_local, assign, binary, block, bool_lit, break_stmt, builtin_call, case_chain,
+    cm_raw_call, expr_stmt, generic_method_call, handle_from_f64, handle_to_f64, i32_const,
+    if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, mut_ref_expr,
+    return_stmt, split_packed_ptr_len, synth_span,
 };
 
 use super::lift::{lift_variant_from_disc, materialize_if_needed, synthesize_lift};
@@ -231,6 +231,7 @@ fn synthesize_async_lift_function(
 /// Build the `AsyncCall<T>` struct literal returned by async import paths.
 /// Field order and indices mirror the stdlib `AsyncCall` declaration.
 fn make_async_call_literal(
+    type_table: &RefCell<TypeTable>,
     subtask_type: TypeId,
     packed: TirExpr,
     outptr: TirExpr,
@@ -238,6 +239,11 @@ fn make_async_call_literal(
     align: TirExpr,
     lift: TirExpr,
 ) -> TirExpr {
+    let not_ended = mut_ref_expr(
+        bool_lit(false, synth_span()),
+        type_table.borrow_mut().make_mut_ref(TypeTable::BOOL),
+        synth_span(),
+    );
     TirExpr::new(
         TirExprKind::StructLiteral {
             struct_type: subtask_type,
@@ -267,6 +273,11 @@ fn make_async_call_literal(
                     name: "__cm_lift".to_string(),
                     value: lift,
                     field_index: 4,
+                },
+                TirStructField {
+                    name: "__cm_ended".to_string(),
+                    value: not_ended,
+                    field_index: 5,
                 },
             ],
         },
@@ -347,6 +358,7 @@ fn synthesize_async_wrap_function(
     };
 
     let completed = make_async_call_literal(
+        ctx.type_table,
         subtask_type,
         i32_const(0),
         outptr_expr,
@@ -1218,6 +1230,7 @@ impl<'a> AdapterBuilder<'a> {
         );
 
         let subtask_struct = make_async_call_literal(
+            self.lower_ctx.type_table,
             subtask_type,
             local_ref(subtask_local, "$subtask_packed", TypeTable::I32),
             outptr_expr,

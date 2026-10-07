@@ -1,0 +1,13 @@
+// An `AsyncCall` ends at its first `wait`; a second one traps rather than lift
+// a result whose buffer is already freed.
+
+use { MonotonicClock } from "wasi:clocks";
+
+export fn run() with MonotonicClock {
+    let call = MonotonicClock::wait_for(0);
+    call.wait();
+    call.wait();
+}
+
+__DATA__
+{"stderr_contains": ["AsyncCall used after wait or cancel"], "trapped": true}

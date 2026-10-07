@@ -303,25 +303,25 @@ fn "cm_error_context.wado/$cm_export__handle"(request) {
 }
 
 fn "cm_error_context.wado/$cm_task_entry__handle"(request) with ErrorContext {
-    let packed_179: i64;
+    let packed_180: i64;
     let handle: i32;
     let bytes: ref Array<u8>;
-    let ptr_187: i32;
+    let ptr_188: i32;
     let i: i32;
-    "wasi/error-context-drop"(ptr_187 = builtin::i32_wrap_i64(local.tee packed_179(bytes = global:cm_error_context.wado::$const_obj_1; ptr_187 = "mem/realloc"(0, 0, 1, 18); i = 0; b1: block {
+    "wasi/error-context-drop"(ptr_188 = builtin::i32_wrap_i64(local.tee packed_180(bytes = global:cm_error_context.wado::$const_obj_1; ptr_188 = "mem/realloc"(0, 0, 1, 18); i = 0; b1: block {
         l2: loop {
             break_if b1 i >= 18;
-            builtin::store_u8(ptr_187 + i, builtin::array_get_value_u8(bytes, i));
+            builtin::store_u8(ptr_188 + i, builtin::array_get_value_u8(bytes, i));
             i = i + 1;
             continue l2;
         };
-    }; builtin::i64_extend_i32_u(ptr_187) | 77309411328_i64)); i = builtin::i32_wrap_i64(packed_179 >> 32_i64); handle = "wasi/error-context-new"(ptr_187, i); drop("mem/realloc"(ptr_187, i, 1, 0)); handle);
-    handle = builtin::i32_wrap_i64(local.tee packed_179("wasi/future-new"()));
-    i = builtin::i32_wrap_i64(packed_179 >> 32_i64);
+    }; builtin::i64_extend_i32_u(ptr_188) | 77309411328_i64)); i = builtin::i32_wrap_i64(packed_180 >> 32_i64); handle = "wasi/error-context-new"(ptr_188, i); drop("mem/realloc"(ptr_188, i, 1, 0)); handle);
+    handle = builtin::i32_wrap_i64(local.tee packed_180("wasi/future-new"()));
+    i = builtin::i32_wrap_i64(packed_180 >> 32_i64);
     handle = "cm_error_context.wado/$cm_binding__Response_new"("cm_error_context.wado/$cm_binding__Fields_new"(), global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>$0, handle).0;
-    ptr_187 = 0;
-    ptr_187 = handle;
-    "wasi/task-return:handle"(0, ptr_187, 0, 0_i64, 0, 0, 0, 0);
+    ptr_188 = 0;
+    ptr_188 = handle;
+    "wasi/task-return:handle"(0, ptr_188, 0, 0_i64, 0, 0, 0, 0);
     "cm_error_context.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(i, global:cm_error_context.wado::$const_obj_0);
     "wasi/resource-drop:wasi/http/types.wado#request"(request);
 }

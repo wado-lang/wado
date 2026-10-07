@@ -77,62 +77,34 @@ they want the result.
 
 ```wado
 // core/prelude/types.wado
-/// A handle to an in-flight async CM import call, parameterised by the result
-/// type `T`. Owns the CM subtask handle and the linear-memory result buffer;
-/// `wait` blocks until the subtask returns, lifts the result, and frees the
-/// buffer.
-pub resource AsyncCall<T> {
-    /// Wait for the subtask to return and take its value. Consumes `self`
-    /// (drops the subtask handle and frees the result buffer).
-    fn wait(self) -> T;
+pub struct AsyncCall<T> {
+    __cm_packed: i32,          // the CM subtask handle and its status
+    __cm_outptr: i32,          // the linear-memory result buffer
+    __cm_size: i32,            // its size and alignment, for `realloc`-based free
+    __cm_align: i32,
+    __cm_lift: fn(i32) -> T,   // reads `T` out of the buffer
+    __cm_ended: &mut bool,     // set by the first `wait` or `cancel`
+}
 
-    /// Cancel the in-flight subtask and free the buffer. Consumes `self`.
-    fn cancel(self);
-
-    /// Join this subtask to a waitable set for manual polling (used when the
-    /// caller wants to wait on multiple subtasks or streams simultaneously).
-    /// Borrows `self`; the caller still owns the `AsyncCall<T>` and remains
-    /// responsible for the eventual `wait` / `cancel`.
-    fn join(&self, set: &WaitableSet) -> Waitable;
+impl<T> AsyncCall<T> {
+    pub fn wait(&self) -> T with (Subtask, WaitableSet);
+    pub fn cancel(&self) with Subtask;
+    pub fn join(&self, set: &WaitableSet) -> Waitable with Subtask;
 }
 ```
 
-`AsyncCall<T>` is a `resource` in the ownership sense of
-[WEP 2026-05-21](./wep-2026-05-21-resource-ownership.md): an affine
-(move-only) type with a destructor. It is _not_ a CM-imported resource and is
-_not_ exported across any CM boundary — it is a guest-internal resource. Its
-representation is a guest-internal aggregate: the packed subtask handle, the
-result buffer pointer, the buffer size and alignment (for `realloc`-based
-free), and a per-`T` lift function. Size and alignment are baked in at
-monomorphization time based on `T`.
+`AsyncCall<T>` is a `struct`, not a `resource`. It is not a CM primitive but
+the guest's own bookkeeping around one: the subtask handle, the result buffer
+the subtask writes into, and the lift that reads `T` back out. That is what the
+CM `subtask` lacks, and a resource stands for a CM handle. Size and alignment
+are baked in at monomorphization time based on `T`.
 
-`wait` and `cancel` take `self` by value because they genuinely consume the
-in-flight call — after either, the subtask handle is dropped and the buffer
-freed — and because consuming `self` receivers are restricted to `resource`
-types (see WEP 2026-05-21). `join` only registers the subtask with a waitable
-set, so it borrows.
-
-### Implementation status and divergence
-
-This WEP is implemented, but the shipped form diverges from the design above
-in two ways that the affine ownership model
-([WEP 2026-05-21](./wep-2026-05-21-resource-ownership.md)) is meant to
-correct:
-
-- `AsyncCall<T>` is declared `pub struct`, not `pub resource`. As a plain
-  struct it has value semantics and is _copyable_, so two copies can each
-  `wait()` and double-free the result buffer.
-- `wait` / `cancel` / `join` all take `&self`. A borrow does not consume, so
-  `task.wait(); task.wait();` type-checks even though the first call already
-  freed the buffer. The stdlib doc comment on `AsyncCall<T>::wait` already
-  states the value "must not be used again — doing so is a use-after-free";
-  the contract is documented but unenforced.
-
-Both are exactly the unsoundness the affine model removes: as a `resource`,
-`AsyncCall<T>` is non-copyable, and consuming `wait(self)` / `cancel(self)`
-turn the documented use-after-free into a compile error. Closing this gap is
-tracked by WEP 2026-05-21's roadmap; until then the `&self` form remains, with
-the contract enforced only by documentation.
+`wait` and `cancel` end the call: the subtask handle is dropped and the buffer
+freed. A copy of the struct shares the handle and the buffer, so it shares the
+end too. `__cm_ended` is a reference for that reason, and a `wait`, `cancel` or
+`join` on an ended call traps rather than lift a freed buffer. A call never
+ended leaks its handle and buffer: ending it on drop would need to know that no
+copy is left, which a struct does not track.
 
 ### Synthesis of async imports
 
@@ -159,13 +131,12 @@ monomorphized per `T`:
 
 ### `wado-from-idl` automation
 
-WIT `async func foo(...) -> T` ⇒ Wado `fn foo(...) -> AsyncCall<T>` (no `async`
-keyword, matching the spec's rule that "effect declarations never use the
-`async` keyword"). `wado-from-idl` tracks `is_async` in its IR and emits
-`AsyncCall<ReturnType>` rather than adding the `async` keyword.
+WIT `async func foo(...) -> T` ⇒ Wado `async fn foo(...) -> AsyncCall<T>`.
+`wado-from-idl` tracks `is_async` in its IR and emits both the `async` marker
+and the `AsyncCall<ReturnType>` result.
 
-World exports (entry points like `run`, `handle`) continue to use `async fn`
-since they represent the CM lifting boundary, not a CM import adapter.
+World exports (entry points like `run`, `handle`) are `async fn` too, returning
+`T` itself: they are the CM lifting boundary, not an import adapter.
 
 ### User code patterns
 
@@ -188,7 +159,7 @@ req.set_method(Method::Post);
 let task = Client::send(req);    // canon lower async, host subtask starts
 body_tx.write(body);             // rendezvous with subtask reading body_rx
 body_tx.drop();
-let resp = task.wait();          // wait + lift + free; consumes `task`
+let resp = task.wait();          // wait + lift + free; ends `task`
 trailers_tx.write(Result::Ok(null));
 ```
 
@@ -206,18 +177,6 @@ trailers_tx.write(Result::Ok(null));
   `i32` and a resource are an internal escape hatch that bypasses ownership
   entirely; WEP 2026-05-21 tracks restricting them to `internal`-only code.
 
-### Out of scope
-
-- Generic structured concurrency primitives (`join`, `race`). Spec §
-  Concurrency Model shows `join` syntax that is not yet implemented. With
-  `AsyncCall<T>` in place, `join` can be built as a stdlib library that
-  combines multiple `AsyncCall<T>` values via `WaitableSet::wait`.
-- TLS trust store configuration for outgoing HTTPS requests from `wado run`.
-  wasmtime-wasi-http 43.0.1's `WasiHttpHooks::send_request` signature uses
-  `pub(crate)` types (`HttpResult`, `HttpError`, `body::UnsyncBoxBody`),
-  making external override impossible without patching upstream or using a
-  local vendor fork. Tracked separately.
-
 ## Implementation status
 
 - [x] `AsyncCall<T>` added to `prelude/types.wado`; non-generic `Subtask`
@@ -233,12 +192,25 @@ trailers_tx.write(Result::Ok(null));
   without waiting.
 - [x] `wado-from-idl` emits `AsyncCall<…>` for `is_async` functions.
 - [x] Existing `Client::send` fixtures migrated to add `.wait()`.
-- [ ] Make `AsyncCall<T>` a `resource` (affine, non-copyable) and change
-  `wait` / `cancel` to consuming `self` receivers — removes the documented
-  use-after-free. Tracked by WEP 2026-05-21.
+- [x] A `wait`, `cancel` or `join` on an ended call, or on a copy of one,
+  traps through the shared `__cm_ended` flag.
 - [ ] Restrict `as` casts between `i32` and resources to `internal`-only
   code so user code cannot forge or alias resource handles. Tracked by
   WEP 2026-05-21.
+
+## Known gaps
+
+- No way to start a task. A component gets a new task only when its export is
+  called. The CM threading built-ins (🧵, `thread.new-indirect` and the rest)
+  add threads within a task, but they are gated outside WASI 0.3, and wasmtime
+  calls its support for them very incomplete. So both ends of a stream cannot
+  live in one component: one end goes to an import's subtask or to the caller.
+- No structured concurrency over several calls (`join`, `race`). A caller
+  combines them by hand with `WaitableSet::wait`.
+- TLS trust store configuration for outgoing HTTPS requests from `wado run`.
+  wasmtime-wasi-http 43.0.1's `WasiHttpHooks::send_request` signature uses
+  `pub(crate)` types (`HttpResult`, `HttpError`, `body::UnsyncBoxBody`), so
+  the host cannot override it without patching upstream.
 
 ## References
 
